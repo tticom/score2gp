@@ -8,7 +8,7 @@ from typing import Optional
 import typer
 
 from .gp_package import compare_gp, dumps_summary, inspect_gp, validate_gp, write_gp
-from .ir import ScoreIR
+from .ir import ScoreIR, compare_score_ir, export_scoreir_schema, validate_score_ir_file
 from .pdf import extract_tab as extract_tab_file
 from .pdf import inspect_pdf as inspect_pdf_file
 from .report import write_conversion_report, write_warnings
@@ -35,6 +35,37 @@ def validate_command(input_gp: Path) -> None:
 def compare_command(expected_gp: Path, actual_gp: Path) -> None:
     """Compare semantic GP features rather than package bytes."""
     result = compare_gp(expected_gp, actual_gp)
+    typer.echo(json.dumps(result, indent=2, sort_keys=True))
+    if not result["matches"]:
+        raise typer.Exit(1)
+
+
+@app.command("export-schema")
+def export_schema_command(out: Path = typer.Option(...)) -> None:
+    """Export committed JSON schemas for intermediate contracts."""
+    path = export_scoreir_schema(out)
+    typer.echo(str(path))
+
+
+@app.command("validate-ir")
+def validate_ir_command(input_ir: Path) -> None:
+    """Validate ScoreIR JSON with pydantic and semantic checks."""
+    score, errors = validate_score_ir_file(input_ir)
+    result = {
+        "path": str(input_ir),
+        "valid": score is not None and not errors,
+        "schema_version": score.schema_version if score else None,
+        "errors": errors,
+    }
+    typer.echo(json.dumps(result, indent=2, sort_keys=True))
+    if errors:
+        raise typer.Exit(1)
+
+
+@app.command("compare-ir")
+def compare_ir_command(expected_ir: Path, actual_ir: Path) -> None:
+    """Compare semantic ScoreIR content rather than JSON bytes."""
+    result = compare_score_ir(expected_ir, actual_ir)
     typer.echo(json.dumps(result, indent=2, sort_keys=True))
     if not result["matches"]:
         raise typer.Exit(1)
@@ -100,7 +131,9 @@ def build_ir_command(
 ) -> None:
     """Placeholder aligner: write a clear error until MusicXML/tab alignment exists."""
     raise typer.BadParameter(
-        f"build-ir alignment is not implemented yet; received musicxml={musicxml} tab={tab} out={out}"
+        "ScoreIR v0.1 is ready, but build-ir alignment is not implemented yet. "
+        "The next phase is MusicXML timing import plus PDF tab alignment into ScoreIR. "
+        f"Received musicxml={musicxml} tab={tab} out={out}"
     )
 
 

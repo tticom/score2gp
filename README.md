@@ -50,6 +50,8 @@ See [docs/setup.md](docs/setup.md) for full Windows setup, Audiveris installatio
 
 See [docs/workflow.md](docs/workflow.md) for the intended staged PDF-to-GP workflow and current implementation status.
 
+See [docs/scoreir.md](docs/scoreir.md) for the formal ScoreIR v0.1 contract, validation rules, and schema commands.
+
 ```powershell
 python -m pip install -e .[dev]
 python -m pytest
