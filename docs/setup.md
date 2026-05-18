@@ -169,6 +169,8 @@ python -m score2gp.cli validate "work/tiny/output.gp"
 
 ## 8. Current Pipeline Status
 
+For the full staged command sequence, see [workflow.md](workflow.md).
+
 Working now:
 
 - GP7 package inspection

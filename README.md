@@ -48,6 +48,8 @@ Use them for local development and regression evaluation only.
 
 See [docs/setup.md](docs/setup.md) for full Windows setup, Audiveris installation, private fixtures, and smoke-test commands.
 
+See [docs/workflow.md](docs/workflow.md) for the intended staged PDF-to-GP workflow and current implementation status.
+
 ```powershell
 python -m pip install -e .[dev]
 python -m pytest
