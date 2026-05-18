@@ -46,7 +46,9 @@ Use them for local development and regression evaluation only.
 
 ## Development
 
+See [docs/setup.md](docs/setup.md) for full Windows setup, Audiveris installation, private fixtures, and smoke-test commands.
+
 ```powershell
 python -m pip install -e .[dev]
-pytest
+python -m pytest
 ```
