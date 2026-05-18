@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "score2gp"
+version = "0.1.0"
+description = "Staged, inspectable PDF score to Guitar Pro conversion experiments."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "score2gp contributors" }]
+dependencies = [
+  "pydantic>=2.6",
+  "typer>=0.12",
+  "pymupdf>=1.23",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pillow>=10.0"]
+image = ["pillow>=10.0", "opencv-python>=4.9"]
+omr = []
+
+[project.scripts]
+score2gp = "score2gp.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

@@ -1,0 +1,72 @@
+{
+  "schema_version": "0.1.0",
+  "metadata": {
+    "title": "Tiny Open-E Test",
+    "artist": "Generated Fixture",
+    "copyright": "Public domain generated test fixture"
+  },
+  "tempo": { "bpm": 66, "text": "Moderato" },
+  "tracks": [
+    {
+      "id": "gtr-1",
+      "name": "Guitar",
+      "instrument": "steel guitar",
+      "tuning": {
+        "name": "Open E",
+        "strings": [
+          { "number": 1, "pitch": 64, "name": "E4" },
+          { "number": 2, "pitch": 59, "name": "B3" },
+          { "number": 3, "pitch": 56, "name": "G#3" },
+          { "number": 4, "pitch": 52, "name": "E3" },
+          { "number": 5, "pitch": 47, "name": "B2" },
+          { "number": 6, "pitch": 40, "name": "E2" }
+        ]
+      }
+    }
+  ],
+  "bars": [
+    {
+      "index": 1,
+      "time_signature": { "numerator": 12, "denominator": 8 },
+      "events": [
+        {
+          "id": "e1",
+          "track_id": "gtr-1",
+          "voice": 1,
+          "position": "0",
+          "duration": "1/8",
+          "notes": [
+            { "string": 3, "fret": 0, "pitch": 56, "confidence": 1.0 }
+          ],
+          "chord_symbol": "E",
+          "confidence": 1.0,
+          "source": { "stage": "synthetic", "confidence": 1.0 }
+        },
+        {
+          "id": "e2",
+          "track_id": "gtr-1",
+          "voice": 1,
+          "position": "1/8",
+          "duration": "1/8",
+          "notes": [
+            { "string": 2, "fret": 3, "pitch": 62, "confidence": 1.0, "techniques": ["slide"] }
+          ],
+          "techniques": ["slide"],
+          "confidence": 1.0,
+          "source": { "stage": "synthetic", "confidence": 1.0 }
+        },
+        {
+          "id": "r1",
+          "track_id": "gtr-1",
+          "voice": 1,
+          "position": "2/8",
+          "duration": "10/8",
+          "is_rest": true,
+          "confidence": 1.0,
+          "source": { "stage": "synthetic", "confidence": 1.0 }
+        }
+      ]
+    }
+  ],
+  "warnings": []
+}
