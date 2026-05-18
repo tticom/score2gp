@@ -65,7 +65,11 @@ def extract_tab_command(input_pdf: Path, out: Path = typer.Option(...)) -> None:
 @app.command("omr")
 def omr_command(input_pdf: Path, out: Path = typer.Option(...), audiveris: Optional[Path] = typer.Option(None)) -> None:
     """Run optional Audiveris OMR if configured."""
+    input_pdf = input_pdf.resolve()
+    if audiveris is not None:
+        audiveris = audiveris.resolve()
     out.mkdir(parents=True, exist_ok=True)
+    out = out.resolve()
     warnings = []
     if audiveris is None:
         warnings.append({"code": "audiveris-not-configured", "message": "Audiveris path was not provided."})
@@ -73,7 +77,7 @@ def omr_command(input_pdf: Path, out: Path = typer.Option(...), audiveris: Optio
         log_path = out / "audiveris.log"
         try:
             completed = subprocess.run(
-                [str(audiveris), "-batch", "-export", str(input_pdf)],
+                [str(audiveris), "-batch", "-export", "-output", str(out), str(input_pdf)],
                 cwd=out,
                 text=True,
                 capture_output=True,
