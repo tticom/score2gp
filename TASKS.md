@@ -3,7 +3,6 @@
 ## Next
 
 - [ ] Add compressed `.mxl` parsing for Audiveris exports.
-- [ ] Replace simple x-order candidate matching with x-to-onset diagnostics.
 - [ ] Add controlled private fixture evaluation only after public synthetic and generated fixtures are stable.
 - [ ] Improve PDF line detection and overlay generation.
 - [ ] Attach PDF-derived chord symbols and technique text to ScoreIR events once timing calibration exists.
@@ -28,3 +27,4 @@
 - [x] Score-like public generated PDF fixture with multiple systems, chord symbols, technique text, candidate text, and spacing variation.
 - [x] Heuristic tab system/string/bar inference for vector six-line tab PDFs.
 - [x] PDF-derived TabRaw to MusicXML to ScoreIR smoke path with per-bar and per-system diagnostics.
+- [x] X-to-onset diagnostics for controlled generated PDFs, including an uneven-spacing warning fixture.

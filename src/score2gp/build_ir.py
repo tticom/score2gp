@@ -38,10 +38,31 @@ TRACK_ID = "gtr-1"
 DIAGNOSTICS_SCHEMA_VERSION = "build-ir-diagnostics.v0.1"
 
 
+class CandidateXGroupDiagnostics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    x: float
+    x_min: float
+    x_max: float
+    candidate_count: int
+    candidate_ids: list[str] = Field(default_factory=list)
+    strings: list[int] = Field(default_factory=list)
+    is_chord_stack: bool = False
+
+
+class MusicXmlOnsetGroupDiagnostics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    onset_ticks: int
+    event_count: int
+    musicxml_note_ids: list[str] = Field(default_factory=list)
+
+
 class BarAlignmentDiagnostics(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     bar_index: int
+    system_index: int | None = None
     musicxml_event_count: int
     musicxml_pitched_event_count: int
     musicxml_rest_event_count: int
@@ -51,6 +72,27 @@ class BarAlignmentDiagnostics(BaseModel):
     unmatched_musicxml_note_count: int
     unmatched_tabraw_candidate_count: int
     chord_event_count: int
+    playable_candidate_count: int = 0
+    playable_candidate_onset_group_count: int = 0
+    musicxml_pitched_onset_group_count: int = 0
+    bar_x_min: float | None = None
+    bar_x_max: float | None = None
+    x_span: float | None = None
+    onset_tick_min: int | None = None
+    onset_tick_max: int | None = None
+    candidate_x_positions: list[float] = Field(default_factory=list)
+    candidate_x_groups: list[CandidateXGroupDiagnostics] = Field(default_factory=list)
+    musicxml_onsets: list[int] = Field(default_factory=list)
+    musicxml_onset_groups: list[MusicXmlOnsetGroupDiagnostics] = Field(default_factory=list)
+    relative_x_positions: list[float] = Field(default_factory=list)
+    relative_onsets: list[float] = Field(default_factory=list)
+    mean_absolute_relative_error: float | None = None
+    max_relative_error: float | None = None
+    monotonic_x: bool | None = None
+    has_chord_stack: bool = False
+    ambiguous_x_group_count: int = 0
+    quality: Literal["good", "warning", "poor", "unknown"] = "unknown"
+    x_to_onset_warnings: list[str] = Field(default_factory=list)
     average_event_confidence: float | None = None
     ambiguity_flags: list[str] = Field(default_factory=list)
 
@@ -607,9 +649,11 @@ def _build_diagnostics(
         bar_warnings = [warning for warning in warnings if _warning_bar_index(warning) == bar.index]
         event_confidences = [event.confidence for event in bar.events]
         ambiguity_flags = _bar_ambiguity_flags(bar.index, candidate_pools)
+        x_to_onset = _bar_x_to_onset_diagnostics(bar.index, measure, musicxml_groups, tabraw)
         per_bar.append(
             BarAlignmentDiagnostics(
                 bar_index=bar.index,
+                system_index=x_to_onset["system_index"],
                 musicxml_event_count=len(musicxml_groups),
                 musicxml_pitched_event_count=sum(1 for group in musicxml_groups if not group[0].is_rest),
                 musicxml_rest_event_count=sum(1 for group in musicxml_groups if group[0].is_rest),
@@ -619,8 +663,29 @@ def _build_diagnostics(
                 unmatched_musicxml_note_count=sum(1 for warning in bar_warnings if warning.code == "tab-candidate-missing"),
                 unmatched_tabraw_candidate_count=sum(1 for candidate in candidate_pools.unused() if candidate.bar_index == bar.index),
                 chord_event_count=sum(1 for group in musicxml_groups if len(group) > 1),
+                playable_candidate_count=x_to_onset["playable_candidate_count"],
+                playable_candidate_onset_group_count=x_to_onset["playable_candidate_onset_group_count"],
+                musicxml_pitched_onset_group_count=x_to_onset["musicxml_pitched_onset_group_count"],
+                bar_x_min=x_to_onset["bar_x_min"],
+                bar_x_max=x_to_onset["bar_x_max"],
+                x_span=x_to_onset["x_span"],
+                onset_tick_min=x_to_onset["onset_tick_min"],
+                onset_tick_max=x_to_onset["onset_tick_max"],
+                candidate_x_positions=x_to_onset["candidate_x_positions"],
+                candidate_x_groups=x_to_onset["candidate_x_groups"],
+                musicxml_onsets=x_to_onset["musicxml_onsets"],
+                musicxml_onset_groups=x_to_onset["musicxml_onset_groups"],
+                relative_x_positions=x_to_onset["relative_x_positions"],
+                relative_onsets=x_to_onset["relative_onsets"],
+                mean_absolute_relative_error=x_to_onset["mean_absolute_relative_error"],
+                max_relative_error=x_to_onset["max_relative_error"],
+                monotonic_x=x_to_onset["monotonic_x"],
+                has_chord_stack=x_to_onset["has_chord_stack"],
+                ambiguous_x_group_count=x_to_onset["ambiguous_x_group_count"],
+                quality=x_to_onset["quality"],
+                x_to_onset_warnings=x_to_onset["x_to_onset_warnings"],
                 average_event_confidence=round(sum(event_confidences) / len(event_confidences), 3) if event_confidences else None,
-                ambiguity_flags=ambiguity_flags,
+                ambiguity_flags=ambiguity_flags + x_to_onset["x_to_onset_warnings"],
             )
         )
 
@@ -667,7 +732,7 @@ def _build_diagnostics(
         ],
         warning_count=len(warnings),
         confidence_flags=confidence_flags,
-        extraction_quality_flags=_tabraw_extraction_quality_flags(tabraw),
+        extraction_quality_flags=_tabraw_extraction_quality_flags(tabraw) + _alignment_quality_flags(per_bar),
         per_system=_system_diagnostics(tabraw, candidate_pools),
         per_bar=per_bar,
         warnings=[warning.model_dump(mode="json", exclude_none=True) for warning in warnings],
@@ -713,6 +778,245 @@ def _tabraw_source_stage_counts(tabraw: TabRaw) -> dict[str, int]:
 
 def _candidate_kind_count(tabraw: TabRaw, kind: str) -> int:
     return sum(1 for candidate in tabraw.candidates if candidate.kind == kind)
+
+
+def _bar_x_to_onset_diagnostics(
+    bar_index: int,
+    measure: MusicXmlMeasure | None,
+    musicxml_groups: list[list[MusicXmlNote]],
+    tabraw: TabRaw,
+) -> dict[str, object]:
+    playable = sorted(
+        (candidate for candidate in tabraw.candidates if candidate.parsed_fret is not None and candidate.bar_index == bar_index),
+        key=lambda candidate: (float("inf") if candidate.x is None else candidate.x, candidate.id),
+    )
+    candidates_with_x = [candidate for candidate in playable if candidate.x is not None]
+    x_groups = _candidate_x_groups(candidates_with_x)
+    onset_groups = _musicxml_onset_groups(musicxml_groups, measure)
+    candidate_x_positions = [round(float(candidate.x), 3) for candidate in candidates_with_x if candidate.x is not None]
+    musicxml_onsets = [
+        onset_tick
+        for group in onset_groups
+        for onset_tick in [group.onset_ticks] * group.event_count
+    ]
+    x_values = [group.x for group in x_groups]
+    onset_values = [group.onset_ticks for group in onset_groups]
+    relative_x_positions = _relative_values(x_values)
+    relative_onsets = _relative_values(onset_values)
+    relative_errors = _relative_errors(relative_x_positions, relative_onsets)
+    bar_x_min, bar_x_max = _bar_x_bounds(candidates_with_x)
+    ambiguous_x_group_count = _ambiguous_x_group_count(x_values)
+    warnings = _x_to_onset_warnings(
+        playable=playable,
+        candidates_with_x=candidates_with_x,
+        x_groups=x_groups,
+        onset_groups=onset_groups,
+        relative_errors=relative_errors,
+        ambiguous_x_group_count=ambiguous_x_group_count,
+    )
+    quality = _x_to_onset_quality(
+        x_groups=x_groups,
+        onset_groups=onset_groups,
+        relative_errors=relative_errors,
+        ambiguous_x_group_count=ambiguous_x_group_count,
+        warnings=warnings,
+    )
+
+    return {
+        "system_index": _single_system_index(playable),
+        "playable_candidate_count": len(playable),
+        "playable_candidate_onset_group_count": len(x_groups),
+        "musicxml_pitched_onset_group_count": len(onset_groups),
+        "bar_x_min": bar_x_min,
+        "bar_x_max": bar_x_max,
+        "x_span": round(bar_x_max - bar_x_min, 3) if bar_x_min is not None and bar_x_max is not None else None,
+        "onset_tick_min": min(onset_values) if onset_values else None,
+        "onset_tick_max": max(onset_values) if onset_values else None,
+        "candidate_x_positions": candidate_x_positions,
+        "candidate_x_groups": x_groups,
+        "musicxml_onsets": musicxml_onsets,
+        "musicxml_onset_groups": onset_groups,
+        "relative_x_positions": relative_x_positions,
+        "relative_onsets": relative_onsets,
+        "mean_absolute_relative_error": round(sum(relative_errors) / len(relative_errors), 3) if relative_errors else None,
+        "max_relative_error": round(max(relative_errors), 3) if relative_errors else None,
+        "monotonic_x": _is_monotonic(x_values) if x_values else None,
+        "has_chord_stack": any(group.is_chord_stack for group in x_groups),
+        "ambiguous_x_group_count": ambiguous_x_group_count,
+        "quality": quality,
+        "x_to_onset_warnings": warnings,
+    }
+
+
+def _candidate_x_groups(candidates: list[TabCandidate], tolerance: float = 1.5) -> list[CandidateXGroupDiagnostics]:
+    groups: list[list[TabCandidate]] = []
+    for candidate in sorted(candidates, key=lambda item: (float("inf") if item.x is None else item.x, item.id)):
+        if candidate.x is None:
+            continue
+        if groups and abs(float(candidate.x) - _mean_x(groups[-1])) <= tolerance:
+            groups[-1].append(candidate)
+        else:
+            groups.append([candidate])
+
+    diagnostics = []
+    for group in groups:
+        xs = [float(candidate.x) for candidate in group if candidate.x is not None]
+        strings = sorted({candidate.string for candidate in group if candidate.string is not None})
+        diagnostics.append(
+            CandidateXGroupDiagnostics(
+                x=round(sum(xs) / len(xs), 3),
+                x_min=round(min(xs), 3),
+                x_max=round(max(xs), 3),
+                candidate_count=len(group),
+                candidate_ids=[candidate.id for candidate in group],
+                strings=strings,
+                is_chord_stack=len(group) > 1 and len(strings) > 1,
+            )
+        )
+    return diagnostics
+
+
+def _musicxml_onset_groups(
+    musicxml_groups: list[list[MusicXmlNote]],
+    measure: MusicXmlMeasure | None,
+) -> list[MusicXmlOnsetGroupDiagnostics]:
+    divisions = measure.divisions if measure is not None else 1
+    by_onset: dict[int, list[str]] = defaultdict(list)
+    for group in musicxml_groups:
+        first = group[0]
+        if first.is_rest:
+            continue
+        onset_ticks, _ = first.onset_ticks(divisions)
+        by_onset[onset_ticks].extend(note.id for note in group)
+    return [
+        MusicXmlOnsetGroupDiagnostics(
+            onset_ticks=onset_ticks,
+            event_count=len(note_ids),
+            musicxml_note_ids=note_ids,
+        )
+        for onset_ticks, note_ids in sorted(by_onset.items())
+    ]
+
+
+def _x_to_onset_warnings(
+    *,
+    playable: list[TabCandidate],
+    candidates_with_x: list[TabCandidate],
+    x_groups: list[CandidateXGroupDiagnostics],
+    onset_groups: list[MusicXmlOnsetGroupDiagnostics],
+    relative_errors: list[float],
+    ambiguous_x_group_count: int,
+) -> list[str]:
+    warnings = []
+    if not playable:
+        warnings.append("no playable TabRaw candidates in bar")
+    if playable and len(candidates_with_x) != len(playable):
+        warnings.append("one or more playable candidates lack x-position evidence")
+    if not onset_groups:
+        warnings.append("no MusicXML pitched onset evidence in bar")
+    if x_groups and onset_groups and len(x_groups) != len(onset_groups):
+        warnings.append("playable x-group count differs from MusicXML pitched onset group count")
+    if x_groups and not _is_monotonic([group.x for group in x_groups]):
+        warnings.append("playable x groups are not monotonic")
+    if ambiguous_x_group_count:
+        warnings.append("one or more playable x groups are too close to distinguish confidently")
+    if relative_errors and max(relative_errors) > 0.3:
+        warnings.append("visual x positions drift strongly from MusicXML onset spacing")
+    elif relative_errors and max(relative_errors) > 0.15:
+        warnings.append("visual x positions drift from MusicXML onset spacing")
+    if len(x_groups) == 1 and len(onset_groups) == 1:
+        warnings.append("single onset group cannot calibrate x-to-onset spacing")
+    return warnings
+
+
+def _x_to_onset_quality(
+    *,
+    x_groups: list[CandidateXGroupDiagnostics],
+    onset_groups: list[MusicXmlOnsetGroupDiagnostics],
+    relative_errors: list[float],
+    ambiguous_x_group_count: int,
+    warnings: list[str],
+) -> Literal["good", "warning", "poor", "unknown"]:
+    if not x_groups or not onset_groups:
+        return "unknown"
+    if len(x_groups) == 1 and len(onset_groups) == 1:
+        return "unknown"
+    if len(x_groups) != len(onset_groups):
+        return "poor"
+    if not relative_errors:
+        return "unknown"
+    if max(relative_errors) > 0.3:
+        return "poor"
+    if max(relative_errors) > 0.15 or ambiguous_x_group_count or warnings:
+        return "warning"
+    return "good"
+
+
+def _bar_x_bounds(candidates: list[TabCandidate]) -> tuple[float | None, float | None]:
+    raw_mins = [_raw_float(candidate.raw.get("bar_x_min")) for candidate in candidates if isinstance(candidate.raw, dict)]
+    raw_maxs = [_raw_float(candidate.raw.get("bar_x_max")) for candidate in candidates if isinstance(candidate.raw, dict)]
+    raw_mins = [value for value in raw_mins if value is not None]
+    raw_maxs = [value for value in raw_maxs if value is not None]
+    if raw_mins and raw_maxs:
+        return round(min(raw_mins), 3), round(max(raw_maxs), 3)
+    xs = [float(candidate.x) for candidate in candidates if candidate.x is not None]
+    if not xs:
+        return None, None
+    return round(min(xs), 3), round(max(xs), 3)
+
+
+def _relative_values(values: list[float | int]) -> list[float]:
+    if not values:
+        return []
+    minimum = float(min(values))
+    maximum = float(max(values))
+    if maximum == minimum:
+        return [0.0 for _ in values]
+    return [round((float(value) - minimum) / (maximum - minimum), 3) for value in values]
+
+
+def _relative_errors(left: list[float], right: list[float]) -> list[float]:
+    if len(left) != len(right) or len(left) < 2:
+        return []
+    return [abs(left_value - right_value) for left_value, right_value in zip(left, right)]
+
+
+def _mean_x(candidates: list[TabCandidate]) -> float:
+    values = [float(candidate.x) for candidate in candidates if candidate.x is not None]
+    return sum(values) / len(values)
+
+
+def _single_system_index(candidates: list[TabCandidate]) -> int | None:
+    system_indexes = {candidate.system_index for candidate in candidates if candidate.system_index is not None}
+    if len(system_indexes) == 1:
+        return next(iter(system_indexes))
+    return None
+
+
+def _ambiguous_x_group_count(values: list[float], tolerance: float = 8.0) -> int:
+    return sum(1 for left, right in zip(values, values[1:]) if 1.5 < abs(right - left) <= tolerance)
+
+
+def _is_monotonic(values: list[float]) -> bool:
+    return all(left <= right for left, right in zip(values, values[1:]))
+
+
+def _raw_float(value: object) -> float | None:
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
+def _alignment_quality_flags(per_bar: list[BarAlignmentDiagnostics]) -> list[str]:
+    flags = []
+    qualities = {bar.quality for bar in per_bar}
+    if "poor" in qualities:
+        flags.append("one or more bars have poor x-to-onset quality")
+    if "warning" in qualities:
+        flags.append("one or more bars have warning x-to-onset quality")
+    if "unknown" in qualities:
+        flags.append("one or more bars have unknown x-to-onset quality")
+    return flags
 
 
 def _system_diagnostics(tabraw: TabRaw, candidate_pools: CandidatePools) -> list[SystemAlignmentDiagnostics]:

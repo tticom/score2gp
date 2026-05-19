@@ -104,6 +104,26 @@ python -m score2gp.cli build-ir `
 
 The score-like fixture has two tab systems, four global bars, chord symbols, technique text, candidate text, multi-digit frets, and chord-like vertical stacks. It is still controlled and generated.
 
+Uneven-spacing generated PDF smoke command:
+
+```powershell
+python -m score2gp.cli extract-tab `
+  --out "work/generated_pdf/generated_uneven_spacing_tab.tabraw.json" `
+  "tests/fixtures/pdf/generated_uneven_spacing_tab.pdf"
+```
+
+Then:
+
+```powershell
+python -m score2gp.cli build-ir `
+  --musicxml "tests/fixtures/musicxml/generated_uneven_spacing_tab.musicxml" `
+  --tabraw "work/generated_pdf/generated_uneven_spacing_tab.tabraw.json" `
+  --out "work/generated_pdf/generated_uneven_spacing_tab.ir.json" `
+  --diagnostics-out "work/generated_pdf/generated_uneven_spacing_tab.diagnostics.json"
+```
+
+The uneven-spacing fixture deliberately keeps the MusicXML rhythm simple while placing two visual fret groups very close together. It exists to prove that diagnostics can report unsafe geometry without blocking ScoreIR generation.
+
 Legacy `items` payloads can still be normalized by `score2gp.tabraw.normalize_tabraw_payload()`.
 
 TabRaw candidate IDs are required to be unique. Chord-symbol, technique-text, and candidate-text candidates are preserved and reported by `build-ir`, but they are not consumed as playable fret events.
@@ -161,11 +181,17 @@ The diagnostics contract is `build-ir-diagnostics.v0.1` and records:
 - unsupported construct warning codes
 - per-system extraction/alignment summaries
 - per-bar alignment summaries
+- per-bar x-to-onset summaries comparing playable fret x groups with MusicXML pitched onset groups
+- candidate x groups, MusicXML onset groups, relative positions, drift/error values, chord-stack flags, ambiguity counts, and `good`/`warning`/`poor`/`unknown` quality labels
 - low-confidence flags
 - extraction quality flags
 - all ScoreIR warnings in JSON form
 
 The per-system summaries show how many candidates were found, how many playable frets matched, and how many non-playable candidates were intentionally ignored. The per-bar summaries include rest/chord event counts and ambiguity flags such as repeated x-position candidates.
+
+For x-to-onset diagnostics, playable candidates are only candidates with parsed fret values. Chord symbols such as `Am` or `D7`, technique text such as `slide` or `PM`, and other nearby text are preserved as evidence but excluded from playable x groups. A vertical stack of fret numbers at the same x position is treated as a playable chord stack only when the grouped candidates are frets on different strings.
+
+Relative drift is computed by normalizing playable x groups and MusicXML pitched onset groups inside their observed ranges. This is intentionally a diagnostic measurement, not full optical calibration. A `good` bar means the current x-order heuristic looks internally consistent for that controlled input. A `warning` or `poor` bar means the sidecar should be inspected before trusting automatic conversion. `unknown` usually means the bar lacks enough playable x or MusicXML onset evidence to measure spacing.
 
 The generated ScoreIR should pass:
 
@@ -185,7 +211,7 @@ Still out of scope:
 - extraction from real commercial/private PDFs
 - advanced rhythm, repeats, alternate endings, grace-note semantics, and tempo maps
 - TabRaw-derived chord/technique alignment into ScoreIR events
-- real optical x-to-onset calibration from page geometry
+- full optical x-to-onset calibration from page geometry
 - GPIF writer expansion
 
-The next architectural checkpoint should add x-to-onset diagnostics and then try a controlled private fixture only after the public generated path remains stable.
+The next architectural checkpoint should use these x-to-onset diagnostics on a controlled private fixture, with the conversion report making any poor or unknown geometry impossible to miss.

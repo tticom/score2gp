@@ -151,6 +151,12 @@ class _TabSystem:
             return None
         return self.first_bar_index + local_bar - 1
 
+    def bar_bounds_for_x(self, x: float | None) -> tuple[float, float] | None:
+        local_bar = self.local_bar_for_x(x)
+        if local_bar is None or len(self.barlines) < 2:
+            return None
+        return self.barlines[local_bar - 1], self.barlines[local_bar]
+
     def local_bar_for_x(self, x: float | None) -> int | None:
         if x is None or len(self.barlines) < 2:
             return None
@@ -216,6 +222,7 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]])
                 if system is not None:
                     line_index, string, string_distance = system.string_for_y(y)
                 bar_index = system.bar_for_x(x) if system is not None else None
+                bar_bounds = system.bar_bounds_for_x(x) if system is not None else None
                 candidate = make_tab_candidate(
                     candidate_id=f"pdf-p{page_number:03d}-c{filtered_index + 1:04d}",
                     raw_text=raw_text,
@@ -238,6 +245,10 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]])
                         "barline_count": len(system.barlines) if system is not None else None,
                         "local_bar_index": system.local_bar_for_x(x) if system is not None else None,
                         "system_first_bar_index": system.first_bar_index if system is not None else None,
+                        "system_x0": round(system.x0, 3) if system is not None else None,
+                        "system_x1": round(system.x1, 3) if system is not None else None,
+                        "bar_x_min": round(bar_bounds[0], 3) if bar_bounds is not None else None,
+                        "bar_x_max": round(bar_bounds[1], 3) if bar_bounds is not None else None,
                     },
                 )
                 if not _should_keep_candidate(candidate.model_dump(mode="json", exclude_none=True)):
