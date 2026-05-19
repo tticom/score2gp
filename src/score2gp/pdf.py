@@ -129,6 +129,7 @@ class _TabSystem:
     page_index: int
     system_index: int
     staff_index: int
+    first_bar_index: int
     line_ys: list[float]
     x0: float
     x1: float
@@ -145,6 +146,12 @@ class _TabSystem:
         return line_index, line_index, distance
 
     def bar_for_x(self, x: float | None) -> int | None:
+        local_bar = self.local_bar_for_x(x)
+        if local_bar is None:
+            return None
+        return self.first_bar_index + local_bar - 1
+
+    def local_bar_for_x(self, x: float | None) -> int | None:
         if x is None or len(self.barlines) < 2:
             return None
         for index, (left, right) in enumerate(zip(self.barlines, self.barlines[1:]), start=1):
@@ -162,6 +169,17 @@ class _TabSystem:
             return False
         margin = max(6.0, self.line_spacing)
         return self.line_ys[0] - margin <= y <= self.line_ys[-1] + margin
+
+    def candidate_zone_contains(self, x: float | None, y: float | None) -> bool:
+        if x is None or y is None:
+            return False
+        horizontal_margin = 24.0
+        top_margin = max(34.0, self.line_spacing * 2.5)
+        bottom_margin = max(12.0, self.line_spacing)
+        return (
+            self.x0 - horizontal_margin <= x <= self.x1 + horizontal_margin
+            and self.line_ys[0] - top_margin <= y <= self.line_ys[-1] + bottom_margin
+        )
 
 
 def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -191,12 +209,13 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]])
                 bbox_values = [float(word[0]), float(word[1]), float(word[2]), float(word[3])]
                 x = (bbox_values[0] + bbox_values[2]) / 2
                 y = (bbox_values[1] + bbox_values[3]) / 2
-                system = _nearest_system(systems, y)
+                system = _nearest_system(systems, x, y)
                 line_index = None
                 string = None
                 string_distance = None
                 if system is not None:
                     line_index, string, string_distance = system.string_for_y(y)
+                bar_index = system.bar_for_x(x) if system is not None else None
                 candidate = make_tab_candidate(
                     candidate_id=f"pdf-p{page_number:03d}-c{filtered_index + 1:04d}",
                     raw_text=raw_text,
@@ -205,7 +224,7 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]])
                     confidence=_candidate_confidence(raw_text, system, string, x),
                     system_index=system.system_index if system is not None else None,
                     staff_index=system.staff_index if system is not None else None,
-                    bar_index=system.bar_for_x(x) if system is not None else None,
+                    bar_index=bar_index,
                     line_index=line_index,
                     string=string,
                     raw={
@@ -214,8 +233,11 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]])
                         "pdf_line_number": int(word[6]) if len(word) > 6 else None,
                         "pdf_word_number": int(word[7]) if len(word) > 7 else None,
                         "system_inference": "six-horizontal-lines" if system is not None else None,
+                        "system_relation": _system_relation(system, string),
                         "string_distance": round(string_distance, 3) if string_distance is not None else None,
                         "barline_count": len(system.barlines) if system is not None else None,
+                        "local_bar_index": system.local_bar_for_x(x) if system is not None else None,
+                        "system_first_bar_index": system.first_bar_index if system is not None else None,
                     },
                 )
                 if not _should_keep_candidate(candidate.model_dump(mode="json", exclude_none=True)):
@@ -231,6 +253,7 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
     vertical = sorted((segment for segment in segments if segment.is_vertical), key=lambda segment: segment.x0)
     systems = []
     system_index = 1
+    next_bar_index = 1
 
     for group in _six_line_groups(horizontal):
         line_ys = [round((line.y0 + line.y1) / 2, 3) for line in group]
@@ -251,12 +274,14 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
                 page_index=page_index,
                 system_index=system_index,
                 staff_index=1,
+                first_bar_index=next_bar_index,
                 line_ys=line_ys,
                 x0=x0,
                 x1=x1,
                 barlines=barlines,
             )
         )
+        next_bar_index += max(1, len(barlines) - 1)
         system_index += 1
     return systems
 
@@ -314,15 +339,15 @@ def _unique_sorted(values: list[float], tolerance: float = 1.0) -> list[float]:
     return unique
 
 
-def _nearest_system(systems: list[_TabSystem], y: float | None) -> _TabSystem | None:
-    containing = [system for system in systems if system.contains_y(y)]
+def _nearest_system(systems: list[_TabSystem], x: float | None, y: float | None) -> _TabSystem | None:
+    containing = [system for system in systems if system.candidate_zone_contains(x, y)]
     if not containing:
         return None
     return min(containing, key=lambda system: min(abs(line_y - float(y)) for line_y in system.line_ys))
 
 
 def _candidate_confidence(raw_text: str, system: _TabSystem | None, string: int | None, x: float | None) -> float:
-    base = 0.65 if raw_text.strip().isdigit() else 0.45
+    base = 0.65 if raw_text.strip().isdigit() else 0.4
     if system is not None:
         base += 0.1
     if string is not None:
@@ -336,4 +361,14 @@ def _should_keep_candidate(candidate: dict[str, Any]) -> bool:
     if candidate.get("kind") in {"fret", "chord-symbol", "technique-text"}:
         return True
     text = str(candidate.get("raw_text", "")).strip().lower()
-    return text in {"x"}
+    raw = candidate.get("raw", {})
+    near_tab_system = isinstance(raw, dict) and raw.get("system_inference") is not None
+    return text in {"x"} or near_tab_system
+
+
+def _system_relation(system: _TabSystem | None, string: int | None) -> str | None:
+    if system is None:
+        return None
+    if string is not None:
+        return "on-tab-line"
+    return "near-tab-system"

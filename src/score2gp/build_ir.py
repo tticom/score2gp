@@ -55,6 +55,21 @@ class BarAlignmentDiagnostics(BaseModel):
     ambiguity_flags: list[str] = Field(default_factory=list)
 
 
+class SystemAlignmentDiagnostics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    page_index: int
+    system_index: int
+    tabraw_candidate_count: int
+    fret_candidate_count: int
+    non_fret_candidate_count: int
+    matched_playable_candidate_count: int
+    unmatched_playable_candidate_count: int
+    ignored_non_playable_candidate_count: int
+    candidates_with_string: int
+    candidates_with_bar: int
+
+
 class BuildIrDiagnostics(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -68,8 +83,13 @@ class BuildIrDiagnostics(BaseModel):
     tabraw_candidates_loaded: int
     tabraw_fret_candidate_count: int
     tabraw_non_fret_candidate_count: int
+    tabraw_chord_symbol_candidate_count: int
+    tabraw_technique_text_candidate_count: int
+    tabraw_unknown_candidate_count: int
     tabraw_candidates_with_bbox: int
     tabraw_candidates_with_x: int
+    tabraw_candidates_with_y: int
+    tabraw_candidates_with_system: int
     tabraw_candidates_with_string: int
     tabraw_candidates_with_bar: int
     tabraw_source_stage_counts: dict[str, int] = Field(default_factory=dict)
@@ -77,10 +97,12 @@ class BuildIrDiagnostics(BaseModel):
     unmatched_musicxml_event_count: int
     unmatched_musicxml_note_count: int
     unmatched_tabraw_candidate_count: int
+    ignored_non_playable_candidate_count: int
     unsupported_construct_warnings: list[str] = Field(default_factory=list)
     warning_count: int
     confidence_flags: list[dict[str, object]] = Field(default_factory=list)
     extraction_quality_flags: list[str] = Field(default_factory=list)
+    per_system: list[SystemAlignmentDiagnostics] = Field(default_factory=list)
     per_bar: list[BarAlignmentDiagnostics] = Field(default_factory=list)
     warnings: list[dict[str, object]] = Field(default_factory=list)
 
@@ -623,8 +645,13 @@ def _build_diagnostics(
         tabraw_candidates_loaded=len(tabraw.candidates),
         tabraw_fret_candidate_count=sum(1 for candidate in tabraw.candidates if candidate.parsed_fret is not None),
         tabraw_non_fret_candidate_count=sum(1 for candidate in tabraw.candidates if candidate.parsed_fret is None),
+        tabraw_chord_symbol_candidate_count=_candidate_kind_count(tabraw, "chord-symbol"),
+        tabraw_technique_text_candidate_count=_candidate_kind_count(tabraw, "technique-text"),
+        tabraw_unknown_candidate_count=_candidate_kind_count(tabraw, "candidate-text"),
         tabraw_candidates_with_bbox=sum(1 for candidate in tabraw.candidates if candidate.bbox is not None),
         tabraw_candidates_with_x=sum(1 for candidate in tabraw.candidates if candidate.x is not None),
+        tabraw_candidates_with_y=sum(1 for candidate in tabraw.candidates if candidate.y is not None),
+        tabraw_candidates_with_system=sum(1 for candidate in tabraw.candidates if candidate.system_index is not None),
         tabraw_candidates_with_string=sum(1 for candidate in tabraw.candidates if candidate.string is not None),
         tabraw_candidates_with_bar=sum(1 for candidate in tabraw.candidates if candidate.bar_index is not None),
         tabraw_source_stage_counts=_tabraw_source_stage_counts(tabraw),
@@ -632,6 +659,7 @@ def _build_diagnostics(
         unmatched_musicxml_event_count=totals["unmatched_musicxml_event_count"],
         unmatched_musicxml_note_count=totals["unmatched_musicxml_note_count"],
         unmatched_tabraw_candidate_count=len(candidate_pools.unused()),
+        ignored_non_playable_candidate_count=sum(1 for candidate in tabraw.candidates if candidate.parsed_fret is None),
         unsupported_construct_warnings=[
             code
             for code in warning_codes
@@ -640,6 +668,7 @@ def _build_diagnostics(
         warning_count=len(warnings),
         confidence_flags=confidence_flags,
         extraction_quality_flags=_tabraw_extraction_quality_flags(tabraw),
+        per_system=_system_diagnostics(tabraw, candidate_pools),
         per_bar=per_bar,
         warnings=[warning.model_dump(mode="json", exclude_none=True) for warning in warnings],
     )
@@ -682,6 +711,37 @@ def _tabraw_source_stage_counts(tabraw: TabRaw) -> dict[str, int]:
     return counts
 
 
+def _candidate_kind_count(tabraw: TabRaw, kind: str) -> int:
+    return sum(1 for candidate in tabraw.candidates if candidate.kind == kind)
+
+
+def _system_diagnostics(tabraw: TabRaw, candidate_pools: CandidatePools) -> list[SystemAlignmentDiagnostics]:
+    grouped: dict[tuple[int, int], list[TabCandidate]] = defaultdict(list)
+    for candidate in tabraw.candidates:
+        if candidate.page_index is not None and candidate.system_index is not None:
+            grouped[(candidate.page_index, candidate.system_index)].append(candidate)
+
+    consumed_ids = {use.candidate.id for use in candidate_pools.consumed}
+    unused_ids = {candidate.id for candidate in candidate_pools.unused()}
+    diagnostics = []
+    for (page_index, system_index), candidates in sorted(grouped.items()):
+        diagnostics.append(
+            SystemAlignmentDiagnostics(
+                page_index=page_index,
+                system_index=system_index,
+                tabraw_candidate_count=len(candidates),
+                fret_candidate_count=sum(1 for candidate in candidates if candidate.parsed_fret is not None),
+                non_fret_candidate_count=sum(1 for candidate in candidates if candidate.parsed_fret is None),
+                matched_playable_candidate_count=sum(1 for candidate in candidates if candidate.id in consumed_ids),
+                unmatched_playable_candidate_count=sum(1 for candidate in candidates if candidate.id in unused_ids),
+                ignored_non_playable_candidate_count=sum(1 for candidate in candidates if candidate.parsed_fret is None),
+                candidates_with_string=sum(1 for candidate in candidates if candidate.string is not None),
+                candidates_with_bar=sum(1 for candidate in candidates if candidate.bar_index is not None),
+            )
+        )
+    return diagnostics
+
+
 def _tabraw_extraction_quality_flags(tabraw: TabRaw) -> list[str]:
     flags = []
     fret_candidates = [candidate for candidate in tabraw.candidates if candidate.parsed_fret is not None]
@@ -695,6 +755,8 @@ def _tabraw_extraction_quality_flags(tabraw: TabRaw) -> list[str]:
         flags.append("fret candidate missing inferred string")
     if fret_candidates and any(candidate.bar_index is None for candidate in fret_candidates):
         flags.append("fret candidate missing inferred bar")
+    if fret_candidates and len({candidate.system_index for candidate in fret_candidates if candidate.system_index is not None}) > 1:
+        flags.append("multiple inferred tab systems present")
     if any(candidate.confidence < 0.6 for candidate in tabraw.candidates):
         flags.append("one or more TabRaw candidates have low confidence")
     return flags

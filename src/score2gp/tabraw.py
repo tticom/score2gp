@@ -172,9 +172,10 @@ def _candidate_kind(raw_text: str, parsed_fret: int | None) -> str:
     if parsed_fret is not None:
         return "fret"
     stripped = raw_text.strip()
-    if any(token in lower for token in ("slide", "bend", "vib", "let", "hammer", "pull", "p.m.", "palm")):
+    technique_tokens = ("slide", "bend", "vib", "let", "ring", "hammer", "pull", "p.m.", "palm")
+    if any(token in lower for token in technique_tokens):
         return "technique-text"
-    if stripped.lower() in {"h", "p", "/", "\\", "~"}:
+    if stripped.lower().rstrip(".") in {"h", "p", "pm", "/", "\\", "~"}:
         return "technique-text"
     if _looks_like_chord_symbol(stripped):
         return "chord-symbol"
