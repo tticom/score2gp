@@ -9,6 +9,9 @@ This project does **not** promise perfect PDF-to-Guitar-Pro conversion. Printed 
 Implemented now:
 
 - Strict `ScoreIR` pydantic models.
+- Limited uncompressed MusicXML importer for synthetic fixtures.
+- `tabraw.v0.1` candidate model with stable IDs, spatial evidence, confidence, and provenance.
+- Narrow `build-ir` path from synthetic MusicXML + TabRaw into valid ScoreIR.
 - `score2gp inspect-gp input.gp` for GP7 zip/GPIF inspection.
 - Minimal GP7-style package writer from hand-authored ScoreIR.
 - `score2gp validate output.gp`.
@@ -19,7 +22,8 @@ Planned next:
 
 - More robust PDF system and tab-line detection.
 - Tab number/chord/technique extraction from born-digital PDFs.
-- Optional Audiveris integration for MusicXML timing.
+- `.mxl` package parsing and broader Audiveris MusicXML intake.
+- Real MusicXML/tab alignment from owned score PDFs.
 - Better GPIF coverage for techniques and layout.
 
 ## CLI
@@ -30,6 +34,7 @@ score2gp validate output.gp
 score2gp write-gp fixtures/public/tiny_score.ir.json --template fixtures/templates/minimal_gp7.gp --out output.gp
 score2gp inspect-pdf input.pdf --out work/inspect
 score2gp extract-tab input.pdf --out work/tab
+score2gp build-ir --musicxml tests/fixtures/musicxml/tiny_single_bar.musicxml --tabraw tests/fixtures/tabraw/tiny_single_bar_tabraw.json --out work/synthetic/score.ir.json
 score2gp convert input.pdf --template fixtures/templates/minimal_gp7.gp --out output.gp --workdir work/run1
 ```
 
@@ -51,6 +56,8 @@ See [docs/setup.md](docs/setup.md) for full Windows setup, Audiveris installatio
 See [docs/workflow.md](docs/workflow.md) for the intended staged PDF-to-GP workflow and current implementation status.
 
 See [docs/scoreir.md](docs/scoreir.md) for the formal ScoreIR v0.1 contract, validation rules, and schema commands.
+
+See [docs/musicxml-tabraw-build-ir.md](docs/musicxml-tabraw-build-ir.md) for the limited MusicXML, TabRaw, and synthetic `build-ir` proof path.
 
 ```powershell
 python -m pip install -e .[dev]

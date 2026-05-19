@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .tabraw import TABRAW_SCHEMA_VERSION, TabRaw, make_tab_candidate
+
 
 def inspect_pdf(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
     pdf_path = Path(path)
@@ -71,29 +73,31 @@ def extract_tab(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     inspection = inspect_pdf(path, out / "inspect")
-    raw = {
+    raw: dict[str, Any] = {
+        "schema_version": TABRAW_SCHEMA_VERSION,
         "source_pdf": str(path),
-        "items": [],
+        "candidates": [],
         "warnings": [
             {
                 "code": "tab-extraction-incomplete",
-                "message": "First milestone only records PDF text diagnostics; full tab extraction is pending.",
+                "message": "This phase records born-digital text candidates; staff/string/beat alignment is pending.",
             }
         ],
         "inspection_kind": inspection["kind"],
     }
     for page in inspection["pages"]:
-        for block in page.get("text_blocks", []):
+        for block_index, block in enumerate(page.get("text_blocks", []), start=1):
             text = block["text"]
             if any(char.isdigit() for char in text) or any(token in text.lower() for token in ("slide", "bend", "vib", "let")):
-                raw["items"].append(
-                    {
-                        "page": page["page"],
-                        "text": text,
-                        "bbox": block["bbox"],
-                        "confidence": 0.4,
-                        "kind": "candidate-text",
-                    }
+                candidate = make_tab_candidate(
+                    candidate_id=f"pdf-p{page['page']:03d}-text-{block_index:04d}",
+                    raw_text=text,
+                    page_index=page["page"],
+                    bbox_values=block["bbox"],
+                    confidence=0.4,
+                    raw={"text_block_index": block_index},
                 )
+                raw["candidates"].append(candidate.model_dump(mode="json", exclude_none=True))
+    raw = TabRaw.model_validate(raw).model_dump(mode="json", exclude_none=True)
     (out / "tab_raw.json").write_text(json.dumps(raw, indent=2), encoding="utf-8")
     return raw

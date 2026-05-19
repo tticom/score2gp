@@ -1,0 +1,439 @@
+from __future__ import annotations
+
+import hashlib
+from fractions import Fraction
+from pathlib import Path
+from typing import Literal
+from xml.etree import ElementTree as ET
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from .ir import DEFAULT_TICKS_PER_QUARTER, TimeSignature
+
+
+class MusicXmlWarning(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+    message: str
+    severity: Literal["info", "warning", "error"] = "warning"
+    source_path: str | None = None
+
+
+class MusicXmlMetadata(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = "Untitled"
+    composer: str | None = None
+    lyricist: str | None = None
+    rights: str | None = None
+    source: str | None = None
+
+
+class MusicXmlPitch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    step: str
+    alter: int = 0
+    octave: int
+    midi: int
+    name: str
+
+
+class MusicXmlTuplet(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    actual_notes: int
+    normal_notes: int
+
+
+class MusicXmlNote(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    part_id: str
+    measure_index: int = Field(ge=1)
+    measure_number: str
+    note_index: int = Field(ge=1)
+    onset_divisions: int = Field(ge=0)
+    duration_divisions: int = Field(ge=0)
+    voice: int = Field(default=1, ge=1, le=8)
+    staff: int | None = Field(default=None, ge=1)
+    is_rest: bool = False
+    pitch: MusicXmlPitch | None = None
+    chord: bool = False
+    ties: list[Literal["start", "stop"]] = Field(default_factory=list)
+    notated_type: str | None = None
+    dots: int = Field(default=0, ge=0)
+    tuplet: MusicXmlTuplet | None = None
+    grace: bool = False
+    source_path: str
+
+    def duration_ticks(self, divisions: int) -> tuple[int, bool]:
+        value = Fraction(self.duration_divisions * DEFAULT_TICKS_PER_QUARTER, divisions)
+        return int(value), value.denominator == 1
+
+
+class MusicXmlMeasure(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    index: int = Field(ge=1)
+    number: str
+    divisions: int = Field(gt=0)
+    time_signature: TimeSignature
+    key_fifths: int | None = None
+    notes: list[MusicXmlNote] = Field(default_factory=list)
+
+
+class MusicXmlPart(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    name: str
+    measures: list[MusicXmlMeasure] = Field(default_factory=list)
+
+
+class MusicXmlImport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_path: str
+    source_sha256: str
+    metadata: MusicXmlMetadata
+    tempo_bpm: int | None = Field(default=None, gt=0, le=400)
+    parts: list[MusicXmlPart] = Field(default_factory=list)
+    warnings: list[MusicXmlWarning] = Field(default_factory=list)
+
+
+def parse_musicxml(path: str | Path) -> MusicXmlImport:
+    xml_path = Path(path)
+    if xml_path.suffix.lower() == ".mxl":
+        raise ValueError("compressed .mxl MusicXML packages are not supported by this importer yet")
+
+    tree = ET.parse(xml_path)
+    root = tree.getroot()
+    if _local_name(root.tag) != "score-partwise":
+        raise ValueError("only partwise MusicXML scores are supported")
+
+    warnings: list[MusicXmlWarning] = []
+    part_names = _part_names(root)
+    metadata = _metadata(root, xml_path)
+    tempo_bpm = _tempo(root)
+    parts = []
+
+    for part_node in _children(root, "part"):
+        part_id = part_node.get("id") or f"part-{len(parts) + 1}"
+        part_name = part_names.get(part_id, part_id)
+        parts.append(_parse_part(part_node, part_id, part_name, warnings))
+
+    return MusicXmlImport(
+        source_path=str(xml_path),
+        source_sha256=_sha256(xml_path),
+        metadata=metadata,
+        tempo_bpm=tempo_bpm,
+        parts=parts,
+        warnings=warnings,
+    )
+
+
+def _parse_part(
+    part_node: ET.Element,
+    part_id: str,
+    part_name: str,
+    warnings: list[MusicXmlWarning],
+) -> MusicXmlPart:
+    measures = []
+    current_divisions = 1
+    current_time = TimeSignature(numerator=4, denominator=4)
+    current_key: int | None = None
+
+    for measure_index, measure_node in enumerate(_children(part_node, "measure"), start=1):
+        measure_number = measure_node.get("number") or str(measure_index)
+        cursor = 0
+        last_note_onset = 0
+        notes: list[MusicXmlNote] = []
+
+        for child in list(measure_node):
+            name = _local_name(child.tag)
+            source_path = f"/score-partwise/part[@id='{part_id}']/measure[{measure_index}]/{name}"
+            if name == "attributes":
+                current_divisions = _parse_divisions(child, current_divisions)
+                current_time = _parse_time_signature(child, current_time)
+                current_key = _parse_key(child, current_key)
+            elif name == "note":
+                note_index = len(notes) + 1
+                note, cursor, last_note_onset = _parse_note(
+                    child,
+                    part_id=part_id,
+                    measure_index=measure_index,
+                    measure_number=measure_number,
+                    note_index=note_index,
+                    cursor=cursor,
+                    last_note_onset=last_note_onset,
+                    warnings=warnings,
+                )
+                notes.append(note)
+            elif name == "backup":
+                cursor = max(0, cursor - _duration(child))
+            elif name == "forward":
+                cursor += _duration(child)
+            elif name == "barline" and _has_descendant(child, "repeat"):
+                warnings.append(
+                    MusicXmlWarning(
+                        code="unsupported-repeat",
+                        message="repeat barlines are recorded as unsupported and ignored in this phase",
+                        source_path=source_path,
+                    )
+                )
+            elif name == "barline" and _has_descendant(child, "ending"):
+                warnings.append(
+                    MusicXmlWarning(
+                        code="unsupported-ending",
+                        message="alternate endings are recorded as unsupported and ignored in this phase",
+                        source_path=source_path,
+                    )
+                )
+
+        measures.append(
+            MusicXmlMeasure(
+                index=measure_index,
+                number=measure_number,
+                divisions=current_divisions,
+                time_signature=current_time,
+                key_fifths=current_key,
+                notes=notes,
+            )
+        )
+
+    return MusicXmlPart(id=part_id, name=part_name, measures=measures)
+
+
+def _parse_note(
+    node: ET.Element,
+    *,
+    part_id: str,
+    measure_index: int,
+    measure_number: str,
+    note_index: int,
+    cursor: int,
+    last_note_onset: int,
+    warnings: list[MusicXmlWarning],
+) -> tuple[MusicXmlNote, int, int]:
+    chord = _child(node, "chord") is not None
+    grace = _child(node, "grace") is not None
+    onset = last_note_onset if chord else cursor
+    duration = _duration(node)
+    voice = _int_text(_child(node, "voice"), default=1)
+    staff = _optional_int_text(_child(node, "staff"))
+    source_path = f"/score-partwise/part[@id='{part_id}']/measure[{measure_index}]/note[{note_index}]"
+
+    if grace:
+        warnings.append(
+            MusicXmlWarning(
+                code="unsupported-grace-note",
+                message="grace notes are parsed but not converted into timed ScoreIR events in this phase",
+                source_path=source_path,
+            )
+        )
+
+    note = MusicXmlNote(
+        id=f"mx-{part_id}-m{measure_index}-n{note_index}",
+        part_id=part_id,
+        measure_index=measure_index,
+        measure_number=measure_number,
+        note_index=note_index,
+        onset_divisions=onset,
+        duration_divisions=duration,
+        voice=voice,
+        staff=staff,
+        is_rest=_child(node, "rest") is not None,
+        pitch=_pitch(node),
+        chord=chord,
+        ties=_ties(node),
+        notated_type=_text(_child(node, "type")),
+        dots=len(_children(node, "dot")),
+        tuplet=_tuplet(node),
+        grace=grace,
+        source_path=source_path,
+    )
+
+    if not chord and duration > 0 and not grace:
+        cursor += duration
+    if not chord:
+        last_note_onset = onset
+
+    return note, cursor, last_note_onset
+
+
+def _metadata(root: ET.Element, xml_path: Path) -> MusicXmlMetadata:
+    title = _text(_child(root, "movement-title"))
+    work = _child(root, "work")
+    if not title and work is not None:
+        title = _text(_child(work, "work-title"))
+
+    identification = _child(root, "identification")
+    composer = None
+    lyricist = None
+    rights = None
+    if identification is not None:
+        for creator in _children(identification, "creator"):
+            creator_type = creator.get("type")
+            if creator_type == "composer":
+                composer = _text(creator)
+            elif creator_type == "lyricist":
+                lyricist = _text(creator)
+        rights = _text(_child(identification, "rights"))
+
+    return MusicXmlMetadata(
+        title=title or xml_path.stem,
+        composer=composer,
+        lyricist=lyricist,
+        rights=rights,
+        source=str(xml_path),
+    )
+
+
+def _part_names(root: ET.Element) -> dict[str, str]:
+    part_list = _child(root, "part-list")
+    if part_list is None:
+        return {}
+    names = {}
+    for score_part in _children(part_list, "score-part"):
+        part_id = score_part.get("id")
+        if part_id:
+            names[part_id] = _text(_child(score_part, "part-name")) or part_id
+    return names
+
+
+def _parse_divisions(attributes: ET.Element, current: int) -> int:
+    divisions = _optional_int_text(_child(attributes, "divisions"))
+    return divisions if divisions and divisions > 0 else current
+
+
+def _parse_time_signature(attributes: ET.Element, current: TimeSignature) -> TimeSignature:
+    time_node = _child(attributes, "time")
+    if time_node is None:
+        return current
+    beats = _optional_int_text(_child(time_node, "beats"))
+    beat_type = _optional_int_text(_child(time_node, "beat-type"))
+    if beats is None or beat_type is None:
+        return current
+    return TimeSignature(numerator=beats, denominator=beat_type)
+
+
+def _parse_key(attributes: ET.Element, current: int | None) -> int | None:
+    key_node = _child(attributes, "key")
+    if key_node is None:
+        return current
+    fifths = _optional_int_text(_child(key_node, "fifths"))
+    return fifths if fifths is not None else current
+
+
+def _tempo(root: ET.Element) -> int | None:
+    for direction in _descendants(root, "direction"):
+        sound = _child(direction, "sound")
+        if sound is not None and sound.get("tempo"):
+            return round(float(sound.get("tempo", "0")))
+        metronome = _child(direction, "metronome")
+        if metronome is not None:
+            per_minute = _optional_int_text(_child(metronome, "per-minute"))
+            if per_minute is not None:
+                return per_minute
+    for sound in _descendants(root, "sound"):
+        if sound.get("tempo"):
+            return round(float(sound.get("tempo", "0")))
+    return None
+
+
+def _pitch(note: ET.Element) -> MusicXmlPitch | None:
+    pitch_node = _child(note, "pitch")
+    if pitch_node is None:
+        return None
+    step = (_text(_child(pitch_node, "step")) or "C").upper()
+    alter = _optional_int_text(_child(pitch_node, "alter")) or 0
+    octave = _optional_int_text(_child(pitch_node, "octave")) or 4
+    midi = (octave + 1) * 12 + {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}[step] + alter
+    accidental = "#" if alter == 1 else "b" if alter == -1 else f"{alter:+d}" if alter else ""
+    return MusicXmlPitch(step=step, alter=alter, octave=octave, midi=midi, name=f"{step}{accidental}{octave}")
+
+
+def _ties(note: ET.Element) -> list[Literal["start", "stop"]]:
+    values: list[Literal["start", "stop"]] = []
+    for tie in _children(note, "tie"):
+        tie_type = tie.get("type")
+        if tie_type in ("start", "stop") and tie_type not in values:
+            values.append(tie_type)
+    notations = _child(note, "notations")
+    if notations is not None:
+        for tied in _children(notations, "tied"):
+            tied_type = tied.get("type")
+            if tied_type in ("start", "stop") and tied_type not in values:
+                values.append(tied_type)
+    return values
+
+
+def _tuplet(note: ET.Element) -> MusicXmlTuplet | None:
+    time_modification = _child(note, "time-modification")
+    if time_modification is None:
+        return None
+    actual = _optional_int_text(_child(time_modification, "actual-notes"))
+    normal = _optional_int_text(_child(time_modification, "normal-notes"))
+    if actual is None or normal is None:
+        return None
+    return MusicXmlTuplet(actual_notes=actual, normal_notes=normal)
+
+
+def _duration(node: ET.Element) -> int:
+    return _int_text(_child(node, "duration"), default=0)
+
+
+def _int_text(node: ET.Element | None, default: int) -> int:
+    value = _optional_int_text(node)
+    return default if value is None else value
+
+
+def _optional_int_text(node: ET.Element | None) -> int | None:
+    value = _text(node)
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
+def _text(node: ET.Element | None) -> str | None:
+    if node is None or node.text is None:
+        return None
+    value = node.text.strip()
+    return value or None
+
+
+def _child(node: ET.Element, name: str) -> ET.Element | None:
+    for child in list(node):
+        if _local_name(child.tag) == name:
+            return child
+    return None
+
+
+def _children(node: ET.Element, name: str) -> list[ET.Element]:
+    return [child for child in list(node) if _local_name(child.tag) == name]
+
+
+def _descendants(node: ET.Element, name: str) -> list[ET.Element]:
+    return [child for child in node.iter() if _local_name(child.tag) == name]
+
+
+def _has_descendant(node: ET.Element, name: str) -> bool:
+    return any(_local_name(child.tag) == name for child in node.iter())
+
+
+def _local_name(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1]
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return f"sha256:{digest.hexdigest()}"

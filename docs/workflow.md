@@ -2,7 +2,7 @@
 
 This document describes the intended staged workflow from an owned PDF score to a Guitar Pro `.gp` package.
 
-The full PDF-to-GP workflow is not complete yet. The current project can inspect PDFs, run Audiveris, inspect/write minimal GP packages, and validate generated packages. The MusicXML/tab alignment step is still pending.
+The full PDF-to-GP workflow is not complete yet. The current project can inspect PDFs, run Audiveris, parse a limited uncompressed MusicXML subset, build ScoreIR from synthetic MusicXML plus TabRaw fixtures, inspect/write minimal GP packages, and validate generated packages. Real PDF-derived MusicXML/tab alignment is still pending.
 
 ## 1. Start From The Project Directory
 
@@ -73,20 +73,29 @@ work/derek/tab/inspect/inspect_pdf.json
 work/derek/tab/inspect/pages/*.png
 ```
 
-Current status: first-pass candidate extraction only. It does not yet perform full tab staff/string/beat alignment.
+Current status: first-pass candidate extraction only. It writes `tabraw.v0.1` candidates with stable IDs, bounding boxes, x/y evidence, confidence, and nullable staff/string/bar estimates. It does not yet perform full tab staff/string/beat alignment.
 
 ## 5. Build ScoreIR
 
-Intended command:
+Synthetic proof command:
 
 ```powershell
 python -m score2gp.cli build-ir `
-  --musicxml "work/derek/omr/Derek Trucks BB King.mxl" `
-  --tab "work/derek/tab/tab_raw.json" `
+  --musicxml "tests/fixtures/musicxml/tiny_single_bar.musicxml" `
+  --tabraw "tests/fixtures/tabraw/tiny_single_bar_tabraw.json" `
+  --out "work/synthetic/score.ir.json"
+```
+
+Future real-input command:
+
+```powershell
+python -m score2gp.cli build-ir `
+  --musicxml "work/derek/omr/Derek Trucks BB King.musicxml" `
+  --tabraw "work/derek/tab/tab_raw.json" `
   --out "work/derek/score.ir.json"
 ```
 
-Current status: not implemented. This is the next major milestone. It must align standard-notation timing with tab fret/string positions and preserve confidence plus bounding boxes.
+Current status: implemented only for limited synthetic fixtures. It uses MusicXML for measure timing and rests, TabRaw for string/fret candidates, and simple bar/x-order alignment. It uses standard guitar tuning as an explicit placeholder. Private real-world fixture alignment is still deferred.
 
 ## 6. Write Guitar Pro Package
 
@@ -158,7 +167,7 @@ Current status: scaffold only. It writes diagnostics and a conversion report, bu
 | PDF diagnostics | `inspect-pdf` | Implemented |
 | Standard notation OMR | `omr` | Implemented via Audiveris |
 | Tab candidate extraction | `extract-tab` | First pass |
-| ScoreIR alignment | `build-ir` | Not implemented |
+| ScoreIR alignment | `build-ir` | Synthetic proof path |
 | GP writing | `write-gp` | Minimal subset implemented |
 | Validation | `validate` | Implemented |
 | Full conversion | `convert` | Scaffold only |

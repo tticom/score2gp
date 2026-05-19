@@ -44,10 +44,13 @@ Purpose:
 
 - hold candidate fret numbers, chord symbols, and technique text
 - preserve source page and bounding boxes
+- preserve stable candidate IDs
+- preserve system/staff/bar/string estimates when known
+- preserve x/y evidence for later MusicXML alignment
 - keep confidence values visible
 - keep uncertain text as candidates rather than forced notes
 
-Status: first-pass born-digital text candidate extraction only.
+Status: `tabraw.v0.1` candidate contract implemented. Extraction is still first-pass born-digital text candidate collection only.
 
 ## MusicXmlImport
 
@@ -70,16 +73,17 @@ Purpose:
 
 - use Audiveris for standard notation OMR
 - capture logs and warnings
-- provide MusicXML/MXL timing input for a later ScoreIR builder
+- parse uncompressed partwise MusicXML into limited timing, pitch, voice, rest, tie, tuplet, and measure data
+- provide timing input for the first synthetic ScoreIR builder
 
-Status: Audiveris wrapper implemented. MusicXML parsing is not implemented yet.
+Status: Audiveris wrapper implemented. A limited uncompressed MusicXML parser is implemented for synthetic fixtures. Compressed `.mxl` package parsing is not implemented yet.
 
 ## ScoreIR
 
 Intended produced by:
 
 ```powershell
-python -m score2gp.cli build-ir --musicxml work/omr/score.mxl --tab work/tab/tab_raw.json --out score.ir.json
+python -m score2gp.cli build-ir --musicxml work/omr/score.musicxml --tabraw work/tab/tab_raw.json --out score.ir.json
 ```
 
 Purpose:
@@ -88,7 +92,7 @@ Purpose:
 - store tracks, tunings, bars, timing, notes, techniques, confidence, and provenance
 - be suitable for validation, semantic comparison, correction, and writing
 
-Status: ScoreIR v0.1 schema and validation are implemented. `build-ir` is not implemented yet.
+Status: ScoreIR v0.1 schema and validation are implemented. `build-ir` now supports a narrow synthetic MusicXML + TabRaw path. Real PDF-derived alignment is still pending.
 
 ## ConversionReport
 
