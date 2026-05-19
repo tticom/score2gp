@@ -66,6 +66,13 @@ class BuildIrDiagnostics(BaseModel):
     musicxml_pitched_events_imported: int
     musicxml_rest_events_imported: int
     tabraw_candidates_loaded: int
+    tabraw_fret_candidate_count: int
+    tabraw_non_fret_candidate_count: int
+    tabraw_candidates_with_bbox: int
+    tabraw_candidates_with_x: int
+    tabraw_candidates_with_string: int
+    tabraw_candidates_with_bar: int
+    tabraw_source_stage_counts: dict[str, int] = Field(default_factory=dict)
     matched_candidate_count: int
     unmatched_musicxml_event_count: int
     unmatched_musicxml_note_count: int
@@ -73,6 +80,7 @@ class BuildIrDiagnostics(BaseModel):
     unsupported_construct_warnings: list[str] = Field(default_factory=list)
     warning_count: int
     confidence_flags: list[dict[str, object]] = Field(default_factory=list)
+    extraction_quality_flags: list[str] = Field(default_factory=list)
     per_bar: list[BarAlignmentDiagnostics] = Field(default_factory=list)
     warnings: list[dict[str, object]] = Field(default_factory=list)
 
@@ -613,6 +621,13 @@ def _build_diagnostics(
         musicxml_pitched_events_imported=totals["musicxml_pitched_event_count"],
         musicxml_rest_events_imported=totals["musicxml_rest_event_count"],
         tabraw_candidates_loaded=len(tabraw.candidates),
+        tabraw_fret_candidate_count=sum(1 for candidate in tabraw.candidates if candidate.parsed_fret is not None),
+        tabraw_non_fret_candidate_count=sum(1 for candidate in tabraw.candidates if candidate.parsed_fret is None),
+        tabraw_candidates_with_bbox=sum(1 for candidate in tabraw.candidates if candidate.bbox is not None),
+        tabraw_candidates_with_x=sum(1 for candidate in tabraw.candidates if candidate.x is not None),
+        tabraw_candidates_with_string=sum(1 for candidate in tabraw.candidates if candidate.string is not None),
+        tabraw_candidates_with_bar=sum(1 for candidate in tabraw.candidates if candidate.bar_index is not None),
+        tabraw_source_stage_counts=_tabraw_source_stage_counts(tabraw),
         matched_candidate_count=len(candidate_pools.consumed),
         unmatched_musicxml_event_count=totals["unmatched_musicxml_event_count"],
         unmatched_musicxml_note_count=totals["unmatched_musicxml_note_count"],
@@ -624,6 +639,7 @@ def _build_diagnostics(
         ],
         warning_count=len(warnings),
         confidence_flags=confidence_flags,
+        extraction_quality_flags=_tabraw_extraction_quality_flags(tabraw),
         per_bar=per_bar,
         warnings=[warning.model_dump(mode="json", exclude_none=True) for warning in warnings],
     )
@@ -656,6 +672,32 @@ def _diagnostic_totals(per_bar: list[BarAlignmentDiagnostics]) -> dict[str, int]
         "unmatched_musicxml_event_count": sum(item.unmatched_musicxml_event_count for item in per_bar),
         "unmatched_musicxml_note_count": sum(item.unmatched_musicxml_note_count for item in per_bar),
     }
+
+
+def _tabraw_source_stage_counts(tabraw: TabRaw) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for candidate in tabraw.candidates:
+        key = str(candidate.source_stage)
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def _tabraw_extraction_quality_flags(tabraw: TabRaw) -> list[str]:
+    flags = []
+    fret_candidates = [candidate for candidate in tabraw.candidates if candidate.parsed_fret is not None]
+    if not tabraw.candidates:
+        flags.append("TabRaw contains no candidates")
+    if fret_candidates and any(candidate.x is None for candidate in fret_candidates):
+        flags.append("fret candidate missing x-position")
+    if fret_candidates and any(candidate.bbox is None for candidate in fret_candidates):
+        flags.append("fret candidate missing bounding box")
+    if fret_candidates and any(candidate.string is None for candidate in fret_candidates):
+        flags.append("fret candidate missing inferred string")
+    if fret_candidates and any(candidate.bar_index is None for candidate in fret_candidates):
+        flags.append("fret candidate missing inferred bar")
+    if any(candidate.confidence < 0.6 for candidate in tabraw.candidates):
+        flags.append("one or more TabRaw candidates have low confidence")
+    return flags
 
 
 def _bar_ambiguity_flags(bar_index: int, candidate_pools: CandidatePools) -> list[str]:

@@ -138,6 +138,11 @@ def make_tab_candidate(
     page_index: int | None,
     bbox_values: list[float] | tuple[float, float, float, float] | None,
     confidence: float,
+    system_index: int | None = None,
+    staff_index: int | None = None,
+    bar_index: int | None = None,
+    line_index: int | None = None,
+    string: int | None = None,
     raw: dict[str, Any] | None = None,
 ) -> TabCandidate:
     bbox = _normalize_bbox(bbox_values, page_index)
@@ -147,6 +152,11 @@ def make_tab_candidate(
         id=candidate_id,
         kind=_candidate_kind(raw_text, parsed_fret),
         page_index=page_index,
+        system_index=system_index,
+        staff_index=staff_index,
+        bar_index=bar_index,
+        line_index=line_index,
+        string=string,
         raw_text=raw_text,
         parsed_fret=parsed_fret,
         x=x,
