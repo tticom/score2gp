@@ -28,6 +28,7 @@
 - Add per-system and ignored non-playable candidate diagnostics for PDF-derived TabRaw.
 - Add per-bar x-to-onset diagnostics with visual fret groups, MusicXML onset groups, drift/error values, chord-stack flags, ambiguity counts, and quality labels.
 - Use the diagnostics to decide when a controlled private fixture is safe to try.
+- Run private fixtures only through ignored diagnostic workflows with sanitized summaries.
 
 ## Milestone 4: GPIF coverage
 

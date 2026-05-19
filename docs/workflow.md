@@ -178,6 +178,19 @@ Current status: implemented for limited synthetic fixtures and controlled genera
 
 When reading `build-ir-diagnostics.v0.1`, check each bar's `quality`, `candidate_x_groups`, `musicxml_onset_groups`, `mean_absolute_relative_error`, `max_relative_error`, `ambiguous_x_group_count`, and `x_to_onset_warnings`. `good` means the current x-order heuristic is internally consistent for the controlled input. `warning`, `poor`, or `unknown` should block trust in automatic conversion until the geometry is inspected.
 
+## Private Diagnostic Smoke
+
+Use private material only for local diagnostics, and keep both inputs and outputs in ignored paths. A full diagnostic run requires a private PDF plus matching MusicXML/XML/MXL timing data from the same source:
+
+```powershell
+python scripts/private_diagnostic_smoke.py `
+  --pdf "fixtures/private/example.pdf" `
+  --musicxml "fixtures/private/example.musicxml" `
+  --out-dir "work/private_diagnostics/example"
+```
+
+If matching MusicXML is missing, omit `--musicxml`; the runner will stop after PDF extraction and record that `build-ir` was not run. The compact `summary.json` and `summary.md` use basenames and counts only; full TabRaw, IR, diagnostics, rendered pages, and overlays remain private artifacts under ignored `work/`.
+
 ## 6. Write Guitar Pro Package
 
 Once `score.ir.json` exists, write a GP7-style package:
