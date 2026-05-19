@@ -101,6 +101,14 @@ Current synthetic alignment details:
 - Pitched ScoreIR events are emitted only when TabRaw provides string/fret evidence.
 - Unused fret candidates, non-fret TabRaw candidates, unattached harmonies, and pitch mismatches are explicit warnings.
 
+Optional sidecar diagnostics:
+
+```powershell
+python -m score2gp.cli build-ir --musicxml tests/fixtures/musicxml/tiny_multibar.musicxml --tabraw tests/fixtures/tabraw/tiny_multibar_tabraw.json --out work/synthetic/multibar.ir.json --diagnostics-out work/synthetic/multibar.diagnostics.json
+```
+
+The sidecar uses `build-ir-diagnostics.v0.1` and includes imported event counts, loaded/matched/unmatched TabRaw candidate counts, unmatched MusicXML counts, unsupported warning codes, confidence flags, and per-bar alignment summaries. It is intentionally separate from ScoreIR so diagnostics can evolve without changing the interchange contract.
+
 ## ConversionReport
 
 Produced by:

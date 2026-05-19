@@ -23,3 +23,5 @@
 - [x] TabRaw v0.1 candidate model and born-digital text candidate extraction.
 - [x] Synthetic MusicXML + TabRaw `build-ir` path.
 - [x] Richer public synthetic fixtures for chords, tuplets, selected techniques, and alignment diagnostics.
+- [x] `build-ir --diagnostics-out` sidecar with imported/matched/unmatched counts and per-bar summaries.
+- [x] Public regression fixtures for multibar, chords, rests/voices, and invalid TabRaw inputs.

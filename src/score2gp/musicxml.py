@@ -415,7 +415,7 @@ def _tempo(root: ET.Element) -> int | None:
         sound = _child(direction, "sound")
         if sound is not None and sound.get("tempo"):
             return round(float(sound.get("tempo", "0")))
-        metronome = _child(direction, "metronome")
+        metronome = _child(direction, "metronome") or _first_descendant(direction, "metronome")
         if metronome is not None:
             per_minute = _optional_int_text(_child(metronome, "per-minute"))
             if per_minute is not None:
@@ -617,6 +617,13 @@ def _children(node: ET.Element, name: str) -> list[ET.Element]:
 
 def _descendants(node: ET.Element, name: str) -> list[ET.Element]:
     return [child for child in node.iter() if _local_name(child.tag) == name]
+
+
+def _first_descendant(node: ET.Element, name: str) -> ET.Element | None:
+    for child in node.iter():
+        if child is not node and _local_name(child.tag) == name:
+            return child
+    return None
 
 
 def _has_descendant(node: ET.Element, name: str) -> bool:

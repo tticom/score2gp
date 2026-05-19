@@ -95,6 +95,16 @@ python -m score2gp.cli build-ir `
   --out "work/synthetic/rich_score.ir.json"
 ```
 
+Alignment diagnostics sidecar:
+
+```powershell
+python -m score2gp.cli build-ir `
+  --musicxml "tests/fixtures/musicxml/tiny_multibar.musicxml" `
+  --tabraw "tests/fixtures/tabraw/tiny_multibar_tabraw.json" `
+  --out "work/synthetic/multibar.ir.json" `
+  --diagnostics-out "work/synthetic/multibar.diagnostics.json"
+```
+
 Future real-input command:
 
 ```powershell
@@ -104,7 +114,7 @@ python -m score2gp.cli build-ir `
   --out "work/derek/score.ir.json"
 ```
 
-Current status: implemented only for limited synthetic fixtures. It uses MusicXML for measure timing, rests, chord symbols, tuplets, and selected note techniques. It uses TabRaw for string/fret candidates and simple bar/x-order alignment. It emits warnings for unused candidates, non-fret TabRaw candidates that are preserved but not aligned, missing tab evidence, and pitch mismatches. It uses standard guitar tuning as an explicit placeholder. Private real-world fixture alignment is still deferred.
+Current status: implemented only for limited synthetic fixtures. It uses MusicXML for measure timing, rests, voices, chords, backup/forward timing, chord symbols, tuplets, and selected note techniques. It uses TabRaw for string/fret candidates and simple bar/x-order alignment. It emits warnings for unused candidates, non-fret TabRaw candidates that are preserved but not aligned, missing tab evidence, and pitch mismatches. The optional diagnostics file reports imported, matched, and unmatched counts plus per-bar summaries. It uses standard guitar tuning as an explicit placeholder. Private real-world fixture alignment is still deferred.
 
 ## 6. Write Guitar Pro Package
 

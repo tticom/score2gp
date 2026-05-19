@@ -80,3 +80,32 @@ def test_musicxml_importer_preserves_harmony_tuplets_and_guitar_techniques() -> 
 
     second_measure = imported.parts[0].measures[1]
     assert second_measure.harmonies[0].text == "Gmaj7"
+
+
+def test_musicxml_importer_handles_multibar_onsets_and_divisions() -> None:
+    imported = parse_musicxml(FIXTURES / "tiny_multibar.musicxml")
+
+    assert len(imported.parts[0].measures) == 2
+    first, second = imported.parts[0].measures
+    assert [note.onset_ticks(first.divisions)[0] for note in first.notes] == [0, 960, 1920]
+    assert [note.onset_ticks(second.divisions)[0] for note in second.notes] == [0, 1920]
+
+
+def test_musicxml_importer_handles_chord_without_advancing_onset() -> None:
+    imported = parse_musicxml(FIXTURES / "tiny_chords.musicxml")
+    measure = imported.parts[0].measures[0]
+
+    assert measure.harmonies[0].text == "Em"
+    assert [note.onset_divisions for note in measure.notes] == [0, 0, 4]
+    assert measure.notes[1].chord is True
+
+
+def test_musicxml_importer_handles_backup_for_simple_voice_timing() -> None:
+    imported = parse_musicxml(FIXTURES / "tiny_rests_voices.musicxml")
+    measure = imported.parts[0].measures[0]
+
+    assert [(note.onset_divisions, note.voice, note.is_rest) for note in measure.notes] == [
+        (0, 1, False),
+        (8, 1, False),
+        (0, 2, True),
+    ]

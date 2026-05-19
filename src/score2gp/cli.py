@@ -7,7 +7,7 @@ from typing import Optional
 
 import typer
 
-from .build_ir import build_ir_from_files
+from .build_ir import build_ir_with_diagnostics_from_files
 from .gp_package import compare_gp, dumps_summary, inspect_gp, validate_gp, write_gp
 from .ir import ScoreIR, compare_score_ir, export_scoreir_schema, validate_score_ir_file
 from .pdf import extract_tab as extract_tab_file
@@ -129,6 +129,7 @@ def build_ir_command(
     musicxml: Optional[Path] = typer.Option(None),
     tabraw: Optional[Path] = typer.Option(None, "--tabraw", "--tab"),
     out: Path = typer.Option(...),
+    diagnostics_out: Optional[Path] = typer.Option(None, "--diagnostics-out"),
 ) -> None:
     """Build a limited ScoreIR file from synthetic MusicXML plus TabRaw inputs."""
     if musicxml is None or tabraw is None:
@@ -136,15 +137,21 @@ def build_ir_command(
             "ScoreIR v0.1 is ready. This build-ir phase requires --musicxml and --tabraw/--tab "
             "and supports only the limited synthetic MusicXML + TabRaw alignment path."
         )
-    score = build_ir_from_files(musicxml, tabraw, out)
+    score, diagnostics = build_ir_with_diagnostics_from_files(musicxml, tabraw, out)
+    if diagnostics_out is not None:
+        diagnostics.to_json_file(diagnostics_out)
     typer.echo(
         json.dumps(
             {
                 "out": str(out),
+                "diagnostics_out": str(diagnostics_out) if diagnostics_out else None,
                 "schema_version": score.schema_version,
                 "bar_count": len(score.bars),
                 "event_count": sum(len(bar.events) for bar in score.bars),
                 "warning_count": len(score.warnings),
+                "matched_candidate_count": diagnostics.matched_candidate_count,
+                "unmatched_musicxml_event_count": diagnostics.unmatched_musicxml_event_count,
+                "unmatched_tabraw_candidate_count": diagnostics.unmatched_tabraw_candidate_count,
                 "warnings": [warning.model_dump(mode="json", exclude_none=True) for warning in score.warnings],
             },
             indent=2,

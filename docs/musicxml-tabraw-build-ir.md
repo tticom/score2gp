@@ -84,9 +84,10 @@ Richer synthetic smoke command:
 
 ```powershell
 python -m score2gp.cli build-ir `
-  --musicxml "tests/fixtures/musicxml/rich_guitar_cases.musicxml" `
-  --tabraw "tests/fixtures/tabraw/rich_guitar_cases_tabraw.json" `
-  --out "work/synthetic/rich_score.ir.json"
+  --musicxml "tests/fixtures/musicxml/tiny_multibar.musicxml" `
+  --tabraw "tests/fixtures/tabraw/tiny_multibar_tabraw.json" `
+  --out "work/synthetic/multibar.ir.json" `
+  --diagnostics-out "work/synthetic/multibar.diagnostics.json"
 ```
 
 `--tab` is retained as an alias for `--tabraw`.
@@ -98,11 +99,28 @@ Current behavior:
 - creates rest events directly from MusicXML rests
 - creates pitched events only when TabRaw provides aligned string/fret evidence
 - aligns synthetic tab candidates by bar and x-position order
+- treats repeated or near-repeated x-position candidates within a MusicXML chord event as stacked notes
 - preserves MusicXML chord symbols on same-onset events
 - carries simple MusicXML tuplets and selected note techniques into ScoreIR
 - keeps MusicXML and TabRaw provenance on generated notes
 - warns when notes cannot be aligned, pitch evidence conflicts, non-fret TabRaw candidates are not aligned, harmonies cannot attach to an event, or extra fret candidates are unused
 - uses standard guitar tuning as an explicit placeholder
+
+## Diagnostics
+
+`build-ir` can write a sidecar diagnostics file with `--diagnostics-out`. This deliberately stays outside ScoreIR so the interchange schema remains stable.
+
+The diagnostics contract is `build-ir-diagnostics.v0.1` and records:
+
+- MusicXML event counts imported
+- TabRaw candidate counts loaded, matched, and unmatched
+- unmatched MusicXML event and note counts
+- unsupported construct warning codes
+- per-bar alignment summaries
+- low-confidence flags
+- all ScoreIR warnings in JSON form
+
+The per-bar summaries include rest/chord event counts and ambiguity flags such as repeated x-position candidates.
 
 The generated ScoreIR should pass:
 
@@ -121,6 +139,7 @@ Still out of scope:
 - tab string inference from detected line positions
 - advanced rhythm, repeats, alternate endings, grace-note semantics, and tempo maps
 - TabRaw-derived chord/technique alignment
+- real optical x-to-onset calibration from page geometry
 - GPIF writer expansion
 
 The next architectural checkpoint should add controlled public fixtures that look more like born-digital guitar tab extraction before using private material.

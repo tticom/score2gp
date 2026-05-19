@@ -20,6 +20,7 @@
 - Prove synthetic MusicXML + TabRaw alignment with bars, rests, voices, chords, tuplets, selected techniques, and diagnostics.
 - Align tab x-positions with MusicXML timing for controlled public fixtures.
 - Produce richer ScoreIR with event-level provenance before attempting private real-world fixtures.
+- Write `build-ir-diagnostics.v0.1` sidecars so alignment quality can be reviewed before trying private fixtures.
 
 ## Milestone 4: GPIF coverage
 

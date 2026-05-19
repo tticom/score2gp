@@ -4,7 +4,9 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Literal
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from . import __version__
 from .ir import (
@@ -29,24 +31,90 @@ from .ir import (
     Track,
     WarningItem,
 )
-from .musicxml import MusicXmlHarmony, MusicXmlImport, MusicXmlMeasure, MusicXmlNote, MusicXmlTechnique, parse_musicxml
+from .musicxml import MusicXmlHarmony, MusicXmlImport, MusicXmlMeasure, MusicXmlNote, MusicXmlPart, MusicXmlTechnique, parse_musicxml
 from .tabraw import TabCandidate, TabRaw
 
 TRACK_ID = "gtr-1"
+DIAGNOSTICS_SCHEMA_VERSION = "build-ir-diagnostics.v0.1"
 
 
-def build_ir_from_files(musicxml_path: str | Path, tabraw_path: str | Path, out_path: str | Path | None = None) -> ScoreIR:
+class BarAlignmentDiagnostics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    bar_index: int
+    musicxml_event_count: int
+    musicxml_pitched_event_count: int
+    musicxml_rest_event_count: int
+    scoreir_event_count: int
+    matched_candidate_count: int
+    unmatched_musicxml_event_count: int
+    unmatched_musicxml_note_count: int
+    unmatched_tabraw_candidate_count: int
+    chord_event_count: int
+    average_event_confidence: float | None = None
+    ambiguity_flags: list[str] = Field(default_factory=list)
+
+
+class BuildIrDiagnostics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["build-ir-diagnostics.v0.1"] = DIAGNOSTICS_SCHEMA_VERSION
+    alignment_strategy: str = "bar-x-order"
+    musicxml_source: str
+    tabraw_source: str | None = None
+    musicxml_events_imported: int
+    musicxml_pitched_events_imported: int
+    musicxml_rest_events_imported: int
+    tabraw_candidates_loaded: int
+    matched_candidate_count: int
+    unmatched_musicxml_event_count: int
+    unmatched_musicxml_note_count: int
+    unmatched_tabraw_candidate_count: int
+    unsupported_construct_warnings: list[str] = Field(default_factory=list)
+    warning_count: int
+    confidence_flags: list[dict[str, object]] = Field(default_factory=list)
+    per_bar: list[BarAlignmentDiagnostics] = Field(default_factory=list)
+    warnings: list[dict[str, object]] = Field(default_factory=list)
+
+    def to_json_file(self, path: str | Path) -> None:
+        out = Path(path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(self.model_dump_json(indent=2), encoding="utf-8")
+
+
+def build_ir_from_files(
+    musicxml_path: str | Path,
+    tabraw_path: str | Path,
+    out_path: str | Path | None = None,
+    diagnostics_out_path: str | Path | None = None,
+) -> ScoreIR:
+    score, diagnostics = build_ir_with_diagnostics_from_files(musicxml_path, tabraw_path, out_path)
+    if diagnostics_out_path is not None:
+        diagnostics.to_json_file(diagnostics_out_path)
+    return score
+
+
+def build_ir_with_diagnostics_from_files(
+    musicxml_path: str | Path,
+    tabraw_path: str | Path,
+    out_path: str | Path | None = None,
+) -> tuple[ScoreIR, BuildIrDiagnostics]:
     musicxml = parse_musicxml(musicxml_path)
     tabraw = TabRaw.from_json_file(tabraw_path)
-    score = build_ir_from_imports(musicxml, tabraw)
+    score, diagnostics = build_ir_with_diagnostics_from_imports(musicxml, tabraw)
     if out_path is not None:
         out = Path(out_path)
         out.parent.mkdir(parents=True, exist_ok=True)
         score.to_json_file(out)
-    return score
+    return score, diagnostics
 
 
 def build_ir_from_imports(musicxml: MusicXmlImport, tabraw: TabRaw) -> ScoreIR:
+    score, _ = build_ir_with_diagnostics_from_imports(musicxml, tabraw)
+    return score
+
+
+def build_ir_with_diagnostics_from_imports(musicxml: MusicXmlImport, tabraw: TabRaw) -> tuple[ScoreIR, BuildIrDiagnostics]:
     warnings = _musicxml_warnings(musicxml)
     warnings.extend(_tabraw_warnings(tabraw))
     if musicxml.tempo_bpm is None:
@@ -95,7 +163,7 @@ def build_ir_from_imports(musicxml: MusicXmlImport, tabraw: TabRaw) -> ScoreIR:
             )
         warnings.extend(_unused_candidate_warnings(candidate_pools))
 
-    return ScoreIR(
+    score = ScoreIR(
         metadata=Metadata(
             title=musicxml.metadata.title,
             composer=musicxml.metadata.composer,
@@ -113,6 +181,8 @@ def build_ir_from_imports(musicxml: MusicXmlImport, tabraw: TabRaw) -> ScoreIR:
         bars=bars,
         warnings=warnings,
     )
+    diagnostics = _build_diagnostics(musicxml, tabraw, score, candidate_pools)
+    return score, diagnostics
 
 
 def _measure_events(
@@ -177,7 +247,7 @@ def _measure_events(
             if xml_note.pitch is None:
                 warnings.append(_event_warning("musicxml-pitch-missing", xml_note, "Pitched note is missing pitch data."))
                 continue
-            candidate = candidate_pools.pop(measure.index)
+            candidate = candidate_pools.pop(measure.index, event_id=event_id, musicxml_note_id=xml_note.id)
             if candidate is None:
                 warnings.append(
                     _event_warning(
@@ -295,9 +365,18 @@ def _note_groups(notes: Iterable[MusicXmlNote]) -> list[list[MusicXmlNote]]:
 
 
 @dataclass
+class CandidateUse:
+    candidate: TabCandidate
+    requested_bar_index: int
+    source_pool_bar_index: int | None
+    event_id: str
+    musicxml_note_id: str
+
+
+@dataclass
 class CandidatePools:
     pools: dict[int | None, list[TabCandidate]]
-    consumed_ids: set[str] = field(default_factory=set)
+    consumed: list[CandidateUse] = field(default_factory=list)
 
     @classmethod
     def from_tabraw(cls, tabraw: TabRaw) -> "CandidatePools":
@@ -309,17 +388,28 @@ class CandidatePools:
             pool.sort(key=lambda candidate: (float("inf") if candidate.x is None else candidate.x, candidate.id))
         return cls(pools=dict(pools))
 
-    def pop(self, bar_index: int) -> TabCandidate | None:
+    def pop(self, bar_index: int, *, event_id: str, musicxml_note_id: str) -> TabCandidate | None:
         for key in (bar_index, None):
             pool = self.pools.get(key)
             if pool:
                 candidate = pool.pop(0)
-                self.consumed_ids.add(candidate.id)
+                self.consumed.append(
+                    CandidateUse(
+                        candidate=candidate,
+                        requested_bar_index=bar_index,
+                        source_pool_bar_index=key,
+                        event_id=event_id,
+                        musicxml_note_id=musicxml_note_id,
+                    )
+                )
                 return candidate
         return None
 
     def unused(self) -> list[TabCandidate]:
         return [candidate for pool in self.pools.values() for candidate in pool]
+
+    def consumed_in_bar(self, bar_index: int) -> list[CandidateUse]:
+        return [use for use in self.consumed if use.requested_bar_index == bar_index]
 
 
 def _timing(note: MusicXmlNote, measure: MusicXmlMeasure, duration_ticks: int, onset_ticks: int) -> Timing:
@@ -469,6 +559,127 @@ def _unused_candidate_warnings(candidate_pools: CandidatePools) -> list[WarningI
         )
         for candidate in candidate_pools.unused()
     ]
+
+
+def _build_diagnostics(
+    musicxml: MusicXmlImport,
+    tabraw: TabRaw,
+    score: ScoreIR,
+    candidate_pools: CandidatePools,
+) -> BuildIrDiagnostics:
+    per_bar = []
+    first_part = musicxml.parts[0] if musicxml.parts else None
+    warnings = score.warnings
+    warning_codes = [warning.code for warning in warnings]
+    for bar in score.bars:
+        measure = _measure_for_bar(first_part, bar.index)
+        musicxml_groups = _diagnostic_groups(measure.notes) if measure is not None else []
+        bar_warnings = [warning for warning in warnings if _warning_bar_index(warning) == bar.index]
+        event_confidences = [event.confidence for event in bar.events]
+        ambiguity_flags = _bar_ambiguity_flags(bar.index, candidate_pools)
+        per_bar.append(
+            BarAlignmentDiagnostics(
+                bar_index=bar.index,
+                musicxml_event_count=len(musicxml_groups),
+                musicxml_pitched_event_count=sum(1 for group in musicxml_groups if not group[0].is_rest),
+                musicxml_rest_event_count=sum(1 for group in musicxml_groups if group[0].is_rest),
+                scoreir_event_count=len(bar.events),
+                matched_candidate_count=len(candidate_pools.consumed_in_bar(bar.index)),
+                unmatched_musicxml_event_count=sum(1 for warning in bar_warnings if warning.code == "scoreir-event-skipped"),
+                unmatched_musicxml_note_count=sum(1 for warning in bar_warnings if warning.code == "tab-candidate-missing"),
+                unmatched_tabraw_candidate_count=sum(1 for candidate in candidate_pools.unused() if candidate.bar_index == bar.index),
+                chord_event_count=sum(1 for group in musicxml_groups if len(group) > 1),
+                average_event_confidence=round(sum(event_confidences) / len(event_confidences), 3) if event_confidences else None,
+                ambiguity_flags=ambiguity_flags,
+            )
+        )
+
+    totals = _diagnostic_totals(per_bar)
+    confidence_flags = [
+        {
+            "event_id": event.id,
+            "bar_index": event.timing.bar_index,
+            "confidence": event.confidence,
+            "reason": "event confidence below 0.75",
+        }
+        for bar in score.bars
+        for event in bar.events
+        if event.confidence < 0.75
+    ]
+    return BuildIrDiagnostics(
+        musicxml_source=musicxml.source_path,
+        tabraw_source=tabraw.source_pdf,
+        musicxml_events_imported=totals["musicxml_event_count"],
+        musicxml_pitched_events_imported=totals["musicxml_pitched_event_count"],
+        musicxml_rest_events_imported=totals["musicxml_rest_event_count"],
+        tabraw_candidates_loaded=len(tabraw.candidates),
+        matched_candidate_count=len(candidate_pools.consumed),
+        unmatched_musicxml_event_count=totals["unmatched_musicxml_event_count"],
+        unmatched_musicxml_note_count=totals["unmatched_musicxml_note_count"],
+        unmatched_tabraw_candidate_count=len(candidate_pools.unused()),
+        unsupported_construct_warnings=[
+            code
+            for code in warning_codes
+            if code.startswith("unsupported-") or code in {"musicxml-grace-skipped", "musicxml-harmony-unattached"}
+        ],
+        warning_count=len(warnings),
+        confidence_flags=confidence_flags,
+        per_bar=per_bar,
+        warnings=[warning.model_dump(mode="json", exclude_none=True) for warning in warnings],
+    )
+
+
+def _measure_for_bar(part: MusicXmlPart | None, bar_index: int) -> MusicXmlMeasure | None:
+    if part is None:
+        return None
+    for measure in part.measures:
+        if measure.index == bar_index:
+            return measure
+    return None
+
+
+def _diagnostic_groups(notes: Iterable[MusicXmlNote]) -> list[list[MusicXmlNote]]:
+    groups = []
+    for group in _note_groups(notes):
+        first = group[0]
+        if first.grace or first.duration_divisions <= 0:
+            continue
+        groups.append(group)
+    return groups
+
+
+def _diagnostic_totals(per_bar: list[BarAlignmentDiagnostics]) -> dict[str, int]:
+    return {
+        "musicxml_event_count": sum(item.musicxml_event_count for item in per_bar),
+        "musicxml_pitched_event_count": sum(item.musicxml_pitched_event_count for item in per_bar),
+        "musicxml_rest_event_count": sum(item.musicxml_rest_event_count for item in per_bar),
+        "unmatched_musicxml_event_count": sum(item.unmatched_musicxml_event_count for item in per_bar),
+        "unmatched_musicxml_note_count": sum(item.unmatched_musicxml_note_count for item in per_bar),
+    }
+
+
+def _bar_ambiguity_flags(bar_index: int, candidate_pools: CandidatePools) -> list[str]:
+    flags = []
+    uses = candidate_pools.consumed_in_bar(bar_index)
+    if any(use.candidate.x is None for use in uses):
+        flags.append("matched candidate missing x-position")
+    if any(use.source_pool_bar_index is None for use in uses):
+        flags.append("used unscoped TabRaw candidate for bar")
+    if _has_repeated_x([use.candidate for use in uses]):
+        flags.append("repeated x-position candidates treated as a chord or stacked notes")
+    return flags
+
+
+def _has_repeated_x(candidates: list[TabCandidate], tolerance: float = 1.5) -> bool:
+    values = sorted(candidate.x for candidate in candidates if candidate.x is not None)
+    return any(abs(left - right) <= tolerance for left, right in zip(values, values[1:]))
+
+
+def _warning_bar_index(warning: WarningItem) -> int | None:
+    for provenance in warning.provenance:
+        if provenance.bar_index is not None:
+            return provenance.bar_index
+    return None
 
 
 def _event_warning(

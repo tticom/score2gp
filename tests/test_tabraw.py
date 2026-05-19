@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
 from score2gp.ir import SourceStage
 from score2gp.tabraw import TabRaw, normalize_tabraw_payload, parse_fret_text
+
+FIXTURES = Path("tests/fixtures/tabraw")
 
 
 def test_tabraw_fixture_has_stable_candidate_ids_and_provenance() -> None:
@@ -46,6 +50,27 @@ def test_legacy_tabraw_items_are_normalized() -> None:
     assert tabraw.candidates[0].x == 14.0
 
 
+def test_invalid_fret_text_remains_raw_candidate_with_low_confidence() -> None:
+    normalized = normalize_tabraw_payload(
+        {
+            "items": [
+                {
+                    "id": "not-a-fret",
+                    "page": 1,
+                    "text": "x",
+                    "bbox": [10, 20, 20, 30],
+                }
+            ]
+        }
+    )
+    tabraw = TabRaw.model_validate(normalized)
+
+    assert tabraw.candidates[0].kind == "candidate-text"
+    assert tabraw.candidates[0].raw_text == "x"
+    assert tabraw.candidates[0].parsed_fret is None
+    assert tabraw.candidates[0].confidence == 0.4
+
+
 def test_tabraw_classifies_chord_and_technique_text_without_treating_them_as_frets() -> None:
     normalized = normalize_tabraw_payload(
         {
@@ -74,3 +99,13 @@ def test_tabraw_rejects_duplicate_candidate_ids() -> None:
                 ],
             }
         )
+
+
+def test_invalid_tabraw_fixture_bad_fret_fails_clearly() -> None:
+    with pytest.raises(ValidationError, match="less than or equal to 36"):
+        TabRaw.from_json_file(FIXTURES / "invalid_tabraw_bad_fret.json")
+
+
+def test_invalid_tabraw_fixture_bad_bbox_fails_clearly() -> None:
+    with pytest.raises(ValidationError, match="bbox must use ordered PDF coordinates"):
+        TabRaw.from_json_file(FIXTURES / "invalid_tabraw_bad_bbox.json")
