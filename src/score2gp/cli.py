@@ -7,7 +7,7 @@ from typing import Optional
 
 import typer
 
-from .build_ir import build_ir_with_diagnostics_from_files
+from .build_ir import BuildIrInputRiskError, build_ir_with_diagnostics_from_files
 from .gp_package import compare_gp, dumps_summary, inspect_gp, validate_gp, write_gp
 from .ir import ScoreIR, compare_score_ir, export_scoreir_schema, validate_score_ir_file
 from .pdf import extract_tab as extract_tab_file
@@ -137,7 +137,15 @@ def build_ir_command(
             "ScoreIR v0.1 is ready. This build-ir phase requires --musicxml and --tabraw/--tab "
             "and supports only the limited synthetic MusicXML + TabRaw alignment path."
         )
-    score, diagnostics = build_ir_with_diagnostics_from_files(musicxml, tabraw, out)
+    try:
+        score, diagnostics = build_ir_with_diagnostics_from_files(musicxml, tabraw, out)
+    except BuildIrInputRiskError as exc:
+        payload = exc.to_diagnostics_payload()
+        if diagnostics_out is not None:
+            diagnostics_out.parent.mkdir(parents=True, exist_ok=True)
+            diagnostics_out.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+        raise typer.Exit(1) from exc
     if diagnostics_out is not None:
         diagnostics.to_json_file(diagnostics_out)
     typer.echo(

@@ -20,6 +20,24 @@ class MusicXmlWarning(BaseModel):
     source_path: str | None = None
 
 
+class MusicXmlTimingIssue(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+    message: str
+    severity: Literal["info", "warning", "error"] = "warning"
+    part_id: str
+    measure_index: int = Field(ge=1)
+    measure_number: str
+    voice: int | None = Field(default=None, ge=1, le=8)
+    musicxml_note_id: str | None = None
+    expected_duration_divisions: int | None = Field(default=None, ge=0)
+    onset_divisions: int | None = Field(default=None, ge=0)
+    duration_divisions: int | None = Field(default=None, ge=0)
+    end_divisions: int | None = Field(default=None, ge=0)
+    source_path: str | None = None
+
+
 class MusicXmlMetadata(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -166,6 +184,139 @@ def parse_musicxml(path: str | Path) -> MusicXmlImport:
     )
 
 
+def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssue]:
+    """Return public-safe timing risks before ScoreIR construction."""
+
+    issues: list[MusicXmlTimingIssue] = []
+    for part in imported.parts:
+        previous_divisions: int | None = None
+        for measure in part.measures:
+            expected = _expected_measure_duration_divisions(measure)
+            if previous_divisions is not None and previous_divisions != measure.divisions:
+                issues.append(
+                    MusicXmlTimingIssue(
+                        code="musicxml-divisions-changed",
+                        message=(
+                            f"Measure {measure.number} changes MusicXML divisions from "
+                            f"{previous_divisions} to {measure.divisions}; timing conversion remains explicit."
+                        ),
+                        severity="info",
+                        part_id=part.id,
+                        measure_index=measure.index,
+                        measure_number=measure.number,
+                        expected_duration_divisions=expected,
+                    )
+                )
+            previous_divisions = measure.divisions
+
+            if measure.time_signature.numerator % 3 == 0 and measure.time_signature.denominator == 8:
+                issues.append(
+                    MusicXmlTimingIssue(
+                        code="musicxml-compound-meter-assumption",
+                        message=(
+                            f"Measure {measure.number} uses {measure.time_signature.numerator}/"
+                            f"{measure.time_signature.denominator}; build-ir treats durations as exact "
+                            "quarter-note ticks and reports alignment quality separately."
+                        ),
+                        severity="info",
+                        part_id=part.id,
+                        measure_index=measure.index,
+                        measure_number=measure.number,
+                        expected_duration_divisions=expected,
+                    )
+                )
+
+            if expected is None:
+                issues.append(
+                    MusicXmlTimingIssue(
+                        code="musicxml-measure-duration-unknown",
+                        message=f"Measure {measure.number} has no computable expected duration.",
+                        severity="warning",
+                        part_id=part.id,
+                        measure_index=measure.index,
+                        measure_number=measure.number,
+                    )
+                )
+                continue
+
+            voice_extents: dict[int, int] = {}
+            previous_by_voice: dict[int, tuple[int, MusicXmlNote]] = {}
+            for group in _measure_timing_groups(measure):
+                first = group[0]
+                if first.grace or first.duration_divisions <= 0:
+                    continue
+                end = first.onset_divisions + first.duration_divisions
+                voice_extents[first.voice] = max(voice_extents.get(first.voice, 0), end)
+                if end > expected:
+                    issues.append(
+                        MusicXmlTimingIssue(
+                            code="musicxml-overfull-bar",
+                            message=(
+                                f"Measure {measure.number} event {first.id} ends at MusicXML division "
+                                f"{end}, beyond expected measure length {expected}."
+                            ),
+                            severity="error",
+                            part_id=part.id,
+                            measure_index=measure.index,
+                            measure_number=measure.number,
+                            voice=first.voice,
+                            musicxml_note_id=first.id,
+                            expected_duration_divisions=expected,
+                            onset_divisions=first.onset_divisions,
+                            duration_divisions=first.duration_divisions,
+                            end_divisions=end,
+                            source_path=first.source_path,
+                        )
+                    )
+                previous = previous_by_voice.get(first.voice)
+                if previous is not None:
+                    previous_end, previous_note = previous
+                    if previous_end > first.onset_divisions:
+                        issues.append(
+                            MusicXmlTimingIssue(
+                                code="musicxml-voice-overlap",
+                                message=(
+                                    f"Measure {measure.number} voice {first.voice} overlaps: "
+                                    f"{previous_note.id} ends at {previous_end}, before {first.id} starts at "
+                                    f"{first.onset_divisions}."
+                                ),
+                                severity="error",
+                                part_id=part.id,
+                                measure_index=measure.index,
+                                measure_number=measure.number,
+                                voice=first.voice,
+                                musicxml_note_id=first.id,
+                                expected_duration_divisions=expected,
+                                onset_divisions=first.onset_divisions,
+                                duration_divisions=first.duration_divisions,
+                                end_divisions=end,
+                                source_path=first.source_path,
+                            )
+                        )
+                previous_by_voice[first.voice] = (end, first)
+
+            if voice_extents:
+                longest_voice = max(voice_extents.values())
+                if 0 < longest_voice < expected:
+                    issues.append(
+                        MusicXmlTimingIssue(
+                            code="musicxml-underfull-bar",
+                            message=(
+                                f"Measure {measure.number} longest voice ends at MusicXML division "
+                                f"{longest_voice}, before expected measure length {expected}."
+                            ),
+                            severity="warning",
+                            part_id=part.id,
+                            measure_index=measure.index,
+                            measure_number=measure.number,
+                            expected_duration_divisions=expected,
+                            end_divisions=longest_voice,
+                        )
+                    )
+
+    return issues
+
+
 def _parse_part(
     part_node: ET.Element,
     part_id: str,
@@ -216,8 +367,24 @@ def _parse_part(
                     )
                 )
             elif name == "backup":
+                warnings.append(
+                    MusicXmlWarning(
+                        code="musicxml-backup-encountered",
+                        message="MusicXML backup changes the timing cursor; build-ir will preflight the resulting voices.",
+                        severity="info",
+                        source_path=source_path,
+                    )
+                )
                 cursor = max(0, cursor - _duration(child))
             elif name == "forward":
+                warnings.append(
+                    MusicXmlWarning(
+                        code="musicxml-forward-encountered",
+                        message="MusicXML forward changes the timing cursor; build-ir will preflight the resulting voices.",
+                        severity="info",
+                        source_path=source_path,
+                    )
+                )
                 cursor += _duration(child)
             elif name == "barline" and _has_descendant(child, "repeat"):
                 warnings.append(
@@ -566,6 +733,24 @@ def _harmony_kind_suffix(kind: str | None) -> str:
         "suspended-second": "sus2",
     }
     return mapping.get(kind, kind)
+
+
+def _expected_measure_duration_divisions(measure: MusicXmlMeasure) -> int | None:
+    value = Fraction(measure.time_signature.numerator * measure.divisions * 4, measure.time_signature.denominator)
+    if value.denominator != 1:
+        return None
+    return int(value)
+
+
+def _measure_timing_groups(measure: MusicXmlMeasure) -> list[list[MusicXmlNote]]:
+    groups: dict[tuple[int, int, int, bool], list[MusicXmlNote]] = {}
+    for note in measure.notes:
+        key = (note.onset_divisions, note.voice, note.duration_divisions, note.is_rest)
+        groups.setdefault(key, []).append(note)
+    return [
+        group
+        for _, group in sorted(groups.items(), key=lambda item: (item[0][1], item[0][0], item[0][2], item[1][0].note_index))
+    ]
 
 
 def _duration(node: ET.Element) -> int:

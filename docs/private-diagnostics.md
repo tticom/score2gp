@@ -67,7 +67,12 @@ The summary uses input basenames only and omits candidate text dumps. It reports
 - worst bars by relative visual/timing drift
 - bars with missing x evidence, ambiguous x groups, and onset-count mismatches
 - validation status
+- failure stage and sanitized failure category when build-ir is refused
+- MusicXML timing issue counts when available
+- recommendation categories such as `missing_pdf_grouping`, `musicxml_timing_risk`, `alignment_not_attempted`, and `validation_failed`
 - a recommended next diagnostic action
+
+The most recent controlled private experiment is recorded only as sanitized counts: extraction found many PDF text candidates, but inferred zero systems, zero bars, and zero strings. The matching Audiveris MXL was unpacked locally, but build-ir did not reach alignment because MusicXML timing risk would have produced invalid ScoreIR. No private PDF, MXL, TabRaw, IR, diagnostics, or report content should be committed.
 
 ## Reading Quality
 
@@ -80,6 +85,8 @@ The summary uses input basenames only and omits candidate text dumps. It reports
 `unknown` means the bar lacks enough playable x evidence or MusicXML onset evidence to judge.
 
 Poor or unknown bars are conversion risks. They should not be hidden or smoothed over.
+
+`missing_pdf_grouping` means extraction found candidates but did not infer enough system/string/bar evidence to align them safely. `musicxml_timing_risk` means the MusicXML timing preflight found an overfull bar or similar structure that would violate ScoreIR. `alignment_not_attempted` means the run stopped before x-to-onset alignment. `validation_failed` means output validation failed and needs public reproduction before private-specific debugging.
 
 ## Current Limits
 

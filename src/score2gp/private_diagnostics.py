@@ -7,7 +7,7 @@ from typing import Any
 from xml.etree import ElementTree as ET
 from zipfile import ZipFile
 
-from .build_ir import BuildIrDiagnostics, build_ir_with_diagnostics_from_files
+from .build_ir import BuildIrDiagnostics, BuildIrInputRiskError, build_ir_with_diagnostics_from_files
 from .ir import validate_score_ir_file
 from .pdf import extract_tab
 from .tabraw import TabRaw
@@ -74,6 +74,11 @@ def run_private_diagnostic_smoke(
                 "warning_count": len(score.warnings),
             }
             summary["suitability"] = _suitability(summary)
+        except BuildIrInputRiskError as exc:
+            payload = exc.to_diagnostics_payload()
+            build_error_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+            summary["outputs"]["build_error"] = build_error_path.name
+            _record_build_ir_risk(summary, exc, build_error_path.name)
         except Exception as exc:  # noqa: BLE001
             sanitized_error = _sanitize_exception_message(exc, [pdf, musicxml])
             build_error_path.write_text(
@@ -81,17 +86,26 @@ def run_private_diagnostic_smoke(
                 encoding="utf-8",
             )
             summary["outputs"]["build_error"] = build_error_path.name
+            categories = _summary_risk_categories(summary) + ["validation_failed"]
             summary["build_ir"] = {
                 "ran": False,
                 "failed": True,
+                "stage": "build-ir",
                 "error_type": type(exc).__name__,
+                "error_category": "validation_failed" if type(exc).__name__ == "ValidationError" else "build_ir_failed",
                 "message": _compact_error_message(sanitized_error),
                 "error_report": build_error_path.name,
+                "output_files_produced": {
+                    "tabraw": True,
+                    "score_ir": ir_path.exists(),
+                    "diagnostics": diagnostics_path.exists(),
+                },
             }
             summary["validation"] = {"ran": False, "valid": False, "error_count": None}
             summary["suitability"] = {
                 "diagnostic_only": True,
                 "suitable_for_next_stage_debugging": False,
+                "recommendation_categories": _dedupe(categories),
                 "recommended_next_action": "fix-build-ir-input-or-import-error-before-private-debugging",
             }
 
@@ -202,6 +216,7 @@ def summarize_diagnostics(diagnostics: BuildIrDiagnostics) -> dict[str, Any]:
 
 
 def _base_summary(pdf: Path, musicxml: Path | None, tabraw: TabRaw) -> dict[str, Any]:
+    extraction = summarize_tabraw(tabraw)
     return {
         "schema_version": SUMMARY_SCHEMA_VERSION,
         "diagnostic_only": True,
@@ -215,12 +230,13 @@ def _base_summary(pdf: Path, musicxml: Path | None, tabraw: TabRaw) -> dict[str,
             "exists": musicxml.exists() if musicxml is not None else False,
             "basename": musicxml.name if musicxml is not None else None,
         },
-        "extraction": summarize_tabraw(tabraw),
+        "extraction": extraction,
         "build_ir": {"ran": False},
         "validation": {"ran": False, "valid": False, "error_count": None},
         "suitability": {
             "diagnostic_only": True,
             "suitable_for_next_stage_debugging": False,
+            "recommendation_categories": _extraction_risk_categories(extraction) + ["alignment_not_attempted"],
             "recommended_next_action": "provide-matching-musicxml-before-build-ir",
         },
     }
@@ -236,6 +252,7 @@ def _record_missing_musicxml(summary: dict[str, Any]) -> None:
     summary["suitability"] = {
         "diagnostic_only": True,
         "suitable_for_next_stage_debugging": False,
+        "recommendation_categories": _summary_risk_categories(summary) + ["alignment_not_attempted"],
         "recommended_next_action": "provide-matching-musicxml-before-build-ir",
     }
 
@@ -248,15 +265,56 @@ def _add_build_summary(summary: dict[str, Any], diagnostics: BuildIrDiagnostics)
     }
 
 
+def _record_build_ir_risk(summary: dict[str, Any], exc: BuildIrInputRiskError, report_name: str) -> None:
+    timing_issue_counts: dict[str, int] = {}
+    severity_counts: dict[str, int] = {}
+    for issue in exc.timing_issues:
+        timing_issue_counts[issue.code] = timing_issue_counts.get(issue.code, 0) + 1
+        severity_counts[issue.severity] = severity_counts.get(issue.severity, 0) + 1
+
+    categories = _summary_risk_categories(summary)
+    if exc.category not in categories:
+        categories.append(exc.category)
+    if "alignment_not_attempted" not in categories:
+        categories.append("alignment_not_attempted")
+
+    summary["build_ir"] = {
+        "ran": False,
+        "failed": True,
+        "stage": exc.stage,
+        "error_type": type(exc).__name__,
+        "error_category": exc.category,
+        "message": _compact_error_message(str(exc)),
+        "error_report": report_name,
+        "musicxml_timing_issue_count": len(exc.timing_issues),
+        "musicxml_timing_issue_counts": dict(sorted(timing_issue_counts.items())),
+        "musicxml_timing_severity_counts": dict(sorted(severity_counts.items())),
+        "output_files_produced": {
+            "tabraw": True,
+            "score_ir": False,
+            "diagnostics": False,
+        },
+    }
+    summary["validation"] = {"ran": False, "valid": False, "error_count": None}
+    summary["suitability"] = {
+        "diagnostic_only": True,
+        "suitable_for_next_stage_debugging": False,
+        "recommendation_categories": categories,
+        "recommended_next_action": "review-musicxml-timing-risk-before-alignment",
+    }
+
+
 def _suitability(summary: dict[str, Any]) -> dict[str, Any]:
     validation = summary.get("validation", {})
     build = summary.get("build_ir", {})
     extraction = summary.get("extraction", {})
     quality_counts = build.get("per_bar_quality_counts", {})
 
+    categories = _summary_risk_categories(summary)
     if not validation.get("valid"):
         action = "fix-validation-before-private-debugging"
         suitable = False
+        categories.append("validation_failed")
     elif extraction.get("playable_candidates", 0) == 0:
         action = "inspect-pdf-extraction-before-build-ir"
         suitable = False
@@ -273,8 +331,34 @@ def _suitability(summary: dict[str, Any]) -> dict[str, Any]:
     return {
         "diagnostic_only": True,
         "suitable_for_next_stage_debugging": suitable,
+        "recommendation_categories": _dedupe(categories),
         "recommended_next_action": action,
     }
+
+
+def _summary_risk_categories(summary: dict[str, Any]) -> list[str]:
+    return _extraction_risk_categories(summary.get("extraction", {}))
+
+
+def _extraction_risk_categories(extraction: dict[str, Any]) -> list[str]:
+    categories = []
+    if extraction.get("total_candidates", 0) == 0:
+        categories.append("extraction_empty")
+    if extraction.get("playable_candidates", 0) and (
+        extraction.get("inferred_system_count", 0) == 0
+        or extraction.get("candidates_with_bar", 0) == 0
+        or extraction.get("candidates_with_string", 0) == 0
+    ):
+        categories.append("missing_pdf_grouping")
+    return categories
+
+
+def _dedupe(values: list[str]) -> list[str]:
+    unique = []
+    for value in values:
+        if value not in unique:
+            unique.append(value)
+    return unique
 
 
 def _confidence_summary(values: list[float]) -> dict[str, float | None]:
@@ -350,6 +434,9 @@ def _summary_markdown(summary: dict[str, Any]) -> str:
         f"- Build IR ran: {build.get('ran')}",
         f"- Validation valid: {validation.get('valid')}",
     ]
+    categories = summary["suitability"].get("recommendation_categories", [])
+    if categories:
+        lines.append(f"- Recommendation categories: `{', '.join(categories)}`")
     if quality_counts:
         lines.extend(
             [

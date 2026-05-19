@@ -14,6 +14,7 @@ SCORELIKE_PDF = Path("tests/fixtures/pdf/generated_scorelike_tab.pdf")
 SCORELIKE_MUSICXML = Path("tests/fixtures/musicxml/generated_scorelike_tab.musicxml")
 UNEVEN_PDF = Path("tests/fixtures/pdf/generated_uneven_spacing_tab.pdf")
 UNEVEN_MUSICXML = Path("tests/fixtures/musicxml/generated_uneven_spacing_tab.musicxml")
+UNSTRUCTURED_PDF = Path("tests/fixtures/pdf/generated_unstructured_tab_text.pdf")
 
 
 def test_pdf_inspection_reports_missing_pymupdf_or_empty_pdf(tmp_path) -> None:
@@ -258,3 +259,29 @@ def test_uneven_generated_pdf_reports_x_to_onset_quality_without_breaking_scorei
     assert "one or more playable x groups are too close to distinguish confidently" in second_bar["x_to_onset_warnings"]
     assert "visual x positions drift strongly from MusicXML onset spacing" in second_bar["x_to_onset_warnings"]
     assert "one or more bars have poor x-to-onset quality" in diagnostics["extraction_quality_flags"]
+
+
+def test_unstructured_pdf_preserves_candidates_but_reports_missing_grouping(tmp_path) -> None:
+    assert UNSTRUCTURED_PDF.exists()
+    first_path = tmp_path / "generated_unstructured_tab_text.tabraw.json"
+    second_path = tmp_path / "generated_unstructured_tab_text_again.tabraw.json"
+
+    first = TabRaw.model_validate(extract_tab(UNSTRUCTURED_PDF, first_path))
+    second = TabRaw.model_validate(extract_tab(UNSTRUCTURED_PDF, second_path))
+
+    assert first.inspection_kind == "born-digital"
+    assert [candidate.id for candidate in first.candidates] == [candidate.id for candidate in second.candidates]
+    assert [candidate.raw_text for candidate in first.candidates] == [candidate.raw_text for candidate in second.candidates]
+
+    fret_candidates = [candidate for candidate in first.candidates if candidate.kind == "fret"]
+    non_fret_candidates = [candidate for candidate in first.candidates if candidate.kind != "fret"]
+
+    assert len(first.candidates) == 8
+    assert [candidate.parsed_fret for candidate in fret_candidates] == [0, 12, 3, 7, 5, 10]
+    assert {candidate.raw_text for candidate in non_fret_candidates} == {"Am", "slide"}
+    assert all(candidate.bbox is not None for candidate in first.candidates)
+    assert all(candidate.x is not None and candidate.y is not None for candidate in first.candidates)
+    assert all(candidate.system_index is None for candidate in first.candidates)
+    assert all(candidate.bar_index is None for candidate in first.candidates)
+    assert all(candidate.string is None for candidate in fret_candidates)
+    assert any(warning["code"] == "pdf-tab-system-not-detected" for warning in first.warnings)

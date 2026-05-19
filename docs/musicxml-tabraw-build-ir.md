@@ -50,6 +50,17 @@ Simple integer mappings are supported. Non-integer onset or duration mappings pr
 
 The original MusicXML division values remain in ScoreIR provenance so duration conversion can be inspected later.
 
+Before ScoreIR construction, `build-ir` runs a MusicXML timing preflight. It reports:
+
+- overfull bars where a MusicXML event extends beyond the expected measure length
+- same-voice overlaps that would later violate ScoreIR
+- underfull bars as warnings
+- compound-meter assumptions such as 12/8
+- backup/forward cursor movement as import warnings
+- divisions changes between measures as informational timing context
+
+Overfull bars and same-voice overlaps are refused before invalid ScoreIR is written. If `--diagnostics-out` is provided, the CLI writes a `build-ir-failure-diagnostics.v0.1` payload with timing issue counts and public-safe MusicXML element identifiers.
+
 ## TabRaw
 
 TabRaw is now a documented candidate contract with schema version `tabraw.v0.1`.
@@ -124,6 +135,16 @@ python -m score2gp.cli build-ir `
 
 The uneven-spacing fixture deliberately keeps the MusicXML rhythm simple while placing two visual fret groups very close together. It exists to prove that diagnostics can report unsafe geometry without blocking ScoreIR generation.
 
+Unstructured generated PDF smoke command:
+
+```powershell
+python -m score2gp.cli extract-tab `
+  --out "work/generated_pdf/generated_unstructured_tab_text.tabraw.json" `
+  "tests/fixtures/pdf/generated_unstructured_tab_text.pdf"
+```
+
+This fixture deliberately has extractable fret/chord/technique text but no reliable six-line tab staff geometry. It should preserve candidates with bbox/x/y evidence while leaving system, string, and bar estimates empty. This reproduces the important failure mode "extraction succeeded, grouping failed" using public generated data.
+
 Legacy `items` payloads can still be normalized by `score2gp.tabraw.normalize_tabraw_payload()`.
 
 TabRaw candidate IDs are required to be unique. Chord-symbol, technique-text, and candidate-text candidates are preserved and reported by `build-ir`, but they are not consumed as playable fret events.
@@ -154,6 +175,7 @@ python -m score2gp.cli build-ir `
 Current behavior:
 
 - uses only the first MusicXML part
+- refuses overfull or same-voice-overlapping MusicXML before writing invalid ScoreIR
 - creates ScoreIR bars from MusicXML measures
 - creates rest events directly from MusicXML rests
 - creates pitched events only when TabRaw provides aligned string/fret evidence
@@ -204,7 +226,7 @@ python -m score2gp.cli validate-ir "work/synthetic/score.ir.json"
 Still out of scope:
 
 - real Derek Trucks fixture conversion
-- Audiveris `.mxl` package parsing
+- native Audiveris `.mxl` package parsing in the main MusicXML importer
 - multi-part alignment
 - robust system/staff detection beyond controlled generated PDFs
 - robust tab string inference from detected line positions
@@ -214,4 +236,4 @@ Still out of scope:
 - full optical x-to-onset calibration from page geometry
 - GPIF writer expansion
 
-The next architectural checkpoint should use these x-to-onset diagnostics on a controlled private fixture, with the conversion report making any poor or unknown geometry impossible to miss.
+The latest controlled private diagnostic experiment produced only sanitized evidence: PDF extraction found many candidates, but no system/bar/string grouping was inferred, and MusicXML timing risk stopped build-ir before ScoreIR output. The next checkpoint should reproduce those exact failure classes with public fixtures before trying another private run.

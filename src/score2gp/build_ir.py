@@ -31,11 +31,52 @@ from .ir import (
     Track,
     WarningItem,
 )
-from .musicxml import MusicXmlHarmony, MusicXmlImport, MusicXmlMeasure, MusicXmlNote, MusicXmlPart, MusicXmlTechnique, parse_musicxml
+from .musicxml import (
+    MusicXmlHarmony,
+    MusicXmlImport,
+    MusicXmlMeasure,
+    MusicXmlNote,
+    MusicXmlPart,
+    MusicXmlTechnique,
+    MusicXmlTimingIssue,
+    analyze_musicxml_timing,
+    parse_musicxml,
+)
 from .tabraw import TabCandidate, TabRaw
 
 TRACK_ID = "gtr-1"
 DIAGNOSTICS_SCHEMA_VERSION = "build-ir-diagnostics.v0.1"
+
+
+class BuildIrInputRiskError(ValueError):
+    """Raised when input timing/grouping risk would produce invalid ScoreIR."""
+
+    def __init__(
+        self,
+        *,
+        category: str,
+        stage: str,
+        message: str,
+        timing_issues: list[MusicXmlTimingIssue] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.category = category
+        self.stage = stage
+        self.timing_issues = timing_issues or []
+
+    def to_diagnostics_payload(self) -> dict[str, object]:
+        issue_counts: dict[str, int] = {}
+        for issue in self.timing_issues:
+            issue_counts[issue.code] = issue_counts.get(issue.code, 0) + 1
+        return {
+            "schema_version": "build-ir-failure-diagnostics.v0.1",
+            "stage": self.stage,
+            "category": self.category,
+            "message": str(self),
+            "timing_issue_count": len(self.timing_issues),
+            "timing_issue_counts": dict(sorted(issue_counts.items())),
+            "timing_issues": [issue.model_dump(mode="json", exclude_none=True) for issue in self.timing_issues],
+        }
 
 
 class CandidateXGroupDiagnostics(BaseModel):
@@ -188,6 +229,19 @@ def build_ir_from_imports(musicxml: MusicXmlImport, tabraw: TabRaw) -> ScoreIR:
 
 def build_ir_with_diagnostics_from_imports(musicxml: MusicXmlImport, tabraw: TabRaw) -> tuple[ScoreIR, BuildIrDiagnostics]:
     warnings = _musicxml_warnings(musicxml)
+    timing_issues = analyze_musicxml_timing(musicxml)
+    warnings.extend(_musicxml_timing_issue_warnings(timing_issues))
+    fatal_timing_issues = [issue for issue in timing_issues if issue.severity == "error"]
+    if fatal_timing_issues:
+        raise BuildIrInputRiskError(
+            category="musicxml_timing_risk",
+            stage="musicxml-import",
+            message=(
+                "MusicXML timing risk prevents ScoreIR output: "
+                f"{len(fatal_timing_issues)} overfull or overlapping event(s) would violate ScoreIR timing."
+            ),
+            timing_issues=timing_issues,
+        )
     warnings.extend(_tabraw_warnings(tabraw))
     if musicxml.tempo_bpm is None:
         warnings.append(
@@ -589,6 +643,34 @@ def _musicxml_warnings(musicxml: MusicXmlImport) -> list[WarningItem]:
             ],
         )
         for warning in musicxml.warnings
+    ]
+
+
+def _musicxml_timing_issue_warnings(issues: list[MusicXmlTimingIssue]) -> list[WarningItem]:
+    return [
+        WarningItem(
+            code=issue.code,
+            message=issue.message,
+            severity=issue.severity,
+            provenance=[
+                Provenance(
+                    source_stage=SourceStage.MUSICXML,
+                    bar_index=issue.measure_index,
+                    raw_token_id=issue.musicxml_note_id,
+                    raw={
+                        "source_path": issue.source_path,
+                        "measure_number": issue.measure_number,
+                        "voice": issue.voice,
+                        "expected_duration_divisions": issue.expected_duration_divisions,
+                        "onset_divisions": issue.onset_divisions,
+                        "duration_divisions": issue.duration_divisions,
+                        "end_divisions": issue.end_divisions,
+                    },
+                    confidence=1.0,
+                )
+            ],
+        )
+        for issue in issues
     ]
 
 
