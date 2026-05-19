@@ -6,6 +6,7 @@
 - [ ] Replace simple x-order candidate matching with x-to-onset diagnostics.
 - [ ] Add controlled private fixture evaluation only after public synthetic and generated fixtures are stable.
 - [ ] Improve PDF line detection and overlay generation.
+- [ ] Attach PDF-derived chord symbols and technique text to ScoreIR events once timing calibration exists.
 - [ ] Add HTML conversion report styling and unsupported-technique summaries.
 
 ## Done
@@ -24,5 +25,6 @@
 - [x] `build-ir --diagnostics-out` sidecar with imported/matched/unmatched counts and per-bar summaries.
 - [x] Public regression fixtures for multibar, chords, rests/voices, and invalid TabRaw inputs.
 - [x] Generated public born-digital PDF fixture for real `extract-tab` regression.
+- [x] Score-like public generated PDF fixture with multiple systems, chord symbols, technique text, candidate text, and spacing variation.
 - [x] Heuristic tab system/string/bar inference for vector six-line tab PDFs.
-- [x] PDF-derived TabRaw to MusicXML to ScoreIR smoke path with diagnostics.
+- [x] PDF-derived TabRaw to MusicXML to ScoreIR smoke path with per-bar and per-system diagnostics.

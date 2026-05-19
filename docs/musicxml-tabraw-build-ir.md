@@ -7,7 +7,7 @@ It is intentionally narrow:
 - MusicXML supplies bars, timing, voices, rests, pitches, chord symbols, and selected notation details.
 - TabRaw supplies spatial fret/string candidates and provenance.
 - `build-ir` combines synthetic MusicXML fixtures with synthetic TabRaw fixtures into valid ScoreIR.
-- A controlled generated born-digital PDF fixture proves that `extract-tab` can produce real TabRaw evidence for the same path.
+- Controlled generated born-digital PDF fixtures prove that `extract-tab` can produce real TabRaw evidence for the same path.
 
 It does not attempt complete OMR, full tablature alignment, or full GPIF output.
 
@@ -64,7 +64,7 @@ Each candidate preserves:
 - confidence
 - source stage and raw payload
 
-`extract-tab` now emits `candidates` rather than anonymous text blocks. It reads born-digital PDF word boxes and, when vector page geometry looks like a six-line tab staff, adds heuristic system, staff, string, and bar estimates. These estimates are evidence, not truth: they should be reviewed through TabRaw JSON and build diagnostics before being trusted.
+`extract-tab` now emits `candidates` rather than anonymous text blocks. It reads born-digital PDF word boxes and, when vector page geometry looks like six-line tab systems, adds heuristic system, staff, string, and global bar estimates. Text above or near a detected tab system can keep system/bar evidence without being assigned to a string. These estimates are evidence, not truth: they should be reviewed through TabRaw JSON and build diagnostics before being trusted.
 
 Controlled generated PDF smoke command:
 
@@ -84,9 +84,29 @@ python -m score2gp.cli build-ir `
   --diagnostics-out "work/generated_pdf/generated_tiny_tab.diagnostics.json"
 ```
 
+Score-like generated PDF smoke command:
+
+```powershell
+python -m score2gp.cli extract-tab `
+  --out "work/generated_pdf/generated_scorelike_tab.tabraw.json" `
+  "tests/fixtures/pdf/generated_scorelike_tab.pdf"
+```
+
+Then:
+
+```powershell
+python -m score2gp.cli build-ir `
+  --musicxml "tests/fixtures/musicxml/generated_scorelike_tab.musicxml" `
+  --tabraw "work/generated_pdf/generated_scorelike_tab.tabraw.json" `
+  --out "work/generated_pdf/generated_scorelike_tab.ir.json" `
+  --diagnostics-out "work/generated_pdf/generated_scorelike_tab.diagnostics.json"
+```
+
+The score-like fixture has two tab systems, four global bars, chord symbols, technique text, candidate text, multi-digit frets, and chord-like vertical stacks. It is still controlled and generated.
+
 Legacy `items` payloads can still be normalized by `score2gp.tabraw.normalize_tabraw_payload()`.
 
-TabRaw candidate IDs are required to be unique. Chord-symbol and technique-text candidates are preserved and reported by `build-ir`, but they are not aligned from TabRaw into events yet.
+TabRaw candidate IDs are required to be unique. Chord-symbol, technique-text, and candidate-text candidates are preserved and reported by `build-ir`, but they are not consumed as playable fret events.
 
 ## build-ir
 
@@ -132,18 +152,20 @@ Current behavior:
 The diagnostics contract is `build-ir-diagnostics.v0.1` and records:
 
 - MusicXML event counts imported
-- TabRaw candidate counts loaded, matched, and unmatched
+- TabRaw candidate counts loaded, matched, unmatched, and ignored as non-playable
 - fret/non-fret candidate counts
-- counts for candidates with bounding boxes, x positions, inferred strings, and inferred bars
+- chord-symbol, technique-text, and unknown candidate counts
+- counts for candidates with bounding boxes, x/y positions, inferred systems, inferred strings, and inferred bars
 - TabRaw source-stage counts
 - unmatched MusicXML event and note counts
 - unsupported construct warning codes
+- per-system extraction/alignment summaries
 - per-bar alignment summaries
 - low-confidence flags
 - extraction quality flags
 - all ScoreIR warnings in JSON form
 
-The per-bar summaries include rest/chord event counts and ambiguity flags such as repeated x-position candidates.
+The per-system summaries show how many candidates were found, how many playable frets matched, and how many non-playable candidates were intentionally ignored. The per-bar summaries include rest/chord event counts and ambiguity flags such as repeated x-position candidates.
 
 The generated ScoreIR should pass:
 
@@ -158,12 +180,12 @@ Still out of scope:
 - real Derek Trucks fixture conversion
 - Audiveris `.mxl` package parsing
 - multi-part alignment
-- robust system/staff detection
+- robust system/staff detection beyond controlled generated PDFs
 - robust tab string inference from detected line positions
 - extraction from real commercial/private PDFs
 - advanced rhythm, repeats, alternate endings, grace-note semantics, and tempo maps
-- TabRaw-derived chord/technique alignment
+- TabRaw-derived chord/technique alignment into ScoreIR events
 - real optical x-to-onset calibration from page geometry
 - GPIF writer expansion
 
-The next architectural checkpoint should add controlled public fixtures that look more like born-digital guitar tab extraction before using private material.
+The next architectural checkpoint should add x-to-onset diagnostics and then try a controlled private fixture only after the public generated path remains stable.

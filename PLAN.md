@@ -14,6 +14,7 @@
 - Extract vector text fret numbers, chord symbols, and technique labels with bounding boxes.
 - Write `tab_raw.json` with confidence scores and warnings.
 - Add a generated born-digital public PDF fixture to prove real `extract-tab` output can feed `build-ir`.
+- Add a score-like generated PDF fixture with multiple tab systems, chord-symbol noise, technique text, candidate text, and spacing variation.
 
 ## Milestone 3: timing alignment
 
@@ -23,6 +24,7 @@
 - Produce richer ScoreIR with event-level provenance before attempting private real-world fixtures.
 - Write `build-ir-diagnostics.v0.1` sidecars so alignment quality can be reviewed before trying private fixtures.
 - Extend diagnostics with PDF-derived TabRaw evidence counts and extraction quality flags.
+- Add per-system and ignored non-playable candidate diagnostics for PDF-derived TabRaw.
 
 ## Milestone 4: GPIF coverage
 
