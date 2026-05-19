@@ -29,6 +29,8 @@
 - Add per-bar x-to-onset diagnostics with visual fret groups, MusicXML onset groups, drift/error values, chord-stack flags, ambiguity counts, and quality labels.
 - Use the diagnostics to decide when a controlled private fixture is safe to try.
 - Run private fixtures only through ignored diagnostic workflows with sanitized summaries.
+- Reproduce private failure classes with public fixtures: Audiveris-like MusicXML timing risk and PDF extraction without grouping.
+- Refuse overfull MusicXML before writing invalid ScoreIR.
 
 ## Milestone 4: GPIF coverage
 

@@ -3,8 +3,9 @@
 ## Next
 
 - [ ] Add compressed `.mxl` parsing to the main MusicXML importer for Audiveris exports.
-- [ ] Inspect controlled private fixture diagnostic results before making any conversion claims.
-- [ ] Improve PDF line detection and overlay generation.
+- [ ] Improve PDF system detection using public fixtures that resemble the private grouping failure.
+- [ ] Add overlays or HTML reports for extraction succeeded/grouping failed cases.
+- [ ] Add public reproductions for more Audiveris timing patterns before another private run.
 - [ ] Attach PDF-derived chord symbols and technique text to ScoreIR events once timing calibration exists.
 - [ ] Add HTML conversion report styling and unsupported-technique summaries.
 
@@ -29,3 +30,6 @@
 - [x] PDF-derived TabRaw to MusicXML to ScoreIR smoke path with per-bar and per-system diagnostics.
 - [x] X-to-onset diagnostics for controlled generated PDFs, including an uneven-spacing warning fixture.
 - [x] Public-safe private diagnostic workflow with sanitized count/quality summaries.
+- [x] Public Audiveris-like MusicXML timing-risk fixtures.
+- [x] Preflight overfull MusicXML before writing invalid ScoreIR.
+- [x] Public generated PDF fixture for extraction succeeded/grouping failed diagnostics.

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from score2gp.musicxml import parse_musicxml
+from score2gp.musicxml import analyze_musicxml_timing, parse_musicxml
 
 FIXTURES = Path("tests/fixtures/musicxml")
 
@@ -109,3 +109,36 @@ def test_musicxml_importer_handles_backup_for_simple_voice_timing() -> None:
         (8, 1, False),
         (0, 2, True),
     ]
+
+
+def test_musicxml_timing_preflight_detects_audiveris_like_overfull_bar() -> None:
+    imported = parse_musicxml(FIXTURES / "audiveris_like_overfull_bar.musicxml")
+
+    issues = analyze_musicxml_timing(imported)
+
+    assert [(issue.code, issue.severity) for issue in issues] == [("musicxml-overfull-bar", "error")]
+    assert issues[0].expected_duration_divisions == 16
+    assert issues[0].end_divisions == 20
+
+
+def test_musicxml_timing_preflight_flags_12_8_compound_meter_without_error() -> None:
+    imported = parse_musicxml(FIXTURES / "audiveris_like_12_8_timing.musicxml")
+
+    issues = analyze_musicxml_timing(imported)
+
+    assert [(issue.code, issue.severity) for issue in issues] == [("musicxml-compound-meter-assumption", "info")]
+    assert issues[0].expected_duration_divisions == 36
+
+
+def test_musicxml_timing_preflight_records_backup_forward_risk() -> None:
+    imported = parse_musicxml(FIXTURES / "audiveris_like_backup_forward.musicxml")
+
+    assert [warning.code for warning in imported.warnings] == [
+        "musicxml-backup-encountered",
+        "musicxml-forward-encountered",
+    ]
+
+    issues = analyze_musicxml_timing(imported)
+
+    assert [(issue.code, issue.severity) for issue in issues] == [("musicxml-overfull-bar", "error")]
+    assert issues[0].voice == 2

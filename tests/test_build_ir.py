@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from score2gp.build_ir import build_ir_from_files
+import pytest
+
+from score2gp.build_ir import BuildIrInputRiskError, build_ir_from_files
 from score2gp.ir import validate_score_ir_file
 
 MUSICXML = Path("tests/fixtures/musicxml/tiny_single_bar.musicxml")
@@ -16,6 +18,9 @@ CHORDS_MUSICXML = Path("tests/fixtures/musicxml/tiny_chords.musicxml")
 CHORDS_TABRAW = Path("tests/fixtures/tabraw/tiny_chords_tabraw.json")
 RESTS_VOICES_MUSICXML = Path("tests/fixtures/musicxml/tiny_rests_voices.musicxml")
 RESTS_VOICES_TABRAW = Path("tests/fixtures/tabraw/tiny_rests_voices_tabraw.json")
+AUDIVERIS_OVERFULL_MUSICXML = Path("tests/fixtures/musicxml/audiveris_like_overfull_bar.musicxml")
+AUDIVERIS_12_8_MUSICXML = Path("tests/fixtures/musicxml/audiveris_like_12_8_timing.musicxml")
+AUDIVERIS_BACKUP_FORWARD_MUSICXML = Path("tests/fixtures/musicxml/audiveris_like_backup_forward.musicxml")
 
 
 def test_build_ir_creates_valid_scoreir_from_synthetic_musicxml_and_tabraw(tmp_path) -> None:
@@ -159,3 +164,44 @@ def test_build_ir_keeps_rests_from_consuming_tab_candidates_across_voices(tmp_pa
     ]
     assert [event.notes[0].fret for event in events if event.notes] == [0, 2]
     assert not any(warning.code == "tab-candidate-unused" for warning in score.warnings)
+
+
+def test_build_ir_refuses_overfull_musicxml_before_scoreir_validation(tmp_path) -> None:
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(AUDIVERIS_OVERFULL_MUSICXML, TABRAW, tmp_path / "overfull.ir.json")
+
+    exc = raised.value
+    payload = exc.to_diagnostics_payload()
+
+    assert exc.category == "musicxml_timing_risk"
+    assert exc.stage == "musicxml-import"
+    assert not (tmp_path / "overfull.ir.json").exists()
+    assert payload["schema_version"] == "build-ir-failure-diagnostics.v0.1"
+    assert payload["timing_issue_counts"] == {"musicxml-overfull-bar": 1}
+    assert payload["timing_issues"][0]["end_divisions"] == 20
+
+
+def test_build_ir_preserves_compound_meter_warning_without_weakening_scoreir(tmp_path) -> None:
+    out = tmp_path / "compound.ir.json"
+
+    score = build_ir_from_files(AUDIVERIS_12_8_MUSICXML, TABRAW, out)
+    validated, errors = validate_score_ir_file(out)
+
+    assert errors == []
+    assert validated is not None
+    assert score.bars[0].time_signature.numerator == 12
+    assert score.bars[0].time_signature.denominator == 8
+    assert [event.timing.onset_ticks for event in score.bars[0].events] == [0, 2880]
+    assert [event.timing.duration_ticks for event in score.bars[0].events] == [2880, 2880]
+    assert "musicxml-compound-meter-assumption" in [warning.code for warning in score.warnings]
+
+
+def test_build_ir_refuses_backup_forward_overfull_with_timing_category(tmp_path) -> None:
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(AUDIVERIS_BACKUP_FORWARD_MUSICXML, TABRAW, tmp_path / "backup_forward.ir.json")
+
+    payload = raised.value.to_diagnostics_payload()
+
+    assert payload["category"] == "musicxml_timing_risk"
+    assert payload["timing_issue_counts"] == {"musicxml-overfull-bar": 1}
+    assert payload["timing_issues"][0]["voice"] == 2
