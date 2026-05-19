@@ -16,9 +16,10 @@
 
 ## Milestone 3: timing alignment
 
-- Add optional Audiveris runner and MusicXML ingestion.
-- Align tab x-positions with MusicXML timing.
-- Produce richer ScoreIR with event-level provenance.
+- Add optional Audiveris runner and limited MusicXML ingestion.
+- Prove synthetic MusicXML + TabRaw alignment with bars, rests, voices, chords, tuplets, selected techniques, and diagnostics.
+- Align tab x-positions with MusicXML timing for controlled public fixtures.
+- Produce richer ScoreIR with event-level provenance before attempting private real-world fixtures.
 
 ## Milestone 4: GPIF coverage
 

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .ir import BoundingBox, Provenance, SourceStage
 
@@ -61,6 +62,13 @@ class TabRaw(BaseModel):
     inspection_kind: str | None = None
     candidates: list[TabCandidate] = Field(default_factory=list)
     warnings: list[dict[str, Any]] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def candidate_ids_are_unique(self) -> "TabRaw":
+        ids = [candidate.id for candidate in self.candidates]
+        if len(ids) != len(set(ids)):
+            raise ValueError("TabRaw candidate IDs must be unique")
+        return self
 
     @classmethod
     def from_json_file(cls, path: str | Path) -> "TabRaw":
@@ -153,11 +161,23 @@ def _candidate_kind(raw_text: str, parsed_fret: int | None) -> str:
     lower = raw_text.lower()
     if parsed_fret is not None:
         return "fret"
-    if any(token in lower for token in ("slide", "bend", "vib", "let", "hammer", "pull")):
+    stripped = raw_text.strip()
+    if any(token in lower for token in ("slide", "bend", "vib", "let", "hammer", "pull", "p.m.", "palm")):
         return "technique-text"
-    if any(chord_token in raw_text for chord_token in ("maj", "min", "dim", "sus")):
+    if stripped.lower() in {"h", "p", "/", "\\", "~"}:
+        return "technique-text"
+    if _looks_like_chord_symbol(stripped):
         return "chord-symbol"
     return "candidate-text"
+
+
+def _looks_like_chord_symbol(text: str) -> bool:
+    return bool(
+        re.fullmatch(
+            r"[A-G](?:#|b)?(?:maj|min|m|dim|aug|sus|add)?(?:2|4|5|6|7|9|11|13)?(?:/[A-G](?:#|b)?)?",
+            text,
+        )
+    )
 
 
 def _normalize_bbox(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Iterable
@@ -28,7 +29,7 @@ from .ir import (
     Track,
     WarningItem,
 )
-from .musicxml import MusicXmlImport, MusicXmlMeasure, MusicXmlNote, parse_musicxml
+from .musicxml import MusicXmlHarmony, MusicXmlImport, MusicXmlMeasure, MusicXmlNote, MusicXmlTechnique, parse_musicxml
 from .tabraw import TabCandidate, TabRaw
 
 TRACK_ID = "gtr-1"
@@ -47,6 +48,7 @@ def build_ir_from_files(musicxml_path: str | Path, tabraw_path: str | Path, out_
 
 def build_ir_from_imports(musicxml: MusicXmlImport, tabraw: TabRaw) -> ScoreIR:
     warnings = _musicxml_warnings(musicxml)
+    warnings.extend(_tabraw_warnings(tabraw))
     if musicxml.tempo_bpm is None:
         warnings.append(
             WarningItem(
@@ -76,12 +78,12 @@ def build_ir_from_imports(musicxml: MusicXmlImport, tabraw: TabRaw) -> ScoreIR:
                 )
             )
 
-    candidate_map = _candidate_map(tabraw)
+    candidate_pools = CandidatePools.from_tabraw(tabraw)
     bars: list[Bar] = []
     if part is not None:
         for measure in part.measures:
             bar_warnings: list[WarningItem] = []
-            events = _measure_events(measure, candidate_map, bar_warnings)
+            events = _measure_events(measure, candidate_pools, bar_warnings)
             warnings.extend(bar_warnings)
             bars.append(
                 Bar(
@@ -91,6 +93,7 @@ def build_ir_from_imports(musicxml: MusicXmlImport, tabraw: TabRaw) -> ScoreIR:
                     events=events,
                 )
             )
+        warnings.extend(_unused_candidate_warnings(candidate_pools))
 
     return ScoreIR(
         metadata=Metadata(
@@ -114,13 +117,12 @@ def build_ir_from_imports(musicxml: MusicXmlImport, tabraw: TabRaw) -> ScoreIR:
 
 def _measure_events(
     measure: MusicXmlMeasure,
-    candidate_map: dict[int | None, list[TabCandidate]],
+    candidate_pools: "CandidatePools",
     warnings: list[WarningItem],
 ) -> list[Event]:
     events: list[Event] = []
-    candidate_pool = candidate_map.get(measure.index)
-    if not candidate_pool:
-        candidate_pool = candidate_map.get(None, [])
+    harmony_by_onset = _harmony_by_onset(measure)
+    used_harmony_onsets: set[int] = set()
 
     for group_index, group in enumerate(_note_groups(measure.notes), start=1):
         first = group[0]
@@ -141,8 +143,21 @@ def _measure_events(
                 )
             )
 
-        timing = _timing(first, measure, duration_ticks)
+        onset_ticks, onset_exact = first.onset_ticks(measure.divisions)
+        if not onset_exact:
+            warnings.append(
+                _event_warning(
+                    "musicxml-non-integer-onset",
+                    first,
+                    "MusicXML onset did not map to an integer ScoreIR tick value and was truncated.",
+                )
+            )
+
+        timing = _timing(first, measure, duration_ticks, onset_ticks)
         event_id = f"mx-m{measure.index}-e{group_index}"
+        chord_symbol = harmony_by_onset.get(first.onset_divisions)
+        if chord_symbol is not None:
+            used_harmony_onsets.add(first.onset_divisions)
         if first.is_rest:
             events.append(
                 Event(
@@ -150,6 +165,7 @@ def _measure_events(
                     track_id=TRACK_ID,
                     timing=timing,
                     is_rest=True,
+                    chord_symbol=chord_symbol,
                     confidence=0.9,
                     provenance=[_musicxml_provenance(first, measure)],
                 )
@@ -161,7 +177,7 @@ def _measure_events(
             if xml_note.pitch is None:
                 warnings.append(_event_warning("musicxml-pitch-missing", xml_note, "Pitched note is missing pitch data."))
                 continue
-            candidate = _pop_candidate(candidate_pool)
+            candidate = candidate_pools.pop(measure.index)
             if candidate is None:
                 warnings.append(
                     _event_warning(
@@ -182,6 +198,8 @@ def _measure_events(
                     track_id=TRACK_ID,
                     timing=timing,
                     notes=notes,
+                    chord_symbol=chord_symbol,
+                    techniques=_event_techniques(group),
                     confidence=min(note.confidence for note in notes),
                     provenance=[_musicxml_provenance(first, measure), *[note.provenance[-1] for note in notes]],
                 )
@@ -194,6 +212,10 @@ def _measure_events(
                     "MusicXML note group could not produce a valid ScoreIR event without aligned tab evidence.",
                 )
             )
+
+    for harmony in measure.harmonies:
+        if harmony.onset_divisions not in used_harmony_onsets:
+            warnings.append(_harmony_warning(harmony, "MusicXML harmony could not be attached to a timed event."))
 
     return sorted(events, key=lambda event: (event.timing.onset_ticks, event.timing.voice, event.id))
 
@@ -245,13 +267,19 @@ def _aligned_note(
         )
         confidence = min(confidence, 0.5)
 
+    tab_provenance = candidate.to_provenance()
+    tab_provenance.raw["alignment_strategy"] = "bar-x-order"
+    tab_provenance.raw["candidate_pitch"] = candidate_pitch
+    tab_provenance.raw["musicxml_pitch"] = xml_note.pitch.midi if xml_note.pitch is not None else None
+    tab_provenance.raw["pitch_matched"] = xml_note.pitch is None or candidate_pitch == xml_note.pitch.midi
+
     return Note(
         string=candidate.string,
         fret=candidate.parsed_fret,
         pitch=candidate_pitch,
-        techniques=_tie_techniques(xml_note),
+        techniques=_note_techniques(xml_note),
         confidence=confidence,
-        provenance=[_musicxml_provenance(xml_note, measure), candidate.to_provenance()],
+        provenance=[_musicxml_provenance(xml_note, measure), tab_provenance],
     )
 
 
@@ -266,22 +294,35 @@ def _note_groups(notes: Iterable[MusicXmlNote]) -> list[list[MusicXmlNote]]:
     ]
 
 
-def _candidate_map(tabraw: TabRaw) -> dict[int | None, list[TabCandidate]]:
-    candidates: dict[int | None, list[TabCandidate]] = defaultdict(list)
-    for candidate in tabraw.candidates:
-        if candidate.parsed_fret is not None:
-            candidates[candidate.bar_index].append(candidate)
-    for pool in candidates.values():
-        pool.sort(key=lambda candidate: (float("inf") if candidate.x is None else candidate.x, candidate.id))
-    return candidates
+@dataclass
+class CandidatePools:
+    pools: dict[int | None, list[TabCandidate]]
+    consumed_ids: set[str] = field(default_factory=set)
+
+    @classmethod
+    def from_tabraw(cls, tabraw: TabRaw) -> "CandidatePools":
+        pools: dict[int | None, list[TabCandidate]] = defaultdict(list)
+        for candidate in tabraw.candidates:
+            if candidate.parsed_fret is not None:
+                pools[candidate.bar_index].append(candidate)
+        for pool in pools.values():
+            pool.sort(key=lambda candidate: (float("inf") if candidate.x is None else candidate.x, candidate.id))
+        return cls(pools=dict(pools))
+
+    def pop(self, bar_index: int) -> TabCandidate | None:
+        for key in (bar_index, None):
+            pool = self.pools.get(key)
+            if pool:
+                candidate = pool.pop(0)
+                self.consumed_ids.add(candidate.id)
+                return candidate
+        return None
+
+    def unused(self) -> list[TabCandidate]:
+        return [candidate for pool in self.pools.values() for candidate in pool]
 
 
-def _pop_candidate(pool: list[TabCandidate]) -> TabCandidate | None:
-    return pool.pop(0) if pool else None
-
-
-def _timing(note: MusicXmlNote, measure: MusicXmlMeasure, duration_ticks: int) -> Timing:
-    onset_ticks = int(note.onset_divisions * DEFAULT_TICKS_PER_QUARTER / measure.divisions)
+def _timing(note: MusicXmlNote, measure: MusicXmlMeasure, duration_ticks: int, onset_ticks: int) -> Timing:
     return Timing(
         bar_index=measure.index,
         onset_ticks=onset_ticks,
@@ -314,6 +355,25 @@ def _notated_duration(note: MusicXmlNote) -> NotatedDuration | None:
     return NotatedDuration(value=value, dots=note.dots)
 
 
+def _harmony_by_onset(measure: MusicXmlMeasure) -> dict[int, str]:
+    return {harmony.onset_divisions: harmony.text for harmony in measure.harmonies}
+
+
+def _event_techniques(group: list[MusicXmlNote]) -> list[Technique]:
+    # The current ScoreIR writer handles common guitar markings on notes. Keep
+    # event-level techniques empty until we need an event-wide construct.
+    return []
+
+
+def _note_techniques(note: MusicXmlNote) -> list[Technique]:
+    techniques = _tie_techniques(note)
+    for technique in note.techniques:
+        converted = _scoreir_technique(technique)
+        if converted is not None:
+            techniques.append(converted)
+    return techniques
+
+
 def _tie_techniques(note: MusicXmlNote) -> list[Technique]:
     if "start" in note.ties and "stop" in note.ties:
         return [{"kind": "tie", "state": "continue"}]  # type: ignore[return-value]
@@ -322,6 +382,34 @@ def _tie_techniques(note: MusicXmlNote) -> list[Technique]:
     if "stop" in note.ties:
         return [{"kind": "tie", "state": "stop"}]  # type: ignore[return-value]
     return []
+
+
+def _scoreir_technique(technique: MusicXmlTechnique) -> Technique | None:
+    state = technique.state if technique.state in {"start", "stop", "continue"} else "start"
+    if technique.kind == "slide":
+        return {"kind": "slide", "style": "unknown", "direction": "unknown"}  # type: ignore[return-value]
+    if technique.kind == "bend":
+        return {
+            "kind": "bend",
+            "semitones": technique.semitones,
+            "text": technique.text,
+        }  # type: ignore[return-value]
+    if technique.kind == "vibrato":
+        return {"kind": "vibrato", "width": "unknown", "speed": "unknown"}  # type: ignore[return-value]
+    if technique.kind == "hammer-on":
+        return {"kind": "hammer-on"}  # type: ignore[return-value]
+    if technique.kind == "pull-off":
+        return {"kind": "pull-off"}  # type: ignore[return-value]
+    if technique.kind == "slur":
+        return {"kind": "slur", "state": state}  # type: ignore[return-value]
+    if technique.kind == "unsupported":
+        return {
+            "kind": "unsupported",
+            "label": technique.text or "MusicXML technical notation",
+            "reason": "MusicXML importer preserved this notation but build-ir does not map it yet.",
+            "raw": {"source_path": technique.source_path},
+        }  # type: ignore[return-value]
+    return None
 
 
 def _musicxml_warnings(musicxml: MusicXmlImport) -> list[WarningItem]:
@@ -339,6 +427,47 @@ def _musicxml_warnings(musicxml: MusicXmlImport) -> list[WarningItem]:
             ],
         )
         for warning in musicxml.warnings
+    ]
+
+
+def _tabraw_warnings(tabraw: TabRaw) -> list[WarningItem]:
+    warnings: list[WarningItem] = []
+    for raw_warning in tabraw.warnings:
+        warnings.append(
+            WarningItem(
+                code=str(raw_warning.get("code", "tabraw-warning")),
+                message=str(raw_warning.get("message", "TabRaw warning without message.")),
+                severity=raw_warning.get("severity", "warning")
+                if raw_warning.get("severity") in {"info", "warning", "error"}
+                else "warning",
+            )
+        )
+
+    for candidate in tabraw.candidates:
+        if candidate.parsed_fret is None:
+            warnings.append(
+                WarningItem(
+                    code=f"tabraw-{candidate.kind}-not-aligned",
+                    message=(
+                        f"TabRaw candidate '{candidate.id}' ({candidate.kind}) is preserved "
+                        "but not aligned by this build-ir phase."
+                    ),
+                    severity="info",
+                    provenance=[candidate.to_provenance()],
+                )
+            )
+    return warnings
+
+
+def _unused_candidate_warnings(candidate_pools: CandidatePools) -> list[WarningItem]:
+    return [
+        WarningItem(
+            code="tab-candidate-unused",
+            message=f"TabRaw candidate '{candidate.id}' was not consumed by MusicXML alignment.",
+            severity="warning",
+            provenance=[candidate.to_provenance()],
+        )
+        for candidate in candidate_pools.unused()
     ]
 
 
@@ -366,6 +495,27 @@ def _event_warning(
     return WarningItem(code=code, message=message, severity="warning", provenance=provenance)
 
 
+def _harmony_warning(harmony: MusicXmlHarmony, message: str) -> WarningItem:
+    return WarningItem(
+        code="musicxml-harmony-unattached",
+        message=message,
+        severity="warning",
+        provenance=[
+            Provenance(
+                source_stage=SourceStage.MUSICXML,
+                bar_index=harmony.measure_index,
+                raw_token_id=harmony.id,
+                raw={
+                    "source_path": harmony.source_path,
+                    "text": harmony.text,
+                    "onset_divisions": harmony.onset_divisions,
+                },
+                confidence=0.9,
+            )
+        ],
+    )
+
+
 def _musicxml_provenance(note: MusicXmlNote, measure: MusicXmlMeasure) -> Provenance:
     return Provenance(
         source_stage=SourceStage.MUSICXML,
@@ -377,6 +527,10 @@ def _musicxml_provenance(note: MusicXmlNote, measure: MusicXmlMeasure) -> Proven
             "onset_divisions": note.onset_divisions,
             "duration_divisions": note.duration_divisions,
             "measure_divisions": measure.divisions,
+            "notated_type": note.notated_type,
+            "dots": note.dots,
+            "tuplet": note.tuplet.model_dump() if note.tuplet is not None else None,
+            "techniques": [technique.model_dump(exclude_none=True) for technique in note.techniques],
         },
         confidence=0.9,
     )

@@ -47,6 +47,16 @@ class MusicXmlTuplet(BaseModel):
     normal_notes: int
 
 
+class MusicXmlTechnique(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["slide", "bend", "vibrato", "hammer-on", "pull-off", "slur", "unsupported"]
+    state: Literal["start", "stop", "continue", "single", "unknown"] = "unknown"
+    semitones: float | None = None
+    text: str | None = None
+    source_path: str
+
+
 class MusicXmlNote(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -67,11 +77,31 @@ class MusicXmlNote(BaseModel):
     dots: int = Field(default=0, ge=0)
     tuplet: MusicXmlTuplet | None = None
     grace: bool = False
+    techniques: list[MusicXmlTechnique] = Field(default_factory=list)
     source_path: str
 
     def duration_ticks(self, divisions: int) -> tuple[int, bool]:
         value = Fraction(self.duration_divisions * DEFAULT_TICKS_PER_QUARTER, divisions)
         return int(value), value.denominator == 1
+
+    def onset_ticks(self, divisions: int) -> tuple[int, bool]:
+        value = Fraction(self.onset_divisions * DEFAULT_TICKS_PER_QUARTER, divisions)
+        return int(value), value.denominator == 1
+
+
+class MusicXmlHarmony(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    part_id: str
+    measure_index: int = Field(ge=1)
+    measure_number: str
+    onset_divisions: int = Field(ge=0)
+    root_step: str
+    root_alter: int = 0
+    kind: str | None = None
+    text: str
+    source_path: str
 
 
 class MusicXmlMeasure(BaseModel):
@@ -83,6 +113,7 @@ class MusicXmlMeasure(BaseModel):
     time_signature: TimeSignature
     key_fifths: int | None = None
     notes: list[MusicXmlNote] = Field(default_factory=list)
+    harmonies: list[MusicXmlHarmony] = Field(default_factory=list)
 
 
 class MusicXmlPart(BaseModel):
@@ -151,6 +182,7 @@ def _parse_part(
         cursor = 0
         last_note_onset = 0
         notes: list[MusicXmlNote] = []
+        harmonies: list[MusicXmlHarmony] = []
 
         for child in list(measure_node):
             name = _local_name(child.tag)
@@ -172,6 +204,17 @@ def _parse_part(
                     warnings=warnings,
                 )
                 notes.append(note)
+            elif name == "harmony":
+                harmonies.append(
+                    _parse_harmony(
+                        child,
+                        part_id=part_id,
+                        measure_index=measure_index,
+                        measure_number=measure_number,
+                        harmony_index=len(harmonies) + 1,
+                        cursor=cursor,
+                    )
+                )
             elif name == "backup":
                 cursor = max(0, cursor - _duration(child))
             elif name == "forward":
@@ -201,6 +244,7 @@ def _parse_part(
                 time_signature=current_time,
                 key_fifths=current_key,
                 notes=notes,
+                harmonies=harmonies,
             )
         )
 
@@ -253,6 +297,7 @@ def _parse_note(
         dots=len(_children(node, "dot")),
         tuplet=_tuplet(node),
         grace=grace,
+        techniques=_techniques(node, source_path, warnings),
         source_path=source_path,
     )
 
@@ -262,6 +307,43 @@ def _parse_note(
         last_note_onset = onset
 
     return note, cursor, last_note_onset
+
+
+def _parse_harmony(
+    node: ET.Element,
+    *,
+    part_id: str,
+    measure_index: int,
+    measure_number: str,
+    harmony_index: int,
+    cursor: int,
+) -> MusicXmlHarmony:
+    root = _child(node, "root")
+    root_step = "C"
+    root_alter = 0
+    if root is not None:
+        root_step = (_text(_child(root, "root-step")) or "C").upper()
+        root_alter = _optional_int_text(_child(root, "root-alter")) or 0
+
+    kind_node = _child(node, "kind")
+    kind = _text(kind_node)
+    kind_text = kind_node.get("text") if kind_node is not None else None
+    offset = _optional_int_text(_child(node, "offset")) or 0
+    accidental = "#" if root_alter == 1 else "b" if root_alter == -1 else f"{root_alter:+d}" if root_alter else ""
+    text = f"{root_step}{accidental}{kind_text or _harmony_kind_suffix(kind)}"
+    source_path = f"/score-partwise/part[@id='{part_id}']/measure[{measure_index}]/harmony[{harmony_index}]"
+    return MusicXmlHarmony(
+        id=f"mx-{part_id}-m{measure_index}-h{harmony_index}",
+        part_id=part_id,
+        measure_index=measure_index,
+        measure_number=measure_number,
+        onset_divisions=max(0, cursor + offset),
+        root_step=root_step,
+        root_alter=root_alter,
+        kind=kind,
+        text=text,
+        source_path=source_path,
+    )
 
 
 def _metadata(root: ET.Element, xml_path: Path) -> MusicXmlMetadata:
@@ -382,6 +464,110 @@ def _tuplet(note: ET.Element) -> MusicXmlTuplet | None:
     return MusicXmlTuplet(actual_notes=actual, normal_notes=normal)
 
 
+def _techniques(
+    note: ET.Element,
+    source_path: str,
+    warnings: list[MusicXmlWarning],
+) -> list[MusicXmlTechnique]:
+    notations = _child(note, "notations")
+    if notations is None:
+        return []
+
+    techniques: list[MusicXmlTechnique] = []
+    for slide in _children(notations, "slide"):
+        techniques.append(
+            MusicXmlTechnique(
+                kind="slide",
+                state=_technique_state(slide.get("type")),
+                text=_text(slide),
+                source_path=f"{source_path}/notations/slide",
+            )
+        )
+    for slur in _children(notations, "slur"):
+        techniques.append(
+            MusicXmlTechnique(
+                kind="slur",
+                state=_technique_state(slur.get("type")),
+                text=_text(slur),
+                source_path=f"{source_path}/notations/slur",
+            )
+        )
+
+    ornaments = _child(notations, "ornaments")
+    if ornaments is not None and _child(ornaments, "wavy-line") is not None:
+        techniques.append(MusicXmlTechnique(kind="vibrato", source_path=f"{source_path}/notations/ornaments/wavy-line"))
+
+    technical = _child(notations, "technical")
+    if technical is None:
+        return techniques
+
+    for child in list(technical):
+        name = _local_name(child.tag)
+        child_path = f"{source_path}/notations/technical/{name}"
+        if name in {"string", "fret", "fingering"}:
+            continue
+        if name in {"hammer-on", "pull-off"}:
+            techniques.append(
+                MusicXmlTechnique(
+                    kind=name,
+                    state=_technique_state(child.get("type")),
+                    text=_text(child),
+                    source_path=child_path,
+                )
+            )
+        elif name == "bend":
+            bend_alter = _optional_float_text(_child(child, "bend-alter"))
+            techniques.append(
+                MusicXmlTechnique(
+                    kind="bend",
+                    semitones=bend_alter,
+                    text=_text(child),
+                    source_path=child_path,
+                )
+            )
+        elif name == "other-technical" and ((_text(child) or "").lower().startswith(("vib", "~"))):
+            techniques.append(MusicXmlTechnique(kind="vibrato", text=_text(child), source_path=child_path))
+        else:
+            warnings.append(
+                MusicXmlWarning(
+                    code="unsupported-technical-notation",
+                    message=f"MusicXML technical notation '{name}' is preserved as unsupported.",
+                    source_path=child_path,
+                )
+            )
+            techniques.append(
+                MusicXmlTechnique(
+                    kind="unsupported",
+                    text=name if _text(child) is None else _text(child),
+                    source_path=child_path,
+                )
+            )
+    return techniques
+
+
+def _technique_state(value: str | None) -> Literal["start", "stop", "continue", "single", "unknown"]:
+    if value in {"start", "stop", "continue", "single"}:
+        return value
+    return "unknown"
+
+
+def _harmony_kind_suffix(kind: str | None) -> str:
+    if kind is None:
+        return ""
+    mapping = {
+        "major": "",
+        "minor": "m",
+        "dominant": "7",
+        "major-seventh": "maj7",
+        "minor-seventh": "m7",
+        "diminished": "dim",
+        "augmented": "aug",
+        "suspended-fourth": "sus4",
+        "suspended-second": "sus2",
+    }
+    return mapping.get(kind, kind)
+
+
 def _duration(node: ET.Element) -> int:
     return _int_text(_child(node, "duration"), default=0)
 
@@ -397,6 +583,16 @@ def _optional_int_text(node: ET.Element | None) -> int | None:
         return None
     try:
         return int(value)
+    except ValueError:
+        return None
+
+
+def _optional_float_text(node: ET.Element | None) -> float | None:
+    value = _text(node)
+    if value is None:
+        return None
+    try:
+        return float(value)
     except ValueError:
         return None
 

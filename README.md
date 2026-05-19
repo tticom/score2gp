@@ -9,9 +9,9 @@ This project does **not** promise perfect PDF-to-Guitar-Pro conversion. Printed 
 Implemented now:
 
 - Strict `ScoreIR` pydantic models.
-- Limited uncompressed MusicXML importer for synthetic fixtures.
-- `tabraw.v0.1` candidate model with stable IDs, spatial evidence, confidence, and provenance.
-- Narrow `build-ir` path from synthetic MusicXML + TabRaw into valid ScoreIR.
+- Limited uncompressed MusicXML importer for synthetic fixtures, including simple harmony, tuplets, and selected guitar techniques.
+- `tabraw.v0.1` candidate model with unique stable IDs, spatial evidence, confidence, and provenance.
+- Narrow `build-ir` path from synthetic MusicXML + TabRaw into valid ScoreIR with explicit alignment diagnostics.
 - `score2gp inspect-gp input.gp` for GP7 zip/GPIF inspection.
 - Minimal GP7-style package writer from hand-authored ScoreIR.
 - `score2gp validate output.gp`.
@@ -35,6 +35,7 @@ score2gp write-gp fixtures/public/tiny_score.ir.json --template fixtures/templat
 score2gp inspect-pdf input.pdf --out work/inspect
 score2gp extract-tab input.pdf --out work/tab
 score2gp build-ir --musicxml tests/fixtures/musicxml/tiny_single_bar.musicxml --tabraw tests/fixtures/tabraw/tiny_single_bar_tabraw.json --out work/synthetic/score.ir.json
+score2gp build-ir --musicxml tests/fixtures/musicxml/rich_guitar_cases.musicxml --tabraw tests/fixtures/tabraw/rich_guitar_cases_tabraw.json --out work/synthetic/rich_score.ir.json
 score2gp convert input.pdf --template fixtures/templates/minimal_gp7.gp --out output.gp --workdir work/run1
 ```
 

@@ -4,9 +4,9 @@ This phase proves that extraction stages can populate ScoreIR v0.1 without using
 
 It is intentionally narrow:
 
-- MusicXML supplies bars, timing, voices, rests, and pitches.
+- MusicXML supplies bars, timing, voices, rests, pitches, chord symbols, and selected notation details.
 - TabRaw supplies spatial fret/string candidates and provenance.
-- `build-ir` combines a tiny synthetic MusicXML fixture with a tiny synthetic TabRaw fixture into valid ScoreIR.
+- `build-ir` combines synthetic MusicXML fixtures with synthetic TabRaw fixtures into valid ScoreIR.
 
 It does not attempt complete OMR, full tablature alignment, or full GPIF output.
 
@@ -28,9 +28,11 @@ Currently represented:
 - chord flag
 - tie start/stop
 - simple tuplets from `time-modification`
+- harmony/chord symbols from simple `harmony` elements
+- selected guitar/phrase techniques: slide, bend, vibrato text, hammer-on, pull-off, and slur
 - source element path for debugging
 
-Unsupported or incomplete constructs are warnings, not hidden assumptions. Repeats, alternate endings, grace notes, and compressed `.mxl` packages are not converted in this phase.
+Unsupported or incomplete constructs are warnings, not hidden assumptions. Repeats, alternate endings, grace notes, unsupported technical notation, and compressed `.mxl` packages are not converted in this phase.
 
 ## Timing
 
@@ -43,7 +45,7 @@ duration_ticks = duration_divisions * 960 / measure_divisions
 onset_ticks = onset_divisions * 960 / measure_divisions
 ```
 
-Simple integer mappings are supported. Non-integer duration mappings produce a warning and are truncated for now.
+Simple integer mappings are supported. Non-integer onset or duration mappings produce warnings and are truncated for now.
 
 The original MusicXML division values remain in ScoreIR provenance so duration conversion can be inspected later.
 
@@ -65,6 +67,8 @@ Each candidate preserves:
 
 Legacy `items` payloads can still be normalized by `score2gp.tabraw.normalize_tabraw_payload()`.
 
+TabRaw candidate IDs are required to be unique. Chord-symbol and technique-text candidates are preserved and reported by `build-ir`, but they are not aligned from TabRaw into events yet.
+
 ## build-ir
 
 The current `build-ir` implementation requires both inputs:
@@ -76,6 +80,15 @@ python -m score2gp.cli build-ir `
   --out "work/synthetic/score.ir.json"
 ```
 
+Richer synthetic smoke command:
+
+```powershell
+python -m score2gp.cli build-ir `
+  --musicxml "tests/fixtures/musicxml/rich_guitar_cases.musicxml" `
+  --tabraw "tests/fixtures/tabraw/rich_guitar_cases_tabraw.json" `
+  --out "work/synthetic/rich_score.ir.json"
+```
+
 `--tab` is retained as an alias for `--tabraw`.
 
 Current behavior:
@@ -85,8 +98,10 @@ Current behavior:
 - creates rest events directly from MusicXML rests
 - creates pitched events only when TabRaw provides aligned string/fret evidence
 - aligns synthetic tab candidates by bar and x-position order
+- preserves MusicXML chord symbols on same-onset events
+- carries simple MusicXML tuplets and selected note techniques into ScoreIR
 - keeps MusicXML and TabRaw provenance on generated notes
-- warns when notes cannot be aligned or when pitch evidence conflicts
+- warns when notes cannot be aligned, pitch evidence conflicts, non-fret TabRaw candidates are not aligned, harmonies cannot attach to an event, or extra fret candidates are unused
 - uses standard guitar tuning as an explicit placeholder
 
 The generated ScoreIR should pass:
@@ -104,7 +119,8 @@ Still out of scope:
 - multi-part alignment
 - robust system/staff detection
 - tab string inference from detected line positions
-- advanced rhythm, repeats, alternate endings, tuplets, grace-note semantics, and tempo maps
+- advanced rhythm, repeats, alternate endings, grace-note semantics, and tempo maps
+- TabRaw-derived chord/technique alignment
 - GPIF writer expansion
 
-The next architectural checkpoint should broaden synthetic fixtures before using private material.
+The next architectural checkpoint should add controlled public fixtures that look more like born-digital guitar tab extraction before using private material.

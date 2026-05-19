@@ -50,7 +50,7 @@ Purpose:
 - keep confidence values visible
 - keep uncertain text as candidates rather than forced notes
 
-Status: `tabraw.v0.1` candidate contract implemented. Extraction is still first-pass born-digital text candidate collection only.
+Status: `tabraw.v0.1` candidate contract implemented. Candidate IDs must be unique. Extraction is still first-pass born-digital text candidate collection only; `build-ir` currently consumes fret candidates and reports chord-symbol or technique-text candidates as preserved but not aligned.
 
 ## MusicXmlImport
 
@@ -73,10 +73,10 @@ Purpose:
 
 - use Audiveris for standard notation OMR
 - capture logs and warnings
-- parse uncompressed partwise MusicXML into limited timing, pitch, voice, rest, tie, tuplet, and measure data
+- parse uncompressed partwise MusicXML into limited timing, pitch, voice, rest, tie, tuplet, harmony, and selected guitar technique data
 - provide timing input for the first synthetic ScoreIR builder
 
-Status: Audiveris wrapper implemented. A limited uncompressed MusicXML parser is implemented for synthetic fixtures. Compressed `.mxl` package parsing is not implemented yet.
+Status: Audiveris wrapper implemented. A limited uncompressed MusicXML parser is implemented for synthetic fixtures. Compressed `.mxl` package parsing, repeat expansion, alternate endings, grace timing, and full MusicXML semantics are not implemented yet.
 
 ## ScoreIR
 
@@ -93,6 +93,13 @@ Purpose:
 - be suitable for validation, semantic comparison, correction, and writing
 
 Status: ScoreIR v0.1 schema and validation are implemented. `build-ir` now supports a narrow synthetic MusicXML + TabRaw path. Real PDF-derived alignment is still pending.
+
+Current synthetic alignment details:
+
+- MusicXML provides bar timing, rests, notated duration, tuplets, chord symbols, and selected note techniques.
+- TabRaw provides string/fret candidates, consumed by bar and x-position order.
+- Pitched ScoreIR events are emitted only when TabRaw provides string/fret evidence.
+- Unused fret candidates, non-fret TabRaw candidates, unattached harmonies, and pitch mismatches are explicit warnings.
 
 ## ConversionReport
 

@@ -52,3 +52,31 @@ def test_musicxml_importer_warns_for_unsupported_repeat() -> None:
     imported = parse_musicxml(FIXTURES / "unsupported_repeat.musicxml")
 
     assert [warning.code for warning in imported.warnings] == ["unsupported-repeat"]
+
+
+def test_musicxml_importer_preserves_harmony_tuplets_and_guitar_techniques() -> None:
+    imported = parse_musicxml(FIXTURES / "rich_guitar_cases.musicxml")
+
+    assert imported.metadata.title == "Rich Guitar Cases"
+    assert imported.tempo_bpm == 72
+
+    first_measure = imported.parts[0].measures[0]
+    assert first_measure.divisions == 24
+    assert first_measure.harmonies[0].text == "E7"
+    assert first_measure.harmonies[0].onset_divisions == 0
+
+    chord_note = first_measure.notes[1]
+    assert chord_note.chord is True
+    assert chord_note.onset_divisions == 0
+
+    triplet_note = first_measure.notes[3]
+    assert triplet_note.duration_ticks(first_measure.divisions) == (320, True)
+    assert triplet_note.tuplet is not None
+    assert triplet_note.tuplet.actual_notes == 3
+    assert triplet_note.tuplet.normal_notes == 2
+
+    technique_kinds = [technique.kind for note in first_measure.notes for technique in note.techniques]
+    assert technique_kinds == ["slide", "hammer-on", "bend", "vibrato", "slur"]
+
+    second_measure = imported.parts[0].measures[1]
+    assert second_measure.harmonies[0].text == "Gmaj7"
