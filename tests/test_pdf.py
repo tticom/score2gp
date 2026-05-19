@@ -12,6 +12,8 @@ GENERATED_PDF = Path("tests/fixtures/pdf/generated_tiny_tab.pdf")
 GENERATED_MUSICXML = Path("tests/fixtures/musicxml/generated_tiny_tab.musicxml")
 SCORELIKE_PDF = Path("tests/fixtures/pdf/generated_scorelike_tab.pdf")
 SCORELIKE_MUSICXML = Path("tests/fixtures/musicxml/generated_scorelike_tab.musicxml")
+UNEVEN_PDF = Path("tests/fixtures/pdf/generated_uneven_spacing_tab.pdf")
+UNEVEN_MUSICXML = Path("tests/fixtures/musicxml/generated_uneven_spacing_tab.musicxml")
 
 
 def test_pdf_inspection_reports_missing_pymupdf_or_empty_pdf(tmp_path) -> None:
@@ -178,8 +180,81 @@ def test_scorelike_generated_pdf_extracted_tabraw_feeds_build_ir_with_system_dia
     assert diagnostics["per_bar"][3]["matched_candidate_count"] == 3
     assert "repeated x-position candidates treated as a chord or stacked notes" in diagnostics["per_bar"][0]["ambiguity_flags"]
     assert "repeated x-position candidates treated as a chord or stacked notes" in diagnostics["per_bar"][3]["ambiguity_flags"]
+    assert all(bar["quality"] == "good" for bar in diagnostics["per_bar"])
+    assert diagnostics["per_bar"][0]["has_chord_stack"] is True
+    assert diagnostics["per_bar"][0]["playable_candidate_onset_group_count"] == 2
+    assert diagnostics["per_bar"][0]["musicxml_pitched_onset_group_count"] == 2
+    assert diagnostics["per_bar"][1]["playable_candidate_onset_group_count"] == 3
+    assert diagnostics["per_bar"][1]["musicxml_pitched_onset_group_count"] == 3
+    assert diagnostics["per_bar"][1]["max_relative_error"] < 0.05
+    assert diagnostics["per_bar"][0]["candidate_x_groups"][0]["candidate_count"] == 2
+    assert diagnostics["per_bar"][0]["candidate_x_groups"][0]["is_chord_stack"] is True
+    assert all("pdf-p001-c0001" not in group["candidate_ids"] for group in diagnostics["per_bar"][0]["candidate_x_groups"])
 
     warning_codes = [warning.code for warning in score.warnings]
     assert "tabraw-chord-symbol-not-aligned" in warning_codes
     assert "tabraw-technique-text-not-aligned" in warning_codes
     assert "tabraw-candidate-text-not-aligned" in warning_codes
+
+
+def test_uneven_generated_pdf_reports_x_to_onset_quality_without_breaking_scoreir(tmp_path) -> None:
+    assert UNEVEN_PDF.exists()
+    first_path = tmp_path / "generated_uneven_spacing_tab.tabraw.json"
+    second_path = tmp_path / "generated_uneven_spacing_tab_again.tabraw.json"
+    ir_path = tmp_path / "generated_uneven_spacing_tab.ir.json"
+    diagnostics_path = tmp_path / "generated_uneven_spacing_tab.diagnostics.json"
+
+    first = TabRaw.model_validate(extract_tab(UNEVEN_PDF, first_path))
+    second = TabRaw.model_validate(extract_tab(UNEVEN_PDF, second_path))
+
+    assert [candidate.id for candidate in first.candidates] == [candidate.id for candidate in second.candidates]
+    assert [candidate.raw_text for candidate in first.candidates] == [candidate.raw_text for candidate in second.candidates]
+
+    fret_candidates = [candidate for candidate in first.candidates if candidate.kind == "fret"]
+    chord_candidates = [candidate for candidate in first.candidates if candidate.kind == "chord-symbol"]
+    technique_candidates = [candidate for candidate in first.candidates if candidate.kind == "technique-text"]
+
+    assert len(first.candidates) == 12
+    assert len(fret_candidates) == 8
+    assert len(chord_candidates) == 2
+    assert len(technique_candidates) == 2
+    assert {10, 12} <= {candidate.parsed_fret for candidate in fret_candidates}
+    assert all(candidate.bbox is not None for candidate in fret_candidates)
+    assert all(candidate.x is not None and candidate.y is not None for candidate in fret_candidates)
+    assert all(candidate.system_index == 1 for candidate in fret_candidates)
+    assert {candidate.bar_index for candidate in fret_candidates} == {1, 2}
+
+    score = build_ir_from_files(UNEVEN_MUSICXML, first_path, ir_path, diagnostics_path)
+    validated, errors = validate_score_ir_file(ir_path)
+    diagnostics = json.loads(diagnostics_path.read_text(encoding="utf-8"))
+
+    assert errors == []
+    assert validated is not None
+    assert score.metadata.title == "Generated Uneven Spacing Tab"
+    assert len(score.bars) == 2
+    assert sum(len(bar.events) for bar in score.bars) == 8
+    assert diagnostics["matched_candidate_count"] == 8
+    assert diagnostics["ignored_non_playable_candidate_count"] == 4
+    assert diagnostics["unmatched_tabraw_candidate_count"] == 0
+    assert diagnostics["tabraw_chord_symbol_candidate_count"] == 2
+    assert diagnostics["tabraw_technique_text_candidate_count"] == 2
+
+    first_bar = diagnostics["per_bar"][0]
+    second_bar = diagnostics["per_bar"][1]
+    assert first_bar["playable_candidate_onset_group_count"] == 3
+    assert first_bar["musicxml_pitched_onset_group_count"] == 3
+    assert first_bar["has_chord_stack"] is True
+    assert first_bar["candidate_x_groups"][0]["candidate_count"] == 2
+    assert first_bar["candidate_x_groups"][0]["is_chord_stack"] is True
+    assert first_bar["quality"] == "good"
+    assert first_bar["max_relative_error"] == 0.0
+
+    assert second_bar["playable_candidate_onset_group_count"] == 4
+    assert second_bar["musicxml_pitched_onset_group_count"] == 4
+    assert second_bar["has_chord_stack"] is False
+    assert second_bar["ambiguous_x_group_count"] == 1
+    assert second_bar["quality"] in {"warning", "poor"}
+    assert second_bar["max_relative_error"] > 0.3
+    assert "one or more playable x groups are too close to distinguish confidently" in second_bar["x_to_onset_warnings"]
+    assert "visual x positions drift strongly from MusicXML onset spacing" in second_bar["x_to_onset_warnings"]
+    assert "one or more bars have poor x-to-onset quality" in diagnostics["extraction_quality_flags"]
