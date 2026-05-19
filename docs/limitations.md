@@ -14,6 +14,7 @@ Known limitations:
 - Candidate text near tab systems is preserved as non-playable evidence; it is not interpreted musically.
 - Scanned PDFs require OCR/image recognition that is not complete in the first milestone.
 - The generated PDF regressions demonstrate controlled born-digital PDF producer paths; they do not mean private or commercial scores will convert cleanly.
+- Private diagnostic runs are evidence-gathering only. Their summaries report counts and quality buckets, not copyrighted score content, and private artifacts must stay under ignored paths.
 - GPIF support is minimal and may not cover every Guitar Pro feature.
 - Unsupported or uncertain notation must be reported in warnings and conversion reports.
 
