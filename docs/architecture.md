@@ -11,6 +11,7 @@
 2. Page and system segmentation
    - Detect staff systems, notation staves, tablature staves, barlines, tab lines, chord symbols, and technique text.
    - Write overlay images for human inspection.
+   - When grouping fails, write a small HTML report plus candidate-box overlays so extraction evidence can be inspected without promoting it to musical events.
 
 3. Symbolic recognition
    - Use Audiveris optionally for standard notation to MusicXML/MXL.
@@ -36,3 +37,5 @@
 ## Current Diagnostic Boundaries
 
 The current build-ir path refuses known-unsafe input before writing ScoreIR. MusicXML timing risks such as overfull bars and same-voice overlaps produce `build-ir-failure-diagnostics.v0.1`. PDF-derived TabRaw with playable fret candidates but no usable system/string/bar grouping produces `missing_pdf_grouping` instead of allowing ungrouped text to become musical notes.
+
+`extract-tab` owns the PDF grouping diagnostic boundary. It writes `tab_raw.json` for candidate evidence, `warnings.json` for extraction warnings, and `grouping-diagnostics.html` plus `overlays/page-*-grouping.png` when grouping is missing or partial. The report is intentionally observational: it says extraction succeeded, grouping failed, and alignment/ScoreIR output should remain blocked until geometry is understood.

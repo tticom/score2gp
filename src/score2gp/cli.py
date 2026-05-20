@@ -141,6 +141,8 @@ def build_ir_command(
         score, diagnostics = build_ir_with_diagnostics_from_files(musicxml, tabraw, out)
     except BuildIrInputRiskError as exc:
         payload = exc.to_diagnostics_payload()
+        if exc.category == "missing_pdf_grouping" and tabraw is not None:
+            payload["artifacts"] = _grouping_artifacts_for_tabraw(tabraw)
         if diagnostics_out is not None:
             diagnostics_out.parent.mkdir(parents=True, exist_ok=True)
             diagnostics_out.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
@@ -189,6 +191,21 @@ def convert_command(
     summary = {"pdf": pdf_summary, "tab": tab_summary, "requested_output": str(out), "template": str(template) if template else None}
     write_conversion_report(workdir / "conversion-report.html", "score2gp conversion report", warnings, summary)
     typer.echo(json.dumps({"workdir": str(workdir), "warnings": warnings}, indent=2))
+
+
+def _grouping_artifacts_for_tabraw(tabraw_path: Path) -> dict[str, object]:
+    base = tabraw_path.parent
+    artifacts: dict[str, object] = {}
+    grouping_html = base / "grouping-diagnostics.html"
+    warnings = base / "warnings.json"
+    overlays = base / "overlays"
+    if grouping_html.exists():
+        artifacts["grouping_diagnostics_html"] = str(grouping_html)
+    if warnings.exists():
+        artifacts["warnings"] = str(warnings)
+    if overlays.exists():
+        artifacts["overlay_images"] = [str(path) for path in sorted(overlays.glob("*-grouping.png"))]
+    return artifacts
 
 
 if __name__ == "__main__":

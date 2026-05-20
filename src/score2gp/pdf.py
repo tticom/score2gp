@@ -5,6 +5,12 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .report import (
+    build_grouping_diagnostics,
+    grouping_status_for_tabraw,
+    write_grouping_diagnostics_html,
+    write_warnings,
+)
 from .tabraw import TABRAW_SCHEMA_VERSION, TabRaw, make_tab_candidate
 
 
@@ -105,7 +111,10 @@ def extract_tab(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
 
     _append_grouping_warnings(raw)
     raw = TabRaw.model_validate(raw).model_dump(mode="json", exclude_none=True)
+    _write_grouping_artifacts(Path(path), out, tabraw_path, inspection, raw)
     tabraw_path.write_text(json.dumps(raw, indent=2), encoding="utf-8")
+    if raw.get("warnings"):
+        write_warnings(out / "warnings.json", raw["warnings"])
     return raw
 
 
@@ -294,6 +303,134 @@ def _append_grouping_warnings(raw: dict[str, Any]) -> None:
                 "missing_grouping_dimensions": missing,
             }
         )
+
+
+def _write_grouping_artifacts(
+    pdf_path: Path,
+    out_dir: Path,
+    tabraw_path: Path,
+    inspection: dict[str, Any],
+    raw: dict[str, Any],
+) -> None:
+    candidates = raw.get("candidates", [])
+    if not candidates or not any(candidate.get("parsed_fret") is not None for candidate in candidates):
+        return
+    grouping_status = grouping_status_for_tabraw(raw)
+    if grouping_status not in {"missing", "partial"}:
+        return
+
+    html_path = out_dir / "grouping-diagnostics.html"
+    warnings_path = out_dir / "warnings.json"
+    overlay_paths: list[Path] = []
+    try:
+        overlay_paths = _write_grouping_overlays(
+            pdf_path,
+            raw.get("candidates", []),
+            out_dir / "overlays",
+            grouping_status,
+        )
+    except Exception as exc:  # noqa: BLE001
+        raw.setdefault("warnings", []).append(
+            {
+                "code": "grouping-overlay-failed",
+                "message": f"Grouping overlay images could not be written: {exc}",
+                "severity": "warning",
+            }
+        )
+
+    artifacts = {
+        "tab_raw": _relative_artifact_path(tabraw_path, out_dir),
+        "warnings": _relative_artifact_path(warnings_path, out_dir),
+        "diagnostic_html": _relative_artifact_path(html_path, out_dir),
+        "overlay_images": [_relative_artifact_path(path, out_dir) for path in overlay_paths],
+    }
+    report = build_grouping_diagnostics(
+        source_pdf=pdf_path,
+        inspection=inspection,
+        tabraw=raw,
+        artifacts=artifacts,
+        alignment_attempted=False,
+        scoreir_written=False,
+    )
+    write_grouping_diagnostics_html(html_path, report)
+
+
+def _write_grouping_overlays(
+    pdf_path: Path,
+    candidates: list[dict[str, Any]],
+    overlays_dir: Path,
+    grouping_status: str,
+) -> list[Path]:
+    import fitz  # type: ignore[import-not-found]
+
+    overlays_dir.mkdir(parents=True, exist_ok=True)
+    candidates_by_page: dict[int, list[dict[str, Any]]] = {}
+    for candidate in candidates:
+        bbox = candidate.get("bbox")
+        page_index = int(candidate.get("page_index") or bbox.get("page")) if isinstance(bbox, dict) else candidate.get("page_index")
+        if page_index is None:
+            continue
+        candidates_by_page.setdefault(int(page_index), []).append(candidate)
+
+    message = "candidate text found; no usable tab staff/bar/string grouping inferred"
+    if grouping_status == "partial":
+        message = "candidate text found; tab staff/bar/string grouping is partial"
+
+    overlay_paths: list[Path] = []
+    with fitz.open(pdf_path) as doc:
+        for page_number, page in enumerate(doc, start=1):
+            page_candidates = candidates_by_page.get(page_number, [])
+            if not page_candidates:
+                continue
+            page.insert_text(
+                fitz.Point(36, 24),
+                message,
+                fontsize=10,
+                color=(0.8, 0.05, 0.05),
+            )
+            for candidate in page_candidates:
+                bbox = candidate.get("bbox")
+                if not isinstance(bbox, dict):
+                    continue
+                rect = fitz.Rect(float(bbox["x0"]), float(bbox["y0"]), float(bbox["x1"]), float(bbox["y1"]))
+                color = _candidate_overlay_color(str(candidate.get("kind", "candidate-text")))
+                page.draw_rect(rect, color=color, width=0.8)
+                label = _candidate_overlay_label(candidate)
+                label_y = max(8.0, rect.y0 - 2.0)
+                page.insert_text(fitz.Point(rect.x0, label_y), label, fontsize=5.5, color=color)
+            image_path = overlays_dir / f"page-{page_number:03d}-grouping.png"
+            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
+            pix.save(image_path)
+            overlay_paths.append(image_path)
+    return overlay_paths
+
+
+def _candidate_overlay_color(kind: str) -> tuple[float, float, float]:
+    if kind == "fret":
+        return (0.0, 0.45, 0.1)
+    if kind == "chord-symbol":
+        return (0.5, 0.0, 0.65)
+    if kind == "technique-text":
+        return (0.0, 0.25, 0.85)
+    return (0.85, 0.45, 0.0)
+
+
+def _candidate_overlay_label(candidate: dict[str, Any]) -> str:
+    kind = str(candidate.get("kind", "text"))
+    kind_label = {
+        "candidate-text": "text",
+        "chord-symbol": "chord",
+        "technique-text": "tech",
+    }.get(kind, kind)
+    short_id = str(candidate.get("id", "candidate")).split("-")[-1]
+    return f"{short_id}:{kind_label}"
+
+
+def _relative_artifact_path(path: Path, base: Path) -> str:
+    try:
+        return str(path.relative_to(base)).replace("\\", "/")
+    except ValueError:
+        return str(path)
 
 
 def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:

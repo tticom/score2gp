@@ -115,6 +115,9 @@ def test_private_diagnostic_runner_distinguishes_pdf_grouping_failure(tmp_path) 
     assert summary["extraction"]["grouping_status"] == "missing_pdf_grouping"
     assert "missing_pdf_grouping" in summary["extraction"]["grouping_warning_codes"]
     assert summary["extraction"]["warning_counts"]["missing_pdf_grouping"] == 1
+    assert summary["outputs"]["warnings"] == "warnings.json"
+    assert summary["outputs"]["grouping_diagnostics_html"] == "grouping-diagnostics.html"
+    assert summary["outputs"]["grouping_overlay_count"] >= 1
     assert summary["build_ir"]["ran"] is False
     assert "missing_pdf_grouping" in summary["suitability"]["recommendation_categories"]
     assert "alignment_not_attempted" in summary["suitability"]["recommendation_categories"]
