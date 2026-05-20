@@ -12,6 +12,7 @@ Known limitations:
 - Native `.mxl` intake is supported only for normal compressed MusicXML packages with a safe rootfile declared in `META-INF/container.xml`; malformed packages and unsafe rootfile paths are rejected.
 - 12/8 and other compound-meter input is represented through exact MusicXML divisions and flagged as an assumption; it still needs human review when produced by OMR.
 - If PDF extraction finds fret text but no system/string/bar grouping, the project reports `missing_pdf_grouping` and `build-ir` refuses to write ScoreIR rather than fabricating positions.
+- The grouping HTML report and overlay images make missing grouping inspectable; they do not solve arbitrary PDF grouping or make unstructured fret text safe to align.
 - A `good` x-to-onset quality label only means the current simple alignment looks internally consistent for the inspected controlled input.
 - `warning`, `poor`, or `unknown` x-to-onset quality means the conversion should be inspected before trusting any automatic result.
 - Chord symbols and technique text extracted from PDF-derived TabRaw are preserved and reported, but not yet aligned into ScoreIR events.

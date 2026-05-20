@@ -47,6 +47,7 @@ def run_private_diagnostic_smoke(
         "diagnostics": diagnostics_path.name,
         "summary_json": summary_json_path.name,
         "summary_markdown": summary_markdown_path.name,
+        **_grouping_artifact_outputs(out),
     }
 
     if musicxml is None:
@@ -386,6 +387,22 @@ def _risk_action(category: str) -> str:
     if category == "musicxml_timing_risk":
         return "review-musicxml-timing-risk-before-alignment"
     return "fix-build-ir-input-or-import-error-before-private-debugging"
+
+
+def _grouping_artifact_outputs(out_dir: Path) -> dict[str, Any]:
+    outputs: dict[str, Any] = {}
+    warnings_path = out_dir / "warnings.json"
+    grouping_report_path = out_dir / "grouping-diagnostics.html"
+    overlays_dir = out_dir / "overlays"
+    overlay_names = [path.name for path in sorted(overlays_dir.glob("*-grouping.png"))] if overlays_dir.exists() else []
+    if warnings_path.exists():
+        outputs["warnings"] = warnings_path.name
+    if grouping_report_path.exists():
+        outputs["grouping_diagnostics_html"] = grouping_report_path.name
+    if overlay_names:
+        outputs["grouping_overlay_count"] = len(overlay_names)
+        outputs["grouping_overlays"] = overlay_names
+    return outputs
 
 
 def _dedupe(values: list[str]) -> list[str]:

@@ -105,6 +105,7 @@ def test_scorelike_generated_pdf_extract_tab_groups_multiple_systems_and_preserv
     second = TabRaw.model_validate(extract_tab(SCORELIKE_PDF, second_path))
 
     assert first.inspection_kind == "born-digital"
+    assert not (first_path.parent / "grouping-diagnostics.html").exists()
     assert [candidate.id for candidate in first.candidates] == [candidate.id for candidate in second.candidates]
     assert [candidate.raw_text for candidate in first.candidates] == [candidate.raw_text for candidate in second.candidates]
 
@@ -292,6 +293,20 @@ def test_unstructured_pdf_preserves_candidates_but_reports_missing_grouping(tmp_
     assert grouping_warnings[0]["grouping_status"] == "missing_pdf_grouping"
     assert set(grouping_warnings[0]["missing_grouping_dimensions"]) == {"system", "bar", "string"}
 
+    warnings_path = first_path.parent / "warnings.json"
+    report_path = first_path.parent / "grouping-diagnostics.html"
+    overlay_paths = sorted((first_path.parent / "overlays").glob("*-grouping.png"))
+    report_html = report_path.read_text(encoding="utf-8")
+
+    assert warnings_path.exists()
+    assert report_path.exists()
+    assert overlay_paths
+    assert "missing_pdf_grouping" in report_html
+    assert "Candidate count" in report_html
+    assert "Grouping status" in report_html
+    assert "ScoreIR was not written" in report_html
+    assert "Alignment/build-ir was not attempted" in report_html
+
 
 def test_build_ir_refuses_unstructured_pdf_tabraw_before_scoreir_output(tmp_path) -> None:
     tabraw_path = tmp_path / "generated_unstructured_tab_text.tabraw.json"
@@ -303,6 +318,7 @@ def test_build_ir_refuses_unstructured_pdf_tabraw_before_scoreir_output(tmp_path
         build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
 
     assert not ir_path.exists()
+    assert (tabraw_path.parent / "grouping-diagnostics.html").exists()
     assert raised.value.category == "missing_pdf_grouping"
     payload = raised.value.to_diagnostics_payload()
     assert payload["stage"] == "tabraw-import"
