@@ -1,24 +1,24 @@
 from __future__ import annotations
 
+import json
 from enum import StrEnum
-from fractions import Fraction
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+
+SCHEMA_VERSION = "0.1.0"
+DEFAULT_TICKS_PER_QUARTER = 960
 
 
-class Technique(StrEnum):
-    SLIDE = "slide"
-    BEND = "bend"
-    VIBRATO = "vibrato"
-    HAMMER_ON = "hammer-on"
-    PULL_OFF = "pull-off"
-    LET_RING = "let-ring"
-    GRACE = "grace"
-    TUPLET = "tuplet"
-    TIE = "tie"
-    SLUR = "slur"
+class SourceStage(StrEnum):
+    MUSICXML = "musicxml"
+    PDF_TEXT = "pdf-text"
+    OCR = "ocr"
+    INFERRED = "inferred"
+    MANUAL = "manual"
+    GPIF = "gpif"
+    UNKNOWN = "unknown"
 
 
 class BoundingBox(BaseModel):
@@ -33,25 +33,46 @@ class BoundingBox(BaseModel):
     @model_validator(mode="after")
     def coordinates_are_ordered(self) -> "BoundingBox":
         if self.x1 < self.x0 or self.y1 < self.y0:
-            raise ValueError("bounding box coordinates must be ordered")
+            raise ValueError("bbox must use ordered PDF coordinates: x0 <= x1 and y0 <= y1")
         return self
 
 
-class SourceRef(BaseModel):
+class Provenance(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    stage: str
-    confidence: float = Field(ge=0.0, le=1.0)
+    source_stage: SourceStage = SourceStage.UNKNOWN
+    page: int | None = Field(default=None, ge=1)
+    system_id: str | None = None
+    staff_id: str | None = None
+    bar_index: int | None = Field(default=None, ge=1)
     bbox: BoundingBox | None = None
+    raw_token_id: str | None = None
     raw: dict[str, Any] = Field(default_factory=dict)
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
 
 
 class Metadata(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     title: str = "Untitled"
+    subtitle: str | None = None
     artist: str | None = None
+    composer: str | None = None
+    album: str | None = None
+    transcriber: str | None = None
     copyright: str | None = None
+    source: str | None = None
+
+
+class ConversionInfo(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tool_name: str = "score2gp"
+    tool_version: str | None = None
+    conversion_timestamp: str | None = None
+    source_file_hash: str | None = None
+    source_page_count: int | None = Field(default=None, ge=0)
+    audiveris_version: str | None = None
 
 
 class Tempo(BaseModel):
@@ -103,6 +124,12 @@ class Tuning(BaseModel):
             raise ValueError("tuning string numbers must be unique")
         return self
 
+    def pitch_for_string(self, number: int) -> int | None:
+        for string in self.strings:
+            if string.number == number:
+                return string.pitch
+        return None
+
 
 class Track(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -111,6 +138,162 @@ class Track(BaseModel):
     name: str
     instrument: str = "guitar"
     tuning: Tuning
+    capo: int = Field(default=0, ge=0, le=24)
+    tablature_enabled: bool = True
+    staff_count: int = Field(default=1, ge=1, le=4)
+    midi_program: int | None = Field(default=None, ge=0, le=127)
+    midi_channel: int | None = Field(default=None, ge=1, le=16)
+
+
+class NotatedDuration(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    value: Literal["whole", "half", "quarter", "eighth", "16th", "32nd", "64th", "128th"]
+    dots: int = Field(default=0, ge=0, le=4)
+
+
+class Tuplet(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    actual_notes: int = Field(gt=0, le=64)
+    normal_notes: int = Field(gt=0, le=64)
+
+
+class GraceTiming(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    position: Literal["before", "on-beat", "after"] = "before"
+    slash: bool = False
+    duration_ticks: int = Field(default=0, ge=0)
+
+
+class Timing(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    bar_index: int = Field(ge=1)
+    onset_ticks: int = Field(ge=0)
+    duration_ticks: int = Field(ge=0)
+    ticks_per_quarter: int = Field(default=DEFAULT_TICKS_PER_QUARTER, gt=0)
+    voice: int = Field(default=1, ge=1, le=8)
+    notated_duration: NotatedDuration | None = None
+    tuplet: Tuplet | None = None
+    grace: GraceTiming | None = None
+
+    @model_validator(mode="after")
+    def duration_is_positive_unless_grace(self) -> "Timing":
+        if self.duration_ticks == 0 and self.grace is None:
+            raise ValueError("duration_ticks must be positive unless grace timing is present")
+        return self
+
+
+class SlideTechnique(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["slide"] = "slide"
+    style: Literal["shift", "legato", "slide-in", "slide-out", "unknown"] = "unknown"
+    direction: Literal["up", "down", "unknown"] = "unknown"
+    target_event_id: str | None = None
+
+
+class BendPoint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    offset_ticks: int = Field(ge=0)
+    semitones: float = Field(ge=-12.0, le=12.0)
+
+
+class BendTechnique(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["bend"] = "bend"
+    semitones: float | None = Field(default=None, ge=-12.0, le=12.0)
+    points: list[BendPoint] = Field(default_factory=list)
+    text: str | None = None
+
+
+class VibratoTechnique(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["vibrato"] = "vibrato"
+    width: Literal["narrow", "wide", "unknown"] = "unknown"
+    speed: Literal["slow", "medium", "fast", "unknown"] = "unknown"
+
+
+class HammerOnTechnique(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["hammer-on"] = "hammer-on"
+    target_event_id: str | None = None
+
+
+class PullOffTechnique(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["pull-off"] = "pull-off"
+    target_event_id: str | None = None
+
+
+class TieTechnique(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["tie"] = "tie"
+    state: Literal["start", "stop", "continue"]
+    target_event_id: str | None = None
+
+
+class SlurTechnique(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["slur"] = "slur"
+    state: Literal["start", "stop", "continue"]
+    target_event_id: str | None = None
+
+
+class LetRingTechnique(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["let-ring"] = "let-ring"
+    end_event_id: str | None = None
+
+
+class PalmMuteTechnique(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["palm-mute"] = "palm-mute"
+    end_event_id: str | None = None
+
+
+class GraceTechnique(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["grace"] = "grace"
+    slash: bool = False
+    timing: GraceTiming | None = None
+
+
+class UnsupportedTechnique(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["unsupported"] = "unsupported"
+    label: str
+    reason: str | None = None
+    raw: dict[str, Any] = Field(default_factory=dict)
+
+
+Technique = Annotated[
+    SlideTechnique
+    | BendTechnique
+    | VibratoTechnique
+    | HammerOnTechnique
+    | PullOffTechnique
+    | TieTechnique
+    | SlurTechnique
+    | LetRingTechnique
+    | PalmMuteTechnique
+    | GraceTechnique
+    | UnsupportedTechnique,
+    Field(discriminator="kind"),
+]
 
 
 class Note(BaseModel):
@@ -119,13 +302,9 @@ class Note(BaseModel):
     string: int = Field(ge=1, le=12)
     fret: int = Field(ge=0, le=36)
     pitch: int = Field(ge=0, le=127)
-    duration: str | None = None
-    voice: int | None = Field(default=None, ge=1, le=8)
-    tie: str | None = Field(default=None, pattern="^(start|stop|continue)$")
-    slur: str | None = Field(default=None, pattern="^(start|stop|continue)$")
     techniques: list[Technique] = Field(default_factory=list)
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
-    source: SourceRef | None = None
+    provenance: list[Provenance] = Field(default_factory=list)
 
 
 class Event(BaseModel):
@@ -133,26 +312,20 @@ class Event(BaseModel):
 
     id: str
     track_id: str
-    voice: int = Field(default=1, ge=1, le=8)
-    position: str
-    duration: str
+    timing: Timing
     notes: list[Note] = Field(default_factory=list)
     is_rest: bool = False
     chord_symbol: str | None = None
     techniques: list[Technique] = Field(default_factory=list)
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
-    source: SourceRef | None = None
-
-    @field_validator("position", "duration")
-    @classmethod
-    def fraction_string(cls, value: str) -> str:
-        Fraction(value)
-        return value
+    provenance: list[Provenance] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def event_has_content(self) -> "Event":
+    def rest_note_consistency(self) -> "Event":
+        if self.is_rest and self.notes:
+            raise ValueError(f"event {self.id} is a rest and must not contain notes")
         if not self.is_rest and not self.notes:
-            raise ValueError("non-rest events must contain at least one note")
+            raise ValueError(f"event {self.id} is not a rest and must contain at least one note")
         return self
 
 
@@ -170,31 +343,26 @@ class WarningItem(BaseModel):
 
     code: str
     message: str
-    severity: str = Field(default="warning", pattern="^(info|warning|error)$")
-    source: SourceRef | None = None
+    severity: Literal["info", "warning", "error"] = "warning"
+    provenance: list[Provenance] = Field(default_factory=list)
 
 
 class ScoreIR(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: str = "0.1.0"
+    schema_version: Literal["0.1.0"] = SCHEMA_VERSION
     metadata: Metadata = Field(default_factory=Metadata)
+    conversion: ConversionInfo = Field(default_factory=ConversionInfo)
     tempo: Tempo
     tracks: list[Track] = Field(min_length=1)
     bars: list[Bar] = Field(default_factory=list)
     warnings: list[WarningItem] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def events_reference_tracks(self) -> "ScoreIR":
-        track_ids = {track.id for track in self.tracks}
-        missing = {
-            event.track_id
-            for bar in self.bars
-            for event in bar.events
-            if event.track_id not in track_ids
-        }
-        if missing:
-            raise ValueError(f"events reference unknown tracks: {sorted(missing)}")
+    def semantic_contract_is_valid(self) -> "ScoreIR":
+        errors = self.semantic_errors()
+        if errors:
+            raise ValueError("; ".join(errors))
         return self
 
     @classmethod
@@ -203,3 +371,201 @@ class ScoreIR(BaseModel):
 
     def to_json_file(self, path: str | Path) -> None:
         Path(path).write_text(self.model_dump_json(indent=2), encoding="utf-8")
+
+    def semantic_errors(self) -> list[str]:
+        errors: list[str] = []
+        track_map = {track.id: track for track in self.tracks}
+        if len(track_map) != len(self.tracks):
+            errors.append("track IDs must be unique")
+
+        bar_map = {bar.index: bar for bar in self.bars}
+        if len(bar_map) != len(self.bars):
+            errors.append("bar indexes must be unique")
+
+        all_events = [event for bar in self.bars for event in bar.events]
+        event_ids = {event.id for event in all_events}
+        if len(event_ids) != len(all_events):
+            errors.append("event IDs must be unique")
+
+        events_by_voice: dict[tuple[str, int, int], list[Event]] = {}
+        for bar in self.bars:
+            for event in bar.events:
+                if event.track_id not in track_map:
+                    errors.append(f"event '{event.id}' references unknown track '{event.track_id}'")
+                    continue
+
+                if event.timing.bar_index != bar.index:
+                    errors.append(
+                        f"event '{event.id}' is stored in bar {bar.index} but timing.bar_index is {event.timing.bar_index}"
+                    )
+
+                bar_length = _bar_length_ticks(bar.time_signature, event.timing.ticks_per_quarter)
+                event_end = event.timing.onset_ticks + event.timing.duration_ticks
+                if event.timing.grace is None and event_end > bar_length:
+                    errors.append(
+                        f"event '{event.id}' exceeds bar {bar.index}: ends at tick {event_end}, bar length is {bar_length}"
+                    )
+
+                track = track_map[event.track_id]
+                for note in event.notes:
+                    open_pitch = track.tuning.pitch_for_string(note.string)
+                    if open_pitch is None:
+                        errors.append(
+                            f"event '{event.id}' uses string {note.string}, but track '{track.id}' tuning does not define it"
+                        )
+                        continue
+                    expected_pitch = open_pitch + note.fret
+                    if note.pitch != expected_pitch:
+                        errors.append(
+                            f"event '{event.id}' note string {note.string} fret {note.fret} has pitch {note.pitch}; "
+                            f"expected {expected_pitch} from tuning"
+                        )
+
+                _validate_technique_links(event.id, event.techniques, event_ids, errors)
+                for note in event.notes:
+                    _validate_technique_links(event.id, note.techniques, event_ids, errors)
+
+                if event.timing.duration_ticks > 0:
+                    key = (event.track_id, bar.index, event.timing.voice)
+                    events_by_voice.setdefault(key, []).append(event)
+
+        for (track_id, bar_index, voice), events in events_by_voice.items():
+            ordered = sorted(events, key=lambda item: (item.timing.onset_ticks, item.id))
+            for previous, current in zip(ordered, ordered[1:]):
+                previous_end = previous.timing.onset_ticks + previous.timing.duration_ticks
+                if previous_end > current.timing.onset_ticks:
+                    errors.append(
+                        f"events '{previous.id}' and '{current.id}' overlap on track '{track_id}', "
+                        f"bar {bar_index}, voice {voice}"
+                    )
+
+        return errors
+
+
+def _bar_length_ticks(time_signature: TimeSignature, ticks_per_quarter: int) -> int:
+    return int(time_signature.numerator * ticks_per_quarter * 4 / time_signature.denominator)
+
+
+def _validate_technique_links(
+    event_id: str,
+    techniques: list[Technique],
+    known_event_ids: set[str],
+    errors: list[str],
+) -> None:
+    for technique in techniques:
+        target = getattr(technique, "target_event_id", None) or getattr(technique, "end_event_id", None)
+        if target is not None and target not in known_event_ids:
+            errors.append(
+                f"event '{event_id}' technique '{technique.kind}' references unknown event '{target}'"
+            )
+
+
+def format_validation_errors(exc: ValidationError) -> list[str]:
+    messages = []
+    for error in exc.errors():
+        location = ".".join(str(part) for part in error["loc"])
+        prefix = f"{location}: " if location else ""
+        message = str(error["msg"])
+        if message.startswith("Value error, "):
+            message = message.removeprefix("Value error, ")
+        messages.append(f"{prefix}{message}")
+    return messages
+
+
+def validate_score_ir_file(path: str | Path) -> tuple[ScoreIR | None, list[str]]:
+    try:
+        return ScoreIR.from_json_file(path), []
+    except ValidationError as exc:
+        return None, format_validation_errors(exc)
+    except json.JSONDecodeError as exc:
+        return None, [f"invalid JSON: {exc}"]
+    except OSError as exc:
+        return None, [str(exc)]
+
+
+def scoreir_schema() -> dict[str, Any]:
+    schema = ScoreIR.model_json_schema()
+    schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
+    schema["$id"] = "https://github.com/tticom/score2gp/schemas/scoreir.v0.1.schema.json"
+    schema["title"] = "ScoreIR v0.1"
+    return schema
+
+
+def export_scoreir_schema(out_dir: str | Path) -> Path:
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    path = out / "scoreir.v0.1.schema.json"
+    path.write_text(json.dumps(scoreir_schema(), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return path
+
+
+def semantic_scoreir_summary(score: ScoreIR) -> dict[str, Any]:
+    return {
+        "schema_version": score.schema_version,
+        "metadata": score.metadata.model_dump(exclude_none=True),
+        "tempo": score.tempo.model_dump(exclude_none=True),
+        "tracks": [
+            {
+                "id": track.id,
+                "name": track.name,
+                "instrument": track.instrument,
+                "tuning": track.tuning.model_dump(),
+                "capo": track.capo,
+                "tablature_enabled": track.tablature_enabled,
+                "staff_count": track.staff_count,
+                "midi_program": track.midi_program,
+                "midi_channel": track.midi_channel,
+            }
+            for track in score.tracks
+        ],
+        "bars": [
+            {
+                "index": bar.index,
+                "time_signature": bar.time_signature.model_dump(),
+                "key_signature": bar.key_signature.model_dump() if bar.key_signature else None,
+                "events": [
+                    {
+                        "id": event.id,
+                        "track_id": event.track_id,
+                        "timing": event.timing.model_dump(exclude_none=True),
+                        "is_rest": event.is_rest,
+                        "chord_symbol": event.chord_symbol,
+                        "notes": [note.model_dump(exclude_none=True, exclude={"provenance"}) for note in event.notes],
+                        "techniques": [technique.model_dump(exclude_none=True) for technique in event.techniques],
+                    }
+                    for event in sorted(bar.events, key=lambda item: (item.timing.onset_ticks, item.id))
+                ],
+            }
+            for bar in sorted(score.bars, key=lambda item: item.index)
+        ],
+    }
+
+
+def compare_score_ir(expected: str | Path, actual: str | Path) -> dict[str, Any]:
+    expected_score, expected_errors = validate_score_ir_file(expected)
+    actual_score, actual_errors = validate_score_ir_file(actual)
+    if expected_errors or actual_errors:
+        return {
+            "expected": str(expected),
+            "actual": str(actual),
+            "matches": False,
+            "errors": {"expected": expected_errors, "actual": actual_errors},
+            "differences": {},
+        }
+
+    assert expected_score is not None
+    assert actual_score is not None
+    expected_summary = semantic_scoreir_summary(expected_score)
+    actual_summary = semantic_scoreir_summary(actual_score)
+    differences = {
+        key: {"expected": expected_summary[key], "actual": actual_summary[key]}
+        for key in expected_summary
+        if expected_summary[key] != actual_summary.get(key)
+    }
+    return {
+        "expected": str(expected),
+        "actual": str(actual),
+        "matches": not differences,
+        "errors": {},
+        "differences": differences,
+    }

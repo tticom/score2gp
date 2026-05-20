@@ -7,8 +7,9 @@ from typing import Optional
 
 import typer
 
+from .build_ir import BuildIrInputRiskError, build_ir_with_diagnostics_from_files
 from .gp_package import compare_gp, dumps_summary, inspect_gp, validate_gp, write_gp
-from .ir import ScoreIR
+from .ir import ScoreIR, compare_score_ir, export_scoreir_schema, validate_score_ir_file
 from .pdf import extract_tab as extract_tab_file
 from .pdf import inspect_pdf as inspect_pdf_file
 from .report import write_conversion_report, write_warnings
@@ -35,6 +36,37 @@ def validate_command(input_gp: Path) -> None:
 def compare_command(expected_gp: Path, actual_gp: Path) -> None:
     """Compare semantic GP features rather than package bytes."""
     result = compare_gp(expected_gp, actual_gp)
+    typer.echo(json.dumps(result, indent=2, sort_keys=True))
+    if not result["matches"]:
+        raise typer.Exit(1)
+
+
+@app.command("export-schema")
+def export_schema_command(out: Path = typer.Option(...)) -> None:
+    """Export committed JSON schemas for intermediate contracts."""
+    path = export_scoreir_schema(out)
+    typer.echo(str(path))
+
+
+@app.command("validate-ir")
+def validate_ir_command(input_ir: Path) -> None:
+    """Validate ScoreIR JSON with pydantic and semantic checks."""
+    score, errors = validate_score_ir_file(input_ir)
+    result = {
+        "path": str(input_ir),
+        "valid": score is not None and not errors,
+        "schema_version": score.schema_version if score else None,
+        "errors": errors,
+    }
+    typer.echo(json.dumps(result, indent=2, sort_keys=True))
+    if errors:
+        raise typer.Exit(1)
+
+
+@app.command("compare-ir")
+def compare_ir_command(expected_ir: Path, actual_ir: Path) -> None:
+    """Compare semantic ScoreIR content rather than JSON bytes."""
+    result = compare_score_ir(expected_ir, actual_ir)
     typer.echo(json.dumps(result, indent=2, sort_keys=True))
     if not result["matches"]:
         raise typer.Exit(1)
@@ -95,12 +127,46 @@ def omr_command(input_pdf: Path, out: Path = typer.Option(...), audiveris: Optio
 @app.command("build-ir")
 def build_ir_command(
     musicxml: Optional[Path] = typer.Option(None),
-    tab: Optional[Path] = typer.Option(None),
+    tabraw: Optional[Path] = typer.Option(None, "--tabraw", "--tab"),
     out: Path = typer.Option(...),
+    diagnostics_out: Optional[Path] = typer.Option(None, "--diagnostics-out"),
 ) -> None:
-    """Placeholder aligner: write a clear error until MusicXML/tab alignment exists."""
-    raise typer.BadParameter(
-        f"build-ir alignment is not implemented yet; received musicxml={musicxml} tab={tab} out={out}"
+    """Build a limited ScoreIR file from synthetic MusicXML plus TabRaw inputs."""
+    if musicxml is None or tabraw is None:
+        raise typer.BadParameter(
+            "ScoreIR v0.1 is ready. This build-ir phase requires --musicxml and --tabraw/--tab "
+            "and supports only the limited synthetic MusicXML + TabRaw alignment path."
+        )
+    try:
+        score, diagnostics = build_ir_with_diagnostics_from_files(musicxml, tabraw, out)
+    except BuildIrInputRiskError as exc:
+        payload = exc.to_diagnostics_payload()
+        if exc.category == "missing_pdf_grouping" and tabraw is not None:
+            payload["artifacts"] = _grouping_artifacts_for_tabraw(tabraw)
+        if diagnostics_out is not None:
+            diagnostics_out.parent.mkdir(parents=True, exist_ok=True)
+            diagnostics_out.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+        raise typer.Exit(1) from exc
+    if diagnostics_out is not None:
+        diagnostics.to_json_file(diagnostics_out)
+    typer.echo(
+        json.dumps(
+            {
+                "out": str(out),
+                "diagnostics_out": str(diagnostics_out) if diagnostics_out else None,
+                "schema_version": score.schema_version,
+                "bar_count": len(score.bars),
+                "event_count": sum(len(bar.events) for bar in score.bars),
+                "warning_count": len(score.warnings),
+                "matched_candidate_count": diagnostics.matched_candidate_count,
+                "unmatched_musicxml_event_count": diagnostics.unmatched_musicxml_event_count,
+                "unmatched_tabraw_candidate_count": diagnostics.unmatched_tabraw_candidate_count,
+                "warnings": [warning.model_dump(mode="json", exclude_none=True) for warning in score.warnings],
+            },
+            indent=2,
+            sort_keys=True,
+        )
     )
 
 
@@ -125,6 +191,21 @@ def convert_command(
     summary = {"pdf": pdf_summary, "tab": tab_summary, "requested_output": str(out), "template": str(template) if template else None}
     write_conversion_report(workdir / "conversion-report.html", "score2gp conversion report", warnings, summary)
     typer.echo(json.dumps({"workdir": str(workdir), "warnings": warnings}, indent=2))
+
+
+def _grouping_artifacts_for_tabraw(tabraw_path: Path) -> dict[str, object]:
+    base = tabraw_path.parent
+    artifacts: dict[str, object] = {}
+    grouping_html = base / "grouping-diagnostics.html"
+    warnings = base / "warnings.json"
+    overlays = base / "overlays"
+    if grouping_html.exists():
+        artifacts["grouping_diagnostics_html"] = str(grouping_html)
+    if warnings.exists():
+        artifacts["warnings"] = str(warnings)
+    if overlays.exists():
+        artifacts["overlay_images"] = [str(path) for path in sorted(overlays.glob("*-grouping.png"))]
+    return artifacts
 
 
 if __name__ == "__main__":

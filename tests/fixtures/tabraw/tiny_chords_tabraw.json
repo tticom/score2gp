@@ -1,0 +1,38 @@
+{
+  "schema_version": "tabraw.v0.1",
+  "source_pdf": "synthetic-chords.pdf",
+  "inspection_kind": "synthetic",
+  "candidates": [
+    {
+      "id": "ch-e4",
+      "kind": "fret",
+      "page_index": 1,
+      "system_index": 1,
+      "staff_index": 2,
+      "bar_index": 1,
+      "string": 1,
+      "raw_text": "0",
+      "parsed_fret": 0,
+      "x": 100.0,
+      "y": 140.0,
+      "bbox": {"page": 1, "x0": 98.0, "y0": 136.0, "x1": 104.0, "y1": 144.0},
+      "confidence": 0.95
+    },
+    {
+      "id": "ch-g4",
+      "kind": "fret",
+      "page_index": 1,
+      "system_index": 1,
+      "staff_index": 2,
+      "bar_index": 1,
+      "string": 1,
+      "raw_text": "3",
+      "parsed_fret": 3,
+      "x": 100.5,
+      "y": 140.0,
+      "bbox": {"page": 1, "x0": 106.0, "y0": 136.0, "x1": 112.0, "y1": 144.0},
+      "confidence": 0.94
+    }
+  ],
+  "warnings": []
+}

@@ -1,0 +1,1400 @@
+{
+  "$defs": {
+    "Bar": {
+      "additionalProperties": false,
+      "properties": {
+        "events": {
+          "items": {
+            "$ref": "#/$defs/Event"
+          },
+          "title": "Events",
+          "type": "array"
+        },
+        "index": {
+          "minimum": 1,
+          "title": "Index",
+          "type": "integer"
+        },
+        "key_signature": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeySignature"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "time_signature": {
+          "$ref": "#/$defs/TimeSignature"
+        }
+      },
+      "required": [
+        "index",
+        "time_signature"
+      ],
+      "title": "Bar",
+      "type": "object"
+    },
+    "BendPoint": {
+      "additionalProperties": false,
+      "properties": {
+        "offset_ticks": {
+          "minimum": 0,
+          "title": "Offset Ticks",
+          "type": "integer"
+        },
+        "semitones": {
+          "maximum": 12.0,
+          "minimum": -12.0,
+          "title": "Semitones",
+          "type": "number"
+        }
+      },
+      "required": [
+        "offset_ticks",
+        "semitones"
+      ],
+      "title": "BendPoint",
+      "type": "object"
+    },
+    "BendTechnique": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "bend",
+          "default": "bend",
+          "title": "Kind",
+          "type": "string"
+        },
+        "points": {
+          "items": {
+            "$ref": "#/$defs/BendPoint"
+          },
+          "title": "Points",
+          "type": "array"
+        },
+        "semitones": {
+          "anyOf": [
+            {
+              "maximum": 12.0,
+              "minimum": -12.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Semitones"
+        },
+        "text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Text"
+        }
+      },
+      "title": "BendTechnique",
+      "type": "object"
+    },
+    "BoundingBox": {
+      "additionalProperties": false,
+      "properties": {
+        "page": {
+          "minimum": 1,
+          "title": "Page",
+          "type": "integer"
+        },
+        "x0": {
+          "title": "X0",
+          "type": "number"
+        },
+        "x1": {
+          "title": "X1",
+          "type": "number"
+        },
+        "y0": {
+          "title": "Y0",
+          "type": "number"
+        },
+        "y1": {
+          "title": "Y1",
+          "type": "number"
+        }
+      },
+      "required": [
+        "page",
+        "x0",
+        "y0",
+        "x1",
+        "y1"
+      ],
+      "title": "BoundingBox",
+      "type": "object"
+    },
+    "ConversionInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "audiveris_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Audiveris Version"
+        },
+        "conversion_timestamp": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Conversion Timestamp"
+        },
+        "source_file_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source File Hash"
+        },
+        "source_page_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Page Count"
+        },
+        "tool_name": {
+          "default": "score2gp",
+          "title": "Tool Name",
+          "type": "string"
+        },
+        "tool_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tool Version"
+        }
+      },
+      "title": "ConversionInfo",
+      "type": "object"
+    },
+    "Event": {
+      "additionalProperties": false,
+      "properties": {
+        "chord_symbol": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Chord Symbol"
+        },
+        "confidence": {
+          "default": 1.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "is_rest": {
+          "default": false,
+          "title": "Is Rest",
+          "type": "boolean"
+        },
+        "notes": {
+          "items": {
+            "$ref": "#/$defs/Note"
+          },
+          "title": "Notes",
+          "type": "array"
+        },
+        "provenance": {
+          "items": {
+            "$ref": "#/$defs/Provenance"
+          },
+          "title": "Provenance",
+          "type": "array"
+        },
+        "techniques": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "bend": "#/$defs/BendTechnique",
+                "grace": "#/$defs/GraceTechnique",
+                "hammer-on": "#/$defs/HammerOnTechnique",
+                "let-ring": "#/$defs/LetRingTechnique",
+                "palm-mute": "#/$defs/PalmMuteTechnique",
+                "pull-off": "#/$defs/PullOffTechnique",
+                "slide": "#/$defs/SlideTechnique",
+                "slur": "#/$defs/SlurTechnique",
+                "tie": "#/$defs/TieTechnique",
+                "unsupported": "#/$defs/UnsupportedTechnique",
+                "vibrato": "#/$defs/VibratoTechnique"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/SlideTechnique"
+              },
+              {
+                "$ref": "#/$defs/BendTechnique"
+              },
+              {
+                "$ref": "#/$defs/VibratoTechnique"
+              },
+              {
+                "$ref": "#/$defs/HammerOnTechnique"
+              },
+              {
+                "$ref": "#/$defs/PullOffTechnique"
+              },
+              {
+                "$ref": "#/$defs/TieTechnique"
+              },
+              {
+                "$ref": "#/$defs/SlurTechnique"
+              },
+              {
+                "$ref": "#/$defs/LetRingTechnique"
+              },
+              {
+                "$ref": "#/$defs/PalmMuteTechnique"
+              },
+              {
+                "$ref": "#/$defs/GraceTechnique"
+              },
+              {
+                "$ref": "#/$defs/UnsupportedTechnique"
+              }
+            ]
+          },
+          "title": "Techniques",
+          "type": "array"
+        },
+        "timing": {
+          "$ref": "#/$defs/Timing"
+        },
+        "track_id": {
+          "title": "Track Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "track_id",
+        "timing"
+      ],
+      "title": "Event",
+      "type": "object"
+    },
+    "GraceTechnique": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "grace",
+          "default": "grace",
+          "title": "Kind",
+          "type": "string"
+        },
+        "slash": {
+          "default": false,
+          "title": "Slash",
+          "type": "boolean"
+        },
+        "timing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GraceTiming"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "GraceTechnique",
+      "type": "object"
+    },
+    "GraceTiming": {
+      "additionalProperties": false,
+      "properties": {
+        "duration_ticks": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Duration Ticks",
+          "type": "integer"
+        },
+        "position": {
+          "default": "before",
+          "enum": [
+            "before",
+            "on-beat",
+            "after"
+          ],
+          "title": "Position",
+          "type": "string"
+        },
+        "slash": {
+          "default": false,
+          "title": "Slash",
+          "type": "boolean"
+        }
+      },
+      "title": "GraceTiming",
+      "type": "object"
+    },
+    "HammerOnTechnique": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "hammer-on",
+          "default": "hammer-on",
+          "title": "Kind",
+          "type": "string"
+        },
+        "target_event_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Event Id"
+        }
+      },
+      "title": "HammerOnTechnique",
+      "type": "object"
+    },
+    "KeySignature": {
+      "additionalProperties": false,
+      "properties": {
+        "fifths": {
+          "maximum": 7,
+          "minimum": -7,
+          "title": "Fifths",
+          "type": "integer"
+        },
+        "mode": {
+          "default": "major",
+          "title": "Mode",
+          "type": "string"
+        }
+      },
+      "required": [
+        "fifths"
+      ],
+      "title": "KeySignature",
+      "type": "object"
+    },
+    "LetRingTechnique": {
+      "additionalProperties": false,
+      "properties": {
+        "end_event_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "End Event Id"
+        },
+        "kind": {
+          "const": "let-ring",
+          "default": "let-ring",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "LetRingTechnique",
+      "type": "object"
+    },
+    "Metadata": {
+      "additionalProperties": false,
+      "properties": {
+        "album": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Album"
+        },
+        "artist": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Artist"
+        },
+        "composer": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Composer"
+        },
+        "copyright": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Copyright"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source"
+        },
+        "subtitle": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subtitle"
+        },
+        "title": {
+          "default": "Untitled",
+          "title": "Title",
+          "type": "string"
+        },
+        "transcriber": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Transcriber"
+        }
+      },
+      "title": "Metadata",
+      "type": "object"
+    },
+    "NotatedDuration": {
+      "additionalProperties": false,
+      "properties": {
+        "dots": {
+          "default": 0,
+          "maximum": 4,
+          "minimum": 0,
+          "title": "Dots",
+          "type": "integer"
+        },
+        "value": {
+          "enum": [
+            "whole",
+            "half",
+            "quarter",
+            "eighth",
+            "16th",
+            "32nd",
+            "64th",
+            "128th"
+          ],
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "title": "NotatedDuration",
+      "type": "object"
+    },
+    "Note": {
+      "additionalProperties": false,
+      "properties": {
+        "confidence": {
+          "default": 1.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "fret": {
+          "maximum": 36,
+          "minimum": 0,
+          "title": "Fret",
+          "type": "integer"
+        },
+        "pitch": {
+          "maximum": 127,
+          "minimum": 0,
+          "title": "Pitch",
+          "type": "integer"
+        },
+        "provenance": {
+          "items": {
+            "$ref": "#/$defs/Provenance"
+          },
+          "title": "Provenance",
+          "type": "array"
+        },
+        "string": {
+          "maximum": 12,
+          "minimum": 1,
+          "title": "String",
+          "type": "integer"
+        },
+        "techniques": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "bend": "#/$defs/BendTechnique",
+                "grace": "#/$defs/GraceTechnique",
+                "hammer-on": "#/$defs/HammerOnTechnique",
+                "let-ring": "#/$defs/LetRingTechnique",
+                "palm-mute": "#/$defs/PalmMuteTechnique",
+                "pull-off": "#/$defs/PullOffTechnique",
+                "slide": "#/$defs/SlideTechnique",
+                "slur": "#/$defs/SlurTechnique",
+                "tie": "#/$defs/TieTechnique",
+                "unsupported": "#/$defs/UnsupportedTechnique",
+                "vibrato": "#/$defs/VibratoTechnique"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/SlideTechnique"
+              },
+              {
+                "$ref": "#/$defs/BendTechnique"
+              },
+              {
+                "$ref": "#/$defs/VibratoTechnique"
+              },
+              {
+                "$ref": "#/$defs/HammerOnTechnique"
+              },
+              {
+                "$ref": "#/$defs/PullOffTechnique"
+              },
+              {
+                "$ref": "#/$defs/TieTechnique"
+              },
+              {
+                "$ref": "#/$defs/SlurTechnique"
+              },
+              {
+                "$ref": "#/$defs/LetRingTechnique"
+              },
+              {
+                "$ref": "#/$defs/PalmMuteTechnique"
+              },
+              {
+                "$ref": "#/$defs/GraceTechnique"
+              },
+              {
+                "$ref": "#/$defs/UnsupportedTechnique"
+              }
+            ]
+          },
+          "title": "Techniques",
+          "type": "array"
+        }
+      },
+      "required": [
+        "string",
+        "fret",
+        "pitch"
+      ],
+      "title": "Note",
+      "type": "object"
+    },
+    "PalmMuteTechnique": {
+      "additionalProperties": false,
+      "properties": {
+        "end_event_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "End Event Id"
+        },
+        "kind": {
+          "const": "palm-mute",
+          "default": "palm-mute",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "PalmMuteTechnique",
+      "type": "object"
+    },
+    "Provenance": {
+      "additionalProperties": false,
+      "properties": {
+        "bar_index": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bar Index"
+        },
+        "bbox": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BoundingBox"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "confidence": {
+          "default": 1.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "page": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page"
+        },
+        "raw": {
+          "additionalProperties": true,
+          "title": "Raw",
+          "type": "object"
+        },
+        "raw_token_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Raw Token Id"
+        },
+        "source_stage": {
+          "$ref": "#/$defs/SourceStage",
+          "default": "unknown"
+        },
+        "staff_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Staff Id"
+        },
+        "system_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "System Id"
+        }
+      },
+      "title": "Provenance",
+      "type": "object"
+    },
+    "PullOffTechnique": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "pull-off",
+          "default": "pull-off",
+          "title": "Kind",
+          "type": "string"
+        },
+        "target_event_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Event Id"
+        }
+      },
+      "title": "PullOffTechnique",
+      "type": "object"
+    },
+    "SlideTechnique": {
+      "additionalProperties": false,
+      "properties": {
+        "direction": {
+          "default": "unknown",
+          "enum": [
+            "up",
+            "down",
+            "unknown"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "kind": {
+          "const": "slide",
+          "default": "slide",
+          "title": "Kind",
+          "type": "string"
+        },
+        "style": {
+          "default": "unknown",
+          "enum": [
+            "shift",
+            "legato",
+            "slide-in",
+            "slide-out",
+            "unknown"
+          ],
+          "title": "Style",
+          "type": "string"
+        },
+        "target_event_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Event Id"
+        }
+      },
+      "title": "SlideTechnique",
+      "type": "object"
+    },
+    "SlurTechnique": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "slur",
+          "default": "slur",
+          "title": "Kind",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "start",
+            "stop",
+            "continue"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "target_event_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Event Id"
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "title": "SlurTechnique",
+      "type": "object"
+    },
+    "SourceStage": {
+      "enum": [
+        "musicxml",
+        "pdf-text",
+        "ocr",
+        "inferred",
+        "manual",
+        "gpif",
+        "unknown"
+      ],
+      "title": "SourceStage",
+      "type": "string"
+    },
+    "Tempo": {
+      "additionalProperties": false,
+      "properties": {
+        "bpm": {
+          "exclusiveMinimum": 0,
+          "maximum": 400,
+          "title": "Bpm",
+          "type": "integer"
+        },
+        "text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Text"
+        }
+      },
+      "required": [
+        "bpm"
+      ],
+      "title": "Tempo",
+      "type": "object"
+    },
+    "TieTechnique": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "tie",
+          "default": "tie",
+          "title": "Kind",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "start",
+            "stop",
+            "continue"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "target_event_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Event Id"
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "title": "TieTechnique",
+      "type": "object"
+    },
+    "TimeSignature": {
+      "additionalProperties": false,
+      "properties": {
+        "denominator": {
+          "exclusiveMinimum": 0,
+          "maximum": 64,
+          "title": "Denominator",
+          "type": "integer"
+        },
+        "numerator": {
+          "exclusiveMinimum": 0,
+          "maximum": 64,
+          "title": "Numerator",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "numerator",
+        "denominator"
+      ],
+      "title": "TimeSignature",
+      "type": "object"
+    },
+    "Timing": {
+      "additionalProperties": false,
+      "properties": {
+        "bar_index": {
+          "minimum": 1,
+          "title": "Bar Index",
+          "type": "integer"
+        },
+        "duration_ticks": {
+          "minimum": 0,
+          "title": "Duration Ticks",
+          "type": "integer"
+        },
+        "grace": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GraceTiming"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "notated_duration": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NotatedDuration"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "onset_ticks": {
+          "minimum": 0,
+          "title": "Onset Ticks",
+          "type": "integer"
+        },
+        "ticks_per_quarter": {
+          "default": 960,
+          "exclusiveMinimum": 0,
+          "title": "Ticks Per Quarter",
+          "type": "integer"
+        },
+        "tuplet": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tuplet"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "voice": {
+          "default": 1,
+          "maximum": 8,
+          "minimum": 1,
+          "title": "Voice",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "bar_index",
+        "onset_ticks",
+        "duration_ticks"
+      ],
+      "title": "Timing",
+      "type": "object"
+    },
+    "Track": {
+      "additionalProperties": false,
+      "properties": {
+        "capo": {
+          "default": 0,
+          "maximum": 24,
+          "minimum": 0,
+          "title": "Capo",
+          "type": "integer"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "instrument": {
+          "default": "guitar",
+          "title": "Instrument",
+          "type": "string"
+        },
+        "midi_channel": {
+          "anyOf": [
+            {
+              "maximum": 16,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Midi Channel"
+        },
+        "midi_program": {
+          "anyOf": [
+            {
+              "maximum": 127,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Midi Program"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "staff_count": {
+          "default": 1,
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Staff Count",
+          "type": "integer"
+        },
+        "tablature_enabled": {
+          "default": true,
+          "title": "Tablature Enabled",
+          "type": "boolean"
+        },
+        "tuning": {
+          "$ref": "#/$defs/Tuning"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "tuning"
+      ],
+      "title": "Track",
+      "type": "object"
+    },
+    "Tuning": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "strings": {
+          "items": {
+            "$ref": "#/$defs/TuningString"
+          },
+          "maxItems": 12,
+          "minItems": 1,
+          "title": "Strings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "strings"
+      ],
+      "title": "Tuning",
+      "type": "object"
+    },
+    "TuningString": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "number": {
+          "maximum": 12,
+          "minimum": 1,
+          "title": "Number",
+          "type": "integer"
+        },
+        "pitch": {
+          "maximum": 127,
+          "minimum": 0,
+          "title": "Pitch",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "number",
+        "pitch",
+        "name"
+      ],
+      "title": "TuningString",
+      "type": "object"
+    },
+    "Tuplet": {
+      "additionalProperties": false,
+      "properties": {
+        "actual_notes": {
+          "exclusiveMinimum": 0,
+          "maximum": 64,
+          "title": "Actual Notes",
+          "type": "integer"
+        },
+        "normal_notes": {
+          "exclusiveMinimum": 0,
+          "maximum": 64,
+          "title": "Normal Notes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "actual_notes",
+        "normal_notes"
+      ],
+      "title": "Tuplet",
+      "type": "object"
+    },
+    "UnsupportedTechnique": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "unsupported",
+          "default": "unsupported",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "raw": {
+          "additionalProperties": true,
+          "title": "Raw",
+          "type": "object"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "title": "UnsupportedTechnique",
+      "type": "object"
+    },
+    "VibratoTechnique": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "vibrato",
+          "default": "vibrato",
+          "title": "Kind",
+          "type": "string"
+        },
+        "speed": {
+          "default": "unknown",
+          "enum": [
+            "slow",
+            "medium",
+            "fast",
+            "unknown"
+          ],
+          "title": "Speed",
+          "type": "string"
+        },
+        "width": {
+          "default": "unknown",
+          "enum": [
+            "narrow",
+            "wide",
+            "unknown"
+          ],
+          "title": "Width",
+          "type": "string"
+        }
+      },
+      "title": "VibratoTechnique",
+      "type": "object"
+    },
+    "WarningItem": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "provenance": {
+          "items": {
+            "$ref": "#/$defs/Provenance"
+          },
+          "title": "Provenance",
+          "type": "array"
+        },
+        "severity": {
+          "default": "warning",
+          "enum": [
+            "info",
+            "warning",
+            "error"
+          ],
+          "title": "Severity",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "WarningItem",
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/tticom/score2gp/schemas/scoreir.v0.1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "bars": {
+      "items": {
+        "$ref": "#/$defs/Bar"
+      },
+      "title": "Bars",
+      "type": "array"
+    },
+    "conversion": {
+      "$ref": "#/$defs/ConversionInfo"
+    },
+    "metadata": {
+      "$ref": "#/$defs/Metadata"
+    },
+    "schema_version": {
+      "const": "0.1.0",
+      "default": "0.1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "tempo": {
+      "$ref": "#/$defs/Tempo"
+    },
+    "tracks": {
+      "items": {
+        "$ref": "#/$defs/Track"
+      },
+      "minItems": 1,
+      "title": "Tracks",
+      "type": "array"
+    },
+    "warnings": {
+      "items": {
+        "$ref": "#/$defs/WarningItem"
+      },
+      "title": "Warnings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "tempo",
+    "tracks"
+  ],
+  "title": "ScoreIR v0.1",
+  "type": "object"
+}
