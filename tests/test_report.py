@@ -52,6 +52,8 @@ def test_grouping_diagnostics_report_describes_blocked_alignment(tmp_path) -> No
 
     html = report_path.read_text(encoding="utf-8")
     assert report["grouping_status"] == "missing"
+    assert report["grouping"]["schema_version"] == "pdf-grouping.v0.1"
+    assert report["grouping"]["system_count"] == 0
     assert report["playable_fret_candidate_count"] == 1
     assert "missing_pdf_grouping" in html
     assert "Extraction succeeded, but grouping failed" in html

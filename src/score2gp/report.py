@@ -58,6 +58,7 @@ def build_grouping_diagnostics(
     inferred_string_assignment_count = sum(1 for candidate in playable if candidate.get("string") is not None)
     warning_codes = [str(warning.get("code", "warning")) for warning in tabraw.get("warnings", [])]
     grouping_status = grouping_status_for_tabraw(tabraw)
+    grouping = _grouping_evidence_summary(candidates)
 
     return {
         "schema_version": GROUPING_DIAGNOSTICS_SCHEMA_VERSION,
@@ -76,6 +77,7 @@ def build_grouping_diagnostics(
         "warning_codes": sorted(set(warning_codes)),
         "alignment_attempted": alignment_attempted,
         "scoreir_written": scoreir_written,
+        "grouping": grouping,
         "artifacts": artifacts,
     }
 
@@ -109,6 +111,12 @@ def write_grouping_diagnostics_html(path: str | Path, report: dict[str, Any]) ->
         for overlay in artifacts.get("overlay_images", [])
     )
     warning_items = "\n".join(f"<li>{html.escape(code)}</li>" for code in report.get("warning_codes", []))
+    grouping = report.get("grouping", {})
+    system_items = "\n".join(
+        _grouping_system_html(system)
+        for system in grouping.get("systems", [])
+        if isinstance(system, dict)
+    )
     grouping_status = str(report.get("grouping_status", "unknown"))
     if grouping_status == "missing":
         verdict = "Extraction succeeded, but grouping failed."
@@ -151,6 +159,13 @@ def write_grouping_diagnostics_html(path: str | Path, report: dict[str, Any]) ->
 </dl>
 <h2>Warning Codes</h2>
 <ul>{warning_items}</ul>
+<h2>Inferred Grouping</h2>
+<dl>
+  <dt>System count</dt><dd>{grouping.get("system_count", 0) if isinstance(grouping, dict) else 0}</dd>
+  <dt>Bar box count</dt><dd>{grouping.get("bar_box_count", 0) if isinstance(grouping, dict) else 0}</dd>
+  <dt>Assigned candidate count</dt><dd>{grouping.get("assigned_candidate_count", 0) if isinstance(grouping, dict) else 0}</dd>
+</dl>
+<ul>{system_items}</ul>
 <h2>Artifacts</h2>
 <ul>
   <li>TabRaw: <a href="{html.escape(str(artifacts.get("tab_raw", "")))}">{html.escape(str(artifacts.get("tab_raw", "")))}</a></li>
@@ -165,3 +180,74 @@ def write_grouping_diagnostics_html(path: str | Path, report: dict[str, Any]) ->
 </html>
 """
     out.write_text(body, encoding="utf-8")
+
+
+def _grouping_evidence_summary(candidates: list[dict[str, Any]]) -> dict[str, Any]:
+    systems: dict[tuple[int, int, int], dict[str, Any]] = {}
+    for candidate in candidates:
+        raw = candidate.get("raw")
+        if not isinstance(raw, dict):
+            continue
+        staff_bbox = raw.get("tab_staff_bbox")
+        line_ys = raw.get("tab_line_ys")
+        if not isinstance(staff_bbox, dict) or not isinstance(line_ys, list):
+            continue
+        page_index = int(candidate.get("page_index") or staff_bbox.get("page") or 0)
+        system_index = int(candidate.get("system_index") or 0)
+        staff_index = int(candidate.get("staff_index") or 0)
+        if not page_index or not system_index or not staff_index:
+            continue
+        key = (page_index, system_index, staff_index)
+        if key not in systems:
+            bar_boxes = raw.get("bar_boxes", [])
+            if not isinstance(bar_boxes, list):
+                bar_boxes = []
+            systems[key] = {
+                "page_index": page_index,
+                "system_index": system_index,
+                "staff_index": staff_index,
+                "tab_staff_bbox": staff_bbox,
+                "tab_line_ys": line_ys,
+                "barline_xs": raw.get("barline_xs", []) if isinstance(raw.get("barline_xs"), list) else [],
+                "bar_boxes": bar_boxes,
+                "grouping_confidence": raw.get("grouping_confidence"),
+                "grouping_warnings": raw.get("grouping_warnings", [])
+                if isinstance(raw.get("grouping_warnings", []), list)
+                else [],
+                "candidate_ids": [],
+                "string_assigned_candidate_ids": [],
+                "bar_assigned_candidate_ids": [],
+            }
+        systems[key]["candidate_ids"].append(candidate.get("id"))
+        if candidate.get("string") is not None:
+            systems[key]["string_assigned_candidate_ids"].append(candidate.get("id"))
+        if candidate.get("bar_index") is not None:
+            systems[key]["bar_assigned_candidate_ids"].append(candidate.get("id"))
+
+    system_values = [systems[key] for key in sorted(systems)]
+    return {
+        "schema_version": "pdf-grouping.v0.1",
+        "system_count": len(system_values),
+        "bar_box_count": sum(len(system.get("bar_boxes", [])) for system in system_values),
+        "assigned_candidate_count": sum(len(system.get("candidate_ids", [])) for system in system_values),
+        "systems": system_values,
+    }
+
+
+def _grouping_system_html(system: dict[str, Any]) -> str:
+    bbox = system.get("tab_staff_bbox", {})
+    bbox_text = json.dumps(bbox, sort_keys=True)
+    warnings = ", ".join(str(item) for item in system.get("grouping_warnings", [])) or "none"
+    return (
+        "<li>"
+        f"page {html.escape(str(system.get('page_index')))}, "
+        f"system {html.escape(str(system.get('system_index')))}, "
+        f"staff {html.escape(str(system.get('staff_index')))}; "
+        f"Tab staff bbox: <code>{html.escape(bbox_text)}</code>; "
+        f"string lines: {html.escape(str(len(system.get('tab_line_ys', []))))}; "
+        f"bar boxes: {html.escape(str(len(system.get('bar_boxes', []))))}; "
+        f"candidate assignments: {html.escape(str(len(system.get('candidate_ids', []))))}; "
+        f"grouping confidence: {html.escape(str(system.get('grouping_confidence')))}; "
+        f"warnings: {html.escape(warnings)}"
+        "</li>"
+    )
