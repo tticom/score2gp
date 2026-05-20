@@ -2,12 +2,11 @@
 
 ## Current Branch
 
-- Branch: `feature/pdf-partial-grouping-diagnostics-v0.1`
-- This is a stacked branch based on `feature/scoreir-v0.1-contract`.
-- Base PR: PR #1, `feature/scoreir-v0.1-contract -> main`
-- Stacked PR: PR #2, `feature/pdf-partial-grouping-diagnostics-v0.1 -> feature/scoreir-v0.1-contract`
-- Base branch includes CI workflow fix commit: `e3f3a7a Fix CI test workflow`
-- Partial grouping diagnostics are committed on this stacked branch, not uncommitted.
+- Branch: `feature/pdf-partial-grouping-diagnostics-main-v0.1`
+- Base: `main`
+- PR #1 has been merged into `main`.
+- This branch re-applies the partial PDF grouping diagnostics work that was previously in closed PR #2.
+- Partial grouping diagnostics are committed on this branch.
 
 ## Current Capability
 
@@ -26,30 +25,22 @@ Run before pushing or review:
 - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json`
 - `git diff --check`
 
-Expected current local result before this conflict resolution was:
-
-- `python -m pytest` -> `74 passed`
-- schema export -> passed
-- validate-ir -> valid
-- `git diff --check` -> passed, with CRLF warnings only
-
 ## Private Safety
 
 - Do not commit `work/` outputs.
 - Do not commit private PDFs, GP files, MXL files, private diagnostic HTML, private overlays, logs, or temporary smoke outputs.
 - The only intended tracked private-path item is `fixtures/private/.gitkeep`.
 
-## Known Limits
+## Known Limitations
 
 - No OCR.
 - No scanned-PDF support.
 - No ML layout recognition.
 - No arbitrary commercial score conversion.
-- Partial grouping is diagnostic-first and conservative.
-- Chord symbols and technique text are preserved but not yet musically attached to ScoreIR events.
-- GPIF output remains minimal.
+- Partial grouping remains diagnostic-first and conservative.
+- `build-ir` blocks partial playable grouping rather than guessing.
 
 ## Next Recommended Task
 
-After both PRs have passing CI and are ready for human review, the next implementation task should be a narrow public-fixture-only symbol attachment branch:
+After this branch has passing CI and is ready for human review, the next implementation task should be a narrow public-fixture-only symbol attachment branch:
 attach chord symbols and technique text from TabRaw to ScoreIR events with conservative geometry and explicit warnings.
