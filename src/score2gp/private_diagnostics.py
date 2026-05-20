@@ -4,11 +4,10 @@ import json
 from collections import Counter
 from pathlib import Path
 from typing import Any
-from xml.etree import ElementTree as ET
-from zipfile import ZipFile
 
 from .build_ir import BuildIrDiagnostics, BuildIrInputRiskError, build_ir_with_diagnostics_from_files
 from .ir import validate_score_ir_file
+from .musicxml import mxl_rootfile_path
 from .pdf import extract_tab
 from .tabraw import TabRaw
 
@@ -114,7 +113,7 @@ def run_private_diagnostic_smoke(
 
 
 def prepare_musicxml_for_import(path: str | Path, out_dir: str | Path) -> tuple[Path, dict[str, Any]]:
-    """Return an uncompressed MusicXML path consumable by the current importer."""
+    """Return a MusicXML path consumable by the importer without unpacking MXL."""
 
     source = Path(path)
     if source.suffix.lower() != ".mxl":
@@ -124,20 +123,17 @@ def prepare_musicxml_for_import(path: str | Path, out_dir: str | Path) -> tuple[
             "input_format": source.suffix.lower().lstrip(".") or "unknown",
             "prepared_basename": source.name,
             "unpacked_mxl": False,
+            "native_mxl_import": False,
         }
 
-    prepared = Path(out_dir) / "prepared.musicxml"
-    with ZipFile(source) as package:
-        rootfile = _mxl_rootfile(package)
-        prepared.write_bytes(package.read(rootfile))
-
-    return prepared, {
+    return source, {
         "exists": True,
         "basename": source.name,
         "input_format": "mxl",
-        "prepared_basename": prepared.name,
-        "unpacked_mxl": True,
-        "mxl_rootfile": rootfile,
+        "prepared_basename": source.name,
+        "unpacked_mxl": False,
+        "native_mxl_import": True,
+        "mxl_rootfile": mxl_rootfile_path(source),
     }
 
 
@@ -166,6 +162,15 @@ def summarize_tabraw(tabraw: TabRaw) -> dict[str, Any]:
         "candidates_with_bar": sum(1 for candidate in candidates if candidate.bar_index is not None),
         "inferred_system_count": len(system_indexes),
         "inferred_bar_count": len(bar_indexes),
+        "grouping_status": _grouping_status(candidates),
+        "grouping_warning_codes": sorted(
+            {
+                str(warning.get("code"))
+                for warning in tabraw.warnings
+                if str(warning.get("code", "")).startswith("pdf-") or warning.get("code") == "missing_pdf_grouping"
+            }
+        ),
+        "warning_counts": dict(sorted(Counter(str(warning.get("code", "tabraw-warning")) for warning in tabraw.warnings).items())),
         "confidence": _confidence_summary(confidences),
     }
 
@@ -286,6 +291,7 @@ def _record_build_ir_risk(summary: dict[str, Any], exc: BuildIrInputRiskError, r
         "error_category": exc.category,
         "message": _compact_error_message(str(exc)),
         "error_report": report_name,
+        "risk_details": exc.details,
         "musicxml_timing_issue_count": len(exc.timing_issues),
         "musicxml_timing_issue_counts": dict(sorted(timing_issue_counts.items())),
         "musicxml_timing_severity_counts": dict(sorted(severity_counts.items())),
@@ -300,7 +306,7 @@ def _record_build_ir_risk(summary: dict[str, Any], exc: BuildIrInputRiskError, r
         "diagnostic_only": True,
         "suitable_for_next_stage_debugging": False,
         "recommendation_categories": categories,
-        "recommended_next_action": "review-musicxml-timing-risk-before-alignment",
+        "recommended_next_action": _risk_action(exc.category),
     }
 
 
@@ -353,6 +359,35 @@ def _extraction_risk_categories(extraction: dict[str, Any]) -> list[str]:
     return categories
 
 
+def _grouping_status(candidates: list[Any]) -> str:
+    playable = [candidate for candidate in candidates if candidate.parsed_fret is not None]
+    if not candidates:
+        return "empty"
+    if not playable:
+        return "no_playable_candidates"
+    if (
+        all(candidate.system_index is None for candidate in playable)
+        or all(candidate.bar_index is None for candidate in playable)
+        or all(candidate.string is None for candidate in playable)
+    ):
+        return "missing_pdf_grouping"
+    if (
+        any(candidate.system_index is None for candidate in playable)
+        or any(candidate.bar_index is None for candidate in playable)
+        or any(candidate.string is None for candidate in playable)
+    ):
+        return "partial_pdf_grouping"
+    return "grouped"
+
+
+def _risk_action(category: str) -> str:
+    if category == "missing_pdf_grouping":
+        return "inspect-pdf-grouping-before-alignment"
+    if category == "musicxml_timing_risk":
+        return "review-musicxml-timing-risk-before-alignment"
+    return "fix-build-ir-input-or-import-error-before-private-debugging"
+
+
 def _dedupe(values: list[str]) -> list[str]:
     unique = []
     for value in values:
@@ -369,29 +404,6 @@ def _confidence_summary(values: list[float]) -> dict[str, float | None]:
         "mean": round(sum(values) / len(values), 3),
         "max": round(max(values), 3),
     }
-
-
-def _mxl_rootfile(package: ZipFile) -> str:
-    try:
-        container = ET.fromstring(package.read("META-INF/container.xml"))
-    except KeyError:
-        return _first_musicxml_member(package)
-
-    for node in container.iter():
-        if _local_name(node.tag) == "rootfile" and node.get("full-path"):
-            return str(node.get("full-path"))
-    return _first_musicxml_member(package)
-
-
-def _first_musicxml_member(package: ZipFile) -> str:
-    for name in package.namelist():
-        if name.lower().endswith((".musicxml", ".xml")) and not name.lower().startswith("meta-inf/"):
-            return name
-    raise ValueError("MXL package does not contain a MusicXML rootfile")
-
-
-def _local_name(tag: str) -> str:
-    return tag.rsplit("}", 1)[-1]
 
 
 def _sanitize_exception_message(exc: Exception, paths: list[Path | None]) -> str:

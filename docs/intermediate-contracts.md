@@ -90,7 +90,7 @@ Purpose:
 - parse uncompressed partwise MusicXML into limited timing, pitch, voice, rest, tie, tuplet, harmony, and selected guitar technique data
 - provide timing input for the first synthetic ScoreIR builder
 
-Status: Audiveris wrapper implemented. A limited uncompressed MusicXML parser is implemented for synthetic fixtures. Compressed `.mxl` package parsing, repeat expansion, alternate endings, grace timing, and full MusicXML semantics are not implemented yet.
+Status: Audiveris wrapper implemented. A limited MusicXML parser is implemented for synthetic fixtures and supports plain `.musicxml`/`.xml` plus native `.mxl` packages. Compressed `.mxl` parsing reads the declared rootfile from `META-INF/container.xml` without extracting to disk. Repeat expansion, alternate endings, grace timing, and full MusicXML semantics are not implemented yet.
 
 ## ScoreIR
 

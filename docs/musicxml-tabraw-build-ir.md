@@ -13,7 +13,9 @@ It does not attempt complete OMR, full tablature alignment, or full GPIF output.
 
 ## MusicXmlImport
 
-`score2gp.musicxml.parse_musicxml()` parses uncompressed partwise MusicXML into an internal `MusicXmlImport` model.
+`score2gp.musicxml.parse_musicxml()` parses partwise MusicXML into an internal `MusicXmlImport` model. Inputs may be plain `.musicxml`/`.xml` files or compressed `.mxl` packages.
+
+For `.mxl`, the importer opens the zip package, reads `META-INF/container.xml`, validates the declared rootfile path, and parses that member directly. It does not extract the package to disk. Missing containers, missing rootfiles, unsafe paths, malformed XML, non-zip input, and empty packages fail with clear errors.
 
 Currently represented:
 
@@ -33,7 +35,7 @@ Currently represented:
 - selected guitar/phrase techniques: slide, bend, vibrato text, hammer-on, pull-off, and slur
 - source element path for debugging
 
-Unsupported or incomplete constructs are warnings, not hidden assumptions. Repeats, alternate endings, grace notes, unsupported technical notation, and compressed `.mxl` packages are not converted in this phase.
+Unsupported or incomplete constructs are warnings, not hidden assumptions. Repeats, alternate endings, grace notes, and unsupported technical notation are not converted in this phase.
 
 ## Timing
 
@@ -145,6 +147,8 @@ python -m score2gp.cli extract-tab `
 
 This fixture deliberately has extractable fret/chord/technique text but no reliable six-line tab staff geometry. It should preserve candidates with bbox/x/y evidence while leaving system, string, and bar estimates empty. This reproduces the important failure mode "extraction succeeded, grouping failed" using public generated data.
 
+When playable fret candidates exist but system/string/bar grouping is absent, extraction emits `missing_pdf_grouping`. `build-ir` treats that as unsafe input and refuses ScoreIR output rather than consuming ungrouped candidates from a global fallback pool.
+
 Legacy `items` payloads can still be normalized by `score2gp.tabraw.normalize_tabraw_payload()`.
 
 TabRaw candidate IDs are required to be unique. Chord-symbol, technique-text, and candidate-text candidates are preserved and reported by `build-ir`, but they are not consumed as playable fret events.
@@ -226,7 +230,6 @@ python -m score2gp.cli validate-ir "work/synthetic/score.ir.json"
 Still out of scope:
 
 - real Derek Trucks fixture conversion
-- native Audiveris `.mxl` package parsing in the main MusicXML importer
 - multi-part alignment
 - robust system/staff detection beyond controlled generated PDFs
 - robust tab string inference from detected line positions
@@ -236,4 +239,4 @@ Still out of scope:
 - full optical x-to-onset calibration from page geometry
 - GPIF writer expansion
 
-The latest controlled private diagnostic experiment produced only sanitized evidence: PDF extraction found many candidates, but no system/bar/string grouping was inferred, and MusicXML timing risk stopped build-ir before ScoreIR output. The next checkpoint should reproduce those exact failure classes with public fixtures before trying another private run.
+The latest controlled private diagnostic experiment produced only sanitized evidence: PDF extraction found many candidates, but no system/bar/string grouping was inferred, and MusicXML timing risk stopped build-ir before ScoreIR output. Those failure classes are now represented by public fixtures; another private run should check whether native `.mxl` intake and the stricter `missing_pdf_grouping` refusal produce clearer summaries without tuning to private material.

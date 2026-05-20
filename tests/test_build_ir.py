@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from zipfile import ZIP_DEFLATED, ZipFile
 
 import pytest
 
@@ -21,6 +22,23 @@ RESTS_VOICES_TABRAW = Path("tests/fixtures/tabraw/tiny_rests_voices_tabraw.json"
 AUDIVERIS_OVERFULL_MUSICXML = Path("tests/fixtures/musicxml/audiveris_like_overfull_bar.musicxml")
 AUDIVERIS_12_8_MUSICXML = Path("tests/fixtures/musicxml/audiveris_like_12_8_timing.musicxml")
 AUDIVERIS_BACKUP_FORWARD_MUSICXML = Path("tests/fixtures/musicxml/audiveris_like_backup_forward.musicxml")
+
+
+def _write_mxl(tmp_path: Path, source: Path) -> Path:
+    mxl = tmp_path / f"{source.stem}.mxl"
+    with ZipFile(mxl, "w", ZIP_DEFLATED) as package:
+        package.writestr(
+            "META-INF/container.xml",
+            """<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="music/score.musicxml" media-type="application/vnd.recordare.musicxml+xml"/>
+  </rootfiles>
+</container>
+""",
+        )
+        package.writestr("music/score.musicxml", source.read_text(encoding="utf-8"))
+    return mxl
 
 
 def test_build_ir_creates_valid_scoreir_from_synthetic_musicxml_and_tabraw(tmp_path) -> None:
@@ -205,3 +223,28 @@ def test_build_ir_refuses_backup_forward_overfull_with_timing_category(tmp_path)
     assert payload["category"] == "musicxml_timing_risk"
     assert payload["timing_issue_counts"] == {"musicxml-overfull-bar": 1}
     assert payload["timing_issues"][0]["voice"] == 2
+
+
+def test_build_ir_consumes_native_mxl_without_unpacked_intermediate(tmp_path) -> None:
+    mxl = _write_mxl(tmp_path, MUSICXML)
+    out = tmp_path / "from_mxl.ir.json"
+
+    score = build_ir_from_files(mxl, TABRAW, out)
+    validated, errors = validate_score_ir_file(out)
+
+    assert errors == []
+    assert validated is not None
+    assert score.metadata.title == "Tiny MusicXML Test"
+    assert len(score.bars[0].events) == 3
+
+
+def test_build_ir_refuses_overfull_mxl_before_writing_scoreir(tmp_path) -> None:
+    mxl = _write_mxl(tmp_path, AUDIVERIS_OVERFULL_MUSICXML)
+    out = tmp_path / "overfull_from_mxl.ir.json"
+
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(mxl, TABRAW, out)
+
+    assert not out.exists()
+    assert raised.value.category == "musicxml_timing_risk"
+    assert raised.value.to_diagnostics_payload()["timing_issue_counts"] == {"musicxml-overfull-bar": 1}

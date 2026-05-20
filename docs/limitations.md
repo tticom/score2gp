@@ -9,8 +9,9 @@ Known limitations:
 - Current system/string/bar inference is heuristic and proven only on controlled public generated fixtures, including a two-system score-like page, not arbitrary score layouts.
 - X-to-onset diagnostics now measure playable fret x groups against MusicXML onset groups, but this is not full optical calibration and does not repair bad geometry automatically.
 - MusicXML timing preflight catches overfull bars and same-voice overlaps before ScoreIR output, but it does not make ambiguous Audiveris exports correct.
+- Native `.mxl` intake is supported only for normal compressed MusicXML packages with a safe rootfile declared in `META-INF/container.xml`; malformed packages and unsafe rootfile paths are rejected.
 - 12/8 and other compound-meter input is represented through exact MusicXML divisions and flagged as an assumption; it still needs human review when produced by OMR.
-- If PDF extraction finds fret text but no system/string/bar grouping, the project reports `missing_pdf_grouping` rather than fabricating positions.
+- If PDF extraction finds fret text but no system/string/bar grouping, the project reports `missing_pdf_grouping` and `build-ir` refuses to write ScoreIR rather than fabricating positions.
 - A `good` x-to-onset quality label only means the current simple alignment looks internally consistent for the inspected controlled input.
 - `warning`, `poor`, or `unknown` x-to-onset quality means the conversion should be inspected before trusting any automatic result.
 - Chord symbols and technique text extracted from PDF-derived TabRaw are preserved and reported, but not yet aligned into ScoreIR events.

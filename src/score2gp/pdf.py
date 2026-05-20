@@ -103,6 +103,7 @@ def extract_tab(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
     else:
         raw["candidates"].extend(_extract_pdf_text_candidates(Path(path), raw["warnings"]))
 
+    _append_grouping_warnings(raw)
     raw = TabRaw.model_validate(raw).model_dump(mode="json", exclude_none=True)
     tabraw_path.write_text(json.dumps(raw, indent=2), encoding="utf-8")
     return raw
@@ -256,6 +257,43 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]])
                 filtered_index += 1
                 candidates.append(candidate.model_dump(mode="json", exclude_none=True))
     return candidates
+
+
+def _append_grouping_warnings(raw: dict[str, Any]) -> None:
+    candidates = raw.get("candidates", [])
+    fret_candidates = [candidate for candidate in candidates if candidate.get("parsed_fret") is not None]
+    if not candidates or not fret_candidates:
+        return
+
+    grouping_counts = {
+        "total_candidate_count": len(candidates),
+        "playable_fret_candidate_count": len(fret_candidates),
+        "candidates_with_system": sum(1 for candidate in candidates if candidate.get("system_index") is not None),
+        "candidates_with_bar": sum(1 for candidate in candidates if candidate.get("bar_index") is not None),
+        "fret_candidates_with_string": sum(1 for candidate in fret_candidates if candidate.get("string") is not None),
+    }
+    missing = []
+    if grouping_counts["candidates_with_system"] == 0:
+        missing.append("system")
+    if grouping_counts["candidates_with_bar"] == 0:
+        missing.append("bar")
+    if grouping_counts["fret_candidates_with_string"] == 0:
+        missing.append("string")
+    if missing:
+        raw["warnings"].append(
+            {
+                "code": "missing_pdf_grouping",
+                "message": (
+                    "PDF text extraction found fret-like candidates, but usable "
+                    f"{'/'.join(missing)} grouping evidence is missing; build-ir must not treat these "
+                    "candidates as reliable musical events."
+                ),
+                "severity": "warning",
+                "grouping_status": "missing_pdf_grouping",
+                **grouping_counts,
+                "missing_grouping_dimensions": missing,
+            }
+        )
 
 
 def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:

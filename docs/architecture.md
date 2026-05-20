@@ -14,6 +14,8 @@
 
 3. Symbolic recognition
    - Use Audiveris optionally for standard notation to MusicXML/MXL.
+   - Parse plain `.musicxml`/`.xml` and compressed `.mxl` packages through the same MusicXML importer and timing preflight.
+   - Compressed `.mxl` intake reads `META-INF/container.xml` and the declared rootfile directly from the zip package; it does not extract private files to disk.
    - Extract guitar tab separately, preferring PDF vector text coordinates before OCR.
    - Associate fret numbers by y-position/string and x-position/beat.
 
@@ -30,3 +32,7 @@
    - Validate zip structure and XML well-formedness.
    - Inspect GP semantic features.
    - Compare expected and actual scores semantically, not byte-for-byte.
+
+## Current Diagnostic Boundaries
+
+The current build-ir path refuses known-unsafe input before writing ScoreIR. MusicXML timing risks such as overfull bars and same-voice overlaps produce `build-ir-failure-diagnostics.v0.1`. PDF-derived TabRaw with playable fret candidates but no usable system/string/bar grouping produces `missing_pdf_grouping` instead of allowing ungrouped text to become musical notes.

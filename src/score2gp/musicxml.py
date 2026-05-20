@@ -3,8 +3,10 @@ from __future__ import annotations
 import hashlib
 from fractions import Fraction
 from pathlib import Path
+from pathlib import PurePosixPath
 from typing import Literal
 from xml.etree import ElementTree as ET
+from zipfile import BadZipFile, ZipFile
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -155,11 +157,7 @@ class MusicXmlImport(BaseModel):
 
 def parse_musicxml(path: str | Path) -> MusicXmlImport:
     xml_path = Path(path)
-    if xml_path.suffix.lower() == ".mxl":
-        raise ValueError("compressed .mxl MusicXML packages are not supported by this importer yet")
-
-    tree = ET.parse(xml_path)
-    root = tree.getroot()
+    root = _parse_musicxml_root(xml_path)
     if _local_name(root.tag) != "score-partwise":
         raise ValueError("only partwise MusicXML scores are supported")
 
@@ -182,6 +180,13 @@ def parse_musicxml(path: str | Path) -> MusicXmlImport:
         parts=parts,
         warnings=warnings,
     )
+
+
+def mxl_rootfile_path(path: str | Path) -> str:
+    """Return the root MusicXML member for a compressed MXL package."""
+
+    with ZipFile(path) as package:
+        return _mxl_rootfile(package)
 
 
 def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssue]:
@@ -315,6 +320,57 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                     )
 
     return issues
+
+
+def _parse_musicxml_root(path: Path) -> ET.Element:
+    if path.suffix.lower() != ".mxl":
+        return ET.parse(path).getroot()
+
+    try:
+        with ZipFile(path) as package:
+            if not package.namelist():
+                raise ValueError("MXL package is empty")
+            rootfile = _mxl_rootfile(package)
+            try:
+                return ET.fromstring(package.read(rootfile))
+            except ET.ParseError as exc:
+                raise ValueError(f"MXL rootfile '{rootfile}' is not well-formed MusicXML") from exc
+    except BadZipFile as exc:
+        raise ValueError(f"invalid compressed MusicXML package: {path.name}") from exc
+    except KeyError as exc:
+        missing = str(exc).strip("'")
+        raise ValueError(f"MXL package does not contain its declared MusicXML rootfile: {missing}") from exc
+
+
+def _mxl_rootfile(package: ZipFile) -> str:
+    try:
+        container_data = package.read("META-INF/container.xml")
+    except KeyError:
+        raise ValueError("MXL package is missing required META-INF/container.xml") from None
+    try:
+        container = ET.fromstring(container_data)
+    except ET.ParseError as exc:
+        raise ValueError("MXL container.xml is not well-formed XML") from exc
+
+    for node in container.iter():
+        if _local_name(node.tag) == "rootfile" and node.get("full-path"):
+            rootfile = _validated_mxl_member_path(str(node.get("full-path")))
+            if rootfile not in package.namelist():
+                raise KeyError(rootfile)
+            return rootfile
+    raise ValueError("MXL container.xml does not declare a rootfile full-path")
+
+
+def _validated_mxl_member_path(value: str) -> str:
+    rootfile = value.strip()
+    if not rootfile:
+        raise ValueError("MXL container.xml rootfile full-path is empty")
+    if "\\" in rootfile:
+        raise ValueError(f"MXL rootfile path is unsafe: {rootfile}")
+    path = PurePosixPath(rootfile)
+    if path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts) or ":" in path.parts[0]:
+        raise ValueError(f"MXL rootfile path is unsafe: {rootfile}")
+    return rootfile
 
 
 def _parse_part(
