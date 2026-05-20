@@ -17,6 +17,10 @@ SCORELIKE_MUSICXML = Path("tests/fixtures/musicxml/generated_scorelike_tab.music
 UNEVEN_PDF = Path("tests/fixtures/pdf/generated_uneven_spacing_tab.pdf")
 UNEVEN_MUSICXML = Path("tests/fixtures/musicxml/generated_uneven_spacing_tab.musicxml")
 UNSTRUCTURED_PDF = Path("tests/fixtures/pdf/generated_unstructured_tab_text.pdf")
+PARTIAL_MISSING_BARLINES_PDF = Path("tests/fixtures/pdf/generated_partial_missing_barlines_tab.pdf")
+PARTIAL_INCOMPLETE_STAFF_PDF = Path("tests/fixtures/pdf/generated_partial_incomplete_staff_tab.pdf")
+PARTIAL_AMBIGUOUS_STRING_PDF = Path("tests/fixtures/pdf/generated_partial_ambiguous_string_tab.pdf")
+PARTIAL_AMBIGUOUS_BAR_PDF = Path("tests/fixtures/pdf/generated_partial_ambiguous_bar_tab.pdf")
 
 
 def test_pdf_inspection_reports_missing_pymupdf_or_empty_pdf(tmp_path) -> None:
@@ -325,6 +329,84 @@ def test_unstructured_pdf_preserves_candidates_but_reports_missing_grouping(tmp_
     assert "Alignment/build-ir was not attempted" in report_html
 
 
+def test_partial_pdf_missing_barlines_reports_partial_grouping(tmp_path) -> None:
+    assert PARTIAL_MISSING_BARLINES_PDF.exists()
+    tabraw_path = tmp_path / "generated_partial_missing_barlines_tab.tabraw.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(PARTIAL_MISSING_BARLINES_PDF, tabraw_path))
+    fret_candidates = [candidate for candidate in tabraw.candidates if candidate.kind == "fret"]
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+    report_html = (tabraw_path.parent / "grouping-diagnostics.html").read_text(encoding="utf-8")
+
+    assert len(fret_candidates) == 4
+    assert {"partial_pdf_grouping", "missing_pdf_barlines", "missing_pdf_grouping"} <= warning_codes
+    assert all(candidate.system_index == 1 for candidate in fret_candidates)
+    assert all(candidate.string is not None for candidate in fret_candidates)
+    assert all(candidate.bar_index is None for candidate in fret_candidates)
+    assert all(candidate.confidence < 0.8 for candidate in fret_candidates)
+    assert "partial" in report_html
+    assert "missing_pdf_barlines" in report_html
+    assert sorted((tabraw_path.parent / "overlays").glob("*-grouping.png"))
+
+
+def test_partial_pdf_incomplete_staff_reports_specific_warning(tmp_path) -> None:
+    assert PARTIAL_INCOMPLETE_STAFF_PDF.exists()
+    tabraw_path = tmp_path / "generated_partial_incomplete_staff_tab.tabraw.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(PARTIAL_INCOMPLETE_STAFF_PDF, tabraw_path))
+    fret_candidates = [candidate for candidate in tabraw.candidates if candidate.kind == "fret"]
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+    report_html = (tabraw_path.parent / "grouping-diagnostics.html").read_text(encoding="utf-8")
+
+    assert len(fret_candidates) == 4
+    assert {"partial_pdf_grouping", "incomplete_tab_staff"} <= warning_codes
+    assert "missing_pdf_grouping" not in warning_codes
+    assert all(candidate.system_index == 1 for candidate in fret_candidates)
+    assert all(candidate.bar_index is not None for candidate in fret_candidates)
+    assert all(candidate.string is not None for candidate in fret_candidates)
+    assert all(len(candidate.raw.get("tab_line_ys", [])) == 5 for candidate in fret_candidates)
+    assert all(candidate.confidence < 0.8 for candidate in fret_candidates)
+    assert "partial" in report_html
+    assert "incomplete_tab_staff" in report_html
+    assert sorted((tabraw_path.parent / "overlays").glob("*-grouping.png"))
+
+
+def test_partial_pdf_ambiguous_string_assignment_is_not_high_confidence(tmp_path) -> None:
+    assert PARTIAL_AMBIGUOUS_STRING_PDF.exists()
+    tabraw_path = tmp_path / "generated_partial_ambiguous_string_tab.tabraw.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(PARTIAL_AMBIGUOUS_STRING_PDF, tabraw_path))
+    fret_candidates = [candidate for candidate in tabraw.candidates if candidate.kind == "fret"]
+    ambiguous = [candidate for candidate in fret_candidates if candidate.raw.get("assignment_warnings")]
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+    report_html = (tabraw_path.parent / "grouping-diagnostics.html").read_text(encoding="utf-8")
+
+    assert {"partial_pdf_grouping", "ambiguous_string_assignment", "missing_pdf_grouping"} <= warning_codes
+    assert len(ambiguous) == 1
+    assert ambiguous[0].string is None
+    assert ambiguous[0].confidence <= 0.65
+    assert "ambiguous_string_assignment" in report_html
+    assert sorted((tabraw_path.parent / "overlays").glob("*-grouping.png"))
+
+
+def test_partial_pdf_ambiguous_bar_assignment_is_not_high_confidence(tmp_path) -> None:
+    assert PARTIAL_AMBIGUOUS_BAR_PDF.exists()
+    tabraw_path = tmp_path / "generated_partial_ambiguous_bar_tab.tabraw.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(PARTIAL_AMBIGUOUS_BAR_PDF, tabraw_path))
+    fret_candidates = [candidate for candidate in tabraw.candidates if candidate.kind == "fret"]
+    ambiguous = [candidate for candidate in fret_candidates if candidate.raw.get("assignment_warnings")]
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+    report_html = (tabraw_path.parent / "grouping-diagnostics.html").read_text(encoding="utf-8")
+
+    assert {"partial_pdf_grouping", "ambiguous_bar_assignment", "missing_pdf_grouping"} <= warning_codes
+    assert len(ambiguous) == 1
+    assert ambiguous[0].bar_index is None
+    assert ambiguous[0].confidence <= 0.65
+    assert "ambiguous_bar_assignment" in report_html
+    assert sorted((tabraw_path.parent / "overlays").glob("*-grouping.png"))
+
+
 def test_build_ir_refuses_unstructured_pdf_tabraw_before_scoreir_output(tmp_path) -> None:
     tabraw_path = tmp_path / "generated_unstructured_tab_text.tabraw.json"
     ir_path = tmp_path / "generated_unstructured_tab_text.ir.json"
@@ -343,20 +425,26 @@ def test_build_ir_refuses_unstructured_pdf_tabraw_before_scoreir_output(tmp_path
     assert set(payload["details"]["missing_grouping_dimensions"]) == {"system", "bar", "string"}
 
 
-def test_build_ir_refuses_partially_grouped_playable_candidates(tmp_path) -> None:
-    tabraw_path = tmp_path / "partial_generated_tiny_tab.tabraw.json"
-    ir_path = tmp_path / "partial_generated_tiny_tab.ir.json"
+@pytest.mark.parametrize(
+    ("pdf_path", "expected_warning"),
+    [
+        (PARTIAL_MISSING_BARLINES_PDF, "missing_pdf_barlines"),
+        (PARTIAL_INCOMPLETE_STAFF_PDF, "incomplete_tab_staff"),
+        (PARTIAL_AMBIGUOUS_STRING_PDF, "ambiguous_string_assignment"),
+        (PARTIAL_AMBIGUOUS_BAR_PDF, "ambiguous_bar_assignment"),
+    ],
+)
+def test_build_ir_refuses_public_partial_grouping_fixtures(tmp_path, pdf_path: Path, expected_warning: str) -> None:
+    tabraw_path = tmp_path / f"{pdf_path.stem}.tabraw.json"
+    ir_path = tmp_path / f"{pdf_path.stem}.ir.json"
 
-    data = extract_tab(GENERATED_PDF, tabraw_path)
-    for candidate in data["candidates"]:
-        if candidate.get("parsed_fret") is not None:
-            candidate["string"] = None
-            break
-    tabraw_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    extract_tab(pdf_path, tabraw_path)
 
     with pytest.raises(BuildIrInputRiskError) as raised:
         build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
 
     assert not ir_path.exists()
-    assert raised.value.category == "missing_pdf_grouping"
-    assert raised.value.to_diagnostics_payload()["details"]["missing_grouping_dimensions"] == ["string"]
+    assert raised.value.category == "partial_pdf_grouping"
+    payload = raised.value.to_diagnostics_payload()
+    assert payload["details"]["grouping_status"] == "partial"
+    assert expected_warning in payload["details"]["warning_codes"]
