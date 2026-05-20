@@ -7,12 +7,14 @@ Known limitations:
 - Generic OMR tools may miss guitar-specific tab, bends, slides, vibrato, let-ring marks, and fingering details.
 - Born-digital PDF text extraction works only when fret numbers and symbols are encoded as extractable text.
 - Current system/string/bar inference is heuristic and proven only on controlled public generated fixtures, including a two-system score-like page, not arbitrary score layouts.
+- PDF grouping v0.1 requires born-digital vector-like tab geometry: six visible horizontal tab lines and vertical barlines. It does not infer systems from text-only layouts, scanned images, hidden staff lines, or arbitrary commercial engraving.
+- Grouped reports and overlays show what the extractor inferred; they do not mean the musical timing is trustworthy without MusicXML timing and x-to-onset diagnostics.
 - X-to-onset diagnostics now measure playable fret x groups against MusicXML onset groups, but this is not full optical calibration and does not repair bad geometry automatically.
 - MusicXML timing preflight catches overfull bars and same-voice overlaps before ScoreIR output, but it does not make ambiguous Audiveris exports correct.
 - Native `.mxl` intake is supported only for normal compressed MusicXML packages with a safe rootfile declared in `META-INF/container.xml`; malformed packages and unsafe rootfile paths are rejected.
 - 12/8 and other compound-meter input is represented through exact MusicXML divisions and flagged as an assumption; it still needs human review when produced by OMR.
 - If PDF extraction finds fret text but no system/string/bar grouping, the project reports `missing_pdf_grouping` and `build-ir` refuses to write ScoreIR rather than fabricating positions.
-- The grouping HTML report and overlay images make missing grouping inspectable; they do not solve arbitrary PDF grouping or make unstructured fret text safe to align.
+- The grouping HTML report and overlay images make grouping success and failure inspectable; they do not solve arbitrary PDF grouping or make unstructured fret text safe to align.
 - A `good` x-to-onset quality label only means the current simple alignment looks internally consistent for the inspected controlled input.
 - `warning`, `poor`, or `unknown` x-to-onset quality means the conversion should be inspected before trusting any automatic result.
 - Chord symbols and technique text extracted from PDF-derived TabRaw are preserved and reported, but not yet aligned into ScoreIR events.

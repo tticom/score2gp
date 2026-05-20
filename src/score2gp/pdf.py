@@ -145,6 +145,52 @@ class _TabSystem:
     x1: float
     barlines: list[float]
 
+    @property
+    def staff_bbox(self) -> dict[str, float | int]:
+        return {
+            "page": self.page_index,
+            "x0": round(self.x0, 3),
+            "y0": round(self.line_ys[0], 3),
+            "x1": round(self.x1, 3),
+            "y1": round(self.line_ys[-1], 3),
+        }
+
+    @property
+    def grouping_confidence(self) -> float:
+        if len(self.line_ys) == 6 and len(self.barlines) >= 2:
+            return 0.86
+        if len(self.line_ys) == 6:
+            return 0.62
+        return 0.35
+
+    @property
+    def grouping_warnings(self) -> list[str]:
+        warnings = []
+        if len(self.line_ys) != 6:
+            warnings.append("tab-line-count-not-six")
+        if len(self.barlines) < 2:
+            warnings.append("barlines-not-detected")
+        return warnings
+
+    @property
+    def bar_boxes(self) -> list[dict[str, float | int]]:
+        if len(self.barlines) < 2:
+            return []
+        return [
+            {
+                "page": self.page_index,
+                "system_index": self.system_index,
+                "staff_index": self.staff_index,
+                "bar_index": self.first_bar_index + index,
+                "x0": round(left, 3),
+                "y0": round(self.line_ys[0], 3),
+                "x1": round(right, 3),
+                "y1": round(self.line_ys[-1], 3),
+                "confidence": self.grouping_confidence,
+            }
+            for index, (left, right) in enumerate(zip(self.barlines, self.barlines[1:]))
+        ]
+
     def string_for_y(self, y: float | None) -> tuple[int | None, int | None, float | None]:
         if y is None:
             return None, None, None
@@ -238,7 +284,7 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]])
                     raw_text=raw_text,
                     page_index=page_number,
                     bbox_values=bbox_values,
-                    confidence=_candidate_confidence(raw_text, system, string, x),
+                    confidence=_candidate_confidence(raw_text, system, string, bar_index, x),
                     system_index=system.system_index if system is not None else None,
                     staff_index=system.staff_index if system is not None else None,
                     bar_index=bar_index,
@@ -249,14 +295,24 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]])
                         "pdf_block_number": int(word[5]) if len(word) > 5 else None,
                         "pdf_line_number": int(word[6]) if len(word) > 6 else None,
                         "pdf_word_number": int(word[7]) if len(word) > 7 else None,
+                        "grouping_version": "pdf-grouping.v0.1" if system is not None else None,
                         "system_inference": "six-horizontal-lines" if system is not None else None,
                         "system_relation": _system_relation(system, string),
                         "string_distance": round(string_distance, 3) if string_distance is not None else None,
+                        "grouping_confidence": round(system.grouping_confidence, 3) if system is not None else None,
+                        "grouping_warnings": system.grouping_warnings if system is not None else None,
+                        "tab_staff_bbox": system.staff_bbox if system is not None else None,
+                        "tab_line_ys": [round(line_y, 3) for line_y in system.line_ys] if system is not None else None,
                         "barline_count": len(system.barlines) if system is not None else None,
+                        "barline_xs": [round(value, 3) for value in system.barlines] if system is not None else None,
+                        "bar_boxes": system.bar_boxes if system is not None else None,
                         "local_bar_index": system.local_bar_for_x(x) if system is not None else None,
                         "system_first_bar_index": system.first_bar_index if system is not None else None,
                         "system_x0": round(system.x0, 3) if system is not None else None,
                         "system_x1": round(system.x1, 3) if system is not None else None,
+                        "assigned_string_y": round(system.line_ys[string - 1], 3)
+                        if system is not None and string is not None
+                        else None,
                         "bar_x_min": round(bar_bounds[0], 3) if bar_bounds is not None else None,
                         "bar_x_max": round(bar_bounds[1], 3) if bar_bounds is not None else None,
                     },
@@ -282,11 +338,11 @@ def _append_grouping_warnings(raw: dict[str, Any]) -> None:
         "fret_candidates_with_string": sum(1 for candidate in fret_candidates if candidate.get("string") is not None),
     }
     missing = []
-    if grouping_counts["candidates_with_system"] == 0:
+    if grouping_counts["candidates_with_system"] < len(fret_candidates):
         missing.append("system")
-    if grouping_counts["candidates_with_bar"] == 0:
+    if grouping_counts["candidates_with_bar"] < len(fret_candidates):
         missing.append("bar")
-    if grouping_counts["fret_candidates_with_string"] == 0:
+    if grouping_counts["fret_candidates_with_string"] < len(fret_candidates):
         missing.append("string")
     if missing:
         raw["warnings"].append(
@@ -316,8 +372,6 @@ def _write_grouping_artifacts(
     if not candidates or not any(candidate.get("parsed_fret") is not None for candidate in candidates):
         return
     grouping_status = grouping_status_for_tabraw(raw)
-    if grouping_status not in {"missing", "partial"}:
-        return
 
     html_path = out_dir / "grouping-diagnostics.html"
     warnings_path = out_dir / "warnings.json"
@@ -373,7 +427,9 @@ def _write_grouping_overlays(
         candidates_by_page.setdefault(int(page_index), []).append(candidate)
 
     message = "candidate text found; no usable tab staff/bar/string grouping inferred"
-    if grouping_status == "partial":
+    if grouping_status == "grouped":
+        message = "candidate text found; tab staff/bar/string grouping inferred"
+    elif grouping_status == "partial":
         message = "candidate text found; tab staff/bar/string grouping is partial"
 
     overlay_paths: list[Path] = []
@@ -382,12 +438,59 @@ def _write_grouping_overlays(
             page_candidates = candidates_by_page.get(page_number, [])
             if not page_candidates:
                 continue
+            grouping_structures = _grouping_structures_from_candidates(page_candidates)
             page.insert_text(
                 fitz.Point(36, 24),
                 message,
                 fontsize=10,
                 color=(0.8, 0.05, 0.05),
             )
+            for structure in grouping_structures:
+                staff_bbox = structure.get("staff_bbox")
+                if isinstance(staff_bbox, dict):
+                    rect = fitz.Rect(
+                        float(staff_bbox["x0"]),
+                        float(staff_bbox["y0"]),
+                        float(staff_bbox["x1"]),
+                        float(staff_bbox["y1"]),
+                    )
+                    page.draw_rect(rect, color=(0.05, 0.35, 0.85), width=1.1)
+                    page.insert_text(
+                        fitz.Point(rect.x0, max(8.0, rect.y0 - 6.0)),
+                        f"system {structure['system_index']} staff {structure['staff_index']}",
+                        fontsize=6.5,
+                        color=(0.05, 0.35, 0.85),
+                    )
+                for y in structure.get("tab_line_ys", []):
+                    page.draw_line(
+                        (float(structure["x0"]), float(y)),
+                        (float(structure["x1"]), float(y)),
+                        color=(0.1, 0.55, 0.95),
+                        width=0.35,
+                    )
+                for x in structure.get("barline_xs", []):
+                    page.draw_line(
+                        (float(x), float(structure["y0"])),
+                        (float(x), float(structure["y1"])),
+                        color=(0.9, 0.25, 0.05),
+                        width=0.8,
+                    )
+                for bar_box in structure.get("bar_boxes", []):
+                    if not isinstance(bar_box, dict):
+                        continue
+                    rect = fitz.Rect(
+                        float(bar_box["x0"]),
+                        float(bar_box["y0"]),
+                        float(bar_box["x1"]),
+                        float(bar_box["y1"]),
+                    )
+                    page.draw_rect(rect, color=(0.95, 0.55, 0.05), width=0.5)
+                    page.insert_text(
+                        fitz.Point(rect.x0 + 2.0, rect.y1 + 7.0),
+                        f"bar {bar_box['bar_index']}",
+                        fontsize=5.5,
+                        color=(0.8, 0.35, 0.0),
+                    )
             for candidate in page_candidates:
                 bbox = candidate.get("bbox")
                 if not isinstance(bbox, dict):
@@ -423,7 +526,45 @@ def _candidate_overlay_label(candidate: dict[str, Any]) -> str:
         "technique-text": "tech",
     }.get(kind, kind)
     short_id = str(candidate.get("id", "candidate")).split("-")[-1]
-    return f"{short_id}:{kind_label}"
+    string = candidate.get("string")
+    bar = candidate.get("bar_index")
+    assignment = ""
+    if string is not None or bar is not None:
+        assignment = f":s{string or '?'}b{bar or '?'}"
+    return f"{short_id}:{kind_label}{assignment}"
+
+
+def _grouping_structures_from_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[tuple[int, int, int], dict[str, Any]] = {}
+    for candidate in candidates:
+        raw = candidate.get("raw")
+        if not isinstance(raw, dict):
+            continue
+        staff_bbox = raw.get("tab_staff_bbox")
+        line_ys = raw.get("tab_line_ys")
+        if not isinstance(staff_bbox, dict) or not isinstance(line_ys, list):
+            continue
+        page = int(candidate.get("page_index") or staff_bbox.get("page") or 0)
+        system_index = int(candidate.get("system_index") or 0)
+        staff_index = int(candidate.get("staff_index") or 0)
+        if not page or not system_index or not staff_index:
+            continue
+        key = (page, system_index, staff_index)
+        if key not in grouped:
+            grouped[key] = {
+                "page": page,
+                "system_index": system_index,
+                "staff_index": staff_index,
+                "staff_bbox": staff_bbox,
+                "tab_line_ys": [float(value) for value in line_ys],
+                "barline_xs": [float(value) for value in raw.get("barline_xs", []) if isinstance(value, (int, float))],
+                "bar_boxes": raw.get("bar_boxes", []) if isinstance(raw.get("bar_boxes"), list) else [],
+                "x0": float(staff_bbox["x0"]),
+                "x1": float(staff_bbox["x1"]),
+                "y0": float(staff_bbox["y0"]),
+                "y1": float(staff_bbox["y1"]),
+            }
+    return [grouped[key] for key in sorted(grouped)]
 
 
 def _relative_artifact_path(path: Path, base: Path) -> str:
@@ -532,12 +673,20 @@ def _nearest_system(systems: list[_TabSystem], x: float | None, y: float | None)
     return min(containing, key=lambda system: min(abs(line_y - float(y)) for line_y in system.line_ys))
 
 
-def _candidate_confidence(raw_text: str, system: _TabSystem | None, string: int | None, x: float | None) -> float:
-    base = 0.65 if raw_text.strip().isdigit() else 0.4
+def _candidate_confidence(
+    raw_text: str,
+    system: _TabSystem | None,
+    string: int | None,
+    bar_index: int | None,
+    x: float | None,
+) -> float:
+    base = 0.55 if raw_text.strip().isdigit() else 0.35
     if system is not None:
         base += 0.1
     if string is not None:
         base += 0.15
+    if bar_index is not None:
+        base += 0.05
     if x is not None:
         base += 0.05
     return min(base, 0.9)

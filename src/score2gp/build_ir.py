@@ -1037,11 +1037,11 @@ def _tabraw_grouping_risk(tabraw: TabRaw) -> dict[str, object] | None:
         "playable_candidates_with_string": sum(1 for candidate in playable if candidate.string is not None),
     }
     missing = []
-    if counts["playable_candidates_with_system"] == 0:
+    if counts["playable_candidates_with_system"] < len(playable):
         missing.append("system")
-    if counts["playable_candidates_with_bar"] == 0:
+    if counts["playable_candidates_with_bar"] < len(playable):
         missing.append("bar")
-    if counts["playable_candidates_with_string"] == 0:
+    if counts["playable_candidates_with_string"] < len(playable):
         missing.append("string")
     if not missing:
         return None

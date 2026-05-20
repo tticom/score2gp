@@ -2,8 +2,7 @@
 
 ## Next
 
-- [ ] Improve PDF system detection using public fixtures that resemble the private grouping failure.
-- [ ] Add structured per-page extraction diagnostics for missing grouping and low-confidence system candidates.
+- [ ] Add low-confidence/partial-grouping public fixtures that exercise missing barlines or incomplete string assignments.
 - [ ] Add developer-facing HTML styling and compact thumbnails for grouping diagnostics.
 - [ ] Add public reproductions for more Audiveris timing patterns before another private run.
 - [ ] Attach PDF-derived chord symbols and technique text to ScoreIR events once timing calibration exists.
@@ -36,3 +35,5 @@
 - [x] Native compressed `.mxl` parsing in the main MusicXML importer.
 - [x] `build-ir` refusal for PDF-derived playable candidates with missing system/string/bar grouping.
 - [x] HTML and overlay report for extraction succeeded/grouping failed cases.
+- [x] PDF grouping v0.1 diagnostic boundary for generated born-digital tab fixtures.
+- [x] Grouped/partial/missing extraction reports with inferred staff, string-line, barline, and bar-box overlays.

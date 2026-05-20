@@ -58,6 +58,11 @@ def test_generated_pdf_extract_tab_emits_stable_spatial_tabraw(tmp_path) -> None
     assert all(candidate.staff_index == 1 for candidate in fret_candidates)
     assert all(candidate.string is not None for candidate in fret_candidates)
     assert {candidate.bar_index for candidate in fret_candidates} == {1, 2}
+    assert all(candidate.raw.get("grouping_version") == "pdf-grouping.v0.1" for candidate in fret_candidates)
+    assert all(len(candidate.raw.get("tab_line_ys", [])) == 6 for candidate in fret_candidates)
+    assert all(len(candidate.raw.get("bar_boxes", [])) == 2 for candidate in fret_candidates)
+    assert (first_path.parent / "grouping-diagnostics.html").exists()
+    assert sorted((first_path.parent / "overlays").glob("*-grouping.png"))
 
 
 def test_generated_pdf_extracted_tabraw_feeds_build_ir_with_diagnostics(tmp_path) -> None:
@@ -105,7 +110,14 @@ def test_scorelike_generated_pdf_extract_tab_groups_multiple_systems_and_preserv
     second = TabRaw.model_validate(extract_tab(SCORELIKE_PDF, second_path))
 
     assert first.inspection_kind == "born-digital"
-    assert not (first_path.parent / "grouping-diagnostics.html").exists()
+    report_path = first_path.parent / "grouping-diagnostics.html"
+    overlay_paths = sorted((first_path.parent / "overlays").glob("*-grouping.png"))
+    report_html = report_path.read_text(encoding="utf-8")
+    assert report_path.exists()
+    assert overlay_paths
+    assert "grouped" in report_html
+    assert "Tab staff bbox" in report_html
+    assert "bar boxes" in report_html
     assert [candidate.id for candidate in first.candidates] == [candidate.id for candidate in second.candidates]
     assert [candidate.raw_text for candidate in first.candidates] == [candidate.raw_text for candidate in second.candidates]
 
@@ -133,6 +145,9 @@ def test_scorelike_generated_pdf_extract_tab_groups_multiple_systems_and_preserv
     assert all(candidate.confidence >= 0.8 for candidate in fret_candidates)
     assert all(candidate.staff_index == 1 for candidate in fret_candidates)
     assert all(candidate.string is not None for candidate in fret_candidates)
+    assert all(candidate.raw.get("grouping_version") == "pdf-grouping.v0.1" for candidate in fret_candidates)
+    assert all(len(candidate.raw.get("tab_line_ys", [])) == 6 for candidate in fret_candidates)
+    assert all(len(candidate.raw.get("bar_boxes", [])) == 2 for candidate in fret_candidates)
     assert all(candidate.raw.get("system_relation") == "on-tab-line" for candidate in fret_candidates)
     assert all(candidate.parsed_fret is None for candidate in chord_candidates + technique_candidates + text_candidates)
 
@@ -227,6 +242,8 @@ def test_uneven_generated_pdf_reports_x_to_onset_quality_without_breaking_scorei
     assert all(candidate.x is not None and candidate.y is not None for candidate in fret_candidates)
     assert all(candidate.system_index == 1 for candidate in fret_candidates)
     assert {candidate.bar_index for candidate in fret_candidates} == {1, 2}
+    assert (first_path.parent / "grouping-diagnostics.html").exists()
+    assert sorted((first_path.parent / "overlays").glob("*-grouping.png"))
 
     score = build_ir_from_files(UNEVEN_MUSICXML, first_path, ir_path, diagnostics_path)
     validated, errors = validate_score_ir_file(ir_path)
@@ -324,3 +341,22 @@ def test_build_ir_refuses_unstructured_pdf_tabraw_before_scoreir_output(tmp_path
     assert payload["stage"] == "tabraw-import"
     assert payload["details"]["playable_candidate_count"] == 6
     assert set(payload["details"]["missing_grouping_dimensions"]) == {"system", "bar", "string"}
+
+
+def test_build_ir_refuses_partially_grouped_playable_candidates(tmp_path) -> None:
+    tabraw_path = tmp_path / "partial_generated_tiny_tab.tabraw.json"
+    ir_path = tmp_path / "partial_generated_tiny_tab.ir.json"
+
+    data = extract_tab(GENERATED_PDF, tabraw_path)
+    for candidate in data["candidates"]:
+        if candidate.get("parsed_fret") is not None:
+            candidate["string"] = None
+            break
+    tabraw_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+
+    assert not ir_path.exists()
+    assert raised.value.category == "missing_pdf_grouping"
+    assert raised.value.to_diagnostics_payload()["details"]["missing_grouping_dimensions"] == ["string"]
