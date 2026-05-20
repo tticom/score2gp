@@ -8,6 +8,7 @@ Known limitations:
 - Born-digital PDF text extraction works only when fret numbers and symbols are encoded as extractable text.
 - Current system/string/bar inference is heuristic and proven only on controlled public generated fixtures, including a two-system score-like page, not arbitrary score layouts.
 - PDF grouping v0.1 requires born-digital vector-like tab geometry: six visible horizontal tab lines and vertical barlines. It does not infer systems from text-only layouts, scanned images, hidden staff lines, or arbitrary commercial engraving.
+- Partial grouping is intentionally unsafe. Missing barlines, incomplete tab staff geometry, ambiguous string assignment, or ambiguous bar assignment produce `partial_pdf_grouping` and block `build-ir`; the overlays make the problem visible but do not repair it.
 - Grouped reports and overlays show what the extractor inferred; they do not mean the musical timing is trustworthy without MusicXML timing and x-to-onset diagnostics.
 - X-to-onset diagnostics now measure playable fret x groups against MusicXML onset groups, but this is not full optical calibration and does not repair bad geometry automatically.
 - MusicXML timing preflight catches overfull bars and same-voice overlaps before ScoreIR output, but it does not make ambiguous Audiveris exports correct.

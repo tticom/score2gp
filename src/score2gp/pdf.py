@@ -160,17 +160,21 @@ class _TabSystem:
         if len(self.line_ys) == 6 and len(self.barlines) >= 2:
             return 0.86
         if len(self.line_ys) == 6:
-            return 0.62
+            return 0.58
         return 0.35
 
     @property
     def grouping_warnings(self) -> list[str]:
         warnings = []
         if len(self.line_ys) != 6:
-            warnings.append("tab-line-count-not-six")
+            warnings.append("incomplete_tab_staff")
         if len(self.barlines) < 2:
-            warnings.append("barlines-not-detected")
+            warnings.append("missing_pdf_barlines")
         return warnings
+
+    @property
+    def grouping_status(self) -> str:
+        return "grouped" if not self.grouping_warnings else "partial"
 
     @property
     def bar_boxes(self) -> list[dict[str, float | int]]:
@@ -191,40 +195,49 @@ class _TabSystem:
             for index, (left, right) in enumerate(zip(self.barlines, self.barlines[1:]))
         ]
 
-    def string_for_y(self, y: float | None) -> tuple[int | None, int | None, float | None]:
+    def string_for_y(self, y: float | None) -> tuple[int | None, int | None, float | None, list[str]]:
         if y is None:
-            return None, None, None
+            return None, None, None, []
         distances = [(abs(line_y - y), index + 1) for index, line_y in enumerate(self.line_ys)]
         distance, line_index = min(distances, key=lambda item: item[0])
-        tolerance = max(4.0, self.line_spacing * 0.45)
+        tolerance = max(4.0, self.line_spacing * 0.38)
+        ambiguous_tolerance = max(tolerance, self.line_spacing * 0.58)
         if distance > tolerance:
-            return None, None, distance
-        return line_index, line_index, distance
+            warnings = ["ambiguous_string_assignment"] if distance <= ambiguous_tolerance else []
+            return None, None, distance, warnings
+        return line_index, line_index, distance, []
 
-    def bar_for_x(self, x: float | None) -> int | None:
-        local_bar = self.local_bar_for_x(x)
+    def bar_for_x(self, x: float | None) -> tuple[int | None, list[str]]:
+        local_bar, warnings = self.local_bar_for_x(x)
         if local_bar is None:
-            return None
-        return self.first_bar_index + local_bar - 1
+            return None, warnings
+        return self.first_bar_index + local_bar - 1, warnings
 
     def bar_bounds_for_x(self, x: float | None) -> tuple[float, float] | None:
-        local_bar = self.local_bar_for_x(x)
+        local_bar, _ = self.local_bar_for_x(x)
         if local_bar is None or len(self.barlines) < 2:
             return None
         return self.barlines[local_bar - 1], self.barlines[local_bar]
 
-    def local_bar_for_x(self, x: float | None) -> int | None:
+    def local_bar_for_x(self, x: float | None) -> tuple[int | None, list[str]]:
         if x is None or len(self.barlines) < 2:
-            return None
+            return None, ["missing_pdf_barlines"] if x is not None else []
+        internal_barlines = self.barlines[1:-1]
+        if any(abs(x - barline) <= self.ambiguous_bar_tolerance for barline in internal_barlines):
+            return None, ["ambiguous_bar_assignment"]
         for index, (left, right) in enumerate(zip(self.barlines, self.barlines[1:]), start=1):
             if left - 2.0 <= x <= right + 2.0:
-                return index
-        return None
+                return index, []
+        return None, ["ambiguous_bar_assignment"]
 
     @property
     def line_spacing(self) -> float:
         gaps = [right - left for left, right in zip(self.line_ys, self.line_ys[1:])]
         return sum(gaps) / len(gaps) if gaps else 12.0
+
+    @property
+    def ambiguous_bar_tolerance(self) -> float:
+        return max(4.0, self.line_spacing * 0.45)
 
     def contains_y(self, y: float | None) -> bool:
         if y is None:
@@ -275,16 +288,25 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]])
                 line_index = None
                 string = None
                 string_distance = None
+                assignment_warnings: list[str] = []
                 if system is not None:
-                    line_index, string, string_distance = system.string_for_y(y)
-                bar_index = system.bar_for_x(x) if system is not None else None
+                    line_index, string, string_distance, string_warnings = system.string_for_y(y)
+                    assignment_warnings.extend(string_warnings)
+                if system is not None:
+                    bar_index, bar_warnings = system.bar_for_x(x)
+                    assignment_warnings.extend(bar_warnings)
+                else:
+                    bar_index = None
                 bar_bounds = system.bar_bounds_for_x(x) if system is not None else None
+                confidence = _candidate_confidence(raw_text, system, string, bar_index, x)
+                if assignment_warnings:
+                    confidence = min(confidence, 0.65)
                 candidate = make_tab_candidate(
                     candidate_id=f"pdf-p{page_number:03d}-c{filtered_index + 1:04d}",
                     raw_text=raw_text,
                     page_index=page_number,
                     bbox_values=bbox_values,
-                    confidence=_candidate_confidence(raw_text, system, string, bar_index, x),
+                    confidence=confidence,
                     system_index=system.system_index if system is not None else None,
                     staff_index=system.staff_index if system is not None else None,
                     bar_index=bar_index,
@@ -297,16 +319,19 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]])
                         "pdf_word_number": int(word[7]) if len(word) > 7 else None,
                         "grouping_version": "pdf-grouping.v0.1" if system is not None else None,
                         "system_inference": "six-horizontal-lines" if system is not None else None,
+                        "grouping_status": system.grouping_status if system is not None else None,
+                        "safe_grouping": system is not None and not system.grouping_warnings and not assignment_warnings,
                         "system_relation": _system_relation(system, string),
                         "string_distance": round(string_distance, 3) if string_distance is not None else None,
                         "grouping_confidence": round(system.grouping_confidence, 3) if system is not None else None,
                         "grouping_warnings": system.grouping_warnings if system is not None else None,
+                        "assignment_warnings": assignment_warnings or None,
                         "tab_staff_bbox": system.staff_bbox if system is not None else None,
                         "tab_line_ys": [round(line_y, 3) for line_y in system.line_ys] if system is not None else None,
                         "barline_count": len(system.barlines) if system is not None else None,
                         "barline_xs": [round(value, 3) for value in system.barlines] if system is not None else None,
                         "bar_boxes": system.bar_boxes if system is not None else None,
-                        "local_bar_index": system.local_bar_for_x(x) if system is not None else None,
+                        "local_bar_index": system.local_bar_for_x(x)[0] if system is not None else None,
                         "system_first_bar_index": system.first_bar_index if system is not None else None,
                         "system_x0": round(system.x0, 3) if system is not None else None,
                         "system_x1": round(system.x1, 3) if system is not None else None,
@@ -335,15 +360,34 @@ def _append_grouping_warnings(raw: dict[str, Any]) -> None:
         "playable_fret_candidate_count": len(fret_candidates),
         "candidates_with_system": sum(1 for candidate in candidates if candidate.get("system_index") is not None),
         "candidates_with_bar": sum(1 for candidate in candidates if candidate.get("bar_index") is not None),
+        "fret_candidates_with_system": sum(1 for candidate in fret_candidates if candidate.get("system_index") is not None),
+        "fret_candidates_with_bar": sum(1 for candidate in fret_candidates if candidate.get("bar_index") is not None),
         "fret_candidates_with_string": sum(1 for candidate in fret_candidates if candidate.get("string") is not None),
     }
     missing = []
-    if grouping_counts["candidates_with_system"] < len(fret_candidates):
+    if grouping_counts["fret_candidates_with_system"] < len(fret_candidates):
         missing.append("system")
-    if grouping_counts["candidates_with_bar"] < len(fret_candidates):
+    if grouping_counts["fret_candidates_with_bar"] < len(fret_candidates):
         missing.append("bar")
     if grouping_counts["fret_candidates_with_string"] < len(fret_candidates):
         missing.append("string")
+    unsafe_codes = _unsafe_grouping_codes(fret_candidates)
+    if unsafe_codes:
+        raw["warnings"].append(
+            {
+                "code": "partial_pdf_grouping",
+                "message": (
+                    "PDF text extraction found fret-like candidates, but one or more grouping layers are partial "
+                    "or ambiguous; build-ir must not treat these candidates as reliable musical events."
+                ),
+                "severity": "warning",
+                "grouping_status": "partial",
+                **grouping_counts,
+                "warning_codes": unsafe_codes,
+            }
+        )
+        for code in unsafe_codes:
+            raw["warnings"].append(_specific_grouping_warning(code, grouping_counts))
     if missing:
         raw["warnings"].append(
             {
@@ -359,6 +403,35 @@ def _append_grouping_warnings(raw: dict[str, Any]) -> None:
                 "missing_grouping_dimensions": missing,
             }
         )
+
+
+def _unsafe_grouping_codes(fret_candidates: list[dict[str, Any]]) -> list[str]:
+    codes: set[str] = set()
+    for candidate in fret_candidates:
+        raw = candidate.get("raw")
+        if not isinstance(raw, dict):
+            continue
+        for field in ("grouping_warnings", "assignment_warnings"):
+            values = raw.get(field, [])
+            if isinstance(values, list):
+                codes.update(str(value) for value in values if value)
+    return sorted(codes)
+
+
+def _specific_grouping_warning(code: str, grouping_counts: dict[str, int]) -> dict[str, Any]:
+    messages = {
+        "missing_pdf_barlines": "A tab staff was inferred, but reliable barlines were not detected.",
+        "incomplete_tab_staff": "A partial tab staff was inferred, but fewer than six string lines were detected.",
+        "ambiguous_string_assignment": "One or more fret candidates are too far from a single string line to assign safely.",
+        "ambiguous_bar_assignment": "One or more fret candidates are too close to a bar boundary to assign safely.",
+    }
+    return {
+        "code": code,
+        "message": messages.get(code, "PDF grouping is partial or ambiguous."),
+        "severity": "warning",
+        "grouping_status": "partial",
+        **grouping_counts,
+    }
 
 
 def _write_grouping_artifacts(
@@ -582,7 +655,7 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
     system_index = 1
     next_bar_index = 1
 
-    for group in _six_line_groups(horizontal):
+    for group in _tab_line_groups(horizontal):
         line_ys = [round((line.y0 + line.y1) / 2, 3) for line in group]
         x0 = min(min(line.x0, line.x1) for line in group)
         x1 = max(max(line.x0, line.x1) for line in group)
@@ -637,19 +710,34 @@ def _drawing_segments(drawings: list[dict[str, Any]]) -> list[_LineSegment]:
 
 
 def _six_line_groups(lines: list[_LineSegment]) -> list[list[_LineSegment]]:
+    return [group for group in _tab_line_groups(lines) if len(group) == 6]
+
+
+def _tab_line_groups(lines: list[_LineSegment]) -> list[list[_LineSegment]]:
     groups = []
     index = 0
-    while index + 5 < len(lines):
+    while index < len(lines):
         group = lines[index : index + 6]
-        if _looks_like_six_line_tab(group):
+        if len(group) == 6 and _looks_like_tab_line_group(group):
             groups.append(group)
             index += 6
+            continue
+        group = lines[index : index + 5]
+        if len(group) == 5 and _looks_like_tab_line_group(group):
+            groups.append(group)
+            index += 5
         else:
             index += 1
     return groups
 
 
 def _looks_like_six_line_tab(group: list[_LineSegment]) -> bool:
+    return len(group) == 6 and _looks_like_tab_line_group(group)
+
+
+def _looks_like_tab_line_group(group: list[_LineSegment]) -> bool:
+    if len(group) not in {5, 6}:
+        return False
     ys = [round((line.y0 + line.y1) / 2, 3) for line in group]
     gaps = [right - left for left, right in zip(ys, ys[1:])]
     if any(gap < 6.0 or gap > 24.0 for gap in gaps):
@@ -683,6 +771,8 @@ def _candidate_confidence(
     base = 0.55 if raw_text.strip().isdigit() else 0.35
     if system is not None:
         base += 0.1
+        if system.grouping_warnings:
+            base -= 0.2
     if string is not None:
         base += 0.15
     if bar_index is not None:

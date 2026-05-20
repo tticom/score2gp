@@ -247,12 +247,14 @@ def build_ir_with_diagnostics_from_imports(musicxml: MusicXmlImport, tabraw: Tab
         )
     grouping_risk = _tabraw_grouping_risk(tabraw)
     if grouping_risk is not None:
+        category = str(grouping_risk.get("category", "missing_pdf_grouping"))
+        grouping_phrase = "partial or missing" if category == "partial_pdf_grouping" else "missing"
         raise BuildIrInputRiskError(
-            category="missing_pdf_grouping",
+            category=category,
             stage="tabraw-import",
             message=(
-                "TabRaw extraction found playable fret candidates, but system/string/bar grouping is missing; "
-                "build-ir will not treat ungrouped PDF text as reliable musical evidence."
+                f"TabRaw extraction found playable fret candidates, but system/string/bar grouping is {grouping_phrase}; "
+                "build-ir will not treat unsafe PDF text as reliable musical evidence."
             ),
             details=grouping_risk,
         )
@@ -1044,14 +1046,50 @@ def _tabraw_grouping_risk(tabraw: TabRaw) -> dict[str, object] | None:
     if counts["playable_candidates_with_string"] < len(playable):
         missing.append("string")
     if not missing:
-        return None
+        unsafe_codes = _tabraw_unsafe_grouping_warning_codes(tabraw)
+        if not unsafe_codes:
+            return None
+        counts["missing_grouping_dimensions"] = []
+        counts["unsafe_grouping_warning_codes"] = unsafe_codes
+        counts["grouping_status"] = "partial"
+        counts["category"] = "partial_pdf_grouping"
+        counts["warning_codes"] = unsafe_codes
+        return counts
     counts["missing_grouping_dimensions"] = missing
+    unsafe_codes = _tabraw_unsafe_grouping_warning_codes(tabraw)
+    if unsafe_codes:
+        counts["unsafe_grouping_warning_codes"] = unsafe_codes
+    system_count = int(counts["playable_candidates_with_system"])
+    bar_count = int(counts["playable_candidates_with_bar"])
+    string_count = int(counts["playable_candidates_with_string"])
+    counts["grouping_status"] = "missing" if system_count == 0 and bar_count == 0 and string_count == 0 else "partial"
+    counts["category"] = "missing_pdf_grouping" if counts["grouping_status"] == "missing" else "partial_pdf_grouping"
     counts["warning_codes"] = [
         str(warning.get("code"))
         for warning in tabraw.warnings
-        if warning.get("code") in {"missing_pdf_grouping", "pdf-tab-system-not-detected"}
+        if warning.get("code")
+        in {
+            "missing_pdf_grouping",
+            "partial_pdf_grouping",
+            "pdf-tab-system-not-detected",
+            "missing_pdf_barlines",
+            "incomplete_tab_staff",
+            "ambiguous_string_assignment",
+            "ambiguous_bar_assignment",
+        }
     ]
     return counts
+
+
+def _tabraw_unsafe_grouping_warning_codes(tabraw: TabRaw) -> list[str]:
+    unsafe = {
+        "partial_pdf_grouping",
+        "missing_pdf_barlines",
+        "incomplete_tab_staff",
+        "ambiguous_string_assignment",
+        "ambiguous_bar_assignment",
+    }
+    return sorted({str(warning.get("code")) for warning in tabraw.warnings if warning.get("code") in unsafe})
 
 
 def _x_to_onset_quality(
