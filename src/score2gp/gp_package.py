@@ -6,14 +6,14 @@ from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree as ET
 
-from .gpif import build_gpif
+from .gpif import build_gpif, gpif_warnings
 from .ir import ScoreIR
 
 REQUIRED_MEMBERS = {"VERSION", "Content/score.gpif"}
 
 
 def write_gp(score: ScoreIR, out_path: str | Path, template: str | Path | None = None) -> list[str]:
-    warnings: list[str] = []
+    warnings: list[str] = gpif_warnings(score)
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     gpif = build_gpif(score)

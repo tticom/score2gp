@@ -3,7 +3,17 @@
   "metadata": {
     "title": "Tiny Open-E Test",
     "artist": "Generated Fixture",
-    "copyright": "Public domain generated test fixture"
+    "composer": "Generated Fixture",
+    "transcriber": "score2gp",
+    "copyright": "Public domain generated test fixture",
+    "source": "hand-authored synthetic fixture"
+  },
+  "conversion": {
+    "tool_name": "score2gp",
+    "tool_version": "0.1.0",
+    "conversion_timestamp": "2026-05-18T00:00:00Z",
+    "source_file_hash": "sha256:generated-fixture",
+    "source_page_count": 1
   },
   "tempo": { "bpm": 66, "text": "Moderato" },
   "tracks": [
@@ -11,6 +21,9 @@
       "id": "gtr-1",
       "name": "Guitar",
       "instrument": "steel guitar",
+      "capo": 0,
+      "tablature_enabled": true,
+      "staff_count": 1,
       "tuning": {
         "name": "Open E",
         "strings": [
@@ -32,38 +45,118 @@
         {
           "id": "e1",
           "track_id": "gtr-1",
-          "voice": 1,
-          "position": "0",
-          "duration": "1/8",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 0,
+            "duration_ticks": 480,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "eighth", "dots": 0 }
+          },
           "notes": [
-            { "string": 3, "fret": 0, "pitch": 56, "confidence": 1.0 }
+            {
+              "string": 3,
+              "fret": 0,
+              "pitch": 56,
+              "confidence": 1.0,
+              "provenance": [
+                {
+                  "source_stage": "manual",
+                  "page": 1,
+                  "system_id": "synthetic-system-1",
+                  "staff_id": "tab-1",
+                  "bar_index": 1,
+                  "bbox": { "page": 1, "x0": 10, "y0": 20, "x1": 20, "y1": 30 },
+                  "raw_token_id": "tiny-note-1",
+                  "confidence": 1.0
+                }
+              ]
+            }
           ],
           "chord_symbol": "E",
           "confidence": 1.0,
-          "source": { "stage": "synthetic", "confidence": 1.0 }
+          "provenance": [
+            {
+              "source_stage": "manual",
+              "page": 1,
+              "system_id": "synthetic-system-1",
+              "staff_id": "tab-1",
+              "bar_index": 1,
+              "confidence": 1.0
+            }
+          ]
         },
         {
           "id": "e2",
           "track_id": "gtr-1",
-          "voice": 1,
-          "position": "1/8",
-          "duration": "1/8",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 480,
+            "duration_ticks": 480,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "eighth", "dots": 0 }
+          },
           "notes": [
-            { "string": 2, "fret": 3, "pitch": 62, "confidence": 1.0, "techniques": ["slide"] }
+            {
+              "string": 2,
+              "fret": 3,
+              "pitch": 62,
+              "confidence": 1.0,
+              "techniques": [
+                { "kind": "slide", "style": "legato", "direction": "up" }
+              ],
+              "provenance": [
+                {
+                  "source_stage": "manual",
+                  "page": 1,
+                  "system_id": "synthetic-system-1",
+                  "staff_id": "tab-1",
+                  "bar_index": 1,
+                  "bbox": { "page": 1, "x0": 30, "y0": 20, "x1": 40, "y1": 30 },
+                  "raw_token_id": "tiny-note-2",
+                  "confidence": 1.0
+                }
+              ]
+            }
           ],
-          "techniques": ["slide"],
+          "techniques": [
+            { "kind": "slide", "style": "legato", "direction": "up" }
+          ],
           "confidence": 1.0,
-          "source": { "stage": "synthetic", "confidence": 1.0 }
+          "provenance": [
+            {
+              "source_stage": "manual",
+              "page": 1,
+              "system_id": "synthetic-system-1",
+              "staff_id": "tab-1",
+              "bar_index": 1,
+              "confidence": 1.0
+            }
+          ]
         },
         {
           "id": "r1",
           "track_id": "gtr-1",
-          "voice": 1,
-          "position": "2/8",
-          "duration": "10/8",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 960,
+            "duration_ticks": 4800,
+            "ticks_per_quarter": 960,
+            "voice": 1
+          },
           "is_rest": true,
           "confidence": 1.0,
-          "source": { "stage": "synthetic", "confidence": 1.0 }
+          "provenance": [
+            {
+              "source_stage": "manual",
+              "page": 1,
+              "system_id": "synthetic-system-1",
+              "staff_id": "tab-1",
+              "bar_index": 1,
+              "confidence": 1.0
+            }
+          ]
         }
       ]
     }

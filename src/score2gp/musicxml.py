@@ -1,0 +1,883 @@
+from __future__ import annotations
+
+import hashlib
+from fractions import Fraction
+from pathlib import Path
+from pathlib import PurePosixPath
+from typing import Literal
+from xml.etree import ElementTree as ET
+from zipfile import BadZipFile, ZipFile
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from .ir import DEFAULT_TICKS_PER_QUARTER, TimeSignature
+
+
+class MusicXmlWarning(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+    message: str
+    severity: Literal["info", "warning", "error"] = "warning"
+    source_path: str | None = None
+
+
+class MusicXmlTimingIssue(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+    message: str
+    severity: Literal["info", "warning", "error"] = "warning"
+    part_id: str
+    measure_index: int = Field(ge=1)
+    measure_number: str
+    voice: int | None = Field(default=None, ge=1, le=8)
+    musicxml_note_id: str | None = None
+    expected_duration_divisions: int | None = Field(default=None, ge=0)
+    onset_divisions: int | None = Field(default=None, ge=0)
+    duration_divisions: int | None = Field(default=None, ge=0)
+    end_divisions: int | None = Field(default=None, ge=0)
+    source_path: str | None = None
+
+
+class MusicXmlMetadata(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = "Untitled"
+    composer: str | None = None
+    lyricist: str | None = None
+    rights: str | None = None
+    source: str | None = None
+
+
+class MusicXmlPitch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    step: str
+    alter: int = 0
+    octave: int
+    midi: int
+    name: str
+
+
+class MusicXmlTuplet(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    actual_notes: int
+    normal_notes: int
+
+
+class MusicXmlTechnique(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["slide", "bend", "vibrato", "hammer-on", "pull-off", "slur", "unsupported"]
+    state: Literal["start", "stop", "continue", "single", "unknown"] = "unknown"
+    semitones: float | None = None
+    text: str | None = None
+    source_path: str
+
+
+class MusicXmlNote(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    part_id: str
+    measure_index: int = Field(ge=1)
+    measure_number: str
+    note_index: int = Field(ge=1)
+    onset_divisions: int = Field(ge=0)
+    duration_divisions: int = Field(ge=0)
+    voice: int = Field(default=1, ge=1, le=8)
+    staff: int | None = Field(default=None, ge=1)
+    is_rest: bool = False
+    pitch: MusicXmlPitch | None = None
+    chord: bool = False
+    ties: list[Literal["start", "stop"]] = Field(default_factory=list)
+    notated_type: str | None = None
+    dots: int = Field(default=0, ge=0)
+    tuplet: MusicXmlTuplet | None = None
+    grace: bool = False
+    techniques: list[MusicXmlTechnique] = Field(default_factory=list)
+    source_path: str
+
+    def duration_ticks(self, divisions: int) -> tuple[int, bool]:
+        value = Fraction(self.duration_divisions * DEFAULT_TICKS_PER_QUARTER, divisions)
+        return int(value), value.denominator == 1
+
+    def onset_ticks(self, divisions: int) -> tuple[int, bool]:
+        value = Fraction(self.onset_divisions * DEFAULT_TICKS_PER_QUARTER, divisions)
+        return int(value), value.denominator == 1
+
+
+class MusicXmlHarmony(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    part_id: str
+    measure_index: int = Field(ge=1)
+    measure_number: str
+    onset_divisions: int = Field(ge=0)
+    root_step: str
+    root_alter: int = 0
+    kind: str | None = None
+    text: str
+    source_path: str
+
+
+class MusicXmlMeasure(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    index: int = Field(ge=1)
+    number: str
+    divisions: int = Field(gt=0)
+    time_signature: TimeSignature
+    key_fifths: int | None = None
+    notes: list[MusicXmlNote] = Field(default_factory=list)
+    harmonies: list[MusicXmlHarmony] = Field(default_factory=list)
+
+
+class MusicXmlPart(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    name: str
+    measures: list[MusicXmlMeasure] = Field(default_factory=list)
+
+
+class MusicXmlImport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_path: str
+    source_sha256: str
+    metadata: MusicXmlMetadata
+    tempo_bpm: int | None = Field(default=None, gt=0, le=400)
+    parts: list[MusicXmlPart] = Field(default_factory=list)
+    warnings: list[MusicXmlWarning] = Field(default_factory=list)
+
+
+def parse_musicxml(path: str | Path) -> MusicXmlImport:
+    xml_path = Path(path)
+    root = _parse_musicxml_root(xml_path)
+    if _local_name(root.tag) != "score-partwise":
+        raise ValueError("only partwise MusicXML scores are supported")
+
+    warnings: list[MusicXmlWarning] = []
+    part_names = _part_names(root)
+    metadata = _metadata(root, xml_path)
+    tempo_bpm = _tempo(root)
+    parts = []
+
+    for part_node in _children(root, "part"):
+        part_id = part_node.get("id") or f"part-{len(parts) + 1}"
+        part_name = part_names.get(part_id, part_id)
+        parts.append(_parse_part(part_node, part_id, part_name, warnings))
+
+    return MusicXmlImport(
+        source_path=str(xml_path),
+        source_sha256=_sha256(xml_path),
+        metadata=metadata,
+        tempo_bpm=tempo_bpm,
+        parts=parts,
+        warnings=warnings,
+    )
+
+
+def mxl_rootfile_path(path: str | Path) -> str:
+    """Return the root MusicXML member for a compressed MXL package."""
+
+    with ZipFile(path) as package:
+        return _mxl_rootfile(package)
+
+
+def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssue]:
+    """Return public-safe timing risks before ScoreIR construction."""
+
+    issues: list[MusicXmlTimingIssue] = []
+    for part in imported.parts:
+        previous_divisions: int | None = None
+        for measure in part.measures:
+            expected = _expected_measure_duration_divisions(measure)
+            if previous_divisions is not None and previous_divisions != measure.divisions:
+                issues.append(
+                    MusicXmlTimingIssue(
+                        code="musicxml-divisions-changed",
+                        message=(
+                            f"Measure {measure.number} changes MusicXML divisions from "
+                            f"{previous_divisions} to {measure.divisions}; timing conversion remains explicit."
+                        ),
+                        severity="info",
+                        part_id=part.id,
+                        measure_index=measure.index,
+                        measure_number=measure.number,
+                        expected_duration_divisions=expected,
+                    )
+                )
+            previous_divisions = measure.divisions
+
+            if measure.time_signature.numerator % 3 == 0 and measure.time_signature.denominator == 8:
+                issues.append(
+                    MusicXmlTimingIssue(
+                        code="musicxml-compound-meter-assumption",
+                        message=(
+                            f"Measure {measure.number} uses {measure.time_signature.numerator}/"
+                            f"{measure.time_signature.denominator}; build-ir treats durations as exact "
+                            "quarter-note ticks and reports alignment quality separately."
+                        ),
+                        severity="info",
+                        part_id=part.id,
+                        measure_index=measure.index,
+                        measure_number=measure.number,
+                        expected_duration_divisions=expected,
+                    )
+                )
+
+            if expected is None:
+                issues.append(
+                    MusicXmlTimingIssue(
+                        code="musicxml-measure-duration-unknown",
+                        message=f"Measure {measure.number} has no computable expected duration.",
+                        severity="warning",
+                        part_id=part.id,
+                        measure_index=measure.index,
+                        measure_number=measure.number,
+                    )
+                )
+                continue
+
+            voice_extents: dict[int, int] = {}
+            previous_by_voice: dict[int, tuple[int, MusicXmlNote]] = {}
+            for group in _measure_timing_groups(measure):
+                first = group[0]
+                if first.grace or first.duration_divisions <= 0:
+                    continue
+                end = first.onset_divisions + first.duration_divisions
+                voice_extents[first.voice] = max(voice_extents.get(first.voice, 0), end)
+                if end > expected:
+                    issues.append(
+                        MusicXmlTimingIssue(
+                            code="musicxml-overfull-bar",
+                            message=(
+                                f"Measure {measure.number} event {first.id} ends at MusicXML division "
+                                f"{end}, beyond expected measure length {expected}."
+                            ),
+                            severity="error",
+                            part_id=part.id,
+                            measure_index=measure.index,
+                            measure_number=measure.number,
+                            voice=first.voice,
+                            musicxml_note_id=first.id,
+                            expected_duration_divisions=expected,
+                            onset_divisions=first.onset_divisions,
+                            duration_divisions=first.duration_divisions,
+                            end_divisions=end,
+                            source_path=first.source_path,
+                        )
+                    )
+                previous = previous_by_voice.get(first.voice)
+                if previous is not None:
+                    previous_end, previous_note = previous
+                    if previous_end > first.onset_divisions:
+                        issues.append(
+                            MusicXmlTimingIssue(
+                                code="musicxml-voice-overlap",
+                                message=(
+                                    f"Measure {measure.number} voice {first.voice} overlaps: "
+                                    f"{previous_note.id} ends at {previous_end}, before {first.id} starts at "
+                                    f"{first.onset_divisions}."
+                                ),
+                                severity="error",
+                                part_id=part.id,
+                                measure_index=measure.index,
+                                measure_number=measure.number,
+                                voice=first.voice,
+                                musicxml_note_id=first.id,
+                                expected_duration_divisions=expected,
+                                onset_divisions=first.onset_divisions,
+                                duration_divisions=first.duration_divisions,
+                                end_divisions=end,
+                                source_path=first.source_path,
+                            )
+                        )
+                previous_by_voice[first.voice] = (end, first)
+
+            if voice_extents:
+                longest_voice = max(voice_extents.values())
+                if 0 < longest_voice < expected:
+                    issues.append(
+                        MusicXmlTimingIssue(
+                            code="musicxml-underfull-bar",
+                            message=(
+                                f"Measure {measure.number} longest voice ends at MusicXML division "
+                                f"{longest_voice}, before expected measure length {expected}."
+                            ),
+                            severity="warning",
+                            part_id=part.id,
+                            measure_index=measure.index,
+                            measure_number=measure.number,
+                            expected_duration_divisions=expected,
+                            end_divisions=longest_voice,
+                        )
+                    )
+
+    return issues
+
+
+def _parse_musicxml_root(path: Path) -> ET.Element:
+    if path.suffix.lower() != ".mxl":
+        return ET.parse(path).getroot()
+
+    try:
+        with ZipFile(path) as package:
+            if not package.namelist():
+                raise ValueError("MXL package is empty")
+            rootfile = _mxl_rootfile(package)
+            try:
+                return ET.fromstring(package.read(rootfile))
+            except ET.ParseError as exc:
+                raise ValueError(f"MXL rootfile '{rootfile}' is not well-formed MusicXML") from exc
+    except BadZipFile as exc:
+        raise ValueError(f"invalid compressed MusicXML package: {path.name}") from exc
+    except KeyError as exc:
+        missing = str(exc).strip("'")
+        raise ValueError(f"MXL package does not contain its declared MusicXML rootfile: {missing}") from exc
+
+
+def _mxl_rootfile(package: ZipFile) -> str:
+    try:
+        container_data = package.read("META-INF/container.xml")
+    except KeyError:
+        raise ValueError("MXL package is missing required META-INF/container.xml") from None
+    try:
+        container = ET.fromstring(container_data)
+    except ET.ParseError as exc:
+        raise ValueError("MXL container.xml is not well-formed XML") from exc
+
+    for node in container.iter():
+        if _local_name(node.tag) == "rootfile" and node.get("full-path"):
+            rootfile = _validated_mxl_member_path(str(node.get("full-path")))
+            if rootfile not in package.namelist():
+                raise KeyError(rootfile)
+            return rootfile
+    raise ValueError("MXL container.xml does not declare a rootfile full-path")
+
+
+def _validated_mxl_member_path(value: str) -> str:
+    rootfile = value.strip()
+    if not rootfile:
+        raise ValueError("MXL container.xml rootfile full-path is empty")
+    if "\\" in rootfile:
+        raise ValueError(f"MXL rootfile path is unsafe: {rootfile}")
+    path = PurePosixPath(rootfile)
+    if path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts) or ":" in path.parts[0]:
+        raise ValueError(f"MXL rootfile path is unsafe: {rootfile}")
+    return rootfile
+
+
+def _parse_part(
+    part_node: ET.Element,
+    part_id: str,
+    part_name: str,
+    warnings: list[MusicXmlWarning],
+) -> MusicXmlPart:
+    measures = []
+    current_divisions = 1
+    current_time = TimeSignature(numerator=4, denominator=4)
+    current_key: int | None = None
+
+    for measure_index, measure_node in enumerate(_children(part_node, "measure"), start=1):
+        measure_number = measure_node.get("number") or str(measure_index)
+        cursor = 0
+        last_note_onset = 0
+        notes: list[MusicXmlNote] = []
+        harmonies: list[MusicXmlHarmony] = []
+
+        for child in list(measure_node):
+            name = _local_name(child.tag)
+            source_path = f"/score-partwise/part[@id='{part_id}']/measure[{measure_index}]/{name}"
+            if name == "attributes":
+                current_divisions = _parse_divisions(child, current_divisions)
+                current_time = _parse_time_signature(child, current_time)
+                current_key = _parse_key(child, current_key)
+            elif name == "note":
+                note_index = len(notes) + 1
+                note, cursor, last_note_onset = _parse_note(
+                    child,
+                    part_id=part_id,
+                    measure_index=measure_index,
+                    measure_number=measure_number,
+                    note_index=note_index,
+                    cursor=cursor,
+                    last_note_onset=last_note_onset,
+                    warnings=warnings,
+                )
+                notes.append(note)
+            elif name == "harmony":
+                harmonies.append(
+                    _parse_harmony(
+                        child,
+                        part_id=part_id,
+                        measure_index=measure_index,
+                        measure_number=measure_number,
+                        harmony_index=len(harmonies) + 1,
+                        cursor=cursor,
+                    )
+                )
+            elif name == "backup":
+                warnings.append(
+                    MusicXmlWarning(
+                        code="musicxml-backup-encountered",
+                        message="MusicXML backup changes the timing cursor; build-ir will preflight the resulting voices.",
+                        severity="info",
+                        source_path=source_path,
+                    )
+                )
+                cursor = max(0, cursor - _duration(child))
+            elif name == "forward":
+                warnings.append(
+                    MusicXmlWarning(
+                        code="musicxml-forward-encountered",
+                        message="MusicXML forward changes the timing cursor; build-ir will preflight the resulting voices.",
+                        severity="info",
+                        source_path=source_path,
+                    )
+                )
+                cursor += _duration(child)
+            elif name == "barline" and _has_descendant(child, "repeat"):
+                warnings.append(
+                    MusicXmlWarning(
+                        code="unsupported-repeat",
+                        message="repeat barlines are recorded as unsupported and ignored in this phase",
+                        source_path=source_path,
+                    )
+                )
+            elif name == "barline" and _has_descendant(child, "ending"):
+                warnings.append(
+                    MusicXmlWarning(
+                        code="unsupported-ending",
+                        message="alternate endings are recorded as unsupported and ignored in this phase",
+                        source_path=source_path,
+                    )
+                )
+
+        measures.append(
+            MusicXmlMeasure(
+                index=measure_index,
+                number=measure_number,
+                divisions=current_divisions,
+                time_signature=current_time,
+                key_fifths=current_key,
+                notes=notes,
+                harmonies=harmonies,
+            )
+        )
+
+    return MusicXmlPart(id=part_id, name=part_name, measures=measures)
+
+
+def _parse_note(
+    node: ET.Element,
+    *,
+    part_id: str,
+    measure_index: int,
+    measure_number: str,
+    note_index: int,
+    cursor: int,
+    last_note_onset: int,
+    warnings: list[MusicXmlWarning],
+) -> tuple[MusicXmlNote, int, int]:
+    chord = _child(node, "chord") is not None
+    grace = _child(node, "grace") is not None
+    onset = last_note_onset if chord else cursor
+    duration = _duration(node)
+    voice = _int_text(_child(node, "voice"), default=1)
+    staff = _optional_int_text(_child(node, "staff"))
+    source_path = f"/score-partwise/part[@id='{part_id}']/measure[{measure_index}]/note[{note_index}]"
+
+    if grace:
+        warnings.append(
+            MusicXmlWarning(
+                code="unsupported-grace-note",
+                message="grace notes are parsed but not converted into timed ScoreIR events in this phase",
+                source_path=source_path,
+            )
+        )
+
+    note = MusicXmlNote(
+        id=f"mx-{part_id}-m{measure_index}-n{note_index}",
+        part_id=part_id,
+        measure_index=measure_index,
+        measure_number=measure_number,
+        note_index=note_index,
+        onset_divisions=onset,
+        duration_divisions=duration,
+        voice=voice,
+        staff=staff,
+        is_rest=_child(node, "rest") is not None,
+        pitch=_pitch(node),
+        chord=chord,
+        ties=_ties(node),
+        notated_type=_text(_child(node, "type")),
+        dots=len(_children(node, "dot")),
+        tuplet=_tuplet(node),
+        grace=grace,
+        techniques=_techniques(node, source_path, warnings),
+        source_path=source_path,
+    )
+
+    if not chord and duration > 0 and not grace:
+        cursor += duration
+    if not chord:
+        last_note_onset = onset
+
+    return note, cursor, last_note_onset
+
+
+def _parse_harmony(
+    node: ET.Element,
+    *,
+    part_id: str,
+    measure_index: int,
+    measure_number: str,
+    harmony_index: int,
+    cursor: int,
+) -> MusicXmlHarmony:
+    root = _child(node, "root")
+    root_step = "C"
+    root_alter = 0
+    if root is not None:
+        root_step = (_text(_child(root, "root-step")) or "C").upper()
+        root_alter = _optional_int_text(_child(root, "root-alter")) or 0
+
+    kind_node = _child(node, "kind")
+    kind = _text(kind_node)
+    kind_text = kind_node.get("text") if kind_node is not None else None
+    offset = _optional_int_text(_child(node, "offset")) or 0
+    accidental = "#" if root_alter == 1 else "b" if root_alter == -1 else f"{root_alter:+d}" if root_alter else ""
+    text = f"{root_step}{accidental}{kind_text or _harmony_kind_suffix(kind)}"
+    source_path = f"/score-partwise/part[@id='{part_id}']/measure[{measure_index}]/harmony[{harmony_index}]"
+    return MusicXmlHarmony(
+        id=f"mx-{part_id}-m{measure_index}-h{harmony_index}",
+        part_id=part_id,
+        measure_index=measure_index,
+        measure_number=measure_number,
+        onset_divisions=max(0, cursor + offset),
+        root_step=root_step,
+        root_alter=root_alter,
+        kind=kind,
+        text=text,
+        source_path=source_path,
+    )
+
+
+def _metadata(root: ET.Element, xml_path: Path) -> MusicXmlMetadata:
+    title = _text(_child(root, "movement-title"))
+    work = _child(root, "work")
+    if not title and work is not None:
+        title = _text(_child(work, "work-title"))
+
+    identification = _child(root, "identification")
+    composer = None
+    lyricist = None
+    rights = None
+    if identification is not None:
+        for creator in _children(identification, "creator"):
+            creator_type = creator.get("type")
+            if creator_type == "composer":
+                composer = _text(creator)
+            elif creator_type == "lyricist":
+                lyricist = _text(creator)
+        rights = _text(_child(identification, "rights"))
+
+    return MusicXmlMetadata(
+        title=title or xml_path.stem,
+        composer=composer,
+        lyricist=lyricist,
+        rights=rights,
+        source=str(xml_path),
+    )
+
+
+def _part_names(root: ET.Element) -> dict[str, str]:
+    part_list = _child(root, "part-list")
+    if part_list is None:
+        return {}
+    names = {}
+    for score_part in _children(part_list, "score-part"):
+        part_id = score_part.get("id")
+        if part_id:
+            names[part_id] = _text(_child(score_part, "part-name")) or part_id
+    return names
+
+
+def _parse_divisions(attributes: ET.Element, current: int) -> int:
+    divisions = _optional_int_text(_child(attributes, "divisions"))
+    return divisions if divisions and divisions > 0 else current
+
+
+def _parse_time_signature(attributes: ET.Element, current: TimeSignature) -> TimeSignature:
+    time_node = _child(attributes, "time")
+    if time_node is None:
+        return current
+    beats = _optional_int_text(_child(time_node, "beats"))
+    beat_type = _optional_int_text(_child(time_node, "beat-type"))
+    if beats is None or beat_type is None:
+        return current
+    return TimeSignature(numerator=beats, denominator=beat_type)
+
+
+def _parse_key(attributes: ET.Element, current: int | None) -> int | None:
+    key_node = _child(attributes, "key")
+    if key_node is None:
+        return current
+    fifths = _optional_int_text(_child(key_node, "fifths"))
+    return fifths if fifths is not None else current
+
+
+def _tempo(root: ET.Element) -> int | None:
+    for direction in _descendants(root, "direction"):
+        sound = _child(direction, "sound")
+        if sound is not None and sound.get("tempo"):
+            return round(float(sound.get("tempo", "0")))
+        metronome = _child(direction, "metronome") or _first_descendant(direction, "metronome")
+        if metronome is not None:
+            per_minute = _optional_int_text(_child(metronome, "per-minute"))
+            if per_minute is not None:
+                return per_minute
+    for sound in _descendants(root, "sound"):
+        if sound.get("tempo"):
+            return round(float(sound.get("tempo", "0")))
+    return None
+
+
+def _pitch(note: ET.Element) -> MusicXmlPitch | None:
+    pitch_node = _child(note, "pitch")
+    if pitch_node is None:
+        return None
+    step = (_text(_child(pitch_node, "step")) or "C").upper()
+    alter = _optional_int_text(_child(pitch_node, "alter")) or 0
+    octave = _optional_int_text(_child(pitch_node, "octave")) or 4
+    midi = (octave + 1) * 12 + {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}[step] + alter
+    accidental = "#" if alter == 1 else "b" if alter == -1 else f"{alter:+d}" if alter else ""
+    return MusicXmlPitch(step=step, alter=alter, octave=octave, midi=midi, name=f"{step}{accidental}{octave}")
+
+
+def _ties(note: ET.Element) -> list[Literal["start", "stop"]]:
+    values: list[Literal["start", "stop"]] = []
+    for tie in _children(note, "tie"):
+        tie_type = tie.get("type")
+        if tie_type in ("start", "stop") and tie_type not in values:
+            values.append(tie_type)
+    notations = _child(note, "notations")
+    if notations is not None:
+        for tied in _children(notations, "tied"):
+            tied_type = tied.get("type")
+            if tied_type in ("start", "stop") and tied_type not in values:
+                values.append(tied_type)
+    return values
+
+
+def _tuplet(note: ET.Element) -> MusicXmlTuplet | None:
+    time_modification = _child(note, "time-modification")
+    if time_modification is None:
+        return None
+    actual = _optional_int_text(_child(time_modification, "actual-notes"))
+    normal = _optional_int_text(_child(time_modification, "normal-notes"))
+    if actual is None or normal is None:
+        return None
+    return MusicXmlTuplet(actual_notes=actual, normal_notes=normal)
+
+
+def _techniques(
+    note: ET.Element,
+    source_path: str,
+    warnings: list[MusicXmlWarning],
+) -> list[MusicXmlTechnique]:
+    notations = _child(note, "notations")
+    if notations is None:
+        return []
+
+    techniques: list[MusicXmlTechnique] = []
+    for slide in _children(notations, "slide"):
+        techniques.append(
+            MusicXmlTechnique(
+                kind="slide",
+                state=_technique_state(slide.get("type")),
+                text=_text(slide),
+                source_path=f"{source_path}/notations/slide",
+            )
+        )
+    for slur in _children(notations, "slur"):
+        techniques.append(
+            MusicXmlTechnique(
+                kind="slur",
+                state=_technique_state(slur.get("type")),
+                text=_text(slur),
+                source_path=f"{source_path}/notations/slur",
+            )
+        )
+
+    ornaments = _child(notations, "ornaments")
+    if ornaments is not None and _child(ornaments, "wavy-line") is not None:
+        techniques.append(MusicXmlTechnique(kind="vibrato", source_path=f"{source_path}/notations/ornaments/wavy-line"))
+
+    technical = _child(notations, "technical")
+    if technical is None:
+        return techniques
+
+    for child in list(technical):
+        name = _local_name(child.tag)
+        child_path = f"{source_path}/notations/technical/{name}"
+        if name in {"string", "fret", "fingering"}:
+            continue
+        if name in {"hammer-on", "pull-off"}:
+            techniques.append(
+                MusicXmlTechnique(
+                    kind=name,
+                    state=_technique_state(child.get("type")),
+                    text=_text(child),
+                    source_path=child_path,
+                )
+            )
+        elif name == "bend":
+            bend_alter = _optional_float_text(_child(child, "bend-alter"))
+            techniques.append(
+                MusicXmlTechnique(
+                    kind="bend",
+                    semitones=bend_alter,
+                    text=_text(child),
+                    source_path=child_path,
+                )
+            )
+        elif name == "other-technical" and ((_text(child) or "").lower().startswith(("vib", "~"))):
+            techniques.append(MusicXmlTechnique(kind="vibrato", text=_text(child), source_path=child_path))
+        else:
+            warnings.append(
+                MusicXmlWarning(
+                    code="unsupported-technical-notation",
+                    message=f"MusicXML technical notation '{name}' is preserved as unsupported.",
+                    source_path=child_path,
+                )
+            )
+            techniques.append(
+                MusicXmlTechnique(
+                    kind="unsupported",
+                    text=name if _text(child) is None else _text(child),
+                    source_path=child_path,
+                )
+            )
+    return techniques
+
+
+def _technique_state(value: str | None) -> Literal["start", "stop", "continue", "single", "unknown"]:
+    if value in {"start", "stop", "continue", "single"}:
+        return value
+    return "unknown"
+
+
+def _harmony_kind_suffix(kind: str | None) -> str:
+    if kind is None:
+        return ""
+    mapping = {
+        "major": "",
+        "minor": "m",
+        "dominant": "7",
+        "major-seventh": "maj7",
+        "minor-seventh": "m7",
+        "diminished": "dim",
+        "augmented": "aug",
+        "suspended-fourth": "sus4",
+        "suspended-second": "sus2",
+    }
+    return mapping.get(kind, kind)
+
+
+def _expected_measure_duration_divisions(measure: MusicXmlMeasure) -> int | None:
+    value = Fraction(measure.time_signature.numerator * measure.divisions * 4, measure.time_signature.denominator)
+    if value.denominator != 1:
+        return None
+    return int(value)
+
+
+def _measure_timing_groups(measure: MusicXmlMeasure) -> list[list[MusicXmlNote]]:
+    groups: dict[tuple[int, int, int, bool], list[MusicXmlNote]] = {}
+    for note in measure.notes:
+        key = (note.onset_divisions, note.voice, note.duration_divisions, note.is_rest)
+        groups.setdefault(key, []).append(note)
+    return [
+        group
+        for _, group in sorted(groups.items(), key=lambda item: (item[0][1], item[0][0], item[0][2], item[1][0].note_index))
+    ]
+
+
+def _duration(node: ET.Element) -> int:
+    return _int_text(_child(node, "duration"), default=0)
+
+
+def _int_text(node: ET.Element | None, default: int) -> int:
+    value = _optional_int_text(node)
+    return default if value is None else value
+
+
+def _optional_int_text(node: ET.Element | None) -> int | None:
+    value = _text(node)
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
+def _optional_float_text(node: ET.Element | None) -> float | None:
+    value = _text(node)
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        return None
+
+
+def _text(node: ET.Element | None) -> str | None:
+    if node is None or node.text is None:
+        return None
+    value = node.text.strip()
+    return value or None
+
+
+def _child(node: ET.Element, name: str) -> ET.Element | None:
+    for child in list(node):
+        if _local_name(child.tag) == name:
+            return child
+    return None
+
+
+def _children(node: ET.Element, name: str) -> list[ET.Element]:
+    return [child for child in list(node) if _local_name(child.tag) == name]
+
+
+def _descendants(node: ET.Element, name: str) -> list[ET.Element]:
+    return [child for child in node.iter() if _local_name(child.tag) == name]
+
+
+def _first_descendant(node: ET.Element, name: str) -> ET.Element | None:
+    for child in node.iter():
+        if child is not node and _local_name(child.tag) == name:
+            return child
+    return None
+
+
+def _has_descendant(node: ET.Element, name: str) -> bool:
+    return any(_local_name(child.tag) == name for child in node.iter())
+
+
+def _local_name(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1]
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return f"sha256:{digest.hexdigest()}"

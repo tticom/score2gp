@@ -1,0 +1,15 @@
+{
+  "schema_version": "tabraw.v0.1",
+  "source_pdf": "invalid.pdf",
+  "candidates": [
+    {
+      "id": "bad-fret",
+      "kind": "fret",
+      "raw_text": "99",
+      "parsed_fret": 99,
+      "string": 1,
+      "confidence": 0.5
+    }
+  ],
+  "warnings": []
+}

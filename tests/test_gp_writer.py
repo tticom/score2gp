@@ -50,3 +50,20 @@ def test_compare_generated_gp_semantics(tmp_path) -> None:
     comparison = compare_gp(expected, actual)
     assert comparison["matches"] is True
     assert comparison["differences"] == {}
+
+
+def test_write_gp_warns_for_unsupported_scoreir_fields(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/tiny_score.ir.json")
+    data = score.model_dump(mode="json")
+    data["tracks"][0]["midi_program"] = 30
+    data["bars"][0]["events"][0]["notes"][0]["techniques"] = [
+        {"kind": "bend", "semitones": 1.0}
+    ]
+    score_with_unsupported = ScoreIR.model_validate(data)
+
+    out = tmp_path / "warnings.gp"
+    warnings = write_gp(score_with_unsupported, out)
+
+    assert any("MIDI" in warning for warning in warnings)
+    assert any("technique 'bend'" in warning for warning in warnings)
+    assert zipfile.is_zipfile(out)
