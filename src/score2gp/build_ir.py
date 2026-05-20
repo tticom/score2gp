@@ -58,11 +58,13 @@ class BuildIrInputRiskError(ValueError):
         stage: str,
         message: str,
         timing_issues: list[MusicXmlTimingIssue] | None = None,
+        details: dict[str, object] | None = None,
     ) -> None:
         super().__init__(message)
         self.category = category
         self.stage = stage
         self.timing_issues = timing_issues or []
+        self.details = details or {}
 
     def to_diagnostics_payload(self) -> dict[str, object]:
         issue_counts: dict[str, int] = {}
@@ -76,6 +78,7 @@ class BuildIrInputRiskError(ValueError):
             "timing_issue_count": len(self.timing_issues),
             "timing_issue_counts": dict(sorted(issue_counts.items())),
             "timing_issues": [issue.model_dump(mode="json", exclude_none=True) for issue in self.timing_issues],
+            "details": self.details,
         }
 
 
@@ -241,6 +244,17 @@ def build_ir_with_diagnostics_from_imports(musicxml: MusicXmlImport, tabraw: Tab
                 f"{len(fatal_timing_issues)} overfull or overlapping event(s) would violate ScoreIR timing."
             ),
             timing_issues=timing_issues,
+        )
+    grouping_risk = _tabraw_grouping_risk(tabraw)
+    if grouping_risk is not None:
+        raise BuildIrInputRiskError(
+            category="missing_pdf_grouping",
+            stage="tabraw-import",
+            message=(
+                "TabRaw extraction found playable fret candidates, but system/string/bar grouping is missing; "
+                "build-ir will not treat ungrouped PDF text as reliable musical evidence."
+            ),
+            details=grouping_risk,
         )
     warnings.extend(_tabraw_warnings(tabraw))
     if musicxml.tempo_bpm is None:
@@ -515,20 +529,19 @@ class CandidatePools:
         return cls(pools=dict(pools))
 
     def pop(self, bar_index: int, *, event_id: str, musicxml_note_id: str) -> TabCandidate | None:
-        for key in (bar_index, None):
-            pool = self.pools.get(key)
-            if pool:
-                candidate = pool.pop(0)
-                self.consumed.append(
-                    CandidateUse(
-                        candidate=candidate,
-                        requested_bar_index=bar_index,
-                        source_pool_bar_index=key,
-                        event_id=event_id,
-                        musicxml_note_id=musicxml_note_id,
-                    )
+        pool = self.pools.get(bar_index)
+        if pool:
+            candidate = pool.pop(0)
+            self.consumed.append(
+                CandidateUse(
+                    candidate=candidate,
+                    requested_bar_index=bar_index,
+                    source_pool_bar_index=bar_index,
+                    event_id=event_id,
+                    musicxml_note_id=musicxml_note_id,
                 )
-                return candidate
+            )
+            return candidate
         return None
 
     def unused(self) -> list[TabCandidate]:
@@ -1009,6 +1022,36 @@ def _x_to_onset_warnings(
     if len(x_groups) == 1 and len(onset_groups) == 1:
         warnings.append("single onset group cannot calibrate x-to-onset spacing")
     return warnings
+
+
+def _tabraw_grouping_risk(tabraw: TabRaw) -> dict[str, object] | None:
+    playable = [candidate for candidate in tabraw.candidates if candidate.parsed_fret is not None]
+    if not playable:
+        return None
+
+    counts: dict[str, object] = {
+        "total_candidate_count": len(tabraw.candidates),
+        "playable_candidate_count": len(playable),
+        "playable_candidates_with_system": sum(1 for candidate in playable if candidate.system_index is not None),
+        "playable_candidates_with_bar": sum(1 for candidate in playable if candidate.bar_index is not None),
+        "playable_candidates_with_string": sum(1 for candidate in playable if candidate.string is not None),
+    }
+    missing = []
+    if counts["playable_candidates_with_system"] == 0:
+        missing.append("system")
+    if counts["playable_candidates_with_bar"] == 0:
+        missing.append("bar")
+    if counts["playable_candidates_with_string"] == 0:
+        missing.append("string")
+    if not missing:
+        return None
+    counts["missing_grouping_dimensions"] = missing
+    counts["warning_codes"] = [
+        str(warning.get("code"))
+        for warning in tabraw.warnings
+        if warning.get("code") in {"missing_pdf_grouping", "pdf-tab-system-not-detected"}
+    ]
+    return counts
 
 
 def _x_to_onset_quality(

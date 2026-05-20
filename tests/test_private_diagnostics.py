@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from zipfile import ZIP_DEFLATED, ZipFile
 
 from score2gp.private_diagnostics import SUMMARY_SCHEMA_VERSION, run_private_diagnostic_smoke
 
@@ -10,6 +11,23 @@ SCORELIKE_PDF = Path("tests/fixtures/pdf/generated_scorelike_tab.pdf")
 SCORELIKE_MUSICXML = Path("tests/fixtures/musicxml/generated_scorelike_tab.musicxml")
 OVERFULL_MUSICXML = Path("tests/fixtures/musicxml/audiveris_like_overfull_bar.musicxml")
 UNSTRUCTURED_PDF = Path("tests/fixtures/pdf/generated_unstructured_tab_text.pdf")
+
+
+def _write_public_mxl(tmp_path: Path, source: Path) -> Path:
+    mxl = tmp_path / "public_fixture.mxl"
+    with ZipFile(mxl, "w", ZIP_DEFLATED) as package:
+        package.writestr(
+            "META-INF/container.xml",
+            """<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="scores/score.musicxml" media-type="application/vnd.recordare.musicxml+xml"/>
+  </rootfiles>
+</container>
+""",
+        )
+        package.writestr("scores/score.musicxml", source.read_text(encoding="utf-8"))
+    return mxl
 
 
 def test_private_diagnostic_runner_writes_sanitized_public_fixture_summary(tmp_path) -> None:
@@ -94,6 +112,24 @@ def test_private_diagnostic_runner_distinguishes_pdf_grouping_failure(tmp_path) 
     assert summary["extraction"]["inferred_system_count"] == 0
     assert summary["extraction"]["inferred_bar_count"] == 0
     assert summary["extraction"]["candidates_with_string"] == 0
+    assert summary["extraction"]["grouping_status"] == "missing_pdf_grouping"
+    assert "missing_pdf_grouping" in summary["extraction"]["grouping_warning_codes"]
+    assert summary["extraction"]["warning_counts"]["missing_pdf_grouping"] == 1
     assert summary["build_ir"]["ran"] is False
     assert "missing_pdf_grouping" in summary["suitability"]["recommendation_categories"]
     assert "alignment_not_attempted" in summary["suitability"]["recommendation_categories"]
+
+
+def test_private_diagnostic_runner_uses_native_mxl_import_without_unpacking(tmp_path) -> None:
+    mxl = _write_public_mxl(tmp_path, SCORELIKE_MUSICXML)
+    out_dir = tmp_path / "private_diagnostics" / "native_mxl"
+
+    summary = run_private_diagnostic_smoke(pdf_path=SCORELIKE_PDF, musicxml_path=mxl, out_dir=out_dir)
+
+    assert summary["musicxml"]["input_format"] == "mxl"
+    assert summary["musicxml"]["native_mxl_import"] is True
+    assert summary["musicxml"]["unpacked_mxl"] is False
+    assert summary["musicxml"]["mxl_rootfile"] == "scores/score.musicxml"
+    assert not (out_dir / "prepared.musicxml").exists()
+    assert (out_dir / "score.ir.json").exists()
+    assert summary["validation"] == {"ran": True, "valid": True, "error_count": 0}

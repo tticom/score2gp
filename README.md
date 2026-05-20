@@ -9,7 +9,7 @@ This project does **not** promise perfect PDF-to-Guitar-Pro conversion. Printed 
 Implemented now:
 
 - Strict `ScoreIR` pydantic models.
-- Limited uncompressed MusicXML importer for synthetic fixtures, including simple harmony, tuplets, and selected guitar techniques.
+- Limited MusicXML importer for synthetic fixtures, including plain `.musicxml`/`.xml`, native `.mxl` packages, simple harmony, tuplets, and selected guitar techniques.
 - `tabraw.v0.1` candidate model with unique stable IDs, spatial evidence, confidence, and provenance.
 - Narrow `build-ir` path from synthetic MusicXML + TabRaw into valid ScoreIR with optional `build-ir-diagnostics.v0.1` sidecar output.
 - Public generated born-digital PDF fixtures proving that real `extract-tab` output can feed the diagnostics-backed `build-ir` path, including score-like and uneven-spacing fixtures.
@@ -26,7 +26,7 @@ Planned next:
 - More robust PDF system and tab-line detection beyond controlled generated fixtures.
 - Private-fixture evaluation after public x-to-onset diagnostics stay stable.
 - Tab number/chord/technique extraction from real born-digital PDFs.
-- `.mxl` package parsing and broader Audiveris MusicXML intake.
+- broader Audiveris MusicXML intake beyond the currently supported native `.mxl` rootfile path.
 - Real MusicXML/tab alignment from owned score PDFs.
 - Better GPIF coverage for techniques and layout.
 

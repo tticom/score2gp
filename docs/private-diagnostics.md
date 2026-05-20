@@ -59,6 +59,7 @@ The summary uses input basenames only and omits candidate text dumps. It reports
 - total, playable, and non-playable candidate counts
 - chord-symbol, technique-text, and unknown-text candidate counts
 - inferred system and bar counts
+- grouping status and grouping warning codes
 - matched playable candidate count
 - unmatched MusicXML event and note counts
 - unmatched playable TabRaw candidate count
@@ -72,7 +73,7 @@ The summary uses input basenames only and omits candidate text dumps. It reports
 - recommendation categories such as `missing_pdf_grouping`, `musicxml_timing_risk`, `alignment_not_attempted`, and `validation_failed`
 - a recommended next diagnostic action
 
-The most recent controlled private experiment is recorded only as sanitized counts: extraction found many PDF text candidates, but inferred zero systems, zero bars, and zero strings. The matching Audiveris MXL was unpacked locally, but build-ir did not reach alignment because MusicXML timing risk would have produced invalid ScoreIR. No private PDF, MXL, TabRaw, IR, diagnostics, or report content should be committed.
+The most recent controlled private experiment is recorded only as sanitized counts: extraction found many PDF text candidates, but inferred zero systems, zero bars, and zero strings. The matching Audiveris MXL is now handled by native importer intake rather than being unpacked by the private runner. In the prior run, build-ir did not reach alignment because MusicXML timing risk would have produced invalid ScoreIR. No private PDF, MXL, TabRaw, IR, diagnostics, or report content should be committed.
 
 ## Reading Quality
 
@@ -86,7 +87,7 @@ The most recent controlled private experiment is recorded only as sanitized coun
 
 Poor or unknown bars are conversion risks. They should not be hidden or smoothed over.
 
-`missing_pdf_grouping` means extraction found candidates but did not infer enough system/string/bar evidence to align them safely. `musicxml_timing_risk` means the MusicXML timing preflight found an overfull bar or similar structure that would violate ScoreIR. `alignment_not_attempted` means the run stopped before x-to-onset alignment. `validation_failed` means output validation failed and needs public reproduction before private-specific debugging.
+`missing_pdf_grouping` means extraction found candidates but did not infer enough system/string/bar evidence to align them safely. If this category reaches `build-ir`, ScoreIR output is refused so ungrouped PDF text cannot become notes by accident. `musicxml_timing_risk` means the MusicXML timing preflight found an overfull bar or similar structure that would violate ScoreIR. `alignment_not_attempted` means the run stopped before x-to-onset alignment. `validation_failed` means output validation failed and needs public reproduction before private-specific debugging.
 
 ## Current Limits
 

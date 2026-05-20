@@ -31,6 +31,8 @@
 - Run private fixtures only through ignored diagnostic workflows with sanitized summaries.
 - Reproduce private failure classes with public fixtures: Audiveris-like MusicXML timing risk and PDF extraction without grouping.
 - Refuse overfull MusicXML before writing invalid ScoreIR.
+- Parse native Audiveris `.mxl` packages through the main MusicXML importer without unpacking private content to disk.
+- Refuse PDF-derived TabRaw with playable candidates but missing system/string/bar grouping before writing ScoreIR.
 
 ## Milestone 4: GPIF coverage
 

@@ -2,9 +2,9 @@
 
 ## Next
 
-- [ ] Add compressed `.mxl` parsing to the main MusicXML importer for Audiveris exports.
-- [ ] Improve PDF system detection using public fixtures that resemble the private grouping failure.
 - [ ] Add overlays or HTML reports for extraction succeeded/grouping failed cases.
+- [ ] Improve PDF system detection using public fixtures that resemble the private grouping failure.
+- [ ] Add structured per-page extraction diagnostics for missing grouping and low-confidence system candidates.
 - [ ] Add public reproductions for more Audiveris timing patterns before another private run.
 - [ ] Attach PDF-derived chord symbols and technique text to ScoreIR events once timing calibration exists.
 - [ ] Add HTML conversion report styling and unsupported-technique summaries.
@@ -33,3 +33,5 @@
 - [x] Public Audiveris-like MusicXML timing-risk fixtures.
 - [x] Preflight overfull MusicXML before writing invalid ScoreIR.
 - [x] Public generated PDF fixture for extraction succeeded/grouping failed diagnostics.
+- [x] Native compressed `.mxl` parsing in the main MusicXML importer.
+- [x] `build-ir` refusal for PDF-derived playable candidates with missing system/string/bar grouping.

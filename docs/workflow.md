@@ -2,7 +2,7 @@
 
 This document describes the intended staged workflow from an owned PDF score to a Guitar Pro `.gp` package.
 
-The full PDF-to-GP workflow is not complete yet. The current project can inspect PDFs, run Audiveris, parse a limited uncompressed MusicXML subset, build ScoreIR from synthetic MusicXML plus TabRaw fixtures, run controlled generated-PDF extraction/alignment smoke tests with x-to-onset diagnostics, inspect/write minimal GP packages, and validate generated packages. Private real-world PDF-derived MusicXML/tab alignment is still pending.
+The full PDF-to-GP workflow is not complete yet. The current project can inspect PDFs, run Audiveris, parse a limited MusicXML subset from `.musicxml`, `.xml`, or native `.mxl` packages, build ScoreIR from synthetic MusicXML plus TabRaw fixtures, run controlled generated-PDF extraction/alignment smoke tests with x-to-onset diagnostics, inspect/write minimal GP packages, and validate generated packages. Private real-world PDF-derived MusicXML/tab alignment is still pending.
 
 ## 1. Start From The Project Directory
 
@@ -149,7 +149,7 @@ Future real-input command:
 
 ```powershell
 python -m score2gp.cli build-ir `
-  --musicxml "work/derek/omr/Derek Trucks BB King.musicxml" `
+  --musicxml "work/derek/omr/Derek Trucks BB King.mxl" `
   --tabraw "work/derek/tab/tab_raw.json" `
   --out "work/derek/score.ir.json"
 ```
@@ -184,7 +184,7 @@ python -m score2gp.cli build-ir `
   --diagnostics-out "work/generated_pdf/generated_uneven_spacing_tab.diagnostics.json"
 ```
 
-Current status: implemented for limited synthetic fixtures and controlled generated-PDF fixtures. It uses MusicXML for measure timing, rests, voices, chords, backup/forward timing, chord symbols, tuplets, and selected note techniques. It uses TabRaw for string/fret candidates and simple bar/x-order alignment. It emits warnings for unused candidates, non-fret TabRaw candidates that are preserved but not aligned, missing tab evidence, and pitch mismatches. The optional diagnostics file reports imported, matched, unmatched, ignored non-playable, extraction-quality, per-system, per-bar, and x-to-onset summaries. It uses standard guitar tuning as an explicit placeholder. Private real-world fixture alignment is still deferred.
+Current status: implemented for limited synthetic fixtures and controlled generated-PDF fixtures. It uses MusicXML for measure timing, rests, voices, chords, backup/forward timing, chord symbols, tuplets, and selected note techniques. It accepts plain MusicXML/XML and compressed MXL packages by reading `META-INF/container.xml` and the declared rootfile directly from the zip package. It uses TabRaw for string/fret candidates and simple bar/x-order alignment. It emits warnings for unused candidates, non-fret TabRaw candidates that are preserved but not aligned, missing tab evidence, and pitch mismatches. The optional diagnostics file reports imported, matched, unmatched, ignored non-playable, extraction-quality, per-system, per-bar, and x-to-onset summaries. It uses standard guitar tuning as an explicit placeholder. Private real-world fixture alignment is still deferred.
 
 `build-ir` now preflights MusicXML timing before writing ScoreIR. Public Audiveris-like fixtures under `tests/fixtures/musicxml/` cover overfull bars, 12/8 compound-meter assumptions, and backup/forward timing movement. Overfull bars or same-voice overlaps are treated as timing risk and refused before invalid ScoreIR is written:
 
@@ -197,6 +197,8 @@ python -m score2gp.cli build-ir `
 ```
 
 This command is expected to exit non-zero and write a `build-ir-failure-diagnostics.v0.1` payload when `--diagnostics-out` is supplied. That is intentional: the project should refuse known-invalid timing rather than rely on a later generic ScoreIR validation error.
+
+`build-ir` also refuses PDF-derived TabRaw when playable fret candidates exist but system/string/bar grouping is absent. In that case the failure category is `missing_pdf_grouping`, and no ScoreIR file is written. This keeps ungrouped fret text from being treated as reliable musical evidence.
 
 When reading `build-ir-diagnostics.v0.1`, check each bar's `quality`, `candidate_x_groups`, `musicxml_onset_groups`, `mean_absolute_relative_error`, `max_relative_error`, `ambiguous_x_group_count`, and `x_to_onset_warnings`. `good` means the current x-order heuristic is internally consistent for the controlled input. `warning`, `poor`, or `unknown` should block trust in automatic conversion until the geometry is inspected.
 
@@ -213,7 +215,7 @@ python scripts/private_diagnostic_smoke.py `
 
 If matching MusicXML is missing, omit `--musicxml`; the runner will stop after PDF extraction and record that `build-ir` was not run. The compact `summary.json` and `summary.md` use basenames and counts only; full TabRaw, IR, diagnostics, rendered pages, and overlays remain private artifacts under ignored `work/`.
 
-The summary can distinguish `missing_pdf_grouping`, `musicxml_timing_risk`, `alignment_not_attempted`, and `validation_failed` recommendation categories. This is diagnostic evidence only; it is not a conversion claim.
+The summary can distinguish `missing_pdf_grouping`, `musicxml_timing_risk`, `alignment_not_attempted`, and `validation_failed` recommendation categories. MXL inputs are read natively by the importer; the private runner does not unpack them to `prepared.musicxml`. This is diagnostic evidence only; it is not a conversion claim.
 
 ## 6. Write Guitar Pro Package
 

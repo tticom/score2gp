@@ -1,10 +1,36 @@
 from __future__ import annotations
 
 from pathlib import Path
+from zipfile import ZIP_DEFLATED, ZipFile
 
-from score2gp.musicxml import analyze_musicxml_timing, parse_musicxml
+import pytest
+
+from score2gp.musicxml import analyze_musicxml_timing, mxl_rootfile_path, parse_musicxml
 
 FIXTURES = Path("tests/fixtures/musicxml")
+
+
+def _fixture_text(name: str) -> str:
+    return (FIXTURES / name).read_text(encoding="utf-8")
+
+
+def _container(rootfile: str) -> str:
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="{rootfile}" media-type="application/vnd.recordare.musicxml+xml"/>
+  </rootfiles>
+</container>
+"""
+
+
+def _write_mxl(tmp_path: Path, *, rootfile: str, musicxml: str, include_container: bool = True) -> Path:
+    path = tmp_path / "score.mxl"
+    with ZipFile(path, "w", ZIP_DEFLATED) as package:
+        if include_container:
+            package.writestr("META-INF/container.xml", _container(rootfile))
+        package.writestr(rootfile, musicxml)
+    return path
 
 
 def test_musicxml_importer_parses_tiny_partwise_score() -> None:
@@ -142,3 +168,82 @@ def test_musicxml_timing_preflight_records_backup_forward_risk() -> None:
 
     assert [(issue.code, issue.severity) for issue in issues] == [("musicxml-overfull-bar", "error")]
     assert issues[0].voice == 2
+
+
+def test_musicxml_importer_parses_valid_mxl_with_container(tmp_path) -> None:
+    mxl = _write_mxl(tmp_path, rootfile="score.musicxml", musicxml=_fixture_text("tiny_single_bar.musicxml"))
+
+    imported = parse_musicxml(mxl)
+
+    assert mxl_rootfile_path(mxl) == "score.musicxml"
+    assert imported.metadata.title == "Tiny MusicXML Test"
+    assert imported.source_path == str(mxl)
+    assert imported.parts[0].measures[0].notes[0].pitch is not None
+
+
+def test_musicxml_importer_parses_nested_mxl_rootfile(tmp_path) -> None:
+    mxl = _write_mxl(tmp_path, rootfile="scores/nested.musicxml", musicxml=_fixture_text("tiny_multibar.musicxml"))
+
+    imported = parse_musicxml(mxl)
+
+    assert mxl_rootfile_path(mxl) == "scores/nested.musicxml"
+    assert imported.metadata.title == "Tiny Multibar"
+    assert len(imported.parts[0].measures) == 2
+
+
+def test_musicxml_importer_rejects_mxl_missing_container(tmp_path) -> None:
+    mxl = _write_mxl(
+        tmp_path,
+        rootfile="score.musicxml",
+        musicxml=_fixture_text("tiny_single_bar.musicxml"),
+        include_container=False,
+    )
+
+    with pytest.raises(ValueError, match="META-INF/container.xml"):
+        parse_musicxml(mxl)
+
+
+def test_musicxml_importer_rejects_mxl_missing_declared_rootfile(tmp_path) -> None:
+    mxl = tmp_path / "missing-rootfile.mxl"
+    with ZipFile(mxl, "w", ZIP_DEFLATED) as package:
+        package.writestr("META-INF/container.xml", _container("missing/score.musicxml"))
+
+    with pytest.raises(ValueError, match="declared MusicXML rootfile"):
+        parse_musicxml(mxl)
+
+
+def test_musicxml_importer_rejects_malformed_mxl(tmp_path) -> None:
+    mxl = tmp_path / "not-a-zip.mxl"
+    mxl.write_bytes(b"not a zip package")
+
+    with pytest.raises(ValueError, match="invalid compressed MusicXML package"):
+        parse_musicxml(mxl)
+
+
+def test_musicxml_importer_rejects_empty_mxl(tmp_path) -> None:
+    mxl = tmp_path / "empty.mxl"
+    with ZipFile(mxl, "w", ZIP_DEFLATED):
+        pass
+
+    with pytest.raises(ValueError, match="empty"):
+        parse_musicxml(mxl)
+
+
+def test_musicxml_importer_rejects_unsafe_mxl_rootfile_path(tmp_path) -> None:
+    mxl = tmp_path / "unsafe.mxl"
+    with ZipFile(mxl, "w", ZIP_DEFLATED) as package:
+        package.writestr("META-INF/container.xml", _container("../score.musicxml"))
+        package.writestr("score.musicxml", _fixture_text("tiny_single_bar.musicxml"))
+
+    with pytest.raises(ValueError, match="unsafe"):
+        parse_musicxml(mxl)
+
+
+def test_musicxml_timing_preflight_detects_overfull_bar_inside_mxl(tmp_path) -> None:
+    mxl = _write_mxl(tmp_path, rootfile="score.musicxml", musicxml=_fixture_text("audiveris_like_overfull_bar.musicxml"))
+
+    imported = parse_musicxml(mxl)
+    issues = analyze_musicxml_timing(imported)
+
+    assert [(issue.code, issue.severity) for issue in issues] == [("musicxml-overfull-bar", "error")]
+    assert issues[0].end_divisions == 20

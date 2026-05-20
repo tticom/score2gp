@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from score2gp.build_ir import build_ir_from_files
+import pytest
+
+from score2gp.build_ir import BuildIrInputRiskError, build_ir_from_files
 from score2gp.ir import validate_score_ir_file
 from score2gp.pdf import extract_tab, inspect_pdf
 from score2gp.tabraw import TabRaw
@@ -285,3 +287,24 @@ def test_unstructured_pdf_preserves_candidates_but_reports_missing_grouping(tmp_
     assert all(candidate.bar_index is None for candidate in first.candidates)
     assert all(candidate.string is None for candidate in fret_candidates)
     assert any(warning["code"] == "pdf-tab-system-not-detected" for warning in first.warnings)
+    grouping_warnings = [warning for warning in first.warnings if warning["code"] == "missing_pdf_grouping"]
+    assert len(grouping_warnings) == 1
+    assert grouping_warnings[0]["grouping_status"] == "missing_pdf_grouping"
+    assert set(grouping_warnings[0]["missing_grouping_dimensions"]) == {"system", "bar", "string"}
+
+
+def test_build_ir_refuses_unstructured_pdf_tabraw_before_scoreir_output(tmp_path) -> None:
+    tabraw_path = tmp_path / "generated_unstructured_tab_text.tabraw.json"
+    ir_path = tmp_path / "generated_unstructured_tab_text.ir.json"
+
+    extract_tab(UNSTRUCTURED_PDF, tabraw_path)
+
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+
+    assert not ir_path.exists()
+    assert raised.value.category == "missing_pdf_grouping"
+    payload = raised.value.to_diagnostics_payload()
+    assert payload["stage"] == "tabraw-import"
+    assert payload["details"]["playable_candidate_count"] == 6
+    assert set(payload["details"]["missing_grouping_dimensions"]) == {"system", "bar", "string"}
