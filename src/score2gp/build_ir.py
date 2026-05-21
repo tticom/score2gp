@@ -248,14 +248,26 @@ def build_ir_with_diagnostics_from_imports(musicxml: MusicXmlImport, tabraw: Tab
     grouping_risk = _tabraw_grouping_risk(tabraw)
     if grouping_risk is not None:
         category = str(grouping_risk.get("category", "missing_pdf_grouping"))
-        grouping_phrase = "partial or missing" if category == "partial_pdf_grouping" else "missing"
+        if category == "ascii_tab_timing_unavailable":
+            message = (
+                "TabRaw extraction found ASCII-tab fret candidates with row/string evidence, but no safe "
+                "MusicXML timing or bar alignment; build-ir will not guess timing from character positions."
+            )
+        elif category == "partial_ascii_tab_grouping":
+            message = (
+                "TabRaw extraction found ASCII-tab fret candidates, but the ASCII row grouping is partial; "
+                "build-ir will not treat incomplete ASCII tab text as reliable musical evidence."
+            )
+        else:
+            grouping_phrase = "partial or missing" if category == "partial_pdf_grouping" else "missing"
+            message = (
+                f"TabRaw extraction found playable fret candidates, but system/string/bar grouping is {grouping_phrase}; "
+                "build-ir will not treat unsafe PDF text as reliable musical evidence."
+            )
         raise BuildIrInputRiskError(
             category=category,
             stage="tabraw-import",
-            message=(
-                f"TabRaw extraction found playable fret candidates, but system/string/bar grouping is {grouping_phrase}; "
-                "build-ir will not treat unsafe PDF text as reliable musical evidence."
-            ),
+            message=message,
             details=grouping_risk,
         )
     warnings.extend(_tabraw_warnings(tabraw))
@@ -1030,6 +1042,13 @@ def _tabraw_grouping_risk(tabraw: TabRaw) -> dict[str, object] | None:
     playable = [candidate for candidate in tabraw.candidates if candidate.parsed_fret is not None]
     if not playable:
         return None
+    warning_codes = [
+        str(warning.get("code"))
+        for warning in tabraw.warnings
+        if warning.get("code")
+    ]
+    ascii_timing_unavailable = "ascii_tab_timing_unavailable" in warning_codes
+    partial_ascii_grouping = "partial_ascii_tab_grouping" in warning_codes
 
     counts: dict[str, object] = {
         "total_candidate_count": len(tabraw.candidates),
@@ -1038,6 +1057,26 @@ def _tabraw_grouping_risk(tabraw: TabRaw) -> dict[str, object] | None:
         "playable_candidates_with_bar": sum(1 for candidate in playable if candidate.bar_index is not None),
         "playable_candidates_with_string": sum(1 for candidate in playable if candidate.string is not None),
     }
+    if ascii_timing_unavailable:
+        counts["category"] = "ascii_tab_timing_unavailable"
+        counts["grouping_status"] = "ascii_grouped"
+        counts["warning_codes"] = warning_codes
+        counts["missing_grouping_dimensions"] = ["bar"]
+        return counts
+    if partial_ascii_grouping:
+        counts["category"] = "partial_ascii_tab_grouping"
+        counts["grouping_status"] = "partial_ascii_tab_grouping"
+        counts["warning_codes"] = warning_codes
+        counts["missing_grouping_dimensions"] = [
+            dimension
+            for dimension, count_key in (
+                ("system", "playable_candidates_with_system"),
+                ("bar", "playable_candidates_with_bar"),
+                ("string", "playable_candidates_with_string"),
+            )
+            if int(counts[count_key]) < len(playable)
+        ]
+        return counts
     missing = []
     if counts["playable_candidates_with_system"] < len(playable):
         missing.append("system")
@@ -1088,6 +1127,8 @@ def _tabraw_unsafe_grouping_warning_codes(tabraw: TabRaw) -> list[str]:
         "incomplete_tab_staff",
         "ambiguous_string_assignment",
         "ambiguous_bar_assignment",
+        "ascii_tab_timing_unavailable",
+        "partial_ascii_tab_grouping",
     }
     return sorted({str(warning.get("code")) for warning in tabraw.warnings if warning.get("code") in unsafe})
 

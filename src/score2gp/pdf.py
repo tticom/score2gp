@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 from pathlib import Path
+import re
 from typing import Any
 
 from .report import (
@@ -11,7 +12,12 @@ from .report import (
     write_grouping_diagnostics_html,
     write_warnings,
 )
-from .tabraw import TABRAW_SCHEMA_VERSION, TabRaw, make_tab_candidate
+from .tabraw import TABRAW_SCHEMA_VERSION, TabRaw, make_tab_candidate, parse_fret_text
+
+ASCII_TAB_PARSER_VERSION = "ascii-tab.v0.1"
+_ASCII_TAB_LINE_RE = re.compile(r"^\s*([eEADGB])\|([0-9A-Za-z/\\~()|\s-]+)$")
+_ASCII_TAB_TOKEN_RE = re.compile(r"\d{1,2}|[\\/hpbvr~]+")
+_ASCII_TECHNIQUE_MARKERS = {"/", "\\", "h", "p", "b", "r", "v", "~"}
 
 
 def inspect_pdf(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
@@ -257,6 +263,88 @@ class _TabSystem:
         )
 
 
+@dataclass(frozen=True)
+class _AsciiTabRow:
+    page_index: int
+    block_number: int
+    line_number: int
+    label: str
+    body: str
+    text: str
+    bbox: tuple[float, float, float, float]
+    body_start: int
+    row_index: int = 0
+
+    @property
+    def x0(self) -> float:
+        return self.bbox[0]
+
+    @property
+    def y0(self) -> float:
+        return self.bbox[1]
+
+    @property
+    def x1(self) -> float:
+        return self.bbox[2]
+
+    @property
+    def y1(self) -> float:
+        return self.bbox[3]
+
+    @property
+    def y_center(self) -> float:
+        return (self.y0 + self.y1) / 2
+
+
+@dataclass(frozen=True)
+class _AsciiTabBlock:
+    page_index: int
+    system_index: int
+    staff_index: int
+    rows: list[_AsciiTabRow]
+
+    @property
+    def is_complete(self) -> bool:
+        return len(self.rows) == 6
+
+    @property
+    def grouping_status(self) -> str:
+        return "ascii_grouped" if self.is_complete else "partial_ascii_tab_grouping"
+
+    @property
+    def grouping_confidence(self) -> float:
+        return 0.78 if self.is_complete else 0.45
+
+    @property
+    def grouping_warnings(self) -> list[str]:
+        if self.is_complete:
+            return []
+        return ["partial_ascii_tab_grouping"]
+
+    @property
+    def staff_bbox(self) -> dict[str, float | int]:
+        return {
+            "page": self.page_index,
+            "x0": round(min(row.x0 for row in self.rows), 3),
+            "y0": round(min(row.y0 for row in self.rows), 3),
+            "x1": round(max(row.x1 for row in self.rows), 3),
+            "y1": round(max(row.y1 for row in self.rows), 3),
+        }
+
+    @property
+    def line_ys(self) -> list[float]:
+        return [round(row.y_center, 3) for row in self.rows]
+
+    def contains_point(self, x: float | None, y: float | None) -> bool:
+        if x is None or y is None:
+            return False
+        bbox = self.staff_bbox
+        return (
+            float(bbox["x0"]) - 4.0 <= x <= float(bbox["x1"]) + 4.0
+            and float(bbox["y0"]) - 4.0 <= y <= float(bbox["y1"]) + 4.0
+        )
+
+
 def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     import fitz  # type: ignore[import-not-found]
 
@@ -265,6 +353,7 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]])
     with fitz.open(pdf_path) as doc:
         for page_number, page in enumerate(doc, start=1):
             systems = _detect_tab_systems(page, page_number)
+            ascii_blocks = _detect_ascii_tab_blocks(page, page_number, first_system_index=len(systems) + 1)
             if not systems:
                 warnings.append(
                     {
@@ -273,6 +362,14 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]])
                         "severity": "info",
                     }
                 )
+            if ascii_blocks:
+                warnings.extend(_ascii_tab_warnings(page_number, ascii_blocks))
+                ascii_candidates = _ascii_candidates_from_blocks(
+                    ascii_blocks,
+                    first_candidate_index=filtered_index + 1,
+                )
+                candidates.extend(ascii_candidates)
+                filtered_index += len(ascii_candidates)
             words = sorted(
                 page.get_text("words"),
                 key=lambda word: (round(float(word[1]), 3), round(float(word[0]), 3), str(word[4])),
@@ -284,6 +381,10 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]])
                 bbox_values = [float(word[0]), float(word[1]), float(word[2]), float(word[3])]
                 x = (bbox_values[0] + bbox_values[2]) / 2
                 y = (bbox_values[1] + bbox_values[3]) / 2
+                if _point_in_ascii_block(ascii_blocks, x, y):
+                    continue
+                if ascii_blocks and parse_fret_text(raw_text) is not None:
+                    continue
                 system = _nearest_system(systems, x, y)
                 line_index = None
                 string = None
@@ -349,6 +450,245 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]])
     return candidates
 
 
+def _detect_ascii_tab_blocks(page: Any, page_index: int, *, first_system_index: int = 1) -> list[_AsciiTabBlock]:
+    rows = _ascii_tab_rows(page, page_index)
+    if not rows:
+        return []
+    blocks: list[_AsciiTabBlock] = []
+    system_index = first_system_index
+    for group in _ascii_row_groups(rows):
+        indexed_rows = [
+            _AsciiTabRow(
+                page_index=row.page_index,
+                block_number=row.block_number,
+                line_number=row.line_number,
+                label=row.label,
+                body=row.body,
+                text=row.text,
+                bbox=row.bbox,
+                body_start=row.body_start,
+                row_index=index,
+            )
+            for index, row in enumerate(group, start=1)
+        ]
+        blocks.append(
+            _AsciiTabBlock(
+                page_index=page_index,
+                system_index=system_index,
+                staff_index=1,
+                rows=indexed_rows,
+            )
+        )
+        system_index += 1
+    return blocks
+
+
+def _ascii_tab_rows(page: Any, page_index: int) -> list[_AsciiTabRow]:
+    rows: list[_AsciiTabRow] = []
+    data = page.get_text("dict")
+    for block_number, block in enumerate(data.get("blocks", []), start=1):
+        for line_number, line in enumerate(block.get("lines", []), start=1):
+            spans = line.get("spans", [])
+            text = "".join(str(span.get("text", "")) for span in spans).rstrip()
+            parsed = _parse_ascii_tab_line(text)
+            if parsed is None:
+                continue
+            label, body, body_start = parsed
+            bbox_values = line.get("bbox") or block.get("bbox")
+            if not bbox_values or len(bbox_values) != 4:
+                continue
+            rows.append(
+                _AsciiTabRow(
+                    page_index=page_index,
+                    block_number=block_number,
+                    line_number=line_number,
+                    label=label,
+                    body=body,
+                    text=text,
+                    bbox=tuple(float(value) for value in bbox_values),
+                    body_start=body_start,
+                )
+            )
+    return sorted(rows, key=lambda row: (row.y_center, row.x0, row.block_number, row.line_number))
+
+
+def _parse_ascii_tab_line(text: str) -> tuple[str, str, int] | None:
+    match = _ASCII_TAB_LINE_RE.match(text.rstrip())
+    if match is None:
+        return None
+    label = match.group(1)
+    body = match.group(2)
+    if len(body) < 8:
+        return None
+    if not any(char.isdigit() for char in body) and body.count("-") < 6:
+        return None
+    pipe_index = text.find("|")
+    return label, body, pipe_index + 1
+
+
+def _ascii_row_groups(rows: list[_AsciiTabRow]) -> list[list[_AsciiTabRow]]:
+    groups: list[list[_AsciiTabRow]] = []
+    current: list[_AsciiTabRow] = []
+    for row in rows:
+        if not current:
+            current = [row]
+            continue
+        previous = current[-1]
+        y_gap = row.y_center - previous.y_center
+        x_aligned = abs(row.x0 - previous.x0) <= 18.0
+        if 4.0 <= y_gap <= 22.0 and x_aligned:
+            current.append(row)
+        else:
+            if len(current) >= 2:
+                groups.append(current)
+            current = [row]
+    if len(current) >= 2:
+        groups.append(current)
+
+    normalized: list[list[_AsciiTabRow]] = []
+    for group in groups:
+        if len(group) <= 6:
+            normalized.append(group)
+            continue
+        for index in range(0, len(group), 6):
+            chunk = group[index : index + 6]
+            if len(chunk) >= 2:
+                normalized.append(chunk)
+    return normalized
+
+
+def _ascii_tab_warnings(page_number: int, blocks: list[_AsciiTabBlock]) -> list[dict[str, Any]]:
+    complete_count = sum(1 for block in blocks if block.is_complete)
+    partial_count = len(blocks) - complete_count
+    warnings: list[dict[str, Any]] = [
+        {
+            "code": "ascii_tab_detected",
+            "message": f"ASCII-style tab text was detected on page {page_number}.",
+            "severity": "info",
+            "parser_version": ASCII_TAB_PARSER_VERSION,
+            "ascii_tab_block_count": len(blocks),
+            "ascii_tab_complete_block_count": complete_count,
+            "ascii_tab_partial_block_count": partial_count,
+        }
+    ]
+    if complete_count:
+        warnings.append(
+            {
+                "code": "ascii_tab_timing_unavailable",
+                "message": (
+                    "ASCII-tab rows provide string/fret evidence, but no safe MusicXML timing or bar alignment is "
+                    "available from the PDF alone; build-ir must not guess timing from character positions."
+                ),
+                "severity": "warning",
+                "grouping_status": "ascii_grouped",
+                "parser_version": ASCII_TAB_PARSER_VERSION,
+                "ascii_tab_complete_block_count": complete_count,
+            }
+        )
+    if partial_count:
+        warnings.append(
+            {
+                "code": "partial_ascii_tab_grouping",
+                "message": "ASCII-style tab text was detected, but at least one block has fewer than six tab rows.",
+                "severity": "warning",
+                "grouping_status": "partial_ascii_tab_grouping",
+                "parser_version": ASCII_TAB_PARSER_VERSION,
+                "ascii_tab_partial_block_count": partial_count,
+            }
+        )
+    return warnings
+
+
+def _ascii_candidates_from_blocks(
+    blocks: list[_AsciiTabBlock],
+    *,
+    first_candidate_index: int,
+) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    next_index = first_candidate_index
+    for block in blocks:
+        for row in block.rows:
+            for match in _ASCII_TAB_TOKEN_RE.finditer(row.body):
+                token = match.group(0)
+                is_fret = token.isdigit()
+                is_technique = not is_fret and any(char in _ASCII_TECHNIQUE_MARKERS for char in token)
+                if not is_fret and not is_technique:
+                    continue
+                char_start = row.body_start + match.start()
+                char_end = row.body_start + match.end()
+                bbox_values = _ascii_token_bbox(row, char_start, char_end)
+                candidate = make_tab_candidate(
+                    candidate_id=f"pdf-p{row.page_index:03d}-c{next_index:04d}",
+                    raw_text=token,
+                    page_index=row.page_index,
+                    bbox_values=bbox_values,
+                    confidence=_ascii_candidate_confidence(block, is_fret),
+                    system_index=block.system_index,
+                    staff_index=block.staff_index,
+                    bar_index=None,
+                    line_index=row.row_index,
+                    string=row.row_index if block.is_complete and is_fret else None,
+                    raw={
+                        "parser_version": ASCII_TAB_PARSER_VERSION,
+                        "grouping_version": ASCII_TAB_PARSER_VERSION,
+                        "system_inference": "ascii-tab-text",
+                        "grouping_status": block.grouping_status,
+                        "safe_grouping": False,
+                        "ascii_tab": True,
+                        "ascii_block_id": f"ascii-p{row.page_index:03d}-s{block.system_index:03d}",
+                        "row_label": row.label,
+                        "row_index": row.row_index,
+                        "character_span": [match.start(), match.end()],
+                        "line_character_span": [char_start, char_end],
+                        "line_text_length": len(row.text),
+                        "string_source": "ascii-row-order" if block.is_complete and is_fret else None,
+                        "grouping_confidence": block.grouping_confidence,
+                        "grouping_warnings": block.grouping_warnings or None,
+                        "assignment_warnings": ["ascii_tab_timing_unavailable"],
+                        "tab_staff_bbox": block.staff_bbox,
+                        "tab_line_ys": block.line_ys,
+                        "barline_count": 0,
+                        "barline_xs": [],
+                        "bar_boxes": [],
+                        "local_bar_index": None,
+                        "system_first_bar_index": None,
+                        "system_x0": block.staff_bbox["x0"],
+                        "system_x1": block.staff_bbox["x1"],
+                        "assigned_string_y": round(row.y_center, 3) if block.is_complete and is_fret else None,
+                        "bar_x_min": None,
+                        "bar_x_max": None,
+                        "technique_context": "ascii-inline-marker" if is_technique else None,
+                    },
+                )
+                payload = candidate.model_dump(mode="json", exclude_none=True)
+                if is_technique:
+                    payload["kind"] = "technique-text"
+                    payload.pop("parsed_fret", None)
+                    payload.pop("string", None)
+                candidates.append(payload)
+                next_index += 1
+    return candidates
+
+
+def _ascii_candidate_confidence(block: _AsciiTabBlock, is_fret: bool) -> float:
+    base = 0.74 if is_fret else 0.58
+    if not block.is_complete:
+        base -= 0.22
+    return max(0.25, min(0.82, base))
+
+
+def _ascii_token_bbox(row: _AsciiTabRow, char_start: int, char_end: int) -> list[float]:
+    text_length = max(len(row.text), 1)
+    char_width = max((row.x1 - row.x0) / text_length, 1.0)
+    x0 = row.x0 + char_start * char_width
+    x1 = row.x0 + max(char_end, char_start + 1) * char_width
+    return [round(x0, 3), round(row.y0, 3), round(x1, 3), round(row.y1, 3)]
+
+
+def _point_in_ascii_block(blocks: list[_AsciiTabBlock], x: float | None, y: float | None) -> bool:
+    return any(block.contains_point(x, y) for block in blocks)
+
+
 def _append_grouping_warnings(raw: dict[str, Any]) -> None:
     candidates = raw.get("candidates", [])
     fret_candidates = [candidate for candidate in candidates if candidate.get("parsed_fret") is not None]
@@ -406,6 +746,12 @@ def _append_grouping_warnings(raw: dict[str, Any]) -> None:
 
 
 def _unsafe_grouping_codes(fret_candidates: list[dict[str, Any]]) -> list[str]:
+    drawn_grouping_codes = {
+        "missing_pdf_barlines",
+        "incomplete_tab_staff",
+        "ambiguous_string_assignment",
+        "ambiguous_bar_assignment",
+    }
     codes: set[str] = set()
     for candidate in fret_candidates:
         raw = candidate.get("raw")
@@ -414,7 +760,7 @@ def _unsafe_grouping_codes(fret_candidates: list[dict[str, Any]]) -> list[str]:
         for field in ("grouping_warnings", "assignment_warnings"):
             values = raw.get(field, [])
             if isinstance(values, list):
-                codes.update(str(value) for value in values if value)
+                codes.update(str(value) for value in values if value in drawn_grouping_codes)
     return sorted(codes)
 
 
@@ -504,6 +850,10 @@ def _write_grouping_overlays(
         message = "candidate text found; tab staff/bar/string grouping inferred"
     elif grouping_status == "partial":
         message = "candidate text found; tab staff/bar/string grouping is partial"
+    elif grouping_status == "ascii_grouped":
+        message = "ASCII tab rows found; row/string grouping inferred, timing alignment unavailable"
+    elif grouping_status == "partial_ascii":
+        message = "ASCII tab rows found; row grouping is partial"
 
     overlay_paths: list[Path] = []
     with fitz.open(pdf_path) as doc:

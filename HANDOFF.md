@@ -2,34 +2,41 @@
 
 ## Current Branch
 
-- Branch: `feature/pdf-partial-grouping-diagnostics-main-v0.1`
+- Branch: `feature/ascii-tab-pdf-diagnostics-v0.1`
 - Base: `main`
-- PR #1 has been merged into `main`.
-- This branch re-applies the partial PDF grouping diagnostics work that was previously in closed PR #2.
-- Partial grouping diagnostics are committed on this branch.
+- PR #1 and PR #3 have been merged into `main`.
+- This branch characterizes born-digital ASCII-tab PDFs as a separate input class from drawn tab-staff geometry.
+- Do not start symbol attachment on this branch.
 
 ## Current Capability
 
 - Public PDF grouping v0.1 remains public-fixture-only and born-digital/generated-fixture focused.
-- Fully grouped public fixtures can infer systems, tab staff lines, bar boxes, string assignments, and bar assignments.
-- Partial grouping fixtures cover missing barlines, incomplete tab staff geometry, ambiguous string assignment, and ambiguous bar assignment.
-- Ungrouped and partially grouped playable PDF-derived fret candidates are blocked before ScoreIR output.
-- `build-ir` remains conservative and must not write ScoreIR from unsafe grouping.
+- Drawn tab staff detection remains separate from ASCII-tab text detection.
+- `extract-tab` can detect six-row ASCII-tab blocks using `ascii-tab.v0.1`.
+- Complete ASCII-tab blocks assign row-order strings and extract fret numbers with character-span provenance.
+- Inline ASCII technique markers such as slide, hammer-on, pull-off, bend, release, and vibrato are preserved as non-playable technique-text candidates.
+- Legend and heading text is not treated as playable fret evidence.
+- Malformed fewer-than-six-row ASCII blocks emit `partial_ascii_tab_grouping`.
+- Complete ASCII-tab blocks emit `ascii_tab_timing_unavailable` because character positions are not safe timing.
+- `build-ir` refuses ASCII-tab candidates before ScoreIR output unless a future phase supplies safe timing/alignment.
 
 ## Verification Expected
 
-Run before pushing or review:
+Run before any commit, push, or review:
 
 - `python -m pytest`
 - `python -m score2gp.cli export-schema --out schemas`
 - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json`
 - `git diff --check`
+- `git diff -- schemas`
 
 ## Private Safety
 
+- The local private ASCII-tab PDF was used only for smoke characterization.
 - Do not commit `work/` outputs.
 - Do not commit private PDFs, GP files, MXL files, private diagnostic HTML, private overlays, logs, or temporary smoke outputs.
 - The only intended tracked private-path item is `fixtures/private/.gitkeep`.
+- Public fixtures must stay synthetic and must not copy private titles, URLs, headings, fret sequences, or layout.
 
 ## Known Limitations
 
@@ -37,10 +44,11 @@ Run before pushing or review:
 - No scanned-PDF support.
 - No ML layout recognition.
 - No arbitrary commercial score conversion.
-- Partial grouping remains diagnostic-first and conservative.
-- `build-ir` blocks partial playable grouping rather than guessing.
+- ASCII-tab support is diagnostic/extraction-level only.
+- ASCII character positions are not yet mapped to musical timing.
+- Chord symbols and technique text are preserved but not musically attached to ScoreIR events.
+- GPIF output remains minimal.
 
 ## Next Recommended Task
 
-After this branch has passing CI and is ready for human review, the next implementation task should be a narrow public-fixture-only symbol attachment branch:
-attach chord symbols and technique text from TabRaw to ScoreIR events with conservative geometry and explicit warnings.
+After this branch is reviewed, the next narrow task should define a public timing/alignment contract for ASCII-tab character positions or start a separate public-fixture-only symbol attachment branch. Keep both out of this branch.
