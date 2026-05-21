@@ -93,9 +93,22 @@ def grouping_status_for_tabraw(tabraw: dict[str, Any]) -> str:
     system_count = sum(1 for candidate in playable if candidate.get("system_index") is not None)
     bar_count = sum(1 for candidate in playable if candidate.get("bar_index") is not None)
     string_count = sum(1 for candidate in playable if candidate.get("string") is not None)
-    if system_count == 0 or bar_count == 0 or string_count == 0:
+    warning_codes = {str(warning.get("code", "")) for warning in tabraw.get("warnings", [])}
+    partial_warning_codes = {
+        "partial_pdf_grouping",
+        "missing_pdf_barlines",
+        "incomplete_tab_staff",
+        "ambiguous_string_assignment",
+        "ambiguous_bar_assignment",
+    }
+    if system_count == 0 and bar_count == 0 and string_count == 0:
         return "missing"
-    if system_count < len(playable) or bar_count < len(playable) or string_count < len(playable):
+    if (
+        system_count < len(playable)
+        or bar_count < len(playable)
+        or string_count < len(playable)
+        or warning_codes.intersection(partial_warning_codes)
+    ):
         return "partial"
     return "grouped"
 

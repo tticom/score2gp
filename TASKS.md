@@ -2,11 +2,11 @@
 
 ## Next
 
-- [ ] Add low-confidence/partial-grouping public fixtures that exercise missing barlines or incomplete string assignments.
 - [ ] Add developer-facing HTML styling and compact thumbnails for grouping diagnostics.
 - [ ] Add public reproductions for more Audiveris timing patterns before another private run.
 - [ ] Attach PDF-derived chord symbols and technique text to ScoreIR events once timing calibration exists.
 - [ ] Add HTML conversion report styling and unsupported-technique summaries.
+- [ ] Add a public partial-to-recovery design note before attempting any automatic grouping repair.
 
 ## Done
 
@@ -37,3 +37,5 @@
 - [x] HTML and overlay report for extraction succeeded/grouping failed cases.
 - [x] PDF grouping v0.1 diagnostic boundary for generated born-digital tab fixtures.
 - [x] Grouped/partial/missing extraction reports with inferred staff, string-line, barline, and bar-box overlays.
+- [x] Low-confidence/partial-grouping public fixtures for missing barlines, incomplete staff geometry, ambiguous string assignment, and ambiguous bar assignment.
+- [x] `partial_pdf_grouping` warning boundary with specific public diagnostic codes.
