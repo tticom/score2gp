@@ -59,11 +59,18 @@ def build_grouping_diagnostics(
     warning_codes = [str(warning.get("code", "warning")) for warning in tabraw.get("warnings", [])]
     grouping_status = grouping_status_for_tabraw(tabraw)
     grouping = _grouping_evidence_summary(candidates)
+    ascii_candidates = [
+        candidate
+        for candidate in candidates
+        if isinstance(candidate.get("raw"), dict) and candidate["raw"].get("parser_version") == "ascii-tab.v0.1"
+    ]
+    input_class = "ascii-tab" if ascii_candidates else "drawn-tab-or-text"
 
     return {
         "schema_version": GROUPING_DIAGNOSTICS_SCHEMA_VERSION,
         "source_pdf_path": str(source_pdf) if source_pdf is not None else tabraw.get("source_pdf"),
         "inspection_kind": tabraw.get("inspection_kind") or inspection.get("kind") or "unknown",
+        "input_class": input_class,
         "page_count": int(inspection.get("page_count", 0) or 0),
         "total_text_candidate_count": len(candidates),
         "playable_fret_candidate_count": len(playable),
@@ -74,6 +81,18 @@ def build_grouping_diagnostics(
         "inferred_bar_count": len(inferred_bars),
         "inferred_string_assignment_count": inferred_string_assignment_count,
         "grouping_status": grouping_status,
+        "ascii_tab_candidate_count": len(ascii_candidates),
+        "ascii_tab_block_count": _warning_sum(tabraw, "ascii_tab_detected", "ascii_tab_block_count"),
+        "ascii_tab_complete_block_count": _warning_sum(
+            tabraw,
+            "ascii_tab_detected",
+            "ascii_tab_complete_block_count",
+        ),
+        "ascii_tab_partial_block_count": _warning_sum(
+            tabraw,
+            "ascii_tab_detected",
+            "ascii_tab_partial_block_count",
+        ),
         "warning_codes": sorted(set(warning_codes)),
         "alignment_attempted": alignment_attempted,
         "scoreir_written": scoreir_written,
@@ -100,7 +119,12 @@ def grouping_status_for_tabraw(tabraw: dict[str, Any]) -> str:
         "incomplete_tab_staff",
         "ambiguous_string_assignment",
         "ambiguous_bar_assignment",
+        "partial_ascii_tab_grouping",
     }
+    if "partial_ascii_tab_grouping" in warning_codes:
+        return "partial_ascii"
+    if "ascii_tab_timing_unavailable" in warning_codes and system_count and string_count:
+        return "ascii_grouped"
     if system_count == 0 and bar_count == 0 and string_count == 0:
         return "missing"
     if (
@@ -135,6 +159,10 @@ def write_grouping_diagnostics_html(path: str | Path, report: dict[str, Any]) ->
         verdict = "Extraction succeeded, but grouping failed."
     elif grouping_status == "partial":
         verdict = "Extraction succeeded, but grouping is partial and unsafe for automatic alignment."
+    elif grouping_status == "partial_ascii":
+        verdict = "Extraction succeeded and ASCII tab was detected, but ASCII grouping is partial."
+    elif grouping_status == "ascii_grouped":
+        verdict = "Extraction succeeded and ASCII tab rows were grouped, but timing/alignment is unavailable."
     else:
         verdict = "Extraction and grouping are present for the inspected candidates."
     if not report.get("alignment_attempted"):
@@ -157,6 +185,7 @@ def write_grouping_diagnostics_html(path: str | Path, report: dict[str, Any]) ->
 <dl>
   <dt>Source PDF</dt><dd>{html.escape(str(report.get("source_pdf_path", "")))}</dd>
   <dt>Inspection kind</dt><dd>{html.escape(str(report.get("inspection_kind", "unknown")))}</dd>
+  <dt>Input class</dt><dd>{html.escape(str(report.get("input_class", "unknown")))}</dd>
   <dt>Page count</dt><dd>{html.escape(str(report.get("page_count", 0)))}</dd>
   <dt>Grouping status</dt><dd>{html.escape(grouping_status)}</dd>
 </dl>
@@ -169,6 +198,10 @@ def write_grouping_diagnostics_html(path: str | Path, report: dict[str, Any]) ->
   <dt>Inferred systems</dt><dd>{report.get("inferred_system_count", 0)}</dd>
   <dt>Inferred bars</dt><dd>{report.get("inferred_bar_count", 0)}</dd>
   <dt>String assignments</dt><dd>{report.get("inferred_string_assignment_count", 0)}</dd>
+  <dt>ASCII-tab candidates</dt><dd>{report.get("ascii_tab_candidate_count", 0)}</dd>
+  <dt>ASCII-tab blocks</dt><dd>{report.get("ascii_tab_block_count", 0)}</dd>
+  <dt>Complete ASCII-tab blocks</dt><dd>{report.get("ascii_tab_complete_block_count", 0)}</dd>
+  <dt>Partial ASCII-tab blocks</dt><dd>{report.get("ascii_tab_partial_block_count", 0)}</dd>
 </dl>
 <h2>Warning Codes</h2>
 <ul>{warning_items}</ul>
@@ -224,6 +257,8 @@ def _grouping_evidence_summary(candidates: list[dict[str, Any]]) -> dict[str, An
                 "barline_xs": raw.get("barline_xs", []) if isinstance(raw.get("barline_xs"), list) else [],
                 "bar_boxes": bar_boxes,
                 "grouping_confidence": raw.get("grouping_confidence"),
+                "grouping_version": raw.get("grouping_version"),
+                "system_inference": raw.get("system_inference"),
                 "grouping_warnings": raw.get("grouping_warnings", [])
                 if isinstance(raw.get("grouping_warnings", []), list)
                 else [],
@@ -256,6 +291,7 @@ def _grouping_system_html(system: dict[str, Any]) -> str:
         f"page {html.escape(str(system.get('page_index')))}, "
         f"system {html.escape(str(system.get('system_index')))}, "
         f"staff {html.escape(str(system.get('staff_index')))}; "
+        f"source: {html.escape(str(system.get('system_inference')))}; "
         f"Tab staff bbox: <code>{html.escape(bbox_text)}</code>; "
         f"string lines: {html.escape(str(len(system.get('tab_line_ys', []))))}; "
         f"bar boxes: {html.escape(str(len(system.get('bar_boxes', []))))}; "
@@ -264,3 +300,14 @@ def _grouping_system_html(system: dict[str, Any]) -> str:
         f"warnings: {html.escape(warnings)}"
         "</li>"
     )
+
+
+def _warning_sum(tabraw: dict[str, Any], code: str, field: str) -> int:
+    total = 0
+    for warning in tabraw.get("warnings", []):
+        if warning.get("code") != code:
+            continue
+        value = warning.get(field, 0)
+        if isinstance(value, int):
+            total += value
+    return total
