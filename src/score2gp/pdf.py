@@ -15,6 +15,7 @@ from .report import (
 from .tabraw import TABRAW_SCHEMA_VERSION, TabRaw, make_tab_candidate, parse_fret_text
 
 ASCII_TAB_PARSER_VERSION = "ascii-tab.v0.1"
+ASCII_TIMING_PARSER_VERSION = "ascii-timing.v0.1"
 _ASCII_TAB_LINE_RE = re.compile(r"^\s*([eEADGB])\|([0-9A-Za-z/\\~()|\s-]+)$")
 _ASCII_TAB_TOKEN_RE = re.compile(r"\d{1,2}|[\\/hpbvr~]+")
 _ASCII_TECHNIQUE_MARKERS = {"/", "\\", "h", "p", "b", "r", "v", "~"}
@@ -345,6 +346,27 @@ class _AsciiTabBlock:
         )
 
 
+@dataclass(frozen=True)
+class _AsciiTimingEvidence:
+    status: str
+    confidence: float
+    warnings: list[str]
+    bar_separator_columns: list[int]
+    bar_separators_aligned: bool
+    row_widths: list[int]
+    segment_boundaries: list[tuple[int, int]]
+
+    @property
+    def segment_count(self) -> int:
+        return len(self.segment_boundaries)
+
+    def segment_for_column(self, column_index: int) -> tuple[int, int, int] | None:
+        for index, (start, end) in enumerate(self.segment_boundaries, start=1):
+            if start <= column_index < end:
+                return index, start, end
+        return None
+
+
 def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     import fitz  # type: ignore[import-not-found]
 
@@ -560,29 +582,102 @@ def _ascii_row_groups(rows: list[_AsciiTabRow]) -> list[list[_AsciiTabRow]]:
 def _ascii_tab_warnings(page_number: int, blocks: list[_AsciiTabBlock]) -> list[dict[str, Any]]:
     complete_count = sum(1 for block in blocks if block.is_complete)
     partial_count = len(blocks) - complete_count
+    timing_by_status: dict[str, int] = {}
+    timing_warning_codes: set[str] = set()
+    timing_block_counts: dict[str, int] = {}
+    unsupported_rhythm_count = 0
+    for block in blocks:
+        timing = _ascii_timing_evidence(block)
+        timing_by_status[timing.status] = timing_by_status.get(timing.status, 0) + 1
+        for code in timing.warnings:
+            timing_warning_codes.add(code)
+            timing_block_counts[code] = timing_block_counts.get(code, 0) + 1
+        if _ascii_block_has_inline_rhythm_markers(block):
+            unsupported_rhythm_count += 1
     warnings: list[dict[str, Any]] = [
         {
             "code": "ascii_tab_detected",
             "message": f"ASCII-style tab text was detected on page {page_number}.",
             "severity": "info",
             "parser_version": ASCII_TAB_PARSER_VERSION,
+            "timing_parser_version": ASCII_TIMING_PARSER_VERSION,
             "ascii_tab_block_count": len(blocks),
             "ascii_tab_complete_block_count": complete_count,
             "ascii_tab_partial_block_count": partial_count,
+            "ascii_timing_status_counts": dict(sorted(timing_by_status.items())),
         }
     ]
-    if complete_count:
+    if "ascii_tab_timing_unavailable" in timing_warning_codes:
         warnings.append(
             {
                 "code": "ascii_tab_timing_unavailable",
                 "message": (
-                    "ASCII-tab rows provide string/fret evidence, but no safe MusicXML timing or bar alignment is "
+                    "ASCII-tab rows provide string/fret evidence, but no safe timing or measure segmentation is "
                     "available from the PDF alone; build-ir must not guess timing from character positions."
                 ),
                 "severity": "warning",
                 "grouping_status": "ascii_grouped",
                 "parser_version": ASCII_TAB_PARSER_VERSION,
+                "timing_parser_version": ASCII_TIMING_PARSER_VERSION,
                 "ascii_tab_complete_block_count": complete_count,
+                "ascii_timing_block_count": timing_block_counts.get("ascii_tab_timing_unavailable", 0),
+            }
+        )
+    if "partial_ascii_tab_timing" in timing_warning_codes:
+        warnings.append(
+            {
+                "code": "partial_ascii_tab_timing",
+                "message": (
+                    "ASCII-tab bar separators provide measure/column evidence, but no reliable note duration or "
+                    "onset mapping. This is alignment evidence only, not musical timing."
+                ),
+                "severity": "warning",
+                "grouping_status": "ascii_grouped",
+                "parser_version": ASCII_TAB_PARSER_VERSION,
+                "timing_parser_version": ASCII_TIMING_PARSER_VERSION,
+                "ascii_timing_block_count": timing_block_counts.get("partial_ascii_tab_timing", 0),
+            }
+        )
+    if "ambiguous_ascii_tab_timing" in timing_warning_codes:
+        warnings.append(
+            {
+                "code": "ambiguous_ascii_tab_timing",
+                "message": (
+                    "ASCII-tab bar separators or row widths are inconsistent enough that column-to-measure "
+                    "evidence is ambiguous."
+                ),
+                "severity": "warning",
+                "grouping_status": "ascii_grouped",
+                "parser_version": ASCII_TAB_PARSER_VERSION,
+                "timing_parser_version": ASCII_TIMING_PARSER_VERSION,
+                "ascii_timing_block_count": timing_block_counts.get("ambiguous_ascii_tab_timing", 0),
+            }
+        )
+    if "ascii_tab_measure_boundary_missing" in timing_warning_codes:
+        warnings.append(
+            {
+                "code": "ascii_tab_measure_boundary_missing",
+                "message": "ASCII-tab rows do not contain enough aligned bar separators to infer measure segments.",
+                "severity": "warning",
+                "grouping_status": "ascii_grouped",
+                "parser_version": ASCII_TAB_PARSER_VERSION,
+                "timing_parser_version": ASCII_TIMING_PARSER_VERSION,
+                "ascii_timing_block_count": timing_block_counts.get("ascii_tab_measure_boundary_missing", 0),
+            }
+        )
+    if unsupported_rhythm_count:
+        warnings.append(
+            {
+                "code": "unsupported_ascii_tab_rhythm",
+                "message": (
+                    "ASCII-tab inline technique/rhythm markers were preserved as evidence, but this phase does not "
+                    "interpret them as durations or event attachments."
+                ),
+                "severity": "warning",
+                "grouping_status": "ascii_grouped",
+                "parser_version": ASCII_TAB_PARSER_VERSION,
+                "timing_parser_version": ASCII_TIMING_PARSER_VERSION,
+                "ascii_timing_block_count": unsupported_rhythm_count,
             }
         )
     if partial_count:
@@ -593,6 +688,7 @@ def _ascii_tab_warnings(page_number: int, blocks: list[_AsciiTabBlock]) -> list[
                 "severity": "warning",
                 "grouping_status": "partial_ascii_tab_grouping",
                 "parser_version": ASCII_TAB_PARSER_VERSION,
+                "timing_parser_version": ASCII_TIMING_PARSER_VERSION,
                 "ascii_tab_partial_block_count": partial_count,
             }
         )
@@ -607,6 +703,7 @@ def _ascii_candidates_from_blocks(
     candidates: list[dict[str, Any]] = []
     next_index = first_candidate_index
     for block in blocks:
+        timing = _ascii_timing_evidence(block)
         for row in block.rows:
             for match in _ASCII_TAB_TOKEN_RE.finditer(row.body):
                 token = match.group(0)
@@ -617,6 +714,17 @@ def _ascii_candidates_from_blocks(
                 char_start = row.body_start + match.start()
                 char_end = row.body_start + match.end()
                 bbox_values = _ascii_token_bbox(row, char_start, char_end)
+                segment = None if timing.status == "timing_unavailable" else timing.segment_for_column(match.start())
+                segment_id = segment[0] if segment is not None else None
+                segment_start = segment[1] if segment is not None else None
+                segment_end = segment[2] if segment is not None else None
+                segment_width = (segment_end - segment_start) if segment_start is not None and segment_end is not None else None
+                normalized_column = _normalized_position(match.start(), len(row.body))
+                normalized_segment_column = (
+                    _normalized_position(match.start() - segment_start, segment_width)
+                    if segment_start is not None and segment_width is not None
+                    else None
+                )
                 candidate = make_tab_candidate(
                     candidate_id=f"pdf-p{row.page_index:03d}-c{next_index:04d}",
                     raw_text=token,
@@ -631,23 +739,43 @@ def _ascii_candidates_from_blocks(
                     raw={
                         "parser_version": ASCII_TAB_PARSER_VERSION,
                         "grouping_version": ASCII_TAB_PARSER_VERSION,
+                        "timing_parser_version": ASCII_TIMING_PARSER_VERSION,
                         "system_inference": "ascii-tab-text",
                         "grouping_status": block.grouping_status,
                         "safe_grouping": False,
                         "ascii_tab": True,
                         "ascii_block_id": f"ascii-p{row.page_index:03d}-s{block.system_index:03d}",
+                        "ascii_rows_in_block": len(block.rows),
                         "row_label": row.label,
                         "row_index": row.row_index,
+                        "column_index": match.start(),
                         "character_span": [match.start(), match.end()],
                         "line_character_span": [char_start, char_end],
                         "line_text_length": len(row.text),
+                        "ascii_row_body_length": len(row.body),
+                        "ascii_normalized_column_position": normalized_column,
+                        "ascii_timing_status": timing.status,
+                        "ascii_timing_confidence": timing.confidence,
+                        "ascii_timing_warnings": timing.warnings or None,
+                        "ascii_bar_separator_columns": timing.bar_separator_columns,
+                        "ascii_bar_separator_count": len(timing.bar_separator_columns),
+                        "ascii_bar_separators_aligned": timing.bar_separators_aligned,
+                        "ascii_measure_segment_count": timing.segment_count,
+                        "ascii_measure_segment_boundaries": [
+                            {"start_column": start, "end_column": end}
+                            for start, end in timing.segment_boundaries
+                        ],
+                        "ascii_measure_segment_id": segment_id,
+                        "ascii_measure_start_column": segment_start,
+                        "ascii_measure_end_column": segment_end,
+                        "ascii_measure_normalized_column": normalized_segment_column,
                         "string_source": "ascii-row-order" if block.is_complete and is_fret else None,
                         "grouping_confidence": block.grouping_confidence,
                         "grouping_warnings": block.grouping_warnings or None,
-                        "assignment_warnings": ["ascii_tab_timing_unavailable"],
+                        "assignment_warnings": timing.warnings or None,
                         "tab_staff_bbox": block.staff_bbox,
                         "tab_line_ys": block.line_ys,
-                        "barline_count": 0,
+                        "barline_count": len(timing.bar_separator_columns),
                         "barline_xs": [],
                         "bar_boxes": [],
                         "local_bar_index": None,
@@ -668,6 +796,97 @@ def _ascii_candidates_from_blocks(
                 candidates.append(payload)
                 next_index += 1
     return candidates
+
+
+def _ascii_timing_evidence(block: _AsciiTabBlock) -> _AsciiTimingEvidence:
+    if not block.is_complete:
+        return _AsciiTimingEvidence(
+            status="timing_unavailable",
+            confidence=0.2,
+            warnings=["partial_ascii_tab_grouping"],
+            bar_separator_columns=[],
+            bar_separators_aligned=False,
+            row_widths=[len(row.body) for row in block.rows],
+            segment_boundaries=[],
+        )
+
+    row_widths = [len(row.body) for row in block.rows]
+    row_separators = [[index for index, char in enumerate(row.body) if char == "|"] for row in block.rows]
+    aligned = bool(row_separators) and all(separators == row_separators[0] for separators in row_separators)
+    consistent_width = len(set(row_widths)) == 1
+    separators = row_separators[0] if aligned else []
+    segment_boundaries = _ascii_segment_boundaries(row_widths[0], separators) if consistent_width and aligned else []
+
+    if not aligned or not consistent_width:
+        return _AsciiTimingEvidence(
+            status="timing_partial",
+            confidence=0.38,
+            warnings=["ambiguous_ascii_tab_timing"],
+            bar_separator_columns=separators,
+            bar_separators_aligned=False,
+            row_widths=row_widths,
+            segment_boundaries=segment_boundaries,
+        )
+
+    if len(segment_boundaries) < 2:
+        return _AsciiTimingEvidence(
+            status="timing_unavailable",
+            confidence=0.3,
+            warnings=["ascii_tab_timing_unavailable", "ascii_tab_measure_boundary_missing"],
+            bar_separator_columns=separators,
+            bar_separators_aligned=True,
+            row_widths=row_widths,
+            segment_boundaries=segment_boundaries,
+        )
+
+    segment_widths = [end - start for start, end in segment_boundaries]
+    if any(width <= 1 for width in segment_widths) or max(segment_widths) - min(segment_widths) > 3:
+        return _AsciiTimingEvidence(
+            status="timing_partial",
+            confidence=0.48,
+            warnings=["partial_ascii_tab_timing", "ambiguous_ascii_tab_timing"],
+            bar_separator_columns=separators,
+            bar_separators_aligned=True,
+            row_widths=row_widths,
+            segment_boundaries=segment_boundaries,
+        )
+
+    return _AsciiTimingEvidence(
+        status="timing_partial",
+        confidence=0.62,
+        warnings=["partial_ascii_tab_timing"],
+        bar_separator_columns=separators,
+        bar_separators_aligned=True,
+        row_widths=row_widths,
+        segment_boundaries=segment_boundaries,
+    )
+
+
+def _ascii_segment_boundaries(row_width: int, separators: list[int]) -> list[tuple[int, int]]:
+    boundaries: list[tuple[int, int]] = []
+    start = 0
+    for separator in separators:
+        if separator > start:
+            boundaries.append((start, separator))
+        start = separator + 1
+    if start < row_width:
+        boundaries.append((start, row_width))
+    return boundaries
+
+
+def _normalized_position(column: int, span: int | None) -> float | None:
+    if span is None or span <= 1:
+        return None
+    return round(max(0.0, min(1.0, column / (span - 1))), 4)
+
+
+def _ascii_block_has_inline_rhythm_markers(block: _AsciiTabBlock) -> bool:
+    for row in block.rows:
+        for match in _ASCII_TAB_TOKEN_RE.finditer(row.body):
+            token = match.group(0)
+            if not token.isdigit() and any(char in _ASCII_TECHNIQUE_MARKERS for char in token):
+                return True
+    return False
 
 
 def _ascii_candidate_confidence(block: _AsciiTabBlock, is_fret: bool) -> float:

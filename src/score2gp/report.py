@@ -65,6 +65,7 @@ def build_grouping_diagnostics(
         if isinstance(candidate.get("raw"), dict) and candidate["raw"].get("parser_version") == "ascii-tab.v0.1"
     ]
     input_class = "ascii-tab" if ascii_candidates else "drawn-tab-or-text"
+    ascii_timing_status_counts = _ascii_timing_status_counts(ascii_candidates)
 
     return {
         "schema_version": GROUPING_DIAGNOSTICS_SCHEMA_VERSION,
@@ -93,6 +94,11 @@ def build_grouping_diagnostics(
             "ascii_tab_detected",
             "ascii_tab_partial_block_count",
         ),
+        "ascii_timing_candidate_count": sum(ascii_timing_status_counts.values()),
+        "ascii_timing_status_counts": ascii_timing_status_counts,
+        "ascii_timing_partial_candidate_count": ascii_timing_status_counts.get("timing_partial", 0),
+        "ascii_timing_unavailable_candidate_count": ascii_timing_status_counts.get("timing_unavailable", 0),
+        "ascii_timing_safe_candidate_count": ascii_timing_status_counts.get("timing_safe", 0),
         "warning_codes": sorted(set(warning_codes)),
         "alignment_attempted": alignment_attempted,
         "scoreir_written": scoreir_written,
@@ -123,7 +129,14 @@ def grouping_status_for_tabraw(tabraw: dict[str, Any]) -> str:
     }
     if "partial_ascii_tab_grouping" in warning_codes:
         return "partial_ascii"
-    if "ascii_tab_timing_unavailable" in warning_codes and system_count and string_count:
+    ascii_timing_warning_codes = {
+        "ascii_tab_timing_unavailable",
+        "partial_ascii_tab_timing",
+        "ambiguous_ascii_tab_timing",
+        "unsupported_ascii_tab_rhythm",
+        "ascii_tab_measure_boundary_missing",
+    }
+    if warning_codes.intersection(ascii_timing_warning_codes) and system_count and string_count:
         return "ascii_grouped"
     if system_count == 0 and bar_count == 0 and string_count == 0:
         return "missing"
@@ -162,7 +175,14 @@ def write_grouping_diagnostics_html(path: str | Path, report: dict[str, Any]) ->
     elif grouping_status == "partial_ascii":
         verdict = "Extraction succeeded and ASCII tab was detected, but ASCII grouping is partial."
     elif grouping_status == "ascii_grouped":
-        verdict = "Extraction succeeded and ASCII tab rows were grouped, but timing/alignment is unavailable."
+        timing_counts = report.get("ascii_timing_status_counts", {})
+        if isinstance(timing_counts, dict) and timing_counts.get("timing_partial"):
+            verdict = (
+                "Extraction succeeded and ASCII tab rows were grouped with partial bar/column timing evidence; "
+                "this is not yet safe musical timing."
+            )
+        else:
+            verdict = "Extraction succeeded and ASCII tab rows were grouped, but timing/alignment is unavailable."
     else:
         verdict = "Extraction and grouping are present for the inspected candidates."
     if not report.get("alignment_attempted"):
@@ -202,6 +222,8 @@ def write_grouping_diagnostics_html(path: str | Path, report: dict[str, Any]) ->
   <dt>ASCII-tab blocks</dt><dd>{report.get("ascii_tab_block_count", 0)}</dd>
   <dt>Complete ASCII-tab blocks</dt><dd>{report.get("ascii_tab_complete_block_count", 0)}</dd>
   <dt>Partial ASCII-tab blocks</dt><dd>{report.get("ascii_tab_partial_block_count", 0)}</dd>
+  <dt>ASCII timing candidates</dt><dd>{report.get("ascii_timing_candidate_count", 0)}</dd>
+  <dt>ASCII timing status counts</dt><dd><code>{html.escape(json.dumps(report.get("ascii_timing_status_counts", {}), sort_keys=True))}</code></dd>
 </dl>
 <h2>Warning Codes</h2>
 <ul>{warning_items}</ul>
@@ -259,6 +281,11 @@ def _grouping_evidence_summary(candidates: list[dict[str, Any]]) -> dict[str, An
                 "grouping_confidence": raw.get("grouping_confidence"),
                 "grouping_version": raw.get("grouping_version"),
                 "system_inference": raw.get("system_inference"),
+                "ascii_timing_status": raw.get("ascii_timing_status"),
+                "ascii_timing_confidence": raw.get("ascii_timing_confidence"),
+                "ascii_bar_separator_count": raw.get("ascii_bar_separator_count"),
+                "ascii_bar_separators_aligned": raw.get("ascii_bar_separators_aligned"),
+                "ascii_measure_segment_count": raw.get("ascii_measure_segment_count"),
                 "grouping_warnings": raw.get("grouping_warnings", [])
                 if isinstance(raw.get("grouping_warnings", []), list)
                 else [],
@@ -297,6 +324,9 @@ def _grouping_system_html(system: dict[str, Any]) -> str:
         f"bar boxes: {html.escape(str(len(system.get('bar_boxes', []))))}; "
         f"candidate assignments: {html.escape(str(len(system.get('candidate_ids', []))))}; "
         f"grouping confidence: {html.escape(str(system.get('grouping_confidence')))}; "
+        f"ASCII timing: {html.escape(str(system.get('ascii_timing_status')))}; "
+        f"ASCII bar separators: {html.escape(str(system.get('ascii_bar_separator_count')))}; "
+        f"ASCII measure segments: {html.escape(str(system.get('ascii_measure_segment_count')))}; "
         f"warnings: {html.escape(warnings)}"
         "</li>"
     )
@@ -311,3 +341,16 @@ def _warning_sum(tabraw: dict[str, Any], code: str, field: str) -> int:
         if isinstance(value, int):
             total += value
     return total
+
+
+def _ascii_timing_status_counts(candidates: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for candidate in candidates:
+        raw = candidate.get("raw")
+        if not isinstance(raw, dict):
+            continue
+        status = raw.get("ascii_timing_status")
+        if not isinstance(status, str) or not status:
+            continue
+        counts[status] = counts.get(status, 0) + 1
+    return dict(sorted(counts.items()))

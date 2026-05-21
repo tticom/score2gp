@@ -4,7 +4,7 @@
 
 - [ ] Add developer-facing HTML styling and compact thumbnails for grouping diagnostics.
 - [ ] Add public reproductions for more Audiveris timing patterns before another private run.
-- [ ] Design a public timing/alignment contract for ASCII-tab character positions before allowing ASCII TabRaw into ScoreIR.
+- [ ] Define a future public MusicXML-to-ASCII alignment phase before allowing ASCII TabRaw into ScoreIR.
 - [ ] Attach PDF-derived chord symbols and technique text to ScoreIR events once timing calibration exists.
 - [ ] Add HTML conversion report styling and unsupported-technique summaries.
 - [ ] Add a public partial-to-recovery design note before attempting any automatic grouping repair.
@@ -43,3 +43,5 @@
 - [x] ASCII-tab PDF detection as a separate born-digital text input class.
 - [x] Public synthetic ASCII-tab fixtures for complete rows, inline technique markers, legends, and malformed row grouping.
 - [x] Conservative `ascii_tab_timing_unavailable` and `partial_ascii_tab_grouping` refusal boundaries.
+- [x] Public `ascii-timing.v0.1` contract for character-column, bar-separator, and normalized segment evidence.
+- [x] Conservative `partial_ascii_tab_timing`, `ambiguous_ascii_tab_timing`, and measure-boundary warning boundaries.

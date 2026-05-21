@@ -74,10 +74,80 @@ def make_malformed_ascii_tab() -> None:
     _save(doc, "generated_ascii_tab_malformed.pdf")
 
 
+def make_barred_ascii_tab() -> None:
+    doc, page = _new_page("Generated ASCII Tab Barred")
+    _write_lines(
+        page,
+        [
+            "e|--0--1--2--|--3--4--5--|",
+            "B|-----------|-----------|",
+            "G|--0--------|-----2-----|",
+            "D|-----------|-----------|",
+            "A|-----------|-----------|",
+            "E|-----------|-----------|",
+        ],
+    )
+    _save(doc, "generated_ascii_tab_barred.pdf")
+
+
+def make_equal_width_ascii_tab() -> None:
+    doc, page = _new_page("Generated ASCII Tab Equal Width")
+    page.insert_text((72, 88), "count: 1 & 2 & 3 & 4 & | 1 & 2 & 3 & 4 &", fontsize=9, fontname="cour")
+    _write_lines(
+        page,
+        [
+            "e|--0---1---2---3---|--4---5---6---7---|",
+            "B|------------------|------------------|",
+            "G|--0-------2-------|--4-------6-------|",
+            "D|------------------|------------------|",
+            "A|------------------|------------------|",
+            "E|------------------|------------------|",
+        ],
+        y=122,
+    )
+    _save(doc, "generated_ascii_tab_equal_width.pdf")
+
+
+def make_uneven_timing_ascii_tab() -> None:
+    doc, page = _new_page("Generated ASCII Tab Uneven Timing")
+    _write_lines(
+        page,
+        [
+            "e|--0-1-------|--2---3-|",
+            "B|------------|--------|",
+            "G|--0---------|------2-|",
+            "D|------------|--------|",
+            "A|------------|--------|",
+            "E|------------|--------|",
+        ],
+    )
+    _save(doc, "generated_ascii_tab_uneven_timing.pdf")
+
+
+def make_no_bar_ascii_tab() -> None:
+    doc, page = _new_page("Generated ASCII Tab No Bars")
+    _write_lines(
+        page,
+        [
+            "e|--0--1--2--3--",
+            "B|--------------",
+            "G|--0-----2-----",
+            "D|--------------",
+            "A|--------------",
+            "E|--------------",
+        ],
+    )
+    _save(doc, "generated_ascii_tab_no_bars.pdf")
+
+
 def main() -> None:
     make_simple_ascii_tab()
     make_technique_ascii_tab()
     make_malformed_ascii_tab()
+    make_barred_ascii_tab()
+    make_equal_width_ascii_tab()
+    make_uneven_timing_ascii_tab()
+    make_no_bar_ascii_tab()
 
 
 if __name__ == "__main__":
