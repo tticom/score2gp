@@ -7,6 +7,7 @@ from typing import Optional
 
 import typer
 
+from .ascii_alignment import align_ascii_musicxml_files
 from .build_ir import BuildIrInputRiskError, build_ir_with_diagnostics_from_files
 from .gp_package import compare_gp, dumps_summary, inspect_gp, validate_gp, write_gp
 from .ir import ScoreIR, compare_score_ir, export_scoreir_schema, validate_score_ir_file
@@ -130,6 +131,7 @@ def build_ir_command(
     tabraw: Optional[Path] = typer.Option(None, "--tabraw", "--tab"),
     out: Path = typer.Option(...),
     diagnostics_out: Optional[Path] = typer.Option(None, "--diagnostics-out"),
+    ascii_alignment: Optional[Path] = typer.Option(None, "--ascii-alignment"),
 ) -> None:
     """Build a limited ScoreIR file from synthetic MusicXML plus TabRaw inputs."""
     if musicxml is None or tabraw is None:
@@ -138,7 +140,7 @@ def build_ir_command(
             "and supports only the limited synthetic MusicXML + TabRaw alignment path."
         )
     try:
-        score, diagnostics = build_ir_with_diagnostics_from_files(musicxml, tabraw, out)
+        score, diagnostics = build_ir_with_diagnostics_from_files(musicxml, tabraw, out, ascii_alignment)
     except BuildIrInputRiskError as exc:
         payload = exc.to_diagnostics_payload()
         if exc.category == "missing_pdf_grouping" and tabraw is not None:
@@ -163,6 +165,31 @@ def build_ir_command(
                 "unmatched_musicxml_event_count": diagnostics.unmatched_musicxml_event_count,
                 "unmatched_tabraw_candidate_count": diagnostics.unmatched_tabraw_candidate_count,
                 "warnings": [warning.model_dump(mode="json", exclude_none=True) for warning in score.warnings],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+
+
+@app.command("align-ascii-musicxml")
+def align_ascii_musicxml_command(
+    tab: Path = typer.Option(..., "--tab", "--tabraw"),
+    musicxml: Path = typer.Option(...),
+    out: Path = typer.Option(...),
+) -> None:
+    """Write diagnostic-only ASCII-tab-to-MusicXML onset compatibility evidence."""
+    alignment = align_ascii_musicxml_files(tabraw_path=tab, musicxml_path=musicxml, out_dir=out)
+    typer.echo(
+        json.dumps(
+            {
+                "out": str(out),
+                "schema_version": alignment.schema_version,
+                "overall_status": alignment.overall_status,
+                "alignment_attempted": alignment.alignment_attempted,
+                "scoreir_written": alignment.scoreir_written,
+                "summary_counts": alignment.summary_counts,
+                "warning_codes": [warning.code for warning in alignment.warnings],
             },
             indent=2,
             sort_keys=True,
