@@ -253,6 +253,17 @@ def build_ir_with_diagnostics_from_imports(musicxml: MusicXmlImport, tabraw: Tab
                 "TabRaw extraction found ASCII-tab fret candidates with row/string evidence, but no safe "
                 "MusicXML timing or bar alignment; build-ir will not guess timing from character positions."
             )
+        elif category == "partial_ascii_tab_timing":
+            message = (
+                "TabRaw extraction found ASCII-tab fret candidates with partial bar/column timing evidence, "
+                "but character columns are alignment hints rather than musical timing; build-ir will not "
+                "write ScoreIR from ASCII timing guesses."
+            )
+        elif category == "ambiguous_ascii_tab_timing":
+            message = (
+                "TabRaw extraction found ASCII-tab fret candidates, but ASCII bar separators or row widths "
+                "make timing evidence ambiguous; build-ir will not guess timing from character positions."
+            )
         elif category == "partial_ascii_tab_grouping":
             message = (
                 "TabRaw extraction found ASCII-tab fret candidates, but the ASCII row grouping is partial; "
@@ -1047,8 +1058,11 @@ def _tabraw_grouping_risk(tabraw: TabRaw) -> dict[str, object] | None:
         for warning in tabraw.warnings
         if warning.get("code")
     ]
-    ascii_timing_unavailable = "ascii_tab_timing_unavailable" in warning_codes
     partial_ascii_grouping = "partial_ascii_tab_grouping" in warning_codes
+    ascii_timing_unavailable = "ascii_tab_timing_unavailable" in warning_codes
+    partial_ascii_timing = "partial_ascii_tab_timing" in warning_codes
+    ambiguous_ascii_timing = "ambiguous_ascii_tab_timing" in warning_codes
+    ascii_measure_boundary_missing = "ascii_tab_measure_boundary_missing" in warning_codes
 
     counts: dict[str, object] = {
         "total_candidate_count": len(tabraw.candidates),
@@ -1057,12 +1071,6 @@ def _tabraw_grouping_risk(tabraw: TabRaw) -> dict[str, object] | None:
         "playable_candidates_with_bar": sum(1 for candidate in playable if candidate.bar_index is not None),
         "playable_candidates_with_string": sum(1 for candidate in playable if candidate.string is not None),
     }
-    if ascii_timing_unavailable:
-        counts["category"] = "ascii_tab_timing_unavailable"
-        counts["grouping_status"] = "ascii_grouped"
-        counts["warning_codes"] = warning_codes
-        counts["missing_grouping_dimensions"] = ["bar"]
-        return counts
     if partial_ascii_grouping:
         counts["category"] = "partial_ascii_tab_grouping"
         counts["grouping_status"] = "partial_ascii_tab_grouping"
@@ -1076,6 +1084,27 @@ def _tabraw_grouping_risk(tabraw: TabRaw) -> dict[str, object] | None:
             )
             if int(counts[count_key]) < len(playable)
         ]
+        return counts
+    if ambiguous_ascii_timing:
+        counts["category"] = "ambiguous_ascii_tab_timing"
+        counts["grouping_status"] = "ascii_grouped"
+        counts["warning_codes"] = warning_codes
+        counts["missing_grouping_dimensions"] = ["bar"]
+        counts["ascii_timing_status_counts"] = _ascii_timing_status_counts(playable)
+        return counts
+    if partial_ascii_timing:
+        counts["category"] = "partial_ascii_tab_timing"
+        counts["grouping_status"] = "ascii_grouped"
+        counts["warning_codes"] = warning_codes
+        counts["missing_grouping_dimensions"] = ["bar"]
+        counts["ascii_timing_status_counts"] = _ascii_timing_status_counts(playable)
+        return counts
+    if ascii_timing_unavailable or ascii_measure_boundary_missing:
+        counts["category"] = "ascii_tab_timing_unavailable"
+        counts["grouping_status"] = "ascii_grouped"
+        counts["warning_codes"] = warning_codes
+        counts["missing_grouping_dimensions"] = ["bar"]
+        counts["ascii_timing_status_counts"] = _ascii_timing_status_counts(playable)
         return counts
     missing = []
     if counts["playable_candidates_with_system"] < len(playable):
@@ -1129,8 +1158,22 @@ def _tabraw_unsafe_grouping_warning_codes(tabraw: TabRaw) -> list[str]:
         "ambiguous_bar_assignment",
         "ascii_tab_timing_unavailable",
         "partial_ascii_tab_grouping",
+        "partial_ascii_tab_timing",
+        "ambiguous_ascii_tab_timing",
+        "unsupported_ascii_tab_rhythm",
+        "ascii_tab_measure_boundary_missing",
     }
     return sorted({str(warning.get("code")) for warning in tabraw.warnings if warning.get("code") in unsafe})
+
+
+def _ascii_timing_status_counts(candidates: list[TabCandidate]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for candidate in candidates:
+        status = str(candidate.raw.get("ascii_timing_status", "")) if isinstance(candidate.raw, dict) else ""
+        if not status:
+            continue
+        counts[status] = counts.get(status, 0) + 1
+    return dict(sorted(counts.items()))
 
 
 def _x_to_onset_quality(

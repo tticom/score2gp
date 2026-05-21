@@ -24,6 +24,10 @@ PARTIAL_AMBIGUOUS_BAR_PDF = Path("tests/fixtures/pdf/generated_partial_ambiguous
 ASCII_SIMPLE_PDF = Path("tests/fixtures/pdf/generated_ascii_tab_simple.pdf")
 ASCII_TECHNIQUES_PDF = Path("tests/fixtures/pdf/generated_ascii_tab_techniques.pdf")
 ASCII_MALFORMED_PDF = Path("tests/fixtures/pdf/generated_ascii_tab_malformed.pdf")
+ASCII_BARRED_PDF = Path("tests/fixtures/pdf/generated_ascii_tab_barred.pdf")
+ASCII_EQUAL_WIDTH_PDF = Path("tests/fixtures/pdf/generated_ascii_tab_equal_width.pdf")
+ASCII_UNEVEN_TIMING_PDF = Path("tests/fixtures/pdf/generated_ascii_tab_uneven_timing.pdf")
+ASCII_NO_BARS_PDF = Path("tests/fixtures/pdf/generated_ascii_tab_no_bars.pdf")
 
 
 def test_pdf_inspection_reports_missing_pymupdf_or_empty_pdf(tmp_path) -> None:
@@ -472,6 +476,9 @@ def test_ascii_tab_pdf_detects_six_row_block_and_fret_candidates(tmp_path) -> No
     assert all(candidate.raw.get("grouping_status") == "ascii_grouped" for candidate in fret_candidates)
     assert all(candidate.raw.get("row_label") in {"e", "B", "G", "D"} for candidate in fret_candidates)
     assert all(candidate.raw.get("character_span") for candidate in fret_candidates)
+    assert all(candidate.raw.get("timing_parser_version") == "ascii-timing.v0.1" for candidate in fret_candidates)
+    assert all(candidate.raw.get("ascii_timing_status") == "timing_unavailable" for candidate in fret_candidates)
+    assert all(candidate.raw.get("ascii_normalized_column_position") is not None for candidate in fret_candidates)
     assert {"ascii_tab_detected", "ascii_tab_timing_unavailable", "missing_pdf_grouping"} <= warning_codes
     assert "ASCII tab rows were grouped" in report_html
     assert "ascii_grouped" in report_html
@@ -505,6 +512,76 @@ def test_ascii_tab_pdf_preserves_inline_technique_markers_and_legend_text(tmp_pa
     assert legend_techniques
     assert all(candidate.kind != "fret" for candidate in legend_techniques)
     assert any(warning["code"] == "ascii_tab_timing_unavailable" for warning in tabraw.warnings)
+    assert any(warning["code"] == "unsupported_ascii_tab_rhythm" for warning in tabraw.warnings)
+
+
+def test_ascii_tab_with_aligned_bars_records_measure_segments(tmp_path) -> None:
+    assert ASCII_BARRED_PDF.exists()
+    tabraw_path = tmp_path / "generated_ascii_tab_barred.tabraw.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(ASCII_BARRED_PDF, tabraw_path))
+    fret_candidates = [candidate for candidate in tabraw.candidates if candidate.kind == "fret"]
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+    report_html = (tabraw_path.parent / "grouping-diagnostics.html").read_text(encoding="utf-8")
+
+    assert len(fret_candidates) >= 8
+    assert {"ascii_tab_detected", "partial_ascii_tab_timing", "missing_pdf_grouping"} <= warning_codes
+    assert "ascii_tab_timing_unavailable" not in warning_codes
+    assert all(candidate.raw.get("timing_parser_version") == "ascii-timing.v0.1" for candidate in fret_candidates)
+    assert all(candidate.raw.get("ascii_timing_status") == "timing_partial" for candidate in fret_candidates)
+    assert all(candidate.raw.get("ascii_bar_separators_aligned") is True for candidate in fret_candidates)
+    assert all(candidate.raw.get("ascii_measure_segment_count") == 2 for candidate in fret_candidates)
+    assert {candidate.raw.get("ascii_measure_segment_id") for candidate in fret_candidates} == {1, 2}
+    assert all(0.0 <= candidate.raw.get("ascii_normalized_column_position") <= 1.0 for candidate in fret_candidates)
+    assert all(0.0 <= candidate.raw.get("ascii_measure_normalized_column") <= 1.0 for candidate in fret_candidates)
+    assert "partial bar/column timing evidence" in report_html
+    assert "ASCII timing status counts" in report_html
+
+
+def test_equal_width_ascii_tab_records_normalized_column_positions(tmp_path) -> None:
+    assert ASCII_EQUAL_WIDTH_PDF.exists()
+    tabraw_path = tmp_path / "generated_ascii_tab_equal_width.tabraw.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(ASCII_EQUAL_WIDTH_PDF, tabraw_path))
+    fret_candidates = [candidate for candidate in tabraw.candidates if candidate.kind == "fret"]
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+    normalized = [candidate.raw.get("ascii_measure_normalized_column") for candidate in fret_candidates]
+
+    assert len(fret_candidates) >= 10
+    assert "partial_ascii_tab_timing" in warning_codes
+    assert all(candidate.raw.get("ascii_timing_status") == "timing_partial" for candidate in fret_candidates)
+    assert all(candidate.raw.get("ascii_bar_separators_aligned") is True for candidate in fret_candidates)
+    assert all(value is not None for value in normalized)
+    assert min(normalized) < 0.25
+    assert max(normalized) > 0.55
+
+
+def test_no_bar_ascii_tab_keeps_timing_unavailable(tmp_path) -> None:
+    assert ASCII_NO_BARS_PDF.exists()
+    tabraw_path = tmp_path / "generated_ascii_tab_no_bars.tabraw.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(ASCII_NO_BARS_PDF, tabraw_path))
+    fret_candidates = [candidate for candidate in tabraw.candidates if candidate.kind == "fret"]
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+
+    assert fret_candidates
+    assert {"ascii_tab_timing_unavailable", "ascii_tab_measure_boundary_missing"} <= warning_codes
+    assert all(candidate.raw.get("ascii_timing_status") == "timing_unavailable" for candidate in fret_candidates)
+    assert all(candidate.raw.get("ascii_measure_segment_id") is None for candidate in fret_candidates)
+
+
+def test_uneven_ascii_tab_reports_ambiguous_timing(tmp_path) -> None:
+    assert ASCII_UNEVEN_TIMING_PDF.exists()
+    tabraw_path = tmp_path / "generated_ascii_tab_uneven_timing.tabraw.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(ASCII_UNEVEN_TIMING_PDF, tabraw_path))
+    fret_candidates = [candidate for candidate in tabraw.candidates if candidate.kind == "fret"]
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+
+    assert fret_candidates
+    assert {"partial_ascii_tab_timing", "ambiguous_ascii_tab_timing"} <= warning_codes
+    assert all(candidate.raw.get("ascii_timing_status") == "timing_partial" for candidate in fret_candidates)
+    assert any("ambiguous_ascii_tab_timing" in candidate.raw.get("ascii_timing_warnings", []) for candidate in fret_candidates)
 
 
 def test_malformed_ascii_tab_pdf_reports_partial_grouping(tmp_path) -> None:
@@ -540,6 +617,38 @@ def test_build_ir_refuses_ascii_tab_without_timing_alignment(tmp_path) -> None:
     payload = raised.value.to_diagnostics_payload()
     assert payload["details"]["grouping_status"] == "ascii_grouped"
     assert "ascii_tab_timing_unavailable" in payload["details"]["warning_codes"]
+
+
+def test_build_ir_refuses_partial_ascii_tab_timing(tmp_path) -> None:
+    tabraw_path = tmp_path / "generated_ascii_tab_barred.tabraw.json"
+    ir_path = tmp_path / "generated_ascii_tab_barred.ir.json"
+
+    extract_tab(ASCII_BARRED_PDF, tabraw_path)
+
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+
+    assert not ir_path.exists()
+    assert raised.value.category == "partial_ascii_tab_timing"
+    payload = raised.value.to_diagnostics_payload()
+    assert payload["details"]["grouping_status"] == "ascii_grouped"
+    assert "partial_ascii_tab_timing" in payload["details"]["warning_codes"]
+    assert payload["details"]["ascii_timing_status_counts"]["timing_partial"] > 0
+
+
+def test_build_ir_refuses_ambiguous_ascii_tab_timing(tmp_path) -> None:
+    tabraw_path = tmp_path / "generated_ascii_tab_uneven_timing.tabraw.json"
+    ir_path = tmp_path / "generated_ascii_tab_uneven_timing.ir.json"
+
+    extract_tab(ASCII_UNEVEN_TIMING_PDF, tabraw_path)
+
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+
+    assert not ir_path.exists()
+    assert raised.value.category == "ambiguous_ascii_tab_timing"
+    payload = raised.value.to_diagnostics_payload()
+    assert "ambiguous_ascii_tab_timing" in payload["details"]["warning_codes"]
 
 
 def test_build_ir_refuses_partial_ascii_tab_grouping(tmp_path) -> None:

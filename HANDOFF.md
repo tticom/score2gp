@@ -2,23 +2,24 @@
 
 ## Current Branch
 
-- Branch: `feature/ascii-tab-pdf-diagnostics-v0.1`
+- Branch: `feature/ascii-tab-timing-contract-v0.1`
 - Base: `main`
-- PR #1 and PR #3 have been merged into `main`.
-- This branch characterizes born-digital ASCII-tab PDFs as a separate input class from drawn tab-staff geometry.
+- PR #1, PR #3, and PR #4 have been merged into `main`.
+- This branch defines public ASCII-tab timing/alignment evidence as a diagnostic contract.
 - Do not start symbol attachment on this branch.
+- Do not start full ASCII timing alignment or ScoreIR conversion from ASCII tab on this branch.
 
 ## Current Capability
 
-- Public PDF grouping v0.1 remains public-fixture-only and born-digital/generated-fixture focused.
 - Drawn tab staff detection remains separate from ASCII-tab text detection.
-- `extract-tab` can detect six-row ASCII-tab blocks using `ascii-tab.v0.1`.
-- Complete ASCII-tab blocks assign row-order strings and extract fret numbers with character-span provenance.
-- Inline ASCII technique markers such as slide, hammer-on, pull-off, bend, release, and vibrato are preserved as non-playable technique-text candidates.
-- Legend and heading text is not treated as playable fret evidence.
-- Malformed fewer-than-six-row ASCII blocks emit `partial_ascii_tab_grouping`.
-- Complete ASCII-tab blocks emit `ascii_tab_timing_unavailable` because character positions are not safe timing.
-- `build-ir` refuses ASCII-tab candidates before ScoreIR output unless a future phase supplies safe timing/alignment.
+- `extract-tab` detects six-row ASCII-tab blocks using `ascii-tab.v0.1`.
+- ASCII-tab fret candidates now include `ascii-timing.v0.1` raw evidence:
+  row labels, character spans, column indexes, normalized row positions, aligned bar-separator columns, measure segment IDs where available, timing status, confidence, and warning codes.
+- Complete ASCII rows without usable bar separators emit `ascii_tab_timing_unavailable` and `ascii_tab_measure_boundary_missing`.
+- Barred/equal-width public fixtures emit `partial_ascii_tab_timing`; this means measure/column evidence exists but musical onset/duration mapping is not safe.
+- Uneven or inconsistent ASCII timing fixtures emit `ambiguous_ascii_tab_timing`.
+- Malformed fewer-than-six-row ASCII blocks still emit `partial_ascii_tab_grouping`.
+- `build-ir` refuses ASCII-tab candidates before ScoreIR output for unavailable, partial, ambiguous, or incomplete ASCII timing evidence.
 
 ## Verification Expected
 
@@ -32,7 +33,7 @@ Run before any commit, push, or review:
 
 ## Private Safety
 
-- The local private ASCII-tab PDF was used only for smoke characterization.
+- Do not use private PDFs as regression fixtures.
 - Do not commit `work/` outputs.
 - Do not commit private PDFs, GP files, MXL files, private diagnostic HTML, private overlays, logs, or temporary smoke outputs.
 - The only intended tracked private-path item is `fixtures/private/.gitkeep`.
@@ -44,11 +45,11 @@ Run before any commit, push, or review:
 - No scanned-PDF support.
 - No ML layout recognition.
 - No arbitrary commercial score conversion.
-- ASCII-tab support is diagnostic/extraction-level only.
-- ASCII character positions are not yet mapped to musical timing.
+- ASCII character columns are not musical timing by themselves.
+- `ascii-timing.v0.1` provides alignment evidence only; it does not infer durations.
 - Chord symbols and technique text are preserved but not musically attached to ScoreIR events.
 - GPIF output remains minimal.
 
 ## Next Recommended Task
 
-After this branch is reviewed, the next narrow task should define a public timing/alignment contract for ASCII-tab character positions or start a separate public-fixture-only symbol attachment branch. Keep both out of this branch.
+After this branch is reviewed, the next narrow task should design a public MusicXML-to-ASCII alignment proof path that can decide whether `ascii-timing.v0.1` evidence is compatible with actual musical onsets. Keep symbol attachment separate until timing alignment is trustworthy.
