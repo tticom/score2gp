@@ -21,6 +21,9 @@ PARTIAL_MISSING_BARLINES_PDF = Path("tests/fixtures/pdf/generated_partial_missin
 PARTIAL_INCOMPLETE_STAFF_PDF = Path("tests/fixtures/pdf/generated_partial_incomplete_staff_tab.pdf")
 PARTIAL_AMBIGUOUS_STRING_PDF = Path("tests/fixtures/pdf/generated_partial_ambiguous_string_tab.pdf")
 PARTIAL_AMBIGUOUS_BAR_PDF = Path("tests/fixtures/pdf/generated_partial_ambiguous_bar_tab.pdf")
+ASCII_SIMPLE_PDF = Path("tests/fixtures/pdf/generated_ascii_tab_simple.pdf")
+ASCII_TECHNIQUES_PDF = Path("tests/fixtures/pdf/generated_ascii_tab_techniques.pdf")
+ASCII_MALFORMED_PDF = Path("tests/fixtures/pdf/generated_ascii_tab_malformed.pdf")
 
 
 def test_pdf_inspection_reports_missing_pymupdf_or_empty_pdf(tmp_path) -> None:
@@ -448,3 +451,108 @@ def test_build_ir_refuses_public_partial_grouping_fixtures(tmp_path, pdf_path: P
     payload = raised.value.to_diagnostics_payload()
     assert payload["details"]["grouping_status"] == "partial"
     assert expected_warning in payload["details"]["warning_codes"]
+
+
+def test_ascii_tab_pdf_detects_six_row_block_and_fret_candidates(tmp_path) -> None:
+    assert ASCII_SIMPLE_PDF.exists()
+    tabraw_path = tmp_path / "generated_ascii_tab_simple.tabraw.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(ASCII_SIMPLE_PDF, tabraw_path))
+    fret_candidates = [candidate for candidate in tabraw.candidates if candidate.kind == "fret"]
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+    report_html = (tabraw_path.parent / "grouping-diagnostics.html").read_text(encoding="utf-8")
+
+    assert len(fret_candidates) == 6
+    assert [candidate.parsed_fret for candidate in fret_candidates] == [0, 3, 1, 3, 0, 2]
+    assert {candidate.string for candidate in fret_candidates} == {1, 2, 3, 4}
+    assert all(candidate.system_index == 1 for candidate in fret_candidates)
+    assert all(candidate.staff_index == 1 for candidate in fret_candidates)
+    assert all(candidate.bar_index is None for candidate in fret_candidates)
+    assert all(candidate.raw.get("parser_version") == "ascii-tab.v0.1" for candidate in fret_candidates)
+    assert all(candidate.raw.get("grouping_status") == "ascii_grouped" for candidate in fret_candidates)
+    assert all(candidate.raw.get("row_label") in {"e", "B", "G", "D"} for candidate in fret_candidates)
+    assert all(candidate.raw.get("character_span") for candidate in fret_candidates)
+    assert {"ascii_tab_detected", "ascii_tab_timing_unavailable", "missing_pdf_grouping"} <= warning_codes
+    assert "ASCII tab rows were grouped" in report_html
+    assert "ascii_grouped" in report_html
+    assert sorted((tabraw_path.parent / "overlays").glob("*-grouping.png"))
+
+
+def test_ascii_tab_pdf_preserves_inline_technique_markers_and_legend_text(tmp_path) -> None:
+    assert ASCII_TECHNIQUES_PDF.exists()
+    tabraw_path = tmp_path / "generated_ascii_tab_techniques.tabraw.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(ASCII_TECHNIQUES_PDF, tabraw_path))
+    fret_candidates = [candidate for candidate in tabraw.candidates if candidate.kind == "fret"]
+    technique_candidates = [candidate for candidate in tabraw.candidates if candidate.kind == "technique-text"]
+    ascii_techniques = [
+        candidate
+        for candidate in technique_candidates
+        if candidate.raw.get("parser_version") == "ascii-tab.v0.1"
+    ]
+    legend_techniques = [
+        candidate
+        for candidate in technique_candidates
+        if candidate.raw.get("parser_version") != "ascii-tab.v0.1"
+    ]
+
+    assert len(fret_candidates) == 12
+    assert {3, 5, 7, 2, 4, 8, 9} <= {candidate.parsed_fret for candidate in fret_candidates}
+    assert {"/", "\\", "h", "p", "b", "r", "v"} <= {candidate.raw_text for candidate in ascii_techniques}
+    assert all(candidate.parsed_fret is None for candidate in technique_candidates)
+    assert all(candidate.string is None for candidate in ascii_techniques)
+    assert all(candidate.raw.get("technique_context") == "ascii-inline-marker" for candidate in ascii_techniques)
+    assert legend_techniques
+    assert all(candidate.kind != "fret" for candidate in legend_techniques)
+    assert any(warning["code"] == "ascii_tab_timing_unavailable" for warning in tabraw.warnings)
+
+
+def test_malformed_ascii_tab_pdf_reports_partial_grouping(tmp_path) -> None:
+    assert ASCII_MALFORMED_PDF.exists()
+    tabraw_path = tmp_path / "generated_ascii_tab_malformed.tabraw.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(ASCII_MALFORMED_PDF, tabraw_path))
+    fret_candidates = [candidate for candidate in tabraw.candidates if candidate.kind == "fret"]
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+    report_html = (tabraw_path.parent / "grouping-diagnostics.html").read_text(encoding="utf-8")
+
+    assert len(fret_candidates) == 6
+    assert all(candidate.raw.get("parser_version") == "ascii-tab.v0.1" for candidate in fret_candidates)
+    assert all(candidate.raw.get("grouping_status") == "partial_ascii_tab_grouping" for candidate in fret_candidates)
+    assert all(candidate.string is None for candidate in fret_candidates)
+    assert {"ascii_tab_detected", "partial_ascii_tab_grouping", "missing_pdf_grouping"} <= warning_codes
+    assert "partial_ascii" in report_html
+    assert "ASCII grouping is partial" in report_html
+    assert sorted((tabraw_path.parent / "overlays").glob("*-grouping.png"))
+
+
+def test_build_ir_refuses_ascii_tab_without_timing_alignment(tmp_path) -> None:
+    tabraw_path = tmp_path / "generated_ascii_tab_simple.tabraw.json"
+    ir_path = tmp_path / "generated_ascii_tab_simple.ir.json"
+
+    extract_tab(ASCII_SIMPLE_PDF, tabraw_path)
+
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+
+    assert not ir_path.exists()
+    assert raised.value.category == "ascii_tab_timing_unavailable"
+    payload = raised.value.to_diagnostics_payload()
+    assert payload["details"]["grouping_status"] == "ascii_grouped"
+    assert "ascii_tab_timing_unavailable" in payload["details"]["warning_codes"]
+
+
+def test_build_ir_refuses_partial_ascii_tab_grouping(tmp_path) -> None:
+    tabraw_path = tmp_path / "generated_ascii_tab_malformed.tabraw.json"
+    ir_path = tmp_path / "generated_ascii_tab_malformed.ir.json"
+
+    extract_tab(ASCII_MALFORMED_PDF, tabraw_path)
+
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+
+    assert not ir_path.exists()
+    assert raised.value.category == "partial_ascii_tab_grouping"
+    payload = raised.value.to_diagnostics_payload()
+    assert payload["details"]["grouping_status"] == "partial_ascii_tab_grouping"
+    assert "partial_ascii_tab_grouping" in payload["details"]["warning_codes"]
