@@ -26,7 +26,8 @@ Known limitations:
 - The grouping HTML report and overlay images make grouping success and failure inspectable; they do not solve arbitrary PDF grouping or make unstructured fret text safe to align.
 - A `good` x-to-onset quality label only means the current simple alignment looks internally consistent for the inspected controlled input.
 - `warning`, `poor`, or `unknown` x-to-onset quality means the conversion should be inspected before trusting any automatic result.
-- Chord symbols and technique text extracted from PDF-derived TabRaw are preserved and reported, but not yet aligned into ScoreIR events.
+- Chord symbols and technique text are conservatively attached to existing, safely timed ScoreIR events and note techniques as metadata/evidence, but they cannot create notes, events, or timing. GPIF technique & chord rendering remains strictly out of scope.
+- Developer-facing HTML report (`symbol-attachment-diagnostics.html`) provides a human-readable visualization of which candidates successfully attached and which remained unattached with warning codes. JSON diagnostics remain the programmatic source of truth.
 - Candidate text near tab systems is preserved as non-playable evidence; it is not interpreted musically.
 - Scanned PDFs require OCR/image recognition that is not complete in the first milestone.
 - The generated PDF regressions demonstrate controlled born-digital PDF producer paths; they do not mean private or commercial scores will convert cleanly.

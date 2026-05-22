@@ -60,3 +60,13 @@ To make gate refusal easy to understand for developers, `build-ir` generates a d
 - **Developer-Facing Explanations**: The HTML report provides a human-readable layout of why the input was refused, primary and secondary reason codes, and remediation advice.
 - **JSON as Source of Truth**: The JSON diagnostics payload remains the programmatic source of truth for the pipeline and downstream automated checks.
 - **Scope Limits**: Refusal is the expected, deterministic behavior for unsupported ASCII inputs. The HTML report does not broaden the ASCII success path, and does not imply broader ASCII-to-ScoreIR conversion support, scanned-PDF support, OCR, or symbol/technique attachment, all of which remain strictly out of scope.
+
+## HTML Diagnostics for Symbol Attachment
+
+To assist in visual review of the conservative TabRaw symbol and technique attachment process, `build-ir` generates a developer-facing HTML diagnostics report (`symbol-attachment-diagnostics.html`) when diagnostics are requested.
+- **Visual Evidence Review**: The report provides a clear display of attached and unattached chord symbol and technique candidates, listing their target bar index, event ID, note target (string/fret), confidence, provenance ID, and refusal warnings.
+- **Strict Scope Boundaries**:
+  - **JSON remains the programmatic source of truth** for all symbol and technique attachments.
+  - **GPIF rendering is NOT implemented**. The HTML report does not render or represent tab in a graphical guitar tab format.
+  - **Symbols and techniques DID NOT create notes, events, or timing**. They are only attached as conservative metadata/evidence to existing, safely timed events.
+  - Unsupported/ambiguous symbols and technique texts remain strictly as diagnostic evidence (warnings) rather than being promoted or silently dropped.

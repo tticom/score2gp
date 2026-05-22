@@ -4,12 +4,12 @@
 
 - [ ] Add developer-facing HTML styling and compact thumbnails for grouping diagnostics.
 - [ ] Add public reproductions for more Audiveris timing patterns before another private run.
-- [ ] Attach PDF-derived chord symbols and technique text to ScoreIR events once timing calibration exists.
-- [ ] Add HTML conversion report styling and unsupported-technique summaries.
 - [ ] Add a public partial-to-recovery design note before attempting any automatic grouping repair.
 
 ## Done
 
+- [x] Attach PDF-derived chord symbols and technique text to ScoreIR events once timing calibration exists.
+- [x] Developer-facing HTML rendering for attached and unattached chord/technique evidence in generated ScoreIR.
 - [x] Repository scaffold.
 - [x] ScoreIR v0.1 contract, schema export, validation, and semantic comparison.
 - [x] GP inspection command.
