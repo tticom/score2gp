@@ -4,9 +4,9 @@
 - **Current Branch**: `feature/ascii-scoreir-gate-refusal-diagnostics-v0.1`
 - **Base Branch**: `main`
 - **Current PR**: #8 (URL: https://github.com/tticom/score2gp/pull/8)
-- **Latest Local Commit**: To be created as the handoff sync commit ("Update handoff after PR readiness")
-- **Latest Pushed Commit**: `11019893d4e930d65b33962b2e51e5aa00b7c788`
-- **Commit Subject**: `Persist pushed handoff rule`
+- **Latest Local Commit**: `027db3ea3cd5f635e2cc0e62dc49d32e4226333d`
+- **Latest Pushed Commit**: `027db3ea3cd5f635e2cc0e62dc49d32e4226333d`
+- **Commit Subject**: `Update handoff after PR readiness`
 - **Working Tree Status**: Clean
 - **Tests & Checks Run**:
   - `python -m pytest` -> 114 passed
@@ -14,7 +14,7 @@
   - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid
   - `git diff --check` -> passed
   - `git diff -- schemas` -> empty
-- **GitHub Check Status**: pending (new GitHub Actions run triggered by commit `1101989` is currently in progress)
+- **GitHub Check Status**: Passing (All remote checks passed on PR #8 for commit `027db3e`)
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL files, overlays, logs, or diagnostic outputs are tracked or staged.
 
 ## What Changed in the Task
