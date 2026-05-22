@@ -145,3 +145,78 @@ def test_musicxml_timing_diagnostics_html_written_on_failure(tmp_path) -> None:
     assert "musicxml-overfull-bar" in html_content
     assert "Timing Risk" in html_content
 
+
+def test_valid_12_8_compound_preflight() -> None:
+    imported = parse_musicxml(FIXTURES / "timing_12_8_valid.musicxml")
+    issues = analyze_musicxml_timing(imported)
+    assert any(issue.code == "valid_compound_meter" and issue.severity == "info" for issue in issues)
+    assert not any(issue.severity == "error" for issue in issues)
+
+
+def test_12_8_underfull_preflight() -> None:
+    imported = parse_musicxml(FIXTURES / "timing_12_8_underfull.musicxml")
+    issues = analyze_musicxml_timing(imported)
+    assert any(issue.code == "musicxml_compound_meter_underfull" and issue.severity == "warning" for issue in issues)
+
+
+def test_12_8_overfull_preflight() -> None:
+    imported = parse_musicxml(FIXTURES / "timing_12_8_overfull.musicxml")
+    issues = analyze_musicxml_timing(imported)
+    assert any(issue.code == "musicxml_compound_meter_overfull" and issue.severity == "error" for issue in issues)
+
+
+def test_backup_rewind_before_measure_start_detected() -> None:
+    imported = parse_musicxml(FIXTURES / "timing_backup_rewinds_before_start.musicxml")
+    issues = analyze_musicxml_timing(imported)
+    assert any(issue.code == "musicxml_backup_rewinds_before_measure_start" and issue.severity == "warning" for issue in issues)
+
+
+def test_forward_beyond_measure_end_detected() -> None:
+    imported = parse_musicxml(FIXTURES / "timing_forward_exceeds_end.musicxml")
+    issues = analyze_musicxml_timing(imported)
+    assert any(issue.code == "musicxml_forward_exceeds_measure_end" and issue.severity == "error" for issue in issues)
+
+
+def test_backup_forward_ambiguity_blocks_alignment(tmp_path) -> None:
+    out_ir = tmp_path / "ambig.ir.json"
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(FIXTURES / "timing_12_8_ambiguous_backup_forward.musicxml", TABRAW, out_ir)
+    assert raised.value.category == "musicxml_timing_risk"
+
+
+def test_multivoice_unsupported_refuses_clearly(tmp_path) -> None:
+    imported = parse_musicxml(FIXTURES / "timing_multivoice_unsupported.musicxml")
+    issues = analyze_musicxml_timing(imported)
+    assert any(issue.code == "musicxml_multivoice_timing_not_supported" and issue.severity == "error" for issue in issues)
+
+    out_ir = tmp_path / "multivoice.ir.json"
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(FIXTURES / "timing_multivoice_unsupported.musicxml", TABRAW, out_ir)
+    assert raised.value.category == "musicxml_timing_risk"
+
+
+def test_same_voice_cursor_overlap_refuses_clearly(tmp_path) -> None:
+    imported = parse_musicxml(FIXTURES / "timing_same_voice_cursor_overlap.musicxml")
+    issues = analyze_musicxml_timing(imported)
+    assert any(issue.code == "musicxml_voice_cursor_overlap" and issue.severity == "error" for issue in issues)
+
+    out_ir = tmp_path / "same_voice.ir.json"
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(FIXTURES / "timing_same_voice_cursor_overlap.musicxml", TABRAW, out_ir)
+    assert raised.value.category == "musicxml_timing_risk"
+
+
+def test_chord_stack_classified_distinctly_from_unsafe_overlap(tmp_path) -> None:
+    imported = parse_musicxml(FIXTURES / "timing_chord_stack_classified.musicxml")
+    issues = analyze_musicxml_timing(imported)
+    assert any(issue.code == "musicxml_chord_stack_detected" and issue.severity == "info" for issue in issues)
+    assert any(issue.code == "musicxml_chord_stack_supported_or_blocked" and issue.severity == "info" for issue in issues)
+    assert not any(issue.severity == "error" for issue in issues)
+
+
+def test_audiveris_like_synthetic_timing_pattern() -> None:
+    imported = parse_musicxml(FIXTURES / "timing_audiveris_like_pattern.musicxml")
+    issues = analyze_musicxml_timing(imported)
+    assert any(issue.code == "musicxml_unbalanced_backup_forward" and issue.severity == "error" for issue in issues)
+    assert any(issue.code == "musicxml_alignment_not_attempted_due_to_timing_risk" and issue.severity == "error" for issue in issues)
+

@@ -195,7 +195,10 @@ def test_build_ir_refuses_overfull_musicxml_before_scoreir_validation(tmp_path) 
     assert exc.stage == "musicxml-import"
     assert not (tmp_path / "overfull.ir.json").exists()
     assert payload["schema_version"] == "build-ir-failure-diagnostics.v0.1"
-    assert payload["timing_issue_counts"] == {"musicxml-overfull-bar": 1}
+    assert payload["timing_issue_counts"] == {
+        "musicxml-overfull-bar": 1,
+        "musicxml_alignment_not_attempted_due_to_timing_risk": 1,
+    }
     assert payload["timing_issues"][0]["end_divisions"] == 20
 
 
@@ -222,8 +225,11 @@ def test_build_ir_refuses_backup_forward_overfull_with_timing_category(tmp_path)
 
     assert payload["category"] == "musicxml_timing_risk"
     assert payload["timing_issue_counts"] == {
+        "musicxml_forward_exceeds_measure_end": 1,
         "musicxml_unbalanced_backup_forward": 1,
+        "musicxml_backup_forward_alignment_ambiguous": 1,
         "musicxml-overfull-bar": 1,
+        "musicxml_alignment_not_attempted_due_to_timing_risk": 1,
     }
     overfull_issue = next(issue for issue in payload["timing_issues"] if issue["code"] == "musicxml-overfull-bar")
     assert overfull_issue["voice"] == 2
@@ -251,4 +257,7 @@ def test_build_ir_refuses_overfull_mxl_before_writing_scoreir(tmp_path) -> None:
 
     assert not out.exists()
     assert raised.value.category == "musicxml_timing_risk"
-    assert raised.value.to_diagnostics_payload()["timing_issue_counts"] == {"musicxml-overfull-bar": 1}
+    assert raised.value.to_diagnostics_payload()["timing_issue_counts"] == {
+        "musicxml-overfull-bar": 1,
+        "musicxml_alignment_not_attempted_due_to_timing_risk": 1,
+    }
