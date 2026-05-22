@@ -3,11 +3,11 @@
 ## Metadata
 - **Current Branch**: `feature/private-smoke-refresh-after-musicxml-voice-cursor-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: N/A (to be created)
-- **Latest Local Commit**: N/A (uncommitted changes)
-- **Latest Pushed Commit**: N/A
-- **Commit Subject**: N/A
-- **Working Tree Status**: Clean (except HANDOFF.md and TASKS.md)
+- **Current PR**: [#22](https://github.com/tticom/score2gp/pull/22)
+- **Latest Local Commit**: `af5a52172f7f7ff7041a9a77eb2b00e3bbef1031`
+- **Latest Pushed Commit**: `af5a52172f7f7ff7041a9a77eb2b00e3bbef1031`
+- **Commit Subject**: Refresh private smoke blocker summary after voice cursor model
+- **Working Tree Status**: Clean
 - **Tests & Checks Run**:
   - `python -m pytest` -> 169 passed
   - `python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
