@@ -71,6 +71,14 @@ To assist in visual review of the conservative TabRaw symbol and technique attac
   - **Symbols and techniques DID NOT create notes, events, or timing**. They are only attached as conservative metadata/evidence to existing, safely timed events.
   - Unsupported/ambiguous symbols and technique texts remain strictly as diagnostic evidence (warnings) rather than being promoted or silently dropped.
 
+## HTML Diagnostics for MusicXML Timing & Overlap Risks
+
+To make MusicXML timing and overlap failures easy to understand and inspect for developers, `build-ir` generates a developer-facing HTML diagnostics report (`musicxml-timing-diagnostics.html`) alongside the JSON diagnostics sidecar when a MusicXML timing risk failure occurs during the import preflight stage.
+- **Detailed Timing Analysis**: The HTML report provides a human-readable table of all timing issues, showing their severity, reason codes, measure numbers, affected voices, note IDs, and detailed descriptions.
+- **Verdict & Remediation Hints**: Clearly highlights the primary timing risk code (e.g. overfull measure, polyphony overlap, unbalanced backup/forward commands, etc.) and provides tailored remediation advice to guide the developer on how to fix the MusicXML timing/voice structure.
+- **JSON as Source of Truth**: The JSON diagnostics payload remains the programmatic source of truth for downstream tools.
+- **Strict Safety Gates**: MusicXML timing risks strictly block ScoreIR generation to prevent downstream alignment and rendering failures, rather than silently dropping or flattening voices, rests, or tuplets.
+
 ## Public End-to-End PDF-to-GP Proof Slice
 
 To demonstrate the structural integrity of the entire staged pipeline (PDF extraction, alignment, ScoreIR building, validation, GP writing, package validation, and semantic fact comparison), there is a public end-to-end integration proof.

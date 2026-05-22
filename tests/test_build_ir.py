@@ -221,8 +221,12 @@ def test_build_ir_refuses_backup_forward_overfull_with_timing_category(tmp_path)
     payload = raised.value.to_diagnostics_payload()
 
     assert payload["category"] == "musicxml_timing_risk"
-    assert payload["timing_issue_counts"] == {"musicxml-overfull-bar": 1}
-    assert payload["timing_issues"][0]["voice"] == 2
+    assert payload["timing_issue_counts"] == {
+        "musicxml_unbalanced_backup_forward": 1,
+        "musicxml-overfull-bar": 1,
+    }
+    overfull_issue = next(issue for issue in payload["timing_issues"] if issue["code"] == "musicxml-overfull-bar")
+    assert overfull_issue["voice"] == 2
 
 
 def test_build_ir_consumes_native_mxl_without_unpacked_intermediate(tmp_path) -> None:

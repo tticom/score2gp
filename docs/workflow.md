@@ -338,7 +338,7 @@ python -m score2gp.cli build-ir `
   --diagnostics-out "work/timing/overfull.diagnostics.json"
 ```
 
-This command is expected to exit non-zero and write a `build-ir-failure-diagnostics.v0.1` payload when `--diagnostics-out` is supplied. That is intentional: the project should refuse known-invalid timing rather than rely on a later generic ScoreIR validation error.
+This command is expected to exit non-zero and write a `build-ir-failure-diagnostics.v0.1` payload when `--diagnostics-out` is supplied. That is intentional: the project should refuse known-invalid timing rather than rely on a later generic ScoreIR validation error. In addition, `build-ir` automatically generates a developer-facing HTML diagnostics report (`musicxml-timing-diagnostics.html`) beside the JSON diagnostics file to provide an inspectable visual table of timing issues, affected measures/voices, and remediation hints. Just like other HTML reports, it serves as a human-readable visual inspection helper while JSON remains the programmatic source of truth.
 
 `build-ir` also refuses PDF-derived TabRaw when playable fret candidates exist but system/string/bar grouping is absent. In that case the failure category is `missing_pdf_grouping`, and no ScoreIR file is written. This keeps ungrouped fret text from being treated as reliable musical evidence. ASCII-tab inputs are also refused until timing is safe; complete ASCII-row extraction fails with `ascii_tab_timing_unavailable`, while incomplete ASCII row grouping fails with `partial_ascii_tab_grouping`.
 

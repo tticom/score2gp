@@ -99,6 +99,9 @@ class MusicXmlNote(BaseModel):
     grace: bool = False
     techniques: list[MusicXmlTechnique] = Field(default_factory=list)
     source_path: str
+    duration_missing: bool = False
+    duration_zero: bool = False
+    tuplet_unsupported: bool = False
 
     def duration_ticks(self, divisions: int) -> tuple[int, bool]:
         value = Fraction(self.duration_divisions * DEFAULT_TICKS_PER_QUARTER, divisions)
@@ -134,6 +137,10 @@ class MusicXmlMeasure(BaseModel):
     key_fifths: int | None = None
     notes: list[MusicXmlNote] = Field(default_factory=list)
     harmonies: list[MusicXmlHarmony] = Field(default_factory=list)
+    divisions_missing: bool = False
+    divisions_changed_mid_measure: bool = False
+    backup_forward_risk: bool = False
+    unbalanced_backup_forward: bool = False
 
 
 class MusicXmlPart(BaseModel):
@@ -193,10 +200,43 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
     """Return public-safe timing risks before ScoreIR construction."""
 
     issues: list[MusicXmlTimingIssue] = []
+
+    # Track notes by voice to check for ties across measures
+    voice_notes: dict[str, dict[int, list[MusicXmlNote]]] = {}
+
     for part in imported.parts:
+        part_vnotes = voice_notes.setdefault(part.id, {})
         previous_divisions: int | None = None
         for measure in part.measures:
             expected = _expected_measure_duration_divisions(measure)
+
+            # Check 1: divisions missing
+            if measure.divisions_missing:
+                issues.append(
+                    MusicXmlTimingIssue(
+                        code="musicxml_divisions_missing",
+                        message=f"Measure {measure.number} is missing MusicXML divisions definition.",
+                        severity="error",
+                        part_id=part.id,
+                        measure_index=measure.index,
+                        measure_number=measure.number,
+                    )
+                )
+
+            # Check 2: divisions changed mid-measure
+            if measure.divisions_changed_mid_measure:
+                issues.append(
+                    MusicXmlTimingIssue(
+                        code="musicxml_divisions_changed_mid_measure",
+                        message=f"Measure {measure.number} changes MusicXML divisions mid-measure, which is unsupported.",
+                        severity="error",
+                        part_id=part.id,
+                        measure_index=measure.index,
+                        measure_number=measure.number,
+                    )
+                )
+
+            # Check 3: divisions changed mid-part
             if previous_divisions is not None and previous_divisions != measure.divisions:
                 issues.append(
                     MusicXmlTimingIssue(
@@ -214,6 +254,7 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                 )
             previous_divisions = measure.divisions
 
+            # Check 4: 12/8 or other compound meter assumption
             if measure.time_signature.numerator % 3 == 0 and measure.time_signature.denominator == 8:
                 issues.append(
                     MusicXmlTimingIssue(
@@ -231,6 +272,7 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                     )
                 )
 
+            # Check 5: measure duration unknown
             if expected is None:
                 issues.append(
                     MusicXmlTimingIssue(
@@ -244,61 +286,229 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                 )
                 continue
 
-            voice_extents: dict[int, int] = {}
-            previous_by_voice: dict[int, tuple[int, MusicXmlNote]] = {}
-            for group in _measure_timing_groups(measure):
-                first = group[0]
-                if first.grace or first.duration_divisions <= 0:
-                    continue
-                end = first.onset_divisions + first.duration_divisions
-                voice_extents[first.voice] = max(voice_extents.get(first.voice, 0), end)
-                if end > expected:
+            # Check 6: backup past zero
+            if measure.backup_forward_risk:
+                issues.append(
+                    MusicXmlTimingIssue(
+                        code="musicxml_backup_forward_risk",
+                        message=f"Measure {measure.number} contains a backup element that moves the cursor past zero.",
+                        severity="warning",
+                        part_id=part.id,
+                        measure_index=measure.index,
+                        measure_number=measure.number,
+                    )
+                )
+
+            # Check 7: unbalanced backup/forward
+            if measure.unbalanced_backup_forward:
+                issues.append(
+                    MusicXmlTimingIssue(
+                        code="musicxml_unbalanced_backup_forward",
+                        message=f"Measure {measure.number} contains unbalanced backup/forward cursor movements.",
+                        severity="error",
+                        part_id=part.id,
+                        measure_index=measure.index,
+                        measure_number=measure.number,
+                    )
+                )
+
+            # Collect pitched notes for tie checking later
+            for note in measure.notes:
+                if not note.grace and not note.is_rest and note.pitch is not None:
+                    part_vnotes.setdefault(note.voice, []).append(note)
+
+            # Let's inspect note-level duration and tuplet issues
+            for note in measure.notes:
+                if note.duration_missing:
                     issues.append(
                         MusicXmlTimingIssue(
-                            code="musicxml-overfull-bar",
-                            message=(
-                                f"Measure {measure.number} event {first.id} ends at MusicXML division "
-                                f"{end}, beyond expected measure length {expected}."
-                            ),
+                            code="musicxml_duration_missing",
+                            message=f"Measure {measure.number} note {note.id} is missing duration.",
+                            severity="warning",
+                            part_id=part.id,
+                            measure_index=measure.index,
+                            measure_number=measure.number,
+                            voice=note.voice,
+                            musicxml_note_id=note.id,
+                            onset_divisions=note.onset_divisions,
+                            source_path=note.source_path,
+                        )
+                    )
+                if note.duration_zero:
+                    issues.append(
+                        MusicXmlTimingIssue(
+                            code="musicxml_duration_zero",
+                            message=f"Measure {measure.number} note {note.id} has duration 0.",
+                            severity="warning",
+                            part_id=part.id,
+                            measure_index=measure.index,
+                            measure_number=measure.number,
+                            voice=note.voice,
+                            musicxml_note_id=note.id,
+                            onset_divisions=note.onset_divisions,
+                            source_path=note.source_path,
+                        )
+                    )
+                if note.tuplet_unsupported:
+                    issues.append(
+                        MusicXmlTimingIssue(
+                            code="musicxml_tuplet_unsupported",
+                            message=f"Measure {measure.number} note {note.id} uses an unsupported or malformed tuplet timing.",
                             severity="error",
                             part_id=part.id,
                             measure_index=measure.index,
                             measure_number=measure.number,
-                            voice=first.voice,
-                            musicxml_note_id=first.id,
-                            expected_duration_divisions=expected,
-                            onset_divisions=first.onset_divisions,
-                            duration_divisions=first.duration_divisions,
-                            end_divisions=end,
-                            source_path=first.source_path,
+                            voice=note.voice,
+                            musicxml_note_id=note.id,
+                            onset_divisions=note.onset_divisions,
+                            source_path=note.source_path,
                         )
                     )
-                previous = previous_by_voice.get(first.voice)
-                if previous is not None:
-                    previous_end, previous_note = previous
-                    if previous_end > first.onset_divisions:
+
+            # Let's check overlaps and chord stacks
+            # Keep track of voice extents for underfull check
+            voice_extents: dict[int, int] = {}
+
+            # Non-grace notes
+            timed_notes = [n for n in measure.notes if not n.grace]
+
+            for note in timed_notes:
+                if note.duration_divisions > 0:
+                    end = note.onset_divisions + note.duration_divisions
+                    voice_extents[note.voice] = max(voice_extents.get(note.voice, 0), end)
+
+                    if end > expected:
                         issues.append(
                             MusicXmlTimingIssue(
-                                code="musicxml-voice-overlap",
+                                code="musicxml-overfull-bar",
                                 message=(
-                                    f"Measure {measure.number} voice {first.voice} overlaps: "
-                                    f"{previous_note.id} ends at {previous_end}, before {first.id} starts at "
-                                    f"{first.onset_divisions}."
+                                    f"Measure {measure.number} event {note.id} ends at MusicXML division "
+                                    f"{end}, beyond expected measure length {expected}."
                                 ),
                                 severity="error",
                                 part_id=part.id,
                                 measure_index=measure.index,
                                 measure_number=measure.number,
-                                voice=first.voice,
-                                musicxml_note_id=first.id,
+                                voice=note.voice,
+                                musicxml_note_id=note.id,
                                 expected_duration_divisions=expected,
-                                onset_divisions=first.onset_divisions,
-                                duration_divisions=first.duration_divisions,
+                                onset_divisions=note.onset_divisions,
+                                duration_divisions=note.duration_divisions,
                                 end_divisions=end,
-                                source_path=first.source_path,
+                                source_path=note.source_path,
                             )
                         )
-                previous_by_voice[first.voice] = (end, first)
+
+            # Now let's compare every pair of timed notes in the measure for overlaps/chords
+            for i in range(len(timed_notes)):
+                note_i = timed_notes[i]
+                if note_i.duration_divisions <= 0:
+                    continue
+                onset_i = note_i.onset_divisions
+                end_i = onset_i + note_i.duration_divisions
+
+                for j in range(i + 1, len(timed_notes)):
+                    note_j = timed_notes[j]
+                    if note_j.duration_divisions <= 0:
+                        continue
+                    onset_j = note_j.onset_divisions
+                    end_j = onset_j + note_j.duration_divisions
+
+                    # Do they overlap?
+                    if max(onset_i, onset_j) < min(end_i, end_j):
+                        if onset_i == onset_j:
+                            if note_i.voice == note_j.voice:
+                                if note_i.chord or note_j.chord:
+                                    # Legitimate chord stack
+                                    issues.append(
+                                        MusicXmlTimingIssue(
+                                            code="musicxml_chord_stack_detected",
+                                            message=f"Measure {measure.number} has a legitimate chord stack in voice {note_i.voice}.",
+                                            severity="info",
+                                            part_id=part.id,
+                                            measure_index=measure.index,
+                                            measure_number=measure.number,
+                                            voice=note_i.voice,
+                                            musicxml_note_id=note_j.id,
+                                            onset_divisions=onset_i,
+                                            duration_divisions=note_i.duration_divisions,
+                                        )
+                                    )
+                            else:
+                                # Different voice same onset -> polyphony
+                                if not note_i.is_rest and not note_j.is_rest:
+                                    issues.append(
+                                        MusicXmlTimingIssue(
+                                            code="musicxml_polyphony_not_supported",
+                                            message=f"Measure {measure.number} has unsupported polyphony/multi-voice overlap between voice {note_i.voice} and voice {note_j.voice}.",
+                                            severity="error",
+                                            part_id=part.id,
+                                            measure_index=measure.index,
+                                            measure_number=measure.number,
+                                            voice=note_j.voice,
+                                            musicxml_note_id=note_j.id,
+                                            onset_divisions=onset_j,
+                                            duration_divisions=note_j.duration_divisions,
+                                        )
+                                    )
+                        else:
+                            # Different onset overlap
+                            if note_i.voice == note_j.voice:
+                                if note_i.is_rest or note_j.is_rest:
+                                    issues.append(
+                                        MusicXmlTimingIssue(
+                                            code="musicxml_rest_overlap",
+                                            message=f"Measure {measure.number} voice {note_i.voice} has overlapping rest and note.",
+                                            severity="error",
+                                            part_id=part.id,
+                                            measure_index=measure.index,
+                                            measure_number=measure.number,
+                                            voice=note_i.voice,
+                                            musicxml_note_id=note_j.id,
+                                            onset_divisions=onset_j,
+                                            duration_divisions=note_j.duration_divisions,
+                                            end_divisions=end_j,
+                                            source_path=note_j.source_path,
+                                        )
+                                    )
+                                else:
+                                    issues.append(
+                                        MusicXmlTimingIssue(
+                                            code="musicxml-voice-overlap",
+                                            message=(
+                                                f"Measure {measure.number} voice {note_i.voice} overlaps: "
+                                                f"{note_i.id} ends at {end_i}, before {note_j.id} starts at "
+                                                f"{onset_j}."
+                                            ),
+                                            severity="error",
+                                            part_id=part.id,
+                                            measure_index=measure.index,
+                                            measure_number=measure.number,
+                                            voice=note_i.voice,
+                                            musicxml_note_id=note_j.id,
+                                            onset_divisions=onset_j,
+                                            duration_divisions=note_j.duration_divisions,
+                                            end_divisions=end_j,
+                                            source_path=note_j.source_path,
+                                        )
+                                    )
+                            else:
+                                # Different voice different onset overlap
+                                if not note_i.is_rest and not note_j.is_rest:
+                                    issues.append(
+                                        MusicXmlTimingIssue(
+                                            code="musicxml_polyphony_not_supported",
+                                            message=f"Measure {measure.number} has unsupported polyphony/multi-voice overlap between voice {note_i.voice} and voice {note_j.voice}.",
+                                            severity="error",
+                                            part_id=part.id,
+                                            measure_index=measure.index,
+                                            measure_number=measure.number,
+                                            voice=note_j.voice,
+                                            musicxml_note_id=note_j.id,
+                                            onset_divisions=onset_j,
+                                            duration_divisions=note_j.duration_divisions,
+                                        )
+                                    )
 
             if voice_extents:
                 longest_voice = max(voice_extents.values())
@@ -318,6 +528,79 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                             end_divisions=longest_voice,
                         )
                     )
+
+        # Check for tie continuity risks
+        for voice, notes in part_vnotes.items():
+            for idx in range(len(notes)):
+                note = notes[idx]
+                if "start" in note.ties:
+                    if note.measure_index < len(part.measures):
+                        resolved = False
+                        next_idx = idx + 1
+                        while next_idx < len(notes):
+                            cand = notes[next_idx]
+                            if cand.onset_divisions > note.onset_divisions or cand.measure_index > note.measure_index:
+                                onset_to_check = cand.onset_divisions
+                                measure_to_check = cand.measure_index
+                                while next_idx < len(notes):
+                                    next_cand = notes[next_idx]
+                                    if next_cand.onset_divisions == onset_to_check and next_cand.measure_index == measure_to_check:
+                                        if "stop" in next_cand.ties and next_cand.pitch is not None and note.pitch is not None and next_cand.pitch.midi == note.pitch.midi:
+                                            resolved = True
+                                            break
+                                        next_idx += 1
+                                    else:
+                                        break
+                                break
+                            next_idx += 1
+
+                        if not resolved:
+                            issues.append(
+                                MusicXmlTimingIssue(
+                                    code="musicxml_tie_continuity_risk",
+                                    message=f"Measure {note.measure_number} note {note.id} starts a tie but has no matching stop tie with same pitch.",
+                                    severity="warning",
+                                    part_id=part.id,
+                                    measure_index=note.measure_index,
+                                    measure_number=note.measure_number,
+                                    voice=note.voice,
+                                    musicxml_note_id=note.id,
+                                )
+                            )
+                if "stop" in note.ties:
+                    if note.measure_index > 1:
+                        resolved = False
+                        prev_idx = idx - 1
+                        while prev_idx >= 0:
+                            cand = notes[prev_idx]
+                            if cand.onset_divisions < note.onset_divisions or cand.measure_index < note.measure_index:
+                                onset_to_check = cand.onset_divisions
+                                measure_to_check = cand.measure_index
+                                while prev_idx >= 0:
+                                    prev_cand = notes[prev_idx]
+                                    if prev_cand.onset_divisions == onset_to_check and prev_cand.measure_index == measure_to_check:
+                                        if "start" in prev_cand.ties and prev_cand.pitch is not None and note.pitch is not None and prev_cand.pitch.midi == note.pitch.midi:
+                                            resolved = True
+                                            break
+                                        prev_idx -= 1
+                                    else:
+                                        break
+                                break
+                            prev_idx -= 1
+
+                        if not resolved:
+                            issues.append(
+                                MusicXmlTimingIssue(
+                                    code="musicxml_tie_continuity_risk",
+                                    message=f"Measure {note.measure_number} note {note.id} stops a tie but has no matching start tie with same pitch.",
+                                    severity="warning",
+                                    part_id=part.id,
+                                    measure_index=note.measure_index,
+                                    measure_number=note.measure_number,
+                                    voice=note.voice,
+                                    musicxml_note_id=note.id,
+                                )
+                            )
 
     return issues
 
@@ -383,6 +666,7 @@ def _parse_part(
     current_divisions = 1
     current_time = TimeSignature(numerator=4, denominator=4)
     current_key: int | None = None
+    has_divisions_defined = False
 
     for measure_index, measure_node in enumerate(_children(part_node, "measure"), start=1):
         measure_number = measure_node.get("number") or str(measure_index)
@@ -390,12 +674,22 @@ def _parse_part(
         last_note_onset = 0
         notes: list[MusicXmlNote] = []
         harmonies: list[MusicXmlHarmony] = []
+        divisions_changed_mid_measure = False
+        has_backup_or_forward = False
+        backup_past_zero = False
 
         for child in list(measure_node):
             name = _local_name(child.tag)
             source_path = f"/score-partwise/part[@id='{part_id}']/measure[{measure_index}]/{name}"
             if name == "attributes":
-                current_divisions = _parse_divisions(child, current_divisions)
+                div_child = _child(child, "divisions")
+                if div_child is not None:
+                    has_divisions_defined = True
+                new_div = _optional_int_text(div_child)
+                if new_div is not None and new_div > 0:
+                    if len(notes) > 0 and new_div != current_divisions:
+                        divisions_changed_mid_measure = True
+                    current_divisions = new_div
                 current_time = _parse_time_signature(child, current_time)
                 current_key = _parse_key(child, current_key)
             elif name == "note":
@@ -423,6 +717,7 @@ def _parse_part(
                     )
                 )
             elif name == "backup":
+                has_backup_or_forward = True
                 warnings.append(
                     MusicXmlWarning(
                         code="musicxml-backup-encountered",
@@ -431,8 +726,12 @@ def _parse_part(
                         source_path=source_path,
                     )
                 )
-                cursor = max(0, cursor - _duration(child))
+                dur = _duration(child)
+                if cursor - dur < 0:
+                    backup_past_zero = True
+                cursor = max(0, cursor - dur)
             elif name == "forward":
+                has_backup_or_forward = True
                 warnings.append(
                     MusicXmlWarning(
                         code="musicxml-forward-encountered",
@@ -459,6 +758,17 @@ def _parse_part(
                     )
                 )
 
+        expected_divs = None
+        if current_time is not None:
+            val = Fraction(current_time.numerator * current_divisions * 4, current_time.denominator)
+            if val.denominator == 1:
+                expected_divs = int(val)
+
+        unbalanced_bf = False
+        if has_backup_or_forward and expected_divs is not None and cursor != expected_divs:
+            if not any(note.duration_zero or note.duration_missing for note in notes):
+                unbalanced_bf = True
+
         measures.append(
             MusicXmlMeasure(
                 index=measure_index,
@@ -468,6 +778,10 @@ def _parse_part(
                 key_fifths=current_key,
                 notes=notes,
                 harmonies=harmonies,
+                divisions_missing=not has_divisions_defined,
+                divisions_changed_mid_measure=divisions_changed_mid_measure,
+                backup_forward_risk=backup_past_zero,
+                unbalanced_backup_forward=unbalanced_bf,
             )
         )
 
@@ -502,6 +816,11 @@ def _parse_note(
             )
         )
 
+    tuplet = _tuplet(node)
+    duration_missing = not grace and _child(node, "duration") is None
+    duration_zero = not grace and _child(node, "duration") is not None and duration == 0
+    tuplet_unsupported = tuplet is not None and (tuplet.actual_notes != 3 or tuplet.actual_notes <= 0 or tuplet.normal_notes <= 0)
+
     note = MusicXmlNote(
         id=f"mx-{part_id}-m{measure_index}-n{note_index}",
         part_id=part_id,
@@ -518,10 +837,13 @@ def _parse_note(
         ties=_ties(node),
         notated_type=_text(_child(node, "type")),
         dots=len(_children(node, "dot")),
-        tuplet=_tuplet(node),
+        tuplet=tuplet,
         grace=grace,
         techniques=_techniques(node, source_path, warnings),
         source_path=source_path,
+        duration_missing=duration_missing,
+        duration_zero=duration_zero,
+        tuplet_unsupported=tuplet_unsupported,
     )
 
     if not chord and duration > 0 and not grace:

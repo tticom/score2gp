@@ -166,8 +166,12 @@ def test_musicxml_timing_preflight_records_backup_forward_risk() -> None:
 
     issues = analyze_musicxml_timing(imported)
 
-    assert [(issue.code, issue.severity) for issue in issues] == [("musicxml-overfull-bar", "error")]
-    assert issues[0].voice == 2
+    assert [(issue.code, issue.severity) for issue in issues] == [
+        ("musicxml_unbalanced_backup_forward", "error"),
+        ("musicxml-overfull-bar", "error"),
+    ]
+    overfull_issue = next(issue for issue in issues if issue.code == "musicxml-overfull-bar")
+    assert overfull_issue.voice == 2
 
 
 def test_musicxml_importer_parses_valid_mxl_with_container(tmp_path) -> None:

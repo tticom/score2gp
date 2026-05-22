@@ -255,6 +255,10 @@ def build_ir_from_files(
                 from .report import write_ascii_gate_diagnostics_html
                 html_path = out_path_p.parent / "ascii-scoreir-gate-diagnostics.html"
                 write_ascii_gate_diagnostics_html(html_path, payload, json_path_ref=out_path_p.name)
+            elif exc.stage == "musicxml-import":
+                from .report import write_musicxml_timing_diagnostics_html
+                html_path = out_path_p.parent / "musicxml-timing-diagnostics.html"
+                write_musicxml_timing_diagnostics_html(html_path, payload, json_path_ref=out_path_p.name)
         raise
 
 
@@ -695,6 +699,10 @@ def build_ir_with_diagnostics_from_imports(
 ) -> tuple[ScoreIR, BuildIrDiagnostics]:
     warnings = _musicxml_warnings(musicxml)
     timing_issues = analyze_musicxml_timing(musicxml)
+    if ascii_gate_details is None:
+        for issue in timing_issues:
+            if issue.code in ("musicxml_duration_missing", "musicxml_duration_zero"):
+                issue.severity = "error"
     warnings.extend(_musicxml_timing_issue_warnings(timing_issues))
     fatal_timing_issues = [issue for issue in timing_issues if issue.severity == "error"]
     if fatal_timing_issues:
