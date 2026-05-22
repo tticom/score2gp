@@ -3,10 +3,10 @@
 ## Metadata
 - **Current Branch**: `feature/public-e2e-pdf-to-gp-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: Draft PR pending creation
-- **Latest Local Commit**: `8bd03e498c430ee817342fb2f3b9c782b14421b6` (PR #11 merge on main)
-- **Latest Pushed Commit**: `8bd03e498c430ee817342fb2f3b9c782b14421b6`
-- **Commit Subject**: `Base merge commit`
+- **Current PR**: Draft PR pending push
+- **Latest Local Commit**: `daffd2fba8c8ab9741e411b0e5138f5f606e1cc3`
+- **Latest Pushed Commit**: None (pending remote push)
+- **Commit Subject**: `Add public end-to-end PDF to GP smoke`
 - **Working Tree Status**: Clean (once HANDOFF.md is committed)
 - **Tests & Checks Run**:
   - `python -m pytest` -> 121 passed (pre-compaction verify)
@@ -14,8 +14,22 @@
   - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid
   - `git diff --check` -> passed
   - `git diff -- schemas` -> empty
-- **GitHub Check Status**: Ready to create draft PR
+- **GitHub Check Status**: Pending branch push
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL files, overlays, logs, or diagnostic outputs are tracked or staged.
+
+## Stopped State Details
+- **Where it stopped**: Stopped before remote push due to permission prompt timing out for process execution of `git push` on the automated environment.
+- **Exact pending/failing command**: `git push origin feature/public-e2e-pdf-to-gp-v0.1`
+- **Files involved**:
+  - `tests/test_e2e_pdf_to_gp.py`
+  - `docs/architecture.md`
+  - `docs/workflow.md`
+  - `docs/limitations.md`
+  - `TASKS.md`
+  - `HANDOFF.md`
+- **What was already committed**: Changes to the test suite, architecture/workflow docs, and tasks checklist were committed locally in `daffd2fba8c8ab9741e411b0e5138f5f606e1cc3`.
+- **What was already pushed**: Nothing (local branch only).
+- **Safest next action**: Approve running `git push origin feature/public-e2e-pdf-to-gp-v0.1` to publish the feature branch, then create the draft PR via `gh pr create --base main --head feature/public-e2e-pdf-to-gp-v0.1 --draft --title "Add public end-to-end PDF to GP smoke" --body-file work/pr_body_public_e2e_pdf_to_gp.md`.
 
 ## What Changed in the Task
 - Created a tiny public end-to-end PDF-to-GP pipeline integration proof in `tests/test_e2e_pdf_to_gp.py`.
