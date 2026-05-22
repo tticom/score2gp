@@ -108,7 +108,7 @@ def build_grouping_diagnostics(
 
 
 def grouping_status_for_tabraw(tabraw: dict[str, Any]) -> str:
-    """Return grouped, partial, or missing for playable PDF-derived tab evidence."""
+    """Return grouped, partial, missing, ambiguous, or unsupported for playable PDF-derived tab evidence."""
 
     candidates = list(tabraw.get("candidates", []))
     playable = [candidate for candidate in candidates if candidate.get("parsed_fret") is not None]
@@ -119,14 +119,47 @@ def grouping_status_for_tabraw(tabraw: dict[str, Any]) -> str:
     bar_count = sum(1 for candidate in playable if candidate.get("bar_index") is not None)
     string_count = sum(1 for candidate in playable if candidate.get("string") is not None)
     warning_codes = {str(warning.get("code", "")) for warning in tabraw.get("warnings", [])}
-    partial_warning_codes = {
+
+    unsupported_codes = {
+        "pdf_ascii_and_drawn_layout_conflict",
+        "pdf_page_layout_unsupported",
+    }
+    ambiguous_codes = {
+        "pdf_multi_system_order_ambiguous",
+        "pdf_tab_staff_ambiguous",
+        "pdf_barlines_ambiguous",
+        "pdf_string_assignment_ambiguous",
+    }
+    missing_codes = {
+        "pdf_no_systems_detected",
+        "pdf_tab_staff_missing",
+        "pdf_barlines_missing",
+        "pdf_bar_boxes_missing",
+        "pdf_string_lines_missing",
+        "pdf_string_assignment_missing",
+        "pdf_grouping_not_safe_for_build_ir",
+        "missing_pdf_grouping",
+    }
+    partial_codes = {
         "partial_pdf_grouping",
         "missing_pdf_barlines",
         "incomplete_tab_staff",
         "ambiguous_string_assignment",
         "ambiguous_bar_assignment",
         "partial_ascii_tab_grouping",
+        "pdf_partial_system_detection",
+        "pdf_tab_staff_incomplete",
+        "pdf_candidate_outside_system",
+        "pdf_candidate_outside_bar",
+        "pdf_candidate_between_strings",
+        "pdf_text_candidate_without_geometry",
     }
+
+    if warning_codes.intersection(unsupported_codes):
+        return "unsupported"
+    if warning_codes.intersection(ambiguous_codes):
+        return "ambiguous"
+
     if "partial_ascii_tab_grouping" in warning_codes:
         return "partial_ascii"
     ascii_timing_warning_codes = {
@@ -138,13 +171,17 @@ def grouping_status_for_tabraw(tabraw: dict[str, Any]) -> str:
     }
     if warning_codes.intersection(ascii_timing_warning_codes) and system_count and string_count:
         return "ascii_grouped"
+
+    if warning_codes.intersection(missing_codes):
+        return "missing"
+
     if system_count == 0 and bar_count == 0 and string_count == 0:
         return "missing"
     if (
         system_count < len(playable)
         or bar_count < len(playable)
         or string_count < len(playable)
-        or warning_codes.intersection(partial_warning_codes)
+        or warning_codes.intersection(partial_codes)
     ):
         return "partial"
     return "grouped"
@@ -174,6 +211,10 @@ def write_grouping_diagnostics_html(path: str | Path, report: dict[str, Any]) ->
         verdict = "Extraction succeeded, but grouping is partial and unsafe for automatic alignment."
     elif grouping_status == "partial_ascii":
         verdict = "Extraction succeeded and ASCII tab was detected, but ASCII grouping is partial."
+    elif grouping_status == "ambiguous":
+        verdict = "Extraction succeeded, but grouping/layout is ambiguous and unsafe."
+    elif grouping_status == "unsupported":
+        verdict = "Extraction succeeded, but layout/format is unsupported."
     elif grouping_status == "ascii_grouped":
         timing_counts = report.get("ascii_timing_status_counts", {})
         if isinstance(timing_counts, dict) and timing_counts.get("timing_partial"):
