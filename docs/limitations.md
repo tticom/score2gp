@@ -26,9 +26,10 @@ Known limitations:
 - Safe timing gates remain strict:
   - Same-voice overlaps (invalid timelines) block alignment and ScoreIR, raising a `BuildIrInputRiskError` with the `musicxml_timing_risk` category.
   - Valid multi-voice MusicXML containing cross-voice overlaps or timelines unsupported by ScoreIR/build-ir is cleanly refused with the `musicxml_scoreir_polyphony_gate_refused` category instead of the generic timing risk.
-- Refined timing diagnostics distinguish precise failure classes including valid/underfull/overfull compound meter, backup rewind before measure start, forward exceeding measure end, backup/forward ambiguity, same-voice cursor overlap, multi-voice timing risks, repeated backup/forward cursor movements, rest/note overlap, and Audiveris-like heavy rewind risks.
-- Preflight timing fixtures are tiny, synthetic, public reproductions of timing failure classes, focusing on compound meters (e.g., 12/8), voice cursor alignment, chord stacks, same-voice overlaps, and Audiveris-style heavy rewinds.
-- Compound meter (e.g., 12/8), voice cursor reset, and backup/forward-heavy handling remain strictly conservative. Unsafe, overlapping, or unbalanced MusicXML timing strictly blocks alignment/build-ir.
+- Refined timing diagnostics distinguish precise failure classes including same-voice overfull measures, accumulated small duration overflow, same-voice event overlap, rest/note overlap, backup without voice switch overlap, event extending past measure, compound meter overfull, and invalid duration grid cases.
+- Preflight timing fixtures under `tests/fixtures/musicxml/` are tiny, synthetic, public reproductions of these invalid same-voice timing and overfull measure classes, ensuring CI validation remains independent of any private materials.
+- All invalid same-voice timing and overfull measures are strictly blocking errors that prevent ScoreIR compilation and raise `BuildIrInputRiskError` with the `musicxml_timing_risk` category.
+- Timing calibration or recovery heuristics (e.g., adjusting active note/rest durations or correcting rounding/subdivision errors) are future work only. The pipeline does not attempt automatic timing repair or calibration, and strict timing safety gates remain fully intact.
 - No private MusicXML is committed or used as a fixture, and the public E2E path must continue to pass cleanly.
 - Native `.mxl` intake is supported only for normal compressed MusicXML packages with a safe rootfile declared in `META-INF/container.xml`; malformed packages and unsafe rootfile paths are rejected.
 - 12/8 and other compound-meter input is represented through exact MusicXML divisions and flagged as an assumption; it still needs human review when produced by OMR.

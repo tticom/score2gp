@@ -1511,6 +1511,27 @@ def write_musicxml_timing_diagnostics_html(path: str | Path, payload: dict[str, 
     else:
         issues_html = """<tr><td colspan="6" class="empty-state">No timing issues found in payload.</td></tr>"""
 
+    calibration_possible = False
+    repair_attempted = False
+    max_overfull_divisions = 0.0
+    total_overlap_count = 0
+    all_affected_event_ids = set()
+
+    for issue in timing_issues:
+        if issue.get("timing_calibration_possible"):
+            calibration_possible = True
+        if issue.get("timing_repair_attempted"):
+            repair_attempted = True
+        overfull = issue.get("overfull_divisions")
+        if overfull is not None:
+            max_overfull_divisions = max(max_overfull_divisions, float(overfull))
+        overlaps = issue.get("overlap_count")
+        if overlaps is not None:
+            total_overlap_count = max(total_overlap_count, int(overlaps))
+        ev_ids = issue.get("affected_event_ids")
+        if ev_ids:
+            all_affected_event_ids.update(ev_ids)
+
     body = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -1855,6 +1876,29 @@ def write_musicxml_timing_diagnostics_html(path: str | Path, payload: dict[str, 
 
         <dt>JSON Reference</dt>
         <dd><code>{html.escape(json_reference_str)}</code></dd>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">Calibration & Auto-Repair Status</h2>
+      <dl>
+        <dt>Automatic Repair Attempted</dt>
+        <dd><code>{str(repair_attempted).lower()}</code></dd>
+
+        <dt>Timing Calibration Possible</dt>
+        <dd><code>{str(calibration_possible).lower()}</code></dd>
+
+        <dt>Max Overfull Amount</dt>
+        <dd><code>{f"{max_overfull_divisions} divisions" if max_overfull_divisions > 0 else "0"}</code></dd>
+
+        <dt>Total Overlap Counts</dt>
+        <dd><code>{total_overlap_count}</code></dd>
+
+        <dt>Affected Event IDs</dt>
+        <dd>{", ".join(f"<code>{html.escape(str(eid))}</code>" for eid in sorted(all_affected_event_ids)) if all_affected_event_ids else "<em>None</em>"}</dd>
+
+        <dt>Remediation Hint</dt>
+        <dd><strong>Fix or regenerate MusicXML timing; automatic timing repair is not implemented.</strong></dd>
       </dl>
     </div>
 

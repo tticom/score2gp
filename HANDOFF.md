@@ -1,15 +1,15 @@
 # Handoff
 
 ## Metadata
-- **Current Branch**: `feature/private-smoke-refresh-after-musicxml-voice-cursor-v0.1`
+- **Current Branch**: `feature/musicxml-invalid-timing-public-fixtures-v0.4`
 - **Base Branch**: `main`
-- **Current PR**: [#22](https://github.com/tticom/score2gp/pull/22)
-- **Latest Local Commit**: `af5a52172f7f7ff7041a9a77eb2b00e3bbef1031`
-- **Latest Pushed Commit**: `af5a52172f7f7ff7041a9a77eb2b00e3bbef1031`
-- **Commit Subject**: Refresh private smoke blocker summary after voice cursor model
+- **Current PR**: [#23](https://github.com/tticom/score2gp/pull/23)
+- **Latest Local Commit**: `ddbca3f074b2ee5579191c809408b5e607d53074`
+- **Latest Pushed Commit**: `ddbca3f074b2ee5579191c809408b5e607d53074`
+- **Commit Subject**: Add invalid MusicXML timing fixtures
 - **Working Tree Status**: Clean
 - **Tests & Checks Run**:
-  - `python -m pytest` -> 169 passed
+  - `python -m pytest` -> 189 passed
   - `python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
   - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid
   - `git diff --check` -> passed cleanly
@@ -18,10 +18,20 @@
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or diagnostic outputs are tracked or committed. All outputs under `work/` are ignored.
 
 ## What Changed in the Task
-- Re-ran the local private-safe E2E diagnostic smoke workflow (`scripts/private_e2e_smoke.py`) against the real private inputs in `fixtures/private/` after PR #21 (deterministic MusicXML voice cursor model).
-- Successfully generated all local, ignored diagnostic outputs under `work/private_e2e_smoke_after_voice_cursor_v0_1/`.
-- Updated the private-safe blocker summary in `HANDOFF.md` and `TASKS.md` with the new E2E diagnostic smoke results using only the safe anonymized details.
-- Confirmed that `private_input_1` continues to report exactly 66 overfull or overlapping events. The new voice cursor model isolates these as true same-voice invalid timeline issues (`musicxml-overfull-bar` where voice durations sum to 78 divisions inside a 48-division measure) rather than false-positive overlaps or multi-voice structural issues.
+- **Synthetic Public Fixtures**: Created 10 public synthetic MusicXML fixtures under `tests/fixtures/musicxml/` representing same-voice invalid timing and overfull measures:
+  1. `timing_vc_same_voice_overfull.musicxml`: Same voice overfull by one note duration.
+  2. `timing_vc_same_voice_accumulated_overflow.musicxml`: Same voice overfull by accumulated small rounding/subdivision errors.
+  3. `timing_vc_same_voice_event_overlap.musicxml`: Same voice overlapping event caused by incorrect duration.
+  4. `timing_vc_same_voice_rest_note_overlap.musicxml`: Same voice overlap caused by a rest plus note occupying the same tick range.
+  5. `timing_vc_backup_no_voice_switch_overlap.musicxml`: Same voice overlap after backup that does not switch voice.
+  6. `timing_vc_event_extends_past_measure.musicxml`: Same voice event whose duration extends beyond the measure end.
+  7. `timing_vc_compound_meter_overfull.musicxml`: Overfull bar in compound meter.
+  8. `timing_vc_invalid_duration_grid.musicxml`: Overfull bar with divisions that do not divide cleanly into expected measure ticks.
+  9. `timing_vc_many_invalid_events.musicxml`: Synthetic "many invalid events" fixture that produces a count greater than one, proving summaries scale.
+  10. `timing_vc_valid_counterparts.musicxml`: Valid counterpart for each important class.
+- **Diagnostics Refinements**: Refined `MusicXmlVoiceCursorModel` and timing issue parsing to trace same-voice overfull measures, accumulated duration overflows, rest/note overlaps, invalid duration grids, and timing calibration suitability.
+- **Reporting Improvements**: Enhanced `write_musicxml_timing_diagnostics_html` in `report.py` to aggregate and display calibration status, overfull divisions, overlap counts, and print the required hint: `"Fix or regenerate MusicXML timing; automatic timing repair is not implemented."`
+- **Unit Tests**: Added a complete suite of unit tests in `tests/test_musicxml_invalid_fixtures.py` that verifies the exact classification and error reasons, proves that invalid timing blocks alignment/build-ir, and checks that no private fixtures are used. All 189 tests pass successfully.
 
 ## Private Smoke Result Summary (Safe Counts & Statuses Only)
 1. **`private_input_1`** (`pdf-tab-musicxml`):
@@ -43,24 +53,22 @@
    - **Secondary Reason Codes**: `missing_pdf_grouping`, `pdf-tab-system-not-detected`
    - **Next Diagnostic Recommendation**: `provide-matching-musicxml-before-build-ir`
 
-## Change Comparison
-- The number of overfull or overlapping events detected in `private_input_1` remains exactly **66**, which is completely mathematically consistent. However, thanks to the deterministic voice cursor model implemented in PR #21, we now have precise diagnostics (`build_error.json`) confirming that these are same-voice invalid timing errors (primarily `musicxml-overfull-bar` where notes in voice 1 extend past measure boundaries) rather than polyphony-gate or backup/forward-handling ambiguities.
-
 ## Current Blocker Classification
 - **Top Blocker**: `musicxml_timing_invalid`
-- **Rationale**: For the E2E input `private_input_1`, the preflight timing check still fails with `musicxml_timing_risk` due to 66 overfull or overlapping events. This is classified as `musicxml_timing_invalid` because the notes in the MusicXML file have durations exceeding the expected measure duration. We need to implement public synthetic timing fixtures for invalid timing/overfull measures to refine timing calibration and explore duration adjustments before alignment.
+- **Rationale**: For `private_input_1`, the preflight timing check still fails due to 66 overfull or overlapping events. This has now been reproduced cleanly using public synthetic fixtures. The diagnostics have been significantly enhanced to track calibration feasibility, overfull divisions, overlap counts, and affected event IDs. The next step is to run the private smoke refresh to see these refined telemetry counts and calibration flags on the private inputs.
 
 ## Recommended Next Branch
-- **Next Branch**: `feature/musicxml-invalid-timing-public-fixtures-v0.4`
-- **Goal**: Add public synthetic MusicXML fixtures and tests representing invalid same-voice timing / overfull measures to design and refine timing calibration, duration adjustments, and recovery heuristics before alignment.
+- **Next Branch**: `feature/private-smoke-refresh-after-invalid-timing-diagnostics-v0.1`
+- **Goal**: Re-run the local E2E private smoke workflow after invalid timing diagnostics (v0.4) to confirm that the new timing metadata (calibration feasibility, overfull divisions, overlap counts, and affected event IDs) is correctly extracted and reported on real private inputs.
 
 ## Known Limitations
 - PDF grouping is strictly conservative and requires born-digital vector tab geometry. No ML layout recognition or OCR is supported.
 - Unsafe PDF grouping (partial, missing, ambiguous, or unsupported) and unsafe MusicXML timing strictly block `build_ir` and prevent ScoreIR compilation.
 - Scanned/raster PDFs remain unsupported.
+- Automatic timing repair/calibration is not implemented; invalid same-voice timing blocks alignment strictly.
 
 ## Remaining Risks
-- None. All 169 tests are fully passing locally. Whitespace checks are perfectly clean, and schemas are identical to the base branch.
+- None. All 189 tests are fully passing locally. Whitespace checks are perfectly clean, and schemas are identical to the base branch.
 
 ## Explicit Scope Boundaries
 - **Do not** commit any private inputs, private outputs, private GP files, private PDFs, private summaries, private HTML diagnostics, or any `work/` contents.
