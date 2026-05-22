@@ -413,3 +413,60 @@ def test_cli_failure_diagnostics_include_ascii_gate_refusal_taxonomy(tmp_path) -
     assert diagnostics["details"]["aligned_candidate_count"] == 4
     assert diagnostics["details"]["scoreir_written"] is False
     assert diagnostics["details"]["expected_next_remediation"]
+
+    html_path = tmp_path / "ascii-scoreir-gate-diagnostics.html"
+    assert html_path.exists()
+    html_content = html_path.read_text(encoding="utf-8")
+    assert "ASCII ScoreIR Gate Refusal Diagnostics" in html_content
+    assert "ascii_unsupported_technique_required" in html_content
+
+
+def test_ascii_gate_refusal_writes_html_diagnostics_report(tmp_path) -> None:
+    tabraw_path = _extract(ASCII_GATE_PDF, tmp_path)
+    ir_path = tmp_path / "refusal_writes_html.ir.json"
+    diagnostics_path = tmp_path / "refusal_writes_html.diagnostics.json"
+    html_path = tmp_path / "ascii-scoreir-gate-diagnostics.html"
+
+    with pytest.raises(BuildIrInputRiskError):
+        build_ir_from_files(
+            ASCII_GATE_MUSICXML,
+            tabraw_path,
+            ir_path,
+            diagnostics_out_path=diagnostics_path,
+        )
+
+    assert not ir_path.exists()
+    assert diagnostics_path.exists()
+    assert html_path.exists()
+
+    html_content = html_path.read_text(encoding="utf-8")
+
+    # 1. Title identifying the failure as ASCII ScoreIR gate refusal
+    assert "ASCII ScoreIR Gate Refusal Diagnostics" in html_content
+
+    # 2. Gate status
+    assert "Refused" in html_content
+
+    # 3. Primary refusal reason
+    assert "missing_ascii_alignment_sidecar" in html_content
+
+    # 4. Secondary refusal reasons, or explicitly says none
+    assert "None" in html_content or "secondary_reason_codes" in html_content
+
+    # 5. Candidate/alignment/rejected counts
+    assert "Total Candidates" in html_content
+    assert "Aligned Candidates" in html_content
+    assert "Rejected Candidates" in html_content
+
+    # 6. Remediation hints
+    assert "provide compatible ascii-musicxml-alignment.v0.1 evidence" in html_content
+
+    # 7. States whether ScoreIR was written
+    assert "ScoreIR Written" in html_content
+    assert "False" in html_content
+
+    # 8. Links or references the JSON diagnostics sidecar where practical
+    assert "refusal_writes_html.diagnostics.json" in html_content
+
+    # 9. Expected statement that refusal is expected for unsupported ASCII inputs
+    assert "Refusal is expected behavior for unsupported ASCII inputs" in html_content
