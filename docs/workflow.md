@@ -363,7 +363,21 @@ When symbol/technique attachment diagnostics exist, `build-ir` writes a develope
 
 For ASCII-tab inputs, `build-ir` remains diagnostic-first and conservative. Without an ASCII/MusicXML alignment sidecar it refuses ASCII candidates with `missing_ascii_alignment_sidecar`. With an alignment sidecar whose status is `partial`, `ambiguous`, `incompatible`, or `unavailable`, it refuses with the matching `ascii_alignment_status_*` category. With a `compatible` sidecar, it evaluates `ascii-scoreir-gate.v0.1` and allows only the tiny public proof shape described above; broad compatible examples still refuse with explicit gate reason codes such as `ascii_polyphony_not_supported`, `ascii_unsupported_technique_required`, or `ascii_outside_tiny_gate_scope`.
 
-`build-ir` now preflights MusicXML timing before writing ScoreIR. Public Audiveris-like fixtures under `tests/fixtures/musicxml/` cover overfull bars, 12/8 compound-meter assumptions, and backup/forward timing movement. Overfull bars or same-voice overlaps are treated as timing risk and refused before invalid ScoreIR is written:
+`build-ir` now preflights MusicXML timing before writing ScoreIR. Public Audiveris-like fixtures under `tests/fixtures/musicxml/` cover overfull bars, 12/8 compound-meter assumptions, and backup/forward timing movement. Precise timing preflight diagnostics distinguish the following categories:
+
+- `valid_compound_meter`: Compound meter (e.g. 12/8) measure with correct timing extents and no errors.
+- `musicxml_compound_meter_underfull`: Compound meter measure where the longest voice duration is shorter than expected.
+- `musicxml_compound_meter_overfull`: Compound meter measure where a note duration pushes the voice extent past the expected measure end.
+- `musicxml_backup_rewinds_before_measure_start`: A `<backup>` element rewinds the voice cursor past the beginning of the measure.
+- `musicxml_forward_exceeds_measure_end`: A `<forward>` element pushes the voice cursor beyond the expected measure end.
+- `musicxml_backup_forward_alignment_ambiguous`: Backup/forward elements create an unbalanced or ambiguous voice cursor.
+- `musicxml_voice_cursor_overlap`: Overlapping active durations within the same voice.
+- `musicxml_multivoice_timing_not_supported`: Overlapping durations between different voices (unsupported polyphony).
+- `musicxml_chord_stack_detected` & `musicxml_chord_stack_supported_or_blocked`: Distinctly classifies valid note stacks/chords encoded with `<chord/>` so they are not treated as unsafe overlaps.
+- `musicxml_rest_voice_overlap`: Overlaps between rests and active notes.
+- `musicxml_alignment_not_attempted_due_to_timing_risk`: Appended as a final blocker issue if any error exists, refusing ScoreIR generation.
+
+Overfull bars or same-voice overlaps are treated as timing risk and refused before invalid ScoreIR is written:
 
 ```powershell
 python -m score2gp.cli build-ir `
@@ -373,7 +387,7 @@ python -m score2gp.cli build-ir `
   --diagnostics-out "work/timing/overfull.diagnostics.json"
 ```
 
-This command is expected to exit non-zero and write a `build-ir-failure-diagnostics.v0.1` payload when `--diagnostics-out` is supplied. That is intentional: the project should refuse known-invalid timing rather than rely on a later generic ScoreIR validation error. In addition, `build-ir` automatically generates a developer-facing HTML diagnostics report (`musicxml-timing-diagnostics.html`) beside the JSON diagnostics file to provide an inspectable visual table of timing issues, affected measures/voices, and remediation hints. Just like other HTML reports, it serves as a human-readable visual inspection helper while JSON remains the programmatic source of truth.
+This command is expected to exit non-zero and write a `build-ir-failure-diagnostics.v0.1` payload when `--diagnostics-out` is supplied. That is intentional: the project should refuse known-invalid timing rather than rely on a later generic ScoreIR validation error. In addition, `build-ir` automatically generates a developer-facing HTML diagnostics report (`musicxml-timing-diagnostics.html`) beside the JSON diagnostics file to provide an inspectable visual table of timing issues, affected measures/voices, expected/actual ticks, per-voice duration totals, and remediation hints. Just like other HTML reports, it serves as a human-readable visual inspection helper while JSON remains the programmatic source of truth.
 
 `build-ir` also refuses PDF-derived TabRaw when playable fret candidates exist but system/string/bar grouping is absent. In that case the failure category is `missing_pdf_grouping`, and no ScoreIR file is written. This keeps ungrouped fret text from being treated as reliable musical evidence. ASCII-tab inputs are also refused until timing is safe; complete ASCII-row extraction fails with `ascii_tab_timing_unavailable`, while incomplete ASCII row grouping fails with `partial_ascii_tab_grouping`.
 

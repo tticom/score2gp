@@ -8,6 +8,7 @@
 
 ## Done
 
+- [x] Add public synthetic MusicXML timing blocker fixtures for compound meter (12/8) and backup/forward voice cursor movements, with refined preflight diagnostics and error taxonomy.
 - [x] Refresh private-safe diagnostic smoke blocker summary after recent PDF layout and MusicXML preflight timing diagnostics work.
 - [x] Improve PDF grouping and system layout diagnostics based on private-smoke warning classes without tuning to private files, adding public synthetic fixtures for layout failure modes and blocking unsafe grouping in build_ir.
 - [x] Improve public MusicXML timing/overlap diagnostics, error taxonomy, and developer-facing HTML reports.
