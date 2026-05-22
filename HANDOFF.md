@@ -3,10 +3,10 @@
 ## Metadata
 - **Current Branch**: `feature/private-smoke-refresh-after-musicxml-v0.3`
 - **Base Branch**: `main`
-- **Current PR**: None yet
-- **Latest Local Commit**: `5f84906e145c90c52a68c7f91d773c3a3e614d50`
-- **Latest Pushed Commit**: `5f84906e145c90c52a68c7f91d773c3a3e614d50`
-- **Commit Subject**: Merge pull request #19 from tticom/feature/musicxml-timing-public-fixtures-v0.3
+- **Current PR**: [#20](https://github.com/tticom/score2gp/pull/20)
+- **Latest Local Commit**: `3c83e165282a5d57ed7f3afa18b7b05b08a4aca6`
+- **Latest Pushed Commit**: `3c83e165282a5d57ed7f3afa18b7b05b08a4aca6`
+- **Commit Subject**: Refresh private smoke blocker summary after MusicXML v0.3
 - **Working Tree Status**: Clean
 - **Tests & Checks Run**:
   - `python -m pytest` -> 160 passed
