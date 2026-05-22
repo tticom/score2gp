@@ -56,3 +56,82 @@ Never push directly to `main` unless explicitly instructed. On feature branches,
 Do not put private musical content, private PDF text, private fret sequences, private titles, private URLs, private diagnostic output, or `work/` artifact contents into `HANDOFF.md`.
 
 Keep `HANDOFF.md` private-safe and useful enough that a new agent can continue without reading previous chat history.
+
+# Allowed routine commands
+
+The user permits the agent to run routine Git, GitHub CLI, and pytest/project-validation commands without asking for additional confirmation.
+
+Allowed without extra confirmation:
+- git status
+- git status --branch
+- git branch
+- git branch --show-current
+- git switch
+- git checkout
+- git pull --ff-only
+- git fetch
+- git log
+- git diff
+- git diff --stat
+- git diff --check
+- git diff -- schemas
+- git ls-files
+- git add
+- git commit
+- git push origin <current-feature-branch>
+- gh pr view
+- gh pr checks
+- gh pr status
+- gh pr create
+- gh pr edit
+- gh pr ready
+- python -m pytest
+- python -m score2gp.cli export-schema --out schemas
+- python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json
+- git push --force*
+- git reset --hard*
+- git clean*
+- git rm*
+- gh pr merge*
+- gh repo*
+- gh secret*
+- del*
+- rmdir*
+- rm*
+- type fixtures/private/*
+- cat fixtures/private/*
+
+The agent may commit and push normal feature-branch work after required checks pass, provided:
+- the branch is not `main`
+- no private files or `work/` artifacts are tracked
+- `HANDOFF.md` has been updated
+- the push is a normal push to the current feature branch
+- the working tree is clean after the push
+
+Still require explicit user confirmation for:
+- git push --force
+- git push --force-with-lease
+- git reset --hard
+- git clean
+- git rm
+- deleting branches
+- deleting files or directories
+- merging PRs
+- pushing directly to main
+- reading fixtures/private/*
+- reading secrets, .env files, credentials, keys, or tokens
+- changing GitHub repo settings, secrets, or permissions
+- running arbitrary network upload/download commands
+
+Run:
+python -m pytest
+python -m score2gp.cli export-schema --out schemas
+python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json
+git diff --check
+git diff -- schemas
+git ls-files fixtures/private work
+
+If checks pass, commit and push:
+git add AGENTS.md HANDOFF.md
+git commit -m "Document routine command permissions"
+git push origin feature/ascii-scoreir-gate-refusal-diagnostics-v0.1
