@@ -447,6 +447,25 @@ python -m pytest tests/test_e2e_pdf_to_gp.py
 7. **Inspect GP & Compare Semantics**:
    Retrieves semantic summary details using `inspect_gp` and verifies expected track counts, tempo, tuning, bar count, and correct fret/string pitches.
 
+## 11. Local Private-Safe E2E Diagnostic Smoke Workflow
+
+To safely assess and track conversion capabilities on real-world private score fixtures without leaking private musical content or committing private files to Git, there is a dedicated local-only private E2E diagnostic smoke script.
+
+This workflow automatically discovers all local PDF and matching MusicXML files under `fixtures/private/`, runs candidate tab raw extraction, MusicXML imports, alignment, and ScoreIR builds, and generates a fully anonymized, redacted, private-safe JSON and Markdown summary under `work/`.
+
+### Run local private diagnostics:
+```powershell
+python scripts/private_e2e_smoke.py
+```
+
+### Outputs Produced:
+- **Sanitized Master Summary**: `work/private_e2e_smoke_v0_1/private_e2e_summary.json` and `work/private_e2e_smoke_v0_1/private_e2e_summary.md`.
+- **Anonymized Input Subdirectories**: `work/private_e2e_smoke_v0_1/private_input_1/`, `work/private_e2e_smoke_v0_1/private_input_2/`, etc.
+  - Contains local tab raw candidates (`extracted.tabraw.json`), intermediate ScoreIR output (`score.ir.json` if successful), build warnings/errors (`build_error.json` / `warnings.json`), and generated GP package (`smoke.gp` if successful).
+
+> [!NOTE]
+> Private smoke runs are purely diagnostic. They do not weaken timing gates or tune conversion thresholds to specific private files. All private files under `fixtures/private/` and generated outputs under `work/` are ignored by Git.
+
 ## Current Stage Summary
 
 | Stage | Command | Status |
