@@ -3,18 +3,18 @@
 ## Metadata
 - **Current Branch**: `feature/symbol-attachment-html-inspection-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: Draft PR pending creation
-- **Latest Local Commit**: `3e26a57e3f2cb51c0702d8471bd7848f3224b78f` (Base main merge of PR #10)
-- **Latest Pushed Commit**: `3e26a57e3f2cb51c0702d8471bd7848f3224b78f`
-- **Commit Subject**: `Base merge commit`
-- **Working Tree Status**: Clean (once modifications are committed)
+- **Current PR**: #11 (URL: https://github.com/tticom/score2gp/pull/11)
+- **Latest Local Commit**: `ea466122d107a729525c34749fbe706786c5f726`
+- **Latest Pushed Commit**: `ea466122d107a729525c34749fbe706786c5f726`
+- **Commit Subject**: `Add symbol attachment HTML diagnostics`
+- **Working Tree Status**: Clean (once HANDOFF.md is committed)
 - **Tests & Checks Run**:
   - `python -m pytest` -> 120 passed (pre-compaction verify)
   - `python -m score2gp.cli export-schema --out schemas` -> passed
   - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid
   - `git diff --check` -> passed
   - `git diff -- schemas` -> empty
-- **GitHub Check Status**: Ready to create draft PR
+- **GitHub Check Status**: Pending (Checks running on draft PR #11)
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL files, overlays, logs, or diagnostic outputs are tracked or staged.
 
 ## What Changed in the Task
