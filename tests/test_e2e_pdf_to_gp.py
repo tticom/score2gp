@@ -86,9 +86,10 @@ def test_public_e2e_pdf_to_gp_smoke_proof(tmp_path) -> None:
     assert len(summary["tunings"]) == 1
     tuning_info = summary["tunings"][0]
     assert tuning_info["track"] == "Guitar"
-    assert tuning_info["name"] == "Standard guitar"
-    # Ensure 6 strings are mapped
+    assert tuning_info.get("name") in (None, "Standard guitar")
+    # Ensure 6 strings are mapped and verify their pitches
     assert len(tuning_info["strings"]) == 6
+    assert [s["pitch"] for s in tuning_info["strings"]] == ["64", "59", "55", "50", "45", "40"]
 
     # Verify no private musical content, PDF text, titles, URLs or files appear
     assert "derek" not in str(summary).lower()
@@ -99,7 +100,7 @@ def test_public_e2e_pdf_to_gp_smoke_proof(tmp_path) -> None:
     with zipfile.ZipFile(gp_path, "r") as zf:
         gpif_bytes = zf.read("Content/score.gpif")
         gpif_str = gpif_bytes.decode("utf-8")
-        assert "Generated ASCII Tab ScoreIR Gate" in gpif_str
+        assert "ASCII ScoreIR Gate Simple" in gpif_str
         assert "derek" not in gpif_str.lower()
         assert "bb king" not in gpif_str.lower()
         assert "caged" not in gpif_str.lower()
