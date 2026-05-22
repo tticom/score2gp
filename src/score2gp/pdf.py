@@ -93,6 +93,12 @@ def extract_tab(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
         tabraw_path = out / "tab_raw.json"
     out.mkdir(parents=True, exist_ok=True)
     inspection = inspect_pdf(path, out / "inspect")
+    meta = {
+        "detected_systems": 0,
+        "detected_staves": 0,
+        "detected_bar_boxes": 0,
+        "detected_string_lines": 0,
+    }
     raw: dict[str, Any] = {
         "schema_version": TABRAW_SCHEMA_VERSION,
         "source_pdf": str(path),
@@ -114,9 +120,9 @@ def extract_tab(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001
         raw["warnings"].append({"code": "pymupdf-unavailable", "message": str(exc), "severity": "error"})
     else:
-        raw["candidates"].extend(_extract_pdf_text_candidates(Path(path), raw["warnings"]))
+        raw["candidates"].extend(_extract_pdf_text_candidates(Path(path), raw["warnings"], meta))
 
-    _append_grouping_warnings(raw)
+    _append_grouping_warnings(raw, meta)
     raw = TabRaw.model_validate(raw).model_dump(mode="json", exclude_none=True)
     _write_grouping_artifacts(Path(path), out, tabraw_path, inspection, raw)
     tabraw_path.write_text(json.dumps(raw, indent=2), encoding="utf-8")
@@ -175,8 +181,11 @@ class _TabSystem:
         warnings = []
         if len(self.line_ys) != 6:
             warnings.append("incomplete_tab_staff")
+            warnings.append("pdf_tab_staff_incomplete")
         if len(self.barlines) < 2:
             warnings.append("missing_pdf_barlines")
+            warnings.append("pdf_barlines_missing")
+            warnings.append("pdf_bar_boxes_missing")
         return warnings
 
     @property
@@ -210,7 +219,11 @@ class _TabSystem:
         tolerance = max(4.0, self.line_spacing * 0.38)
         ambiguous_tolerance = max(tolerance, self.line_spacing * 0.58)
         if distance > tolerance:
-            warnings = ["ambiguous_string_assignment"] if distance <= ambiguous_tolerance else []
+            warnings = ["ambiguous_string_assignment", "pdf_string_assignment_ambiguous"]
+            if distance <= self.line_spacing * 0.65:
+                warnings.append("pdf_candidate_between_strings")
+            else:
+                warnings.append("pdf_string_assignment_missing")
             return None, None, distance, warnings
         return line_index, line_index, distance, []
 
@@ -228,10 +241,12 @@ class _TabSystem:
 
     def local_bar_for_x(self, x: float | None) -> tuple[int | None, list[str]]:
         if x is None or len(self.barlines) < 2:
-            return None, ["missing_pdf_barlines"] if x is not None else []
+            return None, ["missing_pdf_barlines", "pdf_barlines_missing"] if x is not None else []
+        if x < self.barlines[0] - 2.0 or x > self.barlines[-1] + 2.0:
+            return None, ["pdf_candidate_outside_bar", "ambiguous_bar_assignment"]
         internal_barlines = self.barlines[1:-1]
         if any(abs(x - barline) <= self.ambiguous_bar_tolerance for barline in internal_barlines):
-            return None, ["ambiguous_bar_assignment"]
+            return None, ["ambiguous_bar_assignment", "pdf_barlines_ambiguous"]
         for index, (left, right) in enumerate(zip(self.barlines, self.barlines[1:]), start=1):
             if left - 2.0 <= x <= right + 2.0:
                 return index, []
@@ -367,7 +382,7 @@ class _AsciiTimingEvidence:
         return None
 
 
-def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]], meta: dict[str, int]) -> list[dict[str, Any]]:
     import fitz  # type: ignore[import-not-found]
 
     candidates = []
@@ -376,6 +391,14 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]])
         for page_number, page in enumerate(doc, start=1):
             systems = _detect_tab_systems(page, page_number)
             ascii_blocks = _detect_ascii_tab_blocks(page, page_number, first_system_index=len(systems) + 1)
+
+            # Accumulate metadata
+            for system in systems:
+                meta["detected_systems"] += 1
+                meta["detected_staves"] += 1
+                meta["detected_bar_boxes"] += len(system.bar_boxes)
+                meta["detected_string_lines"] += len(system.line_ys)
+
             if not systems:
                 warnings.append(
                     {
@@ -384,6 +407,47 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]])
                         "severity": "info",
                     }
                 )
+            else:
+                # Check for vertically overlapping systems on the page
+                has_overlap = False
+                for i, sys1 in enumerate(systems):
+                    for sys2 in systems[i+1:]:
+                        y_min1, y_max1 = min(sys1.line_ys), max(sys1.line_ys)
+                        y_min2, y_max2 = min(sys2.line_ys), max(sys2.line_ys)
+                        # Check overlap with a small tolerance of 1.0pt
+                        if y_min1 <= y_max2 + 1.0 and y_min2 <= y_max1 + 1.0:
+                            has_overlap = True
+                            break
+                    if has_overlap:
+                        break
+                if has_overlap:
+                    warnings.append({
+                        "code": "pdf_multi_system_order_ambiguous",
+                        "message": f"Multiple tab systems have vertically overlapping ranges on page {page_number}.",
+                        "severity": "warning",
+                        "grouping_status": "ambiguous",
+                    })
+                    warnings.append({
+                        "code": "pdf_tab_staff_ambiguous",
+                        "message": "Tab systems layout is ambiguous due to vertical overlap.",
+                        "severity": "warning",
+                        "grouping_status": "ambiguous",
+                    })
+
+            if len(systems) > 0 and len(ascii_blocks) > 0:
+                warnings.append({
+                    "code": "pdf_ascii_and_drawn_layout_conflict",
+                    "message": f"Both ASCII blocks and drawn systems exist on page {page_number}.",
+                    "severity": "warning",
+                    "grouping_status": "unsupported",
+                })
+                warnings.append({
+                    "code": "pdf_page_layout_unsupported",
+                    "message": f"Unsupported mixed page layout on page {page_number}.",
+                    "severity": "warning",
+                    "grouping_status": "unsupported",
+                })
+
             if ascii_blocks:
                 warnings.extend(_ascii_tab_warnings(page_number, ascii_blocks))
                 ascii_candidates = _ascii_candidates_from_blocks(
@@ -412,10 +476,17 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]])
                 string = None
                 string_distance = None
                 assignment_warnings: list[str] = []
+
+                # Check for invalid geometry or candidate without geometry
+                if any(v is None for v in bbox_values) or (bbox_values[0] == 0.0 and bbox_values[2] == 0.0):
+                    assignment_warnings.append("pdf_text_candidate_without_geometry")
+
                 if system is not None:
+                    # Check if candidate falls outside strict horizontal bounds of the system
+                    if x < system.x0 or x > system.x1:
+                        assignment_warnings.append("pdf_candidate_outside_system")
                     line_index, string, string_distance, string_warnings = system.string_for_y(y)
                     assignment_warnings.extend(string_warnings)
-                if system is not None:
                     bar_index, bar_warnings = system.bar_for_x(x)
                     assignment_warnings.extend(bar_warnings)
                 else:
@@ -449,6 +520,10 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]])
                         "grouping_confidence": round(system.grouping_confidence, 3) if system is not None else None,
                         "grouping_warnings": system.grouping_warnings if system is not None else None,
                         "assignment_warnings": assignment_warnings or None,
+                        "refusal_reason": (
+                            assignment_warnings[0] if assignment_warnings
+                            else (system.grouping_warnings[0] if system is not None and system.grouping_warnings else None)
+                        ),
                         "tab_staff_bbox": system.staff_bbox if system is not None else None,
                         "tab_line_ys": [round(line_y, 3) for line_y in system.line_ys] if system is not None else None,
                         "barline_count": len(system.barlines) if system is not None else None,
@@ -908,11 +983,11 @@ def _point_in_ascii_block(blocks: list[_AsciiTabBlock], x: float | None, y: floa
     return any(block.contains_point(x, y) for block in blocks)
 
 
-def _append_grouping_warnings(raw: dict[str, Any]) -> None:
+def _append_grouping_warnings(raw: dict[str, Any], meta: dict[str, int] | None = None) -> None:
     candidates = raw.get("candidates", [])
-    fret_candidates = [candidate for candidate in candidates if candidate.get("parsed_fret") is not None]
-    if not candidates or not fret_candidates:
+    if not candidates:
         return
+    fret_candidates = [candidate for candidate in candidates if candidate.get("parsed_fret") is not None]
 
     grouping_counts = {
         "total_candidate_count": len(candidates),
@@ -923,6 +998,52 @@ def _append_grouping_warnings(raw: dict[str, Any]) -> None:
         "fret_candidates_with_bar": sum(1 for candidate in fret_candidates if candidate.get("bar_index") is not None),
         "fret_candidates_with_string": sum(1 for candidate in fret_candidates if candidate.get("string") is not None),
     }
+
+    if meta:
+        grouping_counts.update({
+            "detected_systems": meta.get("detected_systems", 0),
+            "detected_staves": meta.get("detected_staves", 0),
+            "detected_bar_boxes": meta.get("detected_bar_boxes", 0),
+            "detected_string_lines": meta.get("detected_string_lines", 0),
+        })
+        raw["warnings"].append({
+            "code": "pdf_layout_details",
+            "message": "Detected tab systems layout details.",
+            "severity": "info",
+            "detected_systems": meta.get("detected_systems", 0),
+            "detected_staves": meta.get("detected_staves", 0),
+            "detected_bar_boxes": meta.get("detected_bar_boxes", 0),
+            "detected_string_lines": meta.get("detected_string_lines", 0),
+        })
+
+    if (grouping_counts["fret_candidates_with_system"] == 0 and len(fret_candidates) > 0) or (meta is not None and meta.get("detected_systems", 0) == 0):
+        raw["warnings"].append({
+            "code": "pdf_no_systems_detected",
+            "message": "No horizontal tab systems were detected on the page(s).",
+            "severity": "warning",
+            "grouping_status": "missing",
+        })
+        raw["warnings"].append({
+            "code": "pdf_tab_staff_missing",
+            "message": "Tab staff lines are missing or not detected.",
+            "severity": "warning",
+            "grouping_status": "missing",
+        })
+        raw["warnings"].append({
+            "code": "pdf_string_lines_missing",
+            "message": "Tab string lines are completely missing.",
+            "severity": "warning",
+            "grouping_status": "missing",
+        })
+
+    if 0 < grouping_counts["fret_candidates_with_system"] < len(fret_candidates):
+        raw["warnings"].append({
+            "code": "pdf_partial_system_detection",
+            "message": "Horizontal tab systems were only partially detected.",
+            "severity": "warning",
+            "grouping_status": "partial",
+        })
+
     missing = []
     if grouping_counts["fret_candidates_with_system"] < len(fret_candidates):
         missing.append("system")
@@ -930,7 +1051,18 @@ def _append_grouping_warnings(raw: dict[str, Any]) -> None:
         missing.append("bar")
     if grouping_counts["fret_candidates_with_string"] < len(fret_candidates):
         missing.append("string")
-    unsafe_codes = _unsafe_grouping_codes(fret_candidates)
+
+    unsafe_codes = _unsafe_grouping_codes(fret_candidates, raw.get("warnings", []))
+    if unsafe_codes or missing:
+        raw["warnings"].append({
+            "code": "pdf_grouping_not_safe_for_build_ir",
+            "message": "PDF grouping contains warnings and is not safe to build IR.",
+            "severity": "warning",
+            "grouping_status": "partial" if unsafe_codes else "missing",
+        })
+        # Re-evaluate unsafe codes to include the new one
+        unsafe_codes = _unsafe_grouping_codes(fret_candidates, raw.get("warnings", []))
+
     if unsafe_codes:
         raw["warnings"].append(
             {
@@ -964,12 +1096,32 @@ def _append_grouping_warnings(raw: dict[str, Any]) -> None:
         )
 
 
-def _unsafe_grouping_codes(fret_candidates: list[dict[str, Any]]) -> list[str]:
+def _unsafe_grouping_codes(fret_candidates: list[dict[str, Any]], page_warnings: list[dict[str, Any]]) -> list[str]:
     drawn_grouping_codes = {
         "missing_pdf_barlines",
         "incomplete_tab_staff",
         "ambiguous_string_assignment",
         "ambiguous_bar_assignment",
+
+        "pdf_no_systems_detected",
+        "pdf_partial_system_detection",
+        "pdf_tab_staff_missing",
+        "pdf_tab_staff_incomplete",
+        "pdf_tab_staff_ambiguous",
+        "pdf_barlines_missing",
+        "pdf_barlines_ambiguous",
+        "pdf_bar_boxes_missing",
+        "pdf_string_lines_missing",
+        "pdf_string_assignment_missing",
+        "pdf_string_assignment_ambiguous",
+        "pdf_candidate_outside_system",
+        "pdf_candidate_outside_bar",
+        "pdf_candidate_between_strings",
+        "pdf_multi_system_order_ambiguous",
+        "pdf_page_layout_unsupported",
+        "pdf_text_candidate_without_geometry",
+        "pdf_ascii_and_drawn_layout_conflict",
+        "pdf_grouping_not_safe_for_build_ir",
     }
     codes: set[str] = set()
     for candidate in fret_candidates:
@@ -980,6 +1132,10 @@ def _unsafe_grouping_codes(fret_candidates: list[dict[str, Any]]) -> list[str]:
             values = raw.get(field, [])
             if isinstance(values, list):
                 codes.update(str(value) for value in values if value in drawn_grouping_codes)
+    for warning in page_warnings:
+        code = warning.get("code")
+        if code in drawn_grouping_codes:
+            codes.add(code)
     return sorted(codes)
 
 
@@ -989,6 +1145,26 @@ def _specific_grouping_warning(code: str, grouping_counts: dict[str, int]) -> di
         "incomplete_tab_staff": "A partial tab staff was inferred, but fewer than six string lines were detected.",
         "ambiguous_string_assignment": "One or more fret candidates are too far from a single string line to assign safely.",
         "ambiguous_bar_assignment": "One or more fret candidates are too close to a bar boundary to assign safely.",
+
+        "pdf_no_systems_detected": "No horizontal tab systems were detected on the page(s).",
+        "pdf_partial_system_detection": "Horizontal tab systems were only partially detected.",
+        "pdf_tab_staff_missing": "Tab staff lines are missing or not detected.",
+        "pdf_tab_staff_incomplete": "A partial tab staff was inferred, but fewer than six string lines were detected.",
+        "pdf_tab_staff_ambiguous": "Tab systems layout is ambiguous due to vertical overlap.",
+        "pdf_barlines_missing": "A tab staff was inferred, but reliable barlines were not detected.",
+        "pdf_barlines_ambiguous": "One or more fret candidates are too close to a barline to assign safely.",
+        "pdf_bar_boxes_missing": "Measure bar boxes could not be inferred.",
+        "pdf_string_lines_missing": "Tab string lines are completely missing.",
+        "pdf_string_assignment_missing": "String lines were not detected, or the candidate is too far to assign.",
+        "pdf_string_assignment_ambiguous": "Candidate is too far from a single string line to assign safely.",
+        "pdf_candidate_outside_system": "Candidate is located horizontally outside the detected tab system.",
+        "pdf_candidate_outside_bar": "Candidate is located outside the detected system barlines.",
+        "pdf_candidate_between_strings": "Candidate is located too far from string lines (between strings).",
+        "pdf_multi_system_order_ambiguous": "Multiple tab systems have vertically overlapping ranges.",
+        "pdf_page_layout_unsupported": "Page layout is unsupported.",
+        "pdf_text_candidate_without_geometry": "Candidate text lacks valid geometry.",
+        "pdf_ascii_and_drawn_layout_conflict": "Both ASCII blocks and drawn systems exist on page.",
+        "pdf_grouping_not_safe_for_build_ir": "PDF grouping contains warnings and is not safe to build IR.",
     }
     return {
         "code": code,
@@ -1073,6 +1249,10 @@ def _write_grouping_overlays(
         message = "ASCII tab rows found; row/string grouping inferred, timing alignment unavailable"
     elif grouping_status == "partial_ascii":
         message = "ASCII tab rows found; row grouping is partial"
+    elif grouping_status == "ambiguous":
+        message = "candidate text found; tab staff/bar/string grouping is ambiguous"
+    elif grouping_status == "unsupported":
+        message = "candidate text found; tab staff layout is unsupported"
 
     overlay_paths: list[Path] = []
     with fitz.open(pdf_path) as doc:
@@ -1283,20 +1463,86 @@ def _six_line_groups(lines: list[_LineSegment]) -> list[list[_LineSegment]]:
 
 
 def _tab_line_groups(lines: list[_LineSegment]) -> list[list[_LineSegment]]:
+    sorted_lines = sorted(lines, key=lambda l: (l.y0 + l.y1) / 2)
+    n = len(sorted_lines)
+    used = set()
     groups = []
-    index = 0
-    while index < len(lines):
-        group = lines[index : index + 6]
-        if len(group) == 6 and _looks_like_tab_line_group(group):
-            groups.append(group)
-            index += 6
+
+    # Try to find 6-line groups first
+    for i0 in range(n):
+        if i0 in used:
             continue
-        group = lines[index : index + 5]
-        if len(group) == 5 and _looks_like_tab_line_group(group):
-            groups.append(group)
-            index += 5
-        else:
-            index += 1
+        for i1 in range(i0 + 1, n):
+            if i1 in used:
+                continue
+            y0 = (sorted_lines[i0].y0 + sorted_lines[i0].y1) / 2
+            y1 = (sorted_lines[i1].y0 + sorted_lines[i1].y1) / 2
+            gap = y1 - y0
+            if gap < 6.0 or gap > 24.0:
+                continue
+
+            group_indices = [i0, i1]
+            for step in range(2, 6):
+                target_y = y0 + step * gap
+                best_idx = None
+                best_diff = 2.5
+                for j in range(group_indices[-1] + 1, n):
+                    if j in used:
+                        continue
+                    yj = (sorted_lines[j].y0 + sorted_lines[j].y1) / 2
+                    diff = abs(yj - target_y)
+                    if diff < best_diff:
+                        best_diff = diff
+                        best_idx = j
+                if best_idx is not None:
+                    group_indices.append(best_idx)
+                else:
+                    break
+
+            if len(group_indices) == 6:
+                group = [sorted_lines[idx] for idx in group_indices]
+                groups.append(group)
+                used.update(group_indices)
+                break
+
+    # Also find 5-line groups among the remaining unused lines
+    for i0 in range(n):
+        if i0 in used:
+            continue
+        for i1 in range(i0 + 1, n):
+            if i1 in used:
+                continue
+            y0 = (sorted_lines[i0].y0 + sorted_lines[i0].y1) / 2
+            y1 = (sorted_lines[i1].y0 + sorted_lines[i1].y1) / 2
+            gap = y1 - y0
+            if gap < 6.0 or gap > 24.0:
+                continue
+
+            group_indices = [i0, i1]
+            for step in range(2, 5):
+                target_y = y0 + step * gap
+                best_idx = None
+                best_diff = 2.5
+                for j in range(group_indices[-1] + 1, n):
+                    if j in used:
+                        continue
+                    yj = (sorted_lines[j].y0 + sorted_lines[j].y1) / 2
+                    diff = abs(yj - target_y)
+                    if diff < best_diff:
+                        best_diff = diff
+                        best_idx = j
+                if best_idx is not None:
+                    group_indices.append(best_idx)
+                else:
+                    break
+
+            if len(group_indices) == 5:
+                group = [sorted_lines[idx] for idx in group_indices]
+                groups.append(group)
+                used.update(group_indices)
+                break
+
+    groups.sort(key=lambda g: sum((l.y0 + l.y1)/2 for l in g) / len(g))
     return groups
 
 
