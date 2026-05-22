@@ -137,15 +137,15 @@ def test_build_ir_still_refuses_ascii_without_alignment_sidecar(tmp_path) -> Non
         build_ir_from_files(COMPATIBLE_MUSICXML, tabraw_path, ir_path)
 
     assert not ir_path.exists()
-    assert raised.value.category == "partial_ascii_tab_timing"
+    assert raised.value.category == "missing_ascii_alignment_sidecar"
 
 
 @pytest.mark.parametrize(
     ("pdf_path", "musicxml_path", "expected_status", "expected_category"),
     [
-        (ASCII_NO_BARS_PDF, COMPATIBLE_MUSICXML, "unavailable", "ascii_musicxml_alignment_unavailable"),
-        (ASCII_UNEVEN_TIMING_PDF, AMBIGUOUS_MUSICXML, "ambiguous", "ascii_musicxml_alignment_ambiguous"),
-        (ASCII_BARRED_PDF, INCOMPATIBLE_MUSICXML, "incompatible", "ascii_musicxml_alignment_incompatible"),
+        (ASCII_NO_BARS_PDF, COMPATIBLE_MUSICXML, "unavailable", "ascii_alignment_status_unavailable"),
+        (ASCII_UNEVEN_TIMING_PDF, AMBIGUOUS_MUSICXML, "ambiguous", "ascii_alignment_status_ambiguous"),
+        (ASCII_BARRED_PDF, INCOMPATIBLE_MUSICXML, "incompatible", "ascii_alignment_status_incompatible"),
     ],
 )
 def test_build_ir_refuses_unsafe_ascii_alignment_sidecars(
@@ -179,8 +179,8 @@ def test_build_ir_refuses_broad_compatible_ascii_alignment_proof_outside_tiny_ga
         build_ir_from_files(COMPATIBLE_MUSICXML, tabraw_path, ir_path, ascii_alignment_path=alignment_path)
 
     assert not ir_path.exists()
-    assert raised.value.category == "ascii_scoreir_gate_unsupported_polyphony"
-    assert "ascii_scoreir_gate_unsupported_polyphony" in raised.value.details["reason_codes"]
+    assert raised.value.category == "ascii_polyphony_not_supported"
+    assert "ascii_polyphony_not_supported" in raised.value.details["reason_codes"]
 
 
 def test_malformed_ascii_grouping_remains_unavailable_for_alignment(tmp_path) -> None:
