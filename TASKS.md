@@ -8,6 +8,7 @@
 
 ## Done
 
+- [x] Improve PDF grouping and system layout diagnostics based on private-smoke warning classes without tuning to private files, adding public synthetic fixtures for layout failure modes and blocking unsafe grouping in build_ir.
 - [x] Improve public MusicXML timing/overlap diagnostics, error taxonomy, and developer-facing HTML reports.
 - [x] Local private-safe E2E diagnostic smoke workflow to evaluate real private score fixtures and generate anonymized master summaries.
 - [x] Public end-to-end PDF-to-GP conversion proof slice targeting a controlled public ASCII-tab PDF + compatible MusicXML.

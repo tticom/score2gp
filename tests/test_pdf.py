@@ -29,6 +29,12 @@ ASCII_EQUAL_WIDTH_PDF = Path("tests/fixtures/pdf/generated_ascii_tab_equal_width
 ASCII_UNEVEN_TIMING_PDF = Path("tests/fixtures/pdf/generated_ascii_tab_uneven_timing.pdf")
 ASCII_NO_BARS_PDF = Path("tests/fixtures/pdf/generated_ascii_tab_no_bars.pdf")
 
+NEW_OUTSIDE_SYSTEM_PDF = Path("tests/fixtures/pdf/generated_pdf_candidate_outside_system.pdf")
+NEW_OUTSIDE_BAR_PDF = Path("tests/fixtures/pdf/generated_pdf_candidate_outside_bar.pdf")
+NEW_MULTI_SYSTEM_PDF = Path("tests/fixtures/pdf/generated_pdf_multi_system_order_ambiguous.pdf")
+NEW_CONFLICT_LAYOUT_PDF = Path("tests/fixtures/pdf/generated_pdf_ascii_and_drawn_layout_conflict.pdf")
+NEW_PROSE_LEGEND_PDF = Path("tests/fixtures/pdf/generated_pdf_prose_legend_text.pdf")
+
 
 def test_pdf_inspection_reports_missing_pymupdf_or_empty_pdf(tmp_path) -> None:
     pdf = tmp_path / "not-really.pdf"
@@ -669,3 +675,107 @@ def test_build_ir_refuses_partial_ascii_tab_grouping(tmp_path) -> None:
     assert payload["details"]["grouping_status"] == "partial_ascii_tab_grouping"
     assert "partial_ascii_tab_grouping" in payload["details"]["tabraw_warning_codes"]
     assert payload["details"]["primary_reason_code"] == "missing_ascii_alignment_sidecar"
+
+
+def test_pdf_candidate_outside_system_diagnosed(tmp_path) -> None:
+    assert NEW_OUTSIDE_SYSTEM_PDF.exists()
+    tabraw_path = tmp_path / "outside_system.tabraw.json"
+    ir_path = tmp_path / "outside_system.ir.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(NEW_OUTSIDE_SYSTEM_PDF, tabraw_path))
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+    assert "pdf_candidate_outside_system" in warning_codes
+    assert "pdf_grouping_not_safe_for_build_ir" in warning_codes
+
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+
+    assert not ir_path.exists()
+    payload = raised.value.to_diagnostics_payload()
+    assert "pdf_candidate_outside_system" in payload["details"]["tabraw_warning_codes"]
+
+
+def test_pdf_candidate_outside_bar_diagnosed(tmp_path) -> None:
+    assert NEW_OUTSIDE_BAR_PDF.exists()
+    tabraw_path = tmp_path / "outside_bar.tabraw.json"
+    ir_path = tmp_path / "outside_bar.ir.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(NEW_OUTSIDE_BAR_PDF, tabraw_path))
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+    assert "pdf_candidate_outside_bar" in warning_codes
+    assert "pdf_grouping_not_safe_for_build_ir" in warning_codes
+
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+
+    assert not ir_path.exists()
+    payload = raised.value.to_diagnostics_payload()
+    assert "pdf_candidate_outside_bar" in payload["details"]["tabraw_warning_codes"]
+
+
+def test_pdf_multi_system_order_ambiguous_diagnosed(tmp_path) -> None:
+    assert NEW_MULTI_SYSTEM_PDF.exists()
+    tabraw_path = tmp_path / "multi_system_ambiguous.tabraw.json"
+    ir_path = tmp_path / "multi_system_ambiguous.ir.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(NEW_MULTI_SYSTEM_PDF, tabraw_path))
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+    assert "pdf_multi_system_order_ambiguous" in warning_codes
+    assert "pdf_tab_staff_ambiguous" in warning_codes
+
+    # HTML grouping diagnostics check
+    report_html = (tabraw_path.parent / "grouping-diagnostics.html").read_text(encoding="utf-8")
+    assert "grouping/layout is ambiguous and unsafe" in report_html
+
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+
+    assert not ir_path.exists()
+    payload = raised.value.to_diagnostics_payload()
+    assert "pdf_multi_system_order_ambiguous" in payload["details"]["tabraw_warning_codes"]
+
+
+def test_pdf_ascii_and_drawn_layout_conflict_diagnosed(tmp_path) -> None:
+    assert NEW_CONFLICT_LAYOUT_PDF.exists()
+    tabraw_path = tmp_path / "conflict_layout.tabraw.json"
+    ir_path = tmp_path / "conflict_layout.ir.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(NEW_CONFLICT_LAYOUT_PDF, tabraw_path))
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+    assert "pdf_ascii_and_drawn_layout_conflict" in warning_codes
+    assert "pdf_page_layout_unsupported" in warning_codes
+
+    # HTML grouping diagnostics check
+    report_html = (tabraw_path.parent / "grouping-diagnostics.html").read_text(encoding="utf-8")
+    assert "layout/format is unsupported" in report_html
+
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+
+    assert not ir_path.exists()
+    payload = raised.value.to_diagnostics_payload()
+    assert "pdf_ascii_and_drawn_layout_conflict" in payload["details"]["tabraw_warning_codes"]
+
+
+def test_pdf_prose_legend_text_diagnosed(tmp_path) -> None:
+    assert NEW_PROSE_LEGEND_PDF.exists()
+    tabraw_path = tmp_path / "prose_legend.tabraw.json"
+    ir_path = tmp_path / "prose_legend.ir.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(NEW_PROSE_LEGEND_PDF, tabraw_path))
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+    # No systems, staves, string lines, barlines detected -> missing warning
+    assert "pdf_no_systems_detected" in warning_codes
+    assert "pdf_tab_staff_missing" in warning_codes
+    assert "pdf_string_lines_missing" in warning_codes
+
+    # No fret candidates exist, so playable_fret_candidate_count should be 0
+    fret_candidates = [candidate for candidate in tabraw.candidates if candidate.kind == "fret"]
+    assert len(fret_candidates) == 0
+
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+
+    assert not ir_path.exists()
+    payload = raised.value.to_diagnostics_payload()
+    assert payload["details"]["playable_fret_candidate_count"] == 0

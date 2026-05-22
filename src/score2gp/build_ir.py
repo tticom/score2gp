@@ -1620,7 +1620,8 @@ def _x_to_onset_warnings(
 
 def _tabraw_grouping_risk(tabraw: TabRaw) -> dict[str, object] | None:
     playable = [candidate for candidate in tabraw.candidates if candidate.parsed_fret is not None]
-    if not playable:
+    unsafe_codes = _tabraw_unsafe_grouping_warning_codes(tabraw)
+    if not playable and not unsafe_codes:
         return None
     warning_codes = [
         str(warning.get("code"))
@@ -1636,6 +1637,7 @@ def _tabraw_grouping_risk(tabraw: TabRaw) -> dict[str, object] | None:
     counts: dict[str, object] = {
         "total_candidate_count": len(tabraw.candidates),
         "playable_candidate_count": len(playable),
+        "playable_fret_candidate_count": len(playable),
         "playable_candidates_with_system": sum(1 for candidate in playable if candidate.system_index is not None),
         "playable_candidates_with_bar": sum(1 for candidate in playable if candidate.bar_index is not None),
         "playable_candidates_with_string": sum(1 for candidate in playable if candidate.string is not None),
@@ -1688,9 +1690,10 @@ def _tabraw_grouping_risk(tabraw: TabRaw) -> dict[str, object] | None:
             return None
         counts["missing_grouping_dimensions"] = []
         counts["unsafe_grouping_warning_codes"] = unsafe_codes
-        counts["grouping_status"] = "partial"
-        counts["category"] = "partial_pdf_grouping"
+        counts["grouping_status"] = "missing" if len(playable) == 0 else "partial"
+        counts["category"] = "missing_pdf_grouping" if len(playable) == 0 else "partial_pdf_grouping"
         counts["warning_codes"] = unsafe_codes
+        counts["tabraw_warning_codes"] = unsafe_codes
         return counts
     counts["missing_grouping_dimensions"] = missing
     unsafe_codes = _tabraw_unsafe_grouping_warning_codes(tabraw)
@@ -1713,8 +1716,28 @@ def _tabraw_grouping_risk(tabraw: TabRaw) -> dict[str, object] | None:
             "incomplete_tab_staff",
             "ambiguous_string_assignment",
             "ambiguous_bar_assignment",
+            "pdf_no_systems_detected",
+            "pdf_partial_system_detection",
+            "pdf_tab_staff_missing",
+            "pdf_tab_staff_incomplete",
+            "pdf_tab_staff_ambiguous",
+            "pdf_barlines_missing",
+            "pdf_barlines_ambiguous",
+            "pdf_bar_boxes_missing",
+            "pdf_string_lines_missing",
+            "pdf_string_assignment_missing",
+            "pdf_string_assignment_ambiguous",
+            "pdf_candidate_outside_system",
+            "pdf_candidate_outside_bar",
+            "pdf_candidate_between_strings",
+            "pdf_multi_system_order_ambiguous",
+            "pdf_page_layout_unsupported",
+            "pdf_text_candidate_without_geometry",
+            "pdf_ascii_and_drawn_layout_conflict",
+            "pdf_grouping_not_safe_for_build_ir",
         }
     ]
+    counts["tabraw_warning_codes"] = counts["warning_codes"]
     return counts
 
 
@@ -1731,6 +1754,26 @@ def _tabraw_unsafe_grouping_warning_codes(tabraw: TabRaw) -> list[str]:
         "ambiguous_ascii_tab_timing",
         "unsupported_ascii_tab_rhythm",
         "ascii_tab_measure_boundary_missing",
+
+        "pdf_no_systems_detected",
+        "pdf_partial_system_detection",
+        "pdf_tab_staff_missing",
+        "pdf_tab_staff_incomplete",
+        "pdf_tab_staff_ambiguous",
+        "pdf_barlines_missing",
+        "pdf_barlines_ambiguous",
+        "pdf_bar_boxes_missing",
+        "pdf_string_lines_missing",
+        "pdf_string_assignment_missing",
+        "pdf_string_assignment_ambiguous",
+        "pdf_candidate_outside_system",
+        "pdf_candidate_outside_bar",
+        "pdf_candidate_between_strings",
+        "pdf_multi_system_order_ambiguous",
+        "pdf_page_layout_unsupported",
+        "pdf_text_candidate_without_geometry",
+        "pdf_ascii_and_drawn_layout_conflict",
+        "pdf_grouping_not_safe_for_build_ir",
     }
     return sorted({str(warning.get("code")) for warning in tabraw.warnings if warning.get("code") in unsafe})
 
