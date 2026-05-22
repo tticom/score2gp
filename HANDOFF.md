@@ -1,58 +1,56 @@
 # Handoff
 
 ## Metadata
-- **Current Branch**: `feature/symbol-attachment-html-inspection-v0.1`
+- **Current Branch**: `feature/public-e2e-pdf-to-gp-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: #11 (URL: https://github.com/tticom/score2gp/pull/11)
-- **Latest Local Commit**: `ea466122d107a729525c34749fbe706786c5f726`
-- **Latest Pushed Commit**: `ea466122d107a729525c34749fbe706786c5f726`
-- **Commit Subject**: `Add symbol attachment HTML diagnostics`
-- **Working Tree Status**: Clean (once HANDOFF.md is committed)
+- **Current PR**: PR #12 (https://github.com/tticom/score2gp/pull/12)
+- **Latest Local Commit**: `42f549a088d40d7cb2cbb2d80bfed533f5adaa6a`
+- **Latest Pushed Commit**: `42f549a088d40d7cb2cbb2d80bfed533f5adaa6a`
+- **Commit Subject**: `Fix tuning assertion and title metadata check in public E2E test`
+- **Working Tree Status**: Clean
 - **Tests & Checks Run**:
-  - `python -m pytest` -> 120 passed (pre-compaction verify)
-  - `python -m score2gp.cli export-schema --out schemas` -> passed
+  - `python -m pytest` -> 121 passed
+  - `python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
   - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid
   - `git diff --check` -> passed
   - `git diff -- schemas` -> empty
-- **GitHub Check Status**: Pending (Checks running on draft PR #11)
+- **GitHub Check Status**: Checks running on GitHub Actions
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL files, overlays, logs, or diagnostic outputs are tracked or staged.
 
 ## What Changed in the Task
-- Added developer-facing HTML inspection report for attached and unattached chord symbols and technique text evidence in generated ScoreIR (`symbol-attachment-diagnostics.html`).
-- The HTML report displays:
-  - title identifying symbol/technique attachment diagnostics
-  - source ScoreIR path or build output path
-  - total/attached/unattached chord candidates
-  - total/attached/unattached technique candidates
-  - attachment target IDs (bar index, event ID, note target details where available)
-  - confidence values
-  - provenance/candidate IDs
-  - warning/reason codes for unattached, ambiguous, or unsupported candidates
-  - clear statement that GPIF rendering is not implemented
-  - clear statement that symbols and techniques did not create notes, events, or timing
-- Preserved existing JSON diagnostics.
-- Hooked the report generation into the successful build path of `build_ir_from_files` in `src/score2gp/build_ir.py` and `build-ir` CLI command in `src/score2gp/cli.py`.
-- Added comprehensive public test suite proving all visual, count, and statement requirements in `tests/test_symbol_attachment.py` (no private fixtures used).
-- Updated architectural and workflow documentation in `docs/architecture.md`, `docs/workflow.md`, and `docs/limitations.md`.
+- Fixed `tests/test_e2e_pdf_to_gp.py` failing assertions:
+  1. Handled the absent `"name"` key gracefully when tuning is populated directly from Track-level String elements (asserting `tuning_info.get("name") in (None, "Standard guitar")` and directly verifying MIDI pitch array `["64", "59", "55", "50", "45", "40"]`).
+  2. Fixed title assertion to search for `"ASCII ScoreIR Gate Simple"`, which is the correct title embedded in the synthetic MusicXML metadata (rather than the PDF file title).
+- Ran full local verification suite successfully (121/121 tests passing).
+- Successfully pushed the feature branch `feature/public-e2e-pdf-to-gp-v0.1` to remote `origin`.
+- Created draft Pull Request #12 using the compiled E2E PR body.
+- Created a tiny public end-to-end PDF-to-GP pipeline integration proof in `tests/test_e2e_pdf_to_gp.py` which:
+  1. Extracts TabRaw candidate symbols from a public PDF fixture.
+  2. Aligns onset evidence with a monophonic MusicXML fixture.
+  3. Builds ScoreIR using compatible alignment.
+  4. Validates ScoreIR against schema.
+  5. Generates minimal GP package structure.
+  6. Validates GP well-formedness and ZIP layout.
+  7. Semantic inspection of the GP output track, tempo, timesig, bars, and MIDI pitches.
+- Integrated architecture, workflows, and limitations documentation in `docs/`.
 
 ## Known Limitations
-- HTML diagnostics are developer-facing only. JSON diagnostics remain the programmatic source of truth.
-- GPIF technique/chord rendering is not implemented.
+- This is a tiny, highly controlled integration proof using a synthetic public score. It does not handle arbitrary PDF score authoring or complex sheets.
 - No OCR.
-- No scanned-PDF support.
-- No ML layout recognition.
+- No scanned-PDF/ML layout recognition.
 - No broad ASCII-to-ScoreIR conversion.
-- Symbols and techniques do not create notes, events, or timing.
+- GPIF output is minimal.
+- Technique/chord symbol rendering to GPIF is out of scope.
 
 ## Remaining Risks
-- None. The inspection report is purely informative and sidecar-like, with zero impact on ScoreIR semantic generation correctness or conservative alignment logic.
+- None. Stable public fixtures and strict pipeline validations are fully in place.
 
 ## Explicit Scope Boundaries
-- **Do not** start GPIF technique rendering.
 - **Do not** broaden ASCII-to-ScoreIR conversion.
-- **Do not** infer durations from PDF text.
-- **Do not** use private PDFs as regression fixtures.
-- **Do not** commit `work/` outputs or private files.
+- **Do not** use private fixtures as tests.
+- **Do not** add OCR/scanned-PDF/ML support.
+- **Do not** expand GPIF technique rendering.
+- **Do not** start private tuning.
 
 ## Next Recommended Task
-- Add developer-facing HTML styling and compact thumbnails for grouping diagnostics.
+- Review and merge the public E2E PR. After merge, start a small public E2E comparison/reporting improvement branch or begin carefully planning the first private diagnostic smoke run without committing private artifacts.
