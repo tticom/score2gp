@@ -85,8 +85,8 @@ To make MusicXML timing and overlap failures easy to understand and inspect for 
 - **Verdict & Remediation Hints**: Clearly highlights the primary timing risk code (e.g. overfull measure, polyphony overlap, unbalanced backup/forward commands, etc.) and provides tailored remediation advice to guide the developer on how to fix the MusicXML timing/voice structure.
 - **JSON as Source of Truth**: The JSON diagnostics payload remains the programmatic source of truth for downstream tools.
 - **Strict Safety Gates**: MusicXML timing risks strictly block ScoreIR generation to prevent downstream alignment and rendering failures, rather than silently dropping or flattening voices, rests, or tuplets.
-- **Refined Timing Diagnostic Codes**: The preflight catches valid/underfull/overfull compound meter, backup rewind before measure start, forward exceeding measure end, backup/forward ambiguity, same-voice cursor overlap, and multi-voice timing risks using a taxonomy of precise codes.
-- **Synthetic Public Fixtures**: Public synthetic MusicXML timing blocker fixtures are added under `tests/fixtures/musicxml/` to safely reproduce and test these failure modes, ensuring CI validation remains independent of any private materials.
+- **Refined Timing Diagnostic Codes**: The preflight catches valid/underfull/overfull compound meter, backup rewind before measure start, forward exceeding measure end, backup/forward ambiguity, same-voice cursor overlap, multi-voice timing risks, repeated backup/forward cursor movements, staggered cross-voice cursor movement, rest/note overlap, and Audiveris-like heavy rewind risks using a taxonomy of precise codes.
+- **Synthetic Public Fixtures**: Public synthetic MusicXML timing blocker fixtures (v0.2 and v0.3) are added under `tests/fixtures/musicxml/` to safely reproduce and test these specific failure modes, ensuring CI validation remains independent of any private materials.
 
 ## Public End-to-End PDF-to-GP Proof Slice
 

@@ -1457,6 +1457,12 @@ def write_musicxml_timing_diagnostics_html(path: str | Path, payload: dict[str, 
         "musicxml_chord_stack_supported_or_blocked": "A chord stack is classified and handled depending on overall system constraints.",
         "musicxml_rest_voice_overlap": "An overlapping note and rest in the same voice creates timing ambiguity.",
         "musicxml_alignment_not_attempted_due_to_timing_risk": "One or more timing errors blocked alignment; resolve those errors first.",
+        "musicxml_voice_cursor_alignment_risk": "Unsafe voice cursor backtrack detected that overlaps notes or rests on the same timeline.",
+        "musicxml_repeated_backup_forward_risk": "Repeated backup/forward cursor movements exceed safe bounds and are unsupported.",
+        "musicxml_many_timing_risks": "Measure contains high-density timing risks/overlaps indicating extremely messy notation.",
+        "musicxml_same_voice_tick_overlap": "Notes overlap on the same voice timeline, producing duplicate tick entries.",
+        "musicxml_cross_voice_timing_unsupported": "Cross-voice polyphony/multi-voice timing overlap is unsupported in this pipeline.",
+        "musicxml_chord_stack_not_timing_overlap": "Legitimate chord stack detected and distinguished from timing overlap.",
     }
     remediation = mapping.get(primary_reason, "Review the timing issues listed below and fix the MusicXML timing/voice structure.")
 
