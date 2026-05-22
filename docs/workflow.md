@@ -367,6 +367,14 @@ When symbol/technique attachment diagnostics exist, `build-ir` writes a develope
 - `musicxml_voice_timeline_valid`: The voice timelines are completely valid.
 - `musicxml_voice_duration_underfull`: A voice cursor timeline is underfull compared to the expected measure duration.
 - `musicxml_voice_duration_overfull`: A voice cursor timeline exceeds the expected measure duration.
+- `musicxml_same_voice_measure_overfull`: A voice cursor timeline exceeds the expected measure duration.
+- `musicxml_same_voice_event_overlap`: Overlapping note/rest durations within the same voice timeline.
+- `musicxml_same_voice_rest_note_overlap`: Rest and note overlaps within the same voice timeline.
+- `musicxml_event_extends_past_measure`: An event's duration extends beyond the measure end.
+- `musicxml_accumulated_duration_overflow`: Accumulated small rounding errors lead to measure duration overflow.
+- `musicxml_invalid_duration_grid`: The expected duration divisions do not partition into a clean integer grid.
+- `musicxml_timing_repair_not_attempted`: Flag showing that timing repair was not performed.
+- `musicxml_timing_calibration_required`: Timing calibration/repair is required for alignment to succeed.
 - `musicxml_measure_duration_inconsistent_across_voices`: Active voice timelines have inconsistent end ticks across the measure.
 - `musicxml_backup_cursor_before_measure_start`: A `<backup>` element attempts to rewind the voice cursor before the start of the measure.
 - `musicxml_forward_cursor_after_measure_end`: A `<forward>` element pushes the voice cursor beyond the expected measure duration.
@@ -379,6 +387,7 @@ When symbol/technique attachment diagnostics exist, `build-ir` writes a develope
 - `musicxml_many_timing_risks`: Measure has high-density timing risks with more than 5 errors or highly overlapping event density.
 - `musicxml_voice_cursor_alignment_risk`: Appended to cross-voice timing overlap, rest overlap, or same-voice overlap if backup/forward movements are present.
 - `musicxml_alignment_not_attempted_due_to_timing_risk`: Appended as a final blocker issue if any error exists, refusing ScoreIR generation.
+
 
 Overfull bars or same-voice overlaps are treated as timing risk and refused before invalid ScoreIR is written. Unsupported polyphony (valid multi-voice timing that build-ir cannot represent) is explicitly refused as `musicxml_scoreir_polyphony_gate_refused` rather than a timing risk:
 
