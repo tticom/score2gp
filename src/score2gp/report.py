@@ -754,3 +754,614 @@ def write_ascii_gate_diagnostics_html(path: str | Path, payload: dict[str, Any],
 </html>
 """
     out.write_text(body, encoding="utf-8")
+
+
+def write_symbol_attachment_diagnostics_html(
+    path: str | Path,
+    diagnostics: Any,
+    score: Any,
+    tabraw_path: str | Path | None = None,
+) -> None:
+    """Write an inspectable developer-facing HTML report for attached and unattached chord/technique evidence in generated ScoreIR."""
+    out = Path(path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    # 1. Map warnings by candidate ID
+    warnings_by_candidate = {}
+    for warning in getattr(score, "warnings", []):
+        for prov in getattr(warning, "provenance", []):
+            if getattr(prov, "raw_token_id", None):
+                tid = prov.raw_token_id
+                if tid not in warnings_by_candidate:
+                    warnings_by_candidate[tid] = []
+                warnings_by_candidate[tid].append(warning)
+
+    # 2. Traverse score to build attached map
+    attached_map = {}
+    for bar in getattr(score, "bars", []):
+        for event in getattr(bar, "events", []):
+            if getattr(event, "chord_symbol", None):
+                for prov in getattr(event, "provenance", []):
+                    if getattr(prov, "raw_token_id", None):
+                        attached_map[prov.raw_token_id] = {
+                            "bar_index": bar.index,
+                            "event_id": event.id,
+                            "note_desc": None,
+                        }
+            for note in getattr(event, "notes", []):
+                for prov in getattr(note, "provenance", []):
+                    if getattr(prov, "raw_token_id", None):
+                        attached_map[prov.raw_token_id] = {
+                            "bar_index": bar.index,
+                            "event_id": event.id,
+                            "note_desc": f"String {note.string}, Fret {note.fret}",
+                        }
+
+    # 3. Load tabraw if available to populate candidates list
+    tabraw = None
+    if tabraw_path:
+        t_path = Path(tabraw_path)
+        if t_path.exists():
+            try:
+                from .tabraw import TabRaw
+                tabraw = TabRaw.from_json_file(t_path)
+            except Exception:
+                pass
+    if not tabraw and getattr(diagnostics, "tabraw_source", None):
+        t_path = Path(diagnostics.tabraw_source)
+        if t_path.exists():
+            try:
+                from .tabraw import TabRaw
+                tabraw = TabRaw.from_json_file(t_path)
+            except Exception:
+                pass
+
+    chord_rows = []
+    tech_rows = []
+
+    if tabraw:
+        for candidate in getattr(tabraw, "candidates", []):
+            cid = getattr(candidate, "id", None)
+            kind = getattr(candidate, "kind", None)
+            text = getattr(candidate, "raw_text", "")
+            conf = getattr(candidate, "confidence", 1.0)
+            bar_idx = getattr(candidate, "bar_index", None)
+
+            if not cid or kind not in ("chord-symbol", "technique-text"):
+                continue
+
+            is_attached = cid in attached_map
+
+            if kind == "chord-symbol":
+                target_bar = bar_idx
+                target_event = attached_map[cid]["event_id"] if is_attached else None
+                status = "Attached" if is_attached else "Unattached"
+                status_class = "status-attached" if is_attached else "status-unattached"
+
+                warns = warnings_by_candidate.get(cid, [])
+                warn_text = "; ".join(f"[{w.code}] {w.message}" for w in warns) if warns else ("N/A" if is_attached else "Unattached (no specific warning)")
+
+                chord_rows.append({
+                    "id": cid,
+                    "text": text,
+                    "confidence": conf,
+                    "bar_index": target_bar,
+                    "event_id": target_event,
+                    "status": status,
+                    "status_class": status_class,
+                    "warning_info": warn_text,
+                })
+
+            elif kind == "technique-text":
+                target_bar = bar_idx
+                target_event = attached_map[cid]["event_id"] if is_attached else None
+                target_note = attached_map[cid]["note_desc"] if is_attached else None
+                status = "Attached" if is_attached else "Unattached"
+                status_class = "status-attached" if is_attached else "status-unattached"
+
+                warns = warnings_by_candidate.get(cid, [])
+                warn_text = "; ".join(f"[{w.code}] {w.message}" for w in warns) if warns else ("N/A" if is_attached else "Unattached (no specific warning)")
+
+                tech_rows.append({
+                    "id": cid,
+                    "text": text,
+                    "confidence": conf,
+                    "bar_index": target_bar,
+                    "event_id": target_event,
+                    "note_desc": target_note,
+                    "status": status,
+                    "status_class": status_class,
+                    "warning_info": warn_text,
+                })
+    else:
+        # Fallback: scan score for attached items
+        for bar in getattr(score, "bars", []):
+            for event in getattr(bar, "events", []):
+                if getattr(event, "chord_symbol", None):
+                    for prov in getattr(event, "provenance", []):
+                        if getattr(prov, "raw_token_id", None):
+                            chord_rows.append({
+                                "id": prov.raw_token_id,
+                                "text": event.chord_symbol,
+                                "confidence": getattr(prov, "confidence", 1.0),
+                                "bar_index": bar.index,
+                                "event_id": event.id,
+                                "status": "Attached",
+                                "status_class": "status-attached",
+                                "warning_info": "N/A",
+                            })
+                for note in getattr(event, "notes", []):
+                    if getattr(note, "techniques", None):
+                        for prov in getattr(note, "provenance", []):
+                            if getattr(prov, "raw_token_id", None) and (prov.raw_token_id.startswith("tech") or "tech" in prov.raw_token_id):
+                                tech_text = ", ".join(getattr(t, "kind", "unknown") for t in note.techniques)
+                                tech_rows.append({
+                                    "id": prov.raw_token_id,
+                                    "text": tech_text,
+                                    "confidence": getattr(prov, "confidence", 1.0),
+                                    "bar_index": bar.index,
+                                    "event_id": event.id,
+                                    "note_desc": f"String {note.string}, Fret {note.fret}",
+                                    "status": "Attached",
+                                    "status_class": "status-attached",
+                                    "warning_info": "N/A",
+                                })
+
+        # Scan warnings for unattached items
+        for warning in getattr(score, "warnings", []):
+            for prov in getattr(warning, "provenance", []):
+                if getattr(prov, "raw_token_id", None):
+                    raw_text = warning.message.split("'")[1] if "'" in warning.message else "unknown"
+                    if warning.code in ("symbol_attachment_requires_timing", "unattached_chord_symbol", "ambiguous_chord_symbol_attachment"):
+                        chord_rows.append({
+                            "id": prov.raw_token_id,
+                            "text": raw_text,
+                            "confidence": getattr(prov, "confidence", 1.0),
+                            "bar_index": getattr(prov, "bar_index", None),
+                            "event_id": None,
+                            "status": "Unattached",
+                            "status_class": "status-unattached",
+                            "warning_info": f"[{warning.code}] {warning.message}",
+                        })
+                    elif warning.code in ("technique_attachment_requires_note_target", "unattached_technique_text", "ambiguous_technique_attachment", "unsupported_technique_text"):
+                        tech_rows.append({
+                            "id": prov.raw_token_id,
+                            "text": raw_text,
+                            "confidence": getattr(prov, "confidence", 1.0),
+                            "bar_index": getattr(prov, "bar_index", None),
+                            "event_id": None,
+                            "note_desc": None,
+                            "status": "Unattached",
+                            "status_class": "status-unattached",
+                            "warning_info": f"[{warning.code}] {warning.message}",
+                        })
+
+    # Prepare HTML lists
+    chords_html = ""
+    if chord_rows:
+        chords_html = "\n".join(
+            f"""<tr>
+              <td><code>{html.escape(str(r["id"]))}</code></td>
+              <td><strong>{html.escape(str(r["text"]))}</strong></td>
+              <td>{r["confidence"]:.2f}</td>
+              <td>{html.escape(str(r["bar_index"])) if r["bar_index"] is not None else "<em>N/A</em>"}</td>
+              <td>{f"<code>{html.escape(str(r['event_id']))}</code>" if r["event_id"] is not None else "<em>N/A</em>"}</td>
+              <td><span class="badge {r['status_class']}">{html.escape(str(r["status"]))}</span></td>
+              <td class="warning-text">{html.escape(str(r["warning_info"]))}</td>
+            </tr>"""
+            for r in chord_rows
+        )
+    else:
+        chords_html = """<tr><td colspan="7" class="empty-state">No chord symbol candidates found.</td></tr>"""
+
+    techs_html = ""
+    if tech_rows:
+        techs_html = "\n".join(
+            f"""<tr>
+              <td><code>{html.escape(str(r["id"]))}</code></td>
+              <td><strong>{html.escape(str(r["text"]))}</strong></td>
+              <td>{r["confidence"]:.2f}</td>
+              <td>{html.escape(str(r["bar_index"])) if r["bar_index"] is not None else "<em>N/A</em>"}</td>
+              <td>{f"<code>{html.escape(str(r['event_id']))}</code>" if r["event_id"] is not None else "<em>N/A</em>"}</td>
+              <td>{html.escape(str(r["note_desc"])) if r["note_desc"] is not None else "<em>N/A</em>"}</td>
+              <td><span class="badge {r['status_class']}">{html.escape(str(r["status"]))}</span></td>
+              <td class="warning-text">{html.escape(str(r["warning_info"]))}</td>
+            </tr>"""
+            for r in tech_rows
+        )
+    else:
+        techs_html = """<tr><td colspan="8" class="empty-state">No technique text candidates found.</td></tr>"""
+
+    # Retrieve counts from diagnostics
+    c_found = getattr(diagnostics, "symbol_attachment_chord_candidates_found", 0)
+    c_attached = getattr(diagnostics, "symbol_attachment_chord_candidates_attached", 0)
+    c_unattached = getattr(diagnostics, "symbol_attachment_chord_candidates_unattached", 0)
+
+    t_found = getattr(diagnostics, "symbol_attachment_technique_candidates_found", 0)
+    t_attached = getattr(diagnostics, "symbol_attachment_technique_candidates_attached", 0)
+    t_unattached = getattr(diagnostics, "symbol_attachment_technique_candidates_unattached", 0)
+
+    source_ir_path_str = getattr(score, "metadata", None)
+    source_title = getattr(source_ir_path_str, "title", "Unknown") if source_ir_path_str else "Unknown"
+
+    tabraw_ref_str = tabraw_path or getattr(diagnostics, "tabraw_source", None) or "N/A"
+
+    body = f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Symbol & Technique Attachment Diagnostics</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+    :root {{
+      --bg-color: #0b0f19;
+      --card-bg: #151e30;
+      --card-border: #202c46;
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --divider: #1e293b;
+
+      --accent-unattached: #f87171;
+      --accent-unattached-glow: rgba(248, 113, 113, 0.1);
+      --accent-attached: #34d399;
+      --accent-attached-glow: rgba(52, 211, 153, 0.1);
+      --accent-blue: #3b82f6;
+      --accent-blue-glow: rgba(59, 130, 246, 0.1);
+    }}
+
+    body {{
+      background-color: var(--bg-color);
+      color: var(--text-primary);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      margin: 0;
+      padding: 2rem 1rem;
+      min-height: 100vh;
+      line-height: 1.5;
+    }}
+
+    .container {{
+      max-width: 1000px;
+      margin: 0 auto;
+    }}
+
+    header {{
+      border-bottom: 1px solid var(--divider);
+      padding-bottom: 1.5rem;
+      margin-bottom: 2rem;
+    }}
+
+    h1 {{
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin: 0 0 0.5rem 0;
+      letter-spacing: -0.025em;
+    }}
+
+    .subtitle {{
+      font-size: 0.95rem;
+      color: var(--text-secondary);
+      margin: 0;
+    }}
+
+    .badge {{
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border: 1px solid transparent;
+      display: inline-block;
+    }}
+
+    .status-unattached {{
+      background-color: var(--accent-unattached-glow);
+      color: var(--accent-unattached);
+      border-color: rgba(248, 113, 113, 0.2);
+    }}
+
+    .status-attached {{
+      background-color: var(--accent-attached-glow);
+      color: var(--accent-attached);
+      border-color: rgba(52, 211, 153, 0.2);
+    }}
+
+    .card {{
+      background-color: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }}
+
+    .card-title {{
+      font-size: 0.9rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-secondary);
+      margin-top: 0;
+      margin-bottom: 1.25rem;
+      border-bottom: 1px solid var(--divider);
+      padding-bottom: 0.5rem;
+    }}
+
+    .grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 1.5rem;
+    }}
+
+    .metric-group {{
+      background-color: rgba(0, 0, 0, 0.15);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 1rem;
+    }}
+
+    .metric-group-title {{
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-secondary);
+      margin-bottom: 0.75rem;
+    }}
+
+    .metric-row {{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+    }}
+
+    .metric-row:last-child {{
+      margin-bottom: 0;
+    }}
+
+    .metric-label {{
+      font-size: 0.875rem;
+    }}
+
+    .metric-value {{
+      font-size: 1.25rem;
+      font-weight: 700;
+    }}
+
+    .metric-value.attached {{
+      color: var(--accent-attached);
+    }}
+
+    .metric-value.unattached {{
+      color: var(--accent-unattached);
+    }}
+
+    .scope-card {{
+      background-color: rgba(248, 113, 113, 0.03);
+      border: 1px solid rgba(248, 113, 113, 0.2);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }}
+
+    .scope-title {{
+      font-size: 0.9rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--accent-unattached);
+      margin-top: 0;
+      margin-bottom: 0.75rem;
+    }}
+
+    .scope-list {{
+      margin: 0;
+      padding-left: 1.25rem;
+    }}
+
+    .scope-list li {{
+      font-size: 0.9rem;
+      margin-bottom: 0.5rem;
+      color: var(--text-secondary);
+    }}
+
+    .scope-list li strong {{
+      color: var(--text-primary);
+    }}
+
+    table {{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+      text-align: left;
+    }}
+
+    th {{
+      font-weight: 600;
+      color: var(--text-secondary);
+      border-bottom: 2px solid var(--divider);
+      padding: 0.75rem 0.5rem;
+    }}
+
+    td {{
+      padding: 0.75rem 0.5rem;
+      border-bottom: 1px solid var(--divider);
+      vertical-align: middle;
+    }}
+
+    tr:hover td {{
+      background-color: rgba(255, 255, 255, 0.02);
+    }}
+
+    .empty-state {{
+      text-align: center;
+      color: var(--text-secondary);
+      font-style: italic;
+      padding: 2rem 0;
+    }}
+
+    code {{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.8rem;
+      background-color: rgba(0, 0, 0, 0.3);
+      padding: 0.125rem 0.25rem;
+      border-radius: 4px;
+      border: 1px solid var(--card-border);
+    }}
+
+    .warning-text {{
+      color: var(--accent-unattached);
+      font-size: 0.8rem;
+    }}
+
+    .footer-note {{
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      text-align: center;
+      margin-top: 3rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--divider);
+    }}
+
+    pre {{
+      background-color: rgba(0, 0, 0, 0.3);
+      padding: 1rem;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.8rem;
+      border: 1px solid var(--card-border);
+      margin: 0;
+    }}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Symbol & Technique Attachment Diagnostics</h1>
+      <p class="subtitle">Visual inspection report for PDF-derived chord symbols and technique text evidence.</p>
+    </header>
+
+    <div class="card">
+      <h2 class="card-title">Document Reference</h2>
+      <table style="width: auto;">
+        <tr>
+          <td style="border: none; padding: 0.25rem 1rem 0.25rem 0; font-weight: 500; color: var(--text-secondary);">Score Title:</td>
+          <td style="border: none; padding: 0.25rem 0; font-weight: 600;">{html.escape(source_title)}</td>
+        </tr>
+        <tr>
+          <td style="border: none; padding: 0.25rem 1rem 0.25rem 0; font-weight: 500; color: var(--text-secondary);">TabRaw Source:</td>
+          <td style="border: none; padding: 0.25rem 0; font-weight: 600;"><code>{html.escape(str(tabraw_ref_str))}</code></td>
+        </tr>
+        <tr>
+          <td style="border: none; padding: 0.25rem 1rem 0.25rem 0; font-weight: 500; color: var(--text-secondary);">ScoreIR Path:</td>
+          <td style="border: none; padding: 0.25rem 0; font-weight: 600;"><code>{html.escape(str(out))}</code></td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="scope-card">
+      <h2 class="scope-title">Important System Scope & Boundaries</h2>
+      <ul class="scope-list">
+        <li><strong>GPIF rendering is NOT implemented</strong>. This report serves solely as a developer-facing visualization tool for symbol attachment diagnostic evidence in the generated ScoreIR.</li>
+        <li><strong>Symbols and techniques DID NOT create notes, events, or timing</strong>. They are only attached as conservative metadata/evidence to existing, safely timed bars and events derived from MusicXML.</li>
+        <li><strong>JSON diagnostics remain the programmatic source of truth</strong>. The HTML report is only a read-only developer representation.</li>
+      </ul>
+    </div>
+
+    <div class="grid">
+      <div class="metric-group">
+        <h3 class="metric-group-title">Chord Symbols Summary</h3>
+        <div class="metric-row">
+          <span class="metric-label">Total Candidates Found:</span>
+          <span class="metric-value">{c_found}</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Successfully Attached:</span>
+          <span class="metric-value attached">{c_attached}</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Unattached / Refused:</span>
+          <span class="metric-value unattached">{c_unattached}</span>
+        </div>
+      </div>
+
+      <div class="metric-group">
+        <h3 class="metric-group-title">Technique Texts Summary</h3>
+        <div class="metric-row">
+          <span class="metric-label">Total Candidates Found:</span>
+          <span class="metric-value">{t_found}</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Successfully Attached:</span>
+          <span class="metric-value attached">{t_attached}</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Unattached / Refused:</span>
+          <span class="metric-value unattached">{t_unattached}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">Chord Symbol Candidates</h2>
+      <div style="overflow-x: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Text</th>
+              <th>Confidence</th>
+              <th>Bar Index</th>
+              <th>Event ID</th>
+              <th>Status</th>
+              <th>Warning Details / Refusal Reason</th>
+            </tr>
+          </thead>
+          <tbody>
+            {chords_html}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">Technique Text Candidates</h2>
+      <div style="overflow-x: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Text</th>
+              <th>Confidence</th>
+              <th>Bar Index</th>
+              <th>Event ID</th>
+              <th>Note Target</th>
+              <th>Status</th>
+              <th>Warning Details / Refusal Reason</th>
+            </tr>
+          </thead>
+          <tbody>
+            {techs_html}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">Raw Diagnostics Payload Reference</h2>
+      <pre><code>{html.escape(json.dumps(diagnostics.model_dump(mode="json") if hasattr(diagnostics, "model_dump") else diagnostics, indent=2, sort_keys=True))}</code></pre>
+    </div>
+
+    <div class="footer-note">
+      This diagnostic report is generated automatically by the Antigravity Score2GP pipeline.
+    </div>
+  </div>
+</body>
+</html>
+"""
+    out.write_text(body, encoding="utf-8")
