@@ -372,9 +372,13 @@ For ASCII-tab inputs, `build-ir` remains diagnostic-first and conservative. With
 - `musicxml_forward_exceeds_measure_end`: A `<forward>` element pushes the voice cursor beyond the expected measure end.
 - `musicxml_backup_forward_alignment_ambiguous`: Backup/forward elements create an unbalanced or ambiguous voice cursor.
 - `musicxml_voice_cursor_overlap`: Overlapping active durations within the same voice.
-- `musicxml_multivoice_timing_not_supported`: Overlapping durations between different voices (unsupported polyphony).
-- `musicxml_chord_stack_detected` & `musicxml_chord_stack_supported_or_blocked`: Distinctly classifies valid note stacks/chords encoded with `<chord/>` so they are not treated as unsafe overlaps.
-- `musicxml_rest_voice_overlap`: Overlaps between rests and active notes.
+- `musicxml_same_voice_tick_overlap`: Same-voice, same-onset overlap where two distinct notes overlap on the voice timeline without `<chord/>` elements.
+- `musicxml_cross_voice_timing_unsupported` & `musicxml_multivoice_timing_not_supported`: Overlapping durations between different voices (unsupported cross-voice polyphony).
+- `musicxml_chord_stack_detected`, `musicxml_chord_stack_supported_or_blocked`, & `musicxml_chord_stack_not_timing_overlap`: Distinctly classifies valid note stacks/chords encoded with `<chord/>` so they are not treated as unsafe overlaps.
+- `musicxml_rest_voice_overlap` & `musicxml_rest_overlap`: Overlaps between rests and active notes.
+- `musicxml_repeated_backup_forward_risk`: Measure has 4 or more backup/forward cursor movements, exceeding the safe limit of 3.
+- `musicxml_many_timing_risks`: Measure has high-density timing risks with more than 5 errors or highly overlapping event density.
+- `musicxml_voice_cursor_alignment_risk`: Appended to cross-voice timing overlap, rest overlap, or same-voice overlap if backup/forward movements are present.
 - `musicxml_alignment_not_attempted_due_to_timing_risk`: Appended as a final blocker issue if any error exists, refusing ScoreIR generation.
 
 Overfull bars or same-voice overlaps are treated as timing risk and refused before invalid ScoreIR is written:
