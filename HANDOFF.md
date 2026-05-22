@@ -4,8 +4,8 @@
 - **Current Branch**: `feature/ascii-scoreir-gate-refusal-diagnostics-v0.1`
 - **Base Branch**: `main`
 - **Current PR**: #8 (URL: https://github.com/tticom/score2gp/pull/8)
-- **Latest Commit**: `89229f710610c637888ad0d9a25c7433c55d188f`
-- **Commit Subject**: `feat(ascii-gate): implement enriched refusal diagnostics for ASCII ScoreIR gate v0.1`
+- **Latest Commit**: `00503b8d3b1661918b4c9912c581b679bf29ed0b`
+- **Commit Subject**: `Persist handoff update rule`
 - **Working Tree Status**: Clean
 - **Tests & Checks Run**:
   - `python -m pytest` -> 114 passed
@@ -13,7 +13,7 @@
   - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid
   - `git diff --check` -> passed
   - `git diff -- schemas` -> empty
-- **GitHub Check Status**: passing (`✓ Checks passing` on GitHub Actions runs)
+- **GitHub Check Status**: pending (new GitHub Actions run triggered by the latest commit push is in progress)
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL files, overlays, logs, or diagnostic outputs are tracked or staged.
 
 ## What Changed in the Task
