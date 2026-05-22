@@ -1,56 +1,72 @@
 # Handoff
 
 ## Metadata
-- **Current Branch**: `feature/public-e2e-pdf-to-gp-v0.1`
+- **Current Branch**: `feature/private-e2e-diagnostic-smoke-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: PR #12 (https://github.com/tticom/score2gp/pull/12)
-- **Latest Local Commit**: `42f549a088d40d7cb2cbb2d80bfed533f5adaa6a`
-- **Latest Pushed Commit**: `42f549a088d40d7cb2cbb2d80bfed533f5adaa6a`
-- **Commit Subject**: `Fix tuning assertion and title metadata check in public E2E test`
-- **Working Tree Status**: Clean
+- **Current PR**: PR #13 (https://github.com/tticom/score2gp/pull/13)
+- **Latest Local Commit**: `945fb2e1843baa03a2ee9671078ab90769bc2f99`
+- **Latest Pushed Commit**: `945fb2e1843baa03a2ee9671078ab90769bc2f99`
+- **Commit Subject**: `Add private-safe E2E diagnostic smoke`
+- **Working Tree Status**: Clean (before handoff commit)
 - **Tests & Checks Run**:
-  - `python -m pytest` -> 121 passed
+  - `python -m pytest` -> 124 passed
   - `python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
   - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid
   - `git diff --check` -> passed
   - `git diff -- schemas` -> empty
 - **GitHub Check Status**: Checks running on GitHub Actions
-- **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL files, overlays, logs, or diagnostic outputs are tracked or staged.
+- **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or diagnostic outputs are tracked or committed. All outputs under `work/` are ignored.
 
 ## What Changed in the Task
-- Fixed `tests/test_e2e_pdf_to_gp.py` failing assertions:
-  1. Handled the absent `"name"` key gracefully when tuning is populated directly from Track-level String elements (asserting `tuning_info.get("name") in (None, "Standard guitar")` and directly verifying MIDI pitch array `["64", "59", "55", "50", "45", "40"]`).
-  2. Fixed title assertion to search for `"ASCII ScoreIR Gate Simple"`, which is the correct title embedded in the synthetic MusicXML metadata (rather than the PDF file title).
-- Ran full local verification suite successfully (121/121 tests passing).
-- Successfully pushed the feature branch `feature/public-e2e-pdf-to-gp-v0.1` to remote `origin`.
-- Created draft Pull Request #12 using the compiled E2E PR body.
-- Created a tiny public end-to-end PDF-to-GP pipeline integration proof in `tests/test_e2e_pdf_to_gp.py` which:
-  1. Extracts TabRaw candidate symbols from a public PDF fixture.
-  2. Aligns onset evidence with a monophonic MusicXML fixture.
-  3. Builds ScoreIR using compatible alignment.
-  4. Validates ScoreIR against schema.
-  5. Generates minimal GP package structure.
-  6. Validates GP well-formedness and ZIP layout.
-  7. Semantic inspection of the GP output track, tempo, timesig, bars, and MIDI pitches.
-- Integrated architecture, workflows, and limitations documentation in `docs/`.
+- Added a local-only private E2E diagnostic smoke script/workflow (`scripts/private_e2e_smoke.py`).
+- Added public-safe tests for the private smoke script (`tests/test_private_smoke.py`) using synthetic/public temporary fixtures proving:
+  1. The script writes a summary JSON and Markdown.
+  2. The summary redacts/avoids raw score text and private information.
+  3. The summary includes counts, status, and reason codes.
+  4. Private-like filenames can be anonymized properly.
+  5. Outputs are written under a supplied output directory (`work/` or `tmp_path`).
+  6. No private fixtures are required to run the test suite.
+- Updated documentation (`docs/workflow.md` and `docs/limitations.md`) to reflect that the private diagnostic smoke is optional, local-only, does not commit private files, uses private examples purely as diagnostic inputs, and never tunes thresholds or weakens validation gates to make specific private examples pass.
+- Updated `TASKS.md` to reflect the completed task.
+- Generated draft Pull Request #13 using the compiled E2E PR body.
+
+## Private Smoke Result Summary (Safe Counts & Statuses Only)
+The local diagnostic smoke scan successfully identified and processed the following private inputs:
+1. **`private_input_1`** (`pdf-tab-musicxml`):
+   - **Page Count**: 2
+   - **Text/Geometry Detected**: Yes (both ASCII tab and drawn tab geometry detected)
+   - **Playable Candidate Count**: 203 candidates
+   - **Timing Status**: `failed` (ScoreIR gate status: `refused`)
+   - **GP Written**: No
+   - **Primary Failure/Refusal Reason**: `musicxml_timing_risk`
+   - **Secondary Reason Codes**: `MusicXML timing risk prevents ScoreIR output: 63 overfull or overlapping event(s) would violate ScoreIR timing`, `missing_pdf_grouping`, `pdf-tab-system-not-detected`
+   - **Next Diagnostic Recommendation**: `review-musicxml-timing-risk-before-alignment`
+2. **`private_input_2`** (`pdf-tab-only`):
+   - **Page Count**: 1
+   - **Text/Geometry Detected**: Yes (both ASCII tab and drawn tab geometry detected)
+   - **Playable Candidate Count**: 54 candidates
+   - **Timing Status**: `not_attempted` (ScoreIR gate status: `not_attempted`)
+   - **GP Written**: No
+   - **Primary Failure/Refusal Reason**: None (MusicXML is missing)
+   - **Secondary Reason Codes**: `missing_pdf_grouping`, `pdf-tab-system-not-detected`
+   - **Next Diagnostic Recommendation**: `provide-matching-musicxml-before-build-ir`
 
 ## Known Limitations
-- This is a tiny, highly controlled integration proof using a synthetic public score. It does not handle arbitrary PDF score authoring or complex sheets.
-- No OCR.
-- No scanned-PDF/ML layout recognition.
+- Private smoke is diagnostic-only and does not tune thresholds.
+- It does not make private examples pass or weaken validation/timing gates.
+- No OCR or scanned-PDF support.
 - No broad ASCII-to-ScoreIR conversion.
-- GPIF output is minimal.
-- Technique/chord symbol rendering to GPIF is out of scope.
+- GPIF technique rendering is out of scope.
 
 ## Remaining Risks
-- None. Stable public fixtures and strict pipeline validations are fully in place.
+- None. Stable public fixtures and strict pipeline validations are fully in place. All local summaries are verified to be private-safe.
 
 ## Explicit Scope Boundaries
-- **Do not** broaden ASCII-to-ScoreIR conversion.
-- **Do not** use private fixtures as tests.
+- **Do not** commit any private inputs, private outputs, private GP files, private PDFs, private summaries, private HTML diagnostics, or any `work/` contents.
+- **Do not** weaken validation/timing gates or tune thresholds to private examples.
 - **Do not** add OCR/scanned-PDF/ML support.
 - **Do not** expand GPIF technique rendering.
-- **Do not** start private tuning.
+- **Do not** push directly to main.
 
 ## Next Recommended Task
-- Review and merge the public E2E PR. After merge, start a small public E2E comparison/reporting improvement branch or begin carefully planning the first private diagnostic smoke run without committing private artifacts.
+- Review and merge the private E2E diagnostic smoke PR (PR #13). Once merged, the next step is to address the MusicXML timing/overlap issue in the pipeline or begin designing alignment improvement gates for public ascii alignment, keeping a strict gate without loosening thresholds.

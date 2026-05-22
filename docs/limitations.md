@@ -32,6 +32,9 @@ Known limitations:
 - Scanned PDFs require OCR/image recognition that is not complete in the first milestone.
 - The generated PDF regressions demonstrate controlled born-digital PDF producer paths; they do not mean private or commercial scores will convert cleanly.
 - Private diagnostic runs are evidence-gathering only. Their summaries report counts and quality buckets, not copyrighted score content, and private artifacts must stay under ignored paths.
+- The private diagnostic smoke workflow (`scripts/private_e2e_smoke.py`) is an optional, local-only developer tool. It must never commit private files, private outputs, or private summaries to Git. All diagnostic outputs and master reports are placed in ignored `work/` subdirectories.
+- Private examples used in the smoke workflow are purely diagnostic inputs, not regression fixtures. Failures are expected and useful to measure the pipeline's progress, and we must never weaken timing/validation gates or tune thresholds to make specific private examples pass.
+- Public/synthetic fixtures remain the sole source of committed regression tests and CI validation.
 - GPIF support is minimal and may not cover every Guitar Pro feature.
 - Unsupported or uncertain notation must be reported in warnings and conversion reports.
 - The public end-to-end PDF-to-GP proof (`tests/test_e2e_pdf_to_gp.py`) demonstrates pipeline correctness on a highly controlled, synthetic public ASCII-tab PDF and compatible MusicXML fixture. It does not prove or guarantee arbitrary commercial PDF conversion, OCR, scanned-PDF support, or general PDF-to-GP authoring.
