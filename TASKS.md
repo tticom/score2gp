@@ -2,12 +2,13 @@
 
 ## Next
 
-- [ ] Re-run the E2E private smoke workflow to verify that the new same-voice invalid timing and overfull measure diagnostics accurately classify and report the exact counts and calibration feasibility on the private inputs.
 - [ ] Add public reproductions for more Audiveris timing patterns before another private run.
 - [ ] Add developer-facing HTML styling and compact thumbnails for grouping diagnostics.
 - [ ] Add a public partial-to-recovery design note before attempting any automatic grouping repair.
 
 ## Done
+
+- [x] Re-run the E2E private smoke workflow to verify that the new same-voice invalid timing and overfull measure diagnostics accurately classify and report the exact counts and calibration feasibility on the private inputs (PR #24).
 
 - [x] Add public synthetic MusicXML fixtures and tests for invalid same-voice timing / overfull measures, refining preflight diagnostics, calibration boundaries, and developer-facing reports (PR #23).
 - [x] Refresh private smoke blocker summary after voice cursor model (PR #22).
