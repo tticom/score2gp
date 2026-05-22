@@ -219,15 +219,29 @@ def build_ir_from_files(
     diagnostics_out_path: str | Path | None = None,
     ascii_alignment_path: str | Path | None = None,
 ) -> ScoreIR:
-    score, diagnostics = build_ir_with_diagnostics_from_files(
-        musicxml_path,
-        tabraw_path,
-        out_path,
-        ascii_alignment_path=ascii_alignment_path,
-    )
-    if diagnostics_out_path is not None:
-        diagnostics.to_json_file(diagnostics_out_path)
-    return score
+    try:
+        score, diagnostics = build_ir_with_diagnostics_from_files(
+            musicxml_path,
+            tabraw_path,
+            out_path,
+            ascii_alignment_path=ascii_alignment_path,
+        )
+        if diagnostics_out_path is not None:
+            diagnostics.to_json_file(diagnostics_out_path)
+        return score
+    except BuildIrInputRiskError as exc:
+        if diagnostics_out_path is not None:
+            import json
+            payload = exc.to_diagnostics_payload()
+            out_path_p = Path(diagnostics_out_path)
+            out_path_p.parent.mkdir(parents=True, exist_ok=True)
+            out_path_p.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+            if exc.stage == "ascii-scoreir-gate":
+                from .report import write_ascii_gate_diagnostics_html
+                html_path = out_path_p.parent / "ascii-scoreir-gate-diagnostics.html"
+                write_ascii_gate_diagnostics_html(html_path, payload, json_path_ref=out_path_p.name)
+        raise
+
 
 
 def build_ir_with_diagnostics_from_files(
