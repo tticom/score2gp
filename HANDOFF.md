@@ -3,9 +3,9 @@
 ## Metadata
 - **Current Branch**: `feature/private-smoke-refresh-after-musicxml-v0.2`
 - **Base Branch**: `main`
-- **Current PR**: N/A (not created yet)
-- **Latest Local Commit**: `442bab3d382c6e1934a2a576531e9ea059b89a11`
-- **Latest Pushed Commit**: `442bab3d382c6e1934a2a576531e9ea059b89a11`
+- **Current PR**: [#18](https://github.com/tticom/score2gp/pull/18)
+- **Latest Local Commit**: `972aafde18a15b46cbd748fd852531caa0449f02`
+- **Latest Pushed Commit**: `972aafde18a15b46cbd748fd852531caa0449f02`
 - **Commit Subject**: Refresh private smoke blocker summary after MusicXML fixtures
 - **Working Tree Status**: Clean (after committing handoff)
 - **Tests & Checks Run**:
