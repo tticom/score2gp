@@ -56,6 +56,28 @@ Never push directly to `main` unless explicitly instructed. On feature branches,
 Do not put private musical content, private PDF text, private fret sequences, private titles, private URLs, private diagnostic output, or `work/` artifact contents into `HANDOFF.md`.
 
 Keep `HANDOFF.md` private-safe and useful enough that a new agent can continue without reading previous chat history.
+
+# Planning and execution rule
+
+Unless the user explicitly asks for planning only, do not stop after creating an implementation plan. Create a short plan if useful, then continue into implementation.
+
+The agent may proceed through normal repo-local implementation, tests, commits, pushes to feature branches, and draft PR creation without asking for another approval, provided:
+- the task remains within the requested scope
+- required checks pass
+- no private files or work/ artifacts are tracked
+- HANDOFF.md is updated, committed, and pushed
+- the branch is not main
+- the push is not a force push
+
+The agent must still stop and ask before:
+- merging PRs
+- force-pushing
+- deleting branches
+- destructive file operations
+- reading private fixtures unless explicitly instructed
+- reading secrets or credential files
+- broadening scope beyond the current branch
+
 # Allowed routine commands
 
 The user permits the agent to run routine Git, GitHub CLI, and pytest/project-validation commands without asking for additional confirmation.
