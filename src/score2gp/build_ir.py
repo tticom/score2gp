@@ -203,8 +203,9 @@ def build_ir_from_files(
     tabraw_path: str | Path,
     out_path: str | Path | None = None,
     diagnostics_out_path: str | Path | None = None,
+    ascii_alignment_path: str | Path | None = None,
 ) -> ScoreIR:
-    score, diagnostics = build_ir_with_diagnostics_from_files(musicxml_path, tabraw_path, out_path)
+    score, diagnostics = build_ir_with_diagnostics_from_files(musicxml_path, tabraw_path, out_path, ascii_alignment_path)
     if diagnostics_out_path is not None:
         diagnostics.to_json_file(diagnostics_out_path)
     return score
@@ -214,7 +215,10 @@ def build_ir_with_diagnostics_from_files(
     musicxml_path: str | Path,
     tabraw_path: str | Path,
     out_path: str | Path | None = None,
+    ascii_alignment_path: str | Path | None = None,
 ) -> tuple[ScoreIR, BuildIrDiagnostics]:
+    if ascii_alignment_path is not None:
+        _refuse_ascii_alignment_sidecar(ascii_alignment_path)
     musicxml = parse_musicxml(musicxml_path)
     tabraw = TabRaw.from_json_file(tabraw_path)
     score, diagnostics = build_ir_with_diagnostics_from_imports(musicxml, tabraw)
@@ -223,6 +227,40 @@ def build_ir_with_diagnostics_from_files(
         out.parent.mkdir(parents=True, exist_ok=True)
         score.to_json_file(out)
     return score, diagnostics
+
+
+def _refuse_ascii_alignment_sidecar(path: str | Path) -> None:
+    import json
+
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    status = str(payload.get("overall_status", "unavailable"))
+    details = {
+        "schema_version": payload.get("schema_version"),
+        "overall_status": status,
+        "summary_counts": payload.get("summary_counts", {}),
+        "warning_codes": [warning.get("code") for warning in payload.get("warnings", []) if isinstance(warning, dict)],
+        "alignment_attempted": payload.get("alignment_attempted", False),
+        "scoreir_written": payload.get("scoreir_written", False),
+    }
+    if status == "compatible":
+        raise BuildIrInputRiskError(
+            category="ascii_scoreir_writing_not_implemented",
+            stage="ascii-musicxml-alignment",
+            message=(
+                "ASCII/MusicXML alignment diagnostics are compatible, but this branch does not write ScoreIR "
+                "from ASCII-tab timing evidence."
+            ),
+            details=details,
+        )
+    raise BuildIrInputRiskError(
+        category=f"ascii_musicxml_alignment_{status}",
+        stage="ascii-musicxml-alignment",
+        message=(
+            f"ASCII/MusicXML alignment status is {status}; build-ir will not write ScoreIR from unsafe "
+            "ASCII-tab timing evidence."
+        ),
+        details=details,
+    )
 
 
 def build_ir_from_imports(musicxml: MusicXmlImport, tabraw: TabRaw) -> ScoreIR:

@@ -4,7 +4,7 @@
 
 - [ ] Add developer-facing HTML styling and compact thumbnails for grouping diagnostics.
 - [ ] Add public reproductions for more Audiveris timing patterns before another private run.
-- [ ] Define a future public MusicXML-to-ASCII alignment phase before allowing ASCII TabRaw into ScoreIR.
+- [ ] Design the future explicit ScoreIR-writing gate for ASCII TabRaw after alignment proof, keeping refusal as the default.
 - [ ] Attach PDF-derived chord symbols and technique text to ScoreIR events once timing calibration exists.
 - [ ] Add HTML conversion report styling and unsupported-technique summaries.
 - [ ] Add a public partial-to-recovery design note before attempting any automatic grouping repair.
@@ -45,3 +45,6 @@
 - [x] Conservative `ascii_tab_timing_unavailable` and `partial_ascii_tab_grouping` refusal boundaries.
 - [x] Public `ascii-timing.v0.1` contract for character-column, bar-separator, and normalized segment evidence.
 - [x] Conservative `partial_ascii_tab_timing`, `ambiguous_ascii_tab_timing`, and measure-boundary warning boundaries.
+- [x] Public `ascii-musicxml-alignment.v0.1` proof sidecar comparing ASCII timing evidence with MusicXML onsets.
+- [x] Conservative `compatible`, `partial`, `ambiguous`, `incompatible`, and `unavailable` ASCII/MusicXML alignment diagnostics.
+- [x] `build-ir` refusal boundary for ASCII alignment sidecars, including compatible sidecars until ScoreIR writing is explicitly designed.
