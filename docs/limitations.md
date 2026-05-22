@@ -24,6 +24,10 @@ Known limitations:
 - X-to-onset diagnostics now measure playable fret x groups against MusicXML onset groups, but this is not full optical calibration and does not repair bad geometry automatically.
 - MusicXML timing preflight catches overfull bars, same-voice/multi-voice overlap, unbalanced backup/forward cursor movements, duration anomalies, and divisions changes before ScoreIR output. It generates a developer-facing `musicxml-timing-diagnostics.html` report, but it does not make ambiguous Audiveris exports correct or loosen gates for unsafe inputs.
 - MusicXML timing risk diagnostics are public-fixture driven, whereas private diagnostic smoke passes are for identifying failure classes. Unsafe or risky MusicXML strictly blocks ScoreIR. Polyphony and overlap support remains intentionally conservative.
+- Refined timing diagnostics distinguish precise failure classes including valid/underfull/overfull compound meter, backup rewind before measure start, forward exceeding measure end, backup/forward ambiguity, same-voice cursor overlap, and multi-voice timing risks.
+- These preflight timing fixtures are tiny, synthetic, public reproductions of timing failure classes, focusing on compound meters (e.g., 12/8) and Audiveris-style backup/forward voice cursor movements.
+- Compound meter (e.g., 12/8) and backup/forward handling remain conservative. Risky or unbalanced MusicXML timing strictly blocks alignment/build-ir.
+- No private MusicXML is committed or used as a fixture, and the public E2E path must continue to pass cleanly.
 - Native `.mxl` intake is supported only for normal compressed MusicXML packages with a safe rootfile declared in `META-INF/container.xml`; malformed packages and unsafe rootfile paths are rejected.
 - 12/8 and other compound-meter input is represented through exact MusicXML divisions and flagged as an assumption; it still needs human review when produced by OMR.
 - If PDF extraction finds fret text but no system/string/bar grouping, the project reports `missing_pdf_grouping` and `build-ir` refuses to write ScoreIR rather than fabricating positions.

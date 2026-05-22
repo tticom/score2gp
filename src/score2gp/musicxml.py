@@ -38,6 +38,10 @@ class MusicXmlTimingIssue(BaseModel):
     duration_divisions: int | None = Field(default=None, ge=0)
     end_divisions: int | None = Field(default=None, ge=0)
     source_path: str | None = None
+    meter: str | None = None
+    backup_forward_count: int | None = None
+    voice_extents: dict[str, int] | None = None
+    voice_durations: dict[str, int] | None = None
 
 
 class MusicXmlMetadata(BaseModel):
@@ -141,6 +145,9 @@ class MusicXmlMeasure(BaseModel):
     divisions_changed_mid_measure: bool = False
     backup_forward_risk: bool = False
     unbalanced_backup_forward: bool = False
+    backup_rewinds_before_measure_start: bool = False
+    forward_exceeds_measure_end: bool = False
+    backup_forward_count: int = 0
 
 
 class MusicXmlPart(BaseModel):
@@ -210,6 +217,21 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
         for measure in part.measures:
             expected = _expected_measure_duration_divisions(measure)
 
+            is_compound = measure.time_signature.numerator % 3 == 0 and measure.time_signature.denominator == 8
+            meter_str = f"{measure.time_signature.numerator}/{measure.time_signature.denominator}"
+
+            # Calculate voice extents and durations for the measure
+            voice_extents: dict[str, int] = {}
+            voice_durations: dict[str, int] = {}
+            timed_notes = [n for n in measure.notes if not n.grace]
+            for note in timed_notes:
+                if note.duration_divisions > 0:
+                    end = note.onset_divisions + note.duration_divisions
+                    voice_extents[str(note.voice)] = max(voice_extents.get(str(note.voice), 0), end)
+                    voice_durations[str(note.voice)] = voice_durations.get(str(note.voice), 0) + note.duration_divisions
+
+            start_idx = len(issues)
+
             # Check 1: divisions missing
             if measure.divisions_missing:
                 issues.append(
@@ -220,6 +242,10 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                         part_id=part.id,
                         measure_index=measure.index,
                         measure_number=measure.number,
+                        meter=meter_str,
+                        backup_forward_count=measure.backup_forward_count,
+                        voice_extents=voice_extents,
+                        voice_durations=voice_durations,
                     )
                 )
 
@@ -233,6 +259,10 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                         part_id=part.id,
                         measure_index=measure.index,
                         measure_number=measure.number,
+                        meter=meter_str,
+                        backup_forward_count=measure.backup_forward_count,
+                        voice_extents=voice_extents,
+                        voice_durations=voice_durations,
                     )
                 )
 
@@ -250,12 +280,16 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                         measure_index=measure.index,
                         measure_number=measure.number,
                         expected_duration_divisions=expected,
+                        meter=meter_str,
+                        backup_forward_count=measure.backup_forward_count,
+                        voice_extents=voice_extents,
+                        voice_durations=voice_durations,
                     )
                 )
             previous_divisions = measure.divisions
 
             # Check 4: 12/8 or other compound meter assumption
-            if measure.time_signature.numerator % 3 == 0 and measure.time_signature.denominator == 8:
+            if is_compound:
                 issues.append(
                     MusicXmlTimingIssue(
                         code="musicxml-compound-meter-assumption",
@@ -269,6 +303,10 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                         measure_index=measure.index,
                         measure_number=measure.number,
                         expected_duration_divisions=expected,
+                        meter=meter_str,
+                        backup_forward_count=measure.backup_forward_count,
+                        voice_extents=voice_extents,
+                        voice_durations=voice_durations,
                     )
                 )
 
@@ -282,6 +320,10 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                         part_id=part.id,
                         measure_index=measure.index,
                         measure_number=measure.number,
+                        meter=meter_str,
+                        backup_forward_count=measure.backup_forward_count,
+                        voice_extents=voice_extents,
+                        voice_durations=voice_durations,
                     )
                 )
                 continue
@@ -296,6 +338,44 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                         part_id=part.id,
                         measure_index=measure.index,
                         measure_number=measure.number,
+                        meter=meter_str,
+                        backup_forward_count=measure.backup_forward_count,
+                        voice_extents=voice_extents,
+                        voice_durations=voice_durations,
+                    )
+                )
+
+            # Check 6b: backup rewinds before measure start
+            if measure.backup_rewinds_before_measure_start:
+                issues.append(
+                    MusicXmlTimingIssue(
+                        code="musicxml_backup_rewinds_before_measure_start",
+                        message=f"Measure {measure.number} contains a backup element that rewinds before measure start.",
+                        severity="warning",
+                        part_id=part.id,
+                        measure_index=measure.index,
+                        measure_number=measure.number,
+                        meter=meter_str,
+                        backup_forward_count=measure.backup_forward_count,
+                        voice_extents=voice_extents,
+                        voice_durations=voice_durations,
+                    )
+                )
+
+            # Check 6c: forward exceeds measure end
+            if measure.forward_exceeds_measure_end:
+                issues.append(
+                    MusicXmlTimingIssue(
+                        code="musicxml_forward_exceeds_measure_end",
+                        message=f"Measure {measure.number} contains a forward element that pushes beyond measure end.",
+                        severity="error",
+                        part_id=part.id,
+                        measure_index=measure.index,
+                        measure_number=measure.number,
+                        meter=meter_str,
+                        backup_forward_count=measure.backup_forward_count,
+                        voice_extents=voice_extents,
+                        voice_durations=voice_durations,
                     )
                 )
 
@@ -309,6 +389,24 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                         part_id=part.id,
                         measure_index=measure.index,
                         measure_number=measure.number,
+                        meter=meter_str,
+                        backup_forward_count=measure.backup_forward_count,
+                        voice_extents=voice_extents,
+                        voice_durations=voice_durations,
+                    )
+                )
+                issues.append(
+                    MusicXmlTimingIssue(
+                        code="musicxml_backup_forward_alignment_ambiguous",
+                        message=f"Measure {measure.number} backup/forward cursor movements create ambiguous alignment.",
+                        severity="error",
+                        part_id=part.id,
+                        measure_index=measure.index,
+                        measure_number=measure.number,
+                        meter=meter_str,
+                        backup_forward_count=measure.backup_forward_count,
+                        voice_extents=voice_extents,
+                        voice_durations=voice_durations,
                     )
                 )
 
@@ -317,7 +415,7 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                 if not note.grace and not note.is_rest and note.pitch is not None:
                     part_vnotes.setdefault(note.voice, []).append(note)
 
-            # Let's inspect note-level duration and tuplet issues
+            # Note-level duration and tuplet issues
             for note in measure.notes:
                 if note.duration_missing:
                     issues.append(
@@ -332,6 +430,10 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                             musicxml_note_id=note.id,
                             onset_divisions=note.onset_divisions,
                             source_path=note.source_path,
+                            meter=meter_str,
+                            backup_forward_count=measure.backup_forward_count,
+                            voice_extents=voice_extents,
+                            voice_durations=voice_durations,
                         )
                     )
                 if note.duration_zero:
@@ -347,6 +449,10 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                             musicxml_note_id=note.id,
                             onset_divisions=note.onset_divisions,
                             source_path=note.source_path,
+                            meter=meter_str,
+                            backup_forward_count=measure.backup_forward_count,
+                            voice_extents=voice_extents,
+                            voice_durations=voice_durations,
                         )
                     )
                 if note.tuplet_unsupported:
@@ -362,21 +468,17 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                             musicxml_note_id=note.id,
                             onset_divisions=note.onset_divisions,
                             source_path=note.source_path,
+                            meter=meter_str,
+                            backup_forward_count=measure.backup_forward_count,
+                            voice_extents=voice_extents,
+                            voice_durations=voice_durations,
                         )
                     )
 
-            # Let's check overlaps and chord stacks
-            # Keep track of voice extents for underfull check
-            voice_extents: dict[int, int] = {}
-
-            # Non-grace notes
-            timed_notes = [n for n in measure.notes if not n.grace]
-
+            # Check overlaps and chord stacks
             for note in timed_notes:
                 if note.duration_divisions > 0:
                     end = note.onset_divisions + note.duration_divisions
-                    voice_extents[note.voice] = max(voice_extents.get(note.voice, 0), end)
-
                     if end > expected:
                         issues.append(
                             MusicXmlTimingIssue(
@@ -396,10 +498,39 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                                 duration_divisions=note.duration_divisions,
                                 end_divisions=end,
                                 source_path=note.source_path,
+                                meter=meter_str,
+                                backup_forward_count=measure.backup_forward_count,
+                                voice_extents=voice_extents,
+                                voice_durations=voice_durations,
                             )
                         )
+                        if is_compound:
+                            issues.append(
+                                MusicXmlTimingIssue(
+                                    code="musicxml_compound_meter_overfull",
+                                    message=(
+                                        f"Measure {measure.number} event {note.id} ends at MusicXML division "
+                                        f"{end}, beyond expected compound measure length {expected}."
+                                    ),
+                                    severity="error",
+                                    part_id=part.id,
+                                    measure_index=measure.index,
+                                    measure_number=measure.number,
+                                    voice=note.voice,
+                                    musicxml_note_id=note.id,
+                                    expected_duration_divisions=expected,
+                                    onset_divisions=note.onset_divisions,
+                                    duration_divisions=note.duration_divisions,
+                                    end_divisions=end,
+                                    source_path=note.source_path,
+                                    meter=meter_str,
+                                    backup_forward_count=measure.backup_forward_count,
+                                    voice_extents=voice_extents,
+                                    voice_durations=voice_durations,
+                                )
+                            )
 
-            # Now let's compare every pair of timed notes in the measure for overlaps/chords
+            # Compare every pair of timed notes in the measure for overlaps/chords
             for i in range(len(timed_notes)):
                 note_i = timed_notes[i]
                 if note_i.duration_divisions <= 0:
@@ -432,6 +563,28 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                                             musicxml_note_id=note_j.id,
                                             onset_divisions=onset_i,
                                             duration_divisions=note_i.duration_divisions,
+                                            meter=meter_str,
+                                            backup_forward_count=measure.backup_forward_count,
+                                            voice_extents=voice_extents,
+                                            voice_durations=voice_durations,
+                                        )
+                                    )
+                                    issues.append(
+                                        MusicXmlTimingIssue(
+                                            code="musicxml_chord_stack_supported_or_blocked",
+                                            message=f"Measure {measure.number} has a supported chord stack in voice {note_i.voice}.",
+                                            severity="info",
+                                            part_id=part.id,
+                                            measure_index=measure.index,
+                                            measure_number=measure.number,
+                                            voice=note_i.voice,
+                                            musicxml_note_id=note_j.id,
+                                            onset_divisions=onset_i,
+                                            duration_divisions=note_i.duration_divisions,
+                                            meter=meter_str,
+                                            backup_forward_count=measure.backup_forward_count,
+                                            voice_extents=voice_extents,
+                                            voice_durations=voice_durations,
                                         )
                                     )
                             else:
@@ -449,6 +602,28 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                                             musicxml_note_id=note_j.id,
                                             onset_divisions=onset_j,
                                             duration_divisions=note_j.duration_divisions,
+                                            meter=meter_str,
+                                            backup_forward_count=measure.backup_forward_count,
+                                            voice_extents=voice_extents,
+                                            voice_durations=voice_durations,
+                                        )
+                                    )
+                                    issues.append(
+                                        MusicXmlTimingIssue(
+                                            code="musicxml_multivoice_timing_not_supported",
+                                            message=f"Measure {measure.number} has unsupported multi-voice timing between voice {note_i.voice} and voice {note_j.voice}.",
+                                            severity="error",
+                                            part_id=part.id,
+                                            measure_index=measure.index,
+                                            measure_number=measure.number,
+                                            voice=note_j.voice,
+                                            musicxml_note_id=note_j.id,
+                                            onset_divisions=onset_j,
+                                            duration_divisions=note_j.duration_divisions,
+                                            meter=meter_str,
+                                            backup_forward_count=measure.backup_forward_count,
+                                            voice_extents=voice_extents,
+                                            voice_durations=voice_durations,
                                         )
                                     )
                         else:
@@ -469,6 +644,30 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                                             duration_divisions=note_j.duration_divisions,
                                             end_divisions=end_j,
                                             source_path=note_j.source_path,
+                                            meter=meter_str,
+                                            backup_forward_count=measure.backup_forward_count,
+                                            voice_extents=voice_extents,
+                                            voice_durations=voice_durations,
+                                        )
+                                    )
+                                    issues.append(
+                                        MusicXmlTimingIssue(
+                                            code="musicxml_rest_voice_overlap",
+                                            message=f"Measure {measure.number} voice {note_i.voice} has overlapping rest and note.",
+                                            severity="error",
+                                            part_id=part.id,
+                                            measure_index=measure.index,
+                                            measure_number=measure.number,
+                                            voice=note_i.voice,
+                                            musicxml_note_id=note_j.id,
+                                            onset_divisions=onset_j,
+                                            duration_divisions=note_j.duration_divisions,
+                                            end_divisions=end_j,
+                                            source_path=note_j.source_path,
+                                            meter=meter_str,
+                                            backup_forward_count=measure.backup_forward_count,
+                                            voice_extents=voice_extents,
+                                            voice_durations=voice_durations,
                                         )
                                     )
                                 else:
@@ -490,6 +689,34 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                                             duration_divisions=note_j.duration_divisions,
                                             end_divisions=end_j,
                                             source_path=note_j.source_path,
+                                            meter=meter_str,
+                                            backup_forward_count=measure.backup_forward_count,
+                                            voice_extents=voice_extents,
+                                            voice_durations=voice_durations,
+                                        )
+                                    )
+                                    issues.append(
+                                        MusicXmlTimingIssue(
+                                            code="musicxml_voice_cursor_overlap",
+                                            message=(
+                                                f"Measure {measure.number} voice {note_i.voice} cursor overlaps: "
+                                                f"{note_i.id} ends at {end_i}, before {note_j.id} starts at "
+                                                f"{onset_j}."
+                                            ),
+                                            severity="error",
+                                            part_id=part.id,
+                                            measure_index=measure.index,
+                                            measure_number=measure.number,
+                                            voice=note_i.voice,
+                                            musicxml_note_id=note_j.id,
+                                            onset_divisions=onset_j,
+                                            duration_divisions=note_j.duration_divisions,
+                                            end_divisions=end_j,
+                                            source_path=note_j.source_path,
+                                            meter=meter_str,
+                                            backup_forward_count=measure.backup_forward_count,
+                                            voice_extents=voice_extents,
+                                            voice_durations=voice_durations,
                                         )
                                     )
                             else:
@@ -507,6 +734,28 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                                             musicxml_note_id=note_j.id,
                                             onset_divisions=onset_j,
                                             duration_divisions=note_j.duration_divisions,
+                                            meter=meter_str,
+                                            backup_forward_count=measure.backup_forward_count,
+                                            voice_extents=voice_extents,
+                                            voice_durations=voice_durations,
+                                        )
+                                    )
+                                    issues.append(
+                                        MusicXmlTimingIssue(
+                                            code="musicxml_multivoice_timing_not_supported",
+                                            message=f"Measure {measure.number} has unsupported multi-voice timing between voice {note_i.voice} and voice {note_j.voice}.",
+                                            severity="error",
+                                            part_id=part.id,
+                                            measure_index=measure.index,
+                                            measure_number=measure.number,
+                                            voice=note_j.voice,
+                                            musicxml_note_id=note_j.id,
+                                            onset_divisions=onset_j,
+                                            duration_divisions=note_j.duration_divisions,
+                                            meter=meter_str,
+                                            backup_forward_count=measure.backup_forward_count,
+                                            voice_extents=voice_extents,
+                                            voice_durations=voice_durations,
                                         )
                                     )
 
@@ -526,8 +775,50 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                             measure_number=measure.number,
                             expected_duration_divisions=expected,
                             end_divisions=longest_voice,
+                            meter=meter_str,
+                            backup_forward_count=measure.backup_forward_count,
+                            voice_extents=voice_extents,
+                            voice_durations=voice_durations,
                         )
                     )
+                    if is_compound:
+                        issues.append(
+                            MusicXmlTimingIssue(
+                                code="musicxml_compound_meter_underfull",
+                                message=(
+                                    f"Measure {measure.number} longest voice ends at division "
+                                    f"{longest_voice}, before expected compound measure length {expected}."
+                                ),
+                                severity="warning",
+                                part_id=part.id,
+                                measure_index=measure.index,
+                                measure_number=measure.number,
+                                expected_duration_divisions=expected,
+                                end_divisions=longest_voice,
+                                meter=meter_str,
+                                backup_forward_count=measure.backup_forward_count,
+                                voice_extents=voice_extents,
+                                voice_durations=voice_durations,
+                            )
+                        )
+
+            # Check if this compound meter has no errors and is thus a valid compound meter
+            measure_issues = issues[start_idx:]
+            if is_compound and not any(issue.severity == "error" for issue in measure_issues):
+                issues.append(
+                    MusicXmlTimingIssue(
+                        code="valid_compound_meter",
+                        message=f"Measure {measure.number} is a valid compound meter.",
+                        severity="info",
+                        part_id=part.id,
+                        measure_index=measure.index,
+                        measure_number=measure.number,
+                        meter=meter_str,
+                        backup_forward_count=measure.backup_forward_count,
+                        voice_extents=voice_extents,
+                        voice_durations=voice_durations,
+                    )
+                )
 
         # Check for tie continuity risks
         for voice, notes in part_vnotes.items():
@@ -555,6 +846,16 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                             next_idx += 1
 
                         if not resolved:
+                            meas = part.measures[note.measure_index - 1]
+                            m_meter_str = f"{meas.time_signature.numerator}/{meas.time_signature.denominator}"
+                            m_extents: dict[str, int] = {}
+                            m_durations: dict[str, int] = {}
+                            for tn in meas.notes:
+                                if not tn.grace and tn.duration_divisions > 0:
+                                    tend = tn.onset_divisions + tn.duration_divisions
+                                    m_extents[str(tn.voice)] = max(m_extents.get(str(tn.voice), 0), tend)
+                                    m_durations[str(tn.voice)] = m_durations.get(str(tn.voice), 0) + tn.duration_divisions
+
                             issues.append(
                                 MusicXmlTimingIssue(
                                     code="musicxml_tie_continuity_risk",
@@ -565,6 +866,10 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                                     measure_number=note.measure_number,
                                     voice=note.voice,
                                     musicxml_note_id=note.id,
+                                    meter=m_meter_str,
+                                    backup_forward_count=meas.backup_forward_count,
+                                    voice_extents=m_extents,
+                                    voice_durations=m_durations,
                                 )
                             )
                 if "stop" in note.ties:
@@ -589,6 +894,16 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                             prev_idx -= 1
 
                         if not resolved:
+                            meas = part.measures[note.measure_index - 1]
+                            m_meter_str = f"{meas.time_signature.numerator}/{meas.time_signature.denominator}"
+                            m_extents: dict[str, int] = {}
+                            m_durations: dict[str, int] = {}
+                            for tn in meas.notes:
+                                if not tn.grace and tn.duration_divisions > 0:
+                                    tend = tn.onset_divisions + tn.duration_divisions
+                                    m_extents[str(tn.voice)] = max(m_extents.get(str(tn.voice), 0), tend)
+                                    m_durations[str(tn.voice)] = m_durations.get(str(tn.voice), 0) + tn.duration_divisions
+
                             issues.append(
                                 MusicXmlTimingIssue(
                                     code="musicxml_tie_continuity_risk",
@@ -599,8 +914,30 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                                     measure_number=note.measure_number,
                                     voice=note.voice,
                                     musicxml_note_id=note.id,
+                                    meter=m_meter_str,
+                                    backup_forward_count=meas.backup_forward_count,
+                                    voice_extents=m_extents,
+                                    voice_durations=m_durations,
                                 )
                             )
+
+    # Append alignment refused/due to risk issue if any error exists
+    if any(issue.severity == "error" for issue in issues):
+        first_err = next(issue for issue in issues if issue.severity == "error")
+        issues.append(
+            MusicXmlTimingIssue(
+                code="musicxml_alignment_not_attempted_due_to_timing_risk",
+                message="Alignment and ScoreIR generation were not attempted due to MusicXML timing risk.",
+                severity="error",
+                part_id=first_err.part_id,
+                measure_index=first_err.measure_index,
+                measure_number=first_err.measure_number,
+                meter=first_err.meter,
+                backup_forward_count=first_err.backup_forward_count,
+                voice_extents=first_err.voice_extents,
+                voice_durations=first_err.voice_durations,
+            )
+        )
 
     return issues
 
@@ -677,6 +1014,8 @@ def _parse_part(
         divisions_changed_mid_measure = False
         has_backup_or_forward = False
         backup_past_zero = False
+        backup_rewinds_before_measure_start = False
+        forward_exceeds_measure_end = False
 
         for child in list(measure_node):
             name = _local_name(child.tag)
@@ -729,6 +1068,7 @@ def _parse_part(
                 dur = _duration(child)
                 if cursor - dur < 0:
                     backup_past_zero = True
+                    backup_rewinds_before_measure_start = True
                 cursor = max(0, cursor - dur)
             elif name == "forward":
                 has_backup_or_forward = True
@@ -740,7 +1080,15 @@ def _parse_part(
                         source_path=source_path,
                     )
                 )
-                cursor += _duration(child)
+                dur = _duration(child)
+                cursor += dur
+                expected_divs = None
+                if current_time is not None:
+                    val = Fraction(current_time.numerator * current_divisions * 4, current_time.denominator)
+                    if val.denominator == 1:
+                        expected_divs = int(val)
+                if expected_divs is not None and cursor > expected_divs:
+                    forward_exceeds_measure_end = True
             elif name == "barline" and _has_descendant(child, "repeat"):
                 warnings.append(
                     MusicXmlWarning(
@@ -769,6 +1117,8 @@ def _parse_part(
             if not any(note.duration_zero or note.duration_missing for note in notes):
                 unbalanced_bf = True
 
+        backup_forward_count = sum(1 for child in list(measure_node) if _local_name(child.tag) in ("backup", "forward"))
+
         measures.append(
             MusicXmlMeasure(
                 index=measure_index,
@@ -782,6 +1132,9 @@ def _parse_part(
                 divisions_changed_mid_measure=divisions_changed_mid_measure,
                 backup_forward_risk=backup_past_zero,
                 unbalanced_backup_forward=unbalanced_bf,
+                backup_rewinds_before_measure_start=backup_rewinds_before_measure_start,
+                forward_exceeds_measure_end=forward_exceeds_measure_end,
+                backup_forward_count=backup_forward_count,
             )
         )
 
