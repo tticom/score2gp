@@ -70,3 +70,9 @@ To assist in visual review of the conservative TabRaw symbol and technique attac
   - **GPIF rendering is NOT implemented**. The HTML report does not render or represent tab in a graphical guitar tab format.
   - **Symbols and techniques DID NOT create notes, events, or timing**. They are only attached as conservative metadata/evidence to existing, safely timed events.
   - Unsupported/ambiguous symbols and technique texts remain strictly as diagnostic evidence (warnings) rather than being promoted or silently dropped.
+
+## Public End-to-End PDF-to-GP Proof Slice
+
+To demonstrate the structural integrity of the entire staged pipeline (PDF extraction, alignment, ScoreIR building, validation, GP writing, package validation, and semantic fact comparison), there is a public end-to-end integration proof.
+- **Proof Coverage**: Exercises TabRaw candidate extraction from a born-digital ASCII-tab PDF, onset compatibility alignment with a matching monophonic MusicXML, ScoreIR generation using the compatible alignment sidecar, validation against schemas, minimal Guitar Pro package generation, and verification of track counts, tuning names, and note properties.
+- **Honest Boundaries**: This is a narrow vertical slice on highly controlled, synthetic public fixtures. It serves to prove the pipelines are connected, but does not weaken the conservative safety gates, does not infer timing or notes from raw columns, and does not enable broad commercial or scanned-PDF score conversions.

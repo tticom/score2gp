@@ -34,5 +34,6 @@ Known limitations:
 - Private diagnostic runs are evidence-gathering only. Their summaries report counts and quality buckets, not copyrighted score content, and private artifacts must stay under ignored paths.
 - GPIF support is minimal and may not cover every Guitar Pro feature.
 - Unsupported or uncertain notation must be reported in warnings and conversion reports.
+- The public end-to-end PDF-to-GP proof (`tests/test_e2e_pdf_to_gp.py`) demonstrates pipeline correctness on a highly controlled, synthetic public ASCII-tab PDF and compatible MusicXML fixture. It does not prove or guarantee arbitrary commercial PDF conversion, OCR, scanned-PDF support, or general PDF-to-GP authoring.
 
 This tool is for files the user owns or has permission to process. It must not be used to bypass DRM or copy protected scores from unauthorised sources.
