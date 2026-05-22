@@ -3,11 +3,11 @@
 ## Metadata
 - **Current Branch**: `feature/pdf-system-layout-diagnostics-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: Pending draft creation
-- **Latest Local Commit**: Pending commit
-- **Latest Pushed Commit**: Pending push
+- **Current PR**: [#15](https://github.com/tticom/score2gp/pull/15)
+- **Latest Local Commit**: `d16aeddd8d3d3a8267d27d4cbd42ee626aee2421`
+- **Latest Pushed Commit**: `d16aeddd8d3d3a8267d27d4cbd42ee626aee2421`
 - **Commit Subject**: Improve PDF system layout diagnostics
-- **Working Tree Status**: Modified (verified and ready to commit)
+- **Working Tree Status**: Clean (committed and pushed)
 - **Tests & Checks Run**:
   - `python -m pytest` -> 140 passed
   - `python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
