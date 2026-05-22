@@ -1,13 +1,13 @@
 # Handoff
 
 ## Metadata
-- **Current Branch**: `feature/pdf-system-layout-diagnostics-v0.1`
+- **Current Branch**: `feature/private-smoke-refresh-after-layout-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: [#15](https://github.com/tticom/score2gp/pull/15)
-- **Latest Local Commit**: `d16aeddd8d3d3a8267d27d4cbd42ee626aee2421`
-- **Latest Pushed Commit**: `d16aeddd8d3d3a8267d27d4cbd42ee626aee2421`
-- **Commit Subject**: Improve PDF system layout diagnostics
-- **Working Tree Status**: Clean (committed and pushed)
+- **Current PR**: [#16](https://github.com/tticom/score2gp/pull/16)
+- **Latest Local Commit**: `455f01da1672299ef4d3e0be5ae826234fd89e11`
+- **Latest Pushed Commit**: `455f01da1672299ef4d3e0be5ae826234fd89e11`
+- **Commit Subject**: Refresh private smoke blocker summary
+- **Working Tree Status**: Clean (after pushing updated handoff)
 - **Tests & Checks Run**:
   - `python -m pytest` -> 140 passed
   - `python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
@@ -18,48 +18,41 @@
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or diagnostic outputs are tracked or committed. All outputs under `work/` are ignored.
 
 ## What Changed in the Task
-- Improved PDF grouping and system layout diagnostics based on private-smoke warning classes without tuning to private files or weakening safety gates.
-- Refined and added strict warning/reason codes for PDF grouping and system layout anomalies:
-  - `pdf_no_systems_detected`, `pdf_partial_system_detection`, `pdf_tab_staff_missing`, `pdf_tab_staff_incomplete`, `pdf_tab_staff_ambiguous`
-  - `pdf_barlines_missing`, `pdf_barlines_ambiguous`, `pdf_bar_boxes_missing`
-  - `pdf_string_lines_missing`, `pdf_string_assignment_missing`, `pdf_string_assignment_ambiguous`
-  - `pdf_candidate_outside_system`, `pdf_candidate_outside_bar`, `pdf_candidate_between_strings`
-  - `pdf_multi_system_order_ambiguous`, `pdf_page_layout_unsupported`
-  - `pdf_text_candidate_without_geometry`, `pdf_ascii_and_drawn_layout_conflict`, `pdf_grouping_not_safe_for_build_ir`
-- Replaced sequential chunk line-grouping logic with a robust, greedy gap-cluster search algorithm that handles vertically interleaved/overlapping tab systems.
-- Updated heuristic precedence in `grouping_status_for_tabraw` to ensure that severe drawn-layout anomalies and conflicts are evaluated first.
-- Ensured a plain prose/legend page correctly fails with systems-missing warnings even when there are zero playable fret candidates on the page.
-- Added 5 new public synthetic PDF fixtures under `tests/fixtures/pdf/` generated via PyMuPDF/fitz:
-  - `generated_pdf_candidate_outside_system.pdf`
-  - `generated_pdf_candidate_outside_bar.pdf`
-  - `generated_pdf_multi_system_order_ambiguous.pdf`
-  - `generated_pdf_ascii_and_drawn_layout_conflict.pdf`
-  - `generated_pdf_prose_legend_text.pdf`
-- Appended 5 dedicated regression tests in `tests/test_pdf.py` confirming that each of these layout warning classes is correctly diagnosed and successfully blocks `build_ir` from compiling ScoreIR.
-- Updated documentation (`docs/architecture.md`, `docs/workflow.md`, `docs/limitations.md`, and `TASKS.md`) to integrate and explain the new preflight gates and HTML diagnostics.
+- Re-ran the private-safe E2E diagnostic smoke pass locally using the ignored output directory `work/private_e2e_smoke_after_layout_v0_1/` to refresh our pipeline capability assessments.
+- Analyzed the diagnostic warnings and gating results after recent MusicXML timing and PDF layout diagnostics improvements.
+- Updated the canonical private-safe blocker summary and classification using only anonymized counts, statuses, and reason codes.
 
 ## Private Smoke Result Summary (Safe Counts & Statuses Only)
-The local diagnostic smoke scan from the previous task remains valid:
 1. **`private_input_1`** (`pdf-tab-musicxml`):
    - **Page Count**: 2
-   - **Text/Geometry Detected**: Yes (both ASCII tab and drawn tab geometry detected)
+   - **Text/Geometry Detected**: Yes (both extractable text and drawn tab geometry detected)
    - **Playable Candidate Count**: 203 candidates
    - **Timing Status**: `failed` (ScoreIR gate status: `refused`)
    - **GP Written**: No
    - **Primary Failure/Refusal Reason**: `musicxml_timing_risk`
-   - **Secondary Reason Codes**: `MusicXML timing risk prevents ScoreIR output: 63 overfull or overlapping event(s) would violate ScoreIR timing`, `missing_pdf_grouping`, `pdf-tab-system-not-detected`
+   - **Secondary Reason Codes**: `MusicXML timing risk prevents ScoreIR output: 63 overfull or overlapping event(s) would violate ScoreIR timing`, `missing_pdf_grouping`
+   - **Next Diagnostic Recommendation**: `review-musicxml-timing-risk-before-alignment`
 2. **`private_input_2`** (`pdf-tab-only`):
    - **Page Count**: 1
-   - **Text/Geometry Detected**: Yes (both ASCII tab and drawn tab geometry detected)
+   - **Text/Geometry Detected**: Yes (both extractable text and drawn tab geometry detected)
    - **Playable Candidate Count**: 54 candidates
    - **Timing Status**: `not_attempted` (ScoreIR gate status: `not_attempted`)
    - **GP Written**: No
    - **Primary Failure/Refusal Reason**: None (MusicXML is missing)
    - **Secondary Reason Codes**: `missing_pdf_grouping`, `pdf-tab-system-not-detected`
+   - **Next Diagnostic Recommendation**: `provide-matching-musicxml-before-build-ir`
+
+## Current Blocker Classification
+- **Top Blocker**: `musicxml_timing`
+- **Rationale**: For the E2E input `private_input_1`, the preflight timing check failed with `musicxml_timing_risk` due to 63 overfull or overlapping events violating ScoreIR timing. Unsafe MusicXML strictly blocks the ScoreIR generation to prevent downstream compiler failure. Additionally, the PDF layout has overlapping systems and lacks clean barlines/bar boxes (`missing_pdf_grouping`), which also gates `build_ir`. For `private_input_2`, matching MusicXML reference is completely missing (`missing_reference_musicxml`).
+
+## Recommended Next Branch
+- **Next Branch**: `feature/musicxml-timing-public-fixtures-v0.2`
+- **Goal**: Add public synthetic timing/overlap fixtures mirroring Audiveris compound meter and backup/forward voice timings, and improve preflight timing heuristics to resolve timing overlap refusal boundaries.
 
 ## Known Limitations
 - PDF grouping is strictly conservative and requires born-digital vector tab geometry. No ML layout recognition or OCR is supported.
-- Unsafe PDF grouping (partial, missing, ambiguous, or unsupported) strictly blocks `build_ir` and prevents ScoreIR compilation.
+- Unsafe PDF grouping (partial, missing, ambiguous, or unsupported) and unsafe MusicXML timing strictly block `build_ir` and prevent ScoreIR compilation.
 - Scanned/raster PDFs remain unsupported.
 
 ## Remaining Risks
