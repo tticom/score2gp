@@ -361,27 +361,26 @@ When symbol/technique attachment diagnostics exist, `build-ir` writes a develope
 - **JSON as Source of Truth**: The JSON diagnostics payload remains the programmatic source of truth.
 - **Scope Limits**: GPIF technique/chord rendering remains out of scope. Symbols and techniques cannot create timing or notes; they are only attached as conservative metadata/evidence to existing, safely timed events. Unsupported or ambiguous text remains strictly diagnostic evidence (warnings) rather than being promoted or silently dropped.
 
-For ASCII-tab inputs, `build-ir` remains diagnostic-first and conservative. Without an ASCII/MusicXML alignment sidecar it refuses ASCII candidates with `missing_ascii_alignment_sidecar`. With an alignment sidecar whose status is `partial`, `ambiguous`, `incompatible`, or `unavailable`, it refuses with the matching `ascii_alignment_status_*` category. With a `compatible` sidecar, it evaluates `ascii-scoreir-gate.v0.1` and allows only the tiny public proof shape described above; broad compatible examples still refuse with explicit gate reason codes such as `ascii_polyphony_not_supported`, `ascii_unsupported_technique_required`, or `ascii_outside_tiny_gate_scope`.
-
-`build-ir` now preflights MusicXML timing before writing ScoreIR. Public Audiveris-like fixtures under `tests/fixtures/musicxml/` cover overfull bars, 12/8 compound-meter assumptions, and backup/forward timing movement. Precise timing preflight diagnostics distinguish the following categories:
+`build-ir` now preflights MusicXML timing using a deterministic voice cursor/timeline model before writing ScoreIR. Public Audiveris-like fixtures under `tests/fixtures/musicxml/` cover overfull bars, chord stacks, and backup/forward timing movement. The preflight simulates voice cursor tracking per-measure, per-part, and per-voice. Precise timing preflight diagnostics distinguish the following categories:
 
 - `valid_compound_meter`: Compound meter (e.g. 12/8) measure with correct timing extents and no errors.
-- `musicxml_compound_meter_underfull`: Compound meter measure where the longest voice duration is shorter than expected.
-- `musicxml_compound_meter_overfull`: Compound meter measure where a note duration pushes the voice extent past the expected measure end.
-- `musicxml_backup_rewinds_before_measure_start`: A `<backup>` element rewinds the voice cursor past the beginning of the measure.
-- `musicxml_forward_exceeds_measure_end`: A `<forward>` element pushes the voice cursor beyond the expected measure end.
-- `musicxml_backup_forward_alignment_ambiguous`: Backup/forward elements create an unbalanced or ambiguous voice cursor.
-- `musicxml_voice_cursor_overlap`: Overlapping active durations within the same voice.
-- `musicxml_same_voice_tick_overlap`: Same-voice, same-onset overlap where two distinct notes overlap on the voice timeline without `<chord/>` elements.
-- `musicxml_cross_voice_timing_unsupported` & `musicxml_multivoice_timing_not_supported`: Overlapping durations between different voices (unsupported cross-voice polyphony).
-- `musicxml_chord_stack_detected`, `musicxml_chord_stack_supported_or_blocked`, & `musicxml_chord_stack_not_timing_overlap`: Distinctly classifies valid note stacks/chords encoded with `<chord/>` so they are not treated as unsafe overlaps.
-- `musicxml_rest_voice_overlap` & `musicxml_rest_overlap`: Overlaps between rests and active notes.
+- `musicxml_voice_timeline_valid`: The voice timelines are completely valid.
+- `musicxml_voice_duration_underfull`: A voice cursor timeline is underfull compared to the expected measure duration.
+- `musicxml_voice_duration_overfull`: A voice cursor timeline exceeds the expected measure duration.
+- `musicxml_measure_duration_inconsistent_across_voices`: Active voice timelines have inconsistent end ticks across the measure.
+- `musicxml_backup_cursor_before_measure_start`: A `<backup>` element attempts to rewind the voice cursor before the start of the measure.
+- `musicxml_forward_cursor_after_measure_end`: A `<forward>` element pushes the voice cursor beyond the expected measure duration.
+- `musicxml_same_voice_overlap`: Overlapping active note durations within the same voice.
+- `musicxml_cross_voice_overlap_unsupported` / `musicxml_valid_multivoice_unsupported`: Overlapping durations between different voices (unsupported cross-voice polyphony).
+- `musicxml_chord_stack_detected` / `musicxml_chord_stack_not_timing_overlap`: Distinctly classifies valid note stacks/chords encoded with `<chord/>` so they are not treated as unsafe overlaps.
+- `musicxml_chord_stack_without_anchor`: A `<chord/>` element appears without a preceding anchor note in that voice.
+- `musicxml_rest_overlap_same_voice`: Rest and note overlaps within the same voice timeline.
 - `musicxml_repeated_backup_forward_risk`: Measure has 4 or more backup/forward cursor movements, exceeding the safe limit of 3.
 - `musicxml_many_timing_risks`: Measure has high-density timing risks with more than 5 errors or highly overlapping event density.
 - `musicxml_voice_cursor_alignment_risk`: Appended to cross-voice timing overlap, rest overlap, or same-voice overlap if backup/forward movements are present.
 - `musicxml_alignment_not_attempted_due_to_timing_risk`: Appended as a final blocker issue if any error exists, refusing ScoreIR generation.
 
-Overfull bars or same-voice overlaps are treated as timing risk and refused before invalid ScoreIR is written:
+Overfull bars or same-voice overlaps are treated as timing risk and refused before invalid ScoreIR is written. Unsupported polyphony (valid multi-voice timing that build-ir cannot represent) is explicitly refused as `musicxml_scoreir_polyphony_gate_refused` rather than a timing risk:
 
 ```powershell
 python -m score2gp.cli build-ir `

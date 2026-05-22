@@ -80,12 +80,14 @@ To assist in visual review of the conservative TabRaw symbol and technique attac
 
 ## HTML Diagnostics for MusicXML Timing & Overlap Risks
 
-To make MusicXML timing and overlap failures easy to understand and inspect for developers, `build-ir` generates a developer-facing HTML diagnostics report (`musicxml-timing-diagnostics.html`) alongside the JSON diagnostics sidecar when a MusicXML timing risk failure occurs during the import preflight stage.
+To make MusicXML timing and overlap failures easy to understand and inspect for developers, `build-ir` generates a developer-facing HTML diagnostics report (`musicxml-timing-diagnostics.html`) alongside the JSON diagnostics sidecar when a MusicXML timing risk or polyphony gate refusal occurs during the import preflight stage.
+- **Voice Cursor / Timeline Model**: Uses a deterministic MusicXML voice cursor/timeline model to simulate backup, forward, chord, rest, and voice cursor movements per measure. This ensures correct interpretation of multi-voice timelines before deciding whether timing is valid, unsupported, or unsafe.
 - **Detailed Timing Analysis**: The HTML report provides a human-readable table of all timing issues, showing their severity, reason codes, measure numbers, affected voices, note IDs, and detailed descriptions.
-- **Verdict & Remediation Hints**: Clearly highlights the primary timing risk code (e.g. overfull measure, polyphony overlap, unbalanced backup/forward commands, etc.) and provides tailored remediation advice to guide the developer on how to fix the MusicXML timing/voice structure.
+- **Verdict & Remediation Hints**: Clearly highlights the primary timing risk or polyphony refusal code and provides tailored remediation advice to guide the developer.
 - **JSON as Source of Truth**: The JSON diagnostics payload remains the programmatic source of truth for downstream tools.
-- **Strict Safety Gates**: MusicXML timing risks strictly block ScoreIR generation to prevent downstream alignment and rendering failures, rather than silently dropping or flattening voices, rests, or tuplets.
-- **Refined Timing Diagnostic Codes**: The preflight catches valid/underfull/overfull compound meter, backup rewind before measure start, forward exceeding measure end, backup/forward ambiguity, same-voice cursor overlap, multi-voice timing risks, repeated backup/forward cursor movements, staggered cross-voice cursor movement, rest/note overlap, and Audiveris-like heavy rewind risks using a taxonomy of precise codes.
+- **Strict Safety Gates**: MusicXML timing risks and unsupported polyphony strictly block ScoreIR generation to prevent downstream alignment and rendering failures, rather than silently dropping or flattening voices, rests, or tuplets.
+- **Polyphony Gate Refusal**: Separates invalid timing (e.g., same-voice overlaps) from valid but unsupported multi-voice structures (`musicxml_scoreir_polyphony_gate_refused`), ensuring that valid polyphony is not misclassified as timing risk.
+- **Refined Timing Diagnostic Codes**: The preflight catches backup rewind before measure start, forward exceeding measure end, same-voice overlap, cross-voice unsupported overlap, chord stacks using `<chord/>`, rest overlap, and repeated backup/forward movements using a taxonomy of precise codes.
 - **Synthetic Public Fixtures**: Public synthetic MusicXML timing blocker fixtures (v0.2 and v0.3) are added under `tests/fixtures/musicxml/` to safely reproduce and test these specific failure modes, ensuring CI validation remains independent of any private materials.
 
 ## Public End-to-End PDF-to-GP Proof Slice

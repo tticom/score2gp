@@ -44,6 +44,205 @@ class MusicXmlTimingIssue(BaseModel):
     voice_durations: dict[str, int] | None = None
 
 
+class MusicXmlVoiceCursorDiagnostics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    part_id: str
+    measure_index: int
+    measure_number: str
+    voice_id: int | None = None
+    expected_measure_ticks: int | None = None
+    expected_measure_divisions: int | None = None
+    voice_cursor_starts: dict[str, int] = Field(default_factory=dict)
+    voice_cursor_ends: dict[str, int] = Field(default_factory=dict)
+    note_event_count: int = 0
+    rest_event_count: int = 0
+    chord_stack_count: int = 0
+    backup_count: int = 0
+    forward_count: int = 0
+    same_voice_overlap_count: int = 0
+    cross_voice_overlap_count: int = 0
+    measure_overfull: bool = False
+    measure_underfull: bool = False
+    primary_reason: str
+    secondary_reasons: list[str] = Field(default_factory=list)
+
+
+class MusicXmlVoiceCursorModel:
+    def __init__(
+        self,
+        part_id: str,
+        measure_index: int,
+        measure_number: str,
+        divisions: int,
+        expected_duration_divisions: int | None,
+    ):
+        self.part_id = part_id
+        self.measure_index = measure_index
+        self.measure_number = measure_number
+        self.divisions = divisions
+        self.expected_duration_divisions = expected_duration_divisions
+
+        self.parsing_cursor = 0
+        self.last_note_onset: dict[int, int] = {}
+        self.voice_cursors: dict[int, int] = {}
+        self.voice_cursor_starts: dict[int, int] = {}
+        self.voice_cursor_ends: dict[int, int] = {}
+
+        self.note_event_count = 0
+        self.rest_event_count = 0
+        self.chord_stack_count = 0
+        self.backup_count = 0
+        self.forward_count = 0
+
+        self.same_voice_overlap_count = 0
+        self.cross_voice_overlap_count = 0
+
+        self.primary_reason = "musicxml_voice_timeline_valid"
+        self.secondary_reasons: list[str] = []
+        self.events: list[tuple[int, int, int, bool, str]] = []
+        self.measure_overfull = False
+        self.measure_underfull = False
+
+        self.note_onsets: dict[int, int] = {}
+
+    def simulate(self, measure_node: ET.Element) -> MusicXmlVoiceCursorDiagnostics:
+        note_index = 0
+        for child in list(measure_node):
+            name = _local_name(child.tag)
+            if name == "note":
+                note_index += 1
+                grace = _child(child, "grace") is not None
+                if grace:
+                    self.note_onsets[note_index] = 0
+                    continue
+
+                voice = _int_text(_child(child, "voice"), default=1)
+                duration = _duration(child)
+                is_rest = _child(child, "rest") is not None
+                chord = _child(child, "chord") is not None
+                note_id = child.get("id") or f"note-{note_index}"
+
+                if chord:
+                    onset = self.last_note_onset.get(voice, None)
+                    if onset is None:
+                        if "musicxml_chord_stack_without_anchor" not in self.secondary_reasons:
+                            self.secondary_reasons.append("musicxml_chord_stack_without_anchor")
+                        onset = self.parsing_cursor
+                    self.chord_stack_count += 1
+                    self.note_onsets[note_index] = onset
+                else:
+                    onset = self.parsing_cursor
+                    self.last_note_onset[voice] = onset
+                    self.note_onsets[note_index] = onset
+                    if voice not in self.voice_cursor_starts:
+                        self.voice_cursor_starts[voice] = onset
+
+                    # Same-voice overlap check
+                    prev_cursor = self.voice_cursors.get(voice, 0)
+                    if onset < prev_cursor and duration > 0:
+                        self.same_voice_overlap_count += 1
+                        if is_rest:
+                            if "musicxml_rest_overlap_same_voice" not in self.secondary_reasons:
+                                self.secondary_reasons.append("musicxml_rest_overlap_same_voice")
+                        else:
+                            if "musicxml_same_voice_overlap" not in self.secondary_reasons:
+                                self.secondary_reasons.append("musicxml_same_voice_overlap")
+
+                    self.voice_cursors[voice] = max(prev_cursor, onset + duration)
+                    self.voice_cursor_ends[voice] = self.voice_cursors[voice]
+                    self.parsing_cursor = onset + duration
+                    if is_rest:
+                        self.rest_event_count += 1
+                    else:
+                        self.note_event_count += 1
+
+                    if duration > 0:
+                        self.events.append((voice, onset, onset + duration, is_rest, note_id))
+
+            elif name == "backup":
+                self.backup_count += 1
+                dur = _duration(child)
+                self.parsing_cursor -= dur
+                if self.parsing_cursor < 0:
+                    if "musicxml_backup_cursor_before_measure_start" not in self.secondary_reasons:
+                        self.secondary_reasons.append("musicxml_backup_cursor_before_measure_start")
+                    self.parsing_cursor = 0
+
+            elif name == "forward":
+                self.forward_count += 1
+                dur = _duration(child)
+                self.parsing_cursor += dur
+                if self.expected_duration_divisions is not None and self.parsing_cursor > self.expected_duration_divisions:
+                    if "musicxml_forward_cursor_after_measure_end" not in self.secondary_reasons:
+                        self.secondary_reasons.append("musicxml_forward_cursor_after_measure_end")
+
+        # Compare pairs for cross-voice overlap
+        for i in range(len(self.events)):
+            v_a, s_a, e_a, r_a, id_a = self.events[i]
+            for j in range(i + 1, len(self.events)):
+                v_b, s_b, e_b, r_b, id_b = self.events[j]
+                if v_a != v_b:
+                    if max(s_a, s_b) < min(e_a, e_b):
+                        self.cross_voice_overlap_count += 1
+                        if "musicxml_cross_voice_overlap_unsupported" not in self.secondary_reasons:
+                            self.secondary_reasons.append("musicxml_cross_voice_overlap_unsupported")
+
+        # Check overfull/underfull
+        if self.expected_duration_divisions is not None:
+            overfull_voices = [v for v, end in self.voice_cursors.items() if end > self.expected_duration_divisions]
+            if overfull_voices:
+                self.measure_overfull = True
+                if "musicxml_voice_duration_overfull" not in self.secondary_reasons:
+                    self.secondary_reasons.append("musicxml_voice_duration_overfull")
+
+            if self.voice_cursors:
+                longest_voice_end = max(self.voice_cursors.values())
+                if 0 < longest_voice_end < self.expected_duration_divisions:
+                    self.measure_underfull = True
+                    if "musicxml_voice_duration_underfull" not in self.secondary_reasons:
+                        self.secondary_reasons.append("musicxml_voice_duration_underfull")
+
+        if len(self.voice_cursors) > 1:
+            ends = list(self.voice_cursors.values())
+            if any(e != ends[0] for e in ends):
+                if "musicxml_measure_duration_inconsistent_across_voices" not in self.secondary_reasons:
+                    self.secondary_reasons.append("musicxml_measure_duration_inconsistent_across_voices")
+
+        if "musicxml_backup_cursor_before_measure_start" in self.secondary_reasons:
+            self.primary_reason = "musicxml_backup_cursor_before_measure_start"
+        elif "musicxml_forward_cursor_after_measure_end" in self.secondary_reasons:
+            self.primary_reason = "musicxml_forward_cursor_after_measure_end"
+        elif self.same_voice_overlap_count > 0:
+            self.primary_reason = "musicxml_same_voice_overlap"
+        elif self.cross_voice_overlap_count > 0:
+            self.primary_reason = "musicxml_valid_multivoice_unsupported"
+        else:
+            self.primary_reason = "musicxml_voice_timeline_valid"
+
+        return MusicXmlVoiceCursorDiagnostics(
+            part_id=self.part_id,
+            measure_index=self.measure_index,
+            measure_number=self.measure_number,
+            voice_id=None,
+            expected_measure_ticks=self.expected_duration_divisions,
+            expected_measure_divisions=self.expected_duration_divisions,
+            voice_cursor_starts={str(k): v for k, v in self.voice_cursor_starts.items()},
+            voice_cursor_ends={str(k): v for k, v in self.voice_cursor_ends.items()},
+            note_event_count=self.note_event_count,
+            rest_event_count=self.rest_event_count,
+            chord_stack_count=self.chord_stack_count,
+            backup_count=self.backup_count,
+            forward_count=self.forward_count,
+            same_voice_overlap_count=self.same_voice_overlap_count,
+            cross_voice_overlap_count=self.cross_voice_overlap_count,
+            measure_overfull=self.measure_overfull,
+            measure_underfull=self.measure_underfull,
+            primary_reason=self.primary_reason,
+            secondary_reasons=self.secondary_reasons,
+        )
+
+
 class MusicXmlMetadata(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -148,6 +347,7 @@ class MusicXmlMeasure(BaseModel):
     backup_rewinds_before_measure_start: bool = False
     forward_exceeds_measure_end: bool = False
     backup_forward_count: int = 0
+    voice_cursor_diagnostics: MusicXmlVoiceCursorDiagnostics | None = None
 
 
 class MusicXmlPart(BaseModel):
@@ -475,42 +675,23 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                         )
                     )
 
-            # Check overlaps and chord stacks
-            for note in timed_notes:
-                if note.duration_divisions > 0:
-                    end = note.onset_divisions + note.duration_divisions
-                    if end > expected:
-                        issues.append(
-                            MusicXmlTimingIssue(
-                                code="musicxml-overfull-bar",
-                                message=(
-                                    f"Measure {measure.number} event {note.id} ends at MusicXML division "
-                                    f"{end}, beyond expected measure length {expected}."
-                                ),
-                                severity="error",
-                                part_id=part.id,
-                                measure_index=measure.index,
-                                measure_number=measure.number,
-                                voice=note.voice,
-                                musicxml_note_id=note.id,
-                                expected_duration_divisions=expected,
-                                onset_divisions=note.onset_divisions,
-                                duration_divisions=note.duration_divisions,
-                                end_divisions=end,
-                                source_path=note.source_path,
-                                meter=meter_str,
-                                backup_forward_count=measure.backup_forward_count,
-                                voice_extents=voice_extents,
-                                voice_durations=voice_durations,
-                            )
-                        )
-                        if is_compound:
+            # Check overlaps and chord stacks using simulated voice cursor diagnostics
+            overlap_count = 0
+            affected_voices_set: set[int] = set()
+
+            vcd = measure.voice_cursor_diagnostics
+            if vcd is not None:
+                # 1. Overfull bars
+                if vcd.measure_overfull:
+                    for note in timed_notes:
+                        end = note.onset_divisions + note.duration_divisions
+                        if end > expected:
                             issues.append(
                                 MusicXmlTimingIssue(
-                                    code="musicxml_compound_meter_overfull",
+                                    code="musicxml-overfull-bar",
                                     message=(
                                         f"Measure {measure.number} event {note.id} ends at MusicXML division "
-                                        f"{end}, beyond expected compound measure length {expected}."
+                                        f"{end}, beyond expected measure length {expected}."
                                     ),
                                     severity="error",
                                     part_id=part.id,
@@ -529,207 +710,109 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                                     voice_durations=voice_durations,
                                 )
                             )
+                            if is_compound:
+                                issues.append(
+                                    MusicXmlTimingIssue(
+                                        code="musicxml_compound_meter_overfull",
+                                        message=(
+                                            f"Measure {measure.number} event {note.id} ends at MusicXML division "
+                                            f"{end}, beyond expected compound measure length {expected}."
+                                        ),
+                                        severity="error",
+                                        part_id=part.id,
+                                        measure_index=measure.index,
+                                        measure_number=measure.number,
+                                        voice=note.voice,
+                                        musicxml_note_id=note.id,
+                                        expected_duration_divisions=expected,
+                                        onset_divisions=note.onset_divisions,
+                                        duration_divisions=note.duration_divisions,
+                                        end_divisions=end,
+                                        source_path=note.source_path,
+                                        meter=meter_str,
+                                        backup_forward_count=measure.backup_forward_count,
+                                        voice_extents=voice_extents,
+                                        voice_durations=voice_durations,
+                                    )
+                                )
 
-            # Compare every pair of timed notes in the measure for overlaps/chords
-            overlap_count = 0
-            affected_voices_set: set[int] = set()
+                # 2. Legitimate chord stacks
+                for i in range(len(timed_notes)):
+                    note_i = timed_notes[i]
+                    for j in range(i + 1, len(timed_notes)):
+                        note_j = timed_notes[j]
+                        if note_i.voice == note_j.voice and note_i.onset_divisions == note_j.onset_divisions:
+                            if note_i.chord or note_j.chord:
+                                issues.append(
+                                    MusicXmlTimingIssue(
+                                        code="musicxml_chord_stack_detected",
+                                        message=f"Measure {measure.number} has a legitimate chord stack in voice {note_i.voice}.",
+                                        severity="info",
+                                        part_id=part.id,
+                                        measure_index=measure.index,
+                                        measure_number=measure.number,
+                                        voice=note_i.voice,
+                                        musicxml_note_id=note_j.id,
+                                        onset_divisions=note_i.onset_divisions,
+                                        duration_divisions=note_i.duration_divisions,
+                                        meter=meter_str,
+                                        backup_forward_count=measure.backup_forward_count,
+                                        voice_extents=voice_extents,
+                                        voice_durations=voice_durations,
+                                    )
+                                )
+                                issues.append(
+                                    MusicXmlTimingIssue(
+                                        code="musicxml_chord_stack_supported_or_blocked",
+                                        message=f"Measure {measure.number} has a supported chord stack in voice {note_i.voice}.",
+                                        severity="info",
+                                        part_id=part.id,
+                                        measure_index=measure.index,
+                                        measure_number=measure.number,
+                                        voice=note_i.voice,
+                                        musicxml_note_id=note_j.id,
+                                        onset_divisions=note_i.onset_divisions,
+                                        duration_divisions=note_i.duration_divisions,
+                                        meter=meter_str,
+                                        backup_forward_count=measure.backup_forward_count,
+                                        voice_extents=voice_extents,
+                                        voice_durations=voice_durations,
+                                    )
+                                )
+                                issues.append(
+                                    MusicXmlTimingIssue(
+                                        code="musicxml_chord_stack_not_timing_overlap",
+                                        message=f"Measure {measure.number} has a legitimate chord stack in voice {note_i.voice} that is distinguished from timing overlap.",
+                                        severity="info",
+                                        part_id=part.id,
+                                        measure_index=measure.index,
+                                        measure_number=measure.number,
+                                        voice=note_i.voice,
+                                        musicxml_note_id=note_j.id,
+                                        onset_divisions=note_i.onset_divisions,
+                                        duration_divisions=note_i.duration_divisions,
+                                        meter=meter_str,
+                                        backup_forward_count=measure.backup_forward_count,
+                                        voice_extents=voice_extents,
+                                        voice_durations=voice_durations,
+                                    )
+                                )
 
-            for i in range(len(timed_notes)):
-                note_i = timed_notes[i]
-                if note_i.duration_divisions <= 0:
-                    continue
-                onset_i = note_i.onset_divisions
-                end_i = onset_i + note_i.duration_divisions
-
-                for j in range(i + 1, len(timed_notes)):
-                    note_j = timed_notes[j]
-                    if note_j.duration_divisions <= 0:
-                        continue
-                    onset_j = note_j.onset_divisions
-                    end_j = onset_j + note_j.duration_divisions
-
-                    # Do they overlap?
-                    if max(onset_i, onset_j) < min(end_i, end_j):
-                        if onset_i == onset_j:
-                            if note_i.voice == note_j.voice:
-                                if note_i.chord or note_j.chord:
-                                    # Legitimate chord stack
-                                    issues.append(
-                                        MusicXmlTimingIssue(
-                                            code="musicxml_chord_stack_detected",
-                                            message=f"Measure {measure.number} has a legitimate chord stack in voice {note_i.voice}.",
-                                            severity="info",
-                                            part_id=part.id,
-                                            measure_index=measure.index,
-                                            measure_number=measure.number,
-                                            voice=note_i.voice,
-                                            musicxml_note_id=note_j.id,
-                                            onset_divisions=onset_i,
-                                            duration_divisions=note_i.duration_divisions,
-                                            meter=meter_str,
-                                            backup_forward_count=measure.backup_forward_count,
-                                            voice_extents=voice_extents,
-                                            voice_durations=voice_durations,
-                                        )
-                                    )
-                                    issues.append(
-                                        MusicXmlTimingIssue(
-                                            code="musicxml_chord_stack_supported_or_blocked",
-                                            message=f"Measure {measure.number} has a supported chord stack in voice {note_i.voice}.",
-                                            severity="info",
-                                            part_id=part.id,
-                                            measure_index=measure.index,
-                                            measure_number=measure.number,
-                                            voice=note_i.voice,
-                                            musicxml_note_id=note_j.id,
-                                            onset_divisions=onset_i,
-                                            duration_divisions=note_i.duration_divisions,
-                                            meter=meter_str,
-                                            backup_forward_count=measure.backup_forward_count,
-                                            voice_extents=voice_extents,
-                                            voice_durations=voice_durations,
-                                        )
-                                    )
-                                    issues.append(
-                                        MusicXmlTimingIssue(
-                                            code="musicxml_chord_stack_not_timing_overlap",
-                                            message=f"Measure {measure.number} has a legitimate chord stack in voice {note_i.voice} that is distinguished from timing overlap.",
-                                            severity="info",
-                                            part_id=part.id,
-                                            measure_index=measure.index,
-                                            measure_number=measure.number,
-                                            voice=note_i.voice,
-                                            musicxml_note_id=note_j.id,
-                                            onset_divisions=onset_i,
-                                            duration_divisions=note_i.duration_divisions,
-                                            meter=meter_str,
-                                            backup_forward_count=measure.backup_forward_count,
-                                            voice_extents=voice_extents,
-                                            voice_durations=voice_durations,
-                                        )
-                                    )
-                                else:
-                                    overlap_count += 1
-                                    affected_voices_set.add(note_i.voice)
-                                    issues.append(
-                                        MusicXmlTimingIssue(
-                                            code="musicxml_same_voice_tick_overlap",
-                                            message=f"Measure {measure.number} voice {note_i.voice} has overlapping ticks on the voice timeline.",
-                                            severity="error",
-                                            part_id=part.id,
-                                            measure_index=measure.index,
-                                            measure_number=measure.number,
-                                            voice=note_i.voice,
-                                            musicxml_note_id=note_j.id,
-                                            onset_divisions=onset_j,
-                                            duration_divisions=note_j.duration_divisions,
-                                            meter=meter_str,
-                                            backup_forward_count=measure.backup_forward_count,
-                                            voice_extents=voice_extents,
-                                            voice_durations=voice_durations,
-                                        )
-                                    )
-                                    if measure.backup_forward_count > 0:
-                                        issues.append(
-                                            MusicXmlTimingIssue(
-                                                code="musicxml_voice_cursor_alignment_risk",
-                                                message=f"Measure {measure.number} voice {note_i.voice} has voice cursor alignment risk due to same-voice overlap.",
-                                                severity="error",
-                                                part_id=part.id,
-                                                measure_index=measure.index,
-                                                measure_number=measure.number,
-                                                voice=note_i.voice,
-                                                musicxml_note_id=note_j.id,
-                                                onset_divisions=onset_j,
-                                                duration_divisions=note_j.duration_divisions,
-                                                meter=meter_str,
-                                                backup_forward_count=measure.backup_forward_count,
-                                                voice_extents=voice_extents,
-                                                voice_durations=voice_durations,
-                                            )
-                                        )
-                            else:
-                                # Different voice same onset -> polyphony
-                                if not note_i.is_rest and not note_j.is_rest:
-                                    overlap_count += 1
-                                    affected_voices_set.add(note_i.voice)
-                                    affected_voices_set.add(note_j.voice)
-                                    issues.append(
-                                        MusicXmlTimingIssue(
-                                            code="musicxml_polyphony_not_supported",
-                                            message=f"Measure {measure.number} has unsupported polyphony/multi-voice overlap between voice {note_i.voice} and voice {note_j.voice}.",
-                                            severity="error",
-                                            part_id=part.id,
-                                            measure_index=measure.index,
-                                            measure_number=measure.number,
-                                            voice=note_j.voice,
-                                            musicxml_note_id=note_j.id,
-                                            onset_divisions=onset_j,
-                                            duration_divisions=note_j.duration_divisions,
-                                            meter=meter_str,
-                                            backup_forward_count=measure.backup_forward_count,
-                                            voice_extents=voice_extents,
-                                            voice_durations=voice_durations,
-                                        )
-                                    )
-                                    issues.append(
-                                        MusicXmlTimingIssue(
-                                            code="musicxml_multivoice_timing_not_supported",
-                                            message=f"Measure {measure.number} has unsupported multi-voice timing between voice {note_i.voice} and voice {note_j.voice}.",
-                                            severity="error",
-                                            part_id=part.id,
-                                            measure_index=measure.index,
-                                            measure_number=measure.number,
-                                            voice=note_j.voice,
-                                            musicxml_note_id=note_j.id,
-                                            onset_divisions=onset_j,
-                                            duration_divisions=note_j.duration_divisions,
-                                            meter=meter_str,
-                                            backup_forward_count=measure.backup_forward_count,
-                                            voice_extents=voice_extents,
-                                            voice_durations=voice_durations,
-                                        )
-                                    )
-                                    issues.append(
-                                        MusicXmlTimingIssue(
-                                            code="musicxml_cross_voice_timing_unsupported",
-                                            message=f"Measure {measure.number} has unsupported cross-voice timing overlap between voice {note_i.voice} and voice {note_j.voice}.",
-                                            severity="error",
-                                            part_id=part.id,
-                                            measure_index=measure.index,
-                                            measure_number=measure.number,
-                                            voice=note_j.voice,
-                                            musicxml_note_id=note_j.id,
-                                            onset_divisions=onset_j,
-                                            duration_divisions=note_j.duration_divisions,
-                                            meter=meter_str,
-                                            backup_forward_count=measure.backup_forward_count,
-                                            voice_extents=voice_extents,
-                                            voice_durations=voice_durations,
-                                        )
-                                    )
-                                    if measure.backup_forward_count > 0:
-                                        issues.append(
-                                            MusicXmlTimingIssue(
-                                                code="musicxml_voice_cursor_alignment_risk",
-                                                message=f"Measure {measure.number} has voice cursor alignment risk due to cross-voice timing overlap.",
-                                                severity="error",
-                                                part_id=part.id,
-                                                measure_index=measure.index,
-                                                measure_number=measure.number,
-                                                voice=note_j.voice,
-                                                musicxml_note_id=note_j.id,
-                                                onset_divisions=onset_j,
-                                                duration_divisions=note_j.duration_divisions,
-                                                meter=meter_str,
-                                                backup_forward_count=measure.backup_forward_count,
-                                                voice_extents=voice_extents,
-                                                voice_durations=voice_durations,
-                                            )
-                                        )
-                        else:
-                            # Different onset overlap
-                            if note_i.voice == note_j.voice:
+                # 3. Same-voice overlaps
+                if vcd.same_voice_overlap_count > 0:
+                    for i in range(len(timed_notes)):
+                        note_i = timed_notes[i]
+                        if note_i.duration_divisions <= 0:
+                            continue
+                        onset_i = note_i.onset_divisions
+                        end_i = onset_i + note_i.duration_divisions
+                        for j in range(i + 1, len(timed_notes)):
+                            note_j = timed_notes[j]
+                            if note_j.duration_divisions <= 0:
+                                continue
+                            onset_j = note_j.onset_divisions
+                            end_j = onset_j + note_j.duration_divisions
+                            if note_i.voice == note_j.voice and max(onset_i, onset_j) < min(end_i, end_j) and (onset_i != onset_j or (not note_i.chord and not note_j.chord)):
                                 overlap_count += 1
                                 affected_voices_set.add(note_i.voice)
                                 if note_i.is_rest or note_j.is_rest:
@@ -882,16 +965,102 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                                                 voice_durations=voice_durations,
                                             )
                                         )
-                            else:
-                                # Different voice different onset overlap
-                                if not note_i.is_rest and not note_j.is_rest:
-                                    overlap_count += 1
-                                    affected_voices_set.add(note_i.voice)
-                                    affected_voices_set.add(note_j.voice)
+
+                # 4. Cross-voice overlaps
+                if vcd.cross_voice_overlap_count > 0:
+                    for i in range(len(timed_notes)):
+                        note_i = timed_notes[i]
+                        if note_i.duration_divisions <= 0 or note_i.is_rest:
+                            continue
+                        onset_i = note_i.onset_divisions
+                        end_i = onset_i + note_i.duration_divisions
+                        for j in range(i + 1, len(timed_notes)):
+                            note_j = timed_notes[j]
+                            if note_j.duration_divisions <= 0 or note_j.is_rest:
+                                continue
+                            onset_j = note_j.onset_divisions
+                            end_j = onset_j + note_j.duration_divisions
+                            if note_i.voice != note_j.voice and max(onset_i, onset_j) < min(end_i, end_j):
+                                overlap_count += 1
+                                affected_voices_set.add(note_i.voice)
+                                affected_voices_set.add(note_j.voice)
+                                issues.append(
+                                    MusicXmlTimingIssue(
+                                        code="musicxml_polyphony_not_supported",
+                                        message=f"Measure {measure.number} has unsupported polyphony/multi-voice overlap between voice {note_i.voice} and voice {note_j.voice}.",
+                                        severity="error",
+                                        part_id=part.id,
+                                        measure_index=measure.index,
+                                        measure_number=measure.number,
+                                        voice=note_j.voice,
+                                        musicxml_note_id=note_j.id,
+                                        onset_divisions=onset_j,
+                                        duration_divisions=note_j.duration_divisions,
+                                        meter=meter_str,
+                                        backup_forward_count=measure.backup_forward_count,
+                                        voice_extents=voice_extents,
+                                        voice_durations=voice_durations,
+                                    )
+                                )
+                                issues.append(
+                                    MusicXmlTimingIssue(
+                                        code="musicxml_multivoice_timing_not_supported",
+                                        message=f"Measure {measure.number} has unsupported multi-voice timing between voice {note_i.voice} and voice {note_j.voice}.",
+                                        severity="error",
+                                        part_id=part.id,
+                                        measure_index=measure.index,
+                                        measure_number=measure.number,
+                                        voice=note_j.voice,
+                                        musicxml_note_id=note_j.id,
+                                        onset_divisions=onset_j,
+                                        duration_divisions=note_j.duration_divisions,
+                                        meter=meter_str,
+                                        backup_forward_count=measure.backup_forward_count,
+                                        voice_extents=voice_extents,
+                                        voice_durations=voice_durations,
+                                    )
+                                )
+                                issues.append(
+                                    MusicXmlTimingIssue(
+                                        code="musicxml_cross_voice_timing_unsupported",
+                                        message=f"Measure {measure.number} has unsupported cross-voice timing overlap between voice {note_i.voice} and voice {note_j.voice}.",
+                                        severity="error",
+                                        part_id=part.id,
+                                        measure_index=measure.index,
+                                        measure_number=measure.number,
+                                        voice=note_j.voice,
+                                        musicxml_note_id=note_j.id,
+                                        onset_divisions=onset_j,
+                                        duration_divisions=note_j.duration_divisions,
+                                        meter=meter_str,
+                                        backup_forward_count=measure.backup_forward_count,
+                                        voice_extents=voice_extents,
+                                        voice_durations=voice_durations,
+                                    )
+                                )
+                                issues.append(
+                                    MusicXmlTimingIssue(
+                                        code="musicxml_valid_multivoice_unsupported",
+                                        message=f"Measure {measure.number} has valid multi-voice timing but it is unsupported by ScoreIR.",
+                                        severity="error",
+                                        part_id=part.id,
+                                        measure_index=measure.index,
+                                        measure_number=measure.number,
+                                        voice=note_j.voice,
+                                        musicxml_note_id=note_j.id,
+                                        onset_divisions=onset_j,
+                                        duration_divisions=note_j.duration_divisions,
+                                        meter=meter_str,
+                                        backup_forward_count=measure.backup_forward_count,
+                                        voice_extents=voice_extents,
+                                        voice_durations=voice_durations,
+                                    )
+                                )
+                                if measure.backup_forward_count > 0:
                                     issues.append(
                                         MusicXmlTimingIssue(
-                                            code="musicxml_polyphony_not_supported",
-                                            message=f"Measure {measure.number} has unsupported polyphony/multi-voice overlap between voice {note_i.voice} and voice {note_j.voice}.",
+                                            code="musicxml_voice_cursor_alignment_risk",
+                                            message=f"Measure {measure.number} has voice cursor alignment risk due to cross-voice timing overlap.",
                                             severity="error",
                                             part_id=part.id,
                                             measure_index=measure.index,
@@ -906,61 +1075,6 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                                             voice_durations=voice_durations,
                                         )
                                     )
-                                    issues.append(
-                                        MusicXmlTimingIssue(
-                                            code="musicxml_multivoice_timing_not_supported",
-                                            message=f"Measure {measure.number} has unsupported multi-voice timing between voice {note_i.voice} and voice {note_j.voice}.",
-                                            severity="error",
-                                            part_id=part.id,
-                                            measure_index=measure.index,
-                                            measure_number=measure.number,
-                                            voice=note_j.voice,
-                                            musicxml_note_id=note_j.id,
-                                            onset_divisions=onset_j,
-                                            duration_divisions=note_j.duration_divisions,
-                                            meter=meter_str,
-                                            backup_forward_count=measure.backup_forward_count,
-                                            voice_extents=voice_extents,
-                                            voice_durations=voice_durations,
-                                        )
-                                    )
-                                    issues.append(
-                                        MusicXmlTimingIssue(
-                                            code="musicxml_cross_voice_timing_unsupported",
-                                            message=f"Measure {measure.number} has unsupported cross-voice timing overlap between voice {note_i.voice} and voice {note_j.voice}.",
-                                            severity="error",
-                                            part_id=part.id,
-                                            measure_index=measure.index,
-                                            measure_number=measure.number,
-                                            voice=note_j.voice,
-                                            musicxml_note_id=note_j.id,
-                                            onset_divisions=onset_j,
-                                            duration_divisions=note_j.duration_divisions,
-                                            meter=meter_str,
-                                            backup_forward_count=measure.backup_forward_count,
-                                            voice_extents=voice_extents,
-                                            voice_durations=voice_durations,
-                                        )
-                                    )
-                                    if measure.backup_forward_count > 0:
-                                        issues.append(
-                                            MusicXmlTimingIssue(
-                                                code="musicxml_voice_cursor_alignment_risk",
-                                                message=f"Measure {measure.number} has voice cursor alignment risk due to cross-voice timing overlap.",
-                                                severity="error",
-                                                part_id=part.id,
-                                                measure_index=measure.index,
-                                                measure_number=measure.number,
-                                                voice=note_j.voice,
-                                                musicxml_note_id=note_j.id,
-                                                onset_divisions=onset_j,
-                                                duration_divisions=note_j.duration_divisions,
-                                                meter=meter_str,
-                                                backup_forward_count=measure.backup_forward_count,
-                                                voice_extents=voice_extents,
-                                                voice_durations=voice_durations,
-                                            )
-                                        )
 
             if measure.backup_forward_count > 3:
                 issues.append(
@@ -1244,15 +1358,40 @@ def _parse_part(
 
     for measure_index, measure_node in enumerate(_children(part_node, "measure"), start=1):
         measure_number = measure_node.get("number") or str(measure_index)
+
+        # Pre-scan attributes to get correct current_divisions and current_time for this measure
+        temp_div = current_divisions
+        temp_time = current_time
+        for child in list(measure_node):
+            name = _local_name(child.tag)
+            if name == "attributes":
+                div_child = _child(child, "divisions")
+                new_div = _optional_int_text(div_child)
+                if new_div is not None and new_div > 0:
+                    temp_div = new_div
+                temp_time = _parse_time_signature(child, temp_time)
+
+        temp_expected = None
+        if temp_time is not None:
+            val = Fraction(temp_time.numerator * temp_div * 4, temp_time.denominator)
+            if val.denominator == 1:
+                temp_expected = int(val)
+
+        # Instantiate voice cursor model and simulate
+        model = MusicXmlVoiceCursorModel(
+            part_id=part_id,
+            measure_index=measure_index,
+            measure_number=measure_number,
+            divisions=temp_div,
+            expected_duration_divisions=temp_expected,
+        )
+        voice_cursor_diagnostics = model.simulate(measure_node)
+
         cursor = 0
-        last_note_onset = 0
         notes: list[MusicXmlNote] = []
         harmonies: list[MusicXmlHarmony] = []
         divisions_changed_mid_measure = False
-        has_backup_or_forward = False
-        backup_past_zero = False
-        backup_rewinds_before_measure_start = False
-        forward_exceeds_measure_end = False
+        has_backup_or_forward = voice_cursor_diagnostics.backup_count > 0 or voice_cursor_diagnostics.forward_count > 0
 
         for child in list(measure_node):
             name = _local_name(child.tag)
@@ -1270,17 +1409,20 @@ def _parse_part(
                 current_key = _parse_key(child, current_key)
             elif name == "note":
                 note_index = len(notes) + 1
-                note, cursor, last_note_onset = _parse_note(
+                onset_val = model.note_onsets.get(note_index, cursor)
+                note, _, _ = _parse_note(
                     child,
                     part_id=part_id,
                     measure_index=measure_index,
                     measure_number=measure_number,
                     note_index=note_index,
-                    cursor=cursor,
-                    last_note_onset=last_note_onset,
+                    cursor=onset_val,
+                    last_note_onset=onset_val,
                     warnings=warnings,
                 )
                 notes.append(note)
+                if not note.grace and not note.chord:
+                    cursor = onset_val + note.duration_divisions
             elif name == "harmony":
                 harmonies.append(
                     _parse_harmony(
@@ -1293,7 +1435,6 @@ def _parse_part(
                     )
                 )
             elif name == "backup":
-                has_backup_or_forward = True
                 warnings.append(
                     MusicXmlWarning(
                         code="musicxml-backup-encountered",
@@ -1303,12 +1444,8 @@ def _parse_part(
                     )
                 )
                 dur = _duration(child)
-                if cursor - dur < 0:
-                    backup_past_zero = True
-                    backup_rewinds_before_measure_start = True
                 cursor = max(0, cursor - dur)
             elif name == "forward":
-                has_backup_or_forward = True
                 warnings.append(
                     MusicXmlWarning(
                         code="musicxml-forward-encountered",
@@ -1319,13 +1456,6 @@ def _parse_part(
                 )
                 dur = _duration(child)
                 cursor += dur
-                expected_divs = None
-                if current_time is not None:
-                    val = Fraction(current_time.numerator * current_divisions * 4, current_time.denominator)
-                    if val.denominator == 1:
-                        expected_divs = int(val)
-                if expected_divs is not None and cursor > expected_divs:
-                    forward_exceeds_measure_end = True
             elif name == "barline" and _has_descendant(child, "repeat"):
                 warnings.append(
                     MusicXmlWarning(
@@ -1354,7 +1484,9 @@ def _parse_part(
             if not any(note.duration_zero or note.duration_missing for note in notes):
                 unbalanced_bf = True
 
-        backup_forward_count = sum(1 for child in list(measure_node) if _local_name(child.tag) in ("backup", "forward"))
+        backup_past_zero = "musicxml_backup_cursor_before_measure_start" in voice_cursor_diagnostics.secondary_reasons
+        backup_rewinds_before_measure_start = backup_past_zero
+        forward_exceeds_measure_end = "musicxml_forward_cursor_after_measure_end" in voice_cursor_diagnostics.secondary_reasons
 
         measures.append(
             MusicXmlMeasure(
@@ -1371,7 +1503,8 @@ def _parse_part(
                 unbalanced_backup_forward=unbalanced_bf,
                 backup_rewinds_before_measure_start=backup_rewinds_before_measure_start,
                 forward_exceeds_measure_end=forward_exceeds_measure_end,
-                backup_forward_count=backup_forward_count,
+                backup_forward_count=voice_cursor_diagnostics.backup_count + voice_cursor_diagnostics.forward_count,
+                voice_cursor_diagnostics=voice_cursor_diagnostics,
             )
         )
 
