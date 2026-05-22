@@ -90,6 +90,22 @@ def make_barred_ascii_tab() -> None:
     _save(doc, "generated_ascii_tab_barred.pdf")
 
 
+def make_scoreir_gate_ascii_tab() -> None:
+    doc, page = _new_page("Generated ASCII Tab ScoreIR Gate")
+    _write_lines(
+        page,
+        [
+            "e|--0--1--2--|--3--------|",
+            "B|-----------|-----------|",
+            "G|-----------|-----------|",
+            "D|-----------|-----------|",
+            "A|-----------|-----------|",
+            "E|-----------|-----------|",
+        ],
+    )
+    _save(doc, "generated_ascii_tab_scoreir_gate.pdf")
+
+
 def make_equal_width_ascii_tab() -> None:
     doc, page = _new_page("Generated ASCII Tab Equal Width")
     page.insert_text((72, 88), "count: 1 & 2 & 3 & 4 & | 1 & 2 & 3 & 4 &", fontsize=9, fontname="cour")
@@ -145,6 +161,7 @@ def main() -> None:
     make_technique_ascii_tab()
     make_malformed_ascii_tab()
     make_barred_ascii_tab()
+    make_scoreir_gate_ascii_tab()
     make_equal_width_ascii_tab()
     make_uneven_timing_ascii_tab()
     make_no_bar_ascii_tab()

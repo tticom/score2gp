@@ -204,7 +204,29 @@ work/generated_pdf/ascii_alignment_compatible/warnings.json
 work/generated_pdf/ascii_alignment_compatible/alignment-diagnostics.html
 ```
 
-The sidecar contract is `ascii-musicxml-alignment.v0.1`. It compares ASCII measure segments and normalized character-column positions with MusicXML onset positions in the corresponding measure. Status values are `compatible`, `partial`, `ambiguous`, `incompatible`, and `unavailable`. A compatible result means the controlled fixture evidence is internally consistent; it does not mean ASCII tab can be converted to ScoreIR. `build-ir --ascii-alignment` still refuses ASCII candidates in this branch, including compatible sidecars, because ScoreIR writing from ASCII alignment proof is not implemented.
+The sidecar contract is `ascii-musicxml-alignment.v0.1`. It compares ASCII measure segments and normalized character-column positions with MusicXML onset positions in the corresponding measure. Status values are `compatible`, `partial`, `ambiguous`, `incompatible`, and `unavailable`. A compatible result means the controlled fixture evidence is internally consistent; it does not mean ASCII tab is generally convertible.
+
+ASCII ScoreIR writing gate:
+
+```powershell
+python -m score2gp.cli extract-tab `
+  "tests/fixtures/pdf/generated_ascii_tab_scoreir_gate.pdf" `
+  --out "work/generated_pdf/generated_ascii_tab_scoreir_gate.tabraw.json"
+
+python -m score2gp.cli align-ascii-musicxml `
+  --tab "work/generated_pdf/generated_ascii_tab_scoreir_gate.tabraw.json" `
+  --musicxml "tests/fixtures/musicxml/ascii_scoreir_gate_simple.musicxml" `
+  --out "work/generated_pdf/ascii_scoreir_gate_alignment"
+
+python -m score2gp.cli build-ir `
+  --musicxml "tests/fixtures/musicxml/ascii_scoreir_gate_simple.musicxml" `
+  --tabraw "work/generated_pdf/generated_ascii_tab_scoreir_gate.tabraw.json" `
+  --ascii-alignment "work/generated_pdf/ascii_scoreir_gate_alignment/ascii_musicxml_alignment.json" `
+  --out "work/generated_pdf/generated_ascii_tab_scoreir_gate.ir.json" `
+  --diagnostics-out "work/generated_pdf/generated_ascii_tab_scoreir_gate.diagnostics.json"
+```
+
+This path is intentionally tiny. The `ascii-scoreir-gate.v0.1` diagnostics report `ascii_scoreir_gate_status`, reason codes, candidate counts, aligned candidate counts, output event count, and whether ScoreIR was written. It only allows the controlled public monophonic fixture when MusicXML timing is safe, every playable ASCII fret candidate has compatible alignment evidence, strings/frets come from TabRaw, and durations/rests come from MusicXML. Missing sidecars, partial/ambiguous/incompatible/unavailable alignment, unsupported techniques, chord/symbol requirements, polyphony, tuplets, ties, grace notes, missing string/fret evidence, or risky MusicXML timing still block ScoreIR output.
 
 Private ASCII-tab PDFs can be inspected with the same commands, but keep inputs under `fixtures/private/` and outputs under ignored `work/`:
 
@@ -297,7 +319,7 @@ python -m score2gp.cli build-ir `
 
 Current status: implemented for limited synthetic fixtures and controlled generated-PDF fixtures. It uses MusicXML for measure timing, rests, voices, chords, backup/forward timing, chord symbols, tuplets, and selected note techniques. It accepts plain MusicXML/XML and compressed MXL packages by reading `META-INF/container.xml` and the declared rootfile directly from the zip package. It uses TabRaw for string/fret candidates and simple bar/x-order alignment. It emits warnings for unused candidates, non-fret TabRaw candidates that are preserved but not aligned, missing tab evidence, and pitch mismatches. The optional diagnostics file reports imported, matched, unmatched, ignored non-playable, extraction-quality, per-system, per-bar, and x-to-onset summaries. It uses standard guitar tuning as an explicit placeholder. Private real-world fixture alignment is still deferred.
 
-For ASCII-tab inputs, `build-ir` remains diagnostic-first and conservative. Without an ASCII/MusicXML alignment sidecar it refuses ASCII candidates. With an alignment sidecar whose status is `partial`, `ambiguous`, `incompatible`, or `unavailable`, it refuses with the corresponding category. With a `compatible` sidecar, it still refuses with `ascii_scoreir_writing_not_implemented`; this preserves the boundary between proof of alignment compatibility and actual ScoreIR generation.
+For ASCII-tab inputs, `build-ir` remains diagnostic-first and conservative. Without an ASCII/MusicXML alignment sidecar it refuses ASCII candidates. With an alignment sidecar whose status is `partial`, `ambiguous`, `incompatible`, or `unavailable`, it refuses with the corresponding category. With a `compatible` sidecar, it evaluates `ascii-scoreir-gate.v0.1` and allows only the tiny public proof shape described above; broad compatible examples still refuse with explicit gate reason codes such as unsupported polyphony or unsupported technique.
 
 `build-ir` now preflights MusicXML timing before writing ScoreIR. Public Audiveris-like fixtures under `tests/fixtures/musicxml/` cover overfull bars, 12/8 compound-meter assumptions, and backup/forward timing movement. Overfull bars or same-voice overlaps are treated as timing risk and refused before invalid ScoreIR is written:
 
