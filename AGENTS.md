@@ -15,11 +15,16 @@ Ground rules:
 
 At the end of every task, update `HANDOFF.md` before reporting completion.
 
-`HANDOFF.md` must include:
+`HANDOFF.md` is the canonical project handoff file. Do not create or use `HANDOVER.md` unless explicitly instructed.
+
+Because some agent CLIs may limit access to previous output, `HANDOFF.md` must be kept durable and pushed to the remote branch whenever it changes.
+
+Every completed task must leave `HANDOFF.md` with:
 - current branch
 - base branch
 - current PR number and URL if one exists
-- latest commit hash and subject
+- latest local commit hash and subject
+- latest pushed commit hash and subject
 - working tree status
 - tests/checks run and results
 - GitHub check status if applicable
@@ -30,11 +35,23 @@ At the end of every task, update `HANDOFF.md` before reporting completion.
 - next recommended task
 - explicit scope boundaries, including what must not be started in the current branch
 
-If the task stops early because of a failure, conflict, pending GitHub check, or missing information, update `HANDOFF.md` with:
+If the task stops early because of a failure, conflict, pending GitHub check, missing approval, missing information, or CLI/tool limitation, update `HANDOFF.md` with:
 - where it stopped
 - exact failing/pending command or condition
 - files involved
+- what was already committed
+- what was already pushed
 - safest next action
+
+After updating `HANDOFF.md`:
+1. Run the relevant verification checks for the task.
+2. Confirm no private files or `work/` artifacts are tracked.
+3. Commit `HANDOFF.md` together with the task changes, or as a small handoff-only commit if the task changes were already committed.
+4. Push the current feature branch so the handoff is available remotely.
+5. Re-check PR/GitHub status if a PR exists.
+6. Only then report completion.
+
+Never push directly to `main` unless explicitly instructed. On feature branches, push handoff updates to the feature branch after checks pass.
 
 Do not put private musical content, private PDF text, private fret sequences, private titles, private URLs, private diagnostic output, or `work/` artifact contents into `HANDOFF.md`.
 

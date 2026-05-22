@@ -4,8 +4,8 @@
 - **Current Branch**: `feature/ascii-scoreir-gate-refusal-diagnostics-v0.1`
 - **Base Branch**: `main`
 - **Current PR**: #8 (URL: https://github.com/tticom/score2gp/pull/8)
-- **Latest Commit**: `00503b8d3b1661918b4c9912c581b679bf29ed0b`
-- **Commit Subject**: `Persist handoff update rule`
+- **Latest Local Commit**: To be created in Phase 5 ("Persist pushed handoff rule")
+- **Latest Pushed Commit**: `44062f32fafc36f665ac55886e85cc5e1ad7a92c` (Prior to Phase 5 push)
 - **Working Tree Status**: Clean
 - **Tests & Checks Run**:
   - `python -m pytest` -> 114 passed
@@ -13,15 +13,12 @@
   - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid
   - `git diff --check` -> passed
   - `git diff -- schemas` -> empty
-- **GitHub Check Status**: pending (new GitHub Actions run triggered by the latest commit push is in progress)
+- **GitHub Check Status**: Passing (All checks passed on PR #8 for commit `44062f3`)
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL files, overlays, logs, or diagnostic outputs are tracked or staged.
 
 ## What Changed in the Task
-- Implemented and refined refusal reason codes for `ascii-scoreir-gate.v0.1` (e.g., `missing_ascii_alignment_sidecar`, `ascii_alignment_status_unavailable`, etc.).
-- Enriched failure diagnostics sidecars with primary/secondary reason codes, total candidate counts, aligned/rejected counts, safe candidate IDs, alignment status, timing safety, and clear remediation hints.
-- Added public synthetic refusal test coverage using fixture mutations.
-- Kept the tiny compatible monophonic ASCII fixture as the sole success path.
-- Persisted the handoff-update rule in `AGENTS.md` and updated `HANDOFF.md` accordingly.
+- Added a stronger persistent project rule in `AGENTS.md` to ensure `HANDOFF.md` is updated, committed, and pushed to the remote feature branch at the end of every task.
+- Updated `HANDOFF.md` to align with the latest pushed commit status, ready-for-review status, and passing remote check results.
 
 ## Known Limitations
 - Refusal diagnostics are JSON-focused. Developer-facing HTML rendering for ASCII gate failures is a follow-up branch.
@@ -41,4 +38,4 @@
 - **Do not** commit `work/` outputs or private files.
 
 ## Next Recommended Task
-- Add developer-facing HTML rendering for ASCII ScoreIR gate refusal diagnostics, then separately design symbol/technique attachment in a subsequent branch.
+- Add developer-facing HTML rendering for ASCII ScoreIR gate refusal diagnostics in a new branch after PR #8 is merged.
