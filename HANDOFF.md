@@ -1,42 +1,59 @@
 # Handoff
 
 ## Metadata
-- **Current Branch**: `feature/ascii-scoreir-gate-refusal-diagnostics-v0.1`
+- **Current Branch**: `feature/ascii-scoreir-gate-html-diagnostics-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: #8 (URL: https://github.com/tticom/score2gp/pull/8)
-- **Latest Local Commit**: `027db3ea3cd5f635e2cc0e62dc49d32e4226333d`
-- **Latest Pushed Commit**: `027db3ea3cd5f635e2cc0e62dc49d32e4226333d`
-- **Commit Subject**: `Update handoff after PR readiness`
-- **Working Tree Status**: Clean
+- **Current PR**: #9 (URL: https://github.com/tticom/score2gp/pull/9)
+- **Latest Local Commit**: `d33406e87381c1ee50b89f35d1efec94e5262531`
+- **Latest Pushed Commit**: `d33406e87381c1ee50b89f35d1efec94e5262531`
+- **Commit Subject**: `Update handoff for HTML diagnostics PR`
+- **Working Tree Status**: Clean (once HANDOFF.md is committed)
 - **Tests & Checks Run**:
-  - `python -m pytest` -> 114 passed
+  - `python -m pytest` -> 115 passed
   - `python -m score2gp.cli export-schema --out schemas` -> passed
   - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid
-  - `git diff --check` -> passed
+  - `git diff --check` -> passed (CRLF warnings only)
   - `git diff -- schemas` -> empty
-- **GitHub Check Status**: Passing (All remote checks passed on PR #8 for commit `027db3e`)
+- **GitHub Check Status**: Pending (Checks running on PR #9)
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL files, overlays, logs, or diagnostic outputs are tracked or staged.
 
 ## What Changed in the Task
-- Added a stronger persistent project rule in `AGENTS.md` to ensure `HANDOFF.md` is updated, committed, and pushed to the remote feature branch at the end of every task.
-- Updated `HANDOFF.md` to align with the latest pushed commit status, ready-for-review status, and passing remote check results.
+- Added developer-facing HTML rendering for ASCII ScoreIR gate refusal diagnostics.
+- When `build-ir` refuses due to ASCII ScoreIR gate diagnostics, it writes an HTML diagnostics report (`ascii-scoreir-gate-diagnostics.html`) alongside the JSON diagnostics sidecar.
+- The HTML report displays:
+  - Gate status (refused/allowed)
+  - Primary refusal reason code
+  - Secondary refusal reason codes (or explicitly "None")
+  - Remediation hints
+  - Total candidate count, aligned candidate count, and rejected candidate count
+  - Safe candidate IDs (if present)
+  - MusicXML timing safety status
+  - Alignment sidecar presence and status
+  - Whether ScoreIR was written
+  - Reference to the JSON diagnostics sidecar
+  - Clear statement that refusal is expected for unsupported ASCII inputs
+- Preserved backward compatibility of existing JSON diagnostics.
+- Added comprehensive public tests for the HTML report content without using private fixtures.
+- Updated documentation (`docs/architecture.md`, `docs/workflow.md`, `docs/limitations.md`, and `TASKS.md`) detailing the new developer-facing report and strict boundaries.
 
 ## Known Limitations
-- Refusal diagnostics are JSON-focused. Developer-facing HTML rendering for ASCII gate failures is a follow-up branch.
-- No OCR, scanned-PDF support, or ML layout recognition.
-- No arbitrary commercial score conversion.
-- No symbol or technique attachment to ScoreIR events yet.
+- HTML diagnostics are developer-facing explanations. JSON diagnostics remain the programmatic source of truth.
+- Refusal is expected for most inputs as this does not broaden ASCII-to-ScoreIR conversion.
+- No OCR or scanned-PDF support.
+- No ML layout recognition or arbitrary commercial score conversion.
+- Symbol/technique attachment remains out of scope.
 - GPIF output remains minimal.
 
 ## Remaining Risks
-- None on this branch. Refusal is the deterministic and expected behavior for unsupported ASCII inputs.
+- None. Refusal is deterministic and expected for unsupported ASCII inputs.
 
 ## Explicit Scope Boundaries
-- **Do not** start HTML rendering on this branch.
 - **Do not** start symbol/technique attachment.
 - **Do not** broaden ASCII-to-ScoreIR conversion.
+- **Do not** add new ScoreIR success paths.
+- **Do not** implement OCR or scanned-PDF support.
 - **Do not** use private PDFs as regression fixtures.
 - **Do not** commit `work/` outputs or private files.
 
 ## Next Recommended Task
-- Add developer-facing HTML rendering for ASCII ScoreIR gate refusal diagnostics in a new branch after PR #8 is merged.
+- Attach PDF-derived chord symbols and technique text to ScoreIR events once timing calibration exists.

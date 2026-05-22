@@ -148,6 +148,10 @@ def build_ir_command(
         if diagnostics_out is not None:
             diagnostics_out.parent.mkdir(parents=True, exist_ok=True)
             diagnostics_out.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+            if exc.stage == "ascii-scoreir-gate":
+                from .report import write_ascii_gate_diagnostics_html
+                html_path = diagnostics_out.parent / "ascii-scoreir-gate-diagnostics.html"
+                write_ascii_gate_diagnostics_html(html_path, payload, json_path_ref=diagnostics_out.name)
         typer.echo(json.dumps(payload, indent=2, sort_keys=True))
         raise typer.Exit(1) from exc
     if diagnostics_out is not None:
