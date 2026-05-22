@@ -8,6 +8,7 @@
 
 ## Done
 
+- [x] Local private-safe E2E diagnostic smoke workflow to evaluate real private score fixtures and generate anonymized master summaries.
 - [x] Public end-to-end PDF-to-GP conversion proof slice targeting a controlled public ASCII-tab PDF + compatible MusicXML.
 - [x] Attach PDF-derived chord symbols and technique text to ScoreIR events once timing calibration exists.
 - [x] Developer-facing HTML rendering for attached and unattached chord/technique evidence in generated ScoreIR.
