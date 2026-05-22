@@ -220,3 +220,113 @@ def test_audiveris_like_synthetic_timing_pattern() -> None:
     assert any(issue.code == "musicxml_unbalanced_backup_forward" and issue.severity == "error" for issue in issues)
     assert any(issue.code == "musicxml_alignment_not_attempted_due_to_timing_risk" and issue.severity == "error" for issue in issues)
 
+
+def test_v03_repeated_backup_forward(tmp_path) -> None:
+    imported = parse_musicxml(FIXTURES / "timing_v03_repeated_backup_forward.musicxml")
+    issues = analyze_musicxml_timing(imported)
+    assert any(issue.code == "musicxml_repeated_backup_forward_risk" and issue.severity == "error" for issue in issues)
+
+    out_ir = tmp_path / "repeated.ir.json"
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(FIXTURES / "timing_v03_repeated_backup_forward.musicxml", TABRAW, out_ir)
+    assert raised.value.category == "musicxml_timing_risk"
+
+
+def test_v03_voice_cursor_reset(tmp_path) -> None:
+    imported = parse_musicxml(FIXTURES / "timing_v03_voice_cursor_reset.musicxml")
+    issues = analyze_musicxml_timing(imported)
+    assert any(issue.code == "musicxml_same_voice_tick_overlap" and issue.severity == "error" for issue in issues)
+
+    out_ir = tmp_path / "reset.ir.json"
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(FIXTURES / "timing_v03_voice_cursor_reset.musicxml", TABRAW, out_ir)
+    assert raised.value.category == "musicxml_timing_risk"
+
+
+def test_v03_multivoice_staggered(tmp_path) -> None:
+    imported = parse_musicxml(FIXTURES / "timing_v03_multivoice_staggered.musicxml")
+    issues = analyze_musicxml_timing(imported)
+    assert any(issue.code == "musicxml_cross_voice_timing_unsupported" and issue.severity == "error" for issue in issues)
+
+    out_ir = tmp_path / "staggered.ir.json"
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(FIXTURES / "timing_v03_multivoice_staggered.musicxml", TABRAW, out_ir)
+    assert raised.value.category == "musicxml_timing_risk"
+
+
+def test_v03_backup_measure_start_forward(tmp_path) -> None:
+    imported = parse_musicxml(FIXTURES / "timing_v03_backup_measure_start_forward.musicxml")
+    issues = analyze_musicxml_timing(imported)
+    assert any(issue.code == "musicxml_same_voice_tick_overlap" and issue.severity == "error" for issue in issues)
+
+    out_ir = tmp_path / "measure_start.ir.json"
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(FIXTURES / "timing_v03_backup_measure_start_forward.musicxml", TABRAW, out_ir)
+    assert raised.value.category == "musicxml_timing_risk"
+
+
+def test_v03_rest_note_cursor_overlap(tmp_path) -> None:
+    imported = parse_musicxml(FIXTURES / "timing_v03_rest_note_cursor_overlap.musicxml")
+    issues = analyze_musicxml_timing(imported)
+    assert any(issue.code == "musicxml_rest_overlap" and issue.severity == "error" for issue in issues)
+
+    out_ir = tmp_path / "rest_cursor.ir.json"
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(FIXTURES / "timing_v03_rest_note_cursor_overlap.musicxml", TABRAW, out_ir)
+    assert raised.value.category == "musicxml_timing_risk"
+
+
+def test_v03_chord_marker_backup_forward(tmp_path) -> None:
+    imported = parse_musicxml(FIXTURES / "timing_v03_chord_marker_backup_forward.musicxml")
+    issues = analyze_musicxml_timing(imported)
+    assert any(issue.code == "musicxml_chord_stack_not_timing_overlap" and issue.severity == "info" for issue in issues)
+    assert not any(issue.severity == "error" for issue in issues)
+
+    out_ir = tmp_path / "chord_backup.ir.json"
+    score = build_ir_from_files(FIXTURES / "timing_v03_chord_marker_backup_forward.musicxml", TABRAW, out_ir)
+    assert score is not None
+    assert out_ir.exists()
+
+
+def test_v03_audiveris_heavy_rewinds(tmp_path) -> None:
+    imported = parse_musicxml(FIXTURES / "timing_v03_audiveris_heavy_rewinds.musicxml")
+    issues = analyze_musicxml_timing(imported)
+    assert any(issue.severity == "error" for issue in issues)
+
+    out_ir = tmp_path / "audiveris.ir.json"
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(FIXTURES / "timing_v03_audiveris_heavy_rewinds.musicxml", TABRAW, out_ir)
+    assert raised.value.category == "musicxml_timing_risk"
+
+
+def test_v03_high_count_timing_risk(tmp_path) -> None:
+    imported = parse_musicxml(FIXTURES / "timing_v03_high_count_timing_risk.musicxml")
+    issues = analyze_musicxml_timing(imported)
+    assert any(issue.code == "musicxml_many_timing_risks" and issue.severity == "error" for issue in issues)
+
+    out_ir = tmp_path / "high_count.ir.json"
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(FIXTURES / "timing_v03_high_count_timing_risk.musicxml", TABRAW, out_ir)
+    assert raised.value.category == "musicxml_timing_risk"
+
+
+def test_v03_valid_counterpart(tmp_path) -> None:
+    imported = parse_musicxml(FIXTURES / "timing_v03_valid_counterpart.musicxml")
+    issues = analyze_musicxml_timing(imported)
+    assert not any(issue.severity == "error" for issue in issues)
+
+    out_ir = tmp_path / "valid.ir.json"
+    score = build_ir_from_files(FIXTURES / "timing_v03_valid_counterpart.musicxml", TABRAW, out_ir)
+    assert score is not None
+    assert out_ir.exists()
+
+
+def test_v03_alignment_not_attempted(tmp_path) -> None:
+    imported = parse_musicxml(FIXTURES / "timing_v03_alignment_not_attempted.musicxml")
+    issues = analyze_musicxml_timing(imported)
+    assert any(issue.code == "musicxml_alignment_not_attempted_due_to_timing_risk" and issue.severity == "error" for issue in issues)
+
+    out_ir = tmp_path / "alignment_not_attempted.ir.json"
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(FIXTURES / "timing_v03_alignment_not_attempted.musicxml", TABRAW, out_ir)
+    assert raised.value.category == "musicxml_timing_risk"
