@@ -1,37 +1,43 @@
 # Handoff
 
 ## Metadata
-- **Current Branch**: `feature/private-e2e-diagnostic-smoke-v0.1`
+- **Current Branch**: `feature/musicxml-overlap-diagnostics-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: PR #13 (https://github.com/tticom/score2gp/pull/13)
-- **Latest Local Commit**: `945fb2e1843baa03a2ee9671078ab90769bc2f99`
-- **Latest Pushed Commit**: `945fb2e1843baa03a2ee9671078ab90769bc2f99`
-- **Commit Subject**: `Add private-safe E2E diagnostic smoke`
-- **Working Tree Status**: Clean (before handoff commit)
+- **Current PR**: [#14](https://github.com/tticom/score2gp/pull/14)
+- **Latest Local Commit**: `f131aa3b13d3223749b46dd7b24282ee6856e7fd`
+- **Latest Pushed Commit**: `f131aa3b13d3223749b46dd7b24282ee6856e7fd`
+- **Commit Subject**: `Improve MusicXML timing overlap diagnostics`
+- **Working Tree Status**: Clean (committed)
 - **Tests & Checks Run**:
-  - `python -m pytest` -> 124 passed
+  - `python -m pytest` -> 135 passed
   - `python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
   - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid
-  - `git diff --check` -> passed
+  - `git diff --check` -> passed cleanly
   - `git diff -- schemas` -> empty
-- **GitHub Check Status**: Checks running on GitHub Actions
+- **GitHub Check Status**: Pending (Actions runner running)
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or diagnostic outputs are tracked or committed. All outputs under `work/` are ignored.
 
 ## What Changed in the Task
-- Added a local-only private E2E diagnostic smoke script/workflow (`scripts/private_e2e_smoke.py`).
-- Added public-safe tests for the private smoke script (`tests/test_private_smoke.py`) using synthetic/public temporary fixtures proving:
-  1. The script writes a summary JSON and Markdown.
-  2. The summary redacts/avoids raw score text and private information.
-  3. The summary includes counts, status, and reason codes.
-  4. Private-like filenames can be anonymized properly.
-  5. Outputs are written under a supplied output directory (`work/` or `tmp_path`).
-  6. No private fixtures are required to run the test suite.
-- Updated documentation (`docs/workflow.md` and `docs/limitations.md`) to reflect that the private diagnostic smoke is optional, local-only, does not commit private files, uses private examples purely as diagnostic inputs, and never tunes thresholds or weakens validation gates to make specific private examples pass.
-- Updated `TASKS.md` to reflect the completed task.
-- Generated draft Pull Request #13 using the compiled E2E PR body.
+- Improved MusicXML timing/overlap diagnostics and strict validation gates so that the pipeline safely and explicitly blocks MusicXML timing/voice/overlap problems before ScoreIR generation.
+- Implemented robust timing analysis in `src/score2gp/musicxml.py` covering:
+  - Overfull measures (`musicxml-overfull-bar`)
+  - Underfull measures (`musicxml-underfull-bar` warning)
+  - Same-voice overlapping events (`musicxml-voice-overlap`)
+  - Multi-voice pitched note overlaps (`musicxml_polyphony_not_supported`)
+  - Legitimate chord stacks (`musicxml_chord_stack_detected` info)
+  - Backup/forward cursor movement risks (`musicxml_backup_forward_risk` / `musicxml_unbalanced_backup_forward`)
+  - Rest overlaps with other events (`musicxml_rest_overlap`)
+  - Missing or zero duration note properties (`musicxml_duration_missing` / `musicxml_duration_zero`)
+  - Mid-measure/mid-part divisions changes (`musicxml_divisions_changed_mid_measure` / `musicxml-divisions-changed`)
+  - Unsupported tuplet timing (`musicxml_tuplet_unsupported`)
+- Updated standard build-ir error escalation in `src/score2gp/build_ir.py` to treat note duration issues as fatal errors for non-ASCII standard E2E paths, while letting the ASCII gate check them if an ASCII alignment sidecar is present.
+- Created 10 public synthetic timing and overlap fixtures under `tests/fixtures/musicxml/` to model each category.
+- Added a dedicated test suite `tests/test_musicxml_timing_overlap.py` verifying all 10 synthetic fixtures.
+- Added a new developer-facing HTML diagnostic report `write_musicxml_timing_diagnostics_html` in `src/score2gp/report.py` that visualizes detailed tables of timing issues, affected measures, and voice metadata with tailored remediation hints on preflight failure.
+- Updated documentation (`docs/architecture.md`, `docs/workflow.md`, `docs/limitations.md`, and `TASKS.md`) to integrate and explain the new preflight gates and HTML diagnostics.
 
 ## Private Smoke Result Summary (Safe Counts & Statuses Only)
-The local diagnostic smoke scan successfully identified and processed the following private inputs:
+The local diagnostic smoke scan from the previous task remains valid, showing:
 1. **`private_input_1`** (`pdf-tab-musicxml`):
    - **Page Count**: 2
    - **Text/Geometry Detected**: Yes (both ASCII tab and drawn tab geometry detected)
@@ -52,21 +58,17 @@ The local diagnostic smoke scan successfully identified and processed the follow
    - **Next Diagnostic Recommendation**: `provide-matching-musicxml-before-build-ir`
 
 ## Known Limitations
-- Private smoke is diagnostic-only and does not tune thresholds.
-- It does not make private examples pass or weaken validation/timing gates.
+- Diagnostics are conservative and do not tune to private examples or loosen the safety gates.
+- Polyphony/overlap support is intentionally narrow and monophonic-focused.
+- Backup/forward cursor movement is checked strictly at measure boundaries.
 - No OCR or scanned-PDF support.
-- No broad ASCII-to-ScoreIR conversion.
-- GPIF technique rendering is out of scope.
 
 ## Remaining Risks
-- None. Stable public fixtures and strict pipeline validations are fully in place. All local summaries are verified to be private-safe.
+- None. All 135 tests are fully passing locally. Whitespace checks are perfectly clean, and schemas are identical to the base branch.
 
 ## Explicit Scope Boundaries
 - **Do not** commit any private inputs, private outputs, private GP files, private PDFs, private summaries, private HTML diagnostics, or any `work/` contents.
 - **Do not** weaken validation/timing gates or tune thresholds to private examples.
 - **Do not** add OCR/scanned-PDF/ML support.
 - **Do not** expand GPIF technique rendering.
-- **Do not** push directly to main.
-
-## Next Recommended Task
-- Review and merge the private E2E diagnostic smoke PR (PR #13). Once merged, the next step is to address the MusicXML timing/overlap issue in the pipeline or begin designing alignment improvement gates for public ascii alignment, keeping a strict gate without loosening thresholds.
+- **Do not** push directly to `main`.

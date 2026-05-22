@@ -1365,3 +1365,456 @@ def write_symbol_attachment_diagnostics_html(
 </html>
 """
     out.write_text(body, encoding="utf-8")
+
+
+def write_musicxml_timing_diagnostics_html(path: str | Path, payload: dict[str, Any], json_path_ref: str | Path | None = None) -> None:
+    """Write an inspectable developer-facing HTML report for MusicXML timing and overlap failure diagnostics."""
+    out = Path(path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    timing_issues = payload.get("timing_issues", [])
+
+    # Extract primary and secondary reasons
+    primary_issue = None
+    for issue in timing_issues:
+        if issue.get("severity") == "error":
+            primary_issue = issue
+            break
+    if not primary_issue and timing_issues:
+        primary_issue = timing_issues[0]
+
+    primary_reason = primary_issue.get("code") if primary_issue else payload.get("category") or "musicxml_timing_risk"
+
+    all_codes = sorted({issue.get("code") for issue in timing_issues if issue.get("code")})
+    secondary_reasons = [code for code in all_codes if code != primary_reason]
+
+    # Remediation hint mapping
+    mapping = {
+        "musicxml_measure_overfull": "Adjust note durations or measure time signature so the sum of divisions in the voice fits the measure boundary.",
+        "musicxml_measure_underfull": "Ensure the sum of voice durations and rests exactly fills the measure capacity according to the divisions and time signature.",
+        "musicxml_event_overlap": "Resolve overlapping notes in the same voice.",
+        "musicxml_voice_overlap": "Resolve overlapping notes in the same voice.",
+        "musicxml_polyphony_not_supported": "Score2GP only supports a single monophonic voice per staff. Avoid multiple simultaneous voices or notes.",
+        "musicxml_backup_forward_risk": "Avoid ambiguous cursor backtracks; standard sequential notes or explicit single voice layout is required.",
+        "musicxml_unbalanced_backup_forward": "The backup/forward commands did not balance at the end of the measure, creating ambiguous timing.",
+        "musicxml_duration_missing": "Ensure all note elements contain a positive duration value in the MusicXML source.",
+        "musicxml_duration_zero": "Ensure all note elements contain a positive duration value; zero-duration notes are unsupported.",
+        "musicxml_divisions_missing": "The MusicXML file is missing the initial divisions element in attributes.",
+        "musicxml_divisions_changed_mid_measure": "Divisions cannot change in the middle of a measure.",
+        "musicxml_tuplet_unsupported": "Tuplets must represent supported division ratios; verify the tuplet definitions.",
+        "musicxml_tie_continuity_risk": "Verify start/stop matching of tie elements.",
+        "musicxml_rest_overlap": "Rests cannot overlap with notes or other rests in the same voice.",
+    }
+    remediation = mapping.get(primary_reason, "Review the timing issues listed below and fix the MusicXML timing/voice structure.")
+
+    affected_measures = sorted({str(issue.get("measure_number")) for issue in timing_issues if issue.get("measure_number") is not None})
+    affected_voices = sorted({str(issue.get("voice")) for issue in timing_issues if issue.get("voice") is not None})
+
+    json_reference_str = "N/A"
+    if json_path_ref is not None:
+        json_reference_str = str(json_path_ref)
+
+    secondary_html = ""
+    if secondary_reasons:
+        secondary_html = "\n".join(f"<li><code>{html.escape(str(r))}</code></li>" for r in secondary_reasons)
+    else:
+        secondary_html = "<li><em>None</em></li>"
+
+    issues_rows = []
+    if timing_issues:
+        for issue in timing_issues:
+            severity = issue.get("severity", "warning")
+            badge_class = "status-refused" if severity == "error" else "status-warning"
+            issues_rows.append(f"""<tr>
+              <td><span class="badge {badge_class}">{html.escape(str(severity))}</span></td>
+              <td><code>{html.escape(str(issue.get("code", "")))}</code></td>
+              <td>Measure {html.escape(str(issue.get("measure_number", "")))}</td>
+              <td>{f"Voice {html.escape(str(issue.get('voice')))}" if issue.get("voice") is not None else "<em>N/A</em>"}</td>
+              <td>{f"<code>{html.escape(str(issue.get('musicxml_note_id')))}</code>" if issue.get("musicxml_note_id") is not None else "<em>N/A</em>"}</td>
+              <td>{html.escape(str(issue.get("message", "")))}</td>
+            </tr>""")
+        issues_html = "\n".join(issues_rows)
+    else:
+        issues_html = """<tr><td colspan="6" class="empty-state">No timing issues found in payload.</td></tr>"""
+
+    body = f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MusicXML Timing & Overlap Diagnostics</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+    :root {{
+      --bg-color: #0b0f19;
+      --card-bg: #151e30;
+      --card-border: #202c46;
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --divider: #1e293b;
+
+      --accent-refused: #f87171;
+      --accent-refused-glow: rgba(248, 113, 113, 0.1);
+      --accent-warning: #f59e0b;
+      --accent-warning-glow: rgba(245, 158, 11, 0.1);
+      --accent-allowed: #34d399;
+      --accent-allowed-glow: rgba(52, 211, 153, 0.1);
+    }}
+
+    body {{
+      background-color: var(--bg-color);
+      color: var(--text-primary);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      margin: 0;
+      padding: 2rem 1rem;
+      min-height: 100vh;
+      line-height: 1.5;
+    }}
+
+    .container {{
+      max-width: 1000px;
+      margin: 0 auto;
+    }}
+
+    header {{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+      border-bottom: 1px solid var(--divider);
+      padding-bottom: 1.5rem;
+    }}
+
+    h1 {{
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin: 0;
+      letter-spacing: -0.025em;
+    }}
+
+    .badge {{
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border: 1px solid transparent;
+      display: inline-block;
+    }}
+
+    .status-refused {{
+      background-color: var(--accent-refused-glow);
+      color: var(--accent-refused);
+      border-color: rgba(248, 113, 113, 0.2);
+    }}
+
+    .status-warning {{
+      background-color: var(--accent-warning-glow);
+      color: var(--accent-warning);
+      border-color: rgba(245, 158, 11, 0.2);
+    }}
+
+    .status-allowed {{
+      background-color: var(--accent-allowed-glow);
+      color: var(--accent-allowed);
+      border-color: rgba(52, 211, 153, 0.2);
+    }}
+
+    .card {{
+      background-color: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }}
+
+    .card-title {{
+      font-size: 0.9rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-secondary);
+      margin-top: 0;
+      margin-bottom: 1.25rem;
+      border-bottom: 1px solid var(--divider);
+      padding-bottom: 0.5rem;
+    }}
+
+    .reason-box {{
+      border-left: 4px solid var(--accent-refused);
+      background-color: rgba(248, 113, 113, 0.05);
+      padding: 1rem;
+      border-radius: 0 8px 8px 0;
+      margin-bottom: 1rem;
+    }}
+
+    .reason-title {{
+      font-size: 1.125rem;
+      font-weight: 700;
+      margin: 0 0 0.5rem 0;
+    }}
+
+    .reason-code {{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.9rem;
+      background-color: rgba(0, 0, 0, 0.2);
+      padding: 0.2rem 0.4rem;
+      border-radius: 4px;
+      color: var(--text-primary);
+    }}
+
+    .grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }}
+
+    .metric-card {{
+      background-color: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      text-align: center;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }}
+
+    .metric-value {{
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 0.25rem;
+      color: var(--text-primary);
+    }}
+
+    .metric-label {{
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-secondary);
+    }}
+
+    dl {{
+      display: grid;
+      grid-template-columns: max-content 1fr;
+      gap: 0.5rem 1.5rem;
+      margin: 0;
+    }}
+
+    dt {{
+      font-weight: 500;
+      color: var(--text-secondary);
+    }}
+
+    dd {{
+      margin: 0;
+      font-weight: 600;
+    }}
+
+    code {{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.8rem;
+      background-color: rgba(0, 0, 0, 0.3);
+      padding: 0.125rem 0.25rem;
+      border-radius: 4px;
+      border: 1px solid var(--card-border);
+    }}
+
+    ul {{
+      margin: 0;
+      padding-left: 1.25rem;
+    }}
+
+    li {{
+      margin-bottom: 0.5rem;
+    }}
+
+    .remediation-card {{
+      background-color: rgba(245, 158, 11, 0.05);
+      border: 1px solid rgba(245, 158, 11, 0.2);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }}
+
+    .remediation-title {{
+      font-size: 0.875rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--accent-warning);
+      margin-top: 0;
+      margin-bottom: 0.5rem;
+    }}
+
+    .remediation-text {{
+      font-size: 1.05rem;
+      font-weight: 500;
+      margin: 0;
+    }}
+
+    table {{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+      text-align: left;
+    }}
+
+    th {{
+      font-weight: 600;
+      color: var(--text-secondary);
+      border-bottom: 2px solid var(--divider);
+      padding: 0.75rem 0.5rem;
+    }}
+
+    td {{
+      padding: 0.75rem 0.5rem;
+      border-bottom: 1px solid var(--divider);
+      vertical-align: middle;
+    }}
+
+    tr:hover td {{
+      background-color: rgba(255, 255, 255, 0.02);
+    }}
+
+    .empty-state {{
+      text-align: center;
+      color: var(--text-secondary);
+      font-style: italic;
+      padding: 2rem 0;
+    }}
+
+    .footer-note {{
+      font-size: 0.825rem;
+      color: var(--text-secondary);
+      text-align: center;
+      margin-top: 3rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--divider);
+    }}
+
+    pre {{
+      background-color: rgba(0, 0, 0, 0.3);
+      padding: 1rem;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.85rem;
+      border: 1px solid var(--card-border);
+      margin: 0;
+    }}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>MusicXML Timing & Overlap Diagnostics</h1>
+      <span class="badge status-refused">Timing Risk</span>
+    </header>
+
+    <div class="card">
+      <h2 class="card-title">Verdict & Diagnostics</h2>
+      <div class="reason-box">
+        <h3 class="reason-title">{html.escape(payload.get("message", ""))}</h3>
+        <p style="margin: 0.5rem 0 0 0;">Primary reason code: <span class="reason-code">{html.escape(str(primary_reason))}</span></p>
+      </div>
+      <p style="margin: 1rem 0 0 0; font-size: 0.925rem; color: var(--text-secondary);">
+        Risky or unsupported MusicXML timing strictly blocks ScoreIR generation to prevent downstream alignment and rendering failures. JSON remains the source of truth.
+      </p>
+    </div>
+
+    <div class="remediation-card">
+      <h2 class="remediation-title">Suggested Remediation</h2>
+      <p class="remediation-text">{html.escape(str(remediation))}</p>
+    </div>
+
+    <div class="grid">
+      <div class="metric-card">
+        <div class="metric-value">{payload.get("timing_issue_count", 0)}</div>
+        <div class="metric-label">Total Timing Issues</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-value">{len(affected_measures)}</div>
+        <div class="metric-label">Affected Measures</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-value">{len(affected_voices)}</div>
+        <div class="metric-label">Affected Voices</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">Timing Refusal Taxonomy</h2>
+      <dl style="margin-bottom: 1.5rem;">
+        <dt>Primary Reason</dt>
+        <dd><code>{html.escape(str(primary_reason))}</code></dd>
+
+        <dt>Secondary Reasons</dt>
+        <dd>
+          <ul style="padding-left: 1.25rem; margin-top: 0.25rem;">
+            {secondary_html}
+          </ul>
+        </dd>
+
+        <dt>Affected Measures</dt>
+        <dd>{", ".join(f"<code>{html.escape(m)}</code>" for m in affected_measures) if affected_measures else "<em>None</em>"}</dd>
+
+        <dt>Affected Voices</dt>
+        <dd>{", ".join(f"<code>{html.escape(v)}</code>" for v in affected_voices) if affected_voices else "<em>None</em>"}</dd>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">Gate Metadata</h2>
+      <dl>
+        <dt>Pipeline Stage</dt>
+        <dd><code>{html.escape(str(payload.get("stage", "musicxml-import")))}</code></dd>
+
+        <dt>ScoreIR Written</dt>
+        <dd><code>False</code></dd>
+
+        <dt>Alignment Attempted</dt>
+        <dd><code>False</code></dd>
+
+        <dt>JSON Reference</dt>
+        <dd><code>{html.escape(json_reference_str)}</code></dd>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">Detailed Timing Issues</h2>
+      <div style="overflow-x: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Severity</th>
+              <th>Code</th>
+              <th>Measure</th>
+              <th>Voice</th>
+              <th>Note ID</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            {issues_html}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">JSON Diagnostics Payload Reference</h2>
+      <pre><code>{html.escape(json.dumps(payload, indent=2, sort_keys=True))}</code></pre>
+    </div>
+
+    <div class="footer-note">
+      This diagnostic report is generated automatically by the Antigravity Score2GP pipeline.
+    </div>
+  </div>
+</body>
+</html>
+"""
+    out.write_text(body, encoding="utf-8")
