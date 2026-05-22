@@ -192,7 +192,7 @@ def test_multivoice_unsupported_refuses_clearly(tmp_path) -> None:
     out_ir = tmp_path / "multivoice.ir.json"
     with pytest.raises(BuildIrInputRiskError) as raised:
         build_ir_from_files(FIXTURES / "timing_multivoice_unsupported.musicxml", TABRAW, out_ir)
-    assert raised.value.category == "musicxml_timing_risk"
+    assert raised.value.category == "musicxml_scoreir_polyphony_gate_refused"
 
 
 def test_same_voice_cursor_overlap_refuses_clearly(tmp_path) -> None:

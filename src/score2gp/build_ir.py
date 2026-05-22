@@ -706,13 +706,30 @@ def build_ir_with_diagnostics_from_imports(
     warnings.extend(_musicxml_timing_issue_warnings(timing_issues))
     fatal_timing_issues = [issue for issue in timing_issues if issue.severity == "error"]
     if fatal_timing_issues:
-        raise BuildIrInputRiskError(
-            category="musicxml_timing_risk",
-            stage="musicxml-import",
-            message=(
+        category = "musicxml_timing_risk"
+        if all(
+            issue.code in (
+                "musicxml_polyphony_not_supported",
+                "musicxml_multivoice_timing_not_supported",
+                "musicxml_cross_voice_timing_unsupported",
+                "musicxml_valid_multivoice_unsupported",
+                "musicxml_voice_cursor_alignment_risk",
+                "musicxml_alignment_not_attempted_due_to_timing_risk",
+                "musicxml_many_timing_risks",
+            )
+            for issue in fatal_timing_issues
+        ):
+            category = "musicxml_scoreir_polyphony_gate_refused"
+            message = "MusicXML timing is valid but contains unsupported polyphony/multi-voice structures."
+        else:
+            message = (
                 "MusicXML timing risk prevents ScoreIR output: "
                 f"{len(fatal_timing_issues)} overfull or overlapping event(s) would violate ScoreIR timing."
-            ),
+            )
+        raise BuildIrInputRiskError(
+            category=category,
+            stage="musicxml-import",
+            message=message,
             timing_issues=timing_issues,
         )
     grouping_risk = None if ascii_gate_details is not None else _tabraw_grouping_risk(tabraw)
