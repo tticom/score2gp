@@ -2,16 +2,15 @@
 
 ## Next
 
-- [ ] Refresh private smoke blocker summary after MusicXML timing public fixtures v0.3 (PR #19).
-- [ ] Add developer-facing HTML styling and compact thumbnails for grouping diagnostics.
 - [ ] Add public reproductions for more Audiveris timing patterns before another private run.
+- [ ] Add developer-facing HTML styling and compact thumbnails for grouping diagnostics.
 - [ ] Add a public partial-to-recovery design note before attempting any automatic grouping repair.
 
 ## Done
 
+- [x] Refresh private smoke blocker summary after MusicXML timing public fixtures v0.3 (PR #19).
 - [x] Add a third round of public synthetic MusicXML timing fixtures (v0.3) focused on remaining voice cursor alignment, backup/forward movement, and Audiveris-like timing risks, with refined preflight diagnostics and tests.
 - [x] Refresh private smoke blocker summary after MusicXML timing public fixtures (PR #17).
-
 - [x] Add public synthetic MusicXML timing blocker fixtures for compound meter (12/8) and backup/forward voice cursor movements, with refined preflight diagnostics and error taxonomy.
 - [x] Refresh private-safe diagnostic smoke blocker summary after recent PDF layout and MusicXML preflight timing diagnostics work.
 - [x] Improve PDF grouping and system layout diagnostics based on private-smoke warning classes without tuning to private files, adding public synthetic fixtures for layout failure modes and blocking unsafe grouping in build_ir.
