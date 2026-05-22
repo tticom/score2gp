@@ -422,6 +422,31 @@ python -m score2gp.cli convert "fixtures/private/Derek Trucks BB King.pdf" `
 
 Current status: scaffold only. It writes diagnostics and a conversion report, but it does not yet produce a real PDF-derived GP file.
 
+## 10. Public End-to-End PDF-to-GP Smoke Proof
+
+To verify the E2E capabilities of the entire pipeline, there is a controlled public end-to-end integration proof. This smoke test executes PDF-derived ASCII tab extraction, ASCII/MusicXML alignment, ScoreIR building, validation, GP writing, GP package validation, and semantic fact inspection.
+
+Run the test suite to execute this:
+```powershell
+python -m pytest tests/test_e2e_pdf_to_gp.py
+```
+
+### Steps Executed in E2E Path:
+1. **Extract Tablature**:
+   Extracts `tabraw.json` containing ASCII-tab candidates from `tests/fixtures/pdf/generated_ascii_tab_scoreir_gate.pdf` via `extract_tab`.
+2. **Align ASCII to MusicXML**:
+   Aligns the extracted candidates to `tests/fixtures/musicxml/ascii_scoreir_gate_simple.musicxml` via `align_ascii_musicxml_files` to generate an `ascii_musicxml_alignment.json` sidecar.
+3. **Build ScoreIR**:
+   Constructs the intermediate `ScoreIR` JSON and `diagnostics.json` using `build_ir_from_files` with the compatible alignment sidecar.
+4. **Validate ScoreIR**:
+   Performs structural and semantic verification via `validate_score_ir_file`.
+5. **Write GP Package**:
+   Generates a minimal GP7 zip package (`smoke.gp`) from ScoreIR using `write_gp`.
+6. **Validate GP**:
+   Validates zip formatting and GPIF XML well-formedness using `validate_gp`.
+7. **Inspect GP & Compare Semantics**:
+   Retrieves semantic summary details using `inspect_gp` and verifies expected track counts, tempo, tuning, bar count, and correct fret/string pitches.
+
 ## Current Stage Summary
 
 | Stage | Command | Status |
@@ -433,5 +458,6 @@ Current status: scaffold only. It writes diagnostics and a conversion report, bu
 | GP writing | `write-gp` | Minimal subset implemented |
 | Validation | `validate` | Implemented |
 | Full conversion | `convert` | Scaffold only |
+| Public E2E Smoke Proof | N/A (Test Suite) | Fully implemented via `tests/test_e2e_pdf_to_gp.py` |
 
 The project should keep uncertainty visible at every stage. Unsupported features should become warnings or report items, not silent omissions.
