@@ -31,6 +31,12 @@ from .ir import (
     Tuplet,
     Track,
     WarningItem,
+    SlideTechnique,
+    BendTechnique,
+    VibratoTechnique,
+    HammerOnTechnique,
+    PullOffTechnique,
+    UnsupportedTechnique,
 )
 from .musicxml import (
     MusicXmlHarmony,
@@ -186,6 +192,12 @@ class BuildIrDiagnostics(BaseModel):
     unmatched_musicxml_note_count: int
     unmatched_tabraw_candidate_count: int
     ignored_non_playable_candidate_count: int
+    symbol_attachment_chord_candidates_found: int = 0
+    symbol_attachment_chord_candidates_attached: int = 0
+    symbol_attachment_chord_candidates_unattached: int = 0
+    symbol_attachment_technique_candidates_found: int = 0
+    symbol_attachment_technique_candidates_attached: int = 0
+    symbol_attachment_technique_candidates_unattached: int = 0
     unsupported_construct_warnings: list[str] = Field(default_factory=list)
     warning_count: int
     confidence_flags: list[dict[str, object]] = Field(default_factory=list)
@@ -793,6 +805,7 @@ def build_ir_with_diagnostics_from_imports(
         bars=bars,
         warnings=warnings,
     )
+    _attach_symbols_and_techniques(score, tabraw)
     diagnostics = _build_diagnostics(musicxml, tabraw, score, candidate_pools, ascii_gate_details=ascii_gate_details)
     return score, diagnostics
 
@@ -1277,6 +1290,33 @@ def _build_diagnostics(
         for event in bar.events
         if event.confidence < 0.75
     ]
+
+    chord_cands = [c for c in tabraw.candidates if c.kind == "chord-symbol"]
+    tech_cands = [c for c in tabraw.candidates if c.kind == "technique-text"]
+
+    attached_chord_ids = set()
+    for bar in score.bars:
+        for event in bar.events:
+            for prov in event.provenance:
+                if prov.raw_token_id:
+                    attached_chord_ids.add(prov.raw_token_id)
+
+    attached_tech_ids = set()
+    for bar in score.bars:
+        for event in bar.events:
+            for note in event.notes:
+                for prov in note.provenance:
+                    if prov.raw_token_id:
+                        attached_tech_ids.add(prov.raw_token_id)
+
+    chord_found = len(chord_cands)
+    chord_attached = sum(1 for c in chord_cands if c.id in attached_chord_ids)
+    chord_unattached = chord_found - chord_attached
+
+    tech_found = len(tech_cands)
+    tech_attached = sum(1 for c in tech_cands if c.id in attached_tech_ids)
+    tech_unattached = tech_found - tech_attached
+
     return BuildIrDiagnostics(
         musicxml_source=musicxml.source_path,
         tabraw_source=tabraw.source_pdf,
@@ -1301,6 +1341,12 @@ def _build_diagnostics(
         unmatched_musicxml_note_count=totals["unmatched_musicxml_note_count"],
         unmatched_tabraw_candidate_count=len(candidate_pools.unused()),
         ignored_non_playable_candidate_count=sum(1 for candidate in tabraw.candidates if candidate.parsed_fret is None),
+        symbol_attachment_chord_candidates_found=chord_found,
+        symbol_attachment_chord_candidates_attached=chord_attached,
+        symbol_attachment_chord_candidates_unattached=chord_unattached,
+        symbol_attachment_technique_candidates_found=tech_found,
+        symbol_attachment_technique_candidates_attached=tech_attached,
+        symbol_attachment_technique_candidates_unattached=tech_unattached,
         unsupported_construct_warnings=[
             code
             for code in warning_codes
@@ -1937,3 +1983,234 @@ def _standard_guitar_tuning() -> Tuning:
             TuningString(number=6, pitch=40, name="E2"),
         ],
     )
+
+
+def _classify_technique(text: str) -> str | None:
+    t = text.strip().lower()
+    if t in ("slide", "sl.", "sl"):
+        return "slide"
+    if t in ("bend", "b"):
+        return "bend"
+    if t in ("vibrato", "vib", "v"):
+        return "vibrato"
+    if t in ("hammer-on", "h", "hammer"):
+        return "hammer-on"
+    if t in ("pull-off", "p", "pull"):
+        return "pull-off"
+    return None
+
+
+def _remove_not_aligned_warning(score: ScoreIR, candidate: TabCandidate) -> None:
+    score.warnings = [
+        w for w in score.warnings
+        if not (w.code == f"tabraw-{candidate.kind}-not-aligned" and w.provenance and w.provenance[0].raw_token_id == candidate.id)
+    ]
+
+
+def _attach_symbols_and_techniques(score: ScoreIR, tabraw: TabRaw) -> None:
+    bars_by_index = {bar.index: bar for bar in score.bars}
+
+    for candidate in tabraw.candidates:
+        if candidate.kind not in ("chord-symbol", "technique-text"):
+            continue
+
+        bar_idx = candidate.bar_index
+        # If candidate lacks a bar index, or the target bar does not exist:
+        if bar_idx is None or bar_idx not in bars_by_index:
+            if candidate.kind == "chord-symbol":
+                score.warnings.append(
+                    WarningItem(
+                        code="symbol_attachment_requires_timing" if bar_idx is None else "unattached_chord_symbol",
+                        message=f"Chord symbol '{candidate.raw_text}' has no valid timed bar/event target.",
+                        severity="warning",
+                        provenance=[candidate.to_provenance()],
+                    )
+                )
+            else:
+                score.warnings.append(
+                    WarningItem(
+                        code="technique_attachment_requires_note_target" if bar_idx is None else "unattached_technique_text",
+                        message=f"Technique text '{candidate.raw_text}' has no valid timed bar target.",
+                        severity="warning",
+                        provenance=[candidate.to_provenance()],
+                    )
+                )
+            continue
+
+        bar = bars_by_index[bar_idx]
+
+        if candidate.kind == "chord-symbol":
+            # Chord symbol attachment
+            if not bar.events:
+                score.warnings.append(
+                    WarningItem(
+                        code="symbol_attachment_requires_timing",
+                        message=f"Chord symbol '{candidate.raw_text}' requires a timed event target in bar {bar_idx}.",
+                        severity="warning",
+                        provenance=[candidate.to_provenance()],
+                    )
+                )
+                continue
+
+            # Fallback to the first event of the bar if candidate.x is None
+            if candidate.x is None:
+                event = bar.events[0]
+                event.chord_symbol = candidate.raw_text
+                event.provenance.append(candidate.to_provenance())
+                _remove_not_aligned_warning(score, candidate)
+                continue
+
+            # Visual proximity logic
+            # Let's extract visual coordinate x for each event in the bar
+            events_with_x = []
+            for event in bar.events:
+                x_coords = []
+                for note in event.notes:
+                    for prov in note.provenance:
+                        if prov.raw and prov.raw.get("x") is not None:
+                            try:
+                                x_val = float(prov.raw["x"])
+                                x_coords.append(x_val)
+                            except (ValueError, TypeError):
+                                pass
+                if x_coords:
+                    events_with_x.append((sum(x_coords) / len(x_coords), event))
+                else:
+                    events_with_x.append((None, event))
+
+            # If all events have no visual coordinates, fallback to first event
+            valid_events_with_x = [(x, ev) for x, ev in events_with_x if x is not None]
+            if not valid_events_with_x:
+                event = bar.events[0]
+                event.chord_symbol = candidate.raw_text
+                event.provenance.append(candidate.to_provenance())
+                _remove_not_aligned_warning(score, candidate)
+                continue
+
+            # Sort valid events by their x-coordinate
+            valid_events_with_x.sort(key=lambda item: item[0])
+            first_event_x = valid_events_with_x[0][0]
+
+            # If candidate.x is at or before the first event's x position, map to first event
+            if candidate.x <= first_event_x:
+                event = bar.events[0]
+                event.chord_symbol = candidate.raw_text
+                event.provenance.append(candidate.to_provenance())
+                _remove_not_aligned_warning(score, candidate)
+                continue
+
+            # Find closest event by absolute visual distance
+            dists = []
+            for ev_x, ev in valid_events_with_x:
+                dists.append((abs(ev_x - candidate.x), ev))
+            dists.sort(key=lambda item: item[0])
+
+            best_dist, best_event = dists[0]
+
+            # Ambiguity check: if there's a tie or a second event within a tight range (e.g. 2.0 units), refuse attachment
+            if len(dists) > 1 and abs(dists[0][0] - dists[1][0]) < 2.0:
+                score.warnings.append(
+                    WarningItem(
+                        code="ambiguous_chord_symbol_attachment",
+                        message=f"Chord symbol '{candidate.raw_text}' has ambiguous visual targets in bar {bar_idx}.",
+                        severity="warning",
+                        provenance=[candidate.to_provenance()],
+                    )
+                )
+            else:
+                best_event.chord_symbol = candidate.raw_text
+                best_event.provenance.append(candidate.to_provenance())
+                _remove_not_aligned_warning(score, candidate)
+
+        elif candidate.kind == "technique-text":
+            # Technique text attachment
+            kind = _classify_technique(candidate.raw_text)
+            if kind is None:
+                score.warnings.append(
+                    WarningItem(
+                        code="unsupported_technique_text",
+                        message=f"Technique text '{candidate.raw_text}' is unsupported in v0.1 vocabulary.",
+                        severity="warning",
+                        provenance=[candidate.to_provenance()],
+                    )
+                )
+                continue
+
+            notes = [note for event in bar.events for note in event.notes]
+            if not notes:
+                score.warnings.append(
+                    WarningItem(
+                        code="technique_attachment_requires_note_target",
+                        message=f"Technique text '{candidate.raw_text}' requires a note target in bar {bar_idx}.",
+                        severity="warning",
+                        provenance=[candidate.to_provenance()],
+                    )
+                )
+                continue
+
+            # Differentiate by kind
+            if kind in ("hammer-on", "pull-off"):
+                # Span/link technique requires exactly two notes in the bar
+                if len(notes) != 2:
+                    score.warnings.append(
+                        WarningItem(
+                            code="ambiguous_technique_attachment",
+                            message=f"Span technique '{candidate.raw_text}' requires exactly two notes in bar {bar_idx}.",
+                            severity="warning",
+                            provenance=[candidate.to_provenance()],
+                        )
+                    )
+                    continue
+
+                # Ensure notes are in chronological order (which they are, because events are sorted)
+                note1, note2 = notes
+                event1 = next(ev for ev in bar.events if note1 in ev.notes)
+                event2 = next(ev for ev in bar.events if note2 in ev.notes)
+
+                # Ensure they are at different onset times
+                if event1.timing.onset_ticks >= event2.timing.onset_ticks:
+                    score.warnings.append(
+                        WarningItem(
+                            code="ambiguous_technique_attachment",
+                            message=f"Span technique '{candidate.raw_text}' endpoints are not sequential in bar {bar_idx}.",
+                            severity="warning",
+                            provenance=[candidate.to_provenance()],
+                        )
+                    )
+                    continue
+
+                # Unambiguous: attach to note1 targeting event2.id
+                if kind == "hammer-on":
+                    tech = HammerOnTechnique(kind="hammer-on", target_event_id=event2.id)
+                else:
+                    tech = PullOffTechnique(kind="pull-off", target_event_id=event2.id)
+
+                note1.techniques.append(tech)
+                note1.provenance.append(candidate.to_provenance())
+                _remove_not_aligned_warning(score, candidate)
+
+            else:
+                # Slide, Bend, Vibrato require exactly one note in the bar
+                if len(notes) != 1:
+                    score.warnings.append(
+                        WarningItem(
+                            code="ambiguous_technique_attachment",
+                            message=f"Technique '{candidate.raw_text}' requires exactly one note target in bar {bar_idx}.",
+                            severity="warning",
+                            provenance=[candidate.to_provenance()],
+                        )
+                    )
+                    continue
+
+                # Unambiguous: attach to the single note
+                target_note = notes[0]
+                if kind == "slide":
+                    tech = SlideTechnique(kind="slide", style="unknown", direction="unknown", target_event_id=None)
+                elif kind == "bend":
+                    tech = BendTechnique(kind="bend", semitones=None, points=[], text=None)
+                else:
+                    tech = VibratoTechnique(kind="vibrato", width="unknown", speed="unknown")
+
+                target_note.techniques.append(tech)
+                target_note.provenance.append(candidate.to_provenance())
+                _remove_not_aligned_warning(score, candidate)

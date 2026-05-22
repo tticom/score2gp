@@ -108,7 +108,7 @@ def test_generated_pdf_extracted_tabraw_feeds_build_ir_with_diagnostics(tmp_path
     assert "one or more TabRaw candidates have low confidence" in diagnostics["extraction_quality_flags"]
 
     warning_codes = [warning.code for warning in score.warnings]
-    assert "tabraw-chord-symbol-not-aligned" in warning_codes
+    assert "tabraw-chord-symbol-not-aligned" not in warning_codes
     assert "tabraw-technique-text-not-aligned" in warning_codes
 
 
@@ -222,7 +222,7 @@ def test_scorelike_generated_pdf_extracted_tabraw_feeds_build_ir_with_system_dia
     assert all("pdf-p001-c0001" not in group["candidate_ids"] for group in diagnostics["per_bar"][0]["candidate_x_groups"])
 
     warning_codes = [warning.code for warning in score.warnings]
-    assert "tabraw-chord-symbol-not-aligned" in warning_codes
+    assert "tabraw-chord-symbol-not-aligned" not in warning_codes
     assert "tabraw-technique-text-not-aligned" in warning_codes
     assert "tabraw-candidate-text-not-aligned" in warning_codes
 

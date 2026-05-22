@@ -1,59 +1,55 @@
 # Handoff
 
 ## Metadata
-- **Current Branch**: `feature/ascii-scoreir-gate-html-diagnostics-v0.1`
+- **Current Branch**: `feature/tabraw-symbol-attachment-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: #9 (URL: https://github.com/tticom/score2gp/pull/9)
-- **Latest Local Commit**: `d33406e87381c1ee50b89f35d1efec94e5262531`
-- **Latest Pushed Commit**: `d33406e87381c1ee50b89f35d1efec94e5262531`
-- **Commit Subject**: `Update handoff for HTML diagnostics PR`
+- **Current PR**: #10 (URL: https://github.com/tticom/score2gp/pull/10)
+- **Latest Local Commit**: `b1563df868d4076395b001a1d95c721c00224d45`
+- **Latest Pushed Commit**: `b1563df868d4076395b001a1d95c721c00224d45`
+- **Commit Subject**: `Add conservative TabRaw symbol attachment`
 - **Working Tree Status**: Clean (once HANDOFF.md is committed)
 - **Tests & Checks Run**:
-  - `python -m pytest` -> 115 passed
+  - `python -m pytest` -> 119 passed
   - `python -m score2gp.cli export-schema --out schemas` -> passed
   - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid
-  - `git diff --check` -> passed (CRLF warnings only)
+  - `git diff --check` -> passed
   - `git diff -- schemas` -> empty
-- **GitHub Check Status**: Pending (Checks running on PR #9)
+- **GitHub Check Status**: Pending (Checks running on PR #10)
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL files, overlays, logs, or diagnostic outputs are tracked or staged.
 
 ## What Changed in the Task
-- Added developer-facing HTML rendering for ASCII ScoreIR gate refusal diagnostics.
-- When `build-ir` refuses due to ASCII ScoreIR gate diagnostics, it writes an HTML diagnostics report (`ascii-scoreir-gate-diagnostics.html`) alongside the JSON diagnostics sidecar.
-- The HTML report displays:
-  - Gate status (refused/allowed)
-  - Primary refusal reason code
-  - Secondary refusal reason codes (or explicitly "None")
-  - Remediation hints
-  - Total candidate count, aligned candidate count, and rejected candidate count
-  - Safe candidate IDs (if present)
-  - MusicXML timing safety status
-  - Alignment sidecar presence and status
-  - Whether ScoreIR was written
-  - Reference to the JSON diagnostics sidecar
-  - Clear statement that refusal is expected for unsupported ASCII inputs
-- Preserved backward compatibility of existing JSON diagnostics.
-- Added comprehensive public tests for the HTML report content without using private fixtures.
-- Updated documentation (`docs/architecture.md`, `docs/workflow.md`, `docs/limitations.md`, and `TASKS.md`) detailing the new developer-facing report and strict boundaries.
+- Attached PDF-derived chord symbols and technique text to safely timed ScoreIR bars/events in a narrow public-fixture-only way.
+- Implemented visual proximity and default first-event chord symbol attachment for `chord-symbol` candidates, including safety checks for ambiguity (refusing attachment if another target event is within a tight range of 2.0 visual units).
+- Implemented single-note technique text attachment for `slide`, `bend`, `vibrato` candidates, and span technique attachment for `hammer-on` and `pull-off` candidates requiring exactly two chronological notes in the bar.
+- Emitted specific, detailed WarningItem warning codes for unattached, ambiguous, or unsupported symbols/techniques:
+  - `symbol_attachment_requires_timing`
+  - `unattached_chord_symbol`
+  - `technique_attachment_requires_note_target`
+  - `unattached_technique_text`
+  - `ambiguous_chord_symbol_attachment`
+  - `unsupported_technique_text`
+  - `ambiguous_technique_attachment`
+- Cleared the original pre-alignment `tabraw-{kind}-not-aligned` warnings upon successful alignment/attachment of chord symbols or technique texts to keep warnings clean.
+- Added comprehensive public tests for chord symbol proximity attachment, technique attachment, unsupported vocabulary, and span techniques.
+- Persisted the planning and execution rule inside `AGENTS.md` to avoid unnecessary stops after creating implementation plans in future tasks.
 
 ## Known Limitations
-- HTML diagnostics are developer-facing explanations. JSON diagnostics remain the programmatic source of truth.
-- Refusal is expected for most inputs as this does not broaden ASCII-to-ScoreIR conversion.
 - No OCR or scanned-PDF support.
-- No ML layout recognition or arbitrary commercial score conversion.
-- Symbol/technique attachment remains out of scope.
-- GPIF output remains minimal.
+- No ML layout recognition.
+- No ASCII success path broadening.
+- No duration inference from PDF text/columns.
+- No GPIF rendering of attached techniques.
+- High reliance on visual coordinates; inputs without reliable coordinates fall back to default anchors or emit ambiguity warnings.
 
 ## Remaining Risks
-- None. Refusal is deterministic and expected for unsupported ASCII inputs.
+- Relying on simple heuristic distance thresholds (like the 2.0 units proximity tie-breaker) might need calibration on larger public synthetic corpora.
 
 ## Explicit Scope Boundaries
-- **Do not** start symbol/technique attachment.
+- **Do not** start OCR, scanned-PDF support, or ML layout recognition.
 - **Do not** broaden ASCII-to-ScoreIR conversion.
-- **Do not** add new ScoreIR success paths.
-- **Do not** implement OCR or scanned-PDF support.
+- **Do not** infer durations from PDF text.
 - **Do not** use private PDFs as regression fixtures.
 - **Do not** commit `work/` outputs or private files.
 
 ## Next Recommended Task
-- Attach PDF-derived chord symbols and technique text to ScoreIR events once timing calibration exists.
+- Implement HTML-based visualization or rendering support to inspect the attached chord symbols and techniques in the generated ScoreIR.
