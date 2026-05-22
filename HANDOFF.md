@@ -4,9 +4,9 @@
 - **Current Branch**: `feature/private-smoke-refresh-after-invalid-timing-diagnostics-v0.1`
 - **Base Branch**: `main`
 - **Current PR**: [#24](https://github.com/tticom/score2gp/pull/24)
-- **Latest Local Commit**: `4a69f0c28c815993bb38716caf37bdb40f9ad593`
-- **Latest Pushed Commit**: `4a69f0c28c815993bb38716caf37bdb40f9ad593`
-- **Commit Subject**: Update tasks for private smoke refresh
+- **Latest Local Commit**: `e8a6ec377fb3d4be92a6d2179aaa5a647928a7f0`
+- **Latest Pushed Commit**: `e8a6ec377fb3d4be92a6d2179aaa5a647928a7f0`
+- **Commit Subject**: Refresh private smoke after invalid timing diagnostics
 - **Working Tree Status**: Clean
 - **Tests & Checks Run**:
   - `python -m pytest` -> 189 passed
