@@ -613,10 +613,11 @@ def test_build_ir_refuses_ascii_tab_without_timing_alignment(tmp_path) -> None:
         build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
 
     assert not ir_path.exists()
-    assert raised.value.category == "ascii_tab_timing_unavailable"
+    assert raised.value.category == "missing_ascii_alignment_sidecar"
     payload = raised.value.to_diagnostics_payload()
     assert payload["details"]["grouping_status"] == "ascii_grouped"
-    assert "ascii_tab_timing_unavailable" in payload["details"]["warning_codes"]
+    assert "ascii_tab_timing_unavailable" in payload["details"]["tabraw_warning_codes"]
+    assert payload["details"]["primary_reason_code"] == "missing_ascii_alignment_sidecar"
 
 
 def test_build_ir_refuses_partial_ascii_tab_timing(tmp_path) -> None:
@@ -629,11 +630,12 @@ def test_build_ir_refuses_partial_ascii_tab_timing(tmp_path) -> None:
         build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
 
     assert not ir_path.exists()
-    assert raised.value.category == "partial_ascii_tab_timing"
+    assert raised.value.category == "missing_ascii_alignment_sidecar"
     payload = raised.value.to_diagnostics_payload()
     assert payload["details"]["grouping_status"] == "ascii_grouped"
-    assert "partial_ascii_tab_timing" in payload["details"]["warning_codes"]
+    assert "partial_ascii_tab_timing" in payload["details"]["tabraw_warning_codes"]
     assert payload["details"]["ascii_timing_status_counts"]["timing_partial"] > 0
+    assert payload["details"]["primary_reason_code"] == "missing_ascii_alignment_sidecar"
 
 
 def test_build_ir_refuses_ambiguous_ascii_tab_timing(tmp_path) -> None:
@@ -646,9 +648,10 @@ def test_build_ir_refuses_ambiguous_ascii_tab_timing(tmp_path) -> None:
         build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
 
     assert not ir_path.exists()
-    assert raised.value.category == "ambiguous_ascii_tab_timing"
+    assert raised.value.category == "missing_ascii_alignment_sidecar"
     payload = raised.value.to_diagnostics_payload()
-    assert "ambiguous_ascii_tab_timing" in payload["details"]["warning_codes"]
+    assert "ambiguous_ascii_tab_timing" in payload["details"]["tabraw_warning_codes"]
+    assert payload["details"]["primary_reason_code"] == "missing_ascii_alignment_sidecar"
 
 
 def test_build_ir_refuses_partial_ascii_tab_grouping(tmp_path) -> None:
@@ -661,7 +664,8 @@ def test_build_ir_refuses_partial_ascii_tab_grouping(tmp_path) -> None:
         build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
 
     assert not ir_path.exists()
-    assert raised.value.category == "partial_ascii_tab_grouping"
+    assert raised.value.category == "missing_ascii_alignment_sidecar"
     payload = raised.value.to_diagnostics_payload()
     assert payload["details"]["grouping_status"] == "partial_ascii_tab_grouping"
-    assert "partial_ascii_tab_grouping" in payload["details"]["warning_codes"]
+    assert "partial_ascii_tab_grouping" in payload["details"]["tabraw_warning_codes"]
+    assert payload["details"]["primary_reason_code"] == "missing_ascii_alignment_sidecar"
