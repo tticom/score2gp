@@ -87,8 +87,10 @@ To make MusicXML timing and overlap failures easy to understand and inspect for 
 - **JSON as Source of Truth**: The JSON diagnostics payload remains the programmatic source of truth for downstream tools.
 - **Strict Safety Gates**: MusicXML timing risks and unsupported polyphony strictly block ScoreIR generation to prevent downstream alignment and rendering failures, rather than silently dropping or flattening voices, rests, or tuplets.
 - **Polyphony Gate Refusal**: Separates invalid timing (e.g., same-voice overlaps) from valid but unsupported multi-voice structures (`musicxml_scoreir_polyphony_gate_refused`), ensuring that valid polyphony is not misclassified as timing risk.
-- **Refined Timing Diagnostic Codes**: The preflight catches backup rewind before measure start, forward exceeding measure end, same-voice overlap, cross-voice unsupported overlap, chord stacks using `<chord/>`, rest overlap, and repeated backup/forward movements using a taxonomy of precise codes.
-- **Synthetic Public Fixtures**: Public synthetic MusicXML timing blocker fixtures (v0.2 and v0.3) are added under `tests/fixtures/musicxml/` to safely reproduce and test these specific failure modes, ensuring CI validation remains independent of any private materials.
+- **Refined Timing Diagnostic Codes**: The preflight catches same-voice overfull measures, accumulated small duration overflow, same-voice event overlap, rest/note overlap, backup without voice switch overlap, event extending past measure, compound meter overfull, and invalid duration grid cases using a taxonomy of precise codes.
+- **Calibration Boundary & Metadata**: The diagnostics track precise metrics: calibration feasibility, overfull divisions, overlap counts, and affected event IDs. Calibration is flagged as possible only if the overfull error is small (<= 1 quarter note beat), events remain ordered, and no overlaps occur.
+- **Synthetic Public Fixtures**: Public synthetic MusicXML timing blocker fixtures (v0.2, v0.3, and v0.4) are added under `tests/fixtures/musicxml/` to safely reproduce and test these specific failure modes, ensuring CI validation remains independent of any private materials.
+- **No Automatic Repair**: The current implementation does not attempt automatic timing repair or calibration, and strict timing safety gates remain fully intact.
 
 ## Public End-to-End PDF-to-GP Proof Slice
 
