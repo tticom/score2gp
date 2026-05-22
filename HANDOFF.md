@@ -1,58 +1,44 @@
 # Handoff
 
-## Current Branch
+## Metadata
+- **Current Branch**: `feature/ascii-scoreir-gate-refusal-diagnostics-v0.1`
+- **Base Branch**: `main`
+- **Current PR**: #8 (URL: https://github.com/tticom/score2gp/pull/8)
+- **Latest Commit**: `89229f710610c637888ad0d9a25c7433c55d188f`
+- **Commit Subject**: `feat(ascii-gate): implement enriched refusal diagnostics for ASCII ScoreIR gate v0.1`
+- **Working Tree Status**: Clean
+- **Tests & Checks Run**:
+  - `python -m pytest` -> 114 passed
+  - `python -m score2gp.cli export-schema --out schemas` -> passed
+  - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid
+  - `git diff --check` -> passed
+  - `git diff -- schemas` -> empty
+- **GitHub Check Status**: passing (`✓ Checks passing` on GitHub Actions runs)
+- **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL files, overlays, logs, or diagnostic outputs are tracked or staged.
 
-- Branch: `feature/ascii-scoreir-gate-refusal-diagnostics-v0.1`
-- Base: `main`
-- PR #1, PR #3, PR #4, PR #5, PR #6, and PR #7 have been merged into `main`.
-- This branch improves public refusal coverage and developer-facing diagnostics for `ascii-scoreir-gate.v0.1`.
-- Do not start symbol attachment on this branch.
-- Do not broaden ASCII-to-ScoreIR conversion beyond the tiny controlled public gate.
-
-## Current Capability
-
-- Drawn tab staff detection remains separate from ASCII-tab text detection.
-- `extract-tab` detects six-row ASCII-tab blocks using `ascii-tab.v0.1`.
-- ASCII-tab fret candidates include `ascii-timing.v0.1` raw evidence with row labels, character spans, column indexes, normalized positions, bar-separator columns, measure segment IDs, timing status, confidence, and warning codes.
-- `ascii-musicxml-alignment.v0.1` compares ASCII measure segment/column evidence with MusicXML onset positions in controlled public fixture pairs.
-- `ascii-scoreir-gate.v0.1` allows ScoreIR output only for one tiny public compatible fixture.
-- Durations and rests come from MusicXML. Strings and frets come from ASCII TabRaw.
-- The gate requires safe MusicXML timing, a compatible alignment sidecar, one-to-one candidate mappings, string/fret evidence, known MusicXML measure/onset evidence, monophonic notes, and no unsupported technique/symbol/chord/polyphony requirements.
-- Refusal diagnostics now distinguish missing sidecars, unsafe alignment statuses, missing candidate mappings, non-one-to-one mappings, missing string/fret evidence, unmapped measures/onsets, unsupported techniques, unsupported chord symbols, unsupported polyphony, MusicXML timing risk, missing MusicXML duration evidence, and cases outside the tiny public gate scope.
-- Failure diagnostics include gate status, primary and secondary reason codes, candidate counts, aligned candidate counts, rejected candidate counts, safe candidate IDs only, MusicXML timing safety, alignment sidecar presence/status, whether ScoreIR was written, and expected remediation.
-- The tiny public success fixture still writes valid ScoreIR. No new broad success path has been added.
-
-## Verification Expected
-
-Run before any commit, push, or review:
-
-- `python -m pytest`
-- `python -m score2gp.cli export-schema --out schemas`
-- `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json`
-- `git diff --check`
-- `git diff -- schemas`
-
-## Private Safety
-
-- Do not use private PDFs as regression fixtures.
-- Do not commit `work/` outputs.
-- Do not commit private PDFs, GP files, MXL files, private diagnostic HTML, private overlays, logs, or temporary smoke outputs.
-- The only intended tracked private-path item is `fixtures/private/.gitkeep`.
-- Public fixtures must stay synthetic and must not copy private titles, URLs, headings, fret sequences, or layout.
+## What Changed in the Task
+- Implemented and refined refusal reason codes for `ascii-scoreir-gate.v0.1` (e.g., `missing_ascii_alignment_sidecar`, `ascii_alignment_status_unavailable`, etc.).
+- Enriched failure diagnostics sidecars with primary/secondary reason codes, total candidate counts, aligned/rejected counts, safe candidate IDs, alignment status, timing safety, and clear remediation hints.
+- Added public synthetic refusal test coverage using fixture mutations.
+- Kept the tiny compatible monophonic ASCII fixture as the sole success path.
+- Persisted the handoff-update rule in `AGENTS.md` and updated `HANDOFF.md` accordingly.
 
 ## Known Limitations
-
-- No OCR.
-- No scanned-PDF support.
-- No ML layout recognition.
+- Refusal diagnostics are JSON-focused. Developer-facing HTML rendering for ASCII gate failures is a follow-up branch.
+- No OCR, scanned-PDF support, or ML layout recognition.
 - No arbitrary commercial score conversion.
-- ASCII character columns are not musical timing by themselves.
-- `ascii-musicxml-alignment.v0.1` proves only whether controlled ASCII column evidence is compatible with MusicXML onsets.
-- `ascii-scoreir-gate.v0.1` is proven only on a tiny synthetic monophonic fixture.
-- Refusal diagnostics are clearer, but they do not implement unsupported techniques, chord symbols, polyphony, broad layouts, or general ASCII conversion.
-- Chord symbols and technique text are preserved but not musically attached to ScoreIR events.
+- No symbol or technique attachment to ScoreIR events yet.
 - GPIF output remains minimal.
 
-## Next Recommended Task
+## Remaining Risks
+- None on this branch. Refusal is the deterministic and expected behavior for unsupported ASCII inputs.
 
-After this branch is reviewed, the next narrow task should add developer-facing HTML rendering for ASCII ScoreIR gate refusal diagnostics, then separately design symbol/technique attachment.
+## Explicit Scope Boundaries
+- **Do not** start HTML rendering on this branch.
+- **Do not** start symbol/technique attachment.
+- **Do not** broaden ASCII-to-ScoreIR conversion.
+- **Do not** use private PDFs as regression fixtures.
+- **Do not** commit `work/` outputs or private files.
+
+## Next Recommended Task
+- Add developer-facing HTML rendering for ASCII ScoreIR gate refusal diagnostics, then separately design symbol/technique attachment in a subsequent branch.
