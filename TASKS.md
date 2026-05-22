@@ -8,6 +8,7 @@
 
 ## Done
 
+- [x] Refresh private smoke blocker summary after voice cursor model (PR #21).
 - [x] Implement a deterministic MusicXML voice cursor/timeline model that correctly interprets backup/forward/chord/rest/voice cursor movement, separating same-voice overlaps (timing risk) from valid but unsupported cross-voice polyphony (polyphony gate refusal).
 - [x] Refresh private smoke blocker summary after MusicXML timing public fixtures v0.3 (PR #19).
 - [x] Add a third round of public synthetic MusicXML timing fixtures (v0.3) focused on remaining voice cursor alignment, backup/forward movement, and Audiveris-like timing risks, with refined preflight diagnostics and tests.
