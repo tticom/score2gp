@@ -3,18 +3,18 @@
 ## Metadata
 - **Current Branch**: `feature/musicxml-overlap-diagnostics-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: *Pending creation in Phase 12*
-- **Latest Local Commit**: `e35238fdf28945ff60086bb5f7b036573c0be850`
-- **Latest Pushed Commit**: `e35238fdf28945ff60086bb5f7b036573c0be850`
-- **Commit Subject**: `Merge pull request #13 from tticom/feature/private-e2e-diagnostic-smoke-v0.1`
-- **Working Tree Status**: Modified files (before handoff commit)
+- **Current PR**: [#14](https://github.com/tticom/score2gp/pull/14)
+- **Latest Local Commit**: `f131aa3b13d3223749b46dd7b24282ee6856e7fd`
+- **Latest Pushed Commit**: `f131aa3b13d3223749b46dd7b24282ee6856e7fd`
+- **Commit Subject**: `Improve MusicXML timing overlap diagnostics`
+- **Working Tree Status**: Clean (committed)
 - **Tests & Checks Run**:
   - `python -m pytest` -> 135 passed
   - `python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
   - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid
   - `git diff --check` -> passed cleanly
   - `git diff -- schemas` -> empty
-- **GitHub Check Status**: N/A (before push)
+- **GitHub Check Status**: Pending (Actions runner running)
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or diagnostic outputs are tracked or committed. All outputs under `work/` are ignored.
 
 ## What Changed in the Task
