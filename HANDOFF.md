@@ -2,24 +2,24 @@
 
 ## Current Branch
 
-- Branch: `feature/ascii-tab-timing-contract-v0.1`
+- Branch: `feature/ascii-musicxml-alignment-proof-v0.1`
 - Base: `main`
-- PR #1, PR #3, and PR #4 have been merged into `main`.
-- This branch defines public ASCII-tab timing/alignment evidence as a diagnostic contract.
+- PR #1, PR #3, PR #4, and PR #5 have been merged into `main`.
+- This branch defines a public ASCII/MusicXML alignment proof sidecar.
 - Do not start symbol attachment on this branch.
-- Do not start full ASCII timing alignment or ScoreIR conversion from ASCII tab on this branch.
+- Do not start full ASCII-to-ScoreIR conversion on this branch.
 
 ## Current Capability
 
 - Drawn tab staff detection remains separate from ASCII-tab text detection.
 - `extract-tab` detects six-row ASCII-tab blocks using `ascii-tab.v0.1`.
-- ASCII-tab fret candidates now include `ascii-timing.v0.1` raw evidence:
-  row labels, character spans, column indexes, normalized row positions, aligned bar-separator columns, measure segment IDs where available, timing status, confidence, and warning codes.
-- Complete ASCII rows without usable bar separators emit `ascii_tab_timing_unavailable` and `ascii_tab_measure_boundary_missing`.
-- Barred/equal-width public fixtures emit `partial_ascii_tab_timing`; this means measure/column evidence exists but musical onset/duration mapping is not safe.
-- Uneven or inconsistent ASCII timing fixtures emit `ambiguous_ascii_tab_timing`.
-- Malformed fewer-than-six-row ASCII blocks still emit `partial_ascii_tab_grouping`.
-- `build-ir` refuses ASCII-tab candidates before ScoreIR output for unavailable, partial, ambiguous, or incomplete ASCII timing evidence.
+- ASCII-tab fret candidates include `ascii-timing.v0.1` raw evidence with row labels, character spans, column indexes, normalized positions, bar-separator columns, measure segment IDs, timing status, confidence, and warning codes.
+- `ascii-musicxml-alignment.v0.1` compares ASCII measure segment/column evidence with MusicXML onset positions in controlled public fixture pairs.
+- Alignment status can be `compatible`, `partial`, `ambiguous`, `incompatible`, or `unavailable`.
+- Timing-risk MusicXML blocks alignment before matching.
+- The new CLI command is `python -m score2gp.cli align-ascii-musicxml --tab <tabraw.json> --musicxml <score.musicxml> --out <dir>`.
+- The command writes `ascii_musicxml_alignment.json`, `warnings.json` when warnings exist, and `alignment-diagnostics.html`.
+- `build-ir` still refuses ASCII-tab candidates by default. It refuses unavailable, partial, ambiguous, and incompatible sidecars, and it also refuses compatible sidecars with `ascii_scoreir_writing_not_implemented`.
 
 ## Verification Expected
 
@@ -46,10 +46,11 @@ Run before any commit, push, or review:
 - No ML layout recognition.
 - No arbitrary commercial score conversion.
 - ASCII character columns are not musical timing by themselves.
-- `ascii-timing.v0.1` provides alignment evidence only; it does not infer durations.
+- `ascii-musicxml-alignment.v0.1` proves only whether controlled ASCII column evidence is compatible with MusicXML onsets.
+- The alignment proof does not infer durations, attach techniques, or authorize ScoreIR writing.
 - Chord symbols and technique text are preserved but not musically attached to ScoreIR events.
 - GPIF output remains minimal.
 
 ## Next Recommended Task
 
-After this branch is reviewed, the next narrow task should design a public MusicXML-to-ASCII alignment proof path that can decide whether `ascii-timing.v0.1` evidence is compatible with actual musical onsets. Keep symbol attachment separate until timing alignment is trustworthy.
+After this branch is reviewed, the next narrow task should design the explicit public ScoreIR-writing gate for ASCII TabRaw, starting with a tiny compatible fixture and keeping conservative refusal for every unsupported timing, technique, and symbol case.
