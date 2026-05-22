@@ -192,10 +192,16 @@ class BuildIrDiagnostics(BaseModel):
     extraction_quality_flags: list[str] = Field(default_factory=list)
     ascii_scoreir_gate_status: Literal["not-applicable", "allowed", "refused"] = "not-applicable"
     ascii_scoreir_gate_reason_codes: list[str] = Field(default_factory=list)
+    ascii_scoreir_gate_primary_reason_code: str | None = None
     ascii_scoreir_gate_candidate_count: int = 0
     ascii_scoreir_gate_aligned_candidate_count: int = 0
+    ascii_scoreir_gate_rejected_candidate_count: int = 0
     ascii_scoreir_gate_output_event_count: int = 0
     ascii_scoreir_gate_scoreir_written: bool = False
+    ascii_scoreir_gate_alignment_sidecar_present: bool = False
+    ascii_scoreir_gate_alignment_status: str | None = None
+    ascii_scoreir_gate_musicxml_timing_safe: bool | None = None
+    ascii_scoreir_gate_expected_next_remediation: str | None = None
     per_system: list[SystemAlignmentDiagnostics] = Field(default_factory=list)
     per_bar: list[BarAlignmentDiagnostics] = Field(default_factory=list)
     warnings: list[dict[str, object]] = Field(default_factory=list)
@@ -245,6 +251,16 @@ def build_ir_with_diagnostics_from_files(
             )
         tabraw = gate.tabraw or tabraw
         ascii_gate_details = gate.details
+    else:
+        gate = _ascii_scoreir_missing_sidecar_gate(musicxml, tabraw)
+        if gate is not None:
+            raise BuildIrInputRiskError(
+                category=gate.category,
+                stage="ascii-scoreir-gate",
+                message=gate.message,
+                timing_issues=gate.timing_issues,
+                details=gate.details,
+            )
     score, diagnostics = build_ir_with_diagnostics_from_imports(musicxml, tabraw, ascii_gate_details=ascii_gate_details)
     if out_path is not None:
         out = Path(out_path)
@@ -271,24 +287,21 @@ def _ascii_scoreir_gate(
     alignment = AsciiMusicXmlAlignment.model_validate_json(Path(ascii_alignment_path).read_text(encoding="utf-8"))
     timing_issues = analyze_musicxml_timing(musicxml)
     fatal_timing_issues = [issue for issue in timing_issues if issue.severity == "error"]
-    playable = _playable_ascii_candidates(tabraw)
+    playable = _ascii_gate_candidates(tabraw)
     mappings_by_candidate = {mapping.candidate_id: mapping for mapping in alignment.candidate_mappings}
     compatible_mappings = [mapping for mapping in alignment.candidate_mappings if mapping.result == "compatible"]
-    details: dict[str, object] = {
-        "gate_version": ASCII_SCOREIR_GATE_VERSION,
-        "ascii_scoreir_gate_status": "refused",
-        "schema_version": alignment.schema_version,
-        "alignment_status": alignment.overall_status,
-        "reason_codes": [],
-        "candidate_count": len(playable),
-        "aligned_candidate_count": len(compatible_mappings),
-        "output_event_count": 0,
-        "scoreir_written": False,
-        "alignment_path": str(ascii_alignment_path),
-    }
+    details = _ascii_scoreir_gate_details(
+        candidates=playable,
+        aligned_candidate_count=len(compatible_mappings),
+        alignment_sidecar_present=True,
+        alignment_status=alignment.overall_status,
+        musicxml_timing_safe=not fatal_timing_issues,
+        schema_version=alignment.schema_version,
+        alignment_path=str(ascii_alignment_path),
+    )
 
     def refused(category: str, message: str, reason_codes: list[str]) -> AsciiScoreIrGateDecision:
-        details["reason_codes"] = reason_codes
+        _apply_ascii_gate_refusal_details(details, reason_codes)
         return AsciiScoreIrGateDecision(
             allowed=False,
             category=category,
@@ -299,9 +312,9 @@ def _ascii_scoreir_gate(
 
     if fatal_timing_issues or any(warning.code == "musicxml_timing_risk" for warning in alignment.warnings):
         return refused(
-            "musicxml_timing_risk",
+            "ascii_musicxml_timing_risk",
             "MusicXML timing risk prevents ASCII ScoreIR output.",
-            ["musicxml_timing_risk"],
+            ["ascii_musicxml_timing_risk"],
         )
     if alignment.schema_version != ALIGNMENT_SCHEMA_VERSION:
         return refused(
@@ -311,10 +324,11 @@ def _ascii_scoreir_gate(
         )
     if alignment.overall_status != "compatible":
         status = alignment.overall_status
+        category = _ascii_alignment_status_reason(status)
         return refused(
-            f"ascii_musicxml_alignment_{status}",
+            category,
             f"ASCII/MusicXML alignment status is {status}; build-ir will not write ScoreIR.",
-            [f"ascii_musicxml_alignment_{status}"],
+            [category],
         )
 
     reason_codes = _ascii_scoreir_gate_reason_codes(musicxml, tabraw, playable, mappings_by_candidate)
@@ -378,8 +392,12 @@ def _ascii_scoreir_gate(
         {
             "ascii_scoreir_gate_status": "allowed",
             "reason_codes": ["ascii_scoreir_gate_allowed"],
+            "primary_reason_code": "ascii_scoreir_gate_allowed",
+            "secondary_reason_codes": [],
+            "rejected_candidate_count": 0,
             "output_event_count": len(playable),
             "scoreir_written": True,
+            "expected_next_remediation": "none",
         }
     )
     return AsciiScoreIrGateDecision(
@@ -392,12 +410,59 @@ def _ascii_scoreir_gate(
     )
 
 
-def _playable_ascii_candidates(tabraw: TabRaw) -> list[TabCandidate]:
+def _ascii_scoreir_missing_sidecar_gate(
+    musicxml: MusicXmlImport,
+    tabraw: TabRaw,
+) -> AsciiScoreIrGateDecision | None:
+    candidates = _ascii_gate_candidates(tabraw)
+    if not candidates:
+        return None
+    timing_issues = analyze_musicxml_timing(musicxml)
+    fatal_timing_issues = [issue for issue in timing_issues if issue.severity == "error"]
+    if fatal_timing_issues:
+        reason_codes = ["ascii_musicxml_timing_risk"]
+        category = "ascii_musicxml_timing_risk"
+        message = "MusicXML timing risk prevents ASCII ScoreIR output."
+    else:
+        reason_codes = ["missing_ascii_alignment_sidecar"]
+        category = "missing_ascii_alignment_sidecar"
+        message = (
+            "ASCII TabRaw candidates require a compatible ascii-musicxml-alignment.v0.1 sidecar; "
+            "build-ir will not write ScoreIR from ASCII text without explicit alignment evidence."
+        )
+    details = _ascii_scoreir_gate_details(
+        candidates=candidates,
+        aligned_candidate_count=0,
+        alignment_sidecar_present=False,
+        alignment_status=None,
+        musicxml_timing_safe=not fatal_timing_issues,
+    )
+    warning_codes = [str(warning.get("code")) for warning in tabraw.warnings if warning.get("code")]
+    details.update(
+        {
+            "tabraw_warning_codes": warning_codes,
+            "ascii_timing_status_counts": _ascii_timing_status_counts(candidates),
+            "grouping_status": "partial_ascii_tab_grouping"
+            if "partial_ascii_tab_grouping" in warning_codes
+            else "ascii_grouped",
+        }
+    )
+    _apply_ascii_gate_refusal_details(details, reason_codes)
+    return AsciiScoreIrGateDecision(
+        allowed=False,
+        category=category,
+        message=message,
+        details=details,
+        timing_issues=timing_issues,
+    )
+
+
+def _ascii_gate_candidates(tabraw: TabRaw) -> list[TabCandidate]:
     return [
         candidate
         for candidate in tabraw.candidates
-        if candidate.parsed_fret is not None
-        and candidate.raw.get("parser_version") == "ascii-tab.v0.1"
+        if candidate.raw.get("parser_version") == "ascii-tab.v0.1"
+        and (candidate.kind == "fret" or candidate.parsed_fret is not None)
     ]
 
 
@@ -409,76 +474,172 @@ def _ascii_scoreir_gate_reason_codes(
 ) -> list[str]:
     reason_codes: list[str] = []
     if not playable:
-        reason_codes.append("ascii_scoreir_gate_no_playable_candidates")
+        reason_codes.append("ascii_outside_tiny_gate_scope")
     if any(candidate.parsed_fret is not None and candidate.raw.get("parser_version") != "ascii-tab.v0.1" for candidate in tabraw.candidates):
-        reason_codes.append("ascii_scoreir_gate_non_ascii_playable_candidate")
-    if any(candidate.parsed_fret is None and candidate.raw.get("parser_version") == "ascii-tab.v0.1" for candidate in tabraw.candidates):
-        reason_codes.append("ascii_scoreir_gate_unsupported_technique")
+        reason_codes.append("ascii_outside_tiny_gate_scope")
+    for candidate in tabraw.candidates:
+        if candidate.raw.get("parser_version") != "ascii-tab.v0.1" or candidate.kind == "fret":
+            continue
+        if candidate.kind == "chord-symbol":
+            reason_codes.append("ascii_unsupported_chord_symbol")
+        elif candidate.kind == "technique-text" or candidate.raw.get("technique_context"):
+            reason_codes.append("ascii_unsupported_technique_required")
 
     part = musicxml.parts[0] if musicxml.parts else None
     if part is None:
-        reason_codes.append("ascii_scoreir_gate_musicxml_part_missing")
+        reason_codes.append("ascii_outside_tiny_gate_scope")
         return _dedupe(reason_codes)
     if len(musicxml.parts) != 1:
-        reason_codes.append("ascii_scoreir_gate_multiple_parts")
+        reason_codes.append("ascii_outside_tiny_gate_scope")
     if len(part.measures) > 2:
-        reason_codes.append("ascii_scoreir_gate_too_many_measures")
+        reason_codes.append("ascii_outside_tiny_gate_scope")
     if any(measure.harmonies for measure in part.measures):
-        reason_codes.append("ascii_scoreir_gate_harmony_unsupported")
+        reason_codes.append("ascii_unsupported_chord_symbol")
 
     pitched_notes: list[MusicXmlNote] = []
     for measure in part.measures:
         for group in _note_groups(measure.notes):
             first = group[0]
             if first.grace:
-                reason_codes.append("ascii_scoreir_gate_grace_unsupported")
+                reason_codes.append("ascii_outside_tiny_gate_scope")
             if len([note for note in group if not note.is_rest and note.pitch is not None]) > 1 or any(note.chord for note in group):
-                reason_codes.append("ascii_scoreir_gate_unsupported_polyphony")
+                reason_codes.append("ascii_polyphony_not_supported")
             if first.voice != 1:
-                reason_codes.append("ascii_scoreir_gate_complex_voice_unsupported")
+                reason_codes.append("ascii_polyphony_not_supported")
             if first.tuplet is not None or any(note.tuplet is not None for note in group):
-                reason_codes.append("ascii_scoreir_gate_tuplet_unsupported")
+                reason_codes.append("ascii_outside_tiny_gate_scope")
+            if first.duration_divisions <= 0 and (not first.is_rest or first.pitch is not None):
+                reason_codes.append("ascii_duration_source_missing")
             for note in group:
                 if note.techniques or note.ties:
-                    reason_codes.append("ascii_scoreir_gate_unsupported_technique")
+                    reason_codes.append("ascii_unsupported_technique_required")
                 if not note.is_rest and note.pitch is not None and not note.grace:
+                    if note.duration_divisions <= 0:
+                        reason_codes.append("ascii_duration_source_missing")
                     pitched_notes.append(note)
 
     if len(playable) != len(pitched_notes):
-        reason_codes.append("ascii_scoreir_gate_candidate_event_count_mismatch")
+        reason_codes.append("ascii_alignment_not_one_to_one")
 
     mapped_note_ids: list[str] = []
     for candidate in playable:
         mapping = mappings_by_candidate.get(candidate.id)
         if mapping is None:
-            reason_codes.append("ascii_scoreir_gate_candidate_missing_alignment")
+            reason_codes.append("ascii_alignment_candidate_missing")
             continue
         result = getattr(mapping, "result", None)
         if result != "compatible":
-            reason_codes.append("ascii_scoreir_gate_candidate_not_compatible")
+            reason_codes.append(_ascii_alignment_status_reason(str(result or "unavailable")))
         note_ids = list(getattr(mapping, "nearest_musicxml_note_ids", []) or [])
         if len(note_ids) != 1:
-            reason_codes.append("ascii_scoreir_gate_candidate_not_monophonic")
+            reason_codes.append("ascii_alignment_not_one_to_one")
         mapped_note_ids.extend(note_ids)
-        if getattr(mapping, "musicxml_measure_index", None) is None or getattr(mapping, "nearest_musicxml_onset_ticks", None) is None:
-            reason_codes.append("ascii_scoreir_gate_candidate_missing_measure_or_onset")
+        if getattr(mapping, "musicxml_measure_index", None) is None:
+            reason_codes.append("ascii_candidate_unmapped_measure")
+        if getattr(mapping, "nearest_musicxml_onset_ticks", None) is None:
+            reason_codes.append("ascii_candidate_unmapped_onset")
         if candidate.string is None:
-            reason_codes.append("ascii_scoreir_gate_candidate_missing_string")
+            reason_codes.append("ascii_candidate_missing_string")
         if candidate.parsed_fret is None:
-            reason_codes.append("ascii_scoreir_gate_candidate_missing_fret")
+            reason_codes.append("ascii_candidate_missing_fret")
         if candidate.raw.get("timing_parser_version") != "ascii-timing.v0.1":
-            reason_codes.append("ascii_scoreir_gate_ascii_timing_missing")
+            reason_codes.append("ascii_outside_tiny_gate_scope")
         if candidate.raw.get("ascii_measure_segment_id") is None:
-            reason_codes.append("ascii_scoreir_gate_measure_segment_missing")
+            reason_codes.append("ascii_candidate_unmapped_measure")
         if candidate.raw.get("ascii_timing_status") not in {"timing_partial", "timing_safe"}:
-            reason_codes.append("ascii_scoreir_gate_ascii_timing_unavailable")
+            reason_codes.append("ascii_alignment_status_unavailable")
         if any(code in (candidate.raw.get("ascii_timing_warnings") or []) for code in {"ambiguous_ascii_tab_timing", "unsupported_ascii_tab_rhythm"}):
-            reason_codes.append("ascii_scoreir_gate_ambiguous_or_unsupported_timing")
+            reason_codes.append("ascii_alignment_status_ambiguous")
 
     pitched_note_ids = {note.id for note in pitched_notes}
     if set(mapped_note_ids) != pitched_note_ids or len(mapped_note_ids) != len(set(mapped_note_ids)):
-        reason_codes.append("ascii_scoreir_gate_musicxml_note_mapping_mismatch")
+        reason_codes.append("ascii_alignment_not_one_to_one")
     return _dedupe(reason_codes)
+
+
+def _ascii_scoreir_gate_details(
+    *,
+    candidates: list[TabCandidate],
+    aligned_candidate_count: int,
+    alignment_sidecar_present: bool,
+    alignment_status: str | None,
+    musicxml_timing_safe: bool,
+    schema_version: str | None = None,
+    alignment_path: str | None = None,
+) -> dict[str, object]:
+    details: dict[str, object] = {
+        "gate_version": ASCII_SCOREIR_GATE_VERSION,
+        "ascii_scoreir_gate_status": "refused",
+        "schema_version": schema_version,
+        "alignment_status": alignment_status,
+        "alignment_sidecar_present": alignment_sidecar_present,
+        "musicxml_timing_safe": musicxml_timing_safe,
+        "reason_codes": [],
+        "primary_reason_code": None,
+        "secondary_reason_codes": [],
+        "candidate_count": len(candidates),
+        "aligned_candidate_count": aligned_candidate_count,
+        "rejected_candidate_count": len(candidates),
+        "sample_candidate_ids": [candidate.id for candidate in candidates[:5]],
+        "output_event_count": 0,
+        "scoreir_written": False,
+        "expected_next_remediation": None,
+    }
+    if alignment_path is not None:
+        details["alignment_path"] = alignment_path
+    return details
+
+
+def _apply_ascii_gate_refusal_details(details: dict[str, object], reason_codes: list[str]) -> None:
+    deduped = _dedupe(reason_codes)
+    primary = deduped[0] if deduped else "ascii_outside_tiny_gate_scope"
+    candidate_count = _int_detail(details, "candidate_count")
+    details.update(
+        {
+            "ascii_scoreir_gate_status": "refused",
+            "reason_codes": deduped or [primary],
+            "primary_reason_code": primary,
+            "secondary_reason_codes": deduped[1:],
+            "rejected_candidate_count": candidate_count,
+            "output_event_count": 0,
+            "scoreir_written": False,
+            "expected_next_remediation": _ascii_gate_remediation(primary),
+        }
+    )
+
+
+def _ascii_alignment_status_reason(status: str) -> str:
+    if status in {"unavailable", "partial", "ambiguous", "incompatible"}:
+        return f"ascii_alignment_status_{status}"
+    return "ascii_outside_tiny_gate_scope"
+
+
+def _ascii_gate_remediation(reason_code: str) -> str:
+    mapping = {
+        "missing_ascii_alignment_sidecar": "provide compatible ascii-musicxml-alignment.v0.1 evidence",
+        "ascii_alignment_status_unavailable": "provide ASCII timing evidence with usable measure segmentation",
+        "ascii_alignment_status_partial": "resolve partial ASCII/MusicXML alignment before ScoreIR writing",
+        "ascii_alignment_status_ambiguous": "resolve ambiguous ASCII/MusicXML mapping before ScoreIR writing",
+        "ascii_alignment_status_incompatible": "fix the public fixture pair so ASCII candidates and MusicXML onsets agree",
+        "ascii_alignment_candidate_missing": "ensure every output candidate appears in the alignment sidecar",
+        "ascii_alignment_not_one_to_one": "use a tiny monophonic fixture with one candidate per MusicXML note",
+        "ascii_candidate_missing_string": "provide explicit ASCII-derived string evidence for every candidate",
+        "ascii_candidate_missing_fret": "provide explicit ASCII-derived fret evidence for every candidate",
+        "ascii_candidate_unmapped_measure": "map every candidate to a known MusicXML measure",
+        "ascii_candidate_unmapped_onset": "map every candidate to a known MusicXML onset",
+        "ascii_unsupported_technique_required": "remove unsupported technique requirements or implement a future technique phase",
+        "ascii_unsupported_chord_symbol": "remove chord/symbol requirements or implement a future symbol phase",
+        "ascii_polyphony_not_supported": "use the supported tiny monophonic fixture shape",
+        "ascii_musicxml_timing_risk": "fix MusicXML timing risk before attempting ASCII ScoreIR writing",
+        "ascii_duration_source_missing": "provide MusicXML durations for every output event",
+        "ascii_outside_tiny_gate_scope": "this case is intentionally unsupported by ascii-scoreir-gate.v0.1",
+    }
+    return mapping.get(reason_code, "this case is intentionally unsupported by ascii-scoreir-gate.v0.1")
+
+
+def _int_detail(details: dict[str, object], key: str) -> int:
+    value = details.get(key)
+    return value if isinstance(value, int) else 0
 
 
 def _dedupe(values: list[str]) -> list[str]:
@@ -1136,10 +1297,16 @@ def _build_diagnostics(
         extraction_quality_flags=_tabraw_extraction_quality_flags(tabraw) + _alignment_quality_flags(per_bar),
         ascii_scoreir_gate_status=_ascii_gate_detail_string(ascii_gate_details, "ascii_scoreir_gate_status", "not-applicable"),
         ascii_scoreir_gate_reason_codes=_ascii_gate_reason_codes(ascii_gate_details),
+        ascii_scoreir_gate_primary_reason_code=_ascii_gate_detail_optional_string(ascii_gate_details, "primary_reason_code"),
         ascii_scoreir_gate_candidate_count=_ascii_gate_detail_int(ascii_gate_details, "candidate_count"),
         ascii_scoreir_gate_aligned_candidate_count=_ascii_gate_detail_int(ascii_gate_details, "aligned_candidate_count"),
+        ascii_scoreir_gate_rejected_candidate_count=_ascii_gate_detail_int(ascii_gate_details, "rejected_candidate_count"),
         ascii_scoreir_gate_output_event_count=sum(len(bar.events) for bar in score.bars) if ascii_gate_details is not None else 0,
         ascii_scoreir_gate_scoreir_written=bool(ascii_gate_details.get("scoreir_written")) if ascii_gate_details else False,
+        ascii_scoreir_gate_alignment_sidecar_present=_ascii_gate_detail_bool(ascii_gate_details, "alignment_sidecar_present"),
+        ascii_scoreir_gate_alignment_status=_ascii_gate_detail_optional_string(ascii_gate_details, "alignment_status"),
+        ascii_scoreir_gate_musicxml_timing_safe=_ascii_gate_detail_optional_bool(ascii_gate_details, "musicxml_timing_safe"),
+        ascii_scoreir_gate_expected_next_remediation=_ascii_gate_detail_optional_string(ascii_gate_details, "expected_next_remediation"),
         per_system=_system_diagnostics(tabraw, candidate_pools),
         per_bar=per_bar,
         warnings=[warning.model_dump(mode="json", exclude_none=True) for warning in warnings],
@@ -1158,6 +1325,27 @@ def _ascii_gate_detail_int(details: dict[str, object] | None, key: str) -> int:
         return 0
     value = details.get(key)
     return value if isinstance(value, int) else 0
+
+
+def _ascii_gate_detail_bool(details: dict[str, object] | None, key: str) -> bool:
+    if details is None:
+        return False
+    value = details.get(key)
+    return value if isinstance(value, bool) else False
+
+
+def _ascii_gate_detail_optional_bool(details: dict[str, object] | None, key: str) -> bool | None:
+    if details is None:
+        return None
+    value = details.get(key)
+    return value if isinstance(value, bool) else None
+
+
+def _ascii_gate_detail_optional_string(details: dict[str, object] | None, key: str) -> str | None:
+    if details is None:
+        return None
+    value = details.get(key)
+    return value if isinstance(value, str) else None
 
 
 def _ascii_gate_reason_codes(details: dict[str, object] | None) -> list[str]:

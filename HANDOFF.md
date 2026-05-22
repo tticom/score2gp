@@ -2,10 +2,10 @@
 
 ## Current Branch
 
-- Branch: `feature/ascii-scoreir-writing-gate-v0.1`
+- Branch: `feature/ascii-scoreir-gate-refusal-diagnostics-v0.1`
 - Base: `main`
-- PR #1, PR #3, PR #4, PR #5, and PR #6 have been merged into `main`.
-- This branch defines the explicit public ASCII TabRaw to ScoreIR writing gate.
+- PR #1, PR #3, PR #4, PR #5, PR #6, and PR #7 have been merged into `main`.
+- This branch improves public refusal coverage and developer-facing diagnostics for `ascii-scoreir-gate.v0.1`.
 - Do not start symbol attachment on this branch.
 - Do not broaden ASCII-to-ScoreIR conversion beyond the tiny controlled public gate.
 
@@ -18,8 +18,9 @@
 - `ascii-scoreir-gate.v0.1` allows ScoreIR output only for one tiny public compatible fixture.
 - Durations and rests come from MusicXML. Strings and frets come from ASCII TabRaw.
 - The gate requires safe MusicXML timing, a compatible alignment sidecar, one-to-one candidate mappings, string/fret evidence, known MusicXML measure/onset evidence, monophonic notes, and no unsupported technique/symbol/chord/polyphony requirements.
-- Missing sidecars, unavailable/partial/ambiguous/incompatible sidecars, broad compatible examples outside the tiny gate, unsupported techniques, missing string/fret evidence, and MusicXML timing risk all refuse before ScoreIR output.
-- Build diagnostics now include `ascii_scoreir_gate_status`, reason codes, candidate counts, aligned candidate counts, output event count, and whether ScoreIR was written.
+- Refusal diagnostics now distinguish missing sidecars, unsafe alignment statuses, missing candidate mappings, non-one-to-one mappings, missing string/fret evidence, unmapped measures/onsets, unsupported techniques, unsupported chord symbols, unsupported polyphony, MusicXML timing risk, missing MusicXML duration evidence, and cases outside the tiny public gate scope.
+- Failure diagnostics include gate status, primary and secondary reason codes, candidate counts, aligned candidate counts, rejected candidate counts, safe candidate IDs only, MusicXML timing safety, alignment sidecar presence/status, whether ScoreIR was written, and expected remediation.
+- The tiny public success fixture still writes valid ScoreIR. No new broad success path has been added.
 
 ## Verification Expected
 
@@ -48,10 +49,10 @@ Run before any commit, push, or review:
 - ASCII character columns are not musical timing by themselves.
 - `ascii-musicxml-alignment.v0.1` proves only whether controlled ASCII column evidence is compatible with MusicXML onsets.
 - `ascii-scoreir-gate.v0.1` is proven only on a tiny synthetic monophonic fixture.
-- The gate does not infer durations from ASCII columns, attach techniques, support chord symbols, support polyphony, or broaden GPIF output.
+- Refusal diagnostics are clearer, but they do not implement unsupported techniques, chord symbols, polyphony, broad layouts, or general ASCII conversion.
 - Chord symbols and technique text are preserved but not musically attached to ScoreIR events.
 - GPIF output remains minimal.
 
 ## Next Recommended Task
 
-After this branch is reviewed, the next narrow task should add more public refusal fixtures and human-facing diagnostics for ASCII gate edge cases before any private smoke attempt.
+After this branch is reviewed, the next narrow task should add developer-facing HTML rendering for ASCII ScoreIR gate refusal diagnostics, then separately design symbol/technique attachment.

@@ -4,8 +4,8 @@
 
 - [ ] Add developer-facing HTML styling and compact thumbnails for grouping diagnostics.
 - [ ] Add public reproductions for more Audiveris timing patterns before another private run.
-- [ ] Add more public refusal fixtures for ASCII ScoreIR gate edge cases before any private smoke attempt.
 - [ ] Attach PDF-derived chord symbols and technique text to ScoreIR events once timing calibration exists.
+- [ ] Add developer-facing HTML rendering for ASCII ScoreIR gate refusal diagnostics.
 - [ ] Add HTML conversion report styling and unsupported-technique summaries.
 - [ ] Add a public partial-to-recovery design note before attempting any automatic grouping repair.
 
@@ -50,3 +50,4 @@
 - [x] `build-ir` refusal boundary for ASCII alignment sidecars, including compatible sidecars until ScoreIR writing is explicitly designed.
 - [x] Tiny public `ascii-scoreir-gate.v0.1` success path for ASCII TabRaw plus compatible MusicXML alignment.
 - [x] Conservative ASCII ScoreIR gate refusal diagnostics for missing sidecars, unsafe sidecars, unsupported techniques, missing string/fret evidence, broad polyphony, and MusicXML timing risk.
+- [x] Public ASCII ScoreIR gate refusal taxonomy for missing mappings, non-one-to-one mappings, unsupported chord symbols, missing measure/onset evidence, missing MusicXML duration source, and failure diagnostics sidecars.

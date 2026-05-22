@@ -33,6 +33,7 @@
 - Refuse overfull MusicXML before writing invalid ScoreIR.
 - Parse native Audiveris `.mxl` packages through the main MusicXML importer without unpacking private content to disk.
 - Refuse PDF-derived TabRaw with playable candidates but missing system/string/bar grouping before writing ScoreIR.
+- Define public ASCII-tab diagnostics, timing evidence, MusicXML alignment proof, a tiny ScoreIR writing gate, and explicit refusal diagnostics before any private ASCII-tab conversion attempt.
 
 ## Milestone 4: GPIF coverage
 
