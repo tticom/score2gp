@@ -33,7 +33,7 @@ class MusicXmlTimingIssue(BaseModel):
     measure_number: str
     voice: int | None = Field(default=None, ge=1, le=8)
     musicxml_note_id: str | None = None
-    expected_duration_divisions: int | None = Field(default=None, ge=0)
+    expected_duration_divisions: float | None = Field(default=None, ge=0.0)
     onset_divisions: int | None = Field(default=None, ge=0)
     duration_divisions: int | None = Field(default=None, ge=0)
     end_divisions: int | None = Field(default=None, ge=0)
@@ -42,6 +42,13 @@ class MusicXmlTimingIssue(BaseModel):
     backup_forward_count: int | None = None
     voice_extents: dict[str, int] | None = None
     voice_durations: dict[str, int] | None = None
+    timing_calibration_possible: bool = False
+    timing_repair_attempted: bool = False
+    overfull_divisions: float | None = None
+    overlap_count: int | None = None
+    affected_event_ids: list[str] = Field(default_factory=list)
+    primary_reason: str | None = None
+    secondary_reasons: list[str] = Field(default_factory=list)
 
 
 class MusicXmlVoiceCursorDiagnostics(BaseModel):
@@ -51,8 +58,8 @@ class MusicXmlVoiceCursorDiagnostics(BaseModel):
     measure_index: int
     measure_number: str
     voice_id: int | None = None
-    expected_measure_ticks: int | None = None
-    expected_measure_divisions: int | None = None
+    expected_measure_ticks: float | None = None
+    expected_measure_divisions: float | None = None
     voice_cursor_starts: dict[str, int] = Field(default_factory=dict)
     voice_cursor_ends: dict[str, int] = Field(default_factory=dict)
     note_event_count: int = 0
@@ -66,6 +73,10 @@ class MusicXmlVoiceCursorDiagnostics(BaseModel):
     measure_underfull: bool = False
     primary_reason: str
     secondary_reasons: list[str] = Field(default_factory=list)
+    timing_calibration_possible: bool = False
+    timing_repair_attempted: bool = False
+    overfull_divisions: float | None = None
+    affected_event_ids: list[str] = Field(default_factory=list)
 
 
 class MusicXmlVoiceCursorModel:
@@ -75,7 +86,7 @@ class MusicXmlVoiceCursorModel:
         measure_index: int,
         measure_number: str,
         divisions: int,
-        expected_duration_divisions: int | None,
+        expected_duration_divisions: float | None,
     ):
         self.part_id = part_id
         self.measure_index = measure_index
@@ -142,7 +153,15 @@ class MusicXmlVoiceCursorModel:
                     prev_cursor = self.voice_cursors.get(voice, 0)
                     if onset < prev_cursor and duration > 0:
                         self.same_voice_overlap_count += 1
-                        if is_rest:
+                        has_rest_overlap = is_rest
+                        if not has_rest_overlap:
+                            for ev in self.events:
+                                ev_voice, ev_onset, ev_end, ev_is_rest, _ = ev
+                                if ev_voice == voice and ev_is_rest:
+                                    if max(onset, ev_onset) < min(onset + duration, ev_end):
+                                        has_rest_overlap = True
+                                        break
+                        if has_rest_overlap:
                             if "musicxml_rest_overlap_same_voice" not in self.secondary_reasons:
                                 self.secondary_reasons.append("musicxml_rest_overlap_same_voice")
                         else:
@@ -189,6 +208,8 @@ class MusicXmlVoiceCursorModel:
                             self.secondary_reasons.append("musicxml_cross_voice_overlap_unsupported")
 
         # Check overfull/underfull
+        overfull_divisions = None
+        affected_event_ids = []
         if self.expected_duration_divisions is not None:
             overfull_voices = [v for v, end in self.voice_cursors.items() if end > self.expected_duration_divisions]
             if overfull_voices:
@@ -198,16 +219,82 @@ class MusicXmlVoiceCursorModel:
 
             if self.voice_cursors:
                 longest_voice_end = max(self.voice_cursors.values())
+                if longest_voice_end > self.expected_duration_divisions:
+                    overfull_divisions = float(longest_voice_end - self.expected_duration_divisions)
                 if 0 < longest_voice_end < self.expected_duration_divisions:
                     self.measure_underfull = True
                     if "musicxml_voice_duration_underfull" not in self.secondary_reasons:
                         self.secondary_reasons.append("musicxml_voice_duration_underfull")
+
+        # Determine affected event IDs
+        if self.expected_duration_divisions is not None:
+            for voice, onset, end, is_rest, note_id in self.events:
+                if end > self.expected_duration_divisions:
+                    if note_id not in affected_event_ids:
+                        affected_event_ids.append(note_id)
+        for i in range(len(self.events)):
+            v_a, s_a, e_a, r_a, id_a = self.events[i]
+            for j in range(i + 1, len(self.events)):
+                v_b, s_b, e_b, r_b, id_b = self.events[j]
+                if v_a == v_b and max(s_a, s_b) < min(e_a, e_b) and (s_a != s_b or (not r_a and not r_b)):
+                    if id_a not in affected_event_ids:
+                        affected_event_ids.append(id_a)
+                    if id_b not in affected_event_ids:
+                        affected_event_ids.append(id_b)
+
+        # Check accumulated subdivision / rounding overflow
+        if self.measure_overfull and overfull_divisions is not None:
+            # If the overflow is very small relative to the expected duration divisions or division count,
+            # it's likely an accumulated rounding error. Let's say <= 5 divisions or <= divisions // 100
+            if overfull_divisions <= max(5.0, self.divisions / 100.0):
+                if "musicxml_accumulated_duration_overflow" not in self.secondary_reasons:
+                    self.secondary_reasons.append("musicxml_accumulated_duration_overflow")
+
+        # Check invalid duration grid
+        # E.g., expected duration is not a clean integer divisions
+        if self.expected_duration_divisions is not None:
+            if int(self.expected_duration_divisions) != self.expected_duration_divisions:
+                if "musicxml_invalid_duration_grid" not in self.secondary_reasons:
+                    self.secondary_reasons.append("musicxml_invalid_duration_grid")
+
+        # Populate timing calibration possible
+        timing_calibration_possible = False
+        if (self.measure_overfull or "musicxml_accumulated_duration_overflow" in self.secondary_reasons) and overfull_divisions is not None:
+            # Calibration could be considered only when:
+            # - error is small (e.g. <= self.divisions, which is 1 quarter-note beat)
+            # - all events remain ordered (no backup before start, etc.)
+            # - no overlaps occur (same voice or cross voice)
+            if overfull_divisions <= self.divisions:
+                if self.same_voice_overlap_count == 0 and self.cross_voice_overlap_count == 0:
+                    if "musicxml_backup_cursor_before_measure_start" not in self.secondary_reasons:
+                        timing_calibration_possible = True
 
         if len(self.voice_cursors) > 1:
             ends = list(self.voice_cursors.values())
             if any(e != ends[0] for e in ends):
                 if "musicxml_measure_duration_inconsistent_across_voices" not in self.secondary_reasons:
                     self.secondary_reasons.append("musicxml_measure_duration_inconsistent_across_voices")
+
+        # Map candidate codes to secondary reasons
+        if self.measure_overfull:
+            if "musicxml_same_voice_measure_overfull" not in self.secondary_reasons:
+                self.secondary_reasons.append("musicxml_same_voice_measure_overfull")
+            # If notes extend past the end
+            if "musicxml_event_extends_past_measure" not in self.secondary_reasons:
+                self.secondary_reasons.append("musicxml_event_extends_past_measure")
+
+        if self.same_voice_overlap_count > 0:
+            if "musicxml_same_voice_event_overlap" not in self.secondary_reasons:
+                self.secondary_reasons.append("musicxml_same_voice_event_overlap")
+            if "musicxml_rest_overlap_same_voice" in self.secondary_reasons:
+                if "musicxml_same_voice_rest_note_overlap" not in self.secondary_reasons:
+                    self.secondary_reasons.append("musicxml_same_voice_rest_note_overlap")
+
+        if self.measure_overfull or self.same_voice_overlap_count > 0 or self.cross_voice_overlap_count > 0 or "musicxml_invalid_duration_grid" in self.secondary_reasons:
+            if "musicxml_timing_repair_not_attempted" not in self.secondary_reasons:
+                self.secondary_reasons.append("musicxml_timing_repair_not_attempted")
+            if "musicxml_timing_calibration_required" not in self.secondary_reasons:
+                self.secondary_reasons.append("musicxml_timing_calibration_required")
 
         if "musicxml_backup_cursor_before_measure_start" in self.secondary_reasons:
             self.primary_reason = "musicxml_backup_cursor_before_measure_start"
@@ -240,6 +327,10 @@ class MusicXmlVoiceCursorModel:
             measure_underfull=self.measure_underfull,
             primary_reason=self.primary_reason,
             secondary_reasons=self.secondary_reasons,
+            timing_calibration_possible=timing_calibration_possible,
+            timing_repair_attempted=False,
+            overfull_divisions=overfull_divisions,
+            affected_event_ids=affected_event_ids,
         )
 
 
@@ -1171,6 +1262,34 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                     )
                 )
 
+            # Enrich all generated issues with the voice cursor diagnostics if present
+            vcd = measure.voice_cursor_diagnostics
+            if vcd is not None:
+                if "musicxml_invalid_duration_grid" in vcd.secondary_reasons:
+                    issues.append(
+                        MusicXmlTimingIssue(
+                            code="musicxml_invalid_duration_grid",
+                            message=f"Measure {measure.number} has an invalid duration grid: expected duration {expected} is not a clean integer divisions.",
+                            severity="error",
+                            part_id=part.id,
+                            measure_index=measure.index,
+                            measure_number=measure.number,
+                            expected_duration_divisions=expected,
+                            meter=meter_str,
+                            backup_forward_count=measure.backup_forward_count,
+                            voice_extents=voice_extents,
+                            voice_durations=voice_durations,
+                        )
+                    )
+                for issue in issues[start_idx:]:
+                    issue.timing_calibration_possible = vcd.timing_calibration_possible
+                    issue.timing_repair_attempted = vcd.timing_repair_attempted
+                    issue.overfull_divisions = vcd.overfull_divisions
+                    issue.overlap_count = vcd.same_voice_overlap_count + vcd.cross_voice_overlap_count
+                    issue.affected_event_ids = vcd.affected_event_ids
+                    issue.primary_reason = vcd.primary_reason
+                    issue.secondary_reasons = vcd.secondary_reasons
+
         # Check for tie continuity risks
         for voice, notes in part_vnotes.items():
             for idx in range(len(notes)):
@@ -1287,6 +1406,13 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                 backup_forward_count=first_err.backup_forward_count,
                 voice_extents=first_err.voice_extents,
                 voice_durations=first_err.voice_durations,
+                timing_calibration_possible=first_err.timing_calibration_possible,
+                timing_repair_attempted=first_err.timing_repair_attempted,
+                overfull_divisions=first_err.overfull_divisions,
+                overlap_count=first_err.overlap_count,
+                affected_event_ids=first_err.affected_event_ids,
+                primary_reason=first_err.primary_reason,
+                secondary_reasons=first_err.secondary_reasons,
             )
         )
 
@@ -1374,8 +1500,7 @@ def _parse_part(
         temp_expected = None
         if temp_time is not None:
             val = Fraction(temp_time.numerator * temp_div * 4, temp_time.denominator)
-            if val.denominator == 1:
-                temp_expected = int(val)
+            temp_expected = float(val)
 
         # Instantiate voice cursor model and simulate
         model = MusicXmlVoiceCursorModel(
@@ -1476,8 +1601,7 @@ def _parse_part(
         expected_divs = None
         if current_time is not None:
             val = Fraction(current_time.numerator * current_divisions * 4, current_time.denominator)
-            if val.denominator == 1:
-                expected_divs = int(val)
+            expected_divs = float(val)
 
         unbalanced_bf = False
         if has_backup_or_forward and expected_divs is not None and cursor != expected_divs:
@@ -1836,11 +1960,9 @@ def _harmony_kind_suffix(kind: str | None) -> str:
     return mapping.get(kind, kind)
 
 
-def _expected_measure_duration_divisions(measure: MusicXmlMeasure) -> int | None:
+def _expected_measure_duration_divisions(measure: MusicXmlMeasure) -> float | None:
     value = Fraction(measure.time_signature.numerator * measure.divisions * 4, measure.time_signature.denominator)
-    if value.denominator != 1:
-        return None
-    return int(value)
+    return float(value)
 
 
 def _measure_timing_groups(measure: MusicXmlMeasure) -> list[list[MusicXmlNote]]:
