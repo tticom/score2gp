@@ -240,6 +240,9 @@ def build_ir_from_files(
         )
         if diagnostics_out_path is not None:
             diagnostics.to_json_file(diagnostics_out_path)
+            from .report import write_symbol_attachment_diagnostics_html
+            html_path = Path(diagnostics_out_path).parent / "symbol-attachment-diagnostics.html"
+            write_symbol_attachment_diagnostics_html(html_path, diagnostics, score, tabraw_path=tabraw_path)
         return score
     except BuildIrInputRiskError as exc:
         if diagnostics_out_path is not None:

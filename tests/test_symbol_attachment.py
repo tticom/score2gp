@@ -310,3 +310,118 @@ def test_span_technique_attachment_cases(tmp_path) -> None:
     assert diagnostics.symbol_attachment_technique_candidates_found == 1
     assert diagnostics.symbol_attachment_technique_candidates_attached == 1
     assert diagnostics.symbol_attachment_technique_candidates_unattached == 0
+
+
+def test_symbol_attachment_html_diagnostics(tmp_path) -> None:
+    # Test all HTML diagnostic report requirements
+    tabraw_data = {
+        "schema_version": "tabraw.v0.1",
+        "source_pdf": "synthetic",
+        "inspection_kind": "synthetic",
+        "candidates": [
+            {
+                "id": "tab-001",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "line_index": 1,
+                "string": 1,
+                "raw_text": "0",
+                "parsed_fret": 0,
+                "x": 100.0,
+                "y": 40.0,
+                "confidence": 0.95,
+            },
+            {
+                "id": "chord-attached",
+                "kind": "chord-symbol",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "raw_text": "Cmaj7",
+                "confidence": 0.9,
+            },
+            {
+                "id": "chord-unattached",
+                "kind": "chord-symbol",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 99,  # No bar 99 exists!
+                "raw_text": "D7",
+                "confidence": 0.8,
+            },
+            {
+                "id": "tech-attached",
+                "kind": "technique-text",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "raw_text": "vib",
+                "confidence": 0.85,
+            },
+            {
+                "id": "tech-unsupported",
+                "kind": "technique-text",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "raw_text": "release",
+                "confidence": 0.75,
+            }
+        ],
+        "warnings": []
+    }
+
+    tabraw_file = tmp_path / "tabraw_diagnostics.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+
+    ir_path = tmp_path / "score.ir.json"
+    diagnostics_path = tmp_path / "diagnostics.json"
+
+    score = build_ir_from_files(
+        MUSICXML,
+        tabraw_file,
+        out_path=ir_path,
+        diagnostics_out_path=diagnostics_path
+    )
+
+    # 1. HTML diagnostics are written when chord/technique attachment diagnostics exist
+    html_path = tmp_path / "symbol-attachment-diagnostics.html"
+    assert html_path.exists()
+
+    html_content = html_path.read_text(encoding="utf-8")
+
+    # 2. HTML includes attached chord count
+    assert "Chord Symbols Summary" in html_content
+    # There is 1 attached chord
+    assert "Successfully Attached:" in html_content
+
+    # 3. HTML includes unattached chord count
+    assert "Unattached / Refused:" in html_content
+
+    # 4. HTML includes attached technique count
+    assert "Technique Texts Summary" in html_content
+
+    # 5. HTML includes unattached technique count
+
+    # 6. HTML includes warning/reason codes for unsupported or ambiguous text
+    assert "unsupported_technique_text" in html_content
+    assert "unattached_chord_symbol" in html_content
+
+    # 7. HTML includes provenance/candidate IDs
+    assert "chord-attached" in html_content
+    assert "chord-unattached" in html_content
+    assert "tech-attached" in html_content
+    assert "tech-unsupported" in html_content
+
+    # 8. HTML states that GPIF rendering is not implemented
+    assert "GPIF rendering is NOT implemented" in html_content
+
+    # 9. HTML states that symbols did not create notes/events/timing
+    assert "Symbols and techniques DID NOT create notes" in html_content
