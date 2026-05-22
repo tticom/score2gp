@@ -354,3 +354,403 @@ def _ascii_timing_status_counts(candidates: list[dict[str, Any]]) -> dict[str, i
             continue
         counts[status] = counts.get(status, 0) + 1
     return dict(sorted(counts.items()))
+
+
+def write_ascii_gate_diagnostics_html(path: str | Path, payload: dict[str, Any], json_path_ref: str | Path | None = None) -> None:
+    """Write an inspectable developer-facing HTML report for ASCII ScoreIR gate refusal diagnostics."""
+    out = Path(path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    details = payload.get("details", {})
+    gate_status = str(details.get("ascii_scoreir_gate_status", "refused"))
+
+    status_label = "Allowed" if gate_status == "allowed" else "Refused"
+    status_class = "status-allowed" if gate_status == "allowed" else "status-refused"
+
+    primary_reason = details.get("primary_reason_code") or payload.get("category") or "unknown_refusal"
+    secondary_reasons = details.get("secondary_reason_codes", [])
+
+    mapping = {
+        "missing_ascii_alignment_sidecar": "provide compatible ascii-musicxml-alignment.v0.1 evidence",
+        "ascii_alignment_status_unavailable": "provide ASCII timing evidence with usable measure segmentation",
+        "ascii_alignment_status_partial": "resolve partial ASCII/MusicXML alignment before ScoreIR writing",
+        "ascii_alignment_status_ambiguous": "resolve ambiguous ASCII/MusicXML mapping before ScoreIR writing",
+        "ascii_alignment_status_incompatible": "fix the public fixture pair so ASCII candidates and MusicXML onsets agree",
+        "ascii_alignment_candidate_missing": "ensure every output candidate appears in the alignment sidecar",
+        "ascii_alignment_not_one_to_one": "use a tiny monophonic fixture with one candidate per MusicXML note",
+        "ascii_candidate_missing_string": "provide explicit ASCII-derived string evidence for every candidate",
+        "ascii_candidate_missing_fret": "provide explicit ASCII-derived fret evidence for every candidate",
+        "ascii_candidate_unmapped_measure": "map every candidate to a known MusicXML measure",
+        "ascii_candidate_unmapped_onset": "map every candidate to a known MusicXML onset",
+        "ascii_unsupported_technique_required": "remove unsupported technique requirements or implement a future technique phase",
+        "ascii_unsupported_chord_symbol": "remove chord/symbol requirements or implement a future symbol phase",
+        "ascii_polyphony_not_supported": "use the supported tiny monophonic fixture shape",
+        "ascii_musicxml_timing_risk": "fix MusicXML timing risk before attempting ASCII ScoreIR writing",
+        "ascii_duration_source_missing": "provide MusicXML durations for every output event",
+        "ascii_outside_tiny_gate_scope": "this case is intentionally unsupported by ascii-scoreir-gate.v0.1",
+    }
+    remediation = details.get("expected_next_remediation") or mapping.get(str(primary_reason), "this case is intentionally unsupported by ascii-scoreir-gate.v0.1")
+
+    candidate_count = details.get("candidate_count", 0)
+    aligned_candidate_count = details.get("aligned_candidate_count", 0)
+    rejected_candidate_count = details.get("rejected_candidate_count", 0)
+
+    sample_candidate_ids = details.get("sample_candidate_ids", [])
+
+    sidecar_present = details.get("alignment_sidecar_present")
+    sidecar_status = details.get("alignment_status")
+    timing_safe = details.get("musicxml_timing_safe")
+    scoreir_written = details.get("scoreir_written", False)
+
+    json_reference_str = "N/A"
+    if json_path_ref is not None:
+        json_reference_str = str(json_path_ref)
+    elif details.get("alignment_path"):
+        json_reference_str = str(details.get("alignment_path"))
+
+    secondary_html = ""
+    if secondary_reasons:
+        secondary_html = "\n".join(f"<li><code>{html.escape(str(r))}</code></li>" for r in secondary_reasons)
+    else:
+        secondary_html = "<li><em>None</em></li>"
+
+    sample_ids_html = ""
+    if sample_candidate_ids:
+        sample_ids_html = ", ".join(f"<code>{html.escape(str(cid))}</code>" for cid in sample_candidate_ids)
+    else:
+        sample_ids_html = "<em>None</em>"
+
+    body = f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ASCII ScoreIR Gate Diagnostics</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+    :root {{
+      --bg-color: #0b0f19;
+      --card-bg: #151e30;
+      --card-border: #202c46;
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --divider: #1e293b;
+
+      --accent-refused: #f87171;
+      --accent-refused-glow: rgba(248, 113, 113, 0.1);
+      --accent-allowed: #34d399;
+      --accent-allowed-glow: rgba(52, 211, 153, 0.1);
+    }}
+
+    body {{
+      background-color: var(--bg-color);
+      color: var(--text-primary);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      margin: 0;
+      padding: 2rem 1rem;
+      min-height: 100vh;
+      line-height: 1.5;
+    }}
+
+    .container {{
+      max-width: 800px;
+      margin: 0 auto;
+    }}
+
+    header {{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+      border-bottom: 1px solid var(--divider);
+      padding-bottom: 1.5rem;
+    }}
+
+    h1 {{
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin: 0;
+      letter-spacing: -0.025em;
+    }}
+
+    .badge {{
+      font-size: 0.875rem;
+      font-weight: 600;
+      padding: 0.375rem 1rem;
+      border-radius: 9999px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border: 1px solid transparent;
+    }}
+
+    .status-refused {{
+      background-color: var(--accent-refused-glow);
+      color: var(--accent-refused);
+      border-color: rgba(248, 113, 113, 0.2);
+    }}
+
+    .status-allowed {{
+      background-color: var(--accent-allowed-glow);
+      color: var(--accent-allowed);
+      border-color: rgba(52, 211, 153, 0.2);
+    }}
+
+    .card {{
+      background-color: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }}
+
+    .card:hover {{
+      transform: translateY(-2px);
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2), 0 4px 6px -4px rgba(0, 0, 0, 0.2);
+    }}
+
+    .card-title {{
+      font-size: 0.875rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-secondary);
+      margin-top: 0;
+      margin-bottom: 1rem;
+    }}
+
+    .reason-box {{
+      border-left: 4px solid var(--accent-refused);
+      background-color: rgba(248, 113, 113, 0.05);
+      padding: 1rem;
+      border-radius: 0 8px 8px 0;
+      margin-bottom: 1rem;
+    }}
+
+    .reason-box.allowed {{
+      border-left-color: var(--accent-allowed);
+      background-color: rgba(52, 211, 153, 0.05);
+    }}
+
+    .reason-title {{
+      font-size: 1.125rem;
+      font-weight: 700;
+      margin: 0 0 0.5rem 0;
+    }}
+
+    .reason-code {{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.9rem;
+      background-color: rgba(0, 0, 0, 0.2);
+      padding: 0.2rem 0.4rem;
+      border-radius: 4px;
+      color: var(--text-primary);
+    }}
+
+    .grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }}
+
+    .metric-card {{
+      background-color: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      text-align: center;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }}
+
+    .metric-value {{
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 0.25rem;
+      color: var(--text-primary);
+    }}
+
+    .metric-label {{
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-secondary);
+    }}
+
+    dl {{
+      display: grid;
+      grid-template-columns: max-content 1fr;
+      gap: 0.5rem 1.5rem;
+      margin: 0;
+    }}
+
+    dt {{
+      font-weight: 500;
+      color: var(--text-secondary);
+    }}
+
+    dd {{
+      margin: 0;
+      font-weight: 600;
+    }}
+
+    code {{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.875rem;
+      background-color: rgba(0, 0, 0, 0.2);
+      padding: 0.125rem 0.25rem;
+      border-radius: 4px;
+    }}
+
+    ul {{
+      margin: 0;
+      padding-left: 1.25rem;
+    }}
+
+    li {{
+      margin-bottom: 0.5rem;
+    }}
+
+    .remediation-card {{
+      background-color: rgba(52, 211, 153, 0.05);
+      border: 1px solid rgba(52, 211, 153, 0.2);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }}
+
+    .remediation-title {{
+      font-size: 0.875rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--accent-allowed);
+      margin-top: 0;
+      margin-bottom: 0.5rem;
+    }}
+
+    .remediation-text {{
+      font-size: 1.05rem;
+      font-weight: 500;
+      margin: 0;
+    }}
+
+    .footer-note {{
+      font-size: 0.825rem;
+      color: var(--text-secondary);
+      text-align: center;
+      margin-top: 3rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--divider);
+    }}
+
+    pre {{
+      background-color: rgba(0, 0, 0, 0.3);
+      padding: 1rem;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.85rem;
+      border: 1px solid var(--card-border);
+      margin: 0;
+    }}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>ASCII ScoreIR Gate Refusal Diagnostics</h1>
+      <span class="badge {status_class}">{status_label}</span>
+    </header>
+
+    <div class="card">
+      <h2 class="card-title">Verdict & Diagnostics</h2>
+      <div class="reason-box {"allowed" if gate_status == "allowed" else ""}">
+        <h3 class="reason-title">{html.escape(payload.get("message", ""))}</h3>
+        <p style="margin: 0.5rem 0 0 0;">Primary refusal code: <span class="reason-code">{html.escape(str(primary_reason))}</span></p>
+      </div>
+      <p style="margin: 1rem 0 0 0; font-size: 0.925rem; color: var(--text-secondary);">
+        Refusal is expected behavior for unsupported ASCII inputs. This HTML report does not imply broader ASCII-to-ScoreIR support. JSON remains the source of truth.
+      </p>
+    </div>
+
+    <div class="remediation-card">
+      <h2 class="remediation-title">Suggested Remediation</h2>
+      <p class="remediation-text">{html.escape(str(remediation))}</p>
+    </div>
+
+    <div class="grid">
+      <div class="metric-card">
+        <div class="metric-value">{candidate_count}</div>
+        <div class="metric-label">Total Candidates</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-value">{aligned_candidate_count}</div>
+        <div class="metric-label">Aligned Candidates</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-value">{rejected_candidate_count}</div>
+        <div class="metric-label">Rejected Candidates</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">Refusal Taxonomy</h2>
+      <dl style="margin-bottom: 1.5rem;">
+        <dt>Primary Reason</dt>
+        <dd><code>{html.escape(str(primary_reason))}</code></dd>
+
+        <dt>Secondary Reasons</dt>
+        <dd>
+          <ul style="padding-left: 1.25rem; margin-top: 0.25rem;">
+            {secondary_html}
+          </ul>
+        </dd>
+
+        <dt>Sample Candidate IDs</dt>
+        <dd>{sample_ids_html}</dd>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">Gate Metadata</h2>
+      <dl>
+        <dt>Gate Version</dt>
+        <dd><code>{html.escape(str(details.get("gate_version", "unknown")))}</code></dd>
+
+        <dt>ScoreIR Written</dt>
+        <dd><code>{str(scoreir_written)}</code></dd>
+
+        <dt>Alignment Sidecar Present</dt>
+        <dd><code>{str(sidecar_present) if sidecar_present is not None else "N/A"}</code></dd>
+
+        <dt>Alignment Status</dt>
+        <dd><code>{html.escape(str(sidecar_status)) if sidecar_status is not None else "N/A"}</code></dd>
+
+        <dt>Alignment Schema</dt>
+        <dd><code>{html.escape(str(details.get("schema_version"))) if details.get("schema_version") is not None else "N/A"}</code></dd>
+
+        <dt>MusicXML Timing Safe</dt>
+        <dd><code>{str(timing_safe) if timing_safe is not None else "N/A"}</code></dd>
+
+        <dt>JSON Reference</dt>
+        <dd><code>{html.escape(json_reference_str)}</code></dd>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">JSON Diagnostics Payload Reference</h2>
+      <pre><code>{html.escape(json.dumps(payload, indent=2, sort_keys=True))}</code></pre>
+    </div>
+
+    <div class="footer-note">
+      This diagnostic report is generated automatically by the Antigravity Score2GP pipeline.
+    </div>
+  </div>
+</body>
+</html>
+"""
+    out.write_text(body, encoding="utf-8")

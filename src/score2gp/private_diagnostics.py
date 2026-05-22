@@ -79,6 +79,10 @@ def run_private_diagnostic_smoke(
             build_error_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
             summary["outputs"]["build_error"] = build_error_path.name
             _record_build_ir_risk(summary, exc, build_error_path.name)
+            if exc.stage == "ascii-scoreir-gate":
+                from .report import write_ascii_gate_diagnostics_html
+                html_path = build_error_path.parent / "ascii-scoreir-gate-diagnostics.html"
+                write_ascii_gate_diagnostics_html(html_path, payload, json_path_ref=build_error_path.name)
         except Exception as exc:  # noqa: BLE001
             sanitized_error = _sanitize_exception_message(exc, [pdf, musicxml])
             build_error_path.write_text(
