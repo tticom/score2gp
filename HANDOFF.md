@@ -1,47 +1,63 @@
 # Handoff
 
 ## Metadata
-- **Current Branch**: `feature/musicxml-voice-cursor-model-v0.1`
+- **Current Branch**: `feature/private-smoke-refresh-after-musicxml-voice-cursor-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: [#21](https://github.com/tticom/score2gp/pull/21)
-- **Latest Local Commit**: `ab2f109602722620606cca115e1bc570fa4b22dc`
-- **Latest Pushed Commit**: `ab2f109602722620606cca115e1bc570fa4b22dc`
-- **Commit Subject**: Add MusicXML voice cursor model
-- **Working Tree Status**: Clean (except HANDOFF.md)
+- **Current PR**: N/A (to be created)
+- **Latest Local Commit**: N/A (uncommitted changes)
+- **Latest Pushed Commit**: N/A
+- **Commit Subject**: N/A
+- **Working Tree Status**: Clean (except HANDOFF.md and TASKS.md)
 - **Tests & Checks Run**:
   - `python -m pytest` -> 169 passed
   - `python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
   - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid
   - `git diff --check` -> passed cleanly
   - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep` is tracked
-- **GitHub Check Status**: Pending
+- **GitHub Check Status**: N/A
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or diagnostic outputs are tracked or committed. All outputs under `work/` are ignored.
 
 ## What Changed in the Task
-- Implemented a deterministic `MusicXmlVoiceCursorModel` that accurately tracks per-part, per-measure, and per-voice timelines.
-- Properly simulated `backup`, `forward`, `rest`, and `chord` elements to calculate voice-specific start/end offsets and chord stack counts.
-- Addressed chord stacks using `<chord/>` so they do not trigger false same-voice timing overlap errors.
-- Refined build-ir gating: invalid same-voice timelines block ScoreIR with the `musicxml_timing_risk` category, whereas valid but unsupported multi-voice structures downstream trigger `musicxml_scoreir_polyphony_gate_refused`.
-- Added 9 tiny synthetic public MusicXML fixtures to represent voice cursor patterns.
-- Expanded the test suite in `tests/test_musicxml_voice_cursor.py` to assert diagnostic outcome correctness across all 9 new fixtures.
-- Updated diagnostics HTML reports with voice cursor timeline counts and remediation hints for all 15 new voice cursor codes.
+- Re-ran the local private-safe E2E diagnostic smoke workflow (`scripts/private_e2e_smoke.py`) against the real private inputs in `fixtures/private/` after PR #21 (deterministic MusicXML voice cursor model).
+- Successfully generated all local, ignored diagnostic outputs under `work/private_e2e_smoke_after_voice_cursor_v0_1/`.
+- Updated the private-safe blocker summary in `HANDOFF.md` and `TASKS.md` with the new E2E diagnostic smoke results using only the safe anonymized details.
+- Confirmed that `private_input_1` continues to report exactly 66 overfull or overlapping events. The new voice cursor model isolates these as true same-voice invalid timeline issues (`musicxml-overfull-bar` where voice durations sum to 78 divisions inside a 48-division measure) rather than false-positive overlaps or multi-voice structural issues.
+
+## Private Smoke Result Summary (Safe Counts & Statuses Only)
+1. **`private_input_1`** (`pdf-tab-musicxml`):
+   - **Page Count**: 2
+   - **Text/Geometry Detected**: Yes (both extractable text and drawn tab geometry detected)
+   - **Playable Candidate Count**: 203 candidates (non-playable: 126, total: 329)
+   - **Timing Status**: `failed` (ScoreIR gate status: `refused`)
+   - **GP Written**: No
+   - **Primary Failure/Refusal Reason**: `musicxml_timing_risk`
+   - **Secondary Reason Codes**: `MusicXML timing risk prevents ScoreIR output: 66 overfull or overlapping event(s) would violate ScoreIR timing.`, `missing_pdf_grouping`
+   - **Next Diagnostic Recommendation**: `review-musicxml-timing-risk-before-alignment`
+2. **`private_input_2`** (`pdf-tab-only`):
+   - **Page Count**: 1
+   - **Text/Geometry Detected**: Yes (both extractable text and drawn tab geometry detected)
+   - **Playable Candidate Count**: 54 candidates (non-playable: 17, total: 71)
+   - **Timing Status**: `not_attempted` (ScoreIR gate status: `not_attempted`)
+   - **GP Written**: No
+   - **Primary Failure/Refusal Reason**: `none` (MusicXML is missing)
+   - **Secondary Reason Codes**: `missing_pdf_grouping`, `pdf-tab-system-not-detected`
+   - **Next Diagnostic Recommendation**: `provide-matching-musicxml-before-build-ir`
 
 ## Change Comparison
-- The pipeline now possesses a formal timeline and cursor tracking model. Instead of treating all backup/forward and multi-voice movements as general timing risk or timing overlap errors, the parser can programmatically follow voice cursors and chord stack alignments. Same-voice overlaps (invalid timing) are cleanly distinguished from valid multi-voice structures that remain unsupported downstream.
+- The number of overfull or overlapping events detected in `private_input_1` remains exactly **66**, which is completely mathematically consistent. However, thanks to the deterministic voice cursor model implemented in PR #21, we now have precise diagnostics (`build_error.json`) confirming that these are same-voice invalid timing errors (primarily `musicxml-overfull-bar` where notes in voice 1 extend past measure boundaries) rather than polyphony-gate or backup/forward-handling ambiguities.
 
 ## Current Blocker Classification
-- **Top Blocker**: `musicxml_timing`
-- **Rationale**: For E2E inputs like `private_input_1`, while we have implemented the voice cursor model to correctly diagnose and classify multi-voice timing versus same-voice overlaps, the files remain blocked by `musicxml_scoreir_polyphony_gate_refused` or `musicxml_timing_risk`. This ensures our gating is extremely safe and conservative, and developer-facing HTML reports now explicitly categorize the exact measures and voices causing the refusal.
+- **Top Blocker**: `musicxml_timing_invalid`
+- **Rationale**: For the E2E input `private_input_1`, the preflight timing check still fails with `musicxml_timing_risk` due to 66 overfull or overlapping events. This is classified as `musicxml_timing_invalid` because the notes in the MusicXML file have durations exceeding the expected measure duration. We need to implement public synthetic timing fixtures for invalid timing/overfull measures to refine timing calibration and explore duration adjustments before alignment.
 
 ## Recommended Next Branch
-- **Next Branch**: `feature/private-smoke-refresh-after-musicxml-voice-cursor-v0.1`
-- **Goal**: Re-run the local private-safe E2E diagnostic smoke workflow to evaluate the exact updated blocker status, classifications, and counts across `private_input_1` and `private_input_2` using the new voice cursor model.
+- **Next Branch**: `feature/musicxml-invalid-timing-public-fixtures-v0.4`
+- **Goal**: Add public synthetic MusicXML fixtures and tests representing invalid same-voice timing / overfull measures to design and refine timing calibration, duration adjustments, and recovery heuristics before alignment.
 
 ## Known Limitations
 - PDF grouping is strictly conservative and requires born-digital vector tab geometry. No ML layout recognition or OCR is supported.
 - Unsafe PDF grouping (partial, missing, ambiguous, or unsupported) and unsafe MusicXML timing strictly block `build_ir` and prevent ScoreIR compilation.
 - Scanned/raster PDFs remain unsupported.
-- Valid multi-voice MusicXML timing may still be unsupported downstream by build-ir and is gated under `musicxml_scoreir_polyphony_gate_refused`.
 
 ## Remaining Risks
 - None. All 169 tests are fully passing locally. Whitespace checks are perfectly clean, and schemas are identical to the base branch.
