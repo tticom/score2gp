@@ -168,7 +168,7 @@ def test_build_ir_refuses_unsafe_ascii_alignment_sidecars(
     assert raised.value.category == expected_category
 
 
-def test_build_ir_refuses_compatible_ascii_alignment_proof_by_default(tmp_path) -> None:
+def test_build_ir_refuses_broad_compatible_ascii_alignment_proof_outside_tiny_gate(tmp_path) -> None:
     tabraw_path = _extract(ASCII_BARRED_PDF, tmp_path)
     alignment = _align(tabraw_path, COMPATIBLE_MUSICXML, tmp_path)
     alignment_path = tmp_path / f"{tabraw_path.stem}.alignment" / "ascii_musicxml_alignment.json"
@@ -179,7 +179,8 @@ def test_build_ir_refuses_compatible_ascii_alignment_proof_by_default(tmp_path) 
         build_ir_from_files(COMPATIBLE_MUSICXML, tabraw_path, ir_path, ascii_alignment_path=alignment_path)
 
     assert not ir_path.exists()
-    assert raised.value.category == "ascii_scoreir_writing_not_implemented"
+    assert raised.value.category == "ascii_scoreir_gate_unsupported_polyphony"
+    assert "ascii_scoreir_gate_unsupported_polyphony" in raised.value.details["reason_codes"]
 
 
 def test_malformed_ascii_grouping_remains_unavailable_for_alignment(tmp_path) -> None:
