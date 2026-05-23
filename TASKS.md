@@ -8,6 +8,7 @@
 
 ## Done
 
+- [x] Refresh E2E private smoke blocker summary after PDF bar-box edge case fixtures v0.7 to verify whether the unboxed system 6 on page 2 of private_input_1 is correctly identified and classified under the new taxonomy (feature/private-smoke-refresh-after-pdf-bar-box-edge-cases-v0.1).
 - [x] Refresh E2E private smoke blocker summary after PDF bar-box construction v0.6 to verify whether the new bar-box construction heuristics, taxonomy codes, and candidate boundary checks are accurately reported for real private layouts (feature/private-smoke-refresh-after-pdf-bar-box-construction-v0.1).
 - [x] Add public synthetic PDF fixtures and conservative diagnostics/heuristics for bar-box construction and candidate assignment after barline validation succeeds (feature/pdf-bar-box-construction-public-fixtures-v0.6).
 - [x] Add private-safe unrecoverable MusicXML timing diagnostic reports and user-facing remediation advice for unrecoverable timeline cursor overlaps (feature/musicxml-unrecoverable-timing-report-v0.1).
