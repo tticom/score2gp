@@ -8,6 +8,7 @@
 
 ## Done
 
+- [x] Add public synthetic PDF fixtures and conservative diagnostics/heuristics for born-digital PDF fret-number extraction, optical bounds, and digit horizontal/vertical grouping, preserving strict compiler gates (feature/pdf-fret-refinement-v0.5).
 - [x] Improve public-safe reporting, telemetry, and diagnostics for edge-boundary fallback rejection, compiling `pdf-edge-boundary-report.json`, premium standalone `pdf-edge-boundary-report.html`, and integrating references to them in both grouping overlays and compiler gates (feature/pdf-edge-boundary-reporting-v0.9).
 
 - [x] Refresh E2E private smoke blocker summary after PDF edge system boundary fixtures v0.8 to verify that the conservative boundary inference policy correctly rejects unsafe fallback and reports `pdf_bar_box_one_boundary_rejected` for system 6 on page 2 of `private_input_1` (`feature/private-smoke-refresh-after-pdf-edge-system-boundary-v0.1`).
