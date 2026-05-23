@@ -3,11 +3,11 @@
 ## Metadata
 - **Current Branch**: `feature/private-smoke-refresh-after-pdf-system-v0.4`
 - **Base Branch**: `main`
-- **Current PR**: Draft PR is ready to be created (Phase 10)
-- **Latest Local Commit**: Pending commit (Phase 9)
-- **Latest Pushed Commit**: Pending push (Phase 9)
+- **Current PR**: [#30](https://github.com/tticom/score2gp/pull/30) (Draft)
+- **Latest Local Commit**: `334100b8d266c923c039dae766e2334f56b3e3fc`
+- **Latest Pushed Commit**: `334100b8d266c923c039dae766e2334f56b3e3fc`
 - **Commit Subject**: Refresh private smoke after PDF system diagnostics
-- **Working Tree Status**: Dirty (pending final handoff commit)
+- **Working Tree Status**: Clean
 - **Tests & Checks Run**:
   - `python -m pytest` -> 205 passed cleanly
   - `python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
