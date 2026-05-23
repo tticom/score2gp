@@ -1910,6 +1910,16 @@ def _tabraw_grouping_risk(tabraw: TabRaw) -> dict[str, object] | None:
             "pdf_bar_boxes_not_constructible",
             "pdf_bar_detection_succeeded_string_assignment_pending",
             "pdf_bar_detection_not_enough_for_build_ir",
+
+            # Refined barline-validation taxonomy blocker codes
+            "pdf_barline_too_short_absolute",
+            "pdf_barline_too_short_relative_to_staff",
+            "pdf_barline_crosses_insufficient_string_gaps",
+            "pdf_barline_partial_staff_crossing",
+            "pdf_barline_outside_staff_region",
+            "pdf_barline_rejected_relative_height",
+            "pdf_barline_validation_threshold_boundary",
+            "pdf_barline_validation_not_enough_for_build_ir",
         }
     ]
     counts["tabraw_warning_codes"] = counts["warning_codes"]
@@ -1988,6 +1998,16 @@ def _tabraw_unsafe_grouping_warning_codes(tabraw: TabRaw) -> list[str]:
         "pdf_bar_boxes_not_constructible",
         "pdf_bar_detection_succeeded_string_assignment_pending",
         "pdf_bar_detection_not_enough_for_build_ir",
+
+        # Refined barline-validation taxonomy blocker codes
+        "pdf_barline_too_short_absolute",
+        "pdf_barline_too_short_relative_to_staff",
+        "pdf_barline_crosses_insufficient_string_gaps",
+        "pdf_barline_partial_staff_crossing",
+        "pdf_barline_outside_staff_region",
+        "pdf_barline_rejected_relative_height",
+        "pdf_barline_validation_threshold_boundary",
+        "pdf_barline_validation_not_enough_for_build_ir",
     }
     return sorted({str(warning.get("code")) for warning in tabraw.warnings if warning.get("code") in unsafe})
 

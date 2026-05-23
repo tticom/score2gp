@@ -2,7 +2,7 @@
 
 ## Next
 
-- [ ] Add public synthetic PDF barline validation fixtures and heuristics to refine vertical candidate rejection thresholds (feature/pdf-barline-validation-public-fixtures-v0.5).
+- [x] Add public synthetic PDF barline validation fixtures and heuristics to refine vertical candidate rejection thresholds (feature/pdf-barline-validation-public-fixtures-v0.5).
 - [ ] Add public reproductions for more Audiveris timing patterns before another private run.
 - [ ] Add developer-facing HTML styling and compact thumbnails for grouping diagnostics.
 - [ ] Add a public partial-to-recovery design note before attempting any automatic grouping repair.
