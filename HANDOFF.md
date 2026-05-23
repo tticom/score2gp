@@ -3,10 +3,11 @@
 ## Metadata
 - **Current Branch**: `feature/pdf-edge-system-boundary-public-fixtures-v0.8`
 - **Base Branch**: `main`
-- **Current PR**: Pending creation
-- **Latest Local Commit**: Pending commit
-- **Latest Pushed Commit**: Pending push
-- **Working Tree Status**: Modified
+- **Current PR**: [PR #40](https://github.com/tticom/score2gp/pull/40) (Draft)
+- **Latest Local Commit**: `8268b26`
+- **Latest Pushed Commit**: `8268b26`
+- **Commit Subject**: Add PDF edge system boundary fixtures v0.8
+- **Working Tree Status**: Clean (after handoff sync commit)
 - **Tests & Checks Run**:
   - `python -m pytest` -> 238 passed cleanly
   - `python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
