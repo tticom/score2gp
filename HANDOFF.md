@@ -4,17 +4,17 @@
 - **Current Branch**: `feature/pdf-edge-boundary-reporting-v0.9`
 - **Base Branch**: `main`
 - **Current PR**: [PR #42](https://github.com/tticom/score2gp/pull/42) (Draft)
-- **Latest Local Commit**: `1d7e38e`
-- **Latest Pushed Commit**: `1d7e38e`
-- **Commit Subject**: Add PDF edge boundary reporting v0.9
-- **Working Tree Status**: Clean (except modified HANDOFF.md and TASKS.md)
+- **Latest Local Commit**: `9443187`
+- **Latest Pushed Commit**: `9443187`
+- **Commit Subject**: Update handoff for PDF edge boundary reporting PR
+- **Working Tree Status**: Clean
 - **Tests & Checks Run**:
-  - `python -m pytest` -> 239 passed cleanly in 14.19s
+  - `python -m pytest` -> 239 passed cleanly in 11.20s
   - `python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
   - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid
   - `git diff --check` -> passed cleanly
   - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep` is tracked under Git
-- **GitHub Check Status**: N/A
+- **GitHub Check Status**: Passed
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or diagnostic outputs are tracked or committed. All outputs under `work/` are ignored.
 
 ## What Changed in the Task
