@@ -257,8 +257,21 @@ class MusicXmlVoiceCursorModel:
                 if "musicxml_invalid_duration_grid" not in self.secondary_reasons:
                     self.secondary_reasons.append("musicxml_invalid_duration_grid")
 
-        # Populate timing calibration possible
+        # Populate timing calibration possible and intermediate reasons
         timing_calibration_possible = False
+        if self.measure_overfull and overfull_divisions is not None:
+            if overfull_divisions > self.divisions:
+                if "musicxml_overfull_too_large_for_calibration" not in self.secondary_reasons:
+                    self.secondary_reasons.append("musicxml_overfull_too_large_for_calibration")
+
+        if self.same_voice_overlap_count > 0 or self.cross_voice_overlap_count > 0:
+            if "musicxml_overlap_blocks_calibration" not in self.secondary_reasons:
+                self.secondary_reasons.append("musicxml_overlap_blocks_calibration")
+
+        if self.backup_count > 3:
+            if "musicxml_many_risks_block_calibration" not in self.secondary_reasons:
+                self.secondary_reasons.append("musicxml_many_risks_block_calibration")
+
         if (self.measure_overfull or "musicxml_accumulated_duration_overflow" in self.secondary_reasons) and overfull_divisions is not None:
             # Calibration could be considered only when:
             # - error is small (e.g. <= self.divisions, which is 1 quarter-note beat)
@@ -1390,6 +1403,87 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                                     voice_durations=m_durations,
                                 )
                             )
+
+    # Post-process global calibration feasibility and reasons
+    has_tie_continuity_risk = any(issue.code == "musicxml_tie_continuity_risk" for issue in issues)
+    has_invalid_duration_grid = any(issue.code == "musicxml_invalid_duration_grid" for issue in issues)
+
+    # Identify overfull and underfull measures
+    overfull_measures = {
+        (issue.part_id, issue.measure_index)
+        for issue in issues
+        if issue.code in ("musicxml-overfull-bar", "musicxml_compound_meter_overfull", "musicxml_voice_duration_overfull")
+        or "musicxml_voice_duration_overfull" in issue.secondary_reasons
+        or "musicxml_same_voice_measure_overfull" in issue.secondary_reasons
+    }
+    underfull_measures = {
+        (issue.part_id, issue.measure_index)
+        for issue in issues
+        if issue.code in ("musicxml-underfull-bar", "musicxml_compound_meter_underfull", "musicxml_voice_duration_underfull")
+        or "musicxml_voice_duration_underfull" in issue.secondary_reasons
+    }
+    has_mixed_measures = len(overfull_measures) > 0 and len(underfull_measures) > 0
+
+    has_overlap_risk = any(
+        issue.code in (
+            "musicxml-voice-overlap",
+            "musicxml_voice_cursor_overlap",
+            "musicxml_same_voice_tick_overlap",
+            "musicxml_rest_overlap",
+            "musicxml_rest_voice_overlap",
+            "musicxml_polyphony_not_supported",
+            "musicxml_multivoice_timing_not_supported",
+            "musicxml_cross_voice_timing_unsupported",
+            "musicxml_valid_multivoice_unsupported"
+        )
+        or "musicxml_overlap_blocks_calibration" in issue.secondary_reasons
+        for issue in issues
+    )
+
+    has_many_risks = any(
+        issue.code in ("musicxml_many_timing_risks", "musicxml_repeated_backup_forward_risk")
+        or "musicxml_many_risks_block_calibration" in issue.secondary_reasons
+        for issue in issues
+    )
+
+    has_large_overfull = any(
+        "musicxml_overfull_too_large_for_calibration" in issue.secondary_reasons
+        for issue in issues
+    )
+
+    global_blocked = (
+        has_tie_continuity_risk
+        or has_invalid_duration_grid
+        or has_mixed_measures
+        or has_overlap_risk
+        or has_many_risks
+        or has_large_overfull
+    )
+
+    # Update all issues' timing_calibration_possible and secondary reasons
+    for issue in issues:
+        if global_blocked:
+            issue.timing_calibration_possible = False
+
+        # Append appropriate global secondary reason codes
+        if has_tie_continuity_risk:
+            if "musicxml_tie_continuity_blocks_calibration" not in issue.secondary_reasons:
+                issue.secondary_reasons.append("musicxml_tie_continuity_blocks_calibration")
+        if has_invalid_duration_grid:
+            if "musicxml_invalid_grid_blocks_calibration" not in issue.secondary_reasons:
+                issue.secondary_reasons.append("musicxml_invalid_grid_blocks_calibration")
+        if has_mixed_measures:
+            if "musicxml_mixed_underfull_overfull_blocks_calibration" not in issue.secondary_reasons:
+                issue.secondary_reasons.append("musicxml_mixed_underfull_overfull_blocks_calibration")
+
+        if issue.timing_calibration_possible:
+            if "musicxml_timing_calibration_candidate" not in issue.secondary_reasons:
+                issue.secondary_reasons.append("musicxml_timing_calibration_candidate")
+        else:
+            if "musicxml_timing_calibration_not_safe" not in issue.secondary_reasons:
+                issue.secondary_reasons.append("musicxml_timing_calibration_not_safe")
+            if "musicxml_calibration_boundary_reported" not in issue.secondary_reasons:
+                issue.secondary_reasons.append("musicxml_calibration_boundary_reported")
 
     # Append alignment refused/due to risk issue if any error exists
     if any(issue.severity == "error" for issue in issues):

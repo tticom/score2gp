@@ -99,3 +99,89 @@ def test_no_private_fixtures_are_used() -> None:
         assert "beethoven" not in content.lower()
         assert "bach" not in content.lower()
         assert "metallica" not in content.lower()
+
+
+def test_calibration_scenarios(tmp_path) -> None:
+    out_ir = tmp_path / "blocked.ir.json"
+
+    # Scenario 1: Drift candidate
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(FIXTURES / "timing_vc_drift_candidate.musicxml", TABRAW, out_ir)
+    payload = raised.value.to_diagnostics_payload()
+    assert payload["calibration_possible"] is True
+    assert payload["calibration_candidate_reason"] == "musicxml_timing_calibration_candidate"
+    assert not payload["calibration_blocking_reasons"]
+    assert payload["overfull_bar_count"] == 1
+    assert payload["underfull_bar_count"] == 0
+    assert payload["automatic_repair_attempted"] is False
+    assert "remediation_hint" in payload
+
+    # Scenario 2: Large overfull
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(FIXTURES / "timing_vc_large_overfull.musicxml", TABRAW, out_ir)
+    payload = raised.value.to_diagnostics_payload()
+    assert payload["calibration_possible"] is False
+    assert "musicxml_overfull_too_large_for_calibration" in payload["calibration_blocking_reasons"]
+    assert payload["overfull_bar_count"] == 1
+
+    # Scenario 3: Same-voice overlap
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(FIXTURES / "timing_vc_overlap_blocks.musicxml", TABRAW, out_ir)
+    payload = raised.value.to_diagnostics_payload()
+    assert payload["calibration_possible"] is False
+    assert "musicxml_overlap_blocks_calibration" in payload["calibration_blocking_reasons"]
+    assert payload["overlap_count"] >= 1
+
+    # Scenario 4: Tie continuity risk
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(FIXTURES / "timing_vc_tie_continuity_blocks.musicxml", TABRAW, out_ir)
+    payload = raised.value.to_diagnostics_payload()
+    assert payload["calibration_possible"] is False
+    assert "musicxml_tie_continuity_blocks_calibration" in payload["calibration_blocking_reasons"]
+    assert payload["tie_continuity_risk_count"] >= 1
+
+    # Scenario 5: Many timing risks
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(FIXTURES / "timing_vc_many_risks_blocks.musicxml", TABRAW, out_ir)
+    payload = raised.value.to_diagnostics_payload()
+    assert payload["calibration_possible"] is False
+    assert "musicxml_many_risks_block_calibration" in payload["calibration_blocking_reasons"]
+    assert payload["many_risk_summary_count"] >= 1
+
+    # Scenario 6: Mixed underfull/overfull
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(FIXTURES / "timing_vc_mixed_blocks.musicxml", TABRAW, out_ir)
+    payload = raised.value.to_diagnostics_payload()
+    assert payload["calibration_possible"] is False
+    assert "musicxml_mixed_underfull_overfull_blocks_calibration" in payload["calibration_blocking_reasons"]
+    assert payload["overfull_bar_count"] == 1
+    assert payload["underfull_bar_count"] == 1
+
+    # Scenario 7: Invalid duration grid
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(FIXTURES / "timing_vc_invalid_grid_blocks.musicxml", TABRAW, out_ir)
+    payload = raised.value.to_diagnostics_payload()
+    assert payload["calibration_possible"] is False
+    assert "musicxml_invalid_grid_blocks_calibration" in payload["calibration_blocking_reasons"]
+    assert payload["invalid_grid_count"] >= 1
+
+    # Scenario 8: Multiple affected events but ordered
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(FIXTURES / "timing_vc_multi_affected_ordered.musicxml", TABRAW, out_ir)
+    payload = raised.value.to_diagnostics_payload()
+    assert payload["calibration_possible"] is True
+    assert payload["affected_event_count"] >= 1
+
+    # Scenario 9: Unrecoverable synthetic summary approximating the private smoke blocker shape
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(FIXTURES / "timing_vc_unrecoverable_summary.musicxml", TABRAW, out_ir)
+    payload = raised.value.to_diagnostics_payload()
+    assert payload["calibration_possible"] is False
+    assert "musicxml_overfull_too_large_for_calibration" in payload["calibration_blocking_reasons"]
+    assert "musicxml_overlap_blocks_calibration" in payload["calibration_blocking_reasons"]
+    assert payload["affected_event_count"] >= 2
+    assert payload["overfull_bar_count"] == 1
+
+    # Scenario 10: Valid counterpart passes
+    build_ir_from_files(FIXTURES / "timing_vc_valid_counterpart.musicxml", TABRAW, out_ir)
+    assert out_ir.exists()
