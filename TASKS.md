@@ -2,13 +2,13 @@
 
 ## Next
 
-- [ ] Add private-safe unrecoverable MusicXML timing diagnostic reports and user-facing remediation advice for unrecoverable timeline cursor overlaps (feature/musicxml-unrecoverable-timing-report-v0.1).
 - [ ] Add public reproductions for more Audiveris timing patterns before another private run.
 - [ ] Add developer-facing HTML styling and compact thumbnails for grouping diagnostics.
 - [ ] Add a public partial-to-recovery design note before attempting any automatic grouping repair.
 
 ## Done
 
+- [x] Add private-safe unrecoverable MusicXML timing diagnostic reports and user-facing remediation advice for unrecoverable timeline cursor overlaps (feature/musicxml-unrecoverable-timing-report-v0.1).
 - [x] Refresh E2E private smoke blocker summary after PDF barline validation v0.5 to evaluate whether the relative crossing rules accept compact barlines on the real inputs (feature/private-smoke-refresh-after-pdf-barline-validation-v0.1).
 - [x] Add public synthetic PDF barline validation fixtures and heuristics to refine vertical candidate rejection thresholds (feature/pdf-barline-validation-public-fixtures-v0.5).
 

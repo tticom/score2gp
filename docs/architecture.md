@@ -101,6 +101,17 @@ To make MusicXML timing and overlap failures easy to understand and inspect for 
 - **Synthetic Public Fixtures**: Public synthetic MusicXML timing blocker fixtures (v0.2, v0.3, and v0.4) are added under `tests/fixtures/musicxml/` to safely reproduce and test these specific failure modes, ensuring CI validation remains independent of any private materials.
 - **No Automatic Repair**: The current implementation does not attempt automatic timing repair or calibration, and strict timing safety gates remain fully intact.
 
+## Unrecoverable MusicXML Timing Reports
+
+To assist developers and users in diagnosing unrecoverable MusicXML timing failures without exposing private score content, the pipeline outputs structured reports:
+- **Anonymised JSON Sidecar (`musicxml-unrecoverable-timing-report.json`)**: Serves as the programmatic source of truth. It records only private-safe, anonymised telemetry including the anonymised source label (e.g. `private_input_1`), stage reached (`musicxml-import`), timing gate status (`refused`), expected measure ticks, actual voice end ticks, overfull/underfull counts, tie continuity risks, and a list of affected note IDs. It explicitly excludes all private score details, pitch steps, note names, lyrics, chord symbols, or raw MusicXML snippets.
+- **User-Facing HTML Report (`musicxml-unrecoverable-timing-report.html`)**: Renders a visually premium dark-mode summary of the unrecoverable timeline. It displays:
+  - **Verdict block**: Highlighting `calibration_possible: false` and `automatic_repair_attempted: false`.
+  - **Counts summary**: Of overfull measures, underfull measures, tie risks, overlaps, and affected events.
+  - **Affected measures timeline breakdown**: Listing Part ID, Measure Number/Index, Voice ID, Expected Ticks, Actual Ticks, Overfull/Underfull Amount, and Reason Codes.
+  - **Remediation guidance**: Providing actionable instructions to regenerate or simplify the source MusicXML before attempting ScoreIR conversion.
+- **Integration**: The build-ir diagnostics payload references these report filenames (`unrecoverable_timing_report_json` and `unrecoverable_timing_report_html`). The private smoke test summary includes only their relative artifact paths within the ignored `work/` directory, preventing any private data leakage into tracked git files.
+
 ## Public End-to-End PDF-to-GP Proof Slice
 
 To demonstrate the structural integrity of the entire staged pipeline (PDF extraction, alignment, ScoreIR building, validation, GP writing, package validation, and semantic fact comparison), there is a public end-to-end integration proof.

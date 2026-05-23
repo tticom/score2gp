@@ -204,6 +204,8 @@ class BuildIrInputRiskError(ValueError):
                 "invalid_grid_count": invalid_grids,
                 "automatic_repair_attempted": False,
                 "remediation_hint": "Fix or regenerate MusicXML timing; automatic timing repair is not implemented.",
+                "unrecoverable_timing_report_json": "musicxml-unrecoverable-timing-report.json",
+                "unrecoverable_timing_report_html": "musicxml-unrecoverable-timing-report.html",
             })
 
         return payload
@@ -375,9 +377,19 @@ def build_ir_from_files(
                 html_path = out_path_p.parent / "ascii-scoreir-gate-diagnostics.html"
                 write_ascii_gate_diagnostics_html(html_path, payload, json_path_ref=out_path_p.name)
             elif exc.stage == "musicxml-import":
-                from .report import write_musicxml_timing_diagnostics_html
+                from .report import write_musicxml_timing_diagnostics_html, write_musicxml_unrecoverable_timing_report
                 html_path = out_path_p.parent / "musicxml-timing-diagnostics.html"
                 write_musicxml_timing_diagnostics_html(html_path, payload, json_path_ref=out_path_p.name)
+                
+                # Write unrecoverable timing reports as sidecars
+                unrec_json_path = out_path_p.parent / "musicxml-unrecoverable-timing-report.json"
+                unrec_html_path = out_path_p.parent / "musicxml-unrecoverable-timing-report.html"
+                write_musicxml_unrecoverable_timing_report(
+                    unrec_json_path,
+                    unrec_html_path,
+                    payload,
+                    source_path=str(musicxml_path),
+                )
         raise
 
 
