@@ -3,9 +3,9 @@
 ## Metadata
 - **Current Branch**: `feature/pdf-string-assignment-public-fixtures-v0.4`
 - **Base Branch**: `main`
-- **Current PR**: None yet (Draft PR to be created)
-- **Latest Local Commit**: `d30e040`
-- **Latest Pushed Commit**: `9443187` (PR #42 merge is `b4a5265` on main)
+- **Current PR**: [PR #43](https://github.com/tticom/score2gp/pull/43) (Draft)
+- **Latest Local Commit**: `71e53e8`
+- **Latest Pushed Commit**: `71e53e8`
 - **Commit Subject**: Implement PDF string assignment heuristics and public fixtures
 - **Working Tree Status**: Clean (except modified `HANDOFF.md` once saved)
 - **Tests & Checks Run**:
