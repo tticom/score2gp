@@ -8,6 +8,8 @@
 
 ## Done
 
+- [x] Add public synthetic MusicXML fixtures and diagnostics for unrecoverable invalid timing / non-safe calibration scenarios, refining calibration boundary feasibility telemetry and blocking reasons (PR #25).
+
 - [x] Re-run the E2E private smoke workflow to verify that the new same-voice invalid timing and overfull measure diagnostics accurately classify and report the exact counts and calibration feasibility on the private inputs (PR #24).
 
 - [x] Add public synthetic MusicXML fixtures and tests for invalid same-voice timing / overfull measures, refining preflight diagnostics, calibration boundaries, and developer-facing reports (PR #23).
