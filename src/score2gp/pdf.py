@@ -157,6 +157,10 @@ class _TabSystem:
     x0: float
     x1: float
     barlines: list[float]
+    barline_candidates_count: int = 0
+    valid_barline_count: int = 0
+    rejected_barline_count: int = 0
+    rejection_reasons: dict[str, int] = None
 
     @property
     def staff_bbox(self) -> dict[str, float | int]:
@@ -186,6 +190,8 @@ class _TabSystem:
             warnings.append("missing_pdf_barlines")
             warnings.append("pdf_barlines_missing")
             warnings.append("pdf_bar_boxes_missing")
+            if self.barline_candidates_count > 0:
+                warnings.append("pdf_bar_boxes_not_constructible")
         return warnings
 
     @property
@@ -433,6 +439,70 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                         "grouping_status": "missing",
                     })
             else:
+                for system in systems:
+                    if len(system.barlines) < 2:
+                        warnings.append({
+                            "code": "pdf_barlines_not_detected_in_system",
+                            "message": f"Less than 2 valid barlines detected in system {system.system_index} on page {page_number}.",
+                            "severity": "warning",
+                            "grouping_status": "missing"
+                        })
+                        warnings.append({
+                            "code": "pdf_bar_boxes_not_constructible",
+                            "message": f"Bar boxes are not constructible in system {system.system_index} on page {page_number}.",
+                            "severity": "warning",
+                            "grouping_status": "missing"
+                        })
+                        warnings.append({
+                            "code": "pdf_bar_detection_not_enough_for_build_ir",
+                            "message": f"Bar detection is incomplete in system {system.system_index} on page {page_number}.",
+                            "severity": "warning",
+                            "grouping_status": "missing"
+                        })
+                    if system.rejected_barline_count > 0 and len(system.barlines) == 0:
+                        warnings.append({
+                            "code": "pdf_barline_candidates_present_but_invalid",
+                            "message": f"Barline candidates were present but all were rejected in system {system.system_index} on page {page_number}.",
+                            "severity": "warning",
+                            "grouping_status": "missing"
+                        })
+                    reasons = system.rejection_reasons or {}
+                    if reasons.get("pdf_barline_too_short", 0) > 0:
+                        warnings.append({
+                            "code": "pdf_barline_too_short",
+                            "message": f"One or more barline candidates are too short in system {system.system_index} on page {page_number}.",
+                            "severity": "warning",
+                            "grouping_status": "partial"
+                        })
+                    if reasons.get("pdf_barline_does_not_cross_staff", 0) > 0:
+                        warnings.append({
+                            "code": "pdf_barline_does_not_cross_staff",
+                            "message": f"One or more barline candidates do not cross the tab staff in system {system.system_index} on page {page_number}.",
+                            "severity": "warning",
+                            "grouping_status": "partial"
+                        })
+                    if reasons.get("pdf_barline_outside_system_bounds", 0) > 0:
+                        warnings.append({
+                            "code": "pdf_barline_outside_system_bounds",
+                            "message": f"One or more barline candidates are outside the system bounds in system {system.system_index} on page {page_number}.",
+                            "severity": "warning",
+                            "grouping_status": "partial"
+                        })
+                    if reasons.get("pdf_barline_ambiguous", 0) > 0:
+                        warnings.append({
+                            "code": "pdf_barline_ambiguous",
+                            "message": f"One or more barline candidates are horizontally ambiguous in system {system.system_index} on page {page_number}.",
+                            "severity": "warning",
+                            "grouping_status": "ambiguous"
+                        })
+                    if len(system.barlines) >= 2:
+                        warnings.append({
+                            "code": "pdf_bar_boxes_constructed",
+                            "message": f"Bar boxes successfully constructed in system {system.system_index} on page {page_number}.",
+                            "severity": "info",
+                            "grouping_status": "grouped"
+                        })
+
                 # Check for vertically overlapping systems on the page
                 has_overlap = False
                 for i, sys1 in enumerate(systems):
@@ -582,6 +652,10 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                         else None,
                         "bar_x_min": round(bar_bounds[0], 3) if bar_bounds is not None else None,
                         "bar_x_max": round(bar_bounds[1], 3) if bar_bounds is not None else None,
+                        "barline_candidates_count": system.barline_candidates_count if system is not None else None,
+                        "valid_barline_count": system.valid_barline_count if system is not None else None,
+                        "rejected_barline_count": system.rejected_barline_count if system is not None else None,
+                        "rejection_reasons": system.rejection_reasons if system is not None else None,
                     },
                 )
                 if not _should_keep_candidate(candidate.model_dump(mode="json", exclude_none=True)):
@@ -1187,6 +1261,13 @@ def _append_grouping_warnings(raw: dict[str, Any], meta: dict[str, int] | None =
             "severity": "warning",
             "grouping_status": "partial"
         })
+    if has_systems and has_bars and ("pdf_candidates_unassigned_to_string" in warning_codes_present or "pdf_string_assignment_missing" in warning_codes_present or "pdf_string_assignment_ambiguous" in warning_codes_present or "pdf_string_lines_missing" in warning_codes_present):
+        raw["warnings"].append({
+            "code": "pdf_bar_detection_succeeded_string_assignment_pending",
+            "message": "Bar detection succeeded, but string assignment is the next blocker.",
+            "severity": "warning",
+            "grouping_status": "partial"
+        })
 
     unsafe_codes = _unsafe_grouping_codes(fret_candidates, raw.get("warnings", []))
     if unsafe_codes or missing:
@@ -1315,6 +1396,17 @@ def _unsafe_grouping_codes(fret_candidates: list[dict[str, Any]], page_warnings:
         "pdf_input_class_ascii_tab_requires_alignment",
         "pdf_input_class_drawn_tab_requires_barlines",
         "pdf_system_detection_not_enough_for_build_ir",
+
+        # Refined bar-detection taxonomy blocker codes
+        "pdf_barlines_not_detected_in_system",
+        "pdf_barline_candidates_present_but_invalid",
+        "pdf_barline_does_not_cross_staff",
+        "pdf_barline_too_short",
+        "pdf_barline_outside_system_bounds",
+        "pdf_barline_ambiguous",
+        "pdf_bar_boxes_not_constructible",
+        "pdf_bar_detection_succeeded_string_assignment_pending",
+        "pdf_bar_detection_not_enough_for_build_ir",
     }
     codes: set[str] = set()
     for candidate in fret_candidates:
@@ -1388,6 +1480,17 @@ def _specific_grouping_warning(code: str, grouping_counts: dict[str, int]) -> di
         "pdf_input_class_ascii_tab_requires_alignment": "ASCII-tab input class requires an alignment sidecar.",
         "pdf_input_class_drawn_tab_requires_barlines": "Drawn-tab input class requires visible barlines.",
         "pdf_system_detection_not_enough_for_build_ir": "PDF system detection is incomplete and not safe to build IR.",
+
+        # Refined bar-detection blocker taxonomy messages
+        "pdf_barlines_not_detected_in_system": "System detected but no barlines found.",
+        "pdf_barline_candidates_present_but_invalid": "Barline candidates exist but are invalid.",
+        "pdf_barline_does_not_cross_staff": "Vertical lines present but do not cross tab staff.",
+        "pdf_barline_too_short": "Vertical lines too short to trust.",
+        "pdf_barline_outside_system_bounds": "Barlines outside detected system bounds.",
+        "pdf_barline_ambiguous": "Ambiguous extra vertical lines detected.",
+        "pdf_bar_boxes_not_constructible": "Measure bar boxes could not be constructed from barlines.",
+        "pdf_bar_detection_succeeded_string_assignment_pending": "Bar detection succeeded, but string assignment is the next blocker.",
+        "pdf_bar_detection_not_enough_for_build_ir": "PDF bar detection is incomplete and not safe to build IR.",
     }
     return {
         "code": code,
@@ -1622,7 +1725,34 @@ def _relative_artifact_path(path: Path, base: Path) -> str:
 def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
     segments = list(_drawing_segments(page.get_drawings()))
     horizontal = sorted((segment for segment in segments if segment.is_horizontal), key=lambda segment: segment.y0)
-    vertical = sorted((segment for segment in segments if segment.is_vertical), key=lambda segment: segment.x0)
+
+    # Extract vertical candidates with a wider margin
+    raw_verticals = []
+    for s in segments:
+        if abs(s.x0 - s.x1) <= 2.0 and abs(s.y1 - s.y0) >= 10.0:
+            raw_verticals.append(s)
+
+    # Deduplicate raw verticals that are essentially the same line
+    deduped_verticals = []
+    for s in raw_verticals:
+        x_s = (s.x0 + s.x1) / 2
+        y_min_s = min(s.y0, s.y1)
+        y_max_s = max(s.y0, s.y1)
+        found_similar = False
+        for i, existing in enumerate(deduped_verticals):
+            x_e = (existing.x0 + existing.x1) / 2
+            y_min_e = min(existing.y0, existing.y1)
+            y_max_e = max(existing.y0, existing.y1)
+            if abs(x_s - x_e) <= 1.0 and not (y_max_s < y_min_e or y_max_e < y_min_s):
+                new_y_min = min(y_min_s, y_min_e)
+                new_y_max = max(y_max_s, y_max_e)
+                new_x = (x_s + x_e) / 2
+                deduped_verticals[i] = _LineSegment(new_x, new_y_min, new_x, new_y_max)
+                found_similar = True
+                break
+        if not found_similar:
+            deduped_verticals.append(s)
+
     systems = []
     system_index = 1
     next_bar_index = 1
@@ -1633,14 +1763,69 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
         x1 = max(max(line.x0, line.x1) for line in group)
         y0 = min(line_ys)
         y1 = max(line_ys)
-        barlines = [
-            round((line.x0 + line.x1) / 2, 3)
-            for line in vertical
-            if x0 - 8.0 <= (line.x0 + line.x1) / 2 <= x1 + 8.0
-            and min(line.y0, line.y1) <= y0 + 4.0
-            and max(line.y0, line.y1) >= y1 - 4.0
-        ]
-        barlines = _unique_sorted(barlines)
+
+        system_candidates = []
+        for s in deduped_verticals:
+            x_val = (s.x0 + s.x1) / 2
+            y_min = min(s.y0, s.y1)
+            y_max = max(s.y0, s.y1)
+            if y_max >= y0 - 15.0 and y_min <= y1 + 15.0 and x0 - 50.0 <= x_val <= x1 + 50.0:
+                system_candidates.append(s)
+
+        barline_candidates_count = len(system_candidates)
+        rejection_reasons = {
+            "pdf_barline_outside_system_bounds": 0,
+            "pdf_barline_too_short": 0,
+            "pdf_barline_does_not_cross_staff": 0,
+            "pdf_barline_ambiguous": 0,
+        }
+
+        valid_barlines = []
+        rejected_count = 0
+
+        for s in system_candidates:
+            x_val = (s.x0 + s.x1) / 2
+            y_min = min(s.y0, s.y1)
+            y_max = max(s.y0, s.y1)
+            height = y_max - y_min
+
+            # 1. Check outside bounds
+            if x_val < x0 - 8.0 or x_val > x1 + 8.0:
+                rejection_reasons["pdf_barline_outside_system_bounds"] += 1
+                rejected_count += 1
+                continue
+
+            # 2. Check too short
+            if height < 40.0:
+                rejection_reasons["pdf_barline_too_short"] += 1
+                rejected_count += 1
+                continue
+
+            # 3. Check does not cross staff
+            if y_min > y0 + 4.0 or y_max < y1 - 4.0:
+                rejection_reasons["pdf_barline_does_not_cross_staff"] += 1
+                rejected_count += 1
+                continue
+
+            # 4. Check ambiguity
+            is_ambiguous = False
+            for other in system_candidates:
+                if other is s:
+                    continue
+                other_x = (other.x0 + other.x1) / 2
+                if abs(x_val - other_x) < 6.0:
+                    is_ambiguous = True
+                    break
+
+            if is_ambiguous:
+                rejection_reasons["pdf_barline_ambiguous"] += 1
+                rejected_count += 1
+                continue
+
+            valid_barlines.append(round(x_val, 3))
+
+        valid_barlines = _unique_sorted(valid_barlines)
+
         systems.append(
             _TabSystem(
                 page_index=page_index,
@@ -1650,10 +1835,14 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
                 line_ys=line_ys,
                 x0=x0,
                 x1=x1,
-                barlines=barlines,
+                barlines=valid_barlines,
+                barline_candidates_count=barline_candidates_count,
+                valid_barline_count=len(valid_barlines),
+                rejected_barline_count=rejected_count,
+                rejection_reasons=rejection_reasons,
             )
         )
-        next_bar_index += max(1, len(barlines) - 1)
+        next_bar_index += max(1, len(valid_barlines) - 1)
         system_index += 1
     return systems
 
