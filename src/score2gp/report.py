@@ -56,6 +56,26 @@ def build_grouping_diagnostics(
     inferred_systems = {candidate.get("system_index") for candidate in candidates if candidate.get("system_index") is not None}
     inferred_bars = {candidate.get("bar_index") for candidate in candidates if candidate.get("bar_index") is not None}
     inferred_string_assignment_count = sum(1 for candidate in playable if candidate.get("string") is not None)
+    unassigned_string_candidate_count = sum(1 for c in playable if c.get("string") is None)
+
+    ambiguous_string_candidate_count = sum(
+        1 for c in playable
+        if any(w in (c.get("raw", {}).get("assignment_warnings", []) or [])
+               for w in ("pdf_string_assignment_ambiguous", "ambiguous_string_assignment"))
+    )
+
+    outside_staff_candidate_count = sum(
+        1 for c in playable
+        if "pdf_string_assignment_outside_staff" in (c.get("raw", {}).get("assignment_warnings", []) or [])
+    )
+
+    between_strings_candidate_count = sum(
+        1 for c in playable
+        if any(w in (c.get("raw", {}).get("assignment_warnings", []) or [])
+               for w in ("pdf_string_assignment_between_lines", "pdf_candidate_between_strings"))
+    )
+    non_playable_excluded_count = sum(1 for c in candidates if c.get("parsed_fret") is None)
+
     warning_codes = [str(warning.get("code", "warning")) for warning in tabraw.get("warnings", [])]
     grouping_status = grouping_status_for_tabraw(tabraw)
     grouping = _grouping_evidence_summary(candidates)
@@ -117,6 +137,7 @@ def build_grouping_diagnostics(
     is_blocked = grouping_status not in ("grouped", "ascii_grouped")
 
     # Determine primary_blocker_stage
+    primary_blocker_stage = "none"
     if not whether_system_detection_succeeded:
         primary_blocker_stage = "system_detection"
     elif input_class in ("unsupported", "mixed_candidate") and is_blocked:
@@ -127,8 +148,9 @@ def build_grouping_diagnostics(
         primary_blocker_stage = "string_assignment"
     elif is_blocked:
         primary_blocker_stage = "timing_alignment"
-    else:
-        primary_blocker_stage = "none"
+    is_string_assignment_primary_blocker = (primary_blocker_stage == "string_assignment")
+    is_string_assignment_secondary_blocker = (is_blocked and not is_string_assignment_primary_blocker and unassigned_string_candidate_count > 0)
+    upstream_blocks_first = is_blocked and primary_blocker_stage in ("system_detection", "bar_detection")
 
     return {
         "schema_version": GROUPING_DIAGNOSTICS_VERSION if "GROUPING_DIAGNOSTICS_VERSION" in globals() else GROUPING_DIAGNOSTICS_SCHEMA_VERSION,
@@ -144,6 +166,14 @@ def build_grouping_diagnostics(
         "inferred_system_count": len(inferred_systems),
         "inferred_bar_count": len(inferred_bars),
         "inferred_string_assignment_count": inferred_string_assignment_count,
+        "unassigned_string_candidate_count": unassigned_string_candidate_count,
+        "ambiguous_string_candidate_count": ambiguous_string_candidate_count,
+        "outside_staff_candidate_count": outside_staff_candidate_count,
+        "between_strings_candidate_count": between_strings_candidate_count,
+        "non_playable_excluded_count": non_playable_excluded_count,
+        "is_string_assignment_primary_blocker": is_string_assignment_primary_blocker,
+        "is_string_assignment_secondary_blocker": is_string_assignment_secondary_blocker,
+        "upstream_blocks_first": upstream_blocks_first,
         "grouping_status": grouping_status,
         "ascii_tab_candidate_count": len(ascii_candidates),
         "ascii_tab_block_count": _warning_sum(tabraw, "ascii_tab_detected", "ascii_tab_block_count"),
@@ -384,6 +414,8 @@ def write_grouping_diagnostics_html(path: str | Path, report: dict[str, Any]) ->
         primary_stage = report.get("primary_blocker_stage", "unknown")
         if primary_stage == "system_detection":
             hint_text = "System detection is incomplete; use a clearer born-digital fixture, improve public layout heuristics, or review manually."
+        elif primary_stage == "string_assignment":
+            hint_text = "Playable fret candidates require unambiguous assignment to one of the six detected tab strings."
         elif primary_stage == "bar_detection":
             if any(w in warnings for w in (
                 "pdf_bar_box_too_narrow",
@@ -466,6 +498,11 @@ def write_grouping_diagnostics_html(path: str | Path, report: dict[str, Any]) ->
   <dt>Inferred systems</dt><dd>{report.get("inferred_system_count", 0)}</dd>
   <dt>Inferred bars</dt><dd>{report.get("inferred_bar_count", 0)}</dd>
   <dt>String assignments</dt><dd>{report.get("inferred_string_assignment_count", 0)}</dd>
+  <dt>Unassigned string candidates</dt><dd>{report.get("unassigned_string_candidate_count", 0)}</dd>
+  <dt>Ambiguous string candidates</dt><dd>{report.get("ambiguous_string_candidate_count", 0)}</dd>
+  <dt>Candidates outside staff</dt><dd>{report.get("outside_staff_candidate_count", 0)}</dd>
+  <dt>Candidates between strings</dt><dd>{report.get("between_strings_candidate_count", 0)}</dd>
+  <dt>Non-playable text excluded</dt><dd>{report.get("non_playable_excluded_count", 0)}</dd>
   <dt>ASCII-tab candidates</dt><dd>{report.get("ascii_tab_candidate_count", 0)}</dd>
   <dt>ASCII-tab blocks</dt><dd>{report.get("ascii_tab_block_count", 0)}</dd>
   <dt>Complete ASCII-tab blocks</dt><dd>{report.get("ascii_tab_complete_block_count", 0)}</dd>
@@ -554,6 +591,18 @@ def _grouping_evidence_summary(candidates: list[dict[str, Any]]) -> dict[str, An
         if candidate.get("bar_index") is not None:
             systems[key]["bar_assigned_candidate_ids"].append(candidate.get("id"))
 
+        cand_detail = {
+            "id": candidate.get("id"),
+            "raw_text": candidate.get("raw_text", ""),
+            "parsed_fret": candidate.get("parsed_fret"),
+            "kind": candidate.get("kind", "candidate-text"),
+            "string": candidate.get("string"),
+            "string_distance": raw.get("string_distance"),
+            "reasons": raw.get("assignment_warnings", []) or [],
+            "confidence": candidate.get("confidence", 0.5),
+        }
+        systems[key].setdefault("candidate_details", []).append(cand_detail)
+
     system_values = [systems[key] for key in sorted(systems)]
     return {
         "schema_version": "pdf-grouping.v0.1",
@@ -585,6 +634,18 @@ def _grouping_system_html(system: dict[str, Any]) -> str:
             )
         details_html = "<br/>&nbsp;&nbsp;&nbsp;&nbsp;Candidates details:<ul>" + "".join(f"<li>{html.escape(item)}</li>" for item in details_items) + "</ul>"
 
+    cand_details = system.get("candidate_details", [])
+    cand_html = ""
+    if cand_details:
+        cand_items = []
+        for c in cand_details:
+            reasons_str = f" (reasons: {', '.join(c['reasons'])})" if c["reasons"] else ""
+            dist_str = f", dist={c['string_distance']}pt" if c["string_distance"] is not None else ""
+            cand_items.append(
+                f"Candidate '{c['id']}' ({c['kind']} '{c['raw_text']}'): string={c['string'] or 'None'}{dist_str}, confidence={c['confidence']}{reasons_str}"
+            )
+        cand_html = "<br/>&nbsp;&nbsp;&nbsp;&nbsp;Candidates details:<ul>" + "".join(f"<li>{html.escape(item)}</li>" for item in cand_items) + "</ul>"
+
     return (
         "<li>"
         f"page {html.escape(str(system.get('page_index')))}, "
@@ -599,6 +660,7 @@ def _grouping_system_html(system: dict[str, Any]) -> str:
         f"valid barlines: {html.escape(str(valid_barlines))}; "
         f"rejected barlines: {html.escape(str(rejected_barlines))} (reasons: {html.escape(reasons_str)});"
         f"{details_html} "
+        f"{cand_html} "
         f"grouping confidence: {html.escape(str(system.get('grouping_confidence')))}; "
         f"warnings: {html.escape(warnings)}"
         "</li>"
