@@ -8,6 +8,8 @@
 
 ## Done
 
+- [x] Refresh E2E private smoke blocker summary after PDF system detection fixtures v0.4 to verify distinct layout stages and blocker taxonomies (feature/private-smoke-refresh-after-pdf-system-v0.4).
+
 - [x] Add public synthetic PDF fixtures for unresolved staff lines and scanned-tab system boundaries, separating system detection from bar detection and drawn from ASCII input classes (feature/pdf-system-detection-public-fixtures-v0.4).
 
 - [x] Refresh the E2E private smoke blocker summary after PDF layout diagnostics v0.3 to evaluate real inputs and identify detailed layout warning codes (PR #28).
