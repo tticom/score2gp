@@ -1948,6 +1948,18 @@ def _tabraw_grouping_risk(tabraw: TabRaw) -> dict[str, object] | None:
             "pdf_partial_grouping_one_system_unboxed",
             "pdf_grouping_complete",
             "pdf_bar_box_construction_not_enough_for_build_ir",
+
+            # New Phase 7 Bar Box Construction Edge Cases Codes
+            "pdf_bar_box_single_system_failure",
+            "pdf_bar_box_edge_system_missing_boundary",
+            "pdf_bar_box_one_boundary_rejected",
+            "pdf_barline_short_but_near_staff_boundary",
+            "pdf_barline_ambiguous_on_edge_system",
+            "pdf_candidate_unassigned_due_to_unboxed_system",
+            "pdf_candidate_near_missing_bar_boundary",
+            "pdf_boundary_candidate_blocks_full_grouping",
+            "pdf_full_grouping_requires_all_systems_boxed",
+            "pdf_grouping_complete_all_playable_candidates_assigned",
         }
     ]
     counts["tabraw_warning_codes"] = counts["warning_codes"]
@@ -2051,6 +2063,18 @@ def _tabraw_unsafe_grouping_warning_codes(tabraw: TabRaw) -> list[str]:
         "pdf_candidate_unassigned_to_bar",
         "pdf_partial_grouping_one_system_unboxed",
         "pdf_bar_box_construction_not_enough_for_build_ir",
+
+        # New Phase 7 Bar Box Construction Edge Cases Codes
+        "pdf_bar_box_single_system_failure",
+        "pdf_bar_box_edge_system_missing_boundary",
+        "pdf_bar_box_one_boundary_rejected",
+        "pdf_barline_short_but_near_staff_boundary",
+        "pdf_barline_ambiguous_on_edge_system",
+        "pdf_candidate_unassigned_due_to_unboxed_system",
+        "pdf_candidate_near_missing_bar_boundary",
+        "pdf_boundary_candidate_blocks_full_grouping",
+        "pdf_full_grouping_requires_all_systems_boxed",
+        "pdf_grouping_complete_all_playable_candidates_assigned",
     }
     return sorted({str(warning.get("code")) for warning in tabraw.warnings if warning.get("code") in unsafe})
 

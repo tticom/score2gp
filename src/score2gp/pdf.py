@@ -197,6 +197,17 @@ class _TabSystem:
                 if len(self.barlines) == 1:
                     warnings.append("pdf_bar_box_requires_two_boundaries")
                     warnings.append("pdf_bar_box_missing_right_boundary")
+                    if self.rejected_barline_count > 0:
+                        warnings.append("pdf_bar_box_one_boundary_rejected")
+                        warnings.append("pdf_bar_box_edge_system_missing_boundary")
+                else:
+                    if self.rejected_barline_count > 0:
+                        warnings.append("pdf_bar_box_single_system_failure")
+                        reasons = self.rejection_reasons or {}
+                        if reasons.get("pdf_barline_too_short", 0) > 0 or reasons.get("pdf_barline_too_short_absolute", 0) > 0:
+                            warnings.append("pdf_barline_short_but_near_staff_boundary")
+                        if reasons.get("pdf_barline_ambiguous", 0) > 0:
+                            warnings.append("pdf_barline_ambiguous_on_edge_system")
         else:
             # Check too narrow boxes
             for left, right in zip(self.barlines, self.barlines[1:]):
@@ -427,6 +438,29 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
             systems = _detect_tab_systems(page, page_number)
             ascii_blocks = _detect_ascii_tab_blocks(page, page_number, first_system_index=len(systems) + 1)
 
+            words = sorted(
+                page.get_text("words"),
+                key=lambda word: (round(float(word[1]), 3), round(float(word[0]), 3), str(word[4])),
+            )
+            # Identify systems that actually contain at least one playable candidate
+            systems_with_playable_candidates = set()
+            for word in words:
+                raw_text = str(word[4]).strip()
+                if not raw_text:
+                    continue
+                bbox_values = [float(word[0]), float(word[1]), float(word[2]), float(word[3])]
+                x = (bbox_values[0] + bbox_values[2]) / 2
+                y = (bbox_values[1] + bbox_values[3]) / 2
+                if _point_in_ascii_block(ascii_blocks, x, y):
+                    continue
+                if ascii_blocks and parse_fret_text(raw_text) is not None:
+                    continue
+                is_fret_candidate = parse_fret_text(raw_text) is not None
+                if is_fret_candidate:
+                    system = _nearest_system(systems, x, y)
+                    if system is not None:
+                        systems_with_playable_candidates.add(system.system_index)
+
             # Accumulate metadata
             for system in systems:
                 meta["detected_systems"] += 1
@@ -469,6 +503,16 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                     })
             else:
                 for system in systems:
+                    if system.system_index not in systems_with_playable_candidates:
+                        if len(system.barlines) >= 2 and not any(w in system.grouping_warnings for w in ("pdf_bar_box_too_narrow", "pdf_bar_box_outside_system_bounds", "pdf_bar_box_overlaps_neighbor")):
+                            warnings.append({
+                                "code": "pdf_bar_boxes_constructed",
+                                "message": f"Bar boxes successfully constructed in system {system.system_index} on page {page_number}.",
+                                "severity": "info",
+                                "grouping_status": "grouped"
+                            })
+                        continue
+
                     if len(system.barlines) < 2:
                         warnings.append({
                             "code": "pdf_barlines_not_detected_in_system",
@@ -623,8 +667,15 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                         })
 
                 # Check if some systems are unboxed while others are boxed on this page
-                has_any_unboxed_system = any(len(sys.barlines) < 2 or any(w in sys.grouping_warnings for w in ("pdf_bar_box_too_narrow", "pdf_bar_box_outside_system_bounds", "pdf_bar_box_overlaps_neighbor")) for sys in systems)
-                has_any_boxed_system = any(len(sys.barlines) >= 2 and not any(w in sys.grouping_warnings for w in ("pdf_bar_box_too_narrow", "pdf_bar_box_outside_system_bounds", "pdf_bar_box_overlaps_neighbor")) for sys in systems)
+                has_any_unboxed_system = any(
+                    (len(sys.barlines) < 2 or any(w in sys.grouping_warnings for w in ("pdf_bar_box_too_narrow", "pdf_bar_box_outside_system_bounds", "pdf_bar_box_overlaps_neighbor")))
+                    and sys.system_index in systems_with_playable_candidates
+                    for sys in systems
+                )
+                has_any_boxed_system = any(
+                    len(sys.barlines) >= 2 and not any(w in sys.grouping_warnings for w in ("pdf_bar_box_too_narrow", "pdf_bar_box_outside_system_bounds", "pdf_bar_box_overlaps_neighbor"))
+                    for sys in systems
+                )
                 if has_any_unboxed_system and has_any_boxed_system:
                     warnings.append({
                         "code": "pdf_partial_grouping_one_system_unboxed",
@@ -730,6 +781,14 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                     bar_index, bar_warnings = system.bar_for_x(x)
                     if bar_index is None and is_fret_candidate:
                         assignment_warnings.append("pdf_candidates_unassigned_to_bar")
+                        assignment_warnings.append("pdf_candidate_unassigned_to_bar")
+                        if len(system.barlines) < 2:
+                            assignment_warnings.append("pdf_candidate_unassigned_due_to_unboxed_system")
+                        if any(w in bar_warnings for w in ("missing_pdf_barlines", "pdf_barlines_missing", "pdf_candidate_outside_bar")):
+                            assignment_warnings.append("pdf_candidate_near_missing_bar_boundary")
+                    if is_fret_candidate:
+                        if "pdf_candidate_on_bar_boundary" in bar_warnings or "pdf_barlines_ambiguous" in bar_warnings:
+                            assignment_warnings.append("pdf_boundary_candidate_blocks_full_grouping")
                     assignment_warnings.extend(bar_warnings)
                 else:
                     bar_index = None
@@ -1572,6 +1631,18 @@ def _unsafe_grouping_codes(fret_candidates: list[dict[str, Any]], page_warnings:
         "pdf_candidate_unassigned_to_bar",
         "pdf_partial_grouping_one_system_unboxed",
         "pdf_bar_box_construction_not_enough_for_build_ir",
+
+        # New Phase 7 Bar Box Construction Edge Cases Codes
+        "pdf_bar_box_single_system_failure",
+        "pdf_bar_box_edge_system_missing_boundary",
+        "pdf_bar_box_one_boundary_rejected",
+        "pdf_barline_short_but_near_staff_boundary",
+        "pdf_barline_ambiguous_on_edge_system",
+        "pdf_candidate_unassigned_due_to_unboxed_system",
+        "pdf_candidate_near_missing_bar_boundary",
+        "pdf_boundary_candidate_blocks_full_grouping",
+        "pdf_full_grouping_requires_all_systems_boxed",
+        "pdf_grouping_complete_all_playable_candidates_assigned",
     }
     codes: set[str] = set()
     for candidate in fret_candidates:
@@ -1682,6 +1753,18 @@ def _specific_grouping_warning(code: str, grouping_counts: dict[str, int]) -> di
         "pdf_partial_grouping_one_system_unboxed": "PDF grouping is partial because at least one system lacks bar boxes.",
         "pdf_grouping_complete": "PDF layout grouping is complete.",
         "pdf_bar_box_construction_not_enough_for_build_ir": "PDF bar-box construction is incomplete and not safe to build IR.",
+
+        # New Phase 7 Bar Box Construction Edge Cases messages
+        "pdf_bar_box_single_system_failure": "PDF grouping contains a system with zero accepted barlines.",
+        "pdf_bar_box_edge_system_missing_boundary": "An edge system is missing one or more boundaries.",
+        "pdf_bar_box_one_boundary_rejected": "One accepted and one rejected boundary detected on system.",
+        "pdf_barline_short_but_near_staff_boundary": "Short barlines detected near the staff boundaries.",
+        "pdf_barline_ambiguous_on_edge_system": "Ambiguous barlines detected on edge system.",
+        "pdf_candidate_unassigned_due_to_unboxed_system": "Fret candidate is unassigned because its system lacks boxes.",
+        "pdf_candidate_near_missing_bar_boundary": "Fret candidate is near a missing bar boundary.",
+        "pdf_boundary_candidate_blocks_full_grouping": "Boundary candidate ambiguity blocks full grouping.",
+        "pdf_full_grouping_requires_all_systems_boxed": "Full grouping is blocked because one or more systems lack bar boxes.",
+        "pdf_grouping_complete_all_playable_candidates_assigned": "All playable fret candidates are safely assigned to systems, bars, and strings.",
     }
     return {
         "code": code,
