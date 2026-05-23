@@ -3,18 +3,18 @@
 ## Metadata
 - **Current Branch**: `feature/pdf-layout-public-fixtures-v0.3`
 - **Base Branch**: `main`
-- **Current PR**: Draft (to be created)
-- **Latest Local Commit**: Pending (after handoff commit)
-- **Latest Pushed Commit**: Pending (after feature branch push)
+- **Current PR**: [#27](https://github.com/tticom/score2gp/pull/27) (Draft)
+- **Latest Local Commit**: `80f95ea359a48bb1f02d4e504ce1200cbe571e0a`
+- **Latest Pushed Commit**: `80f95ea359a48bb1f02d4e504ce1200cbe571e0a`
 - **Commit Subject**: Add PDF layout blocker fixtures v0.3
-- **Working Tree Status**: Clean (once committed)
+- **Working Tree Status**: Clean
 - **Tests & Checks Run**:
   - `python -m pytest` -> 197 passed
   - `python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
   - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid
   - `git diff --check` -> passed cleanly
   - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep` is tracked
-- **GitHub Check Status**: N/A
+- **GitHub Check Status**: N/A (Draft PR created)
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or diagnostic outputs are tracked or committed. All outputs under `work/` are ignored.
 
 ## What Changed in the Task
