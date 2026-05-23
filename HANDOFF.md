@@ -3,11 +3,11 @@
 ## Metadata
 - **Current Branch**: `feature/private-smoke-refresh-after-pdf-bar-box-edge-cases-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: Draft PR (to be created)
-- **Latest Local Commit**: (to be populated after commit)
-- **Latest Pushed Commit**: (to be populated after push)
+- **Current PR**: [PR #39](https://github.com/tticom/score2gp/pull/39) (Draft)
+- **Latest Local Commit**: `94ed292`
+- **Latest Pushed Commit**: `94ed292`
 - **Commit Subject**: Refresh private smoke after PDF bar box edge cases
-- **Working Tree Status**: Modified project files staged for commit
+- **Working Tree Status**: Clean (after handoff sync commit)
 - **Tests & Checks Run**:
   - `python -m pytest` -> 228 passed cleanly
   - `python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
