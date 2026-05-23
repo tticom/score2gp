@@ -2,12 +2,13 @@
 
 ## Next
 
-- [ ] Add public synthetic PDF fixtures for unresolved staff lines and scanned-tab system boundaries under `feature/pdf-system-detection-public-fixtures-v0.4`.
 - [ ] Add public reproductions for more Audiveris timing patterns before another private run.
 - [ ] Add developer-facing HTML styling and compact thumbnails for grouping diagnostics.
 - [ ] Add a public partial-to-recovery design note before attempting any automatic grouping repair.
 
 ## Done
+
+- [x] Add public synthetic PDF fixtures for unresolved staff lines and scanned-tab system boundaries, separating system detection from bar detection and drawn from ASCII input classes (feature/pdf-system-detection-public-fixtures-v0.4).
 
 - [x] Refresh the E2E private smoke blocker summary after PDF layout diagnostics v0.3 to evaluate real inputs and identify detailed layout warning codes (PR #28).
 

@@ -915,3 +915,128 @@ def test_pdf_mixed_prose_tab_numbers_diagnosed(tmp_path) -> None:
     payload = raised.value.to_diagnostics_payload()
     assert payload["details"]["playable_fret_candidate_count"] > 0
     assert "pdf_no_systems_detected" in payload["details"]["tabraw_warning_codes"]
+
+
+def test_refined_drawn_no_system_diagnostics(tmp_path) -> None:
+    tabraw_path = tmp_path / "tab_cands_no_system.tabraw.json"
+    tabraw = TabRaw.model_validate(extract_tab(NEW_TAB_CANDIDATES_NO_SYSTEM_PDF, tabraw_path))
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+
+    # Assert specific warning codes from refined taxonomy
+    assert "pdf_drawn_system_not_detected" in warning_codes
+    assert "pdf_system_detection_not_enough_for_build_ir" in warning_codes
+    assert "pdf_no_systems_detected" in warning_codes
+
+    from score2gp.report import build_grouping_diagnostics
+    report = build_grouping_diagnostics(
+        source_pdf=NEW_TAB_CANDIDATES_NO_SYSTEM_PDF,
+        inspection={"kind": "born-digital", "page_count": 1},
+        tabraw=tabraw.model_dump(mode="json"),
+        artifacts={},
+    )
+    assert report["input_class"] == "drawn_tab_candidate" or report["input_class"] == "unsupported"
+    assert report["whether_system_detection_succeeded"] is False
+    assert report["primary_blocker_stage"] == "system_detection"
+
+
+def test_refined_fragmented_drawn_staff_diagnostics(tmp_path) -> None:
+    tabraw_path = tmp_path / "fragmented.tabraw.json"
+    tabraw = TabRaw.model_validate(extract_tab(NEW_LINES_FRAGMENTED_PDF, tabraw_path))
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+
+    assert "pdf_drawn_staff_lines_unresolved" in warning_codes
+    assert "pdf_tab_staff_lines_fragmented" in warning_codes
+
+
+def test_refined_overlapping_systems_diagnostics(tmp_path) -> None:
+    tabraw_path = tmp_path / "ambiguous_close.tabraw.json"
+    tabraw = TabRaw.model_validate(extract_tab(NEW_ORDER_AMBIGUOUS_CLOSE_PDF, tabraw_path))
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+
+    assert "pdf_drawn_system_ambiguous" in warning_codes
+    assert "pdf_system_order_ambiguous" in warning_codes
+
+
+def test_refined_ascii_three_blocks_no_bars_diagnostics(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_ascii_tab_three_blocks_no_bars.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "three_blocks.tabraw.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+
+    assert "pdf_ascii_system_detected" in warning_codes
+    assert "pdf_ascii_system_measure_boundaries_missing" in warning_codes
+    assert "pdf_ascii_system_timing_unavailable" in warning_codes
+    assert "pdf_input_class_ascii_tab_requires_alignment" in warning_codes
+
+
+def test_refined_ascii_no_bars_with_separators_diagnostics(tmp_path) -> None:
+    tabraw_path = tmp_path / "no_bars.tabraw.json"
+    tabraw = TabRaw.model_validate(extract_tab(ASCII_NO_BARS_PDF, tabraw_path))
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+
+    assert "pdf_ascii_system_detected" in warning_codes
+    assert "pdf_ascii_system_timing_unavailable" in warning_codes
+    assert "pdf_input_class_ascii_tab_requires_alignment" in warning_codes
+
+
+def test_refined_mixed_drawn_ascii_diagnostics(tmp_path) -> None:
+    tabraw_path = tmp_path / "conflict.tabraw.json"
+    tabraw = TabRaw.model_validate(extract_tab(NEW_CONFLICT_LAYOUT_PDF, tabraw_path))
+
+    from score2gp.report import build_grouping_diagnostics
+    report = build_grouping_diagnostics(
+        source_pdf=NEW_CONFLICT_LAYOUT_PDF,
+        inspection={"kind": "born-digital", "page_count": 1},
+        tabraw=tabraw.model_dump(mode="json"),
+        artifacts={},
+    )
+    assert report["input_class"] == "mixed_candidate"
+    assert report["primary_blocker_stage"] == "unsupported_input_class"
+
+
+def test_refined_system_detected_no_bars_diagnostics(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_system_detected_no_barlines.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "no_barlines.tabraw.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+
+    assert "pdf_system_detected_bar_detection_missing" in warning_codes
+    assert "pdf_input_class_drawn_tab_requires_barlines" in warning_codes
+
+    from score2gp.report import build_grouping_diagnostics
+    report = build_grouping_diagnostics(
+        source_pdf=pdf_path,
+        inspection={"kind": "born-digital", "page_count": 1},
+        tabraw=tabraw.model_dump(mode="json"),
+        artifacts={},
+    )
+    assert report["whether_system_detection_succeeded"] is True
+    assert report["whether_bar_detection_succeeded"] is False
+    assert report["primary_blocker_stage"] == "bar_detection"
+
+
+def test_refined_valid_grouped_counterpart_diagnostics(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_valid_grouped_counterpart.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "valid_counterpart.tabraw.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+
+    assert "pdf_system_detected_bar_detection_missing" not in warning_codes
+    assert "pdf_input_class_drawn_tab_requires_barlines" not in warning_codes
+
+    from score2gp.report import build_grouping_diagnostics
+    report = build_grouping_diagnostics(
+        source_pdf=pdf_path,
+        inspection={"kind": "born-digital", "page_count": 1},
+        tabraw=tabraw.model_dump(mode="json"),
+        artifacts={},
+    )
+    assert report["whether_system_detection_succeeded"] is True
+    assert report["whether_bar_detection_succeeded"] is True
+    assert report["primary_blocker_stage"] == "none" or report["primary_blocker_stage"] == "timing_alignment"

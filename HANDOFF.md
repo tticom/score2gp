@@ -1,15 +1,15 @@
 # Handoff
 
 ## Metadata
-- **Current Branch**: `feature/private-smoke-refresh-after-pdf-layout-v0.3`
+- **Current Branch**: `feature/pdf-system-detection-public-fixtures-v0.4`
 - **Base Branch**: `main`
-- **Current PR**: [#28](https://github.com/tticom/score2gp/pull/28) (Draft)
-- **Latest Local Commit**: `8b3992db0517b1880f2e7be2dd9155e10dc1efdd`
-- **Latest Pushed Commit**: `8b3992db0517b1880f2e7be2dd9155e10dc1efdd`
-- **Commit Subject**: Refresh private smoke after PDF layout diagnostics
+- **Current PR**: [#29](https://github.com/tticom/score2gp/pull/29) (Draft)
+- **Latest Local Commit**: `53f90c329f59edd138ce2500b5c3c109037a9b32`
+- **Latest Pushed Commit**: `53f90c329f59edd138ce2500b5c3c109037a9b32`
+- **Commit Subject**: Add PDF system detection fixtures v0.4
 - **Working Tree Status**: Clean
 - **Tests & Checks Run**:
-  - `python -m pytest` -> 197 passed
+  - `python -m pytest` -> 205 passed cleanly
   - `python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
   - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid
   - `git diff --check` -> passed cleanly
@@ -18,8 +18,12 @@
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or diagnostic outputs are tracked or committed. All outputs under `work/` are ignored.
 
 ## What Changed in the Task
-- Re-ran the private-safe E2E smoke workflow against the private inputs under the newly integrated PDF layout blocker diagnostics (PR #27).
-- Evaluated and recorded the detailed warning codes, counts, and statuses on the real inputs without modifying gates, converting them, or copying any private data.
+- Added public synthetic PDF layout fixtures for unresolved drawn staff lines, overlapping systems, ASCII tab blocks without bars, mixed pages, system-detected no barlines, and valid grouped counterparts.
+- Refined the warning taxonomy in `src/score2gp/pdf.py` with 11 precise codes (e.g. `pdf_drawn_system_not_detected`, `pdf_drawn_system_ambiguous`, `pdf_drawn_staff_lines_unresolved`, `pdf_ascii_system_detected`, `pdf_ascii_system_measure_boundaries_missing`, `pdf_ascii_system_timing_unavailable`, `pdf_system_detected_bar_detection_missing`, etc.).
+- Refined diagnostics in `src/score2gp/report.py` to classify `input_class` and `primary_blocker_stage`, distinguishing system-detection blockers from downstream bar-detection blockers.
+- Updated developer-facing HTML grouping report with clear remediation hints.
+- Updated documentation (`architecture.md`, `workflow.md`, `limitations.md`) and task status (`TASKS.md`).
+
 
 ## Private Smoke Blocker Classification
 - **`private_input_1`** (`pdf-tab-musicxml`):
@@ -48,19 +52,20 @@
   - **Detailed PDF warning codes**: `pdf-tab-system-not-detected`, `pdf_text_geometry_present_but_no_safe_system`, `pdf_drawn_geometry_present_but_staff_unresolved`, `pdf_tab_staff_lines_fragmented`, `ascii_tab_detected`, `ascii_tab_timing_unavailable`, `ascii_tab_measure_boundary_missing`, `unsupported_ascii_tab_rhythm`, `pdf_no_systems_detected`, `pdf_tab_staff_missing`, `pdf_string_lines_missing`, `pdf_tab_candidates_present_but_system_not_detected`, `pdf_grouping_not_safe_for_build_ir`, `pdf_missing_pdf_grouping_blocks_build_ir`, `pdf_layout_detection_requires_manual_review`, `pdf_partial_grouping_with_playable_candidates`
 
 ## Comparison with Previous Summary
-- **Previous Grouping Blocker**: `missing_pdf_grouping` and `pdf-tab-system-not-detected`.
-- **Current Grouping Status**: `missing_pdf_grouping` remains the primary layout blocker. For `private_input_1`, drawn systems exist but barlines/bar boxes are completely missing, alongside vertical layout ambiguities. For `private_input_2`, no drawn systems were detected, while ASCII tab blocks are successfully extracted but lack timing/barlines.
-- **Diagnostics Refinement**: The run has successfully validated the newly refined PDF blocker warnings (PR #27) on real private inputs.
+- **Previous Grouping Blocker**: `missing_pdf_grouping` and `pdf-tab-system-not-detected` were the main layout blockers, but the precise boundary between system detection and downstream bar detection was blurred.
+- **Current Grouping Status**: `missing_pdf_grouping` remains the primary layout blocker. However, we have now introduced a clear stage-split diagnostic hierarchy. System detection success and bar detection success are tracked as distinct booleans, and `primary_blocker_stage` maps to `system_detection`, `bar_detection`, `string_assignment`, `timing_alignment`, or `unsupported_input_class`.
+- **Diagnostics Refinement**: The public warning codes and classifications now perfectly model the splits: `private_input_1` is classified as `drawn_tab_candidate` with `primary_blocker_stage: bar_detection` (since systems are detected but barlines/bar boxes are 0), whereas `private_input_2` maps to `primary_blocker_stage: system_detection` (since no drawn systems are found and ASCII blocks lack aligned bar separators).
 
 ## Current Top Blocker Classification
 - **`pdf_system_detection`** (primary blocker for `private_input_2` - unresolved staff lines and no drawn systems detected)
 - **`pdf_bar_detection`** (primary blocker for `private_input_1` - systems exist but no barlines/bar boxes are detected)
 
 ## Recommended Next Branch
-- **`feature/pdf-system-detection-public-fixtures-v0.4`** (to introduce public synthetic fixtures for unresolved staff lines, OCR-like / scanned-tab system boundaries, or ASCII tab calibration, and refine layout/system detection heuristics).
+- **`feature/private-smoke-refresh-after-pdf-system-detection-v0.1`** (to re-run the local private E2E diagnostic smoke workflow and verify that the real inputs are correctly classified and reported under the new distinct system/bar blocker stages, input classes, and taxonomy codes).
 
 ## Explicit Scope Boundaries
 - **Do not** commit any private inputs, private outputs, private GP files, private PDFs, private summaries, private HTML diagnostics, or any `work/` contents.
 - **Do not** weaken timing/grouping gates or implement timing auto-repair.
 - **Do not** add OCR/scanned-PDF/ML support.
 - **Do not** push directly to `main`.
+
