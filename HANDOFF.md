@@ -1,73 +1,80 @@
 # Handoff
 
 ## Metadata
-- **Current Branch**: `feature/pdf-bar-detection-public-fixtures-v0.4`
+- **Current Branch**: `feature/private-smoke-refresh-after-pdf-bar-detection-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: [#31](https://github.com/tticom/score2gp/pull/31) (Draft)
-- **Latest Local Commit**: `23d3587288b293d34461313bb86951085a8a995e`
-- **Latest Pushed Commit**: `23d3587288b293d34461313bb86951085a8a995e`
-- **Commit Subject**: Add PDF bar detection fixtures v0.4
-- **Working Tree Status**: Clean (after handoff push)
+- **Current PR**: Draft (to be created)
+- **Latest Local Commit**: (to be committed)
+- **Latest Pushed Commit**: (to be pushed)
+- **Commit Subject**: Refresh private smoke after PDF bar diagnostics
+- **Working Tree Status**: Modified
 - **Tests & Checks Run**:
   - `python -m pytest` -> 211 passed cleanly
   - `python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
   - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid
-  - `git diff --check` -> passed cleanly with 0 trailing whitespaces
+  - `git diff --check` -> passed cleanly
   - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep` is tracked
 - **GitHub Check Status**: N/A
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or diagnostic outputs are tracked or committed. All outputs under `work/` are ignored.
 
 ## What Changed in the Task
-- **Bar-detection Taxonomy**: Defined comprehensive reason codes for bar-detection failures:
-  - `pdf_barlines_not_detected_in_system`
-  - `pdf_barline_candidates_present_but_invalid`
-  - `pdf_barline_does_not_cross_staff`
-  - `pdf_barline_too_short`
-  - `pdf_barline_outside_system_bounds`
-  - `pdf_barline_ambiguous`
-  - `pdf_bar_boxes_not_constructible`
-  - `pdf_bar_detection_succeeded_string_assignment_pending`
-  - `pdf_bar_detection_not_enough_for_build_ir`
-- **Public Synthetic PDF Fixtures**: Created and generated 5 new PDF fixtures for barline-detection blocker classes:
-  - `generated_pdf_bar_boxes_not_constructible.pdf` (only 1 valid barline)
-  - `generated_pdf_barlines_ambiguous.pdf` (barline candidates horizontally close < 6.0pt)
-  - `generated_pdf_barlines_do_not_cross_staff.pdf` (barlines not crossing tab staff)
-  - `generated_pdf_barlines_outside_bounds.pdf` (barlines outside horizontal bounds)
-  - `generated_pdf_barlines_too_short.pdf` (barlines too short < 40pt)
-  - Regenerated all other synthetic layout diagnostics counterpart PDFs.
-- **Reporting & Diagnostics HTML**:
-  - Summarized per-system `barline_candidates_count`, `valid_barline_count`, `rejected_barline_count`, and `rejection_reasons`.
-  - Propagated new bar-detection metrics into TabRaw candidate `raw` telemetry.
-  - Updated the developer grouping diagnostics HTML to render exact vertical candidate and rejection details.
-  - Updated HTML remediation hint for the `"bar_detection"` stage to: `"System detection succeeded, but safe bar boxes could not be constructed."`.
-- **Pipeline Gates**: Registered the new blocker warning codes inside `src/score2gp/build_ir.py` validation filters to strictly block `build_ir` on unsafe inputs.
-- **Tests**: Appended comprehensive unit tests under `tests/test_pdf.py` verifying correct blocker stage, code reporting, candidate telemetry, and `build_ir` rejection for each synthetic scenario.
+- Re-ran the local private-safe end-to-end diagnostic smoke test workflow against real private inputs after merging the PDF bar detection fixtures v0.4.
+- Evaluated and recorded the detailed barline candidate, accepted, and rejected counts directly from real private inputs without copying private data or loosen grouping gates.
+- Verified that the new pipeline diagnostics correctly extract and propagate system-level vertical candidate metrics (`barline_candidates_count`, `valid_barline_count`, `rejected_barline_count`, and `rejection_reasons`).
 
 ## Private Smoke Blocker Classification
 - **`private_input_1`** (`pdf-tab-musicxml`):
+  - **Input class**: `drawn_tab_candidate`
   - **Page count**: 2
   - **Text detected**: Yes
   - **Geometry detected**: Yes
-  - **Playable candidates**: 203 (non-playable: 126, total: 329)
-  - **Detected systems/staves**: 14 (7 per page)
-  - **Detected bar boxes**: 0
-  - **Fret candidates with string**: 141 (with system: 162, with bar: 0)
-  - **Grouping status**: `missing_pdf_grouping` (due to missing bar barlines and multiple vertical layout ambiguities)
-  - **Primary refusal reason**: `musicxml_timing_risk` (69 timing issues, including 63 overfull bars, 1 underfull bar, 2 tie continuity risks, 2 many timing risks, 66 affected events; calibration feasibility `false`)
-  - **Secondary reason codes**: `missing_pdf_grouping`
+  - **Drawn system count**: 14 (7 per page)
+  - **Barline candidates per system**: 2 candidates detected on most systems, but they are all rejected.
+  - **Valid barline count per system**: 0 (on most systems) or 1 (on system 1).
+  - **Rejected barline count per system**: 2 (on most systems) or 1 (on system 1).
+  - **Barline rejection reason**: `pdf_barline_too_short` (vertical line height is below the 40pt threshold).
+  - **Bar box count**: 0
+  - **Playable fret candidates**: 203 (non-playable: 126, total: 329)
+  - **Candidates assigned to system**: 282 (fret: 162, chord/text: 120)
+  - **Candidates assigned to bar**: 0 (due to 0 bar boxes constructed)
+  - **Candidates assigned to string**: 141 (fret candidates)
+  - **Grouping status**: `missing_pdf_grouping`
+  - **Primary blocker stage**: `bar_detection` (sub-stage `pdf_barline_candidates_invalid` - barlines are present but rejected as too short).
+  - **Primary PDF reason code**: `pdf_system_detected_bar_detection_missing`
+  - **Secondary PDF reason codes**: `pdf_barline_candidates_present_but_invalid`, `pdf_bar_boxes_not_constructible`, `pdf_bar_detection_not_enough_for_build_ir`, `pdf_barline_too_short`, `missing_pdf_barlines`, `pdf_bar_boxes_missing`, `pdf_barlines_missing`
+  - **Timing status**: `failed` (MusicXML timing risk prevents ScoreIR output: 69 timing issues, including 63 overfull bars, 1 underfull bar, 2 tie continuity risks, 2 many timing risks, 66 affected events; calibration feasibility `false`)
+  - **ScoreIR gate status**: `refused`
+  - **GP writing status**: `not_attempted`
 - **`private_input_2`** (`pdf-tab-only`):
+  - **Input class**: `ascii_tab_candidate` / `unsupported`
   - **Page count**: 1
   - **Text detected**: Yes
   - **Geometry detected**: Yes
-  - **Playable candidates**: 54 (non-playable: 17, total: 71)
-  - **Detected systems/staves**: 0 (drawn); 3 ASCII blocks inferred as 3 systems in ASCII tab parsing
-  - **Detected bar boxes**: 0
-  - **Fret candidates with string**: 54 (with system: 54, with bar: 0)
+  - **Drawn system count**: 0
+  - **ASCII block count**: 3
+  - **Playable fret candidates**: 54 (non-playable: 17, total: 71)
+  - **Candidates assigned to system**: 54
+  - **Candidates assigned to bar**: 0 (due to missing ASCII timing boundary)
+  - **Candidates assigned to string**: 54
+  - **Bar box count**: 0
   - **Grouping status**: `missing_pdf_grouping`
-  - **Primary refusal reason**: None (no MusicXML)
+  - **Primary PDF blocker stage**: `system_detection` (drawn) and `ascii_system_detection` (ASCIItiming boundary unavailable).
+  - **Primary PDF reason code**: `pdf-tab-system-not-detected`
+  - **Secondary PDF reason codes**: `pdf_drawn_system_not_detected`, `pdf_ascii_system_detected`, `pdf_ascii_system_measure_boundaries_missing`, `pdf_ascii_system_timing_unavailable`, `pdf_text_geometry_present_but_no_safe_system`, `pdf_drawn_geometry_present_but_staff_unresolved`, `pdf_tab_staff_lines_fragmented`
+  - **Timing status**: `not_attempted`
+  - **ScoreIR gate status**: `not_attempted`
+
+## Comparison with Previous Summary
+- **Previous Bar-detection Status**: `private_input_1` reported 14 systems and 0 bar boxes under `pdf_system_detected_bar_detection_missing`, but could not expose why vertical barlines were missing or rejected.
+- **Current Bar-detection Status**: With the v0.4 telemetry, `private_input_1` successfully reports detailed vertical line candidate counts (mostly 2 per system) and captures the exact reason they are invalid: they are rejected as `pdf_barline_too_short` because their height falls below the 40pt limit.
+
+## Current Top Blocker Classification
+- **`pdf_barline_candidates_invalid`** (primary grouping blocker for `private_input_1` - barline candidates exist but are invalid/too short).
+- **`pdf_drawn_system_detection`** (primary grouping blocker for `private_input_2` - no drawn tab system detected).
+- **`pdf_ascii_system_timing_boundary`** (primary timing/alignment blocker for `private_input_2` - ASCII block timing/barline boundary unavailable).
 
 ## Recommended Next Branch
-- **`feature/private-smoke-refresh-after-pdf-bar-detection-v0.1`** (to re-run the local E2E private smoke workflow and verify that the real inputs correctly report detailed bar candidate, accepted, rejected counts, and precise sub-blocker reasons).
+- **`feature/pdf-barline-validation-public-fixtures-v0.5`** (to introduce public synthetic PDF fixtures for line/barline validation limits, and refine the vertical crossing and height heuristic thresholds so that valid barlines on real inputs are safely accepted).
 
 ## Explicit Scope Boundaries
 - **Do not** commit any private inputs, private outputs, private GP files, private PDFs, private summaries, private HTML diagnostics, or any `work/` contents.
