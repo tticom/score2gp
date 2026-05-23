@@ -2118,3 +2118,576 @@ def write_musicxml_timing_diagnostics_html(path: str | Path, payload: dict[str, 
 </html>
 """
     out.write_text(body, encoding="utf-8")
+
+
+def anonymize_source_label(source_path: str | None) -> str:
+    if not source_path:
+        return "unknown_input"
+    name = Path(source_path).name.lower()
+    if "derek" in name or "trucks" in name:
+        return "private_input_1"
+    if "caged" in name or "guitar tab creator" in name:
+        return "private_input_2"
+    if "private" in name:
+        return "private_input_custom"
+    return Path(source_path).stem
+
+
+def write_musicxml_unrecoverable_timing_report(
+    json_path: str | Path,
+    html_path: str | Path,
+    payload: dict[str, Any],
+    source_path: str | None = None,
+) -> None:
+    """Generate both JSON and HTML reports for unrecoverable MusicXML timing failures."""
+    
+    json_path = Path(json_path)
+    html_path = Path(html_path)
+    
+    json_path.parent.mkdir(parents=True, exist_ok=True)
+    html_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    source_label = anonymize_source_label(source_path or payload.get("source_path") or payload.get("details", {}).get("source_path"))
+    
+    timing_issues = payload.get("timing_issues", [])
+    
+    affected_part_ids = sorted(list(set(issue.get("part_id") for issue in timing_issues if issue.get("part_id"))))
+    affected_measure_numbers = sorted(list(set(str(issue.get("measure_number")) for issue in timing_issues if issue.get("measure_number") is not None)))
+    affected_measure_indexes = sorted(list(set(int(issue.get("measure_index")) for issue in timing_issues if issue.get("measure_index") is not None)))
+    affected_voice_ids = sorted(list(set(int(issue.get("voice")) for issue in timing_issues if issue.get("voice") is not None)))
+    
+    expected_measure_ticks = {}
+    actual_voice_end_ticks = {}
+    backup_forward_density_summary = {}
+    
+    max_overfull_divisions = 0.0
+    max_underfull_divisions = 0.0
+    
+    for issue in timing_issues:
+        m_num = str(issue.get("measure_number"))
+        if m_num:
+            if issue.get("expected_duration_divisions") is not None:
+                expected_measure_ticks[m_num] = float(issue["expected_duration_divisions"])
+            if issue.get("voice_extents"):
+                actual_voice_end_ticks[m_num] = {str(k): int(v) for k, v in issue["voice_extents"].items()}
+            if issue.get("backup_forward_count") is not None:
+                backup_forward_density_summary[m_num] = int(issue["backup_forward_count"])
+            
+            overfull = issue.get("overfull_divisions")
+            if overfull is not None:
+                max_overfull_divisions = max(max_overfull_divisions, float(overfull))
+                
+            if "underfull" in str(issue.get("code", "")).lower() or any("underfull" in str(r).lower() for r in issue.get("secondary_reasons", [])):
+                expected = issue.get("expected_duration_divisions")
+                end = issue.get("end_divisions")
+                if expected is not None and end is not None and expected > end:
+                    max_underfull_divisions = max(max_underfull_divisions, float(expected - end))
+                    
+    primary_reason = payload.get("category") or "musicxml_timing_risk"
+    all_codes = sorted({issue.get("code") for issue in timing_issues if issue.get("code")})
+    secondary_reasons = sorted([code for code in all_codes if code != primary_reason])
+    
+    affected_event_ids = set()
+    for issue in timing_issues:
+        ev_ids = issue.get("affected_event_ids")
+        if ev_ids:
+            affected_event_ids.update(ev_ids)
+        if issue.get("musicxml_note_id"):
+            affected_event_ids.add(issue["musicxml_note_id"])
+            
+    remediation_hint = (
+        "MusicXML timing is unrecoverable. "
+        "Suggested actions:\n"
+        "- regenerate MusicXML from source\n"
+        "- inspect OMR export timing\n"
+        "- simplify/re-export in notation software\n"
+        "- do not proceed to ScoreIR until timing is fixed"
+    )
+    
+    report_json = {
+        "schema_version": "musicxml-unrecoverable-timing-report.v0.1",
+        "source_label": source_label,
+        "stage_reached": "musicxml-import",
+        "timing_status": "failed",
+        "timing_gate_status": "refused",
+        "calibration_possible": False,
+        "automatic_repair_attempted": False,
+        "primary_reason_code": primary_reason,
+        "secondary_reason_codes": secondary_reasons,
+        "calibration_blocking_reasons": payload.get("calibration_blocking_reasons", ["musicxml_timing_calibration_not_safe"]),
+        "affected_part_ids": affected_part_ids,
+        "affected_measure_numbers": affected_measure_numbers,
+        "affected_measure_indexes": affected_measure_indexes,
+        "affected_voice_ids": affected_voice_ids,
+        "expected_measure_ticks": expected_measure_ticks,
+        "actual_voice_end_ticks": actual_voice_end_ticks,
+        "overfull_amount": max_overfull_divisions,
+        "underfull_amount": max_underfull_divisions,
+        "overfull_measure_count": payload.get("overfull_bar_count", 0),
+        "underfull_measure_count": payload.get("underfull_bar_count", 0),
+        "overlap_count": payload.get("overlap_count", 0),
+        "tie_continuity_risk_count": payload.get("tie_continuity_risk_count", 0),
+        "many_risk_count": payload.get("many_risk_summary_count", 0),
+        "affected_event_count": len(affected_event_ids),
+        "affected_event_ids": sorted(list(affected_event_ids)),
+        "backup_forward_density_summary": backup_forward_density_summary,
+        "alignment_attempted": False,
+        "scoreir_written": False,
+        "gp_written": False,
+        "remediation_hint": remediation_hint,
+    }
+    
+    json_path.write_text(json.dumps(report_json, indent=2, sort_keys=True), encoding="utf-8")
+    _write_musicxml_unrecoverable_timing_html(html_path, report_json, json_path.name, timing_issues)
+
+
+def _write_musicxml_unrecoverable_timing_html(
+    html_path: Path,
+    report_json: dict[str, Any],
+    json_filename: str,
+    timing_issues: list[dict[str, Any]],
+) -> None:
+    """Write user-facing HTML report for unrecoverable MusicXML timing."""
+    
+    table_rows = []
+    for issue in timing_issues:
+        part_id = issue.get("part_id") or "N/A"
+        m_num = issue.get("measure_number") or "N/A"
+        m_idx = issue.get("measure_index") or 0
+        voice = issue.get("voice")
+        voice_str = f"Voice {voice}" if voice is not None else "N/A"
+        
+        expected = issue.get("expected_duration_divisions")
+        expected_str = f"{expected}" if expected is not None else "N/A"
+        
+        end = issue.get("end_divisions")
+        end_str = f"{end}" if end is not None else "N/A"
+        
+        overfull = issue.get("overfull_divisions")
+        underfull = None
+        if expected is not None and end is not None and expected > end and "underfull" in str(issue.get("code")).lower():
+            underfull = expected - end
+            
+        amount_str = "0"
+        if overfull is not None and overfull > 0:
+            amount_str = f"+{overfull} divisions (overfull)"
+        elif underfull is not None and underfull > 0:
+            amount_str = f"-{underfull} divisions (underfull)"
+            
+        reason_codes = issue.get("code") or "N/A"
+        
+        table_rows.append(f"""<tr>
+          <td><code>{html.escape(str(part_id))}</code></td>
+          <td>Measure {html.escape(str(m_num))} (index {m_idx})</td>
+          <td>{html.escape(voice_str)}</td>
+          <td><code>{html.escape(expected_str)}</code></td>
+          <td><code>{html.escape(end_str)}</code></td>
+          <td><code>{html.escape(amount_str)}</code></td>
+          <td><code>{html.escape(str(reason_codes))}</code></td>
+        </tr>""")
+        
+    issues_html = "\n".join(table_rows) if table_rows else """<tr><td colspan="7" class="empty-state">No detailed measure timing issue rows.</td></tr>"""
+    
+    secondary_html = ""
+    if report_json["secondary_reason_codes"]:
+        secondary_html = "\n".join(f"<li><code>{html.escape(str(r))}</code></li>" for r in report_json["secondary_reason_codes"])
+    else:
+        secondary_html = "<li><em>None</em></li>"
+        
+    blocking_html = ""
+    if report_json["calibration_blocking_reasons"]:
+        blocking_html = ", ".join(f"<code>{html.escape(str(r))}</code>" for r in report_json["calibration_blocking_reasons"])
+    else:
+        blocking_html = "<em>None</em>"
+
+    body = f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MusicXML Timing is Unrecoverable</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+    :root {{
+      --bg-color: #0b0f19;
+      --card-bg: #151e30;
+      --card-border: #202c46;
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --divider: #1e293b;
+
+      --accent-refused: #f87171;
+      --accent-refused-glow: rgba(248, 113, 113, 0.1);
+      --accent-warning: #f59e0b;
+      --accent-warning-glow: rgba(245, 158, 11, 0.1);
+      --accent-allowed: #34d399;
+      --accent-allowed-glow: rgba(52, 211, 153, 0.1);
+    }}
+
+    body {{
+      background-color: var(--bg-color);
+      color: var(--text-primary);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      margin: 0;
+      padding: 2rem 1rem;
+      min-height: 100vh;
+      line-height: 1.5;
+    }}
+
+    .container {{
+      max-width: 1000px;
+      margin: 0 auto;
+    }}
+
+    header {{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+      border-bottom: 1px solid var(--divider);
+      padding-bottom: 1.5rem;
+    }}
+
+    h1 {{
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin: 0;
+      letter-spacing: -0.025em;
+    }}
+
+    .badge {{
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border: 1px solid transparent;
+      display: inline-block;
+    }}
+
+    .status-refused {{
+      background-color: var(--accent-refused-glow);
+      color: var(--accent-refused);
+      border-color: rgba(248, 113, 113, 0.2);
+    }}
+
+    .card {{
+      background-color: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }}
+
+    .card-title {{
+      font-size: 0.9rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-secondary);
+      margin-top: 0;
+      margin-bottom: 1.25rem;
+      border-bottom: 1px solid var(--divider);
+      padding-bottom: 0.5rem;
+    }}
+
+    .reason-box {{
+      border-left: 4px solid var(--accent-refused);
+      background-color: rgba(248, 113, 113, 0.05);
+      padding: 1rem;
+      border-radius: 0 8px 8px 0;
+      margin-bottom: 1rem;
+    }}
+
+    .reason-title {{
+      font-size: 1.125rem;
+      font-weight: 700;
+      margin: 0 0 0.5rem 0;
+    }}
+
+    .reason-code {{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.9rem;
+      background-color: rgba(0, 0, 0, 0.2);
+      padding: 0.2rem 0.4rem;
+      border-radius: 4px;
+      color: var(--text-primary);
+    }}
+
+    .grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }}
+
+    .metric-card {{
+      background-color: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      text-align: center;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }}
+
+    .metric-value {{
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 0.25rem;
+      color: var(--text-primary);
+    }}
+
+    .metric-label {{
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-secondary);
+    }}
+
+    dl {{
+      display: grid;
+      grid-template-columns: max-content 1fr;
+      gap: 0.5rem 1.5rem;
+      margin: 0;
+    }}
+
+    dt {{
+      font-weight: 500;
+      color: var(--text-secondary);
+    }}
+
+    dd {{
+      margin: 0;
+      font-weight: 600;
+    }}
+
+    code {{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.8rem;
+      background-color: rgba(0, 0, 0, 0.3);
+      padding: 0.125rem 0.25rem;
+      border-radius: 4px;
+      border: 1px solid var(--card-border);
+    }}
+
+    ul {{
+      margin: 0;
+      padding-left: 1.25rem;
+    }}
+
+    li {{
+      margin-bottom: 0.5rem;
+    }}
+
+    .remediation-card {{
+      background-color: rgba(245, 158, 11, 0.05);
+      border: 1px solid rgba(245, 158, 11, 0.2);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }}
+
+    .remediation-title {{
+      font-size: 0.875rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--accent-warning);
+      margin-top: 0;
+      margin-bottom: 0.5rem;
+    }}
+
+    .remediation-text {{
+      font-size: 1.05rem;
+      font-weight: 500;
+      margin: 0;
+    }}
+
+    table {{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+      text-align: left;
+    }}
+
+    th {{
+      font-weight: 600;
+      color: var(--text-secondary);
+      border-bottom: 2px solid var(--divider);
+      padding: 0.75rem 0.5rem;
+    }}
+
+    td {{
+      padding: 0.75rem 0.5rem;
+      border-bottom: 1px solid var(--divider);
+      vertical-align: middle;
+    }}
+
+    tr:hover td {{
+      background-color: rgba(255, 255, 255, 0.02);
+    }}
+
+    .empty-state {{
+      text-align: center;
+      color: var(--text-secondary);
+      font-style: italic;
+      padding: 2rem 0;
+    }}
+
+    .footer-note {{
+      font-size: 0.825rem;
+      color: var(--text-secondary);
+      text-align: center;
+      margin-top: 3rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--divider);
+    }}
+
+    pre {{
+      background-color: rgba(0, 0, 0, 0.3);
+      padding: 1rem;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.85rem;
+      border: 1px solid var(--card-border);
+      margin: 0;
+    }}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>MusicXML timing is unrecoverable</h1>
+      <span class="badge status-refused">Timing Blocked</span>
+    </header>
+
+    <div class="card">
+      <h2 class="card-title">Verdict & Diagnostics</h2>
+      <div class="reason-box">
+        <h3 class="reason-title">MusicXML timing is unrecoverable and strictly blocks alignment/ScoreIR generation.</h3>
+        <p style="margin: 0.5rem 0 0 0;">Primary reason code: <span class="reason-code">{html.escape(str(report_json["primary_reason_code"]))}</span></p>
+      </div>
+      <p style="margin: 1rem 0 0 0; font-size: 0.925rem; color: var(--text-secondary);">
+        Unrecoverable or polyphonic MusicXML timing strictly blocks ScoreIR generation to prevent downstream alignment and rendering failures. JSON remains the source of truth.
+      </p>
+    </div>
+
+    <div class="remediation-card">
+      <h2 class="remediation-title">Suggested Remediation Guidance</h2>
+      <p class="remediation-text">To resolve these unrecoverable timing errors, please try the following:</p>
+      <ul style="margin-top: 0.5rem; padding-left: 1.25rem; font-weight: 500; line-height: 1.6;">
+        <li>Regenerate MusicXML from the original source.</li>
+        <li>Inspect the OMR export timing settings if the file was scanned.</li>
+        <li>Simplify or re-export the score in your notation software (e.g. MuseScore, Sibelius, Finale).</li>
+        <li><strong>Do not proceed to ScoreIR or GP writing until all timing and voice timeline risks are fixed.</strong></li>
+      </ul>
+    </div>
+
+    <div class="grid">
+      <div class="metric-card">
+        <div class="metric-value">{report_json["overfull_measure_count"]}</div>
+        <div class="metric-label">Overfull Measures</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-value">{report_json["underfull_measure_count"]}</div>
+        <div class="metric-label">Underfull Measures</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-value">{report_json["tie_continuity_risk_count"]}</div>
+        <div class="metric-label">Tie Risks</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-value">{report_json["overlap_count"]}</div>
+        <div class="metric-label">Overlap Count</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-value">{report_json["affected_event_count"]}</div>
+        <div class="metric-label">Affected Events</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">Timing Refusal Summary</h2>
+      <dl style="margin-bottom: 1.5rem;">
+        <dt>Anonymised Source Label</dt>
+        <dd><code>{html.escape(report_json["source_label"])}</code></dd>
+
+        <dt>Pipeline Stage Reached</dt>
+        <dd><code>{html.escape(report_json["stage_reached"])}</code></dd>
+
+        <dt>Timing Status</dt>
+        <dd><code>{html.escape(report_json["timing_status"])}</code></dd>
+
+        <dt>Timing Gate Status</dt>
+        <dd><code>{html.escape(report_json["timing_gate_status"])}</code></dd>
+
+        <dt>Calibration Possible</dt>
+        <dd><code>{str(report_json["calibration_possible"]).lower()}</code></dd>
+
+        <dt>Automatic Repair Attempted</dt>
+        <dd><code>{str(report_json["automatic_repair_attempted"]).lower()}</code></dd>
+
+        <dt>Primary Reason</dt>
+        <dd><code>{html.escape(str(report_json["primary_reason_code"]))}</code></dd>
+
+        <dt>Secondary Reasons</dt>
+        <dd>
+          <ul style="padding-left: 1.25rem; margin-top: 0.25rem;">
+            {secondary_html}
+          </ul>
+        </dd>
+
+        <dt>Calibration Blocking Reasons</dt>
+        <dd>{blocking_html}</dd>
+
+        <dt>Affected Part IDs</dt>
+        <dd>{", ".join(f"<code>{html.escape(str(p))}</code>" for p in report_json["affected_part_ids"]) if report_json["affected_part_ids"] else "<em>None</em>"}</dd>
+
+        <dt>Affected Measure Numbers</dt>
+        <dd>{", ".join(f"<code>{html.escape(str(m))}</code>" for m in report_json["affected_measure_numbers"]) if report_json["affected_measure_numbers"] else "<em>None</em>"}</dd>
+
+        <dt>Affected Voice IDs</dt>
+        <dd>{", ".join(f"<code>{html.escape(str(v))}</code>" for v in report_json["affected_voice_ids"]) if report_json["affected_voice_ids"] else "<em>None</em>"}</dd>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">Affected Measures Timeline Breakdown</h2>
+      <div style="overflow-x: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Part ID</th>
+              <th>Measure (Index)</th>
+              <th>Voice ID</th>
+              <th>Expected Ticks</th>
+              <th>Actual Ticks</th>
+              <th>Overfull/Underfull Amount</th>
+              <th>Reason Codes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {issues_html}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">JSON Diagnostics Payload Reference</h2>
+      <pre><code>{html.escape(json.dumps(report_json, indent=2, sort_keys=True))}</code></pre>
+    </div>
+
+    <div class="footer-note">
+      This diagnostic report is generated automatically by the Antigravity Score2GP pipeline.
+    </div>
+  </div>
+</body>
+</html>
+"""
+    html_path.write_text(body, encoding="utf-8")
