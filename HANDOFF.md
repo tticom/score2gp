@@ -3,9 +3,9 @@
 ## Metadata
 - **Current Branch**: `feature/private-smoke-refresh-after-calibration-boundary-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: `Pending`
-- **Latest Local Commit**: `Pending`
-- **Latest Pushed Commit**: `Pending`
+- **Current PR**: [#26](https://github.com/tticom/score2gp/pull/26) (Draft)
+- **Latest Local Commit**: `e5a5c1e358ddd88d2125d1136ecf433d0b953053`
+- **Latest Pushed Commit**: `e5a5c1e358ddd88d2125d1136ecf433d0b953053`
 - **Commit Subject**: Refresh private smoke after calibration boundary diagnostics
 - **Working Tree Status**: Clean
 - **Tests & Checks Run**:
