@@ -3,9 +3,9 @@
 ## Metadata
 - **Current Branch**: `feature/pdf-edge-boundary-reporting-v0.9`
 - **Base Branch**: `main`
-- **Current PR**: N/A (to be created as Draft PR)
-- **Latest Local Commit**: N/A (will commit shortly)
-- **Latest Pushed Commit**: N/A (will push shortly)
+- **Current PR**: [PR #42](https://github.com/tticom/score2gp/pull/42) (Draft)
+- **Latest Local Commit**: `1d7e38e`
+- **Latest Pushed Commit**: `1d7e38e`
 - **Commit Subject**: Add PDF edge boundary reporting v0.9
 - **Working Tree Status**: Clean (except modified HANDOFF.md and TASKS.md)
 - **Tests & Checks Run**:
