@@ -3,11 +3,11 @@
 ## Metadata
 - **Current Branch**: `feature/pdf-barline-validation-public-fixtures-v0.5`
 - **Base Branch**: `main`
-- **Current PR**: PR #33 (Draft)
-- **Latest Local Commit**: `a65da96` (base merge point of PR #32)
-- **Latest Pushed Commit**: `a65da96` (base merge point of PR #32)
+- **Current PR**: [PR #33](https://github.com/tticom/score2gp/pull/33) (Draft)
+- **Latest Local Commit**: `9d58edb18e3423b851fd0bf0171e5b7fc266bd90`
+- **Latest Pushed Commit**: `9d58edb18e3423b851fd0bf0171e5b7fc266bd90`
 - **Commit Subject**: Add PDF barline validation fixtures v0.5
-- **Working Tree Status**: Modified / Untracked files present (prior to final task commit)
+- **Working Tree Status**: Clean (prior to handoff commit)
 - **Tests & Checks Run**:
   - `python -m pytest` -> 213 passed cleanly (including 2 new layout/barline validation test suites)
   - `python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
