@@ -162,6 +162,9 @@ class _TabSystem:
     rejected_barline_count: int = 0
     rejection_reasons: dict[str, int] = None
     barline_candidates_details: list[dict[str, Any]] = None
+    inferred_left: float | None = None
+    inferred_right: float | None = None
+    inferred_warnings: list[str] = None
 
     @property
     def staff_bbox(self) -> dict[str, float | int]:
@@ -175,8 +178,11 @@ class _TabSystem:
 
     @property
     def grouping_confidence(self) -> float:
-        if len(self.line_ys) == 6 and len(self.barlines) >= 2:
-            return 0.86
+        if len(self.barlines) >= 2:
+            if self.inferred_left is not None or self.inferred_right is not None:
+                return 0.72
+            if len(self.line_ys) == 6:
+                return 0.86
         if len(self.line_ys) == 6:
             return 0.58
         return 0.35
@@ -187,6 +193,8 @@ class _TabSystem:
         if len(self.line_ys) != 6:
             warnings.append("incomplete_tab_staff")
             warnings.append("pdf_tab_staff_incomplete")
+        if self.inferred_warnings:
+            warnings.extend(self.inferred_warnings)
         if len(self.barlines) < 2:
             warnings.append("missing_pdf_barlines")
             warnings.append("pdf_barlines_missing")
@@ -242,8 +250,15 @@ class _TabSystem:
     def bar_boxes(self) -> list[dict[str, float | int]]:
         if len(self.barlines) < 2:
             return []
-        return [
-            {
+        boxes = []
+        for index, (left, right) in enumerate(zip(self.barlines, self.barlines[1:])):
+            inferred = []
+            if self.inferred_left is not None and abs(left - self.inferred_left) < 1.0:
+                inferred.append("left")
+            if self.inferred_right is not None and abs(right - self.inferred_right) < 1.0:
+                inferred.append("right")
+
+            box_dict = {
                 "page": self.page_index,
                 "system_index": self.system_index,
                 "staff_index": self.staff_index,
@@ -254,8 +269,11 @@ class _TabSystem:
                 "y1": round(self.line_ys[-1], 3),
                 "confidence": self.grouping_confidence,
             }
-            for index, (left, right) in enumerate(zip(self.barlines, self.barlines[1:]))
-        ]
+            if inferred:
+                box_dict["inferred_boundaries"] = inferred
+                box_dict["provenance"] = "pdf_bar_box_inferred_edge_boundary"
+            boxes.append(box_dict)
+        return boxes
 
     def string_for_y(self, y: float | None) -> tuple[int | None, int | None, float | None, list[str]]:
         if y is None:
@@ -295,8 +313,70 @@ class _TabSystem:
             return None, ["ambiguous_bar_assignment", "pdf_barlines_ambiguous", "pdf_candidate_on_bar_boundary", "pdf_candidate_boundary_ambiguous", "pdf_bar_box_boundary_ambiguous"]
         for index, (left, right) in enumerate(zip(self.barlines, self.barlines[1:]), start=1):
             if left - 2.0 <= x <= right + 2.0:
-                return index, []
+                warnings = []
+                if self.inferred_left is not None and abs(left - self.inferred_left) < 1.0:
+                    warnings.append("pdf_bar_box_inferred_left_boundary")
+                if self.inferred_right is not None and abs(right - self.inferred_right) < 1.0:
+                    warnings.append("pdf_bar_box_inferred_right_boundary")
+                return index, warnings
         return None, ["ambiguous_bar_assignment", "pdf_candidate_unassigned_to_bar"]
+
+    def infer_edge_boundaries(self, playable_xs: list[float], rejected_xs: list[float]) -> tuple[float | None, float | None, list[str]]:
+        inferred_left = None
+        inferred_right = None
+        warnings = []
+
+        if len(self.barlines) != 1:
+            return None, None, []
+
+        mid_x = self.barlines[0]
+        ambig_tol = self.ambiguous_bar_tolerance
+
+        # Left inference
+        left_candidates = [x for x in playable_xs if x < mid_x]
+        if left_candidates:
+            # Check if there are any rejected barlines to the left
+            left_rejected = [rx for rx in rejected_xs if rx < mid_x]
+            if left_rejected:
+                warnings.append("pdf_bar_box_edge_boundary_ambiguous")
+                warnings.append("pdf_bar_box_inferred_boundary_requires_clear_system_edge")
+                warnings.append("pdf_bar_box_edge_boundary_fallback_rejected")
+            # Check too narrow
+            elif mid_x - self.x0 < 30.0:
+                warnings.append("pdf_bar_box_inferred_boundary_too_narrow")
+                warnings.append("pdf_bar_box_edge_boundary_fallback_rejected")
+            # Check candidate near inferred boundary
+            elif any(x - self.x0 < ambig_tol for x in left_candidates):
+                warnings.append("pdf_bar_box_inferred_boundary_candidate_ambiguous")
+                warnings.append("pdf_bar_box_edge_boundary_fallback_rejected")
+            else:
+                inferred_left = self.x0
+                warnings.append("pdf_bar_box_inferred_left_boundary")
+                warnings.append("pdf_bar_box_edge_boundary_fallback_used")
+
+        # Right inference
+        right_candidates = [x for x in playable_xs if x > mid_x]
+        if right_candidates:
+            # Check if there are any rejected barlines to the right
+            right_rejected = [rx for rx in rejected_xs if rx > mid_x]
+            if right_rejected:
+                warnings.append("pdf_bar_box_edge_boundary_ambiguous")
+                warnings.append("pdf_bar_box_inferred_boundary_requires_clear_system_edge")
+                warnings.append("pdf_bar_box_edge_boundary_fallback_rejected")
+            # Check too narrow
+            elif self.x1 - mid_x < 30.0:
+                warnings.append("pdf_bar_box_inferred_boundary_too_narrow")
+                warnings.append("pdf_bar_box_edge_boundary_fallback_rejected")
+            # Check candidate near inferred boundary
+            elif any(self.x1 - x < ambig_tol for x in right_candidates):
+                warnings.append("pdf_bar_box_inferred_boundary_candidate_ambiguous")
+                warnings.append("pdf_bar_box_edge_boundary_fallback_rejected")
+            else:
+                inferred_right = self.x1
+                warnings.append("pdf_bar_box_inferred_right_boundary")
+                warnings.append("pdf_bar_box_edge_boundary_fallback_used")
+
+        return inferred_left, inferred_right, warnings
 
     @property
     def line_spacing(self) -> float:
@@ -444,6 +524,7 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
             )
             # Identify systems that actually contain at least one playable candidate
             systems_with_playable_candidates = set()
+            system_playable_xs = {}
             for word in words:
                 raw_text = str(word[4]).strip()
                 if not raw_text:
@@ -460,6 +541,40 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                     system = _nearest_system(systems, x, y)
                     if system is not None:
                         systems_with_playable_candidates.add(system.system_index)
+                        if system.system_index not in system_playable_xs:
+                            system_playable_xs[system.system_index] = []
+                        system_playable_xs[system.system_index].append(x)
+
+            # Apply edge-boundary fallback inference policy
+            from dataclasses import replace
+            updated_systems = []
+            for system in systems:
+                if len(system.barlines) == 1:
+                    p_xs = system_playable_xs.get(system.system_index, [])
+                    rej_xs = [d["x"] for d in (system.barline_candidates_details or []) if d.get("final_decision") == "rejected"]
+                    inf_left, inf_right, inf_warnings = system.infer_edge_boundaries(p_xs, rej_xs)
+                    if inf_left is not None or inf_right is not None:
+                        new_barlines = list(system.barlines)
+                        if inf_left is not None:
+                            new_barlines.append(inf_left)
+                        if inf_right is not None:
+                            new_barlines.append(inf_right)
+                        new_barlines = sorted(list(set(new_barlines)))
+                        system = replace(
+                            system,
+                            barlines=new_barlines,
+                            inferred_left=inf_left,
+                            inferred_right=inf_right,
+                            inferred_warnings=inf_warnings,
+                            valid_barline_count=len(new_barlines),
+                        )
+                    elif inf_warnings:
+                        system = replace(
+                            system,
+                            inferred_warnings=inf_warnings,
+                        )
+                updated_systems.append(system)
+            systems = updated_systems
 
             # Accumulate metadata
             for system in systems:
@@ -655,6 +770,68 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                             warnings.append({
                                 "code": "pdf_bar_box_requires_two_boundaries",
                                 "message": f"A bar box requires at least two accepted barlines in system {system.system_index} on page {page_number}.",
+                                "severity": "warning",
+                                "grouping_status": "partial"
+                            })
+                        elif gw == "pdf_bar_box_inferred_left_boundary":
+                            warnings.append({
+                                "code": "pdf_bar_box_inferred_left_boundary",
+                                "message": f"Left edge boundary was inferred in system {system.system_index} on page {page_number}.",
+                                "severity": "info",
+                                "grouping_status": "grouped"
+                            })
+                        elif gw == "pdf_bar_box_inferred_right_boundary":
+                            warnings.append({
+                                "code": "pdf_bar_box_inferred_right_boundary",
+                                "message": f"Right edge boundary was inferred in system {system.system_index} on page {page_number}.",
+                                "severity": "info",
+                                "grouping_status": "grouped"
+                            })
+                        elif gw == "pdf_bar_box_edge_boundary_fallback_used":
+                            warnings.append({
+                                "code": "pdf_bar_box_edge_boundary_fallback_used",
+                                "message": f"Edge boundary fallback was used in system {system.system_index} on page {page_number}.",
+                                "severity": "info",
+                                "grouping_status": "grouped"
+                            })
+                        elif gw == "pdf_bar_box_edge_boundary_fallback_rejected":
+                            warnings.append({
+                                "code": "pdf_bar_box_edge_boundary_fallback_rejected",
+                                "message": f"Edge boundary fallback was rejected in system {system.system_index} on page {page_number}.",
+                                "severity": "warning",
+                                "grouping_status": "partial"
+                            })
+                            warnings.append({
+                                "code": "pdf_bar_box_inferred_boundary_not_enough_for_build_ir",
+                                "message": f"Inferred boundary failure blocks IR generation in system {system.system_index} on page {page_number}.",
+                                "severity": "warning",
+                                "grouping_status": "partial"
+                            })
+                        elif gw == "pdf_bar_box_edge_boundary_ambiguous":
+                            warnings.append({
+                                "code": "pdf_bar_box_edge_boundary_ambiguous",
+                                "message": f"Edge boundary fallback is ambiguous in system {system.system_index} on page {page_number}.",
+                                "severity": "warning",
+                                "grouping_status": "partial"
+                            })
+                        elif gw == "pdf_bar_box_inferred_boundary_too_narrow":
+                            warnings.append({
+                                "code": "pdf_bar_box_inferred_boundary_too_narrow",
+                                "message": f"Inferred boundary would produce a box too narrow in system {system.system_index} on page {page_number}.",
+                                "severity": "warning",
+                                "grouping_status": "partial"
+                            })
+                        elif gw == "pdf_bar_box_inferred_boundary_candidate_ambiguous":
+                            warnings.append({
+                                "code": "pdf_bar_box_inferred_boundary_candidate_ambiguous",
+                                "message": f"A fret candidate lies too close to the inferred boundary in system {system.system_index} on page {page_number}.",
+                                "severity": "warning",
+                                "grouping_status": "partial"
+                            })
+                        elif gw == "pdf_bar_box_inferred_boundary_requires_clear_system_edge":
+                            warnings.append({
+                                "code": "pdf_bar_box_inferred_boundary_requires_clear_system_edge",
+                                "message": f"Inferred boundary requires a clear, non-ambiguous system edge in system {system.system_index} on page {page_number}.",
                                 "severity": "warning",
                                 "grouping_status": "partial"
                             })
@@ -1643,6 +1820,14 @@ def _unsafe_grouping_codes(fret_candidates: list[dict[str, Any]], page_warnings:
         "pdf_boundary_candidate_blocks_full_grouping",
         "pdf_full_grouping_requires_all_systems_boxed",
         "pdf_grouping_complete_all_playable_candidates_assigned",
+
+        # New Phase 8 Edge System Boundary Fallback Codes
+        "pdf_bar_box_edge_boundary_fallback_rejected",
+        "pdf_bar_box_edge_boundary_ambiguous",
+        "pdf_bar_box_inferred_boundary_too_narrow",
+        "pdf_bar_box_inferred_boundary_candidate_ambiguous",
+        "pdf_bar_box_inferred_boundary_requires_clear_system_edge",
+        "pdf_bar_box_inferred_boundary_not_enough_for_build_ir",
     }
     codes: set[str] = set()
     for candidate in fret_candidates:
