@@ -337,7 +337,7 @@ def write_grouping_diagnostics_html(path: str | Path, report: dict[str, Any]) ->
         if primary_stage == "system_detection":
             hint_text = "System detection is incomplete; use a clearer born-digital fixture, improve public layout heuristics, or review manually."
         elif primary_stage == "bar_detection":
-            hint_text = "System detection succeeded, but safe bar boxes could not be constructed."
+            hint_text = "Barline candidates exist but do not safely cross enough of the tab staff."
         else:
             hint_text = "PDF layout grouping is unsafe; use a clearer born-digital fixture, improve public layout heuristics, or review manually."
 
@@ -462,6 +462,7 @@ def _grouping_evidence_summary(candidates: list[dict[str, Any]]) -> dict[str, An
                 "valid_barline_count": raw.get("valid_barline_count"),
                 "rejected_barline_count": raw.get("rejected_barline_count"),
                 "rejection_reasons": raw.get("rejection_reasons"),
+                "barline_candidates_details": raw.get("barline_candidates_details"),
             }
         systems[key]["candidate_ids"].append(candidate.get("id"))
         if candidate.get("string") is not None:
@@ -489,6 +490,17 @@ def _grouping_system_html(system: dict[str, Any]) -> str:
     reasons = system.get("rejection_reasons")
     reasons_str = json.dumps(reasons) if reasons else "none"
 
+    details = system.get("barline_candidates_details", [])
+    details_html = ""
+    if details:
+        details_items = []
+        for d in details:
+            details_items.append(
+                f"Candidate at x={d.get('x')} (height={d.get('height')}, crossed={d.get('gaps_crossed')} gaps, staff_h={d.get('staff_height')}, coverage={d.get('coverage_ratio')}) "
+                f"decision: {d.get('final_decision')} (reasons: absolute_height={d.get('absolute_height_decision')}, relative_crossing={d.get('relative_staff_crossing_decision')}, error={d.get('rejection_reason') or 'none'})"
+            )
+        details_html = "<br/>&nbsp;&nbsp;&nbsp;&nbsp;Candidates details:<ul>" + "".join(f"<li>{html.escape(item)}</li>" for item in details_items) + "</ul>"
+
     return (
         "<li>"
         f"page {html.escape(str(system.get('page_index')))}, "
@@ -501,7 +513,8 @@ def _grouping_system_html(system: dict[str, Any]) -> str:
         f"candidate assignments: {html.escape(str(len(system.get('candidate_ids', []))))}; "
         f"barline candidates: {html.escape(str(barline_cands))}; "
         f"valid barlines: {html.escape(str(valid_barlines))}; "
-        f"rejected barlines: {html.escape(str(rejected_barlines))} (reasons: {html.escape(reasons_str)}); "
+        f"rejected barlines: {html.escape(str(rejected_barlines))} (reasons: {html.escape(reasons_str)});"
+        f"{details_html} "
         f"grouping confidence: {html.escape(str(system.get('grouping_confidence')))}; "
         f"warnings: {html.escape(warnings)}"
         "</li>"
