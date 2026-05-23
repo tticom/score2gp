@@ -113,3 +113,30 @@ def test_private_smoke_cli(tmp_path, monkeypatch) -> None:
     assert (out_dir / "extracted.tabraw.json").exists()
     assert (out_dir / "build_error.json").exists()
 
+
+def test_private_smoke_unrecoverable_timing_artifacts(tmp_path) -> None:
+    # Run the private E2E runner for an overfull timing MusicXML to trigger unrecoverable timing
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_valid_grouped_counterpart.pdf")
+    musicxml_path = Path("tests/fixtures/musicxml/timing_overfull_measure.musicxml")
+
+    summary = run_pipeline_for_input(
+        pdf_path=pdf_path,
+        musicxml_path=musicxml_path,
+        output_base=tmp_path,
+    )
+
+    assert summary["timing_status"] == "failed"
+    
+    # Verify that the unrecoverable reports exist on disk
+    out_dir = tmp_path / "private_input_custom"
+    assert (out_dir / "musicxml-unrecoverable-timing-report.json").exists()
+    assert (out_dir / "musicxml-unrecoverable-timing-report.html").exists()
+
+    # Verify that artifact paths include the report relative paths
+    artifact_paths = summary["artifact_paths"]
+    assert "musicxml_unrecoverable_timing_report_json" in artifact_paths
+    assert "musicxml_unrecoverable_timing_report_html" in artifact_paths
+    assert artifact_paths["musicxml_unrecoverable_timing_report_json"] == "private_input_custom/musicxml-unrecoverable-timing-report.json"
+    assert artifact_paths["musicxml_unrecoverable_timing_report_html"] == "private_input_custom/musicxml-unrecoverable-timing-report.html"
+
+

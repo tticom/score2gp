@@ -137,10 +137,20 @@ def run_pipeline_for_input(
 
     # Get local artifact paths relative to output base
     artifacts = {}
-    for filename in ["extracted.tabraw.json", "score.ir.json", "diagnostics.json", "build_error.json", "warnings.json"]:
+    for filename in [
+        "extracted.tabraw.json",
+        "score.ir.json",
+        "diagnostics.json",
+        "build_error.json",
+        "warnings.json",
+        "musicxml-unrecoverable-timing-report.json",
+        "musicxml-unrecoverable-timing-report.html",
+    ]:
         file_path = out_dir / filename
         if file_path.exists():
-            artifacts[filename.split(".")[0]] = f"{label}/{filename}"
+            # For filenames with multiple dots or dashes, let's keep the name simple as the key
+            key = filename.replace(".", "_").replace("-", "_")
+            artifacts[key] = f"{label}/{filename}"
     if gp_path.exists():
         artifacts["gp_package"] = f"{label}/smoke.gp"
 

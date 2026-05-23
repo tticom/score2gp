@@ -330,3 +330,55 @@ def test_v03_alignment_not_attempted(tmp_path) -> None:
     with pytest.raises(BuildIrInputRiskError) as raised:
         build_ir_from_files(FIXTURES / "timing_v03_alignment_not_attempted.musicxml", TABRAW, out_ir)
     assert raised.value.category == "musicxml_timing_risk"
+
+
+def test_unrecoverable_timing_report_generation(tmp_path) -> None:
+    import json
+    out_ir = tmp_path / "failed_score.ir.json"
+    diagnostics_out_path = tmp_path / "diagnostics.json"
+
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(
+            FIXTURES / "timing_overfull_measure.musicxml",
+            TABRAW,
+            out_path=out_ir,
+            diagnostics_out_path=diagnostics_out_path,
+        )
+
+    # Check payload has reference
+    payload = raised.value.to_diagnostics_payload()
+    assert payload.get("unrecoverable_timing_report_json") == "musicxml-unrecoverable-timing-report.json"
+    assert payload.get("unrecoverable_timing_report_html") == "musicxml-unrecoverable-timing-report.html"
+
+    # Check that sidecars were written
+    json_report_path = tmp_path / "musicxml-unrecoverable-timing-report.json"
+    html_report_path = tmp_path / "musicxml-unrecoverable-timing-report.html"
+    assert json_report_path.exists()
+    assert html_report_path.exists()
+
+    # Load JSON report
+    report = json.loads(json_report_path.read_text(encoding="utf-8"))
+    assert report["schema_version"] == "musicxml-unrecoverable-timing-report.v0.1"
+    assert report["timing_status"] == "failed"
+    assert report["timing_gate_status"] == "refused"
+    assert report["calibration_possible"] is False
+    assert report["automatic_repair_attempted"] is False
+    assert report["overfull_measure_count"] > 0
+    assert report["remediation_hint"] is not None
+
+    # Verify no private note details, pitches, lyrics are in JSON keys or values
+    private_keys_or_substrings = ["pitch", "alter", "step", "octave", "lyric", "chord_symbol", "note_name"]
+    for key, val in report.items():
+        for p in private_keys_or_substrings:
+            assert p not in str(key)
+            if isinstance(val, str):
+                assert p not in val
+
+    # Verify HTML contents
+    html_content = html_report_path.read_text(encoding="utf-8")
+    assert "MusicXML timing is unrecoverable" in html_content
+    assert "remediation-card" in html_content
+    assert "calibration_possible" in html_content
+    assert "remediation guidance" in html_content.lower()
+    assert "table" in html_content.lower()
+
