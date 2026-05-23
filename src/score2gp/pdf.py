@@ -538,6 +538,88 @@ class _AsciiTimingEvidence:
         return None
 
 
+def _split_technique_mixed_words(words: list[tuple[float, float, float, float, str, int, int, int]]) -> list[dict[str, Any]]:
+    refined = []
+    tech_chars = set("hpsvbr~/\\")
+
+    for word_index, word in enumerate(words, start=1):
+        raw_text = str(word[4]).strip()
+        if not raw_text:
+            continue
+        bbox_values = [float(word[0]), float(word[1]), float(word[2]), float(word[3])]
+
+        from .tabraw import _looks_like_chord_symbol
+        if _looks_like_chord_symbol(raw_text):
+            refined.append({
+                "x0": bbox_values[0],
+                "y0": bbox_values[1],
+                "x1": bbox_values[2],
+                "y1": bbox_values[3],
+                "text": raw_text,
+                "block_no": int(word[5]) if len(word) > 5 else None,
+                "line_no": int(word[6]) if len(word) > 6 else None,
+                "word_no": int(word[7]) if len(word) > 7 else None,
+                "word_index": word_index,
+                "warnings": [],
+                "provenance": [],
+            })
+            continue
+
+        has_digit = any(char.isdigit() for char in raw_text)
+        has_tech = any(char in tech_chars for char in raw_text.lower())
+
+        if has_digit and has_tech:
+            parts = [m.group(0) for m in re.finditer(r"(\d+|[hpsvbr~/\\b]+)", raw_text, re.IGNORECASE)]
+            if len(parts) > 1:
+                L = len(raw_text)
+                W = bbox_values[2] - bbox_values[0]
+                current_start = 0
+                for part in parts:
+                    part_start = raw_text.find(part, current_start)
+                    part_end = part_start + len(part)
+                    current_start = part_end
+
+                    part_x0 = bbox_values[0] + (part_start / L) * W
+                    part_x1 = bbox_values[0] + (part_end / L) * W
+
+                    part_warnings = []
+                    part_provenance = []
+
+                    is_pure_tech = all(c in tech_chars or c.lower() in ("b", "r") for c in part)
+                    if is_pure_tech:
+                        part_warnings.append("pdf_fret_technique_marker_excluded")
+
+                    refined.append({
+                        "x0": part_x0,
+                        "y0": bbox_values[1],
+                        "x1": part_x1,
+                        "y1": bbox_values[3],
+                        "text": part,
+                        "block_no": int(word[5]) if len(word) > 5 else None,
+                        "line_no": int(word[6]) if len(word) > 6 else None,
+                        "word_no": int(word[7]) if len(word) > 7 else None,
+                        "word_index": word_index,
+                        "warnings": part_warnings,
+                        "provenance": part_provenance,
+                    })
+                continue
+
+        refined.append({
+            "x0": bbox_values[0],
+            "y0": bbox_values[1],
+            "x1": bbox_values[2],
+            "y1": bbox_values[3],
+            "text": raw_text,
+            "block_no": int(word[5]) if len(word) > 5 else None,
+            "line_no": int(word[6]) if len(word) > 6 else None,
+            "word_no": int(word[7]) if len(word) > 7 else None,
+            "word_index": word_index,
+            "warnings": [],
+            "provenance": [],
+        })
+    return refined
+
+
 def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]], meta: dict[str, int]) -> list[dict[str, Any]]:
     import fitz  # type: ignore[import-not-found]
 
@@ -969,38 +1051,218 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                 )
                 candidates.extend(ascii_candidates)
                 filtered_index += len(ascii_candidates)
-            words = sorted(
-                page.get_text("words"),
-                key=lambda word: (round(float(word[1]), 3), round(float(word[0]), 3), str(word[4])),
-            )
-            for word_index, word in enumerate(words, start=1):
-                raw_text = str(word[4]).strip()
-                if not raw_text:
-                    continue
-                bbox_values = [float(word[0]), float(word[1]), float(word[2]), float(word[3])]
-                x = (bbox_values[0] + bbox_values[2]) / 2
-                y = (bbox_values[1] + bbox_values[3]) / 2
+
+            # Pre-process, split mixed technique words, and group playable digits conservatively
+            refined_words = _split_technique_mixed_words(words)
+
+            system_digits = {sys.system_index: [] for sys in systems}
+            system_digits_merged = {sys.system_index: [] for sys in systems}
+            non_playable_words = []
+
+            for rw in refined_words:
+                text = rw["text"]
+                x = (rw["x0"] + rw["x1"]) / 2
+                y = (rw["y0"] + rw["y1"]) / 2
+
                 if _point_in_ascii_block(ascii_blocks, x, y):
                     continue
-                if ascii_blocks and parse_fret_text(raw_text) is not None:
+                if ascii_blocks and parse_fret_text(text) is not None:
                     continue
+
                 system = _nearest_system(systems, x, y)
-                line_index = None
-                string = None
-                string_distance = None
-                assignment_warnings: list[str] = []
+                if system is None:
+                    if text.isdigit() or any(c.isdigit() for c in text):
+                        rw["warnings"].append("pdf_fret_page_or_legend_number_excluded")
+                    non_playable_words.append(rw)
+                    continue
 
-                # Check for invalid geometry or candidate without geometry
-                if any(v is None for v in bbox_values) or (bbox_values[0] == 0.0 and bbox_values[2] == 0.0):
-                    assignment_warnings.append("pdf_text_candidate_without_geometry")
+                if not system.candidate_zone_contains(x, y):
+                    if text.isdigit() or any(c.isdigit() for c in text):
+                        rw["warnings"].append("pdf_fret_page_or_legend_number_excluded")
+                    non_playable_words.append(rw)
+                    continue
 
+                min_y = min(system.line_ys)
+                tolerance = max(4.0, system.line_spacing * 0.38)
+                is_above_staff = y < min_y - tolerance
+
+                if text.isdigit():
+                    system_digits[system.system_index].append(rw)
+                else:
+                    if any(c.isdigit() for c in text):
+                        rw["warnings"].append("pdf_fret_chord_text_digit_excluded")
+                    non_playable_words.append(rw)
+
+            for system in systems:
+                digits = system_digits.get(system.system_index, [])
+                if not digits:
+                    continue
+
+                digit_by_string = {s: [] for s in range(1, 7)}
+                unassigned_digits = []
+
+                for d in digits:
+                    y_center = (d["y0"] + d["y1"]) / 2
+                    height = d["y1"] - d["y0"]
+                    line_idx, string, string_dist, string_warnings = system.string_for_y(y_center, height)
+
+                    d["y_center"] = y_center
+                    d["height_val"] = height
+                    d["width_val"] = d["x1"] - d["x0"]
+
+                    if string is not None:
+                        d["assigned_string"] = string
+                        d["assigned_line_index"] = line_idx
+                        d["string_distance"] = string_dist
+                        d["string_warnings"] = string_warnings
+                        digit_by_string[string].append(d)
+                    else:
+                        d["string_distance"] = string_dist
+                        d["string_warnings"] = string_warnings
+                        unassigned_digits.append(d)
+
+                merged_on_system = []
+                for string in range(1, 7):
+                    string_digits = sorted(digit_by_string[string], key=lambda d: d["x0"])
+                    i = 0
+                    while i < len(string_digits):
+                        d1 = string_digits[i]
+                        j = i + 1
+
+                        merged_text = d1["text"]
+                        merged_x0 = d1["x0"]
+                        merged_y0 = d1["y0"]
+                        merged_x1 = d1["x1"]
+                        merged_y1 = d1["y1"]
+                        merged_warnings = list(d1.get("warnings", []))
+                        merged_provenance = list(d1.get("provenance", []))
+                        merged_string_warnings = list(d1.get("string_warnings", []))
+
+                        merged_gaps = []
+                        merged_y_deltas = []
+
+                        while j < len(string_digits):
+                            d2 = string_digits[j]
+                            gap = d2["x0"] - merged_x1
+                            y_center1 = (merged_y0 + merged_y1) / 2
+                            y_center2 = (d2["y0"] + d2["y1"]) / 2
+                            vertical_offset = abs(y_center2 - y_center1)
+
+                            if 0.0 <= gap <= 5.0:
+                                if vertical_offset <= 2.0:
+                                    merged_text += d2["text"]
+                                    merged_x1 = d2["x1"]
+                                    merged_y0 = min(merged_y0, d2["y0"])
+                                    merged_y1 = max(merged_y1, d2["y1"])
+                                    merged_warnings.append("pdf_fret_digits_merged")
+                                    merged_warnings.append("pdf_fret_split_text_span_merged")
+                                    merged_gaps.append(gap)
+                                    merged_y_deltas.append(vertical_offset)
+                                    j += 1
+                                else:
+                                    d2["warnings"].append("pdf_fret_digits_not_merged_vertical_misalignment")
+                                    d2["warnings"].append("pdf_fret_refinement_not_enough_for_build_ir")
+                                    break
+                            elif 5.0 < gap <= 12.0:
+                                d2["warnings"].append("pdf_fret_digits_not_merged_gap_too_large")
+                                d2["warnings"].append("pdf_fret_refinement_not_enough_for_build_ir")
+                                break
+                            else:
+                                break
+
+                        merged_dict = {
+                            "x0": merged_x0,
+                            "y0": merged_y0,
+                            "x1": merged_x1,
+                            "y1": merged_y1,
+                            "text": merged_text,
+                            "block_no": d1["block_no"],
+                            "line_no": d1["line_no"],
+                            "word_no": d1["word_no"],
+                            "word_index": d1["word_index"],
+                            "warnings": merged_warnings,
+                            "provenance": merged_provenance,
+                            "assigned_string": string,
+                            "assigned_line_index": d1["assigned_line_index"],
+                            "string_distance": d1["string_distance"],
+                            "string_warnings": merged_string_warnings,
+                            "is_playable_fret": True,
+                            "fret_gaps": merged_gaps,
+                            "fret_y_deltas": merged_y_deltas,
+                        }
+                        merged_on_system.append(merged_dict)
+                        i = j
+
+                for ud in unassigned_digits:
+                    ud["is_playable_fret"] = True
+                    ud["assigned_string"] = None
+                    ud["assigned_line_index"] = None
+                    ud["string_distance"] = ud.get("string_distance")
+                    ud["string_warnings"] = ud.get("string_warnings", [])
+                    merged_on_system.append(ud)
+
+                system_digits_merged[system.system_index] = merged_on_system
+
+            all_page_candidates = []
+            for sys in systems:
+                all_page_candidates.extend(system_digits_merged[sys.system_index])
+            all_page_candidates.extend(non_playable_words)
+
+            all_page_candidates.sort(key=lambda c: (round(c["y0"], 3), round(c["x0"], 3), c["text"]))
+
+            for pc in all_page_candidates:
+                raw_text = pc["text"]
+                bbox_values = [pc["x0"], pc["y0"], pc["x1"], pc["y1"]]
+                x = (pc["x0"] + pc["x1"]) / 2
+                y = (pc["y0"] + pc["y1"]) / 2
+
+                system = _nearest_system(systems, x, y)
+                line_index = pc.get("assigned_line_index")
+                string = pc.get("assigned_string")
+                string_distance = pc.get("string_distance")
+
+                assignment_warnings = list(pc.get("warnings", []))
                 is_fret_candidate = parse_fret_text(raw_text) is not None
+
+                # Enforce size / range checks on playable Candidates
+                if is_fret_candidate and pc.get("is_playable_fret"):
+                    fret_val = parse_fret_text(raw_text)
+                    if fret_val is not None:
+                        if not (0 <= fret_val <= 24):
+                            assignment_warnings.append("pdf_fret_outside_valid_range")
+                            assignment_warnings.append("pdf_fret_refinement_not_enough_for_build_ir")
+
+                        height = pc["y1"] - pc["y0"]
+                        width = pc["x1"] - pc["x0"]
+                        line_spacing = system.line_spacing if system is not None else 12.0
+
+                        if height > line_spacing * 1.2 or height > 18.0:
+                            assignment_warnings.append("pdf_fret_bbox_too_tall")
+                            assignment_warnings.append("pdf_fret_refinement_not_enough_for_build_ir")
+                        if width > line_spacing * 2.5 or width > 35.0:
+                            assignment_warnings.append("pdf_fret_bbox_too_wide")
+                            assignment_warnings.append("pdf_fret_refinement_not_enough_for_build_ir")
+                        if width < 2.0 or height < 2.0:
+                            assignment_warnings.append("pdf_fret_bbox_too_small")
+                            assignment_warnings.append("pdf_fret_refinement_not_enough_for_build_ir")
+
+                        if len(raw_text) == 1:
+                            assignment_warnings.append("pdf_fret_single_digit_extracted")
+                        elif len(raw_text) > 1:
+                            assignment_warnings.append("pdf_fret_multidigit_extracted")
+
+                if not is_fret_candidate:
+                    if "pdf_fret_technique_marker_excluded" not in assignment_warnings and "pdf_fret_chord_text_digit_excluded" not in assignment_warnings and "pdf_fret_page_or_legend_number_excluded" not in assignment_warnings:
+                        from .tabraw import _looks_like_chord_symbol
+                        if _looks_like_chord_symbol(raw_text):
+                            assignment_warnings.append("pdf_fret_chord_text_digit_excluded")
+                        elif any(c.isdigit() for c in raw_text):
+                            assignment_warnings.append("pdf_fret_chord_text_digit_excluded")
+
                 if system is not None:
-                    # Check if candidate falls outside strict horizontal bounds of the system
                     if x < system.x0 or x > system.x1:
                         assignment_warnings.append("pdf_candidate_outside_system")
-                    height = bbox_values[3] - bbox_values[1] if bbox_values and len(bbox_values) == 4 else None
-                    line_index, string, string_distance, string_warnings = system.string_for_y(y, height)
+                    string_warnings = pc.get("string_warnings", [])
                     if is_fret_candidate:
                         if string is None:
                             assignment_warnings.append("pdf_playable_candidate_requires_string_assignment")
@@ -1034,15 +1296,29 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                         assignment_warnings.append("pdf_candidates_unassigned_to_string")
                     else:
                         assignment_warnings.append("pdf_non_playable_text_not_string_assigned")
+
                 bar_bounds = system.bar_bounds_for_x(x) if system is not None else None
                 confidence = _candidate_confidence(raw_text, system, string, bar_index, x)
+
+                if is_fret_candidate and confidence < 0.70:
+                    assignment_warnings.append("pdf_fret_optical_bounds_confidence_below_threshold")
+                    assignment_warnings.append("pdf_fret_refinement_not_enough_for_build_ir")
+
                 unsafe_assign = [w for w in assignment_warnings if w not in {
                     "pdf_string_assignment_nearest_line",
                     "pdf_multidigit_fret_string_assigned",
                     "pdf_non_playable_text_not_string_assigned",
+                    "pdf_fret_single_digit_extracted",
+                    "pdf_fret_multidigit_extracted",
+                    "pdf_fret_digits_merged",
+                    "pdf_fret_split_text_span_merged",
+                    "pdf_fret_technique_marker_excluded",
+                    "pdf_fret_chord_text_digit_excluded",
+                    "pdf_fret_page_or_legend_number_excluded",
                 }]
                 if unsafe_assign:
                     confidence = min(confidence, 0.65)
+
                 candidate = make_tab_candidate(
                     candidate_id=f"pdf-p{page_number:03d}-c{filtered_index + 1:04d}",
                     raw_text=raw_text,
@@ -1055,10 +1331,10 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                     line_index=line_index,
                     string=string,
                     raw={
-                        "pdf_word_index": word_index,
-                        "pdf_block_number": int(word[5]) if len(word) > 5 else None,
-                        "pdf_line_number": int(word[6]) if len(word) > 6 else None,
-                        "pdf_word_number": int(word[7]) if len(word) > 7 else None,
+                        "pdf_word_index": pc["word_index"],
+                        "pdf_block_number": pc["block_no"],
+                        "pdf_line_number": pc["line_no"],
+                        "pdf_word_number": pc["word_no"],
                         "grouping_version": "pdf-grouping.v0.1" if system is not None else None,
                         "system_inference": "six-horizontal-lines" if system is not None else None,
                         "grouping_status": system.grouping_status if system is not None else None,
@@ -1091,6 +1367,8 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                         "rejected_barline_count": system.rejected_barline_count if system is not None else None,
                         "rejection_reasons": system.rejection_reasons if system is not None else None,
                         "barline_candidates_details": system.barline_candidates_details if system is not None else None,
+                        "fret_gaps": pc.get("fret_gaps", []),
+                        "fret_y_deltas": pc.get("fret_y_deltas", []),
                     },
                 )
                 if not _should_keep_candidate(candidate.model_dump(mode="json", exclude_none=True)):
@@ -1945,6 +2223,17 @@ def _unsafe_grouping_codes(fret_candidates: list[dict[str, Any]], page_warnings:
         "pdf_string_assignment_compact_staff_ambiguous",
         "pdf_playable_candidate_requires_string_assignment",
         "pdf_string_assignment_not_enough_for_build_ir",
+
+        # New Fret Refinement Blocker Codes
+        "pdf_fret_digits_not_merged_gap_too_large",
+        "pdf_fret_digits_not_merged_vertical_misalignment",
+        "pdf_fret_bbox_too_tall",
+        "pdf_fret_bbox_too_wide",
+        "pdf_fret_bbox_too_small",
+        "pdf_fret_outside_valid_range",
+        "pdf_fret_non_digit_rejected",
+        "pdf_fret_optical_bounds_confidence_below_threshold",
+        "pdf_fret_refinement_not_enough_for_build_ir",
     }
     codes: set[str] = set()
     for candidate in fret_candidates:
@@ -2068,6 +2357,14 @@ def _specific_grouping_warning(code: str, grouping_counts: dict[str, int]) -> di
         "pdf_full_grouping_requires_all_systems_boxed": "Full grouping is blocked because one or more systems lack bar boxes.",
         "pdf_grouping_complete_all_playable_candidates_assigned": "All playable fret candidates are safely assigned to systems, bars, and strings.",
 
+        # New Phase 8 Edge System Boundary Fallback messages
+        "pdf_bar_box_edge_boundary_fallback_rejected": "Edge boundary fallback was rejected.",
+        "pdf_bar_box_edge_boundary_ambiguous": "Edge boundary fallback is ambiguous.",
+        "pdf_bar_box_inferred_boundary_too_narrow": "Inferred boundary is too narrow.",
+        "pdf_bar_box_inferred_boundary_candidate_ambiguous": "Fret candidate is too close to inferred boundary.",
+        "pdf_bar_box_inferred_boundary_requires_clear_system_edge": "Inferred boundary requires clear system edge.",
+        "pdf_bar_box_inferred_boundary_not_enough_for_build_ir": "Inferred boundary is incomplete.",
+
         # New PDF String Assignment Messages
         "pdf_string_assignment_nearest_line": "Fret candidate assigned to the nearest string line.",
         "pdf_string_assignment_outside_staff": "Fret candidate lies outside the vertical bounds of the tab staff.",
@@ -2081,6 +2378,24 @@ def _specific_grouping_warning(code: str, grouping_counts: dict[str, int]) -> di
         "pdf_multidigit_fret_string_assigned": "Multi-digit fret candidate successfully assigned to string.",
         "pdf_string_assignment_not_enough_for_build_ir": "One or more playable fret candidates lack safe string assignment.",
         "pdf_string_assignment_succeeded_upstream_grouping_still_blocks": "String assignment succeeded for all playable candidates, but upstream system/bar grouping still blocks full grouping.",
+
+        # New Fret Refinement Messages
+        "pdf_fret_single_digit_extracted": "Single-digit fret successfully extracted.",
+        "pdf_fret_multidigit_extracted": "Multi-digit fret successfully extracted.",
+        "pdf_fret_digits_merged": "Horizontally adjacent digits successfully merged.",
+        "pdf_fret_digits_not_merged_gap_too_large": "Adjacent digits too far apart horizontally to merge safely.",
+        "pdf_fret_digits_not_merged_vertical_misalignment": "Adjacent digits vertically misaligned and not merged safely.",
+        "pdf_fret_split_text_span_merged": "Split text span digits merged into one candidate.",
+        "pdf_fret_bbox_too_tall": "Fret candidate bounding box is too tall to be a valid fret.",
+        "pdf_fret_bbox_too_wide": "Fret candidate bounding box is too wide to be a valid fret.",
+        "pdf_fret_bbox_too_small": "Fret candidate bounding box is too small or noisy to be a valid fret.",
+        "pdf_fret_outside_valid_range": "Fret candidate value is outside allowed valid range (0-24).",
+        "pdf_fret_non_digit_rejected": "Fret candidate contains non-digit characters and is rejected.",
+        "pdf_fret_technique_marker_excluded": "Technique symbol near fret digit excluded from playable value.",
+        "pdf_fret_chord_text_digit_excluded": "Chord symbol or section text digit above staff excluded from fret evidence.",
+        "pdf_fret_page_or_legend_number_excluded": "Page or legend number outside tab system excluded from fret evidence.",
+        "pdf_fret_optical_bounds_confidence_below_threshold": "Fret optical bounds confidence is below safe threshold.",
+        "pdf_fret_refinement_not_enough_for_build_ir": "One or more playable fret candidates lack unambiguous digit grouping/extraction.",
     }
     return {
         "code": code,
@@ -2725,6 +3040,9 @@ def _should_keep_candidate(candidate: dict[str, Any]) -> bool:
     text = str(candidate.get("raw_text", "")).strip().lower()
     raw = candidate.get("raw", {})
     near_tab_system = isinstance(raw, dict) and raw.get("system_inference") is not None
+    warnings = raw.get("assignment_warnings", []) if isinstance(raw, dict) else []
+    if any(w in warnings for w in ("pdf_fret_page_or_legend_number_excluded", "pdf_fret_chord_text_digit_excluded")):
+        return True
     return text in {"x"} or near_tab_system
 
 

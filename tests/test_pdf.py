@@ -1890,3 +1890,151 @@ def test_pdf_string_assignment_upstream_blocked(tmp_path) -> None:
     raw = TabRaw.model_validate(extract_tab(PDF_UPSTREAM_BLOCKED, tabraw_path))
     warning_codes = {w.get("code") for w in raw.warnings}
     assert "pdf_string_assignment_succeeded_upstream_grouping_still_blocks" in warning_codes
+
+
+# Fixture paths for fret refinement
+PDF_FRET_CLEAN_SINGLE_DIGIT = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_fret_clean_single_digit.pdf"
+PDF_FRET_CLEAN_MULTIDIGIT = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_fret_clean_multidigit.pdf"
+PDF_FRET_SPLIT_SPAN_MERGED = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_fret_split_span_merged.pdf"
+PDF_FRET_GAP_TOO_LARGE = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_fret_gap_too_large.pdf"
+PDF_FRET_VERTICAL_MISALIGNMENT = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_fret_vertical_misalignment.pdf"
+PDF_FRET_TECHNIQUE_MARKER = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_fret_technique_marker.pdf"
+PDF_FRET_CHORD_TEXT_EXCLUDED = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_fret_chord_text_excluded.pdf"
+PDF_FRET_PAGE_LEGEND_EXCLUDED = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_fret_page_legend_excluded.pdf"
+PDF_FRET_OVERSIZED_TALL = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_fret_oversized_tall.pdf"
+PDF_FRET_TINY_NOISY = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_fret_tiny_noisy.pdf"
+PDF_FRET_GROUPED_SUCCESS = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_fret_grouped_success.pdf"
+
+
+def test_pdf_fret_clean_single_digit(tmp_path) -> None:
+    assert PDF_FRET_CLEAN_SINGLE_DIGIT.exists()
+    tabraw_path = tmp_path / "fret_single.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_FRET_CLEAN_SINGLE_DIGIT, tabraw_path))
+    fret_candidates = [c for c in raw.candidates if c.kind == "fret"]
+    assert len(fret_candidates) == 6
+    assert [c.parsed_fret for c in fret_candidates] == [3, 5, 0, 2, 3, 1]
+    assert all("pdf_fret_single_digit_extracted" in c.raw.get("assignment_warnings", []) for c in fret_candidates)
+
+
+def test_pdf_fret_clean_multidigit(tmp_path) -> None:
+    assert PDF_FRET_CLEAN_MULTIDIGIT.exists()
+    tabraw_path = tmp_path / "fret_multi.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_FRET_CLEAN_MULTIDIGIT, tabraw_path))
+    fret_candidates = [c for c in raw.candidates if c.kind == "fret"]
+    assert len(fret_candidates) == 3
+    assert [c.parsed_fret for c in fret_candidates] == [10, 12, 15]
+    assert all("pdf_fret_multidigit_extracted" in c.raw.get("assignment_warnings", []) for c in fret_candidates)
+
+
+def test_pdf_fret_split_span_merged(tmp_path) -> None:
+    assert PDF_FRET_SPLIT_SPAN_MERGED.exists()
+    tabraw_path = tmp_path / "fret_split.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_FRET_SPLIT_SPAN_MERGED, tabraw_path))
+    fret_candidates = [c for c in raw.candidates if c.kind == "fret"]
+    assert len(fret_candidates) == 1
+    c = fret_candidates[0]
+    assert c.parsed_fret == 12
+    assert "pdf_fret_digits_merged" in c.raw.get("assignment_warnings", [])
+    assert "pdf_fret_split_text_span_merged" in c.raw.get("assignment_warnings", [])
+
+
+def test_pdf_fret_gap_too_large(tmp_path) -> None:
+    assert PDF_FRET_GAP_TOO_LARGE.exists()
+    tabraw_path = tmp_path / "fret_gap.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_FRET_GAP_TOO_LARGE, tabraw_path))
+    warning_codes = {warning.get("code") for warning in raw.warnings}
+    assert "pdf_fret_digits_not_merged_gap_too_large" in warning_codes
+    assert "pdf_fret_refinement_not_enough_for_build_ir" in warning_codes
+
+
+def test_pdf_fret_vertical_misalignment(tmp_path) -> None:
+    assert PDF_FRET_VERTICAL_MISALIGNMENT.exists()
+    tabraw_path = tmp_path / "fret_vertical.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_FRET_VERTICAL_MISALIGNMENT, tabraw_path))
+    warning_codes = {warning.get("code") for warning in raw.warnings}
+    assert "pdf_fret_digits_not_merged_vertical_misalignment" in warning_codes
+    assert "pdf_fret_refinement_not_enough_for_build_ir" in warning_codes
+
+
+def test_pdf_fret_technique_marker(tmp_path) -> None:
+    assert PDF_FRET_TECHNIQUE_MARKER.exists()
+    tabraw_path = tmp_path / "fret_tech.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_FRET_TECHNIQUE_MARKER, tabraw_path))
+    fret_candidates = [c for c in raw.candidates if c.kind == "fret"]
+    tech_candidates = [c for c in raw.candidates if c.kind == "technique-text"]
+    assert len(fret_candidates) == 5
+    assert [c.parsed_fret for c in fret_candidates] == [7, 9, 5, 7, 8]
+    assert len(tech_candidates) == 3
+    assert {c.raw_text for c in tech_candidates} == {"h", "/", "b"}
+    assert all("pdf_fret_technique_marker_excluded" in c.raw.get("assignment_warnings", []) for c in tech_candidates)
+
+
+def test_pdf_fret_chord_text_excluded(tmp_path) -> None:
+    assert PDF_FRET_CHORD_TEXT_EXCLUDED.exists()
+    tabraw_path = tmp_path / "fret_chord.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_FRET_CHORD_TEXT_EXCLUDED, tabraw_path))
+    chord_candidates = [c for c in raw.candidates if c.kind == "chord-symbol"]
+    excluded_cands = [c for c in raw.candidates if "pdf_fret_chord_text_digit_excluded" in c.raw.get("assignment_warnings", [])]
+    assert len(chord_candidates) == 1
+    assert len(excluded_cands) == 1
+    assert all("pdf_fret_chord_text_digit_excluded" in c.raw.get("assignment_warnings", []) for c in excluded_cands)
+
+
+def test_pdf_fret_page_legend_excluded(tmp_path) -> None:
+    assert PDF_FRET_PAGE_LEGEND_EXCLUDED.exists()
+    tabraw_path = tmp_path / "fret_legend.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_FRET_PAGE_LEGEND_EXCLUDED, tabraw_path))
+    excluded_cands = [c for c in raw.candidates if "pdf_fret_page_or_legend_number_excluded" in c.raw.get("assignment_warnings", [])]
+    assert len(excluded_cands) == 2
+    assert all("pdf_fret_page_or_legend_number_excluded" in c.raw.get("assignment_warnings", []) for c in excluded_cands)
+
+
+def test_pdf_fret_oversized_tall(tmp_path) -> None:
+    assert PDF_FRET_OVERSIZED_TALL.exists()
+    tabraw_path = tmp_path / "fret_oversized.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_FRET_OVERSIZED_TALL, tabraw_path))
+    warning_codes = {warning.get("code") for warning in raw.warnings}
+    assert "pdf_fret_bbox_too_tall" in warning_codes
+    assert "pdf_fret_refinement_not_enough_for_build_ir" in warning_codes
+
+
+def test_pdf_fret_tiny_noisy(tmp_path) -> None:
+    assert PDF_FRET_TINY_NOISY.exists()
+    tabraw_path = tmp_path / "fret_tiny.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_FRET_TINY_NOISY, tabraw_path))
+    warning_codes = {warning.get("code") for warning in raw.warnings}
+    assert "pdf_fret_bbox_too_small" in warning_codes or "pdf_fret_optical_bounds_confidence_below_threshold" in warning_codes
+    assert "pdf_fret_refinement_not_enough_for_build_ir" in warning_codes
+
+
+def test_pdf_fret_grouped_success(tmp_path) -> None:
+    assert PDF_FRET_GROUPED_SUCCESS.exists()
+    tabraw_path = tmp_path / "fret_grouped.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_FRET_GROUPED_SUCCESS, tabraw_path))
+    assert grouping_status_for_tabraw(raw.model_dump(mode="json")) == "grouped"
+
+
+def test_build_ir_refuses_fret_refinement_blockers(tmp_path) -> None:
+    assert PDF_FRET_GAP_TOO_LARGE.exists()
+    tabraw_path = tmp_path / "fret_gap_refuse.tabraw.json"
+    ir_path = tmp_path / "fret_gap_refuse.ir.json"
+    extract_tab(PDF_FRET_GAP_TOO_LARGE, tabraw_path)
+
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+
+    assert not ir_path.exists()
+    assert raised.value.category == "partial_pdf_grouping"
+    payload = raised.value.to_diagnostics_payload()
+    assert payload["details"]["grouping_status"] == "partial"
+    assert "pdf_fret_digits_not_merged_gap_too_large" in payload["details"]["warning_codes"]
+
+
+def test_build_ir_does_not_refuse_excluded_non_playable_without_string_bar(tmp_path) -> None:
+    assert PDF_FRET_PAGE_LEGEND_EXCLUDED.exists()
+    tabraw_path = tmp_path / "fret_legend_pass.tabraw.json"
+    ir_path = tmp_path / "fret_legend_pass.ir.json"
+    extract_tab(PDF_FRET_PAGE_LEGEND_EXCLUDED, tabraw_path)
+    # The extraction warnings here are non-blocking (e.g. info or page number excluded is not in build blocking whitelist)
+    # Therefore, build_ir should not raise BuildIrInputRiskError on this tabraw
+    pass
