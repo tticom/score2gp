@@ -3,11 +3,11 @@
 ## Metadata
 - **Current Branch**: `feature/private-smoke-refresh-after-pdf-bar-detection-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: Draft (to be created)
-- **Latest Local Commit**: (to be committed)
-- **Latest Pushed Commit**: (to be pushed)
+- **Current PR**: [#32](https://github.com/tticom/score2gp/pull/32) (Draft)
+- **Latest Local Commit**: `407b3f2ea6cdfcfe2a311f2b7a5b80d7b2707879`
+- **Latest Pushed Commit**: `407b3f2ea6cdfcfe2a311f2b7a5b80d7b2707879`
 - **Commit Subject**: Refresh private smoke after PDF bar diagnostics
-- **Working Tree Status**: Modified
+- **Working Tree Status**: Clean (after handoff push)
 - **Tests & Checks Run**:
   - `python -m pytest` -> 211 passed cleanly
   - `python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
