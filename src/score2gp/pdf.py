@@ -161,6 +161,7 @@ class _TabSystem:
     valid_barline_count: int = 0
     rejected_barline_count: int = 0
     rejection_reasons: dict[str, int] = None
+    barline_candidates_details: list[dict[str, Any]] = None
 
     @property
     def staff_bbox(self) -> dict[str, float | int]:
@@ -495,6 +496,48 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                             "severity": "warning",
                             "grouping_status": "ambiguous"
                         })
+                    if reasons.get("pdf_barline_too_short_absolute", 0) > 0:
+                        warnings.append({
+                            "code": "pdf_barline_too_short_absolute",
+                            "message": f"One or more barline candidates are below absolute height threshold in system {system.system_index} on page {page_number}.",
+                            "severity": "warning",
+                            "grouping_status": "partial"
+                        })
+                    if reasons.get("pdf_barline_too_short_relative_to_staff", 0) > 0:
+                        warnings.append({
+                            "code": "pdf_barline_too_short_relative_to_staff",
+                            "message": f"One or more barline candidates are below relative staff-height threshold in system {system.system_index} on page {page_number}.",
+                            "severity": "warning",
+                            "grouping_status": "partial"
+                        })
+                    if reasons.get("pdf_barline_crosses_insufficient_string_gaps", 0) > 0:
+                        warnings.append({
+                            "code": "pdf_barline_crosses_insufficient_string_gaps",
+                            "message": f"One or more barline candidates cross too few string gaps in system {system.system_index} on page {page_number}.",
+                            "severity": "warning",
+                            "grouping_status": "partial"
+                        })
+                    if reasons.get("pdf_barline_partial_staff_crossing", 0) > 0:
+                        warnings.append({
+                            "code": "pdf_barline_partial_staff_crossing",
+                            "message": f"One or more barline candidates only partially cross the staff in system {system.system_index} on page {page_number}.",
+                            "severity": "warning",
+                            "grouping_status": "partial"
+                        })
+                    if reasons.get("pdf_barline_outside_staff_region", 0) > 0:
+                        warnings.append({
+                            "code": "pdf_barline_outside_staff_region",
+                            "message": f"One or more barline candidates are outside the staff region in system {system.system_index} on page {page_number}.",
+                            "severity": "warning",
+                            "grouping_status": "partial"
+                        })
+                    if reasons.get("pdf_barline_rejected_relative_height", 0) > 0:
+                        warnings.append({
+                            "code": "pdf_barline_rejected_relative_height",
+                            "message": f"One or more barline candidates were rejected by relative staff-height check in system {system.system_index} on page {page_number}.",
+                            "severity": "warning",
+                            "grouping_status": "partial"
+                        })
                     if len(system.barlines) >= 2:
                         warnings.append({
                             "code": "pdf_bar_boxes_constructed",
@@ -656,6 +699,7 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                         "valid_barline_count": system.valid_barline_count if system is not None else None,
                         "rejected_barline_count": system.rejected_barline_count if system is not None else None,
                         "rejection_reasons": system.rejection_reasons if system is not None else None,
+                        "barline_candidates_details": system.barline_candidates_details if system is not None else None,
                     },
                 )
                 if not _should_keep_candidate(candidate.model_dump(mode="json", exclude_none=True)):
@@ -1407,6 +1451,16 @@ def _unsafe_grouping_codes(fret_candidates: list[dict[str, Any]], page_warnings:
         "pdf_bar_boxes_not_constructible",
         "pdf_bar_detection_succeeded_string_assignment_pending",
         "pdf_bar_detection_not_enough_for_build_ir",
+
+        # Refined barline-validation taxonomy blocker codes
+        "pdf_barline_too_short_absolute",
+        "pdf_barline_too_short_relative_to_staff",
+        "pdf_barline_crosses_insufficient_string_gaps",
+        "pdf_barline_partial_staff_crossing",
+        "pdf_barline_outside_staff_region",
+        "pdf_barline_rejected_relative_height",
+        "pdf_barline_validation_threshold_boundary",
+        "pdf_barline_validation_not_enough_for_build_ir",
     }
     codes: set[str] = set()
     for candidate in fret_candidates:
@@ -1491,6 +1545,16 @@ def _specific_grouping_warning(code: str, grouping_counts: dict[str, int]) -> di
         "pdf_bar_boxes_not_constructible": "Measure bar boxes could not be constructed from barlines.",
         "pdf_bar_detection_succeeded_string_assignment_pending": "Bar detection succeeded, but string assignment is the next blocker.",
         "pdf_bar_detection_not_enough_for_build_ir": "PDF bar detection is incomplete and not safe to build IR.",
+
+        # Refined barline-validation blocker taxonomy messages
+        "pdf_barline_too_short_absolute": "Barline height below absolute threshold.",
+        "pdf_barline_too_short_relative_to_staff": "Barline height below relative staff-crossing threshold.",
+        "pdf_barline_crosses_insufficient_string_gaps": "Barline candidate crosses too few string gaps.",
+        "pdf_barline_partial_staff_crossing": "Barline candidate crosses only part of the tab staff.",
+        "pdf_barline_outside_staff_region": "Barline candidate is outside the staff region.",
+        "pdf_barline_rejected_relative_height": "Barline candidate rejected by relative staff-height check.",
+        "pdf_barline_validation_threshold_boundary": "Barline candidate is at validation threshold boundary.",
+        "pdf_barline_validation_not_enough_for_build_ir": "Barline validation is incomplete and not safe to build IR.",
     }
     return {
         "code": code,
@@ -1778,10 +1842,18 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
             "pdf_barline_too_short": 0,
             "pdf_barline_does_not_cross_staff": 0,
             "pdf_barline_ambiguous": 0,
+            "pdf_barline_too_short_absolute": 0,
+            "pdf_barline_too_short_relative_to_staff": 0,
+            "pdf_barline_crosses_insufficient_string_gaps": 0,
+            "pdf_barline_partial_staff_crossing": 0,
+            "pdf_barline_outside_staff_region": 0,
+            "pdf_barline_rejected_relative_height": 0,
         }
 
         valid_barlines = []
         rejected_count = 0
+        details = []
+        staff_height = y1 - y0
 
         for s in system_candidates:
             x_val = (s.x0 + s.x1) / 2
@@ -1789,40 +1861,137 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
             y_max = max(s.y0, s.y1)
             height = y_max - y_min
 
-            # 1. Check outside bounds
+            # 1. Check horizontal bounds
             if x_val < x0 - 8.0 or x_val > x1 + 8.0:
                 rejection_reasons["pdf_barline_outside_system_bounds"] += 1
                 rejected_count += 1
+                details.append({
+                    "x": round(x_val, 3),
+                    "y_min": round(y_min, 3),
+                    "y_max": round(y_max, 3),
+                    "height": round(height, 3),
+                    "staff_height": round(staff_height, 3),
+                    "coverage_ratio": 0.0,
+                    "gaps_crossed": 0,
+                    "absolute_height_decision": "rejected",
+                    "relative_staff_crossing_decision": "rejected",
+                    "final_decision": "rejected",
+                    "rejection_reason": "pdf_barline_outside_system_bounds",
+                })
                 continue
 
-            # 2. Check too short
-            if height < 40.0:
-                rejection_reasons["pdf_barline_too_short"] += 1
-                rejected_count += 1
-                continue
-
-            # 3. Check does not cross staff
-            if y_min > y0 + 4.0 or y_max < y1 - 4.0:
+            # 2. Check staff intersection
+            if y_max < y0 or y_min > y1:
+                rejection_reasons["pdf_barline_outside_staff_region"] += 1
                 rejection_reasons["pdf_barline_does_not_cross_staff"] += 1
                 rejected_count += 1
+                details.append({
+                    "x": round(x_val, 3),
+                    "y_min": round(y_min, 3),
+                    "y_max": round(y_max, 3),
+                    "height": round(height, 3),
+                    "staff_height": round(staff_height, 3),
+                    "coverage_ratio": 0.0,
+                    "gaps_crossed": 0,
+                    "absolute_height_decision": "rejected",
+                    "relative_staff_crossing_decision": "rejected",
+                    "final_decision": "rejected",
+                    "rejection_reason": "pdf_barline_outside_staff_region",
+                })
                 continue
 
-            # 4. Check ambiguity
-            is_ambiguous = False
-            for other in system_candidates:
-                if other is s:
-                    continue
-                other_x = (other.x0 + other.x1) / 2
-                if abs(x_val - other_x) < 6.0:
-                    is_ambiguous = True
-                    break
+            # Calculate gaps crossed
+            ys = sorted(line_ys)
+            gaps_crossed = 0
+            for i in range(len(ys) - 1):
+                if y_min <= ys[i] + 1.5 and y_max >= ys[i+1] - 1.5:
+                    gaps_crossed += 1
 
-            if is_ambiguous:
-                rejection_reasons["pdf_barline_ambiguous"] += 1
+            # Intersection height and coverage ratio
+            overlap_y_min = max(y_min, y0)
+            overlap_y_max = min(y_max, y1)
+            overlap_height = max(0.0, overlap_y_max - overlap_y_min)
+            coverage_ratio = overlap_height / staff_height if staff_height > 0 else 0.0
+
+            crosses_entire_staff = (y_min <= y0 + 4.0 and y_max >= y1 - 4.0) or (gaps_crossed >= len(ys) - 1)
+
+            absolute_height_ok = (height >= 40.0)
+            relative_height_ok = crosses_entire_staff
+            is_accepted_relative = (height >= 20.0 and relative_height_ok)
+            is_accepted = (absolute_height_ok or is_accepted_relative) and relative_height_ok
+
+            rejection_reason = None
+            if not relative_height_ok:
+                if gaps_crossed < len(ys) - 2:
+                    rejection_reason = "pdf_barline_crosses_insufficient_string_gaps"
+                    rejection_reasons["pdf_barline_crosses_insufficient_string_gaps"] += 1
+                    rejection_reasons["pdf_barline_does_not_cross_staff"] += 1
+                else:
+                    rejection_reason = "pdf_barline_partial_staff_crossing"
+                    rejection_reasons["pdf_barline_partial_staff_crossing"] += 1
+                    rejection_reasons["pdf_barline_does_not_cross_staff"] += 1
+            elif not is_accepted:
+                # Crossed the staff region, but too short (e.g. < 20pt)
+                rejection_reason = "pdf_barline_too_short_absolute"
+                rejection_reasons["pdf_barline_too_short_absolute"] += 1
+                rejection_reasons["pdf_barline_too_short"] += 1
+
+            if rejection_reason is None and not is_accepted:
+                rejection_reason = "pdf_barline_rejected_relative_height"
+                rejection_reasons["pdf_barline_rejected_relative_height"] += 1
+                rejection_reasons["pdf_barline_too_short"] += 1
+
+            # Check ambiguity among candidates that otherwise would be valid barlines
+            if is_accepted:
+                is_ambiguous = False
+                for other in system_candidates:
+                    if other is s:
+                        continue
+                    other_x = (other.x0 + other.x1) / 2
+                    other_y_min = min(other.y0, other.y1)
+                    other_y_max = max(other.y0, other.y1)
+                    other_height = other_y_max - other_y_min
+
+                    # Estimate other gaps crossed
+                    other_gaps = 0
+                    for i in range(len(ys) - 1):
+                        if other_y_min <= ys[i] + 1.5 and other_y_max >= ys[i+1] - 1.5:
+                            other_gaps += 1
+                    other_crosses = (other_y_min <= y0 + 4.0 and other_y_max >= y1 - 4.0) or (other_gaps >= len(ys) - 1)
+                    other_accepted = ((other_height >= 40.0) or (other_height >= 20.0 and other_crosses)) and other_crosses
+
+                    if other_accepted and abs(x_val - other_x) < 6.0:
+                        is_ambiguous = True
+                        break
+
+                if is_ambiguous:
+                    is_accepted = False
+                    rejection_reason = "pdf_barline_ambiguous"
+                    rejection_reasons["pdf_barline_ambiguous"] += 1
+
+            if not is_accepted:
+                if rejection_reason is None:
+                    rejection_reason = "pdf_barline_too_short"
+                    rejection_reasons["pdf_barline_too_short"] += 1
+                elif height < 40.0:
+                    rejection_reasons["pdf_barline_too_short"] += 1
                 rejected_count += 1
-                continue
+            else:
+                valid_barlines.append(round(x_val, 3))
 
-            valid_barlines.append(round(x_val, 3))
+            details.append({
+                "x": round(x_val, 3),
+                "y_min": round(y_min, 3),
+                "y_max": round(y_max, 3),
+                "height": round(height, 3),
+                "staff_height": round(staff_height, 3),
+                "coverage_ratio": round(coverage_ratio, 3),
+                "gaps_crossed": gaps_crossed,
+                "absolute_height_decision": "accepted" if absolute_height_ok else "rejected",
+                "relative_staff_crossing_decision": "accepted" if relative_height_ok else "rejected",
+                "final_decision": "accepted" if is_accepted else "rejected",
+                "rejection_reason": rejection_reason,
+            })
 
         valid_barlines = _unique_sorted(valid_barlines)
 
@@ -1840,6 +2009,7 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
                 valid_barline_count=len(valid_barlines),
                 rejected_barline_count=rejected_count,
                 rejection_reasons=rejection_reasons,
+                barline_candidates_details=details,
             )
         )
         next_bar_index += max(1, len(valid_barlines) - 1)

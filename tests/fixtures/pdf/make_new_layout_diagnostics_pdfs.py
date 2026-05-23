@@ -315,6 +315,98 @@ def make_pdf_valid_grouped_counterpart() -> None:
     _save(doc, "generated_pdf_valid_grouped_counterpart.pdf")
 
 
+def make_pdf_barlines_below_threshold_crossing_staff() -> None:
+    doc, page = _new_page("Barlines Below Threshold Crossing Staff")
+    line_ys = [120, 126, 132, 138, 144, 150]
+    _draw_tab_lines(page, line_ys=line_ys, x0=72, x1=332)
+    page.draw_line((88, 120), (88, 150), color=(0, 0, 0), width=0.6)
+    page.draw_line((205, 120), (205, 150), color=(0, 0, 0), width=0.6)
+    page.draw_line((322, 120), (322, 150), color=(0, 0, 0), width=0.6)
+    _write_fret(page, "3", 120, line_ys[0])
+    _save(doc, "generated_pdf_barlines_below_threshold_crossing_staff.pdf")
+
+
+def make_pdf_barlines_below_threshold_crossing_partial_staff() -> None:
+    doc, page = _new_page("Barlines Below Threshold Crossing Partial Staff")
+    line_ys = [120, 134, 148, 162, 176, 190]
+    _draw_tab_lines(page, line_ys=line_ys, x0=72, x1=332)
+    page.draw_line((88, 120), (88, 145), color=(0, 0, 0), width=0.6)
+    page.draw_line((205, 120), (205, 145), color=(0, 0, 0), width=0.6)
+    page.draw_line((322, 120), (322, 145), color=(0, 0, 0), width=0.6)
+    _write_fret(page, "3", 120, line_ys[0])
+    _save(doc, "generated_pdf_barlines_below_threshold_crossing_partial_staff.pdf")
+
+
+def make_pdf_barlines_above_threshold_outside_staff_region() -> None:
+    doc, page = _new_page("Barlines Above Threshold Outside Staff Region")
+    line_ys = [120, 134, 148, 162, 176, 190]
+    _draw_tab_lines(page, line_ys=line_ys, x0=72, x1=332)
+    page.draw_line((88, 60), (88, 105), color=(0, 0, 0), width=0.6)
+    page.draw_line((205, 60), (205, 105), color=(0, 0, 0), width=0.6)
+    page.draw_line((322, 60), (322, 105), color=(0, 0, 0), width=0.6)
+    _write_fret(page, "3", 120, line_ys[0])
+    _save(doc, "generated_pdf_barlines_above_threshold_outside_staff_region.pdf")
+
+
+def make_pdf_barlines_crossing_top_bottom_missing_middle() -> None:
+    doc, page = _new_page("Barlines Crossing Top Bottom Missing Middle")
+    line_ys = [120, 134, 148, 162, 176, 190]
+    _draw_tab_lines(page, line_ys=line_ys, x0=72, x1=332)
+    page.draw_line((88, 120), (88, 130), color=(0, 0, 0), width=0.6)
+    page.draw_line((88, 180), (88, 190), color=(0, 0, 0), width=0.6)
+    page.draw_line((205, 120), (205, 130), color=(0, 0, 0), width=0.6)
+    page.draw_line((205, 180), (205, 190), color=(0, 0, 0), width=0.6)
+    page.draw_line((322, 120), (322, 130), color=(0, 0, 0), width=0.6)
+    page.draw_line((322, 180), (322, 190), color=(0, 0, 0), width=0.6)
+    _write_fret(page, "3", 120, line_ys[0])
+    _save(doc, "generated_pdf_barlines_crossing_top_bottom_missing_middle.pdf")
+
+
+def make_pdf_barlines_crossing_all_gaps_short_absolute() -> None:
+    doc, page = _new_page("Barlines Crossing All Gaps Short Absolute")
+    line_ys = [120, 126, 132, 138, 144, 150]
+    _draw_tab_lines(page, line_ys=line_ys, x0=72, x1=332)
+    page.draw_line((88, 120), (88, 150), color=(0, 0, 0), width=0.6)
+    page.draw_line((205, 120), (205, 150), color=(0, 0, 0), width=0.6)
+    page.draw_line((322, 120), (322, 150), color=(0, 0, 0), width=0.6)
+    _write_fret(page, "3", 120, line_ys[0])
+    _save(doc, "generated_pdf_barlines_crossing_all_gaps_short_absolute.pdf")
+
+
+def make_pdf_barlines_crossing_only_some_gaps() -> None:
+    doc, page = _new_page("Barlines Crossing Only Some Gaps")
+    line_ys = [120, 134, 148, 162, 176, 190]
+    _draw_tab_lines(page, line_ys=line_ys, x0=72, x1=332)
+    page.draw_line((88, 134), (88, 162), color=(0, 0, 0), width=0.6)
+    page.draw_line((205, 134), (205, 162), color=(0, 0, 0), width=0.6)
+    page.draw_line((322, 134), (322, 162), color=(0, 0, 0), width=0.6)
+    _write_fret(page, "3", 120, line_ys[0])
+    _save(doc, "generated_pdf_barlines_crossing_only_some_gaps.pdf")
+
+
+def make_pdf_compact_barlines_safe_boxes() -> None:
+    doc, page = _new_page("Compact Barlines Safe Boxes")
+    line_ys = [120, 126, 132, 138, 144, 150]
+    _draw_tab_lines(page, line_ys=line_ys, x0=72, x1=332)
+    page.draw_line((88, 120), (88, 150), color=(0, 0, 0), width=0.6)
+    page.draw_line((205, 120), (205, 150), color=(0, 0, 0), width=0.6)
+    page.draw_line((322, 120), (322, 150), color=(0, 0, 0), width=0.6)
+    _write_fret(page, "3", 120, line_ys[0])
+    _write_fret(page, "5", 220, line_ys[1])
+    _save(doc, "generated_pdf_compact_barlines_safe_boxes.pdf")
+
+
+def make_pdf_compact_barlines_candidate_outside() -> None:
+    doc, page = _new_page("Compact Barlines Candidate Outside")
+    line_ys = [120, 126, 132, 138, 144, 150]
+    _draw_tab_lines(page, line_ys=line_ys, x0=72, x1=332)
+    page.draw_line((88, 120), (88, 150), color=(0, 0, 0), width=0.6)
+    page.draw_line((205, 120), (205, 150), color=(0, 0, 0), width=0.6)
+    page.draw_line((322, 120), (322, 150), color=(0, 0, 0), width=0.6)
+    _write_fret(page, "3", 80, line_ys[0])
+    _save(doc, "generated_pdf_compact_barlines_candidate_outside.pdf")
+
+
 def main() -> None:
     make_pdf_candidate_outside_system()
     make_pdf_candidate_outside_bar()
@@ -336,6 +428,14 @@ def main() -> None:
     make_pdf_barlines_ambiguous()
     make_pdf_bar_boxes_not_constructible()
     make_pdf_valid_grouped_counterpart()
+    make_pdf_barlines_below_threshold_crossing_staff()
+    make_pdf_barlines_below_threshold_crossing_partial_staff()
+    make_pdf_barlines_above_threshold_outside_staff_region()
+    make_pdf_barlines_crossing_top_bottom_missing_middle()
+    make_pdf_barlines_crossing_all_gaps_short_absolute()
+    make_pdf_barlines_crossing_only_some_gaps()
+    make_pdf_compact_barlines_safe_boxes()
+    make_pdf_compact_barlines_candidate_outside()
 
 
 if __name__ == "__main__":

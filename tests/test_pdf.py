@@ -1173,3 +1173,129 @@ def test_build_ir_refuses_unsafe_bar_detection_cases(tmp_path) -> None:
         payload = raised.value.to_diagnostics_payload()
         assert payload["details"]["grouping_status"] == "partial"
         assert expected_warning in payload["details"]["warning_codes"]
+
+
+def test_refined_barline_validation_boundaries(tmp_path) -> None:
+    # 1. compact barline crossing all string lines is accepted (below absolute threshold but crossing staff)
+    pdf1 = Path("tests/fixtures/pdf/generated_pdf_barlines_below_threshold_crossing_staff.pdf")
+    assert pdf1.exists()
+    tabraw1 = TabRaw.model_validate(extract_tab(pdf1, tmp_path / "below_threshold_crossing_staff.tabraw.json"))
+    # Confirms relative-height accepted fixture constructs bar boxes
+    warning_codes1 = {w["code"] for w in tabraw1.warnings}
+    assert "pdf_bar_boxes_constructed" in warning_codes1
+    assert "pdf_bar_boxes_not_constructible" not in warning_codes1
+
+    # Check diagnostics contents: absolute height, staff height/coverage, string gap crossing count, and final decision
+    fret1 = tabraw1.candidates[0]
+    details1 = fret1.raw["barline_candidates_details"]
+    assert details1
+    assert details1[0]["absolute_height_decision"] == "rejected"
+    assert details1[0]["relative_staff_crossing_decision"] == "accepted"
+    assert details1[0]["final_decision"] == "accepted"
+    assert details1[0]["gaps_crossed"] == 5
+    assert details1[0]["height"] < 40.0
+    assert details1[0]["height"] >= 20.0
+
+    # 2. compact barline crossing too few lines/partial staff is rejected
+    pdf2 = Path("tests/fixtures/pdf/generated_pdf_barlines_below_threshold_crossing_partial_staff.pdf")
+    tabraw2 = TabRaw.model_validate(extract_tab(pdf2, tmp_path / "below_threshold_crossing_partial_staff.tabraw.json"))
+    warning_codes2 = {w["code"] for w in tabraw2.warnings}
+    assert "pdf_barline_does_not_cross_staff" in warning_codes2
+    assert "pdf_bar_boxes_not_constructible" in warning_codes2
+    fret2 = tabraw2.candidates[0]
+    details2 = fret2.raw["barline_candidates_details"]
+    assert details2[0]["rejection_reason"] in ("pdf_barline_partial_staff_crossing", "pdf_barline_crosses_insufficient_string_gaps")
+    assert details2[0]["final_decision"] == "rejected"
+
+    # 3. tall barline outside staff region is rejected
+    pdf3 = Path("tests/fixtures/pdf/generated_pdf_barlines_above_threshold_outside_staff_region.pdf")
+    tabraw3 = TabRaw.model_validate(extract_tab(pdf3, tmp_path / "above_threshold_outside_staff_region.tabraw.json"))
+    warning_codes3 = {w["code"] for w in tabraw3.warnings}
+    assert "pdf_barline_outside_staff_region" in warning_codes3 or "pdf_barline_does_not_cross_staff" in warning_codes3
+    assert "pdf_bar_boxes_not_constructible" in warning_codes3
+    fret3 = tabraw3.candidates[0]
+    details3 = fret3.raw["barline_candidates_details"]
+    assert details3[0]["rejection_reason"] == "pdf_barline_outside_staff_region"
+    assert details3[0]["final_decision"] == "rejected"
+
+    # 4. barline crossing top/bottom strings but missing middle staff lines (insufficient gaps)
+    pdf4 = Path("tests/fixtures/pdf/generated_pdf_barlines_crossing_top_bottom_missing_middle.pdf")
+    tabraw4 = TabRaw.model_validate(extract_tab(pdf4, tmp_path / "crossing_top_bottom_missing_middle.tabraw.json"))
+    warning_codes4 = {w["code"] for w in tabraw4.warnings}
+    assert "pdf_bar_boxes_not_constructible" in warning_codes4
+    fret4 = tabraw4.candidates[0]
+    details4 = fret4.raw["barline_candidates_details"]
+    assert details4[0]["rejection_reason"] == "pdf_barline_crosses_insufficient_string_gaps"
+    assert details4[0]["final_decision"] == "rejected"
+
+    # 5. barline crossing all gaps short absolute (compact spacing accepted)
+    pdf5 = Path("tests/fixtures/pdf/generated_pdf_barlines_crossing_all_gaps_short_absolute.pdf")
+    tabraw5 = TabRaw.model_validate(extract_tab(pdf5, tmp_path / "crossing_all_gaps_short_absolute.tabraw.json"))
+    warning_codes5 = {w["code"] for w in tabraw5.warnings}
+    assert "pdf_bar_boxes_constructed" in warning_codes5
+    fret5 = tabraw5.candidates[0]
+    details5 = fret5.raw["barline_candidates_details"]
+    assert details5[0]["final_decision"] == "accepted"
+
+    # 6. barline crossing only some gaps is rejected
+    pdf6 = Path("tests/fixtures/pdf/generated_pdf_barlines_crossing_only_some_gaps.pdf")
+    tabraw6 = TabRaw.model_validate(extract_tab(pdf6, tmp_path / "crossing_only_some_gaps.tabraw.json"))
+    warning_codes6 = {w["code"] for w in tabraw6.warnings}
+    assert "pdf_bar_boxes_not_constructible" in warning_codes6
+    fret6 = tabraw6.candidates[0]
+    details6 = fret6.raw["barline_candidates_details"]
+    assert details6[0]["rejection_reason"] == "pdf_barline_crosses_insufficient_string_gaps"
+    assert details6[0]["final_decision"] == "rejected"
+
+
+def test_refined_compact_barline_success_and_failures(tmp_path) -> None:
+    # 7. Multiple compact valid barlines creating safe bar boxes -> grouped
+    pdf7 = Path("tests/fixtures/pdf/generated_pdf_compact_barlines_safe_boxes.pdf")
+    assert pdf7.exists()
+    tabraw7 = TabRaw.model_validate(extract_tab(pdf7, tmp_path / "compact_safe_boxes.tabraw.json"))
+    warning_codes7 = {w["code"] for w in tabraw7.warnings}
+    assert "pdf_bar_boxes_constructed" in warning_codes7
+    assert "pdf_barlines_not_detected_in_system" not in warning_codes7
+    assert "pdf_bar_boxes_not_constructible" not in warning_codes7
+    assert "pdf_grouping_not_safe_for_build_ir" not in warning_codes7
+
+    # 8. Compact valid barlines but candidate outside bars (barline validation succeeds, downstream bar assignment blocks)
+    pdf8 = Path("tests/fixtures/pdf/generated_pdf_compact_barlines_candidate_outside.pdf")
+    assert pdf8.exists()
+    tabraw8 = TabRaw.model_validate(extract_tab(pdf8, tmp_path / "compact_candidate_outside.tabraw.json"))
+    warning_codes8 = {w["code"] for w in tabraw8.warnings}
+    assert "pdf_bar_boxes_constructed" in warning_codes8
+    assert "pdf_candidate_outside_bar" in warning_codes8
+    assert "pdf_grouping_not_safe_for_build_ir" in warning_codes8
+
+    # 9. build-ir refuses unsafe barline validation cases
+    unsafe_fixtures = [
+        ("generated_pdf_barlines_below_threshold_crossing_partial_staff.pdf", "pdf_barline_does_not_cross_staff"),
+        ("generated_pdf_barlines_above_threshold_outside_staff_region.pdf", "pdf_barline_outside_staff_region"),
+        ("generated_pdf_barlines_crossing_top_bottom_missing_middle.pdf", "pdf_barline_crosses_insufficient_string_gaps"),
+        ("generated_pdf_barlines_crossing_only_some_gaps.pdf", "pdf_barline_crosses_insufficient_string_gaps"),
+        ("generated_pdf_compact_barlines_candidate_outside.pdf", "pdf_candidate_outside_bar"),
+    ]
+    for filename, expected_warning in unsafe_fixtures:
+        pdf_path = Path("tests/fixtures/pdf") / filename
+        assert pdf_path.exists()
+        tabraw_path = tmp_path / f"{pdf_path.stem}.tabraw.json"
+        ir_path = tmp_path / f"{pdf_path.stem}.ir.json"
+
+        extract_tab(pdf_path, tabraw_path)
+
+        with pytest.raises(BuildIrInputRiskError) as raised:
+            build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+
+        assert not ir_path.exists()
+        assert raised.value.category in ("partial_pdf_grouping", "pdf_grouping_not_safe_for_build_ir")
+        payload = raised.value.to_diagnostics_payload()
+        assert expected_warning in payload["details"]["warning_codes"]
+
+    # 10. valid counterpart passes build-ir
+    pdf_valid = Path("tests/fixtures/pdf/generated_pdf_compact_barlines_safe_boxes.pdf")
+    tabraw_valid = tmp_path / "compact_valid.tabraw.json"
+    ir_valid = tmp_path / "compact_valid.ir.json"
+    extract_tab(pdf_valid, tabraw_valid)
+    score = build_ir_from_files(GENERATED_MUSICXML, tabraw_valid, ir_valid)
+    assert score.metadata.title == "Generated Tiny Tab"
