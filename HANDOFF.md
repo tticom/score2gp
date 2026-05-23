@@ -1,13 +1,13 @@
 # Handoff
 
 ## Metadata
-- **Current Branch**: `feature/pdf-bar-box-construction-public-fixtures-v0.6`
+- **Current Branch**: `feature/private-smoke-refresh-after-pdf-bar-box-construction-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: [PR #36](https://github.com/tticom/score2gp/pull/36) (Draft)
-- **Latest Local Commit**: `121c105`
-- **Latest Pushed Commit**: `121c105`
-- **Commit Subject**: Add PDF bar box construction fixtures v0.6
-- **Working Tree Status**: Clean (except HANDOFF.md)
+- **Current PR**: N/A (Draft PR will be opened)
+- **Latest Local Commit**: N/A
+- **Latest Pushed Commit**: N/A
+- **Commit Subject**: Refresh private smoke after PDF bar box construction
+- **Working Tree Status**: Clean (except HANDOFF.md/TASKS.md)
 - **Tests & Checks Run**:
   - `python -m pytest` -> 225 passed cleanly
   - `python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
@@ -18,17 +18,10 @@
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or diagnostic outputs are tracked or committed. All outputs under `work/` are ignored.
 
 ## What Changed in the Task
-- Refined `_TabSystem` bar box construction logic and added strict layout validations:
-  - Width validation (`pdf_bar_box_too_narrow` for barlines < 30.0pt).
-  - Out-of-system coordinate checks (`pdf_bar_box_outside_system_bounds`).
-  - Overlap validation (`pdf_bar_box_overlaps_neighbor`).
-  - Boundary candidate exclusion: candidates exactly or nearly on a boundary are flagged as ambiguous (`pdf_candidate_on_bar_boundary` or `pdf_bar_box_boundary_ambiguous`), and candidates outside constructed boxes are flagged as unassigned (`pdf_candidate_unassigned_to_bar`).
-  - Enforced that page-level completion requires all systems to have constructed bar boxes, otherwise reporting `pdf_partial_grouping_one_system_unboxed` and blocking `build_ir` from ScoreIR generation under the `partial_pdf_grouping` category.
-- Updated `report.py` to register all new layout reason codes and emit custom HTML remediation guidance for bar box construction failure modes.
-- Updated `build_ir.py` to include the new layout warning codes in the allowed grouping risk and unsafe grouping warning sets.
-- Programmatically generated 9 public synthetic PDF fixtures under `tests/fixtures/pdf/` covering all failure modes.
-- Appended comprehensive synthetic tests in `tests/test_pdf.py` verifying each failure mode, strict build-ir gating, and preservation of E2E smoke tests.
-
+- Re-ran the local private-safe E2E diagnostic smoke workflow against real private score inputs under the ignored output path `work/private_e2e_smoke_after_pdf_bar_box_construction_v0_1/`.
+- Programmatically validated that the new layout heuristics, warning codes, and candidate boundary checks implemented in PR #36 are correctly invoked and reported for real private score layouts.
+- Identified that `private_input_1` successfully compiles 8 out of 8 systems on page 1 and 5 out of 6 systems on page 2 (total 13 out of 14 systems boxed and grouped successfully), while page 2 system 6 fails with precise bar-box construction warning codes.
+- Confirmed that candidate unassigned/ambiguous warnings are accurately logged in warnings telemetry.
 
 ## Private Smoke Blocker Classification
 - **`private_input_1`** (`pdf-tab-musicxml`):
@@ -36,21 +29,21 @@
   - **Page count**: 2
   - **Text detected**: Yes
   - **Geometry detected**: Yes
-  - **Drawn system count**: 14 (7 per page)
+  - **Drawn system count**: 14 (8 on page 1, 6 on page 2)
   - **Barline candidates exist on systems**: Yes (2 candidates detected on most systems)
-  - **Valid barline count per system**: 2 on most systems (systems 1-7 on page 1, systems 1-5 and 7 on page 2), but 0 on page 2 system 6.
-  - **Rejected barline count per system**: 0 on most systems, but 2 on page 2 system 6 (rejected as `pdf_barline_too_short` / `pdf_barline_ambiguous`).
-  - **Accepted compact barlines**: Yes! Compact barlines (height = 31.89pt, below 40pt absolute threshold) were successfully accepted on page 1 and page 2 systems under the relative crossing check.
-  - **Bar box count**: 14 (constructed for systems 1-7 on page 1, systems 1-5 and 7 on page 2; missing for system 6 on page 2).
+  - **Valid barline count per system**: 2 on most systems (systems 1-8 on page 1, systems 1-5 on page 2), but 0 on page 2 system 6.
+  - **Rejected barline count per system**: 0 on most systems, but 2 on page 2 system 6.
+  - **Accepted compact barlines**: Yes! Compact barlines were successfully accepted on page 1 (systems 1-8) and page 2 (systems 1-5) under the relative crossing check.
+  - **Bar box count**: 13 successfully constructed (8 on page 1, 5 on page 2; missing for system 6 on page 2).
   - **Playable fret candidates**: 203 (non-playable: 126, total: 329).
   - **Candidates assigned to system**: 282.
   - **Candidates assigned to bar**: 265.
   - **Candidates assigned to string**: 141 (fret candidates).
-  - **Grouping status**: `partial_pdf_grouping` (improved from `missing_pdf_grouping`).
+  - **Grouping status**: `partial_pdf_grouping`.
   - **Primary blocker stage**: `timing_alignment` (MusicXML timing risk prevents ScoreIR output; timing status `failed`).
-  - **Primary PDF blocker stage**: `bar_detection` (due to system 6 on page 2 missing bar boxes, and some candidates unassigned to bar/system).
-  - **Primary PDF reason code**: `pdf_system_detection_succeeded_but_grouping_incomplete`
-  - **Secondary PDF reason codes**: `pdf_barlines_not_detected_in_system`, `pdf_bar_boxes_not_constructible`, `pdf_bar_detection_not_enough_for_build_ir`, `pdf_barline_too_short`, `pdf_barline_ambiguous`, `pdf_multi_system_order_ambiguous`, `pdf_system_order_ambiguous`, `pdf_tab_staff_ambiguous`, `pdf_system_bbox_ambiguous`
+  - **Primary PDF blocker stage**: `pdf_bar_box_construction` (due to system 6 on page 2 missing bar boxes, and some candidates unassigned or ambiguous).
+  - **Primary PDF reason code**: `pdf_partial_grouping_one_system_unboxed`.
+  - **Secondary PDF reason codes**: `pdf_barline_too_short`, `pdf_barline_ambiguous`, `pdf_bar_box_requires_two_boundaries`, `pdf_bar_boxes_not_constructible`, `pdf_barlines_not_detected_in_system`, `pdf_bar_detection_not_enough_for_build_ir`, `ambiguous_bar_assignment`, `ambiguous_string_assignment`, `pdf_candidate_unassigned_to_bar`, `pdf_candidates_unassigned_to_bar`, `pdf_candidates_unassigned_to_string`, `pdf_candidates_unassigned_to_system`.
   - **ScoreIR gate status**: `refused`.
   - **GP writing status**: `not_attempted`.
 
@@ -58,7 +51,7 @@
   - **Input class**: `ascii_tab_candidate` / `unsupported`
   - **Page count**: 1
   - **Text detected**: Yes
-  - **Geometry detected**: Yes
+  - **Geometry detected**: Yes (PyMuPDF detected drawing lines in the PDF, but no drawn systems were resolved)
   - **Drawn system count**: 0
   - **ASCII block count**: 3
   - **Grouping status**: `missing_pdf_grouping`
@@ -69,17 +62,18 @@
   - **ScoreIR gate status**: `not_attempted`
 
 ## Comparison with Previous Summary
-- **Previous PDF grouping status**: `private_input_1` had grouping status `missing_pdf_grouping` because ALL barline candidates were rejected as `pdf_barline_too_short`. Zero valid barlines were found, and zero bar boxes were constructed.
-- **Current PDF grouping status**: Thanks to relative staff-crossing validation, 13 out of 14 systems now successfully accept barlines and construct bar boxes. Fret candidates are assigned to bars. The grouping status has improved to `partial_pdf_grouping`.
-- **Previous primary ScoreIR blocker**: PDF grouping failure blocked `build_ir` from even trying to compile ScoreIR.
-- **Current primary ScoreIR blocker**: PDF grouping is now resolved enough that `build_ir` preflights MusicXML timing, and is strictly blocked by `musicxml_timing_risk` (unrecoverable same-voice cursor overlaps), generating the anonymised unrecoverable timing JSON and HTML reports.
+- **Previous PDF grouping status**: `private_input_1` achieved `partial_pdf_grouping` with 13 of 14 systems boxed.
+- **Current PDF grouping status**: Re-running the smoke workflow confirms that `private_input_1` continues to achieve `partial_pdf_grouping` with 13 of 14 systems successfully constructing bar boxes, but the newly refined bar-box construction diagnostics are now programmatically reported. The unboxed system 6 on page 2 precisely triggers `pdf_partial_grouping_one_system_unboxed`, `pdf_bar_boxes_not_constructible`, and `pdf_barline_too_short` warnings.
+- **Previous primary ScoreIR blocker**: Blocked by timing alignment risk.
+- **Current primary ScoreIR blocker**: Timing preflight remains blocked by `musicxml_timing_risk` (66 overlapping same-voice events in `private_input_1`), while the PDF layout diagnostics are correctly reporting layout boundaries.
 
 ## Current Top Blocker Classification
+- **`pdf_bar_box_construction`** (primary PDF grouping blocker for `private_input_1`).
 - **`musicxml_timing_repair_not_safe`** (primary timing/ScoreIR blocker for `private_input_1`).
 - **`pdf_drawn_system_detection`** / **`pdf_ascii_system_timing_boundary`** (primary PDF grouping blockers for `private_input_2`).
 
 ## Next Recommended Task
-- **`feature/private-smoke-refresh-after-pdf-bar-box-construction-v0.1`** (to re-run the private E2E diagnostic smoke workflow to verify whether the new bar-box construction heuristics, taxonomy codes, and candidate boundaries are accurately reported for `private_input_1`).
+- **`feature/pdf-bar-box-edge-cases-public-fixtures-v0.7`** (to introduce public synthetic fixtures and heuristics to handle remaining layout blocker edge cases like missing barlines on system 6 and unassigned candidates, moving from `partial_pdf_grouping` to full `pdf_grouped` status).
 
 ## Explicit Scope Boundaries
 - **Do not** commit any private inputs, private outputs, private GP files, private PDFs, private summaries, private HTML diagnostics, or any `work/` contents.
