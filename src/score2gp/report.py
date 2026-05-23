@@ -256,6 +256,18 @@ def grouping_status_for_tabraw(tabraw: dict[str, Any]) -> str:
         "pdf_candidate_unassigned_to_bar",
         "pdf_partial_grouping_one_system_unboxed",
         "pdf_bar_box_construction_not_enough_for_build_ir",
+
+        # New Phase 7 Bar Box Construction Edge Cases Codes
+        "pdf_bar_box_single_system_failure",
+        "pdf_bar_box_edge_system_missing_boundary",
+        "pdf_bar_box_one_boundary_rejected",
+        "pdf_barline_short_but_near_staff_boundary",
+        "pdf_barline_ambiguous_on_edge_system",
+        "pdf_candidate_unassigned_due_to_unboxed_system",
+        "pdf_candidate_near_missing_bar_boundary",
+        "pdf_boundary_candidate_blocks_full_grouping",
+        "pdf_full_grouping_requires_all_systems_boxed",
+        "pdf_grouping_complete_all_playable_candidates_assigned",
     }
 
     if warning_codes.intersection(unsupported_codes):
@@ -361,7 +373,25 @@ def write_grouping_diagnostics_html(path: str | Path, report: dict[str, Any]) ->
         if primary_stage == "system_detection":
             hint_text = "System detection is incomplete; use a clearer born-digital fixture, improve public layout heuristics, or review manually."
         elif primary_stage == "bar_detection":
-            if any(w in warnings for w in ("pdf_bar_box_too_narrow", "pdf_bar_box_overlaps_neighbor", "pdf_bar_box_outside_system_bounds", "pdf_bar_box_requires_two_boundaries", "pdf_partial_grouping_one_system_unboxed", "pdf_candidate_unassigned_to_bar", "pdf_candidate_on_bar_boundary", "pdf_bar_box_construction_not_enough_for_build_ir")):
+            if any(w in warnings for w in (
+                "pdf_bar_box_too_narrow",
+                "pdf_bar_box_overlaps_neighbor",
+                "pdf_bar_box_outside_system_bounds",
+                "pdf_bar_box_requires_two_boundaries",
+                "pdf_partial_grouping_one_system_unboxed",
+                "pdf_candidate_unassigned_to_bar",
+                "pdf_candidate_on_bar_boundary",
+                "pdf_bar_box_construction_not_enough_for_build_ir",
+                "pdf_bar_box_single_system_failure",
+                "pdf_bar_box_edge_system_missing_boundary",
+                "pdf_bar_box_one_boundary_rejected",
+                "pdf_barline_short_but_near_staff_boundary",
+                "pdf_barline_ambiguous_on_edge_system",
+                "pdf_candidate_unassigned_due_to_unboxed_system",
+                "pdf_candidate_near_missing_bar_boundary",
+                "pdf_boundary_candidate_blocks_full_grouping",
+                "pdf_full_grouping_requires_all_systems_boxed",
+            )):
                 hint_text = "Accepted barlines exist, but safe bar boxes could not be constructed or candidates could not be assigned."
             else:
                 hint_text = "Barline candidates exist but do not safely cross enough of the tab staff."

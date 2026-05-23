@@ -154,6 +154,48 @@ def make_pdf_multi_system_all_valid() -> None:
     _save(doc, "generated_pdf_multi_system_all_valid.pdf")
 
 
+def make_pdf_empty_system_policy() -> None:
+    # 10. Multi-system page where System 1 is valid, but System 2 has no playable candidates and is empty/decorative.
+    # Grouping status should be "grouped" (empty system policy).
+    doc, page = _new_page("Empty System Policy")
+    # System 1
+    line_ys1 = [100, 114, 128, 142, 156, 170]
+    _draw_tab_lines(page, line_ys=line_ys1, x0=72, x1=332)
+    _draw_barlines(page, line_ys=line_ys1, bar_xs=[88, 205, 322])
+    _write_fret(page, "3", 120, line_ys1[0])
+
+    # System 2 - Empty/Decorative, has no playable candidate
+    line_ys2 = [220, 234, 248, 262, 276, 290]
+    _draw_tab_lines(page, line_ys=line_ys2, x0=72, x1=332)
+    # Lacks barlines completely, but has no candidates so it should be tolerated!
+    _save(doc, "generated_pdf_empty_system_policy.pdf")
+
+
+def make_pdf_one_accepted_one_rejected() -> None:
+    # 11. System with one valid barline and one short rejected barline (triggers pdf_bar_box_one_boundary_rejected)
+    doc, page = _new_page("One Accepted One Rejected")
+    line_ys = [120, 134, 148, 162, 176, 190]
+    _draw_tab_lines(page, line_ys=line_ys, x0=72, x1=332)
+    # One valid barline at x=120
+    _draw_barlines(page, line_ys=line_ys, bar_xs=[120])
+    # One short barline at x=200 going from y=120 to y=138 (18pt)
+    page.draw_line((200, 120), (200, 138), color=(0, 0, 0), width=0.6)
+    _write_fret(page, "3", 150, line_ys[0])
+    _save(doc, "generated_pdf_one_accepted_one_rejected.pdf")
+
+
+def make_pdf_two_short_barlines() -> None:
+    # 12. System with two short/rejected barlines and zero valid barlines
+    doc, page = _new_page("Two Short Barlines")
+    line_ys = [120, 134, 148, 162, 176, 190]
+    _draw_tab_lines(page, line_ys=line_ys, x0=72, x1=332)
+    # Two short barlines (18pt each)
+    page.draw_line((120, 120), (120, 138), color=(0, 0, 0), width=0.6)
+    page.draw_line((200, 120), (200, 138), color=(0, 0, 0), width=0.6)
+    _write_fret(page, "5", 150, line_ys[1])
+    _save(doc, "generated_pdf_two_short_barlines.pdf")
+
+
 def main() -> None:
     make_pdf_one_bar_box()
     make_pdf_one_accepted_barline()
@@ -164,6 +206,9 @@ def main() -> None:
     make_pdf_candidate_on_boundary()
     make_pdf_multi_system_one_failed()
     make_pdf_multi_system_all_valid()
+    make_pdf_empty_system_policy()
+    make_pdf_one_accepted_one_rejected()
+    make_pdf_two_short_barlines()
 
 
 if __name__ == "__main__":
