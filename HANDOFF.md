@@ -3,9 +3,9 @@
 ## Metadata
 - **Current Branch**: `feature/musicxml-unrecoverable-timing-report-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: N/A (Draft)
-- **Latest Local Commit**: N/A
-- **Latest Pushed Commit**: N/A
+- **Current PR**: [PR #35](https://github.com/tticom/score2gp/pull/35) (Draft)
+- **Latest Local Commit**: `ebcc67b`
+- **Latest Pushed Commit**: `ebcc67b`
 - **Commit Subject**: Add unrecoverable MusicXML timing report
 - **Working Tree Status**: Clean
 - **Tests & Checks Run**:
