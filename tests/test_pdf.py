@@ -1134,8 +1134,8 @@ def test_refined_bar_boxes_not_constructible_diagnostics(tmp_path) -> None:
     tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
     warning_codes = {warning["code"] for warning in tabraw.warnings}
 
-    assert "pdf_barlines_not_detected_in_system" in warning_codes
-    assert "pdf_bar_boxes_not_constructible" in warning_codes
+    assert "pdf_bar_box_edge_boundary_fallback_used" in warning_codes
+    assert "pdf_bar_box_inferred_right_boundary" in warning_codes
 
     from score2gp.report import build_grouping_diagnostics
     report = build_grouping_diagnostics(
@@ -1144,7 +1144,8 @@ def test_refined_bar_boxes_not_constructible_diagnostics(tmp_path) -> None:
         tabraw=tabraw.model_dump(mode="json"),
         artifacts={},
     )
-    assert report["primary_blocker_stage"] == "bar_detection"
+    assert report["whether_bar_detection_succeeded"] is True
+    assert report["primary_blocker_stage"] in ("none", "timing_alignment")
 
 
 def test_build_ir_refuses_unsafe_bar_detection_cases(tmp_path) -> None:
@@ -1154,7 +1155,6 @@ def test_build_ir_refuses_unsafe_bar_detection_cases(tmp_path) -> None:
         ("generated_pdf_barlines_too_short.pdf", "pdf_barline_too_short"),
         ("generated_pdf_barlines_outside_bounds.pdf", "pdf_barline_outside_system_bounds"),
         ("generated_pdf_barlines_ambiguous.pdf", "pdf_barline_ambiguous"),
-        ("generated_pdf_bar_boxes_not_constructible.pdf", "pdf_barlines_not_detected_in_system"),
     ]
 
     for filename, expected_warning in fixtures:
@@ -1327,10 +1327,8 @@ def test_synthetic_one_accepted_barline(tmp_path) -> None:
     tabraw_path = tmp_path / "one_accepted_barline.tabraw.json"
     tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
     warning_codes = {w["code"] for w in tabraw.warnings}
-    assert "pdf_bar_box_requires_two_boundaries" in warning_codes
-    assert "pdf_bar_boxes_not_constructible" in warning_codes
-    assert "pdf_bar_box_missing_right_boundary" in warning_codes
-    assert "pdf_bar_box_construction_not_enough_for_build_ir" in warning_codes
+    assert "pdf_bar_box_edge_boundary_fallback_used" in warning_codes
+    assert "pdf_bar_box_inferred_left_boundary" in warning_codes
 
     from score2gp.report import build_grouping_diagnostics
     report = build_grouping_diagnostics(
@@ -1339,8 +1337,8 @@ def test_synthetic_one_accepted_barline(tmp_path) -> None:
         tabraw=tabraw.model_dump(mode="json"),
         artifacts={},
     )
-    assert report["whether_bar_detection_succeeded"] is False
-    assert report["primary_blocker_stage"] == "bar_detection"
+    assert report["whether_bar_detection_succeeded"] is True
+    assert report["primary_blocker_stage"] in ("none", "timing_alignment")
 
 
 def test_synthetic_bar_box_too_narrow(tmp_path) -> None:
@@ -1425,7 +1423,8 @@ def test_synthetic_multi_system_one_failed(tmp_path) -> None:
     tabraw_path = tmp_path / "multi_failed.tabraw.json"
     tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
     warning_codes = {w["code"] for w in tabraw.warnings}
-    assert "pdf_partial_grouping_one_system_unboxed" in warning_codes
+    assert "pdf_bar_box_edge_boundary_fallback_used" in warning_codes
+    assert "pdf_bar_box_inferred_right_boundary" in warning_codes
 
     from score2gp.report import build_grouping_diagnostics
     report = build_grouping_diagnostics(
@@ -1434,8 +1433,8 @@ def test_synthetic_multi_system_one_failed(tmp_path) -> None:
         tabraw=tabraw.model_dump(mode="json"),
         artifacts={},
     )
-    assert report["whether_bar_detection_succeeded"] is False
-    assert report["primary_blocker_stage"] == "bar_detection"
+    assert report["whether_bar_detection_succeeded"] is True
+    assert report["primary_blocker_stage"] in ("none", "timing_alignment")
 
 
 def test_synthetic_multi_system_all_valid(tmp_path) -> None:
@@ -1525,12 +1524,10 @@ def test_synthetic_two_short_barlines(tmp_path) -> None:
 
 def test_build_ir_refuses_bar_box_construction_failures(tmp_path) -> None:
     unsafe_fixtures = [
-        ("generated_pdf_one_accepted_barline.pdf", "pdf_bar_box_requires_two_boundaries"),
         ("generated_pdf_bar_box_too_narrow.pdf", "pdf_bar_box_too_narrow"),
         ("generated_pdf_bar_box_outside_system.pdf", "pdf_bar_box_outside_system_bounds"),
         ("generated_pdf_candidate_left_of_boxes.pdf", "pdf_candidate_unassigned_to_bar"),
         ("generated_pdf_candidate_on_boundary.pdf", "pdf_candidate_on_bar_boundary"),
-        ("generated_pdf_multi_system_one_failed.pdf", "pdf_partial_grouping_one_system_unboxed"),
         ("generated_pdf_one_accepted_one_rejected.pdf", "pdf_bar_box_one_boundary_rejected"),
         ("generated_pdf_two_short_barlines.pdf", "pdf_bar_box_single_system_failure"),
     ]
@@ -1549,3 +1546,113 @@ def test_build_ir_refuses_bar_box_construction_failures(tmp_path) -> None:
         assert raised.value.category in ("partial_pdf_grouping", "pdf_grouping_not_safe_for_build_ir")
         payload = raised.value.to_diagnostics_payload()
         assert expected_warning in payload["details"]["warning_codes"]
+
+
+def test_synthetic_edge_left_fallback(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_edge_left_fallback.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "edge_left_fallback.tabraw.json"
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {w["code"] for w in tabraw.warnings}
+    assert "pdf_bar_box_edge_boundary_fallback_used" in warning_codes
+    assert "pdf_bar_box_inferred_left_boundary" in warning_codes
+
+    from score2gp.report import build_grouping_diagnostics
+    report = build_grouping_diagnostics(
+        source_pdf=pdf_path,
+        inspection={"kind": "born-digital", "page_count": 1},
+        tabraw=tabraw.model_dump(mode="json"),
+        artifacts={},
+    )
+    assert report["whether_bar_detection_succeeded"] is True
+
+
+def test_synthetic_edge_right_fallback(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_edge_right_fallback.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "edge_right_fallback.tabraw.json"
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {w["code"] for w in tabraw.warnings}
+    assert "pdf_bar_box_edge_boundary_fallback_used" in warning_codes
+    assert "pdf_bar_box_inferred_right_boundary" in warning_codes
+
+
+def test_synthetic_edge_ambiguous_fallback(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_edge_ambiguous_fallback.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "edge_ambig.tabraw.json"
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {w["code"] for w in tabraw.warnings}
+    assert "pdf_bar_box_edge_boundary_fallback_rejected" in warning_codes
+    assert "pdf_bar_box_edge_boundary_ambiguous" in warning_codes
+    assert "pdf_bar_box_inferred_boundary_requires_clear_system_edge" in warning_codes
+
+
+def test_synthetic_edge_too_narrow_fallback(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_edge_too_narrow_fallback.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "too_narrow.tabraw.json"
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {w["code"] for w in tabraw.warnings}
+    assert "pdf_bar_box_edge_boundary_fallback_rejected" in warning_codes
+    assert "pdf_bar_box_inferred_boundary_too_narrow" in warning_codes
+
+
+def test_synthetic_edge_candidate_near_inferred(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_edge_candidate_near_inferred.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "near_inferred.tabraw.json"
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {w["code"] for w in tabraw.warnings}
+    assert "pdf_bar_box_edge_boundary_fallback_rejected" in warning_codes
+    assert "pdf_bar_box_inferred_boundary_candidate_ambiguous" in warning_codes
+
+
+def test_synthetic_multi_system_safe_fallback(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_multi_system_safe_fallback.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "multi_safe.tabraw.json"
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {w["code"] for w in tabraw.warnings}
+    assert "pdf_bar_box_edge_boundary_fallback_used" in warning_codes
+    assert "pdf_bar_box_inferred_left_boundary" in warning_codes
+    assert "pdf_grouping_complete" in warning_codes
+
+
+def test_synthetic_multi_system_partial_fallback(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_multi_system_partial_fallback.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "multi_partial.tabraw.json"
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {w["code"] for w in tabraw.warnings}
+    assert "pdf_bar_box_edge_boundary_fallback_rejected" in warning_codes
+    assert "pdf_bar_box_inferred_boundary_candidate_ambiguous" in warning_codes
+
+
+def test_synthetic_next_blocker_string_assignment(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_next_blocker_string_assignment.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "next_blocker.tabraw.json"
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {w["code"] for w in tabraw.warnings}
+    assert "pdf_candidates_unassigned_to_string" in warning_codes
+
+
+def test_synthetic_empty_system_policy_fallback(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_empty_system_policy_fallback.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "empty_policy.tabraw.json"
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {w["code"] for w in tabraw.warnings}
+    assert "pdf_grouping_complete" in warning_codes
+    assert "pdf_bar_box_edge_boundary_fallback_used" in warning_codes
+
+
+def test_build_ir_allows_safe_fallback_fixture(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_edge_left_fallback.pdf")
+    tabraw_path = tmp_path / "safe.tabraw.json"
+    ir_path = tmp_path / "safe.ir.json"
+
+    extract_tab(pdf_path, tabraw_path)
+    build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+    assert ir_path.exists()
