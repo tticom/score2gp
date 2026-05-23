@@ -78,7 +78,8 @@ class BuildIrInputRiskError(ValueError):
         issue_counts: dict[str, int] = {}
         for issue in self.timing_issues:
             issue_counts[issue.code] = issue_counts.get(issue.code, 0) + 1
-        return {
+
+        payload = {
             "schema_version": "build-ir-failure-diagnostics.v0.1",
             "stage": self.stage,
             "category": self.category,
@@ -88,6 +89,124 @@ class BuildIrInputRiskError(ValueError):
             "timing_issues": [issue.model_dump(mode="json", exclude_none=True) for issue in self.timing_issues],
             "details": self.details,
         }
+
+        if self.stage == "musicxml-import":
+            # 1. Counts
+            overfull_bars = set()
+            underfull_bars = set()
+            affected_events = set()
+            tie_continuity_risks = 0
+            many_risk_summaries = 0
+            invalid_grids = 0
+
+            # Gather overlaps: max overlap count per (part_id, measure_index)
+            overlap_by_measure = {}
+
+            for issue in self.timing_issues:
+                # overfull bar check
+                if (issue.code in ("musicxml-overfull-bar", "musicxml_compound_meter_overfull", "musicxml_voice_duration_overfull")
+                        or "musicxml_voice_duration_overfull" in issue.secondary_reasons
+                        or "musicxml_same_voice_measure_overfull" in issue.secondary_reasons):
+                    overfull_bars.add((issue.part_id, issue.measure_index))
+
+                # underfull bar check
+                if (issue.code in ("musicxml-underfull-bar", "musicxml_compound_meter_underfull", "musicxml_voice_duration_underfull")
+                        or "musicxml_voice_duration_underfull" in issue.secondary_reasons):
+                    underfull_bars.add((issue.part_id, issue.measure_index))
+
+                # affected event ids
+                if issue.affected_event_ids:
+                    affected_events.update(issue.affected_event_ids)
+                if issue.musicxml_note_id:
+                    affected_events.add(issue.musicxml_note_id)
+
+                # overlaps per measure
+                if issue.overlap_count is not None:
+                    key = (issue.part_id, issue.measure_index)
+                    overlap_by_measure[key] = max(overlap_by_measure.get(key, 0), issue.overlap_count)
+
+                # tie continuity
+                if issue.code == "musicxml_tie_continuity_risk":
+                    tie_continuity_risks += 1
+
+                # many timing risks
+                if issue.code in ("musicxml_many_timing_risks", "musicxml_repeated_backup_forward_risk"):
+                    many_risk_summaries += 1
+
+                # invalid duration grid
+                if issue.code == "musicxml_invalid_duration_grid":
+                    invalid_grids += 1
+
+            overfull_bar_count = len(overfull_bars)
+            underfull_bar_count = len(underfull_bars)
+            affected_event_count = len(affected_events)
+            overlap_count = sum(overlap_by_measure.values())
+
+            # 2. Calibration details
+            calibration_possible = False
+            if self.timing_issues:
+                # Check if any issue is considered calibratable
+                any_candidate = any(issue.timing_calibration_possible for issue in self.timing_issues)
+
+                # Check blocking reasons
+                blocking_reasons = []
+                if tie_continuity_risks > 0:
+                    blocking_reasons.append("musicxml_tie_continuity_blocks_calibration")
+                if overlap_count > 0:
+                    blocking_reasons.append("musicxml_overlap_blocks_calibration")
+                if many_risk_summaries > 0:
+                    blocking_reasons.append("musicxml_many_risks_block_calibration")
+                if invalid_grids > 0:
+                    blocking_reasons.append("musicxml_invalid_grid_blocks_calibration")
+                if overfull_bar_count > 0 and underfull_bar_count > 0:
+                    blocking_reasons.append("musicxml_mixed_underfull_overfull_blocks_calibration")
+
+                has_large_overfull = any(
+                    "musicxml_overfull_too_large_for_calibration" in issue.secondary_reasons
+                    for issue in self.timing_issues
+                )
+                if has_large_overfull:
+                    blocking_reasons.append("musicxml_overfull_too_large_for_calibration")
+
+                has_non_calibratable_error = any(
+                    not issue.timing_calibration_possible
+                    for issue in self.timing_issues
+                    if issue.severity == "error" and issue.code != "musicxml_alignment_not_attempted_due_to_timing_risk"
+                )
+                if has_non_calibratable_error and "musicxml_timing_calibration_not_safe" not in blocking_reasons:
+                    blocking_reasons.append("musicxml_timing_calibration_not_safe")
+
+                if any_candidate and not blocking_reasons:
+                    calibration_possible = True
+                    calibration_candidate_reason = "musicxml_timing_calibration_candidate"
+                    calibration_blocking_reasons = []
+                else:
+                    calibration_possible = False
+                    calibration_candidate_reason = None
+                    calibration_blocking_reasons = sorted(list(set(blocking_reasons)))
+                    if not calibration_blocking_reasons:
+                        calibration_blocking_reasons = ["musicxml_timing_calibration_not_safe"]
+            else:
+                calibration_possible = False
+                calibration_candidate_reason = None
+                calibration_blocking_reasons = []
+
+            payload.update({
+                "calibration_possible": calibration_possible,
+                "calibration_candidate_reason": calibration_candidate_reason,
+                "calibration_blocking_reasons": calibration_blocking_reasons,
+                "overfull_bar_count": overfull_bar_count,
+                "underfull_bar_count": underfull_bar_count,
+                "affected_event_count": affected_event_count,
+                "overlap_count": overlap_count,
+                "tie_continuity_risk_count": tie_continuity_risks,
+                "many_risk_summary_count": many_risk_summaries,
+                "invalid_grid_count": invalid_grids,
+                "automatic_repair_attempted": False,
+                "remediation_hint": "Fix or regenerate MusicXML timing; automatic timing repair is not implemented.",
+            })
+
+        return payload
 
 
 class CandidateXGroupDiagnostics(BaseModel):
