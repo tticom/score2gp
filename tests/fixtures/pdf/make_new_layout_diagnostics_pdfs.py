@@ -203,6 +203,60 @@ def make_pdf_system_order_ambiguous_close() -> None:
     _save(doc, "generated_pdf_system_order_ambiguous_close.pdf")
 
 
+def make_ascii_tab_three_blocks_no_bars() -> None:
+    doc, page = _new_page("ASCII Tab Three Blocks No Bars")
+    ascii_lines_block1 = [
+        "e|--0--1--",
+        "B|--------",
+        "G|--------",
+        "D|--------",
+        "A|--------",
+        "E|--------",
+    ]
+    ascii_lines_block2 = [
+        "e|--2--3--",
+        "B|--------",
+        "G|--------",
+        "D|--------",
+        "A|--------",
+        "E|--------",
+    ]
+    ascii_lines_block3 = [
+        "e|--4--5--",
+        "B|--------",
+        "G|--------",
+        "D|--------",
+        "A|--------",
+        "E|--------",
+    ]
+    for index, line in enumerate(ascii_lines_block1):
+        page.insert_text((72, 80 + index * 12), line, fontsize=10, fontname="cour")
+    for index, line in enumerate(ascii_lines_block2):
+        page.insert_text((72, 160 + index * 12), line, fontsize=10, fontname="cour")
+    for index, line in enumerate(ascii_lines_block3):
+        page.insert_text((72, 240 + index * 12), line, fontsize=10, fontname="cour")
+    _save(doc, "generated_ascii_tab_three_blocks_no_bars.pdf")
+
+
+def make_pdf_system_detected_no_barlines() -> None:
+    doc, page = _new_page("System Detected No Barlines")
+    line_ys = [120, 134, 148, 162, 176, 190]
+    _draw_tab_lines(page, line_ys=line_ys, x0=72, x1=332)
+    _write_fret(page, "3", 120, line_ys[0])
+    _write_fret(page, "5", 150, line_ys[1])
+    _save(doc, "generated_pdf_system_detected_no_barlines.pdf")
+
+
+def make_pdf_valid_grouped_counterpart() -> None:
+    doc, page = _new_page("Valid Grouped Counterpart")
+    line_ys = [120, 134, 148, 162, 176, 190]
+    _draw_tab_lines(page, line_ys=line_ys, x0=72, x1=332)
+    _draw_barlines(page, line_ys=line_ys, bar_xs=[88, 205, 322])
+    _write_fret(page, "3", 120, line_ys[0])
+    _write_fret(page, "5", 220, line_ys[1])
+    _save(doc, "generated_pdf_valid_grouped_counterpart.pdf")
+
+
 def main() -> None:
     make_pdf_candidate_outside_system()
     make_pdf_candidate_outside_bar()
@@ -216,6 +270,9 @@ def main() -> None:
     make_pdf_candidates_between_systems()
     make_pdf_candidates_unassigned_to_string()
     make_pdf_system_order_ambiguous_close()
+    make_ascii_tab_three_blocks_no_bars()
+    make_pdf_system_detected_no_barlines()
+    make_pdf_valid_grouped_counterpart()
 
 
 if __name__ == "__main__":

@@ -64,11 +64,64 @@ def build_grouping_diagnostics(
         for candidate in candidates
         if isinstance(candidate.get("raw"), dict) and candidate["raw"].get("parser_version") == "ascii-tab.v0.1"
     ]
-    input_class = "ascii-tab" if ascii_candidates else "drawn-tab-or-text"
     ascii_timing_status_counts = _ascii_timing_status_counts(ascii_candidates)
 
+    # Compute custom layout metrics
+    drawn_system_count = 0
+    staff_line_count = 0
+    system_ambiguity_count = 0
+    for warning in tabraw.get("warnings", []):
+        if warning.get("code") == "pdf_layout_details":
+            drawn_system_count = warning.get("detected_systems", 0)
+            staff_line_count = warning.get("detected_string_lines", 0)
+        if warning.get("code") in ("pdf_multi_system_order_ambiguous", "pdf_system_order_ambiguous", "pdf_system_bbox_ambiguous", "pdf_tab_staff_ambiguous"):
+            system_ambiguity_count += 1
+
+    # Fallback to candidate-assigned system count if layout warning is missing
+    if drawn_system_count == 0 and not ascii_candidates:
+        drawn_system_count = len(inferred_systems)
+
+    ascii_block_count = 0
+    for warning in tabraw.get("warnings", []):
+        if warning.get("code") == "ascii_tab_detected":
+            ascii_block_count += warning.get("ascii_tab_block_count", 0)
+
+    # Determine input_class
+    if drawn_system_count > 0 and ascii_block_count > 0:
+        input_class = "mixed_candidate"
+    elif "pdf_ascii_and_drawn_layout_conflict" in warning_codes or "pdf_page_layout_unsupported" in warning_codes:
+        input_class = "mixed_candidate"
+    elif ascii_block_count > 0 or ascii_candidates:
+        input_class = "ascii_tab_candidate"
+    elif drawn_system_count > 0 or len(inferred_systems) > 0 or staff_line_count > 0:
+        input_class = "drawn_tab_candidate"
+    elif playable:
+        input_class = "unsupported"
+    else:
+        input_class = "unsupported"
+
+    whether_system_detection_succeeded = (drawn_system_count > 0 or ascii_block_count > 0)
+    whether_bar_detection_succeeded = len(inferred_bars) > 0
+    whether_string_assignment_succeeded = inferred_string_assignment_count > 0
+
+    is_blocked = grouping_status not in ("grouped", "ascii_grouped")
+
+    # Determine primary_blocker_stage
+    if not whether_system_detection_succeeded:
+        primary_blocker_stage = "system_detection"
+    elif input_class in ("unsupported", "mixed_candidate") and is_blocked:
+        primary_blocker_stage = "unsupported_input_class"
+    elif not whether_bar_detection_succeeded:
+        primary_blocker_stage = "bar_detection"
+    elif not whether_string_assignment_succeeded:
+        primary_blocker_stage = "string_assignment"
+    elif is_blocked:
+        primary_blocker_stage = "timing_alignment"
+    else:
+        primary_blocker_stage = "none"
+
     return {
-        "schema_version": GROUPING_DIAGNOSTICS_SCHEMA_VERSION,
+        "schema_version": GROUPING_DIAGNOSTICS_VERSION if "GROUPING_DIAGNOSTICS_VERSION" in globals() else GROUPING_DIAGNOSTICS_SCHEMA_VERSION,
         "source_pdf_path": str(source_pdf) if source_pdf is not None else tabraw.get("source_pdf"),
         "inspection_kind": tabraw.get("inspection_kind") or inspection.get("kind") or "unknown",
         "input_class": input_class,
@@ -104,6 +157,17 @@ def build_grouping_diagnostics(
         "scoreir_written": scoreir_written,
         "grouping": grouping,
         "artifacts": artifacts,
+
+        # New fields for PDF system/layout taxonomy split
+        "drawn_system_count": drawn_system_count,
+        "ascii_block_count": ascii_block_count,
+        "staff_line_count": staff_line_count,
+        "system_ambiguity_count": system_ambiguity_count,
+        "whether_system_detection_succeeded": whether_system_detection_succeeded,
+        "whether_bar_detection_succeeded": whether_bar_detection_succeeded,
+        "whether_string_assignment_succeeded": whether_string_assignment_succeeded,
+        "whether_build_ir_blocked": is_blocked,
+        "primary_blocker_stage": primary_blocker_stage,
     }
 
 
@@ -249,8 +313,8 @@ def write_grouping_diagnostics_html(path: str | Path, report: dict[str, Any]) ->
     text_geometry_detected = "Yes" if report.get("total_text_candidate_count", 0) > 0 or report.get("inspection_kind") in ("born-digital", "mixed") else "No"
 
     # Systems/lines/bars detection status
-    system_detection_status = "Detected" if report.get("inferred_system_count", 0) > 0 else "Missing"
-    staff_line_detection_status = "Detected" if report.get("inferred_string_assignment_count", 0) > 0 or report.get("inferred_system_count", 0) > 0 else "Missing"
+    system_detection_status = "Detected" if report.get("inferred_system_count", 0) > 0 or report.get("drawn_system_count", 0) > 0 or report.get("ascii_block_count", 0) > 0 else "Missing"
+    staff_line_detection_status = "Detected" if report.get("inferred_string_assignment_count", 0) > 0 or report.get("drawn_system_count", 0) > 0 or report.get("ascii_block_count", 0) > 0 else "Missing"
     bar_detection_status = "Detected" if report.get("inferred_bar_count", 0) > 0 else "Missing"
     string_assignment_status = "Assigned" if report.get("inferred_string_assignment_count", 0) > 0 else "Unassigned/Missing"
 
@@ -269,9 +333,17 @@ def write_grouping_diagnostics_html(path: str | Path, report: dict[str, Any]) ->
 
     remediation_hint = ""
     if is_blocked:
-        remediation_hint = """
+        primary_stage = report.get("primary_blocker_stage", "unknown")
+        if primary_stage == "system_detection":
+            hint_text = "System detection is incomplete; use a clearer born-digital fixture, improve public layout heuristics, or review manually."
+        elif primary_stage == "bar_detection":
+            hint_text = "System detection succeeded; bar detection is the next blocker."
+        else:
+            hint_text = "PDF layout grouping is unsafe; use a clearer born-digital fixture, improve public layout heuristics, or review manually."
+
+        remediation_hint = f"""
         <div style="background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; padding: 12px; margin: 16px 0; border-radius: 4px;">
-            <strong>Remediation Hint:</strong> PDF layout grouping is unsafe; use a clearer born-digital fixture, improve public layout heuristics, or review manually.
+            <strong>Remediation Hint:</strong> {html.escape(hint_text)}
         </div>
         """
 
@@ -291,10 +363,13 @@ def write_grouping_diagnostics_html(path: str | Path, report: dict[str, Any]) ->
   <dt>Page count</dt><dd>{html.escape(str(report.get("page_count", 0)))}</dd>
   <dt>Grouping status</dt><dd>{html.escape(grouping_status)}</dd>
   <dt>Text/Geometry Detected Status</dt><dd>{html.escape(text_geometry_detected)}</dd>
+  <dt>Drawn Systems Detected</dt><dd>{report.get("drawn_system_count", 0)}</dd>
+  <dt>ASCII Blocks Detected</dt><dd>{report.get("ascii_block_count", 0)}</dd>
   <dt>System Detection Status</dt><dd>{html.escape(system_detection_status)}</dd>
   <dt>Staff-line Detection Status</dt><dd>{html.escape(staff_line_detection_status)}</dd>
   <dt>Bar Detection Status</dt><dd>{html.escape(bar_detection_status)}</dd>
   <dt>String Assignment Status</dt><dd>{html.escape(string_assignment_status)}</dd>
+  <dt>Primary Blocker Stage</dt><dd><code>{html.escape(str(report.get("primary_blocker_stage", "none")))}</code></dd>
   <dt>Build-IR Blocked Status</dt><dd>{html.escape(build_ir_blocked_status)}</dd>
   <dt>ScoreIR Written Status</dt><dd>{"Yes" if scoreir_written else "No"}</dd>
   <dt>Primary Layout Warning</dt><dd>{html.escape(primary_warning)}</dd>
