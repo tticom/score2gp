@@ -1,15 +1,15 @@
 # Handoff
 
 ## Metadata
-- **Current Branch**: `feature/musicxml-unrecoverable-timing-report-v0.1`
+- **Current Branch**: `feature/pdf-bar-box-construction-public-fixtures-v0.6`
 - **Base Branch**: `main`
-- **Current PR**: [PR #35](https://github.com/tticom/score2gp/pull/35) (Draft)
-- **Latest Local Commit**: `ebcc67b`
-- **Latest Pushed Commit**: `ebcc67b`
-- **Commit Subject**: Add unrecoverable MusicXML timing report
-- **Working Tree Status**: Clean
+- **Current PR**: [PR #36](https://github.com/tticom/score2gp/pull/36) (Draft)
+- **Latest Local Commit**: `121c105`
+- **Latest Pushed Commit**: `121c105`
+- **Commit Subject**: Add PDF bar box construction fixtures v0.6
+- **Working Tree Status**: Clean (except HANDOFF.md)
 - **Tests & Checks Run**:
-  - `python -m pytest` -> 215 passed cleanly
+  - `python -m pytest` -> 225 passed cleanly
   - `python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
   - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid
   - `git diff --check` -> passed cleanly
@@ -18,11 +18,17 @@
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or diagnostic outputs are tracked or committed. All outputs under `work/` are ignored.
 
 ## What Changed in the Task
-- Added a robust, private-safe HTML/JSON report for unrecoverable MusicXML timing failures (`musicxml-unrecoverable-timing-report.json`, `musicxml-unrecoverable-timing-report.html`).
-- Integrated report generation with `build-ir` failure diagnostics and the local private E2E smoke test workflow.
-- Ensured JSON report is the source of truth, containing anonymised telemetry (calibration blockers, overfull/underfull measure counts, expected vs actual ticks breakdown per measure/voice, affected event counts) without exposing private pitch step/octave values, chord symbols, lyrics, or raw notation text.
-- Added visually premium dark-mode HTML styling for the unrecoverable timing report, featuring clear verdict blocks, summaries, breakdown tables, and remediation guidance.
-- Added public synthetic tests proving report correctness, private safety, and integration.
+- Refined `_TabSystem` bar box construction logic and added strict layout validations:
+  - Width validation (`pdf_bar_box_too_narrow` for barlines < 30.0pt).
+  - Out-of-system coordinate checks (`pdf_bar_box_outside_system_bounds`).
+  - Overlap validation (`pdf_bar_box_overlaps_neighbor`).
+  - Boundary candidate exclusion: candidates exactly or nearly on a boundary are flagged as ambiguous (`pdf_candidate_on_bar_boundary` or `pdf_bar_box_boundary_ambiguous`), and candidates outside constructed boxes are flagged as unassigned (`pdf_candidate_unassigned_to_bar`).
+  - Enforced that page-level completion requires all systems to have constructed bar boxes, otherwise reporting `pdf_partial_grouping_one_system_unboxed` and blocking `build_ir` from ScoreIR generation under the `partial_pdf_grouping` category.
+- Updated `report.py` to register all new layout reason codes and emit custom HTML remediation guidance for bar box construction failure modes.
+- Updated `build_ir.py` to include the new layout warning codes in the allowed grouping risk and unsafe grouping warning sets.
+- Programmatically generated 9 public synthetic PDF fixtures under `tests/fixtures/pdf/` covering all failure modes.
+- Appended comprehensive synthetic tests in `tests/test_pdf.py` verifying each failure mode, strict build-ir gating, and preservation of E2E smoke tests.
+
 
 ## Private Smoke Blocker Classification
 - **`private_input_1`** (`pdf-tab-musicxml`):
@@ -73,7 +79,7 @@
 - **`pdf_drawn_system_detection`** / **`pdf_ascii_system_timing_boundary`** (primary PDF grouping blockers for `private_input_2`).
 
 ## Next Recommended Task
-- **`feature/pdf-bar-box-construction-public-fixtures-v0.6`** (to introduce public synthetic fixtures and heuristics to handle remaining partial grouping layout blockers like missing barlines on system 6 and unassigned candidates, moving from `partial_pdf_grouping` to full `pdf_grouped` status).
+- **`feature/private-smoke-refresh-after-pdf-bar-box-construction-v0.1`** (to re-run the private E2E diagnostic smoke workflow to verify whether the new bar-box construction heuristics, taxonomy codes, and candidate boundaries are accurately reported for `private_input_1`).
 
 ## Explicit Scope Boundaries
 - **Do not** commit any private inputs, private outputs, private GP files, private PDFs, private summaries, private HTML diagnostics, or any `work/` contents.

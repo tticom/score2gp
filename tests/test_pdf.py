@@ -1299,3 +1299,186 @@ def test_refined_compact_barline_success_and_failures(tmp_path) -> None:
     extract_tab(pdf_valid, tabraw_valid)
     score = build_ir_from_files(GENERATED_MUSICXML, tabraw_valid, ir_valid)
     assert score.metadata.title == "Generated Tiny Tab"
+
+
+def test_synthetic_one_bar_box_constructed(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_one_bar_box.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "one_bar_box.tabraw.json"
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {w["code"] for w in tabraw.warnings}
+    assert "pdf_bar_boxes_constructed" in warning_codes
+    assert "pdf_bar_boxes_not_constructible" not in warning_codes
+
+    from score2gp.report import build_grouping_diagnostics
+    report = build_grouping_diagnostics(
+        source_pdf=pdf_path,
+        inspection={"kind": "born-digital", "page_count": 1},
+        tabraw=tabraw.model_dump(mode="json"),
+        artifacts={},
+    )
+    assert report["whether_bar_detection_succeeded"] is True
+    assert report["primary_blocker_stage"] in ("none", "timing_alignment")
+
+
+def test_synthetic_one_accepted_barline(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_one_accepted_barline.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "one_accepted_barline.tabraw.json"
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {w["code"] for w in tabraw.warnings}
+    assert "pdf_bar_box_requires_two_boundaries" in warning_codes
+    assert "pdf_bar_boxes_not_constructible" in warning_codes
+    assert "pdf_bar_box_missing_right_boundary" in warning_codes
+    assert "pdf_bar_box_construction_not_enough_for_build_ir" in warning_codes
+
+    from score2gp.report import build_grouping_diagnostics
+    report = build_grouping_diagnostics(
+        source_pdf=pdf_path,
+        inspection={"kind": "born-digital", "page_count": 1},
+        tabraw=tabraw.model_dump(mode="json"),
+        artifacts={},
+    )
+    assert report["whether_bar_detection_succeeded"] is False
+    assert report["primary_blocker_stage"] == "bar_detection"
+
+
+def test_synthetic_bar_box_too_narrow(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_bar_box_too_narrow.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "bar_box_too_narrow.tabraw.json"
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {w["code"] for w in tabraw.warnings}
+    assert "pdf_bar_box_too_narrow" in warning_codes
+    assert "pdf_bar_box_construction_not_enough_for_build_ir" in warning_codes
+
+    from score2gp.report import build_grouping_diagnostics
+    report = build_grouping_diagnostics(
+        source_pdf=pdf_path,
+        inspection={"kind": "born-digital", "page_count": 1},
+        tabraw=tabraw.model_dump(mode="json"),
+        artifacts={},
+    )
+    assert report["whether_bar_detection_succeeded"] is False
+    assert report["primary_blocker_stage"] == "bar_detection"
+
+
+def test_tab_system_overlaps_neighbor() -> None:
+    from score2gp.pdf import _TabSystem
+    sys = _TabSystem(
+        page_index=1,
+        system_index=1,
+        staff_index=1,
+        first_bar_index=1,
+        line_ys=[120, 134, 148, 162, 176, 190],
+        x0=72,
+        x1=332,
+        barlines=[120, 200, 150, 280],  # unsorted barlines lead to overlap!
+    )
+    assert "pdf_bar_box_overlaps_neighbor" in sys.grouping_warnings
+    assert "pdf_bar_box_construction_not_enough_for_build_ir" in sys.grouping_warnings
+
+
+def test_synthetic_bar_box_outside_system(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_bar_box_outside_system.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "bar_box_outside.tabraw.json"
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {w["code"] for w in tabraw.warnings}
+    assert "pdf_bar_box_outside_system_bounds" in warning_codes
+    assert "pdf_bar_box_construction_not_enough_for_build_ir" in warning_codes
+
+    from score2gp.report import build_grouping_diagnostics
+    report = build_grouping_diagnostics(
+        source_pdf=pdf_path,
+        inspection={"kind": "born-digital", "page_count": 1},
+        tabraw=tabraw.model_dump(mode="json"),
+        artifacts={},
+    )
+    assert report["whether_bar_detection_succeeded"] is False
+    assert report["primary_blocker_stage"] == "bar_detection"
+
+
+def test_synthetic_candidate_left_of_boxes(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_candidate_left_of_boxes.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "left_of_boxes.tabraw.json"
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {w["code"] for w in tabraw.warnings}
+    assert "pdf_candidate_unassigned_to_bar" in warning_codes
+
+
+def test_synthetic_candidate_on_boundary(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_candidate_on_boundary.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "on_boundary.tabraw.json"
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {w["code"] for w in tabraw.warnings}
+    assert "pdf_candidate_on_bar_boundary" in warning_codes
+    assert "pdf_candidate_boundary_ambiguous" in warning_codes
+    assert "pdf_bar_box_boundary_ambiguous" in warning_codes
+
+
+def test_synthetic_multi_system_one_failed(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_multi_system_one_failed.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "multi_failed.tabraw.json"
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {w["code"] for w in tabraw.warnings}
+    assert "pdf_partial_grouping_one_system_unboxed" in warning_codes
+
+    from score2gp.report import build_grouping_diagnostics
+    report = build_grouping_diagnostics(
+        source_pdf=pdf_path,
+        inspection={"kind": "born-digital", "page_count": 1},
+        tabraw=tabraw.model_dump(mode="json"),
+        artifacts={},
+    )
+    assert report["whether_bar_detection_succeeded"] is False
+    assert report["primary_blocker_stage"] == "bar_detection"
+
+
+def test_synthetic_multi_system_all_valid(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_multi_system_all_valid.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "multi_all_valid.tabraw.json"
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {w["code"] for w in tabraw.warnings}
+    assert "pdf_grouping_complete" in warning_codes
+    assert tabraw.warnings[-1]["grouping_status"] == "grouped"
+
+    from score2gp.report import build_grouping_diagnostics
+    report = build_grouping_diagnostics(
+        source_pdf=pdf_path,
+        inspection={"kind": "born-digital", "page_count": 1},
+        tabraw=tabraw.model_dump(mode="json"),
+        artifacts={},
+    )
+    assert report["whether_bar_detection_succeeded"] is True
+    assert report["primary_blocker_stage"] in ("none", "timing_alignment")
+
+
+def test_build_ir_refuses_bar_box_construction_failures(tmp_path) -> None:
+    unsafe_fixtures = [
+        ("generated_pdf_one_accepted_barline.pdf", "pdf_bar_box_requires_two_boundaries"),
+        ("generated_pdf_bar_box_too_narrow.pdf", "pdf_bar_box_too_narrow"),
+        ("generated_pdf_bar_box_outside_system.pdf", "pdf_bar_box_outside_system_bounds"),
+        ("generated_pdf_candidate_left_of_boxes.pdf", "pdf_candidate_unassigned_to_bar"),
+        ("generated_pdf_candidate_on_boundary.pdf", "pdf_candidate_on_bar_boundary"),
+        ("generated_pdf_multi_system_one_failed.pdf", "pdf_partial_grouping_one_system_unboxed"),
+    ]
+    for filename, expected_warning in unsafe_fixtures:
+        pdf_path = Path("tests/fixtures/pdf") / filename
+        assert pdf_path.exists()
+        tabraw_path = tmp_path / f"{pdf_path.stem}.tabraw.json"
+        ir_path = tmp_path / f"{pdf_path.stem}.ir.json"
+
+        extract_tab(pdf_path, tabraw_path)
+
+        with pytest.raises(BuildIrInputRiskError) as raised:
+            build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+
+        assert not ir_path.exists()
+        assert raised.value.category in ("partial_pdf_grouping", "pdf_grouping_not_safe_for_build_ir")
+        payload = raised.value.to_diagnostics_payload()
+        assert expected_warning in payload["details"]["warning_codes"]

@@ -101,7 +101,17 @@ def build_grouping_diagnostics(
         input_class = "unsupported"
 
     whether_system_detection_succeeded = (drawn_system_count > 0 or ascii_block_count > 0)
-    whether_bar_detection_succeeded = len(inferred_bars) > 0
+    has_bar_box_warnings = any(code in warning_codes for code in (
+        "pdf_barlines_not_detected_in_system",
+        "pdf_bar_boxes_not_constructible",
+        "pdf_partial_grouping_one_system_unboxed",
+        "pdf_bar_box_construction_not_enough_for_build_ir",
+        "pdf_bar_box_too_narrow",
+        "pdf_bar_box_overlaps_neighbor",
+        "pdf_bar_box_outside_system_bounds",
+        "pdf_bar_box_requires_two_boundaries",
+    ))
+    whether_bar_detection_succeeded = len(inferred_bars) > 0 and not has_bar_box_warnings
     whether_string_assignment_succeeded = inferred_string_assignment_count > 0
 
     is_blocked = grouping_status not in ("grouped", "ascii_grouped")
@@ -232,6 +242,20 @@ def grouping_status_for_tabraw(tabraw: dict[str, Any]) -> str:
         "pdf_partial_grouping_with_playable_candidates",
         "pdf_grouping_confidence_below_threshold",
         "pdf_layout_detection_requires_manual_review",
+
+        # New Phase 6 Bar Box Construction Codes
+        "pdf_bar_box_requires_two_boundaries",
+        "pdf_bar_box_missing_left_boundary",
+        "pdf_bar_box_missing_right_boundary",
+        "pdf_bar_box_boundary_ambiguous",
+        "pdf_bar_box_too_narrow",
+        "pdf_bar_box_overlaps_neighbor",
+        "pdf_bar_box_outside_system_bounds",
+        "pdf_candidate_between_bar_boxes",
+        "pdf_candidate_on_bar_boundary",
+        "pdf_candidate_unassigned_to_bar",
+        "pdf_partial_grouping_one_system_unboxed",
+        "pdf_bar_box_construction_not_enough_for_build_ir",
     }
 
     if warning_codes.intersection(unsupported_codes):
@@ -337,7 +361,10 @@ def write_grouping_diagnostics_html(path: str | Path, report: dict[str, Any]) ->
         if primary_stage == "system_detection":
             hint_text = "System detection is incomplete; use a clearer born-digital fixture, improve public layout heuristics, or review manually."
         elif primary_stage == "bar_detection":
-            hint_text = "Barline candidates exist but do not safely cross enough of the tab staff."
+            if any(w in warnings for w in ("pdf_bar_box_too_narrow", "pdf_bar_box_overlaps_neighbor", "pdf_bar_box_outside_system_bounds", "pdf_bar_box_requires_two_boundaries", "pdf_partial_grouping_one_system_unboxed", "pdf_candidate_unassigned_to_bar", "pdf_candidate_on_bar_boundary", "pdf_bar_box_construction_not_enough_for_build_ir")):
+                hint_text = "Accepted barlines exist, but safe bar boxes could not be constructed or candidates could not be assigned."
+            else:
+                hint_text = "Barline candidates exist but do not safely cross enough of the tab staff."
         else:
             hint_text = "PDF layout grouping is unsafe; use a clearer born-digital fixture, improve public layout heuristics, or review manually."
 
