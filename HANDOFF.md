@@ -3,11 +3,11 @@
 ## Metadata
 - **Current Branch**: `feature/pdf-system-detection-public-fixtures-v0.4`
 - **Base Branch**: `main`
-- **Current PR**: Draft PR is ready to be created (Phase 12)
-- **Latest Local Commit**: Pending commit (Phase 11)
-- **Latest Pushed Commit**: Pending push (Phase 11)
+- **Current PR**: [#29](https://github.com/tticom/score2gp/pull/29) (Draft)
+- **Latest Local Commit**: `53f90c329f59edd138ce2500b5c3c109037a9b32`
+- **Latest Pushed Commit**: `53f90c329f59edd138ce2500b5c3c109037a9b32`
 - **Commit Subject**: Add PDF system detection fixtures v0.4
-- **Working Tree Status**: Dirty (pending final handoff commit)
+- **Working Tree Status**: Clean
 - **Tests & Checks Run**:
   - `python -m pytest` -> 205 passed cleanly
   - `python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
@@ -23,6 +23,7 @@
 - Refined diagnostics in `src/score2gp/report.py` to classify `input_class` and `primary_blocker_stage`, distinguishing system-detection blockers from downstream bar-detection blockers.
 - Updated developer-facing HTML grouping report with clear remediation hints.
 - Updated documentation (`architecture.md`, `workflow.md`, `limitations.md`) and task status (`TASKS.md`).
+
 
 ## Private Smoke Blocker Classification
 - **`private_input_1`** (`pdf-tab-musicxml`):
