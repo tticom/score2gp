@@ -778,62 +778,80 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                                 "code": "pdf_bar_box_inferred_left_boundary",
                                 "message": f"Left edge boundary was inferred in system {system.system_index} on page {page_number}.",
                                 "severity": "info",
-                                "grouping_status": "grouped"
+                                "grouping_status": "grouped",
+                                "system_index": system.system_index,
+                                "page_index": page_number,
                             })
                         elif gw == "pdf_bar_box_inferred_right_boundary":
                             warnings.append({
                                 "code": "pdf_bar_box_inferred_right_boundary",
                                 "message": f"Right edge boundary was inferred in system {system.system_index} on page {page_number}.",
                                 "severity": "info",
-                                "grouping_status": "grouped"
+                                "grouping_status": "grouped",
+                                "system_index": system.system_index,
+                                "page_index": page_number,
                             })
                         elif gw == "pdf_bar_box_edge_boundary_fallback_used":
                             warnings.append({
                                 "code": "pdf_bar_box_edge_boundary_fallback_used",
                                 "message": f"Edge boundary fallback was used in system {system.system_index} on page {page_number}.",
                                 "severity": "info",
-                                "grouping_status": "grouped"
+                                "grouping_status": "grouped",
+                                "system_index": system.system_index,
+                                "page_index": page_number,
                             })
                         elif gw == "pdf_bar_box_edge_boundary_fallback_rejected":
                             warnings.append({
                                 "code": "pdf_bar_box_edge_boundary_fallback_rejected",
                                 "message": f"Edge boundary fallback was rejected in system {system.system_index} on page {page_number}.",
                                 "severity": "warning",
-                                "grouping_status": "partial"
+                                "grouping_status": "partial",
+                                "system_index": system.system_index,
+                                "page_index": page_number,
                             })
                             warnings.append({
                                 "code": "pdf_bar_box_inferred_boundary_not_enough_for_build_ir",
                                 "message": f"Inferred boundary failure blocks IR generation in system {system.system_index} on page {page_number}.",
                                 "severity": "warning",
-                                "grouping_status": "partial"
+                                "grouping_status": "partial",
+                                "system_index": system.system_index,
+                                "page_index": page_number,
                             })
                         elif gw == "pdf_bar_box_edge_boundary_ambiguous":
                             warnings.append({
                                 "code": "pdf_bar_box_edge_boundary_ambiguous",
                                 "message": f"Edge boundary fallback is ambiguous in system {system.system_index} on page {page_number}.",
                                 "severity": "warning",
-                                "grouping_status": "partial"
+                                "grouping_status": "partial",
+                                "system_index": system.system_index,
+                                "page_index": page_number,
                             })
                         elif gw == "pdf_bar_box_inferred_boundary_too_narrow":
                             warnings.append({
                                 "code": "pdf_bar_box_inferred_boundary_too_narrow",
                                 "message": f"Inferred boundary would produce a box too narrow in system {system.system_index} on page {page_number}.",
                                 "severity": "warning",
-                                "grouping_status": "partial"
+                                "grouping_status": "partial",
+                                "system_index": system.system_index,
+                                "page_index": page_number,
                             })
                         elif gw == "pdf_bar_box_inferred_boundary_candidate_ambiguous":
                             warnings.append({
                                 "code": "pdf_bar_box_inferred_boundary_candidate_ambiguous",
                                 "message": f"A fret candidate lies too close to the inferred boundary in system {system.system_index} on page {page_number}.",
                                 "severity": "warning",
-                                "grouping_status": "partial"
+                                "grouping_status": "partial",
+                                "system_index": system.system_index,
+                                "page_index": page_number,
                             })
                         elif gw == "pdf_bar_box_inferred_boundary_requires_clear_system_edge":
                             warnings.append({
                                 "code": "pdf_bar_box_inferred_boundary_requires_clear_system_edge",
                                 "message": f"Inferred boundary requires a clear, non-ambiguous system edge in system {system.system_index} on page {page_number}.",
                                 "severity": "warning",
-                                "grouping_status": "partial"
+                                "grouping_status": "partial",
+                                "system_index": system.system_index,
+                                "page_index": page_number,
                             })
                     if len(system.barlines) >= 2 and not any(w in system.grouping_warnings for w in ("pdf_bar_box_too_narrow", "pdf_bar_box_outside_system_bounds", "pdf_bar_box_overlaps_neighbor")):
                         warnings.append({
@@ -1997,6 +2015,20 @@ def _write_grouping_artifacts(
         "diagnostic_html": _relative_artifact_path(html_path, out_dir),
         "overlay_images": [_relative_artifact_path(path, out_dir) for path in overlay_paths],
     }
+
+    from score2gp.report import build_pdf_edge_boundary_report, write_pdf_edge_boundary_report_html
+
+    edge_report = build_pdf_edge_boundary_report(raw)
+    if edge_report:
+        edge_json_path = out_dir / "pdf-edge-boundary-report.json"
+        edge_json_path.write_text(json.dumps(edge_report, indent=2), encoding="utf-8")
+
+        edge_html_path = out_dir / "pdf-edge-boundary-report.html"
+        write_pdf_edge_boundary_report_html(edge_html_path, edge_report)
+
+        artifacts["pdf_edge_boundary_report_json"] = _relative_artifact_path(edge_json_path, out_dir)
+        artifacts["pdf_edge_boundary_report_html"] = _relative_artifact_path(edge_html_path, out_dir)
+
     report = build_grouping_diagnostics(
         source_pdf=pdf_path,
         inspection=inspection,

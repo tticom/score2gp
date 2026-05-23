@@ -390,6 +390,14 @@ def build_ir_from_files(
                     payload,
                     source_path=str(musicxml_path),
                 )
+            elif exc.stage == "tabraw-import":
+                # Reference edge-boundary reports if they exist
+                if (out_path_p.parent / "pdf-edge-boundary-report.html").exists():
+                    payload["pdf_edge_boundary_report_html"] = "pdf-edge-boundary-report.html"
+                    payload["pdf_edge_boundary_report_json"] = "pdf-edge-boundary-report.json"
+                if (out_path_p.parent / "grouping-diagnostics.html").exists():
+                    payload["grouping_diagnostics_html"] = "grouping-diagnostics.html"
+                out_path_p.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
         raise
 
 

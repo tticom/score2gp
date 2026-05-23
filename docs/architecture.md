@@ -119,6 +119,18 @@ To assist developers and users in diagnosing unrecoverable MusicXML timing failu
   - **Remediation guidance**: Providing actionable instructions to regenerate or simplify the source MusicXML before attempting ScoreIR conversion.
 - **Integration**: The build-ir diagnostics payload references these report filenames (`unrecoverable_timing_report_json` and `unrecoverable_timing_report_html`). The private smoke test summary includes only their relative artifact paths within the ignored `work/` directory, preventing any private data leakage into tracked git files.
 
+## PDF Edge-Boundary Fallback Reports
+
+To assist developers in diagnosing edge-boundary fallback rejections without exposing private score content, the pipeline outputs structured reports when a fallback is rejected:
+- **Anonymised JSON Sidecar (`pdf-edge-boundary-report.json`)**: Serves as the programmatic source of truth. It records private-safe, anonymised telemetry including the page and system index, observed/accepted/rejected/inferred boundary counts, fallback considered/accepted/rejected status, fallback rejection reason codes, missing sides, accepted/rejected boundary sides, candidate counts, candidates assigned to system/bar, candidates unassigned due to failed boundary, and remediation hints. It explicitly excludes all private score details, note names, lyrics, chord symbols, or raw PDF text.
+- **Developer-Facing HTML Report (`pdf-edge-boundary-report.html`)**: Renders a visually premium dark-mode summary of the fallback rejection. It displays:
+  - **Verdict block**: Highlighting fallback rejected, grouping partial, and build-ir blocked.
+  - **Grid layout**: For system identification (page/system index, missing side) and boundary statistics.
+  - **Fallback decision details**: Listing considered/accepted/rejected status and granular rejection reason codes.
+  - **Impact table**: Showing candidate counts and playable candidates unassigned due to the failed boundary.
+  - **Remediation guidance**: Providing actionable instructions to regenerate the PDF, repair barlines, or manually review layout constraints.
+- **Integration**: The grouping diagnostics HTML (`grouping-diagnostics.html`) includes direct links to both the JSON and HTML edge-boundary reports under the Artifacts list. Furthermore, the `BuildIrInputRiskError` failure diagnostics payload references these report filenames during a `tabraw-import` stage refusal, and the E2E smoke test summary records their relative paths within the ignored `work/` folder.
+
 ## Public End-to-End PDF-to-GP Proof Slice
 
 To demonstrate the structural integrity of the entire staged pipeline (PDF extraction, alignment, ScoreIR building, validation, GP writing, package validation, and semantic fact comparison), there is a public end-to-end integration proof.
