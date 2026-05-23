@@ -247,6 +247,64 @@ def make_pdf_system_detected_no_barlines() -> None:
     _save(doc, "generated_pdf_system_detected_no_barlines.pdf")
 
 
+def make_pdf_barlines_do_not_cross_staff() -> None:
+    doc, page = _new_page("Barlines Do Not Cross Staff")
+    line_ys = [120, 134, 148, 162, 176, 190]
+    _draw_tab_lines(page, line_ys=line_ys, x0=72, x1=332)
+    # Draw vertical lines that are not crossing (height = 50, but starting at 150 to 200, so y_min = 150 > y0 + 4 = 124)
+    page.draw_line((88, 150), (88, 200), color=(0, 0, 0), width=0.6)
+    page.draw_line((205, 150), (205, 200), color=(0, 0, 0), width=0.6)
+    page.draw_line((322, 150), (322, 200), color=(0, 0, 0), width=0.6)
+    _write_fret(page, "3", 120, line_ys[0])
+    _save(doc, "generated_pdf_barlines_do_not_cross_staff.pdf")
+
+
+def make_pdf_barlines_too_short() -> None:
+    doc, page = _new_page("Barlines Too Short")
+    line_ys = [120, 134, 148, 162, 176, 190]
+    _draw_tab_lines(page, line_ys=line_ys, x0=72, x1=332)
+    # Draw short vertical lines (height = 20 < 40)
+    page.draw_line((88, 130), (88, 150), color=(0, 0, 0), width=0.6)
+    page.draw_line((205, 130), (205, 150), color=(0, 0, 0), width=0.6)
+    page.draw_line((322, 130), (322, 150), color=(0, 0, 0), width=0.6)
+    _write_fret(page, "3", 120, line_ys[0])
+    _save(doc, "generated_pdf_barlines_too_short.pdf")
+
+
+def make_pdf_barlines_outside_bounds() -> None:
+    doc, page = _new_page("Barlines Outside Bounds")
+    line_ys = [120, 134, 148, 162, 176, 190]
+    _draw_tab_lines(page, line_ys=line_ys, x0=72, x1=332)
+    # Draw vertical lines outside bounds (x = 50, x = 350)
+    page.draw_line((50, line_ys[0] - 5), (50, line_ys[-1] + 5), color=(0, 0, 0), width=0.6)
+    page.draw_line((350, line_ys[0] - 5), (350, line_ys[-1] + 5), color=(0, 0, 0), width=0.6)
+    _write_fret(page, "3", 120, line_ys[0])
+    _save(doc, "generated_pdf_barlines_outside_bounds.pdf")
+
+
+def make_pdf_barlines_ambiguous() -> None:
+    doc, page = _new_page("Barlines Ambiguous")
+    line_ys = [120, 134, 148, 162, 176, 190]
+    _draw_tab_lines(page, line_ys=line_ys, x0=72, x1=332)
+    # Draw ambiguous barlines (close together)
+    page.draw_line((88, line_ys[0] - 5), (88, line_ys[-1] + 5), color=(0, 0, 0), width=0.6)
+    page.draw_line((90, line_ys[0] - 5), (90, line_ys[-1] + 5), color=(0, 0, 0), width=0.6)
+    page.draw_line((205, line_ys[0] - 5), (205, line_ys[-1] + 5), color=(0, 0, 0), width=0.6)
+    page.draw_line((207, line_ys[0] - 5), (207, line_ys[-1] + 5), color=(0, 0, 0), width=0.6)
+    _write_fret(page, "3", 120, line_ys[0])
+    _save(doc, "generated_pdf_barlines_ambiguous.pdf")
+
+
+def make_pdf_bar_boxes_not_constructible() -> None:
+    doc, page = _new_page("Bar Boxes Not Constructible")
+    line_ys = [120, 134, 148, 162, 176, 190]
+    _draw_tab_lines(page, line_ys=line_ys, x0=72, x1=332)
+    # Only 1 valid barline
+    page.draw_line((88, line_ys[0] - 5), (88, line_ys[-1] + 5), color=(0, 0, 0), width=0.6)
+    _write_fret(page, "3", 120, line_ys[0])
+    _save(doc, "generated_pdf_bar_boxes_not_constructible.pdf")
+
+
 def make_pdf_valid_grouped_counterpart() -> None:
     doc, page = _new_page("Valid Grouped Counterpart")
     line_ys = [120, 134, 148, 162, 176, 190]
@@ -272,6 +330,11 @@ def main() -> None:
     make_pdf_system_order_ambiguous_close()
     make_ascii_tab_three_blocks_no_bars()
     make_pdf_system_detected_no_barlines()
+    make_pdf_barlines_do_not_cross_staff()
+    make_pdf_barlines_too_short()
+    make_pdf_barlines_outside_bounds()
+    make_pdf_barlines_ambiguous()
+    make_pdf_bar_boxes_not_constructible()
     make_pdf_valid_grouped_counterpart()
 
 

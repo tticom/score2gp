@@ -1040,3 +1040,136 @@ def test_refined_valid_grouped_counterpart_diagnostics(tmp_path) -> None:
     assert report["whether_system_detection_succeeded"] is True
     assert report["whether_bar_detection_succeeded"] is True
     assert report["primary_blocker_stage"] == "none" or report["primary_blocker_stage"] == "timing_alignment"
+
+
+def test_refined_barlines_do_not_cross_staff_diagnostics(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_barlines_do_not_cross_staff.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "do_not_cross.tabraw.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+
+    assert "pdf_barline_does_not_cross_staff" in warning_codes
+    assert "pdf_bar_boxes_not_constructible" in warning_codes
+
+    from score2gp.report import build_grouping_diagnostics
+    report = build_grouping_diagnostics(
+        source_pdf=pdf_path,
+        inspection={"kind": "born-digital", "page_count": 1},
+        tabraw=tabraw.model_dump(mode="json"),
+        artifacts={},
+    )
+    assert report["primary_blocker_stage"] == "bar_detection"
+
+
+def test_refined_barlines_too_short_diagnostics(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_barlines_too_short.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "too_short.tabraw.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+
+    assert "pdf_barline_too_short" in warning_codes
+    assert "pdf_bar_boxes_not_constructible" in warning_codes
+
+    from score2gp.report import build_grouping_diagnostics
+    report = build_grouping_diagnostics(
+        source_pdf=pdf_path,
+        inspection={"kind": "born-digital", "page_count": 1},
+        tabraw=tabraw.model_dump(mode="json"),
+        artifacts={},
+    )
+    assert report["primary_blocker_stage"] == "bar_detection"
+
+
+def test_refined_barlines_outside_bounds_diagnostics(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_barlines_outside_bounds.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "outside_bounds.tabraw.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+
+    assert "pdf_barline_outside_system_bounds" in warning_codes
+    assert "pdf_bar_boxes_not_constructible" in warning_codes
+
+    from score2gp.report import build_grouping_diagnostics
+    report = build_grouping_diagnostics(
+        source_pdf=pdf_path,
+        inspection={"kind": "born-digital", "page_count": 1},
+        tabraw=tabraw.model_dump(mode="json"),
+        artifacts={},
+    )
+    assert report["primary_blocker_stage"] == "bar_detection"
+
+
+def test_refined_barlines_ambiguous_diagnostics(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_barlines_ambiguous.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "ambiguous.tabraw.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+
+    assert "pdf_barline_ambiguous" in warning_codes
+    assert "pdf_bar_boxes_not_constructible" in warning_codes
+
+    from score2gp.report import build_grouping_diagnostics
+    report = build_grouping_diagnostics(
+        source_pdf=pdf_path,
+        inspection={"kind": "born-digital", "page_count": 1},
+        tabraw=tabraw.model_dump(mode="json"),
+        artifacts={},
+    )
+    assert report["primary_blocker_stage"] == "bar_detection"
+
+
+def test_refined_bar_boxes_not_constructible_diagnostics(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_bar_boxes_not_constructible.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "not_constructible.tabraw.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+
+    assert "pdf_barlines_not_detected_in_system" in warning_codes
+    assert "pdf_bar_boxes_not_constructible" in warning_codes
+
+    from score2gp.report import build_grouping_diagnostics
+    report = build_grouping_diagnostics(
+        source_pdf=pdf_path,
+        inspection={"kind": "born-digital", "page_count": 1},
+        tabraw=tabraw.model_dump(mode="json"),
+        artifacts={},
+    )
+    assert report["primary_blocker_stage"] == "bar_detection"
+
+
+def test_build_ir_refuses_unsafe_bar_detection_cases(tmp_path) -> None:
+    fixtures = [
+        ("generated_pdf_system_detected_no_barlines.pdf", "pdf_bar_boxes_not_constructible"),
+        ("generated_pdf_barlines_do_not_cross_staff.pdf", "pdf_barline_does_not_cross_staff"),
+        ("generated_pdf_barlines_too_short.pdf", "pdf_barline_too_short"),
+        ("generated_pdf_barlines_outside_bounds.pdf", "pdf_barline_outside_system_bounds"),
+        ("generated_pdf_barlines_ambiguous.pdf", "pdf_barline_ambiguous"),
+        ("generated_pdf_bar_boxes_not_constructible.pdf", "pdf_barlines_not_detected_in_system"),
+    ]
+
+    for filename, expected_warning in fixtures:
+        pdf_path = Path("tests/fixtures/pdf") / filename
+        assert pdf_path.exists()
+        tabraw_path = tmp_path / f"{pdf_path.stem}.tabraw.json"
+        ir_path = tmp_path / f"{pdf_path.stem}.ir.json"
+
+        extract_tab(pdf_path, tabraw_path)
+
+        with pytest.raises(BuildIrInputRiskError) as raised:
+            build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+
+        assert not ir_path.exists()
+        assert raised.value.category == "partial_pdf_grouping"
+        payload = raised.value.to_diagnostics_payload()
+        assert payload["details"]["grouping_status"] == "partial"
+        assert expected_warning in payload["details"]["warning_codes"]

@@ -1888,6 +1888,28 @@ def _tabraw_grouping_risk(tabraw: TabRaw) -> dict[str, object] | None:
             "pdf_grouping_confidence_below_threshold",
             "pdf_missing_pdf_grouping_blocks_build_ir",
             "pdf_layout_detection_requires_manual_review",
+
+            # Refined system-detection and bar-detection codes
+            "pdf_drawn_system_not_detected",
+            "pdf_drawn_system_ambiguous",
+            "pdf_drawn_staff_lines_unresolved",
+            "pdf_ascii_system_detected",
+            "pdf_ascii_system_measure_boundaries_missing",
+            "pdf_ascii_system_timing_unavailable",
+            "pdf_system_detected_bar_detection_missing",
+            "pdf_system_detection_succeeded_but_grouping_incomplete",
+            "pdf_input_class_ascii_tab_requires_alignment",
+            "pdf_input_class_drawn_tab_requires_barlines",
+            "pdf_system_detection_not_enough_for_build_ir",
+            "pdf_barlines_not_detected_in_system",
+            "pdf_barline_candidates_present_but_invalid",
+            "pdf_barline_does_not_cross_staff",
+            "pdf_barline_too_short",
+            "pdf_barline_outside_system_bounds",
+            "pdf_barline_ambiguous",
+            "pdf_bar_boxes_not_constructible",
+            "pdf_bar_detection_succeeded_string_assignment_pending",
+            "pdf_bar_detection_not_enough_for_build_ir",
         }
     ]
     counts["tabraw_warning_codes"] = counts["warning_codes"]
@@ -1944,6 +1966,28 @@ def _tabraw_unsafe_grouping_warning_codes(tabraw: TabRaw) -> list[str]:
         "pdf_grouping_confidence_below_threshold",
         "pdf_missing_pdf_grouping_blocks_build_ir",
         "pdf_layout_detection_requires_manual_review",
+
+        # Refined system-detection and bar-detection codes
+        "pdf_drawn_system_not_detected",
+        "pdf_drawn_system_ambiguous",
+        "pdf_drawn_staff_lines_unresolved",
+        "pdf_ascii_system_detected",
+        "pdf_ascii_system_measure_boundaries_missing",
+        "pdf_ascii_system_timing_unavailable",
+        "pdf_system_detected_bar_detection_missing",
+        "pdf_system_detection_succeeded_but_grouping_incomplete",
+        "pdf_input_class_ascii_tab_requires_alignment",
+        "pdf_input_class_drawn_tab_requires_barlines",
+        "pdf_system_detection_not_enough_for_build_ir",
+        "pdf_barlines_not_detected_in_system",
+        "pdf_barline_candidates_present_but_invalid",
+        "pdf_barline_does_not_cross_staff",
+        "pdf_barline_too_short",
+        "pdf_barline_outside_system_bounds",
+        "pdf_barline_ambiguous",
+        "pdf_bar_boxes_not_constructible",
+        "pdf_bar_detection_succeeded_string_assignment_pending",
+        "pdf_bar_detection_not_enough_for_build_ir",
     }
     return sorted({str(warning.get("code")) for warning in tabraw.warnings if warning.get("code") in unsafe})
 
