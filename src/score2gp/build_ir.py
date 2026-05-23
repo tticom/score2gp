@@ -1871,6 +1871,23 @@ def _tabraw_grouping_risk(tabraw: TabRaw) -> dict[str, object] | None:
             "pdf_text_candidate_without_geometry",
             "pdf_ascii_and_drawn_layout_conflict",
             "pdf_grouping_not_safe_for_build_ir",
+
+            # New Phase 4/8 Codes
+            "pdf_text_geometry_present_but_no_safe_system",
+            "pdf_tab_candidates_present_but_system_not_detected",
+            "pdf_drawn_geometry_present_but_staff_unresolved",
+            "pdf_tab_staff_lines_fragmented",
+            "pdf_tab_staff_lines_overlapping",
+            "pdf_tab_staff_spacing_inconsistent",
+            "pdf_system_bbox_ambiguous",
+            "pdf_system_order_ambiguous",
+            "pdf_candidates_unassigned_to_system",
+            "pdf_candidates_unassigned_to_bar",
+            "pdf_candidates_unassigned_to_string",
+            "pdf_partial_grouping_with_playable_candidates",
+            "pdf_grouping_confidence_below_threshold",
+            "pdf_missing_pdf_grouping_blocks_build_ir",
+            "pdf_layout_detection_requires_manual_review",
         }
     ]
     counts["tabraw_warning_codes"] = counts["warning_codes"]
@@ -1910,6 +1927,23 @@ def _tabraw_unsafe_grouping_warning_codes(tabraw: TabRaw) -> list[str]:
         "pdf_text_candidate_without_geometry",
         "pdf_ascii_and_drawn_layout_conflict",
         "pdf_grouping_not_safe_for_build_ir",
+
+        # New Phase 4/8 Codes
+        "pdf_text_geometry_present_but_no_safe_system",
+        "pdf_tab_candidates_present_but_system_not_detected",
+        "pdf_drawn_geometry_present_but_staff_unresolved",
+        "pdf_tab_staff_lines_fragmented",
+        "pdf_tab_staff_lines_overlapping",
+        "pdf_tab_staff_spacing_inconsistent",
+        "pdf_system_bbox_ambiguous",
+        "pdf_system_order_ambiguous",
+        "pdf_candidates_unassigned_to_system",
+        "pdf_candidates_unassigned_to_bar",
+        "pdf_candidates_unassigned_to_string",
+        "pdf_partial_grouping_with_playable_candidates",
+        "pdf_grouping_confidence_below_threshold",
+        "pdf_missing_pdf_grouping_blocks_build_ir",
+        "pdf_layout_detection_requires_manual_review",
     }
     return sorted({str(warning.get("code")) for warning in tabraw.warnings if warning.get("code") in unsafe})
 

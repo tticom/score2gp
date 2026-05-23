@@ -8,6 +8,8 @@
 
 ## Done
 
+- [x] Add public synthetic PDF layout fixtures and diagnostics for the remaining missing_pdf_grouping / system-not-detected blocker classes (feature/pdf-layout-public-fixtures-v0.3).
+
 - [x] Refresh the private smoke blocker summary after MusicXML calibration-boundary diagnostics to confirm calibration feasibility on real inputs (PR #26).
 
 - [x] Add public synthetic MusicXML fixtures and diagnostics for unrecoverable invalid timing / non-safe calibration scenarios, refining calibration boundary feasibility telemetry and blocking reasons (PR #25).

@@ -1,92 +1,54 @@
 # Handoff
 
 ## Metadata
-- **Current Branch**: `feature/private-smoke-refresh-after-calibration-boundary-v0.1`
+- **Current Branch**: `feature/pdf-layout-public-fixtures-v0.3`
 - **Base Branch**: `main`
-- **Current PR**: [#26](https://github.com/tticom/score2gp/pull/26) (Draft)
-- **Latest Local Commit**: `e5a5c1e358ddd88d2125d1136ecf433d0b953053`
-- **Latest Pushed Commit**: `e5a5c1e358ddd88d2125d1136ecf433d0b953053`
-- **Commit Subject**: Refresh private smoke after calibration boundary diagnostics
+- **Current PR**: [#27](https://github.com/tticom/score2gp/pull/27) (Draft)
+- **Latest Local Commit**: `80f95ea359a48bb1f02d4e504ce1200cbe571e0a`
+- **Latest Pushed Commit**: `80f95ea359a48bb1f02d4e504ce1200cbe571e0a`
+- **Commit Subject**: Add PDF layout blocker fixtures v0.3
 - **Working Tree Status**: Clean
 - **Tests & Checks Run**:
-  - `python -m pytest` -> 190 passed
+  - `python -m pytest` -> 197 passed
   - `python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
   - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid
   - `git diff --check` -> passed cleanly
   - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep` is tracked
-- **GitHub Check Status**: N/A
+- **GitHub Check Status**: N/A (Draft PR created)
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or diagnostic outputs are tracked or committed. All outputs under `work/` are ignored.
 
 ## What Changed in the Task
-- **Private Smoke Refresh**: Re-ran the local private-safe E2E diagnostic smoke workflow to evaluate real private score fixtures under `fixtures/private/` with the new timing calibration boundary diagnostics.
-- **Feasibility Verification**: Verified that the new timing preflight telemetry correctly extracts and reports detailed blocker counts and feasibility flags on real private inputs.
-- **Anonymized Reporting**: Updated the private-safe blocker summaries and blocker classifications under ignored `work/` without leaking private musical content or committing private files.
+- **Refined PDF Blocker Taxonomy**: Integrated complete set of Phase 4/8 warning codes in `pdf.py`, `report.py`, and `build_ir.py` (e.g. `pdf_text_geometry_present_but_no_safe_system`, `pdf_tab_candidates_present_but_system_not_detected`, `pdf_drawn_geometry_present_but_staff_unresolved`, `pdf_tab_staff_lines_fragmented`, `pdf_candidates_unassigned_to_string`, `pdf_candidates_unassigned_to_bar`, `pdf_candidates_unassigned_to_system`, `pdf_system_order_ambiguous`, `pdf_system_bbox_ambiguous`, `pdf_partial_grouping_with_playable_candidates`, `pdf_grouping_confidence_below_threshold`, `pdf_missing_pdf_grouping_blocks_build_ir`, `pdf_layout_detection_requires_manual_review`).
+- **Added Public Synthetic PDF Fixtures**: Created seven new born-digital synthetic PDF blocker fixtures under `tests/fixtures/pdf/` mimicking unresolved staff lines, missing systems, fragmented staves, candidates between systems, unassigned string lines, visually close system overlaps, and mixed prose text.
+- **Strict build_ir Blocking Gates**: Enforced strict refusal in `build_ir` for any playable fret candidate with unsafe or ambiguous PDF grouping, raising `BuildIrInputRiskError` with detailed failure diagnostics.
+- **Improved PDF HTML Grouping Diagnostics**: Enriched `write_grouping_diagnostics_html` to output text/geometry status, candidate/system/staff/bar/string detection stats, block status, warning lists, and clear remediation hints:
+  *`PDF layout grouping is unsafe; use a clearer born-digital fixture, improve public layout heuristics, or review manually.`*
+- **Regression Tests**: Added comprehensive tests verifying all 14 layout blocker requirements in Phase 8 to `tests/test_pdf.py` (197 tests passing successfully).
 
-## Private Smoke Result Summary (Safe Counts & Statuses Only)
-1. **`private_input_1`** (`pdf-tab-musicxml`):
-   - **Page Count**: 2
-   - **Text/Geometry Detected**: Yes (both extractable text and drawn tab geometry detected)
-   - **Playable Candidate Count**: 203 candidates (non-playable: 126, total: 329)
-   - **Timing Status**: `failed` (ScoreIR gate status: `refused`)
-   - **GP Written**: No
-   - **Primary Failure/Refusal Reason**: `musicxml_timing_risk`
-   - **Secondary Reason Codes**: `MusicXML timing risk prevents ScoreIR output: 66 overfull or overlapping event(s) would violate ScoreIR timing.`, `missing_pdf_grouping`
-   - **Timing Risk Count**: 69 total issues (63 overfull bar errors across 16 distinct measures/bars, 1 underfull bar/measure, 2 many timing risks, 2 tie continuity risks)
-   - **Calibration Feasibility Status**: `failed` (`calibration_possible` is false, meaning calibration/automatic repair is not safe or possible)
-   - **Calibration Blocking Reasons**:
-     - `musicxml_many_risks_block_calibration`
-     - `musicxml_mixed_underfull_overfull_blocks_calibration`
-     - `musicxml_overfull_too_large_for_calibration`
-     - `musicxml_tie_continuity_blocks_calibration`
-     - `musicxml_timing_calibration_not_safe`
-   - **Calibration Candidate Reason**: `null` (not a candidate)
-   - **Overfull measures/bars**: 16 distinct overfull measures/bars (measures 1-6 overfull by up to 36.0 divisions; active durations up to 84 divisions vs 48.0 expected)
-   - **Underfull measures/bars**: 1
-   - **Overlap counts**: 0 same-voice timing overlaps found
-   - **Tie continuity risk count**: 2
-   - **Many timing risks (high backup/forward density)**: 2
-   - **Invalid duration grid count**: 0
-   - **Affected Event Count**: 78 distinct note IDs affected
-   - **Automatic repair attempted**: `false`
-   - **Remediation Hint**: `Fix or regenerate MusicXML timing; automatic timing repair is not implemented.`
-   - **Alignment status**: `failed`
-   - **GP writing status**: `not_attempted`
-   - **Stage reached**: `musicxml-import`
-   - **Artifact paths under work/**: `work/private_e2e_smoke_after_calibration_boundary_v0_1/private_input_1/`
-   - **Next Diagnostic Recommendation**: `review-musicxml-timing-risk-before-alignment`
+## Private Smoke Blocker Classification Used
+- **`private_input_1`** (`pdf-tab-musicxml`):
+  - text/geometry detected: Yes
+  - playable candidates: 203 (non-playable: 126, total: 329)
+  - secondary grouping reason: `missing_pdf_grouping`
+- **`private_input_2`** (`pdf-tab-only`):
+  - text/geometry detected: Yes
+  - playable candidates: 54 (non-playable: 17, total: 71)
+  - secondary grouping reasons: `missing_pdf_grouping`, `pdf-tab-system-not-detected`
 
-2. **`private_input_2`** (`pdf-tab-only`):
-   - **Page Count**: 1
-   - **Text/Geometry Detected**: Yes (both extractable text and drawn tab geometry detected)
-   - **Playable Candidate Count**: 54 candidates (non-playable: 17, total: 71)
-   - **Timing Status**: `not_attempted` (ScoreIR gate status: `not_attempted`)
-   - **GP Written**: No
-   - **Primary Failure/Refusal Reason**: `none` (MusicXML is missing)
-   - **Secondary Reason Codes**: `missing_pdf_grouping`, `pdf-tab-system-not-detected`
-   - **Timing Risk Count**: 0 (not attempted)
-   - **Calibration Feasibility Status**: `none`
-   - **Overfull tick/division counts**: 0
-   - **Overlap counts**: 0
-   - **Alignment status**: `not_attempted`
-   - **GP writing status**: `not_attempted`
-   - **Stage reached**: `pdf-tab-extraction`
-   - **Artifact paths under work/**: `work/private_e2e_smoke_after_calibration_boundary_v0_1/private_input_2/`
-   - **Next Diagnostic Recommendation**: `provide-matching-musicxml-before-build-ir`
+## Known Limitations
+- Unsafe PDF grouping still blocks build-ir.
+- Text/geometry extraction alone is not enough for ScoreIR.
+- No private PDFs are used as fixtures.
+- No OCR, scanned-PDF support, ML layout recognition, MusicXML repair, or GPIF expansion.
 
-## Current Blocker Classification
-- **Top Blocker**: `musicxml_timing_repair_not_safe`
-- **Rationale**: For `private_input_1`, the new timing diagnostics successfully ran and verified that `calibration_possible` is `false` with multiple explicit blocking reasons: large overfull measures (`musicxml_overfull_too_large_for_calibration`), unresolved ties (`musicxml_tie_continuity_blocks_calibration`), high backup/forward densities (`musicxml_many_risks_block_calibration`), and mixed underfull/overfull bars (`musicxml_mixed_underfull_overfull_blocks_calibration`). Since these risks represent unrecoverable, non-safe timing errors, timing repair is impossible or unsafe. Additionally, both private inputs are blocked by PDF grouping issues (`missing_pdf_grouping`).
-- **Comparison to Previous Blocker Summary**:
-  - Previous Blocker: `musicxml_invalid_timing_confirmed`
-  - Previous Summary: 69 detailed timing issues (63 overfull bar errors, 1 underfull bar, 2 tie continuity risks, 2 many timing risks), 66 affected events, `calibration_possible` false.
-  - Current Summary: 69 detailed timing issues across 16 distinct overfull measures, 1 underfull measure, 78 affected event IDs, 2 tie continuity risks, 2 high-density timing risks, `calibration_possible` false. Calibration feasibility is confirmed as `calibration-not-safe` with explicit block reason telemetry.
+## Remaining Risks
+- Real private scores will continue to trigger blockers until OCR, scanned-PDF, or heuristics calibration are implemented in future milestones.
 
-## Recommended Next Branch
-- **Next Branch**: `feature/pdf-layout-public-fixtures-v0.3`
-- **Rationale**: Timing remains blocked and unrecoverable, and PDF grouping is also blocking (`missing_pdf_grouping` for both inputs). The next logical step is to improve layout grouping boundaries and add public synthetic fixtures for system/layout failures.
+## Recommended Next Branch / Task
+- **Next Task**: Refresh the private smoke workflow after the layout public fixtures v0.3 milestone under a new feature branch `feature/private-smoke-refresh-after-layout-v0.3` to evaluate if real inputs are correctly classified and verified by the new warning codes.
 
 ## Explicit Scope Boundaries
 - **Do not** commit any private inputs, private outputs, private GP files, private PDFs, private summaries, private HTML diagnostics, or any `work/` contents.
-- **Do not** weaken timing gates or implement timing auto-repair.
+- **Do not** weaken timing/grouping gates or implement timing auto-repair.
 - **Do not** add OCR/scanned-PDF/ML support.
 - **Do not** push directly to `main`.
