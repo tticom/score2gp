@@ -1532,6 +1532,19 @@ def write_musicxml_timing_diagnostics_html(path: str | Path, payload: dict[str, 
         if ev_ids:
             all_affected_event_ids.update(ev_ids)
 
+    # Root payload properties with fallback
+    calibration_possible = payload.get("calibration_possible", calibration_possible)
+    calibration_candidate_reason = payload.get("calibration_candidate_reason")
+    calibration_blocking_reasons = payload.get("calibration_blocking_reasons", [])
+    overfull_bar_count = payload.get("overfull_bar_count", 0)
+    underfull_bar_count = payload.get("underfull_bar_count", 0)
+    affected_event_count = payload.get("affected_event_count", len(all_affected_event_ids))
+    overlap_count_val = payload.get("overlap_count", total_overlap_count)
+    tie_continuity_risk_count = payload.get("tie_continuity_risk_count", 0)
+    many_risk_summary_count = payload.get("many_risk_summary_count", 0)
+    invalid_grid_count = payload.get("invalid_grid_count", 0)
+    repair_attempted = payload.get("automatic_repair_attempted", repair_attempted)
+
     body = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -1888,11 +1901,32 @@ def write_musicxml_timing_diagnostics_html(path: str | Path, payload: dict[str, 
         <dt>Timing Calibration Possible</dt>
         <dd><code>{str(calibration_possible).lower()}</code></dd>
 
+        {f"<dt>Calibration Candidate Reason</dt><dd><code>{html.escape(calibration_candidate_reason)}</code></dd>" if calibration_candidate_reason else ""}
+        {f"<dt>Calibration Blocking Reasons</dt><dd>{', '.join(f'<code>{html.escape(r)}</code>' for r in calibration_blocking_reasons)}</dd>" if calibration_blocking_reasons else ""}
+
         <dt>Max Overfull Amount</dt>
         <dd><code>{f"{max_overfull_divisions} divisions" if max_overfull_divisions > 0 else "0"}</code></dd>
 
+        <dt>Overfull Bar Count</dt>
+        <dd><code>{overfull_bar_count}</code></dd>
+
+        <dt>Underfull Bar Count</dt>
+        <dd><code>{underfull_bar_count}</code></dd>
+
         <dt>Total Overlap Counts</dt>
-        <dd><code>{total_overlap_count}</code></dd>
+        <dd><code>{overlap_count_val}</code></dd>
+
+        <dt>Tie Continuity Risks</dt>
+        <dd><code>{tie_continuity_risk_count}</code></dd>
+
+        <dt>High Risk Summaries</dt>
+        <dd><code>{many_risk_summary_count}</code></dd>
+
+        <dt>Invalid Duration Grids</dt>
+        <dd><code>{invalid_grid_count}</code></dd>
+
+        <dt>Affected Event Count</dt>
+        <dd><code>{affected_event_count}</code></dd>
 
         <dt>Affected Event IDs</dt>
         <dd>{", ".join(f"<code>{html.escape(str(eid))}</code>" for eid in sorted(all_affected_event_ids)) if all_affected_event_ids else "<em>None</em>"}</dd>
