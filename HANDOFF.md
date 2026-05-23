@@ -1,29 +1,61 @@
 # Handoff
 
 ## Metadata
-- **Current Branch**: `feature/pdf-edge-boundary-reporting-v0.9`
+- **Current Branch**: `feature/pdf-string-assignment-public-fixtures-v0.4`
 - **Base Branch**: `main`
-- **Current PR**: [PR #42](https://github.com/tticom/score2gp/pull/42) (Draft)
-- **Latest Local Commit**: `9443187`
-- **Latest Pushed Commit**: `9443187`
-- **Commit Subject**: Update handoff for PDF edge boundary reporting PR
-- **Working Tree Status**: Clean
+- **Current PR**: None yet (Draft PR to be created)
+- **Latest Local Commit**: `d30e040`
+- **Latest Pushed Commit**: `9443187` (PR #42 merge is `b4a5265` on main)
+- **Commit Subject**: Implement PDF string assignment heuristics and public fixtures
+- **Working Tree Status**: Clean (except modified `HANDOFF.md` once saved)
 - **Tests & Checks Run**:
-  - `python -m pytest` -> 239 passed cleanly in 11.20s
+  - `python -m pytest` -> 249 passed cleanly in 14.70s
   - `python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
   - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid
   - `git diff --check` -> passed cleanly
   - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep` is tracked under Git
-- **GitHub Check Status**: Passed
+- **GitHub Check Status**: N/A
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or diagnostic outputs are tracked or committed. All outputs under `work/` are ignored.
 
 ## What Changed in the Task
-- **Defined and implemented PDF Edge-Boundary Fallback Reporting**: Created a private-safe edge-boundary reporting contract (`pdf-edge-boundary-report.json` and `pdf-edge-boundary-report.html`) containing anonymized page and system indexes, observed/accepted/rejected/inferred boundary counts, fallback considered/accepted/rejected status, fallback rejection reason codes, missing sides, accepted/rejected boundary sides, candidate counts, candidates assigned to system/bar, candidates unassigned due to failed boundary, and remediation hints. It explicitly excludes all private score details, note names, lyrics, chord symbols, or raw PDF text.
-- **Enriched telemetry**: Programmatically injected system index and page index inside all edge fallback warnings in `src/score2gp/pdf.py` for clean programmatic extraction.
-- **Linked grouping reports**: Added direct links to both the JSON and HTML edge-boundary reports inside `grouping-diagnostics.html`'s artifacts list.
-- **Referenced reports in compiler gates**: Injected references to `pdf_edge_boundary_report_html` and `grouping_diagnostics_html` directly in the `BuildIrInputRiskError` failure diagnostics json when compilation refuses a `tabraw-import` grouping failure.
-- **Public unit test integration**: Added comprehensive test `test_pdf_edge_boundary_report` to `tests/test_pdf.py` verifying JSON schema values, HTML page content, and compiler gate references.
-- **Private E2E smoke integration**: Re-ran the private E2E smoke tests locally and confirmed that `pdf-edge-boundary-report.json`, `pdf-edge-boundary-report.html`, and `grouping-diagnostics.html` are compiled correctly and populated under the ignored `work/` folder for `private_input_1`.
+- **Added 10 Public Synthetic PDF Fixtures**: Created a programmatic generator `tests/fixtures/pdf/make_string_assignment_pdfs.py` compiling 10 public synthetic PDF fixtures under `tests/fixtures/pdf/` mapping to key string assignment conditions:
+  1. `generated_pdf_string_assignment_valid.pdf`: Six-line tab staff with single-digit fret numbers centered on each string.
+  2. `generated_pdf_string_assignment_multidigit.pdf`: Valid staff with multi-digit fret numbers (e.g., "10", "12", "15").
+  3. `generated_pdf_string_assignment_offset_tolerant.pdf`: Candidate slightly above/below a string line but inside the tolerance threshold.
+  4. `generated_pdf_string_assignment_between_lines.pdf`: Candidate exactly between two string lines.
+  5. `generated_pdf_string_assignment_outside_staff.pdf`: Candidate outside the top/bottom staff region.
+  6. `generated_pdf_string_assignment_compact_staff.pdf`: Compact staff where vertical spacing between lines is too small (`< 8.0`).
+  7. `generated_pdf_string_assignment_techniques.pdf`: Inline technique markers near strings (e.g., 'h', 'p', '/').
+  8. `generated_pdf_string_assignment_chords.pdf`: Chord symbols above the staff.
+  9. `generated_pdf_string_assignment_grouped_success.pdf`: Fully grouped page where system, bar, and string assignment all succeed.
+  10. `generated_pdf_string_assignment_upstream_blocked.pdf`: String assignment succeeds but upstream edge-boundary/bar-box failures remain.
+- **Defined Taxonomy of 14 String-Related Warning/Reason/Provenance Codes**:
+  - `pdf_string_assignment_nearest_line`: Success code indicating a fret candidate was successfully assigned to the nearest string line.
+  - `pdf_string_assignment_outside_staff`: Blocker warning for a fret candidate lying outside the vertical bounds of the tab staff.
+  - `pdf_string_assignment_between_lines`: Blocker warning for a fret candidate lying exactly between two string lines.
+  - `pdf_string_assignment_too_far_from_line`: Blocker warning for a fret candidate too far from any string line to assign safely.
+  - `pdf_string_assignment_overlaps_multiple_bands`: Blocker warning for a fret candidate whose height overlaps multiple string lines.
+  - `pdf_string_assignment_confidence_below_threshold`: Blocker warning for low-confidence string assignment.
+  - `pdf_string_assignment_compact_staff_ambiguous`: Blocker warning for compact staff spacing preventing safe assignment.
+  - `pdf_playable_candidate_requires_string_assignment`: Blocker warning that playable fret candidates require unambiguous string assignment.
+  - `pdf_non_playable_text_not_string_assigned`: Info code indicating non-playable text candidates do not require string assignment.
+  - `pdf_multidigit_fret_string_assigned`: Success code for a multi-digit fret candidate successfully assigned.
+  - `pdf_string_assignment_not_enough_for_build_ir`: Blocker warning indicating one or more playable candidates lack safe string assignment.
+  - `pdf_string_assignment_succeeded_upstream_grouping_still_blocks`: Info warning indicating string assignment succeeded, but upstream system/bar grouping blockers prevent full grouping.
+  - `pdf_candidates_unassigned_to_string`: Blocker warning indicating candidates inside system/bar are not assignable to any string.
+  - `ambiguous_string_assignment`: Blocker warning indicating candidate is too far or ambiguous.
+- **Implemented Conservative Heuristics in Layout Parsing**:
+  - Refined `string_for_y` in `src/score2gp/pdf.py` to analyze line spacing, height, compact spacing (`< 8.0`), outside staff bounds, and between-strings midpoints.
+  - Refined `_extract_pdf_text_candidates` to assign strings, calculate vertical height, classify non-playable text elements (chords, techniques), and attach correct warning/provenance codes.
+- **Corrected Compiler Gates and Blockers Whitelists**:
+  - Correctly categorized Phase 9 string assignment codes, ensuring success/info codes (like `nearest_line`, `multidigit`, `non_playable_text_excluded`, and `succeeded_upstream_grouping_still_blocks`) are **excluded** from build-blocking whitelists (`drawn_grouping_codes` in `pdf.py` and `_tabraw_unsafe_grouping_warning_codes` in `build_ir.py`), while strict blockers block ScoreIR building.
+  - Robustly refined `_append_grouping_warnings` to gather all candidate and page warnings when identifying upstream blockers.
+- **Enriched HTML/JSON Diagnostics**:
+  - Appended string assignment metrics, blockers, and remediation advice to Master Grouping HTML/JSON reports in `report.py`.
+  - Added per-candidate string distance and assignment details to system-level HTML tables.
+- **Robust Candidate Classification and Capping**:
+  - Excluded words containing "string" or "strings" from being classified as technique-text because of the "ring" token, resolving title extraction issues.
+  - Only cap candidate confidence to `0.65` when actual unsafe/blocker layout warnings are present.
 
 ## Private Smoke Blocker Summary (No Private Content Included)
 - **`private_input_1`** (`pdf-tab-musicxml`):
@@ -34,17 +66,8 @@
   - **ASCII block count**: 0
   - **Drawn system count**: 14 (8 on page 1, 6 on page 2)
   - **Accepted barline count**: System 6 on page 2 has 1 accepted boundary and 1 rejected boundary. The other 13 systems have accepted barlines and successfully constructed bar boxes.
-  - **Rejected barline/boundary count**: 1 on system 6 page 2.
-  - **Inferred boundary count**: 0 (rejected).
-  - **Fallback considered**: True
-  - **Fallback accepted/rejected count**: 0 accepted / 1 rejected.
-  - **Fallback rejection reason counts**: 1 (`pdf_bar_box_edge_boundary_fallback_rejected` due to rejected candidate / ambiguous barline in the inference direction).
-  - **Too-narrow inferred box count**: 0.
-  - **Candidate-near-inferred-boundary count**: 0.
   - **Constructed bar box count**: 13 constructed.
   - **Unboxed system count**: 1 (system 6 on page 2).
-  - **Systems with playable candidates**: 14.
-  - **Unboxed systems with playable candidates**: 1 (system 6 on page 2).
   - **Total candidate count**: 329.
   - **Playable candidate count**: 203.
   - **Non-playable candidate count**: 126.
@@ -53,65 +76,8 @@
   - **Candidates assigned to string**: 141.
   - **Grouping status**: `partial_pdf_grouping`
   - **Primary PDF blocker stage**: `pdf_bar_box_one_boundary_rejected` (due to system 6 on page 2 having a rejected boundary, which correctly rejects fallback and blocks grouping).
-  - **Secondary PDF reason codes**:
-    - `ambiguous_bar_assignment`
-    - `ambiguous_string_assignment`
-    - `incomplete_tab_staff`
-    - `missing_pdf_barlines`
-    - `pdf_bar_box_construction_not_enough_for_build_ir`
-    - `pdf_bar_box_edge_boundary_ambiguous`
-    - `pdf_bar_box_edge_boundary_fallback_rejected`
-    - `pdf_bar_box_edge_system_missing_boundary`
-    - `pdf_bar_box_inferred_boundary_not_enough_for_build_ir`
-    - `pdf_bar_box_inferred_boundary_requires_clear_system_edge`
-    - `pdf_bar_box_missing_right_boundary`
-    - `pdf_bar_box_one_boundary_rejected`
-    - `pdf_bar_box_requires_two_boundaries`
-    - `pdf_bar_boxes_missing`
-    - `pdf_bar_boxes_not_constructible`
-    - `pdf_bar_detection_not_enough_for_build_ir`
-    - `pdf_barline_ambiguous`
-    - `pdf_barline_too_short`
-    - `pdf_barlines_missing`
-    - `pdf_barlines_not_detected_in_system`
-    - `pdf_candidate_near_missing_bar_boundary`
-    - `pdf_candidate_outside_bar`
-    - `pdf_candidate_outside_system`
-    - `pdf_candidate_unassigned_due_to_unboxed_system`
-    - `pdf_candidate_unassigned_to_bar`
-    - `pdf_candidates_unassigned_to_bar`
-    - `pdf_candidates_unassigned_to_string`
-    - `pdf_candidates_unassigned_to_system`
-    - `pdf_drawn_system_ambiguous`
-    - `pdf_grouping_confidence_below_threshold`
-    - `pdf_grouping_not_safe_for_build_ir`
-    - `pdf_layout_detection_requires_manual_review`
-    - `pdf_missing_pdf_grouping_blocks_build_ir`
-    - `pdf_multi_system_order_ambiguous`
-    - `pdf_partial_grouping_one_system_unboxed`
-    - `pdf_partial_grouping_with_playable_candidates`
-    - `pdf_partial_system_detection`
-    - `pdf_string_assignment_ambiguous`
-    - `pdf_string_assignment_missing`
-    - `pdf_system_bbox_ambiguous`
-    - `pdf_system_order_ambiguous`
-    - `pdf_tab_staff_ambiguous`
-    - `pdf_tab_staff_incomplete`
   - **Timing blocker stage**: `musicxml_timing_repair_not_safe` (preflight VoiceOverlapError with 66 overfull or overlapping events).
-  - **Calibration possible status**: `unrecoverable_scenario` (due to timing risk).
-  - **Alignment status**: `failed`.
-  - **ScoreIR gate status**: `refused`.
-  - **GP writing status**: `not_attempted` (refused at IR gate).
-  - **Stage reached**: PDF extraction raw output completed, MusicXML preflight timing risk flagged.
-  - **Artifact paths under work/**:
-    - `work/private_e2e_smoke_after_pdf_edge_system_boundary_v0_1/private_input_1/extracted.tabraw.json`
-    - `work/private_e2e_smoke_after_pdf_edge_system_boundary_v0_1/private_input_1/warnings.json`
-    - `work/private_e2e_smoke_after_pdf_edge_system_boundary_v0_1/private_input_1/pdf-edge-boundary-report.json`
-    - `work/private_e2e_smoke_after_pdf_edge_system_boundary_v0_1/private_input_1/pdf-edge-boundary-report.html`
-    - `work/private_e2e_smoke_after_pdf_edge_system_boundary_v0_1/private_input_1/grouping-diagnostics.html`
-    - `work/private_e2e_smoke_after_pdf_edge_system_boundary_v0_1/private_input_1/musicxml-unrecoverable-timing-report.json`
-    - `work/private_e2e_smoke_after_pdf_edge_system_boundary_v0_1/private_input_1/musicxml-unrecoverable-timing-report.html`
-    - `work/private_e2e_smoke_after_pdf_edge_system_boundary_v0_1/private_input_1/build_error.json`
+  - **ScoreIR gate status**: `refused` (blocked by PDF grouping and timing).
 
 - **`private_input_2`** (`pdf-tab-only`):
   - **Input class**: `ascii_tab_candidate` / `unsupported`
@@ -127,15 +93,15 @@
   - **Timing status**: `not_attempted`.
 
 ## Comparison with Previous Blocker Summary
-- **Previous summary**: `private_input_1` had grouping status `partial_pdf_grouping` and system 6 on page 2 had fallback rejected safely under PR #41 (v0.8).
-- **Current summary**: Rejection behavior remains correctly strict, keeping `partial_pdf_grouping` and blocking ScoreIR generation. However, the system now exports `pdf-edge-boundary-report.json` and `pdf-edge-boundary-report.html` detailing observed, accepted, rejected, and inferred counts, affected playable candidates, unassigned candidates, rejection reasons, and actionable remediation hints. These reports are beautifully rendered in HTML, linked under `grouping-diagnostics.html`'s artifacts list, and referenced directly inside compiler failure diagnostics json payloads.
+- **Previous summary**: `private_input_1` had grouping status `partial_pdf_grouping` and system 6 on page 2 had fallback rejected safely under PR #42 (v0.9).
+- **Current summary**: Rejection behavior remains correctly strict, keeping `partial_pdf_grouping` and blocking ScoreIR generation. Non-playable chord symbols and techniques are successfully preserved and excluded from string blocking. Success codes do not block the build, and the diagnostics accurately report the string metrics (141 candidates assigned to string).
 
 ## Current Top Blocker Classification
 1. **`pdf_bar_box_one_boundary_rejected`** (Primary PDF grouping blocker stage)
 2. **`musicxml_timing_repair_not_safe`** (Primary MusicXML timeline voice overlap blocker)
 
 ## Next Recommended Branch
-- **`feature/pdf-string-assignment-public-fixtures-v0.4`**: Since grouping fallback rejection reporting is complete and fully verified, the next blocker area to address is string assignment heuristics and public fixtures.
+- **`feature/pdf-fret-refinement-v0.5`**: Once the draft PR for string assignment is merged into main, the next recommended branch is `feature/pdf-fret-refinement-v0.5` to refine fret number optical bounds and handle OCR/digit alignment edge cases.
 
 ## Explicit Scope Boundaries
 - **Do not** commit any private inputs, private outputs, private GP files, private PDFs, private summaries, private HTML diagnostics, or any `work/` contents.
