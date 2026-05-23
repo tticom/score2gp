@@ -1980,6 +1980,20 @@ def _tabraw_grouping_risk(tabraw: TabRaw) -> dict[str, object] | None:
             "pdf_bar_box_inferred_boundary_candidate_ambiguous",
             "pdf_bar_box_inferred_boundary_requires_clear_system_edge",
             "pdf_bar_box_inferred_boundary_not_enough_for_build_ir",
+
+            # New PDF String Assignment Codes
+            "pdf_string_assignment_nearest_line",
+            "pdf_string_assignment_outside_staff",
+            "pdf_string_assignment_between_lines",
+            "pdf_string_assignment_too_far_from_line",
+            "pdf_string_assignment_overlaps_multiple_bands",
+            "pdf_string_assignment_confidence_below_threshold",
+            "pdf_string_assignment_compact_staff_ambiguous",
+            "pdf_playable_candidate_requires_string_assignment",
+            "pdf_non_playable_text_not_string_assigned",
+            "pdf_multidigit_fret_string_assigned",
+            "pdf_string_assignment_not_enough_for_build_ir",
+            "pdf_string_assignment_succeeded_upstream_grouping_still_blocks",
         }
     ]
     counts["tabraw_warning_codes"] = counts["warning_codes"]
@@ -2103,6 +2117,16 @@ def _tabraw_unsafe_grouping_warning_codes(tabraw: TabRaw) -> list[str]:
         "pdf_bar_box_inferred_boundary_candidate_ambiguous",
         "pdf_bar_box_inferred_boundary_requires_clear_system_edge",
         "pdf_bar_box_inferred_boundary_not_enough_for_build_ir",
+
+        # New PDF String Assignment Codes
+        "pdf_string_assignment_outside_staff",
+        "pdf_string_assignment_between_lines",
+        "pdf_string_assignment_too_far_from_line",
+        "pdf_string_assignment_overlaps_multiple_bands",
+        "pdf_string_assignment_confidence_below_threshold",
+        "pdf_string_assignment_compact_staff_ambiguous",
+        "pdf_playable_candidate_requires_string_assignment",
+        "pdf_string_assignment_not_enough_for_build_ir",
     }
     return sorted({str(warning.get("code")) for warning in tabraw.warnings if warning.get("code") in unsafe})
 

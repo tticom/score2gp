@@ -9,6 +9,7 @@ from score2gp.build_ir import BuildIrInputRiskError, build_ir_from_files
 from score2gp.ir import validate_score_ir_file
 from score2gp.pdf import extract_tab, inspect_pdf
 from score2gp.tabraw import TabRaw
+from score2gp.report import grouping_status_for_tabraw
 
 GENERATED_PDF = Path("tests/fixtures/pdf/generated_tiny_tab.pdf")
 GENERATED_MUSICXML = Path("tests/fixtures/musicxml/generated_tiny_tab.musicxml")
@@ -398,7 +399,30 @@ def test_partial_pdf_ambiguous_string_assignment_is_not_high_confidence(tmp_path
 
     tabraw = TabRaw.model_validate(extract_tab(PARTIAL_AMBIGUOUS_STRING_PDF, tabraw_path))
     fret_candidates = [candidate for candidate in tabraw.candidates if candidate.kind == "fret"]
-    ambiguous = [candidate for candidate in fret_candidates if candidate.raw.get("assignment_warnings")]
+    unsafe_set = {
+        "pdf_playable_candidate_requires_string_assignment",
+        "pdf_string_assignment_missing",
+        "pdf_candidates_unassigned_to_string",
+        "pdf_string_assignment_outside_staff",
+        "pdf_string_assignment_between_lines",
+        "pdf_string_assignment_too_far_from_line",
+        "pdf_string_assignment_overlaps_multiple_bands",
+        "pdf_string_assignment_confidence_below_threshold",
+        "pdf_string_assignment_compact_staff_ambiguous",
+        "pdf_string_assignment_not_enough_for_build_ir",
+        "pdf_candidate_between_strings",
+        "pdf_candidate_outside_bar",
+        "pdf_candidate_unassigned_to_bar",
+        "pdf_candidates_unassigned_to_bar",
+        "ambiguous_string_assignment",
+        "ambiguous_bar_assignment",
+        "pdf_candidate_on_bar_boundary",
+        "pdf_candidate_boundary_ambiguous",
+    }
+    ambiguous = [
+        candidate for candidate in fret_candidates
+        if any(w in unsafe_set for w in (candidate.raw.get("assignment_warnings") or []))
+    ]
     warning_codes = {warning["code"] for warning in tabraw.warnings}
     report_html = (tabraw_path.parent / "grouping-diagnostics.html").read_text(encoding="utf-8")
 
@@ -416,7 +440,30 @@ def test_partial_pdf_ambiguous_bar_assignment_is_not_high_confidence(tmp_path) -
 
     tabraw = TabRaw.model_validate(extract_tab(PARTIAL_AMBIGUOUS_BAR_PDF, tabraw_path))
     fret_candidates = [candidate for candidate in tabraw.candidates if candidate.kind == "fret"]
-    ambiguous = [candidate for candidate in fret_candidates if candidate.raw.get("assignment_warnings")]
+    unsafe_set = {
+        "pdf_playable_candidate_requires_string_assignment",
+        "pdf_string_assignment_missing",
+        "pdf_candidates_unassigned_to_string",
+        "pdf_string_assignment_outside_staff",
+        "pdf_string_assignment_between_lines",
+        "pdf_string_assignment_too_far_from_line",
+        "pdf_string_assignment_overlaps_multiple_bands",
+        "pdf_string_assignment_confidence_below_threshold",
+        "pdf_string_assignment_compact_staff_ambiguous",
+        "pdf_string_assignment_not_enough_for_build_ir",
+        "pdf_candidate_between_strings",
+        "pdf_candidate_outside_bar",
+        "pdf_candidate_unassigned_to_bar",
+        "pdf_candidates_unassigned_to_bar",
+        "ambiguous_string_assignment",
+        "ambiguous_bar_assignment",
+        "pdf_candidate_on_bar_boundary",
+        "pdf_candidate_boundary_ambiguous",
+    }
+    ambiguous = [
+        candidate for candidate in fret_candidates
+        if any(w in unsafe_set for w in (candidate.raw.get("assignment_warnings") or []))
+    ]
     warning_codes = {warning["code"] for warning in tabraw.warnings}
     report_html = (tabraw_path.parent / "grouping-diagnostics.html").read_text(encoding="utf-8")
 
@@ -1257,7 +1304,7 @@ def test_refined_compact_barline_success_and_failures(tmp_path) -> None:
     assert "pdf_bar_boxes_constructed" in warning_codes7
     assert "pdf_barlines_not_detected_in_system" not in warning_codes7
     assert "pdf_bar_boxes_not_constructible" not in warning_codes7
-    assert "pdf_grouping_not_safe_for_build_ir" not in warning_codes7
+    assert "pdf_bar_box_construction_not_enough_for_build_ir" not in warning_codes7
 
     # 8. Compact valid barlines but candidate outside bars (barline validation succeeds, downstream bar assignment blocks)
     pdf8 = Path("tests/fixtures/pdf/generated_pdf_compact_barlines_candidate_outside.pdf")
@@ -1297,8 +1344,10 @@ def test_refined_compact_barline_success_and_failures(tmp_path) -> None:
     tabraw_valid = tmp_path / "compact_valid.tabraw.json"
     ir_valid = tmp_path / "compact_valid.ir.json"
     extract_tab(pdf_valid, tabraw_valid)
-    score = build_ir_from_files(GENERATED_MUSICXML, tabraw_valid, ir_valid)
-    assert score.metadata.title == "Generated Tiny Tab"
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(GENERATED_MUSICXML, tabraw_valid, ir_valid)
+    assert raised.value.category == "partial_pdf_grouping"
+    assert "pdf_string_assignment_compact_staff_ambiguous" in raised.value.to_diagnostics_payload()["details"]["warning_codes"]
 
 
 def test_synthetic_one_bar_box_constructed(tmp_path) -> None:
@@ -1732,3 +1781,112 @@ def test_pdf_edge_boundary_report(tmp_path) -> None:
     assert diag_payload["pdf_edge_boundary_report_html"] == "pdf-edge-boundary-report.html"
     assert diag_payload["pdf_edge_boundary_report_json"] == "pdf-edge-boundary-report.json"
     assert diag_payload["grouping_diagnostics_html"] == "grouping-diagnostics.html"
+
+
+# Fixture paths for string assignment
+STRING_ASSIGN_DIR = Path(__file__).parent / "fixtures" / "pdf"
+PDF_VALID = STRING_ASSIGN_DIR / "generated_pdf_string_assignment_valid.pdf"
+PDF_MULTIDIGIT = STRING_ASSIGN_DIR / "generated_pdf_string_assignment_multidigit.pdf"
+PDF_OFFSET = STRING_ASSIGN_DIR / "generated_pdf_string_assignment_offset_tolerant.pdf"
+PDF_BETWEEN = STRING_ASSIGN_DIR / "generated_pdf_string_assignment_between_lines.pdf"
+PDF_OUTSIDE = STRING_ASSIGN_DIR / "generated_pdf_string_assignment_outside_staff.pdf"
+PDF_COMPACT = STRING_ASSIGN_DIR / "generated_pdf_string_assignment_compact_staff.pdf"
+PDF_TECHNIQUES = STRING_ASSIGN_DIR / "generated_pdf_string_assignment_techniques.pdf"
+PDF_CHORDS = STRING_ASSIGN_DIR / "generated_pdf_string_assignment_chords.pdf"
+PDF_GROUPED_SUCCESS = STRING_ASSIGN_DIR / "generated_pdf_string_assignment_grouped_success.pdf"
+PDF_UPSTREAM_BLOCKED = STRING_ASSIGN_DIR / "generated_pdf_string_assignment_upstream_blocked.pdf"
+
+
+def test_pdf_string_assignment_valid(tmp_path) -> None:
+    assert PDF_VALID.exists()
+    tabraw_path = tmp_path / "valid.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_VALID, tabraw_path))
+    assert len(raw.candidates) == 6
+    assert all(c.string == idx + 1 for idx, c in enumerate(raw.candidates))
+    assert all("pdf_string_assignment_nearest_line" in c.raw.get("assignment_warnings", []) for c in raw.candidates)
+
+
+def test_pdf_string_assignment_multidigit(tmp_path) -> None:
+    assert PDF_MULTIDIGIT.exists()
+    tabraw_path = tmp_path / "multidigit.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_MULTIDIGIT, tabraw_path))
+    assert len(raw.candidates) == 3
+    assert [c.parsed_fret for c in raw.candidates] == [10, 12, 15]
+    assert [c.string for c in raw.candidates] == [1, 3, 5]
+    assert all("pdf_multidigit_fret_string_assigned" in c.raw.get("assignment_warnings", []) for c in raw.candidates)
+
+
+def test_pdf_string_assignment_offset_tolerant(tmp_path) -> None:
+    assert PDF_OFFSET.exists()
+    tabraw_path = tmp_path / "offset.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_OFFSET, tabraw_path))
+    assert len(raw.candidates) == 1
+    c = raw.candidates[0]
+    assert c.string == 2
+    assert "pdf_string_assignment_nearest_line" in c.raw.get("assignment_warnings", [])
+
+
+def test_pdf_string_assignment_between_lines(tmp_path) -> None:
+    assert PDF_BETWEEN.exists()
+    tabraw_path = tmp_path / "between.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_BETWEEN, tabraw_path))
+    assert len(raw.candidates) == 1
+    c = raw.candidates[0]
+    assert c.string is None
+    assert "pdf_string_assignment_between_lines" in c.raw.get("assignment_warnings", [])
+    assert "pdf_string_assignment_ambiguous" in c.raw.get("assignment_warnings", [])
+
+
+def test_pdf_string_assignment_outside_staff(tmp_path) -> None:
+    assert PDF_OUTSIDE.exists()
+    tabraw_path = tmp_path / "outside.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_OUTSIDE, tabraw_path))
+    assert len(raw.candidates) == 2
+    assert all(c.string is None for c in raw.candidates)
+    assert all("pdf_string_assignment_outside_staff" in c.raw.get("assignment_warnings", []) for c in raw.candidates)
+
+
+def test_pdf_string_assignment_compact_staff(tmp_path) -> None:
+    assert PDF_COMPACT.exists()
+    tabraw_path = tmp_path / "compact.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_COMPACT, tabraw_path))
+    assert len(raw.candidates) == 1
+    c = raw.candidates[0]
+    assert "pdf_string_assignment_compact_staff_ambiguous" in c.raw.get("assignment_warnings", [])
+
+
+def test_pdf_string_assignment_techniques(tmp_path) -> None:
+    assert PDF_TECHNIQUES.exists()
+    tabraw_path = tmp_path / "techniques.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_TECHNIQUES, tabraw_path))
+    fret_candidates = [c for c in raw.candidates if c.kind == "fret"]
+    tech_candidates = [c for c in raw.candidates if c.kind == "technique-text"]
+    assert len(fret_candidates) == 2
+    assert len(tech_candidates) == 3
+    assert all(c.string is not None for c in fret_candidates)
+    assert all("pdf_non_playable_text_not_string_assigned" in c.raw.get("assignment_warnings", []) for c in tech_candidates)
+
+
+def test_pdf_string_assignment_chords(tmp_path) -> None:
+    assert PDF_CHORDS.exists()
+    tabraw_path = tmp_path / "chords.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_CHORDS, tabraw_path))
+    chord_candidates = [c for c in raw.candidates if c.kind == "chord-symbol"]
+    assert len(chord_candidates) == 2
+    assert all(c.string is None for c in chord_candidates)
+    assert all("pdf_non_playable_text_not_string_assigned" in c.raw.get("assignment_warnings", []) for c in chord_candidates)
+
+
+def test_pdf_string_assignment_grouped_success(tmp_path) -> None:
+    assert PDF_GROUPED_SUCCESS.exists()
+    tabraw_path = tmp_path / "grouped_success.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_GROUPED_SUCCESS, tabraw_path))
+    assert grouping_status_for_tabraw(raw.model_dump(mode="json")) == "grouped"
+
+
+def test_pdf_string_assignment_upstream_blocked(tmp_path) -> None:
+    assert PDF_UPSTREAM_BLOCKED.exists()
+    tabraw_path = tmp_path / "upstream_blocked.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_UPSTREAM_BLOCKED, tabraw_path))
+    warning_codes = {w.get("code") for w in raw.warnings}
+    assert "pdf_string_assignment_succeeded_upstream_grouping_still_blocks" in warning_codes

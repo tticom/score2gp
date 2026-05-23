@@ -275,21 +275,51 @@ class _TabSystem:
             boxes.append(box_dict)
         return boxes
 
-    def string_for_y(self, y: float | None) -> tuple[int | None, int | None, float | None, list[str]]:
+    def string_for_y(
+        self, y: float | None, height: float | None = None
+    ) -> tuple[int | None, int | None, float | None, list[str]]:
         if y is None:
             return None, None, None, []
         distances = [(abs(line_y - y), index + 1) for index, line_y in enumerate(self.line_ys)]
         distance, line_index = min(distances, key=lambda item: item[0])
         tolerance = max(4.0, self.line_spacing * 0.38)
-        ambiguous_tolerance = max(tolerance, self.line_spacing * 0.58)
+
+        warnings = []
+
+        # Check compact staff spacing
+        if self.line_spacing < 8.0:
+            warnings.append("pdf_string_assignment_compact_staff_ambiguous")
+            warnings.append("pdf_string_assignment_confidence_below_threshold")
+
+        # Check overlaps multiple bands
+        if height is not None and height > self.line_spacing * 1.5:
+            warnings.append("pdf_string_assignment_overlaps_multiple_bands")
+            warnings.append("pdf_string_assignment_ambiguous")
+            warnings.append("ambiguous_string_assignment")
+            return None, None, distance, warnings
+
+        min_y = min(self.line_ys)
+        max_y = max(self.line_ys)
+
+        # Check outside staff bounds
+        if y < min_y - tolerance or y > max_y + tolerance:
+            warnings.append("pdf_string_assignment_outside_staff")
+            warnings.append("pdf_string_assignment_missing")
+            return None, None, distance, warnings
+
         if distance > tolerance:
-            warnings = ["ambiguous_string_assignment", "pdf_string_assignment_ambiguous"]
-            if distance <= self.line_spacing * 0.65:
+            warnings.append("ambiguous_string_assignment")
+            warnings.append("pdf_string_assignment_ambiguous")
+            if min_y <= y <= max_y:
+                warnings.append("pdf_string_assignment_between_lines")
                 warnings.append("pdf_candidate_between_strings")
-            else:
+            if distance > self.line_spacing * 0.65:
+                warnings.append("pdf_string_assignment_too_far_from_line")
                 warnings.append("pdf_string_assignment_missing")
             return None, None, distance, warnings
-        return line_index, line_index, distance, []
+
+        warnings.append("pdf_string_assignment_nearest_line")
+        return line_index, line_index, distance, warnings
 
     def bar_for_x(self, x: float | None) -> tuple[int | None, list[str]]:
         local_bar, warnings = self.local_bar_for_x(x)
@@ -969,10 +999,20 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                     # Check if candidate falls outside strict horizontal bounds of the system
                     if x < system.x0 or x > system.x1:
                         assignment_warnings.append("pdf_candidate_outside_system")
-                    line_index, string, string_distance, string_warnings = system.string_for_y(y)
-                    if string is None and is_fret_candidate:
-                        assignment_warnings.append("pdf_candidates_unassigned_to_string")
-                    assignment_warnings.extend(string_warnings)
+                    height = bbox_values[3] - bbox_values[1] if bbox_values and len(bbox_values) == 4 else None
+                    line_index, string, string_distance, string_warnings = system.string_for_y(y, height)
+                    if is_fret_candidate:
+                        if string is None:
+                            assignment_warnings.append("pdf_playable_candidate_requires_string_assignment")
+                            assignment_warnings.append("pdf_string_assignment_missing")
+                            assignment_warnings.append("pdf_candidates_unassigned_to_string")
+                        elif len(raw_text) > 1:
+                            assignment_warnings.append("pdf_multidigit_fret_string_assigned")
+                    else:
+                        assignment_warnings.append("pdf_non_playable_text_not_string_assigned")
+                    for w in string_warnings:
+                        if w not in assignment_warnings:
+                            assignment_warnings.append(w)
                     bar_index, bar_warnings = system.bar_for_x(x)
                     if bar_index is None and is_fret_candidate:
                         assignment_warnings.append("pdf_candidates_unassigned_to_bar")
@@ -989,9 +1029,19 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                     bar_index = None
                     if is_fret_candidate:
                         assignment_warnings.append("pdf_candidates_unassigned_to_system")
+                        assignment_warnings.append("pdf_playable_candidate_requires_string_assignment")
+                        assignment_warnings.append("pdf_string_assignment_missing")
+                        assignment_warnings.append("pdf_candidates_unassigned_to_string")
+                    else:
+                        assignment_warnings.append("pdf_non_playable_text_not_string_assigned")
                 bar_bounds = system.bar_bounds_for_x(x) if system is not None else None
                 confidence = _candidate_confidence(raw_text, system, string, bar_index, x)
-                if assignment_warnings:
+                unsafe_assign = [w for w in assignment_warnings if w not in {
+                    "pdf_string_assignment_nearest_line",
+                    "pdf_multidigit_fret_string_assigned",
+                    "pdf_non_playable_text_not_string_assigned",
+                }]
+                if unsafe_assign:
                     confidence = min(confidence, 0.65)
                 candidate = make_tab_candidate(
                     candidate_id=f"pdf-p{page_number:03d}-c{filtered_index + 1:04d}",
@@ -1655,6 +1705,45 @@ def _append_grouping_warnings(raw: dict[str, Any], meta: dict[str, int] | None =
         })
 
     unsafe_codes = _unsafe_grouping_codes(fret_candidates, raw.get("warnings", []))
+    if grouping_counts["fret_candidates_with_string"] < len(fret_candidates):
+        raw["warnings"].append({
+            "code": "pdf_string_assignment_not_enough_for_build_ir",
+            "message": "One or more playable fret candidates lack safe string assignment.",
+            "severity": "warning",
+            "grouping_status": "partial"
+        })
+    elif len(fret_candidates) > 0:
+        upstream_blockers = {
+            "pdf_bar_box_one_boundary_rejected",
+            "pdf_partial_grouping_one_system_unboxed",
+            "pdf_bar_boxes_not_constructible",
+            "pdf_barlines_missing",
+            "missing_pdf_barlines",
+            "pdf_bar_boxes_missing",
+            "pdf_bar_box_edge_boundary_fallback_rejected",
+            "pdf_bar_box_edge_boundary_ambiguous",
+            "pdf_bar_box_inferred_boundary_too_narrow",
+            "pdf_bar_box_inferred_boundary_candidate_ambiguous",
+            "pdf_bar_box_inferred_boundary_requires_clear_system_edge",
+            "pdf_bar_box_inferred_boundary_not_enough_for_build_ir",
+        }
+        all_grouping_warnings = {w.get("code") for w in raw.get("warnings", []) if w.get("code")}
+        for candidate in fret_candidates:
+            cand_raw = candidate.get("raw")
+            if isinstance(cand_raw, dict):
+                gws = cand_raw.get("grouping_warnings")
+                if isinstance(gws, list):
+                    for gw in gws:
+                        all_grouping_warnings.add(gw)
+        if any(ub in all_grouping_warnings for ub in upstream_blockers):
+            raw["warnings"].append({
+                "code": "pdf_string_assignment_succeeded_upstream_grouping_still_blocks",
+                "message": "String assignment succeeded for all playable candidates, but upstream grouping still blocks full grouping.",
+                "severity": "warning",
+                "grouping_status": "partial"
+            })
+
+    unsafe_codes = _unsafe_grouping_codes(fret_candidates, raw.get("warnings", []))
     if unsafe_codes or missing:
         raw["warnings"].append({
             "code": "pdf_grouping_not_safe_for_build_ir",
@@ -1846,6 +1935,16 @@ def _unsafe_grouping_codes(fret_candidates: list[dict[str, Any]], page_warnings:
         "pdf_bar_box_inferred_boundary_candidate_ambiguous",
         "pdf_bar_box_inferred_boundary_requires_clear_system_edge",
         "pdf_bar_box_inferred_boundary_not_enough_for_build_ir",
+
+        # New PDF String Assignment Codes
+        "pdf_string_assignment_outside_staff",
+        "pdf_string_assignment_between_lines",
+        "pdf_string_assignment_too_far_from_line",
+        "pdf_string_assignment_overlaps_multiple_bands",
+        "pdf_string_assignment_confidence_below_threshold",
+        "pdf_string_assignment_compact_staff_ambiguous",
+        "pdf_playable_candidate_requires_string_assignment",
+        "pdf_string_assignment_not_enough_for_build_ir",
     }
     codes: set[str] = set()
     for candidate in fret_candidates:
@@ -1968,6 +2067,20 @@ def _specific_grouping_warning(code: str, grouping_counts: dict[str, int]) -> di
         "pdf_boundary_candidate_blocks_full_grouping": "Boundary candidate ambiguity blocks full grouping.",
         "pdf_full_grouping_requires_all_systems_boxed": "Full grouping is blocked because one or more systems lack bar boxes.",
         "pdf_grouping_complete_all_playable_candidates_assigned": "All playable fret candidates are safely assigned to systems, bars, and strings.",
+
+        # New PDF String Assignment Messages
+        "pdf_string_assignment_nearest_line": "Fret candidate assigned to the nearest string line.",
+        "pdf_string_assignment_outside_staff": "Fret candidate lies outside the vertical bounds of the tab staff.",
+        "pdf_string_assignment_between_lines": "Fret candidate lies exactly between two string lines.",
+        "pdf_string_assignment_too_far_from_line": "Fret candidate is too far from any string line to assign safely.",
+        "pdf_string_assignment_overlaps_multiple_bands": "Fret candidate bounding box height overlaps multiple string lines.",
+        "pdf_string_assignment_confidence_below_threshold": "String assignment confidence is below safe threshold.",
+        "pdf_string_assignment_compact_staff_ambiguous": "Tab staff spacing is too compact for safe string assignment.",
+        "pdf_playable_candidate_requires_string_assignment": "Playable fret candidates require unambiguous string assignment.",
+        "pdf_non_playable_text_not_string_assigned": "Non-playable text candidate does not require string assignment.",
+        "pdf_multidigit_fret_string_assigned": "Multi-digit fret candidate successfully assigned to string.",
+        "pdf_string_assignment_not_enough_for_build_ir": "One or more playable fret candidates lack safe string assignment.",
+        "pdf_string_assignment_succeeded_upstream_grouping_still_blocks": "String assignment succeeded for all playable candidates, but upstream system/bar grouping still blocks full grouping.",
     }
     return {
         "code": code,
