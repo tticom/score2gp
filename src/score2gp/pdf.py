@@ -1103,6 +1103,91 @@ def _append_grouping_warnings(raw: dict[str, Any], meta: dict[str, int] | None =
     if grouping_counts["fret_candidates_with_string"] < len(fret_candidates):
         missing.append("string")
 
+    # Generate refined system-detection blocker taxonomy warnings
+    warning_codes_present = {w.get("code") for w in raw.get("warnings", [])}
+    if "pdf_no_systems_detected" in warning_codes_present or "pdf_tab_candidates_present_but_system_not_detected" in warning_codes_present:
+        raw["warnings"].append({
+            "code": "pdf_drawn_system_not_detected",
+            "message": "Drawn tab system was not detected or resolved.",
+            "severity": "warning",
+            "grouping_status": "missing"
+        })
+        raw["warnings"].append({
+            "code": "pdf_system_detection_not_enough_for_build_ir",
+            "message": "PDF system detection is incomplete and not safe to build IR.",
+            "severity": "warning",
+            "grouping_status": "missing"
+        })
+    if "pdf_drawn_geometry_present_but_staff_unresolved" in warning_codes_present or "pdf_tab_staff_lines_fragmented" in warning_codes_present:
+        raw["warnings"].append({
+            "code": "pdf_drawn_staff_lines_unresolved",
+            "message": "Drawn staff lines are fragmented, overlapping, or unresolved.",
+            "severity": "warning",
+            "grouping_status": "missing"
+        })
+
+    if "pdf_multi_system_order_ambiguous" in warning_codes_present or "pdf_system_order_ambiguous" in warning_codes_present or "pdf_tab_staff_ambiguous" in warning_codes_present:
+        raw["warnings"].append({
+            "code": "pdf_drawn_system_ambiguous",
+            "message": "Tab system layout vertical ordering is ambiguous.",
+            "severity": "warning",
+            "grouping_status": "ambiguous"
+        })
+
+    ascii_candidates = [c for c in candidates if isinstance(c.get("raw"), dict) and c["raw"].get("parser_version") == "ascii-tab.v0.1"]
+    if "ascii_tab_detected" in warning_codes_present or ascii_candidates:
+        raw["warnings"].append({
+            "code": "pdf_ascii_system_detected",
+            "message": "ASCII tab system block was detected.",
+            "severity": "info",
+            "grouping_status": "ascii_grouped"
+        })
+        if "ascii_tab_measure_boundary_missing" in warning_codes_present:
+            raw["warnings"].append({
+                "code": "pdf_ascii_system_measure_boundaries_missing",
+                "message": "ASCII blocks lack aligned bar separators to define measure boundaries.",
+                "severity": "warning",
+                "grouping_status": "ascii_grouped"
+            })
+        if "ascii_tab_timing_unavailable" in warning_codes_present or "partial_ascii_tab_timing" in warning_codes_present or "ambiguous_ascii_tab_timing" in warning_codes_present:
+            raw["warnings"].append({
+                "code": "pdf_ascii_system_timing_unavailable",
+                "message": "ASCII blocks lack safe timing or alignment evidence.",
+                "severity": "warning",
+                "grouping_status": "ascii_grouped"
+            })
+            raw["warnings"].append({
+                "code": "pdf_input_class_ascii_tab_requires_alignment",
+                "message": "ASCII-tab input class requires an alignment sidecar.",
+                "severity": "warning",
+                "grouping_status": "ascii_grouped"
+            })
+
+    has_systems = (meta is not None and meta.get("detected_systems", 0) > 0) or grouping_counts["fret_candidates_with_system"] > 0
+    has_bars = (meta is not None and meta.get("detected_bar_boxes", 0) > 0) or grouping_counts["fret_candidates_with_bar"] > 0
+    if has_systems and not has_bars:
+        raw["warnings"].append({
+            "code": "pdf_system_detected_bar_detection_missing",
+            "message": "System detection succeeded, but bar/barline detection is missing.",
+            "severity": "warning",
+            "grouping_status": "missing"
+        })
+        raw["warnings"].append({
+            "code": "pdf_input_class_drawn_tab_requires_barlines",
+            "message": "Drawn-tab input class requires visible barlines.",
+            "severity": "warning",
+            "grouping_status": "missing"
+        })
+
+    is_blocked = ("pdf_grouping_not_safe_for_build_ir" in warning_codes_present or "pdf_missing_pdf_grouping_blocks_build_ir" in warning_codes_present or "missing_pdf_grouping" in warning_codes_present)
+    if has_systems and is_blocked:
+        raw["warnings"].append({
+            "code": "pdf_system_detection_succeeded_but_grouping_incomplete",
+            "message": "System detection succeeded, but overall layout grouping remains partial or unsafe.",
+            "severity": "warning",
+            "grouping_status": "partial"
+        })
+
     unsafe_codes = _unsafe_grouping_codes(fret_candidates, raw.get("warnings", []))
     if unsafe_codes or missing:
         raw["warnings"].append({
@@ -1217,6 +1302,19 @@ def _unsafe_grouping_codes(fret_candidates: list[dict[str, Any]], page_warnings:
         "pdf_grouping_confidence_below_threshold",
         "pdf_missing_pdf_grouping_blocks_build_ir",
         "pdf_layout_detection_requires_manual_review",
+
+        # Refined system-detection taxonomy blocker codes
+        "pdf_drawn_system_not_detected",
+        "pdf_drawn_system_ambiguous",
+        "pdf_drawn_staff_lines_unresolved",
+        "pdf_ascii_system_detected",
+        "pdf_ascii_system_measure_boundaries_missing",
+        "pdf_ascii_system_timing_unavailable",
+        "pdf_system_detected_bar_detection_missing",
+        "pdf_system_detection_succeeded_but_grouping_incomplete",
+        "pdf_input_class_ascii_tab_requires_alignment",
+        "pdf_input_class_drawn_tab_requires_barlines",
+        "pdf_system_detection_not_enough_for_build_ir",
     }
     codes: set[str] = set()
     for candidate in fret_candidates:
@@ -1277,6 +1375,19 @@ def _specific_grouping_warning(code: str, grouping_counts: dict[str, int]) -> di
         "pdf_grouping_confidence_below_threshold": "Fret grouping confidence is below safe threshold.",
         "pdf_missing_pdf_grouping_blocks_build_ir": "Missing PDF grouping blocks build-ir from writing ScoreIR.",
         "pdf_layout_detection_requires_manual_review": "PDF layout grouping is unsafe and requires manual review.",
+
+        # Refined blocker taxonomy messages
+        "pdf_drawn_system_not_detected": "Drawn tab system was not detected or resolved.",
+        "pdf_drawn_system_ambiguous": "Tab system layout vertical ordering is ambiguous.",
+        "pdf_drawn_staff_lines_unresolved": "Drawn staff lines are fragmented, overlapping, or unresolved.",
+        "pdf_ascii_system_detected": "ASCII tab system block was detected.",
+        "pdf_ascii_system_measure_boundaries_missing": "ASCII blocks lack aligned bar separators to define measure boundaries.",
+        "pdf_ascii_system_timing_unavailable": "ASCII blocks lack safe timing or alignment evidence.",
+        "pdf_system_detected_bar_detection_missing": "System detection succeeded, but bar/barline detection is missing.",
+        "pdf_system_detection_succeeded_but_grouping_incomplete": "System detection succeeded, but overall layout grouping remains partial or unsafe.",
+        "pdf_input_class_ascii_tab_requires_alignment": "ASCII-tab input class requires an alignment sidecar.",
+        "pdf_input_class_drawn_tab_requires_barlines": "Drawn-tab input class requires visible barlines.",
+        "pdf_system_detection_not_enough_for_build_ir": "PDF system detection is incomplete and not safe to build IR.",
     }
     return {
         "code": code,
