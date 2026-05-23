@@ -268,6 +268,18 @@ def grouping_status_for_tabraw(tabraw: dict[str, Any]) -> str:
         "pdf_boundary_candidate_blocks_full_grouping",
         "pdf_full_grouping_requires_all_systems_boxed",
         "pdf_grouping_complete_all_playable_candidates_assigned",
+
+        # New Phase 8 Edge System Boundary Fallback Codes
+        "pdf_bar_box_inferred_edge_boundary",
+        "pdf_bar_box_inferred_left_boundary",
+        "pdf_bar_box_inferred_right_boundary",
+        "pdf_bar_box_edge_boundary_fallback_used",
+        "pdf_bar_box_edge_boundary_fallback_rejected",
+        "pdf_bar_box_edge_boundary_ambiguous",
+        "pdf_bar_box_inferred_boundary_too_narrow",
+        "pdf_bar_box_inferred_boundary_candidate_ambiguous",
+        "pdf_bar_box_inferred_boundary_requires_clear_system_edge",
+        "pdf_bar_box_inferred_boundary_not_enough_for_build_ir",
     }
 
     if warning_codes.intersection(unsupported_codes):
@@ -391,8 +403,21 @@ def write_grouping_diagnostics_html(path: str | Path, report: dict[str, Any]) ->
                 "pdf_candidate_near_missing_bar_boundary",
                 "pdf_boundary_candidate_blocks_full_grouping",
                 "pdf_full_grouping_requires_all_systems_boxed",
+                "pdf_bar_box_inferred_edge_boundary",
+                "pdf_bar_box_inferred_left_boundary",
+                "pdf_bar_box_inferred_right_boundary",
+                "pdf_bar_box_edge_boundary_fallback_used",
+                "pdf_bar_box_edge_boundary_fallback_rejected",
+                "pdf_bar_box_edge_boundary_ambiguous",
+                "pdf_bar_box_inferred_boundary_too_narrow",
+                "pdf_bar_box_inferred_boundary_candidate_ambiguous",
+                "pdf_bar_box_inferred_boundary_requires_clear_system_edge",
+                "pdf_bar_box_inferred_boundary_not_enough_for_build_ir",
             )):
-                hint_text = "Accepted barlines exist, but safe bar boxes could not be constructed or candidates could not be assigned."
+                if "pdf_bar_box_edge_boundary_fallback_rejected" in warnings:
+                    hint_text = "A missing edge boundary was inferred only because the system edge and candidate assignment were unambiguous. Fallback was rejected because layout constraints were violated."
+                else:
+                    hint_text = "Accepted barlines exist, but safe bar boxes could not be constructed or candidates could not be assigned."
             else:
                 hint_text = "Barline candidates exist but do not safely cross enough of the tab staff."
         else:

@@ -1960,6 +1960,18 @@ def _tabraw_grouping_risk(tabraw: TabRaw) -> dict[str, object] | None:
             "pdf_boundary_candidate_blocks_full_grouping",
             "pdf_full_grouping_requires_all_systems_boxed",
             "pdf_grouping_complete_all_playable_candidates_assigned",
+
+            # New Phase 8 Edge System Boundary Fallback Codes
+            "pdf_bar_box_inferred_edge_boundary",
+            "pdf_bar_box_inferred_left_boundary",
+            "pdf_bar_box_inferred_right_boundary",
+            "pdf_bar_box_edge_boundary_fallback_used",
+            "pdf_bar_box_edge_boundary_fallback_rejected",
+            "pdf_bar_box_edge_boundary_ambiguous",
+            "pdf_bar_box_inferred_boundary_too_narrow",
+            "pdf_bar_box_inferred_boundary_candidate_ambiguous",
+            "pdf_bar_box_inferred_boundary_requires_clear_system_edge",
+            "pdf_bar_box_inferred_boundary_not_enough_for_build_ir",
         }
     ]
     counts["tabraw_warning_codes"] = counts["warning_codes"]
@@ -2075,6 +2087,14 @@ def _tabraw_unsafe_grouping_warning_codes(tabraw: TabRaw) -> list[str]:
         "pdf_boundary_candidate_blocks_full_grouping",
         "pdf_full_grouping_requires_all_systems_boxed",
         "pdf_grouping_complete_all_playable_candidates_assigned",
+
+        # New Phase 8 Edge System Boundary Fallback Codes
+        "pdf_bar_box_edge_boundary_fallback_rejected",
+        "pdf_bar_box_edge_boundary_ambiguous",
+        "pdf_bar_box_inferred_boundary_too_narrow",
+        "pdf_bar_box_inferred_boundary_candidate_ambiguous",
+        "pdf_bar_box_inferred_boundary_requires_clear_system_edge",
+        "pdf_bar_box_inferred_boundary_not_enough_for_build_ir",
     }
     return sorted({str(warning.get("code")) for warning in tabraw.warnings if warning.get("code") in unsafe})
 
