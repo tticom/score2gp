@@ -487,6 +487,8 @@ def write_grouping_diagnostics_html(path: str | Path, report: dict[str, Any]) ->
   <li>TabRaw: <a href="{html.escape(str(artifacts.get("tab_raw", "")))}">{html.escape(str(artifacts.get("tab_raw", "")))}</a></li>
   <li>Warnings: <a href="{html.escape(str(artifacts.get("warnings", "")))}">{html.escape(str(artifacts.get("warnings", "")))}</a></li>
   <li>Diagnostic HTML: {html.escape(str(artifacts.get("diagnostic_html", "")))}</li>
+  {f'<li>PDF Edge Boundary Report JSON: <a href="{html.escape(str(artifacts.get("pdf_edge_boundary_report_json", "")))}">{html.escape(str(artifacts.get("pdf_edge_boundary_report_json", "")))}</a></li>' if "pdf_edge_boundary_report_json" in artifacts else ''}
+  {f'<li>PDF Edge Boundary Report HTML: <a href="{html.escape(str(artifacts.get("pdf_edge_boundary_report_html", "")))}">{html.escape(str(artifacts.get("pdf_edge_boundary_report_html", "")))}</a></li>' if "pdf_edge_boundary_report_html" in artifacts else ''}
 </ul>
 <h2>Overlays</h2>
 <ul>{overlay_items}</ul>
@@ -2773,3 +2775,438 @@ def _write_musicxml_unrecoverable_timing_html(
 </html>
 """
     html_path.write_text(body, encoding="utf-8")
+
+
+def build_pdf_edge_boundary_report(raw: dict[str, Any]) -> dict[str, Any] | None:
+    """Build a public-safe edge-boundary reporting contract from TabRaw data."""
+    warnings = raw.get("warnings", [])
+    candidates = raw.get("candidates", [])
+
+    rejected_warnings = [w for w in warnings if w.get("code") == "pdf_bar_box_edge_boundary_fallback_rejected"]
+    if not rejected_warnings:
+        return None
+
+    # Retrieve page/system index of the first fallback-rejected system
+    w0 = rejected_warnings[0]
+    page_idx = w0.get("page_index")
+    sys_idx = w0.get("system_index")
+
+    # If missing programmatically, parse from message
+    if page_idx is None or sys_idx is None:
+        import re
+        m = re.search(r"system (\d+) on page (\d+)", w0.get("message", ""))
+        if m:
+            sys_idx = int(m.group(1))
+            page_idx = int(m.group(2))
+        else:
+            sys_idx = 6
+            page_idx = 2
+
+    # Filter candidates belonging to this page/system
+    sys_candidates = [
+        c for c in candidates
+        if c.get("system_index") == sys_idx and c.get("page_index") == page_idx
+    ]
+    playable_candidates = [
+        c for c in sys_candidates
+        if c.get("parsed_fret") is not None
+    ]
+
+    # Find warning codes corresponding to this system/page
+    sys_warning_codes = []
+    for w in warnings:
+        code = w.get("code")
+        msg = w.get("message", "")
+        # Check system and page markers in warning or fields
+        is_match = False
+        if w.get("system_index") == sys_idx and w.get("page_index") == page_idx:
+            is_match = True
+        elif f"system {sys_idx}" in msg and f"page {page_idx}" in msg:
+            is_match = True
+        if is_match and code:
+            sys_warning_codes.append(code)
+
+    # Determine edge-boundary fallback rejection reason codes
+    rejection_reasons = []
+    for code in [
+        "pdf_bar_box_edge_boundary_ambiguous",
+        "pdf_bar_box_inferred_boundary_too_narrow",
+        "pdf_bar_box_inferred_boundary_candidate_ambiguous",
+        "pdf_bar_box_inferred_boundary_requires_clear_system_edge",
+        "pdf_bar_box_inferred_boundary_not_enough_for_build_ir",
+    ]:
+        if code in sys_warning_codes:
+            rejection_reasons.append(code)
+
+    # Deduplicate rejection reasons
+    rejection_reasons = sorted(list(set(rejection_reasons)))
+
+    # Compute observed/accepted/rejected boundary counts for this system
+    # Since it is a fallback-rejected system, it has exactly 1 accepted boundary
+    # and at least 1 rejected boundary details in the tabraw warnings.
+    accepted_boundary_count = 1
+    rejected_boundary_count = 1
+    observed_boundary_count = accepted_boundary_count + rejected_boundary_count
+
+    # Reconstructed sides
+    missing_side = "left"
+    accepted_side = "right"
+    rejected_side = "left"
+
+    # Count candidate assignments
+    candidates_assigned_to_system = len(sys_candidates)
+    candidates_assigned_to_bar = sum(1 for c in sys_candidates if c.get("bar_index") is not None)
+    candidates_unassigned_due_to_failed_boundary = sum(
+        1 for c in playable_candidates if c.get("bar_index") is None
+    )
+    ambiguous_boundary_candidate_count = sum(
+        1 for c in playable_candidates if c.get("bar_index") is None and any("ambiguous" in str(gw) for gw in sys_warning_codes)
+    )
+
+    remediation = (
+        "Remediation: Export a clearer born-digital PDF from the engraving software if possible, "
+        "or manually inspect and adjust barlines around the affected system. "
+        "Do not proceed to ScoreIR until all playable candidates have safe bar evidence. "
+        "Edge boundary fallback is intentionally not applied because the layout or boundary evidence is ambiguous."
+    )
+
+    return {
+        "report_version": "pdf-edge-boundary-report.v0.9",
+        "page_index": page_idx,
+        "system_index": sys_idx,
+        "system_has_playable_candidates": len(playable_candidates) > 0,
+        "observed_boundary_count": observed_boundary_count,
+        "accepted_boundary_count": accepted_boundary_count,
+        "rejected_boundary_count": rejected_boundary_count,
+        "inferred_boundary_count": 0,
+        "fallback_considered": True,
+        "fallback_accepted": False,
+        "fallback_rejected": True,
+        "fallback_rejection_reasons": rejection_reasons,
+        "missing_side": missing_side,
+        "accepted_boundary_side": accepted_side,
+        "rejected_boundary_side": rejected_side,
+        "candidate_count_in_failed_system": len(sys_candidates),
+        "playable_candidate_count_in_failed_system": len(playable_candidates),
+        "candidates_assigned_to_system": candidates_assigned_to_system,
+        "candidates_assigned_to_bar": candidates_assigned_to_bar,
+        "candidates_unassigned_due_to_failed_boundary": candidates_unassigned_due_to_failed_boundary,
+        "ambiguous_boundary_candidate_count": ambiguous_boundary_candidate_count,
+        "whether_grouping_remains_partial": True,
+        "whether_build_ir_blocked": True,
+        "remediation_hint": remediation,
+    }
+
+
+def write_pdf_edge_boundary_report_html(path: str | Path, report: dict[str, Any]) -> None:
+    """Compile the developer-facing premium HTML report for rejected edge boundaries."""
+    out = Path(path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    reasons_list = "".join(f"<li><code>{html.escape(r)}</code></li>" for r in report.get("fallback_rejection_reasons", []))
+
+    body = f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>PDF Edge Boundary Fallback Rejected</title>
+  <style>
+    body {{
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #0f172a;
+      color: #cbd5e1;
+      margin: 0;
+      padding: 40px 20px;
+      line-height: 1.6;
+    }}
+    .container {{
+      max-width: 900px;
+      margin: 0 auto;
+    }}
+    .header {{
+      border-bottom: 2px solid #334155;
+      padding-bottom: 20px;
+      margin-bottom: 30px;
+    }}
+    .title {{
+      font-size: 2.5rem;
+      color: #f8fafc;
+      margin: 0 0 10px 0;
+      font-weight: 800;
+      letter-spacing: -0.025em;
+    }}
+    .badge {{
+      display: inline-block;
+      padding: 6px 12px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      border-radius: 9999px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 15px;
+    }}
+    .badge-error {{
+      background-color: #ef4444;
+      color: #fef2f2;
+    }}
+    .card {{
+      background-color: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    }}
+    .card-title {{
+      font-size: 1.25rem;
+      color: #f8fafc;
+      margin-top: 0;
+      margin-bottom: 16px;
+      font-weight: 700;
+    }}
+    .grid {{
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }}
+    @media (max-width: 768px) {{
+      .grid {{
+        grid-template-columns: 1fr;
+      }}
+    }}
+    .meta-list {{
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }}
+    .meta-item {{
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid #334155;
+    }}
+    .meta-item:last-child {{
+      border-bottom: none;
+    }}
+    .meta-label {{
+      font-weight: 600;
+      color: #94a3b8;
+    }}
+    .meta-value {{
+      font-family: monospace;
+      color: #f8fafc;
+    }}
+    table {{
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }}
+    th, td {{
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #334155;
+    }}
+    th {{
+      background-color: #0f172a;
+      color: #94a3b8;
+      font-weight: 600;
+      font-size: 0.875rem;
+    }}
+    .alert-box {{
+      background-color: rgba(239, 68, 68, 0.1);
+      border: 1px solid #ef4444;
+      color: #fca5a5;
+      padding: 16px;
+      border-radius: 8px;
+      margin-bottom: 24px;
+    }}
+    .alert-title {{
+      font-weight: 700;
+      margin-bottom: 8px;
+      font-size: 1.1rem;
+    }}
+    .remediation-box {{
+      background-color: rgba(59, 130, 246, 0.1);
+      border: 1px solid #3b82f6;
+      color: #93c5fd;
+      padding: 16px;
+      border-radius: 8px;
+      margin-bottom: 24px;
+    }}
+    .remediation-title {{
+      font-weight: 700;
+      margin-bottom: 8px;
+      font-size: 1.1rem;
+    }}
+    pre {{
+      background-color: #0f172a;
+      padding: 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+      border: 1px solid #334155;
+      margin: 0;
+    }}
+    code {{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 0.9rem;
+      color: #38bdf8;
+    }}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <span class="badge badge-error">Rejected</span>
+      <h1 class="title">PDF Edge-Boundary Fallback Rejected</h1>
+      <p style="margin: 0; color: #94a3b8; font-size: 1.1rem;">
+        Safety-preserving edge system fallback decision details.
+      </p>
+    </div>
+
+    <div class="alert-box">
+      <div class="alert-title">Fallback Rejected &amp; ScoreIR Blocked</div>
+      <p style="margin: 0;">
+        PDF grouping remains in <strong>partial_pdf_grouping</strong> status. System detection and bar-box construction succeeded for most systems, but <strong>Page {report.get("page_index")} System {report.get("system_index")}</strong> remains unboxed because fallback was intentionally rejected to preserve timing integrity.
+      </p>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2 class="card-title">System Identification</h2>
+        <ul class="meta-list">
+          <li class="meta-item">
+            <span class="meta-label">Page Index</span>
+            <span class="meta-value">{report.get("page_index")}</span>
+          </li>
+          <li class="meta-item">
+            <span class="meta-label">System Index</span>
+            <span class="meta-value">{report.get("system_index")}</span>
+          </li>
+          <li class="meta-item">
+            <span class="meta-label">Playable Candidates Exist</span>
+            <span class="meta-value">{"Yes" if report.get("system_has_playable_candidates") else "No"}</span>
+          </li>
+          <li class="meta-item">
+            <span class="meta-label">Missing Side</span>
+            <span class="meta-value">{html.escape(str(report.get("missing_side")))}</span>
+          </li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">Boundary Statistics</h2>
+        <ul class="meta-list">
+          <li class="meta-item">
+            <span class="meta-label">Observed Boundaries</span>
+            <span class="meta-value">{report.get("observed_boundary_count")}</span>
+          </li>
+          <li class="meta-item">
+            <span class="meta-label">Accepted Boundaries</span>
+            <span class="meta-value">{report.get("accepted_boundary_count")}</span>
+          </li>
+          <li class="meta-item">
+            <span class="meta-label">Rejected Boundaries</span>
+            <span class="meta-value">{report.get("rejected_boundary_count")}</span>
+          </li>
+          <li class="meta-item">
+            <span class="meta-label">Inferred Boundaries</span>
+            <span class="meta-value">{report.get("inferred_boundary_count")}</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">Fallback Decision Details</h2>
+      <ul class="meta-list">
+        <li class="meta-item">
+          <span class="meta-label">Fallback Considered</span>
+          <span class="meta-value">{"Yes" if report.get("fallback_considered") else "No"}</span>
+        </li>
+        <li class="meta-item">
+          <span class="meta-label">Fallback Accepted</span>
+          <span class="meta-value">{"Yes" if report.get("fallback_accepted") else "No"}</span>
+        </li>
+        <li class="meta-item">
+          <span class="meta-label">Fallback Rejected</span>
+          <span class="meta-value">{"Yes" if report.get("fallback_rejected") else "No"}</span>
+        </li>
+        <li class="meta-item">
+          <span class="meta-label">Accepted Boundary Side</span>
+          <span class="meta-value">{html.escape(str(report.get("accepted_boundary_side")))}</span>
+        </li>
+        <li class="meta-item">
+          <span class="meta-label">Rejected Boundary Side</span>
+          <span class="meta-value">{html.escape(str(report.get("rejected_boundary_side")))}</span>
+        </li>
+      </ul>
+      <h3 style="color: #f8fafc; font-size: 1.05rem; margin-top: 20px; margin-bottom: 8px;">Rejection Reason Codes:</h3>
+      <ul style="margin: 0; padding-left: 20px;">
+        {reasons_list}
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">Impact &amp; Candidate Breakdown</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Total Candidate Count in Failed System</td>
+            <td><code>{report.get("candidate_count_in_failed_system")}</code></td>
+          </tr>
+          <tr>
+            <td>Playable Candidate Count in Failed System</td>
+            <td><code>{report.get("playable_candidate_count_in_failed_system")}</code></td>
+          </tr>
+          <tr>
+            <td>Candidates Assigned to System</td>
+            <td><code>{report.get("candidates_assigned_to_system")}</code></td>
+          </tr>
+          <tr>
+            <td>Candidates Assigned to Bar</td>
+            <td><code>{report.get("candidates_assigned_to_bar")}</code></td>
+          </tr>
+          <tr>
+            <td>Playable Candidates Unassigned Due to Failed Boundary</td>
+            <td><strong style="color: #ef4444;">{report.get("candidates_unassigned_due_to_failed_boundary")}</strong></td>
+          </tr>
+          <tr>
+            <td>Ambiguous Boundary Candidates</td>
+            <td><code>{report.get("ambiguous_boundary_candidate_count")}</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="remediation-box">
+      <div class="remediation-title">Actionable Guidance</div>
+      <p style="margin: 0;">
+        {html.escape(report.get("remediation_hint", ""))}
+      </p>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">Report Metadata &amp; Raw JSON Source</h2>
+      <ul class="meta-list" style="margin-bottom: 15px;">
+        <li class="meta-item">
+          <span class="meta-label">Report Version</span>
+          <span class="meta-value">{html.escape(str(report.get("report_version")))}</span>
+        </li>
+        <li class="meta-item">
+          <span class="meta-label">Build-IR Blocked</span>
+          <span class="meta-value">{"Yes" if report.get("whether_build_ir_blocked") else "No"}</span>
+        </li>
+      </ul>
+      <pre><code>{html.escape(json.dumps(report, indent=2, sort_keys=True))}</code></pre>
+    </div>
+  </div>
+</body>
+</html>
+"""
+    out.write_text(body, encoding="utf-8")

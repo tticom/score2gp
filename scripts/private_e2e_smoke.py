@@ -145,6 +145,9 @@ def run_pipeline_for_input(
         "warnings.json",
         "musicxml-unrecoverable-timing-report.json",
         "musicxml-unrecoverable-timing-report.html",
+        "pdf-edge-boundary-report.json",
+        "pdf-edge-boundary-report.html",
+        "grouping-diagnostics.html",
     ]:
         file_path = out_dir / filename
         if file_path.exists():
