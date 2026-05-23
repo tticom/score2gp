@@ -399,6 +399,11 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                 meta["detected_bar_boxes"] += len(system.bar_boxes)
                 meta["detected_string_lines"] += len(system.line_ys)
 
+            drawings = page.get_drawings()
+            segments = list(_drawing_segments(drawings))
+            has_horizontal = any(abs(s.y0 - s.y1) <= 2.0 and abs(s.x1 - s.x0) >= 15.0 for s in segments)
+            text_blocks = [b for b in page.get_text("blocks") if b[4].strip()]
+
             if not systems:
                 warnings.append(
                     {
@@ -407,6 +412,26 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                         "severity": "info",
                     }
                 )
+                if drawings and text_blocks:
+                    warnings.append({
+                        "code": "pdf_text_geometry_present_but_no_safe_system",
+                        "message": f"Both text and drawn geometry are present, but no safe tab system could be inferred on page {page_number}.",
+                        "severity": "warning",
+                        "grouping_status": "missing",
+                    })
+                    warnings.append({
+                        "code": "pdf_drawn_geometry_present_but_staff_unresolved",
+                        "message": f"Drawn geometry exists, but staff lines could not be resolved into a tab system on page {page_number}.",
+                        "severity": "warning",
+                        "grouping_status": "missing",
+                    })
+                if has_horizontal:
+                    warnings.append({
+                        "code": "pdf_tab_staff_lines_fragmented",
+                        "message": f"Tab staff lines are fragmented or broken on page {page_number}.",
+                        "severity": "warning",
+                        "grouping_status": "missing",
+                    })
             else:
                 # Check for vertically overlapping systems on the page
                 has_overlap = False
@@ -428,8 +453,20 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                         "grouping_status": "ambiguous",
                     })
                     warnings.append({
+                        "code": "pdf_system_order_ambiguous",
+                        "message": f"System order is ambiguous across visually close systems on page {page_number}.",
+                        "severity": "warning",
+                        "grouping_status": "ambiguous",
+                    })
+                    warnings.append({
                         "code": "pdf_tab_staff_ambiguous",
                         "message": "Tab systems layout is ambiguous due to vertical overlap.",
+                        "severity": "warning",
+                        "grouping_status": "ambiguous",
+                    })
+                    warnings.append({
+                        "code": "pdf_system_bbox_ambiguous",
+                        "message": "Tab system bounding boxes are overlapping or ambiguous on page {page_number}.",
                         "severity": "warning",
                         "grouping_status": "ambiguous",
                     })
@@ -481,16 +518,23 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                 if any(v is None for v in bbox_values) or (bbox_values[0] == 0.0 and bbox_values[2] == 0.0):
                     assignment_warnings.append("pdf_text_candidate_without_geometry")
 
+                is_fret_candidate = parse_fret_text(raw_text) is not None
                 if system is not None:
                     # Check if candidate falls outside strict horizontal bounds of the system
                     if x < system.x0 or x > system.x1:
                         assignment_warnings.append("pdf_candidate_outside_system")
                     line_index, string, string_distance, string_warnings = system.string_for_y(y)
+                    if string is None and is_fret_candidate:
+                        assignment_warnings.append("pdf_candidates_unassigned_to_string")
                     assignment_warnings.extend(string_warnings)
                     bar_index, bar_warnings = system.bar_for_x(x)
+                    if bar_index is None and is_fret_candidate:
+                        assignment_warnings.append("pdf_candidates_unassigned_to_bar")
                     assignment_warnings.extend(bar_warnings)
                 else:
                     bar_index = None
+                    if is_fret_candidate:
+                        assignment_warnings.append("pdf_candidates_unassigned_to_system")
                 bar_bounds = system.bar_bounds_for_x(x) if system is not None else None
                 confidence = _candidate_confidence(raw_text, system, string, bar_index, x)
                 if assignment_warnings:
@@ -1035,6 +1079,13 @@ def _append_grouping_warnings(raw: dict[str, Any], meta: dict[str, int] | None =
             "severity": "warning",
             "grouping_status": "missing",
         })
+        if len(fret_candidates) > 0:
+            raw["warnings"].append({
+                "code": "pdf_tab_candidates_present_but_system_not_detected",
+                "message": "Playable fret candidates present, but no tab system detected.",
+                "severity": "warning",
+                "grouping_status": "missing",
+            })
 
     if 0 < grouping_counts["fret_candidates_with_system"] < len(fret_candidates):
         raw["warnings"].append({
@@ -1060,7 +1111,34 @@ def _append_grouping_warnings(raw: dict[str, Any], meta: dict[str, int] | None =
             "severity": "warning",
             "grouping_status": "partial" if unsafe_codes else "missing",
         })
-        # Re-evaluate unsafe codes to include the new one
+        raw["warnings"].append({
+            "code": "pdf_missing_pdf_grouping_blocks_build_ir",
+            "message": "Missing PDF grouping blocks build-ir from writing ScoreIR.",
+            "severity": "warning",
+            "grouping_status": "missing",
+        })
+        raw["warnings"].append({
+            "code": "pdf_layout_detection_requires_manual_review",
+            "message": "PDF layout grouping is unsafe and requires manual review.",
+            "severity": "warning",
+            "grouping_status": "partial" if unsafe_codes else "missing",
+        })
+        if len(fret_candidates) > 0 and unsafe_codes:
+            raw["warnings"].append({
+                "code": "pdf_partial_grouping_with_playable_candidates",
+                "message": "Playable candidates exist but grouping is partial and unsafe.",
+                "severity": "warning",
+                "grouping_status": "partial",
+            })
+        has_low_confidence = any(c.get("confidence", 1.0) < 0.7 for c in fret_candidates)
+        if has_low_confidence:
+            raw["warnings"].append({
+                "code": "pdf_grouping_confidence_below_threshold",
+                "message": "Fret grouping confidence is below safe threshold.",
+                "severity": "warning",
+                "grouping_status": "partial",
+            })
+        # Re-evaluate unsafe codes to include the new ones
         unsafe_codes = _unsafe_grouping_codes(fret_candidates, raw.get("warnings", []))
 
     if unsafe_codes:
@@ -1122,6 +1200,23 @@ def _unsafe_grouping_codes(fret_candidates: list[dict[str, Any]], page_warnings:
         "pdf_text_candidate_without_geometry",
         "pdf_ascii_and_drawn_layout_conflict",
         "pdf_grouping_not_safe_for_build_ir",
+
+        # New Phase 4/8 Codes
+        "pdf_text_geometry_present_but_no_safe_system",
+        "pdf_tab_candidates_present_but_system_not_detected",
+        "pdf_drawn_geometry_present_but_staff_unresolved",
+        "pdf_tab_staff_lines_fragmented",
+        "pdf_tab_staff_lines_overlapping",
+        "pdf_tab_staff_spacing_inconsistent",
+        "pdf_system_bbox_ambiguous",
+        "pdf_system_order_ambiguous",
+        "pdf_candidates_unassigned_to_system",
+        "pdf_candidates_unassigned_to_bar",
+        "pdf_candidates_unassigned_to_string",
+        "pdf_partial_grouping_with_playable_candidates",
+        "pdf_grouping_confidence_below_threshold",
+        "pdf_missing_pdf_grouping_blocks_build_ir",
+        "pdf_layout_detection_requires_manual_review",
     }
     codes: set[str] = set()
     for candidate in fret_candidates:
@@ -1165,6 +1260,23 @@ def _specific_grouping_warning(code: str, grouping_counts: dict[str, int]) -> di
         "pdf_text_candidate_without_geometry": "Candidate text lacks valid geometry.",
         "pdf_ascii_and_drawn_layout_conflict": "Both ASCII blocks and drawn systems exist on page.",
         "pdf_grouping_not_safe_for_build_ir": "PDF grouping contains warnings and is not safe to build IR.",
+
+        # New messages
+        "pdf_text_geometry_present_but_no_safe_system": "Text and drawn geometry both present, but no safe system box can be inferred.",
+        "pdf_tab_candidates_present_but_system_not_detected": "Playable fret candidates present, but no tab system detected.",
+        "pdf_drawn_geometry_present_but_staff_unresolved": "Drawn geometry present, but staff unresolved.",
+        "pdf_tab_staff_lines_fragmented": "Six-ish tab lines present but fragmented or broken so staff is unresolved.",
+        "pdf_tab_staff_lines_overlapping": "Tab staff lines are overlapping and unresolved.",
+        "pdf_tab_staff_spacing_inconsistent": "Tab staff spacing is inconsistent and unresolved.",
+        "pdf_system_bbox_ambiguous": "Tab system bounding boxes are overlapping or ambiguous.",
+        "pdf_system_order_ambiguous": "System order is ambiguous across visually close systems.",
+        "pdf_candidates_unassigned_to_system": "Candidates inside page but unassigned to any system.",
+        "pdf_candidates_unassigned_to_bar": "Candidates inside a detected system but outside all detected bars.",
+        "pdf_candidates_unassigned_to_string": "Candidates inside a detected system/bar but not assignable to a string.",
+        "pdf_partial_grouping_with_playable_candidates": "Playable candidates exist but grouping is partial and unsafe.",
+        "pdf_grouping_confidence_below_threshold": "Fret grouping confidence is below safe threshold.",
+        "pdf_missing_pdf_grouping_blocks_build_ir": "Missing PDF grouping blocks build-ir from writing ScoreIR.",
+        "pdf_layout_detection_requires_manual_review": "PDF layout grouping is unsafe and requires manual review.",
     }
     return {
         "code": code,

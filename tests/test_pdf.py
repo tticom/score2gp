@@ -35,6 +35,14 @@ NEW_MULTI_SYSTEM_PDF = Path("tests/fixtures/pdf/generated_pdf_multi_system_order
 NEW_CONFLICT_LAYOUT_PDF = Path("tests/fixtures/pdf/generated_pdf_ascii_and_drawn_layout_conflict.pdf")
 NEW_PROSE_LEGEND_PDF = Path("tests/fixtures/pdf/generated_pdf_prose_legend_text.pdf")
 
+NEW_TEXT_GEOM_NO_SYSTEM_PDF = Path("tests/fixtures/pdf/generated_pdf_text_geometry_present_but_no_safe_system.pdf")
+NEW_TAB_CANDIDATES_NO_SYSTEM_PDF = Path("tests/fixtures/pdf/generated_pdf_tab_candidates_present_but_system_not_detected.pdf")
+NEW_LINES_FRAGMENTED_PDF = Path("tests/fixtures/pdf/generated_pdf_tab_staff_lines_fragmented.pdf")
+NEW_CANDIDATES_BETWEEN_SYSTEMS_PDF = Path("tests/fixtures/pdf/generated_pdf_candidates_between_systems.pdf")
+NEW_CANDIDATES_UNASSIGNED_TO_STRING_PDF = Path("tests/fixtures/pdf/generated_pdf_candidates_unassigned_to_string.pdf")
+NEW_ORDER_AMBIGUOUS_CLOSE_PDF = Path("tests/fixtures/pdf/generated_pdf_system_order_ambiguous_close.pdf")
+NEW_MIXED_PROSE_TAB_NUMBERS_PDF = Path("tests/fixtures/pdf/generated_pdf_mixed_prose_tab_numbers.pdf")
+
 
 def test_pdf_inspection_reports_missing_pymupdf_or_empty_pdf(tmp_path) -> None:
     pdf = tmp_path / "not-really.pdf"
@@ -779,3 +787,131 @@ def test_pdf_prose_legend_text_diagnosed(tmp_path) -> None:
     assert not ir_path.exists()
     payload = raised.value.to_diagnostics_payload()
     assert payload["details"]["playable_fret_candidate_count"] == 0
+
+
+def test_pdf_text_geometry_present_but_no_safe_system_diagnosed(tmp_path) -> None:
+    assert NEW_TEXT_GEOM_NO_SYSTEM_PDF.exists()
+    tabraw_path = tmp_path / "text_geom_no_system.tabraw.json"
+    ir_path = tmp_path / "text_geom_no_system.ir.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(NEW_TEXT_GEOM_NO_SYSTEM_PDF, tabraw_path))
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+    assert "pdf_text_geometry_present_but_no_safe_system" in warning_codes
+    assert "pdf_drawn_geometry_present_but_staff_unresolved" in warning_codes
+
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+
+    assert not ir_path.exists()
+    payload = raised.value.to_diagnostics_payload()
+    assert "pdf_text_geometry_present_but_no_safe_system" in payload["details"]["tabraw_warning_codes"]
+
+
+def test_pdf_tab_candidates_present_but_system_not_detected_diagnosed(tmp_path) -> None:
+    assert NEW_TAB_CANDIDATES_NO_SYSTEM_PDF.exists()
+    tabraw_path = tmp_path / "tab_cands_no_system.tabraw.json"
+    ir_path = tmp_path / "tab_cands_no_system.ir.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(NEW_TAB_CANDIDATES_NO_SYSTEM_PDF, tabraw_path))
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+    assert "pdf_tab_candidates_present_but_system_not_detected" in warning_codes
+
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+
+    assert not ir_path.exists()
+    payload = raised.value.to_diagnostics_payload()
+    assert "pdf_tab_candidates_present_but_system_not_detected" in payload["details"]["tabraw_warning_codes"]
+
+
+def test_pdf_tab_staff_lines_fragmented_diagnosed(tmp_path) -> None:
+    assert NEW_LINES_FRAGMENTED_PDF.exists()
+    tabraw_path = tmp_path / "fragmented.tabraw.json"
+    ir_path = tmp_path / "fragmented.ir.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(NEW_LINES_FRAGMENTED_PDF, tabraw_path))
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+    assert "pdf_tab_staff_lines_fragmented" in warning_codes
+
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+
+    assert not ir_path.exists()
+    payload = raised.value.to_diagnostics_payload()
+    assert "pdf_tab_staff_lines_fragmented" in payload["details"]["tabraw_warning_codes"]
+
+
+def test_pdf_candidates_between_systems_diagnosed(tmp_path) -> None:
+    assert NEW_CANDIDATES_BETWEEN_SYSTEMS_PDF.exists()
+    tabraw_path = tmp_path / "between_systems.tabraw.json"
+    ir_path = tmp_path / "between_systems.ir.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(NEW_CANDIDATES_BETWEEN_SYSTEMS_PDF, tabraw_path))
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+    # Fret at Y=195 is far from any string in either system, hence unassigned
+    assert "pdf_candidates_unassigned_to_string" in warning_codes or "pdf_candidates_unassigned_to_system" in warning_codes
+
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+
+    assert not ir_path.exists()
+    payload = raised.value.to_diagnostics_payload()
+    assert any(w in payload["details"]["tabraw_warning_codes"] for w in ("pdf_candidates_unassigned_to_string", "pdf_candidates_unassigned_to_system"))
+
+
+def test_pdf_candidates_unassigned_to_string_diagnosed(tmp_path) -> None:
+    assert NEW_CANDIDATES_UNASSIGNED_TO_STRING_PDF.exists()
+    tabraw_path = tmp_path / "unassigned_string.tabraw.json"
+    ir_path = tmp_path / "unassigned_string.ir.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(NEW_CANDIDATES_UNASSIGNED_TO_STRING_PDF, tabraw_path))
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+    assert "pdf_candidates_unassigned_to_string" in warning_codes
+
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+
+    assert not ir_path.exists()
+    payload = raised.value.to_diagnostics_payload()
+    assert "pdf_candidates_unassigned_to_string" in payload["details"]["tabraw_warning_codes"]
+
+
+def test_pdf_system_order_ambiguous_close_diagnosed(tmp_path) -> None:
+    assert NEW_ORDER_AMBIGUOUS_CLOSE_PDF.exists()
+    tabraw_path = tmp_path / "ambiguous_close.tabraw.json"
+    ir_path = tmp_path / "ambiguous_close.ir.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(NEW_ORDER_AMBIGUOUS_CLOSE_PDF, tabraw_path))
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+    assert "pdf_system_order_ambiguous" in warning_codes or "pdf_multi_system_order_ambiguous" in warning_codes
+    assert "pdf_system_bbox_ambiguous" in warning_codes
+
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+
+    assert not ir_path.exists()
+    payload = raised.value.to_diagnostics_payload()
+    assert "pdf_system_order_ambiguous" in payload["details"]["tabraw_warning_codes"] or "pdf_multi_system_order_ambiguous" in payload["details"]["tabraw_warning_codes"]
+
+
+def test_pdf_mixed_prose_tab_numbers_diagnosed(tmp_path) -> None:
+    assert NEW_MIXED_PROSE_TAB_NUMBERS_PDF.exists()
+    tabraw_path = tmp_path / "mixed_prose.tabraw.json"
+    ir_path = tmp_path / "mixed_prose.ir.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(NEW_MIXED_PROSE_TAB_NUMBERS_PDF, tabraw_path))
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+
+    # We expect some numbers like "1", "2", "3", "5" to be extracted as fret candidates
+    fret_candidates = [c for c in tabraw.candidates if c.kind == "fret"]
+    assert len(fret_candidates) > 0
+    # But since they are inside prose text with no tab systems, safe_grouping is False
+    assert all(c.raw.get("safe_grouping") is False for c in fret_candidates)
+
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+
+    assert not ir_path.exists()
+    payload = raised.value.to_diagnostics_payload()
+    assert payload["details"]["playable_fret_candidate_count"] > 0
+    assert "pdf_no_systems_detected" in payload["details"]["tabraw_warning_codes"]

@@ -129,6 +129,8 @@ def grouping_status_for_tabraw(tabraw: dict[str, Any]) -> str:
         "pdf_tab_staff_ambiguous",
         "pdf_barlines_ambiguous",
         "pdf_string_assignment_ambiguous",
+        "pdf_system_bbox_ambiguous",
+        "pdf_system_order_ambiguous",
     }
     missing_codes = {
         "pdf_no_systems_detected",
@@ -139,6 +141,13 @@ def grouping_status_for_tabraw(tabraw: dict[str, Any]) -> str:
         "pdf_string_assignment_missing",
         "pdf_grouping_not_safe_for_build_ir",
         "missing_pdf_grouping",
+        "pdf_text_geometry_present_but_no_safe_system",
+        "pdf_tab_candidates_present_but_system_not_detected",
+        "pdf_drawn_geometry_present_but_staff_unresolved",
+        "pdf_tab_staff_lines_fragmented",
+        "pdf_tab_staff_lines_overlapping",
+        "pdf_tab_staff_spacing_inconsistent",
+        "pdf_missing_pdf_grouping_blocks_build_ir",
     }
     partial_codes = {
         "partial_pdf_grouping",
@@ -153,6 +162,12 @@ def grouping_status_for_tabraw(tabraw: dict[str, Any]) -> str:
         "pdf_candidate_outside_bar",
         "pdf_candidate_between_strings",
         "pdf_text_candidate_without_geometry",
+        "pdf_candidates_unassigned_to_system",
+        "pdf_candidates_unassigned_to_bar",
+        "pdf_candidates_unassigned_to_string",
+        "pdf_partial_grouping_with_playable_candidates",
+        "pdf_grouping_confidence_below_threshold",
+        "pdf_layout_detection_requires_manual_review",
     }
 
     if warning_codes.intersection(unsupported_codes):
@@ -226,14 +241,39 @@ def write_grouping_diagnostics_html(path: str | Path, report: dict[str, Any]) ->
             verdict = "Extraction succeeded and ASCII tab rows were grouped, but timing/alignment is unavailable."
     else:
         verdict = "Extraction and grouping are present for the inspected candidates."
+
+    is_blocked = grouping_status not in ("grouped", "ascii_grouped")
+    build_ir_blocked_status = "Yes, blocked (unsafe PDF layout grouping)" if is_blocked else "No (safe grouping)"
+
+    # Text/geometry detection status
+    text_geometry_detected = "Yes" if report.get("total_text_candidate_count", 0) > 0 or report.get("inspection_kind") in ("born-digital", "mixed") else "No"
+
+    # Systems/lines/bars detection status
+    system_detection_status = "Detected" if report.get("inferred_system_count", 0) > 0 else "Missing"
+    staff_line_detection_status = "Detected" if report.get("inferred_string_assignment_count", 0) > 0 or report.get("inferred_system_count", 0) > 0 else "Missing"
+    bar_detection_status = "Detected" if report.get("inferred_bar_count", 0) > 0 else "Missing"
+    string_assignment_status = "Assigned" if report.get("inferred_string_assignment_count", 0) > 0 else "Unassigned/Missing"
+
+    # Primary and secondary layout warnings
+    warnings = report.get("warning_codes", [])
+    primary_warning = warnings[0] if warnings else "None"
+    secondary_warnings = ", ".join(warnings[1:]) if len(warnings) > 1 else "None"
+
     if not report.get("alignment_attempted"):
         alignment_note = "Alignment/build-ir was not attempted by this extraction report."
     else:
         alignment_note = "Alignment/build-ir was attempted; inspect the build diagnostics for timing and matching quality."
-    if not report.get("scoreir_written"):
-        scoreir_note = "ScoreIR was not written."
-    else:
-        scoreir_note = "ScoreIR was written."
+
+    scoreir_written = bool(report.get("scoreir_written"))
+    scoreir_note = "ScoreIR was written." if scoreir_written else "ScoreIR was not written."
+
+    remediation_hint = ""
+    if is_blocked:
+        remediation_hint = """
+        <div style="background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; padding: 12px; margin: 16px 0; border-radius: 4px;">
+            <strong>Remediation Hint:</strong> PDF layout grouping is unsafe; use a clearer born-digital fixture, improve public layout heuristics, or review manually.
+        </div>
+        """
 
     body = f"""<!doctype html>
 <html lang="en">
@@ -242,6 +282,7 @@ def write_grouping_diagnostics_html(path: str | Path, report: dict[str, Any]) ->
 <h1>PDF Grouping Diagnostics</h1>
 <p>{html.escape(verdict)}</p>
 <p>{html.escape(alignment_note)} {html.escape(scoreir_note)}</p>
+{remediation_hint}
 <h2>Grouping Status</h2>
 <dl>
   <dt>Source PDF</dt><dd>{html.escape(str(report.get("source_pdf_path", "")))}</dd>
@@ -249,6 +290,15 @@ def write_grouping_diagnostics_html(path: str | Path, report: dict[str, Any]) ->
   <dt>Input class</dt><dd>{html.escape(str(report.get("input_class", "unknown")))}</dd>
   <dt>Page count</dt><dd>{html.escape(str(report.get("page_count", 0)))}</dd>
   <dt>Grouping status</dt><dd>{html.escape(grouping_status)}</dd>
+  <dt>Text/Geometry Detected Status</dt><dd>{html.escape(text_geometry_detected)}</dd>
+  <dt>System Detection Status</dt><dd>{html.escape(system_detection_status)}</dd>
+  <dt>Staff-line Detection Status</dt><dd>{html.escape(staff_line_detection_status)}</dd>
+  <dt>Bar Detection Status</dt><dd>{html.escape(bar_detection_status)}</dd>
+  <dt>String Assignment Status</dt><dd>{html.escape(string_assignment_status)}</dd>
+  <dt>Build-IR Blocked Status</dt><dd>{html.escape(build_ir_blocked_status)}</dd>
+  <dt>ScoreIR Written Status</dt><dd>{"Yes" if scoreir_written else "No"}</dd>
+  <dt>Primary Layout Warning</dt><dd>{html.escape(primary_warning)}</dd>
+  <dt>Secondary Layout Warnings</dt><dd>{html.escape(secondary_warnings)}</dd>
 </dl>
 <h2>Candidate Counts</h2>
 <dl>
