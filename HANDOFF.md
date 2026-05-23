@@ -3,9 +3,9 @@
 ## Metadata
 - **Current Branch**: `feature/private-smoke-refresh-after-pdf-edge-system-boundary-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: N/A (to be created as Draft PR)
-- **Latest Local Commit**: N/A (will commit shortly)
-- **Latest Pushed Commit**: N/A (will push shortly)
+- **Current PR**: [PR #41](https://github.com/tticom/score2gp/pull/41) (Draft)
+- **Latest Local Commit**: `7342d21`
+- **Latest Pushed Commit**: `7342d21`
 - **Commit Subject**: Refresh private smoke after PDF edge boundary policy
 - **Working Tree Status**: Clean (except modified HANDOFF.md and TASKS.md)
 - **Tests & Checks Run**:
