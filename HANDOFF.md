@@ -3,11 +3,11 @@
 ## Metadata
 - **Current Branch**: `feature/pdf-bar-box-edge-cases-public-fixtures-v0.7`
 - **Base Branch**: `main`
-- **Current PR**: Draft PR (to be created)
-- **Latest Local Commit**: `c45621bba98654c68126e0a523bb84a5a698b9ec` (prior to committing task additions)
-- **Latest Pushed Commit**: `c45621bba98654c68126e0a523bb84a5a698b9ec`
-- **Commit Subject**: Merge PR #37 Refresh private smoke after PDF bar box construction
-- **Working Tree Status**: Modified project files staged for commit
+- **Current PR**: [PR #38](https://github.com/tticom/score2gp/pull/38) (Draft)
+- **Latest Local Commit**: `1eef37f`
+- **Latest Pushed Commit**: `1eef37f`
+- **Commit Subject**: Implement public synthetic fixtures and heuristics for PDF bar-box edge cases v0.7
+- **Working Tree Status**: Clean (after handoff sync commit)
 - **Tests & Checks Run**:
   - `python -m pytest` -> 228 passed cleanly
   - `python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
