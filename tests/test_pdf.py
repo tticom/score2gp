@@ -1458,6 +1458,71 @@ def test_synthetic_multi_system_all_valid(tmp_path) -> None:
     assert report["primary_blocker_stage"] in ("none", "timing_alignment")
 
 
+def test_synthetic_empty_system_policy(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_empty_system_policy.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "empty_policy.tabraw.json"
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {w["code"] for w in tabraw.warnings}
+    # It should not complain about partial grouping on empty systems!
+    assert "pdf_partial_grouping_one_system_unboxed" not in warning_codes
+    assert "pdf_grouping_complete" in warning_codes
+    assert tabraw.warnings[-1]["grouping_status"] == "grouped"
+
+    from score2gp.report import build_grouping_diagnostics
+    report = build_grouping_diagnostics(
+        source_pdf=pdf_path,
+        inspection={"kind": "born-digital", "page_count": 1},
+        tabraw=tabraw.model_dump(mode="json"),
+        artifacts={},
+    )
+    assert report["whether_bar_detection_succeeded"] is True
+    assert report["primary_blocker_stage"] in ("none", "timing_alignment")
+
+
+def test_synthetic_one_accepted_one_rejected(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_one_accepted_one_rejected.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "one_acc_one_rej.tabraw.json"
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {w["code"] for w in tabraw.warnings}
+    assert "pdf_bar_box_one_boundary_rejected" in warning_codes
+    assert "pdf_bar_box_edge_system_missing_boundary" in warning_codes
+    assert "pdf_candidate_near_missing_bar_boundary" in warning_codes
+
+    from score2gp.report import build_grouping_diagnostics
+    report = build_grouping_diagnostics(
+        source_pdf=pdf_path,
+        inspection={"kind": "born-digital", "page_count": 1},
+        tabraw=tabraw.model_dump(mode="json"),
+        artifacts={},
+    )
+    assert report["whether_bar_detection_succeeded"] is False
+    assert report["primary_blocker_stage"] == "bar_detection"
+
+
+def test_synthetic_two_short_barlines(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_two_short_barlines.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "two_short.tabraw.json"
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {w["code"] for w in tabraw.warnings}
+    assert "pdf_bar_box_single_system_failure" in warning_codes
+    assert "pdf_barline_short_but_near_staff_boundary" in warning_codes
+    assert "pdf_candidate_unassigned_due_to_unboxed_system" in warning_codes
+    assert "pdf_candidate_near_missing_bar_boundary" in warning_codes
+
+    from score2gp.report import build_grouping_diagnostics
+    report = build_grouping_diagnostics(
+        source_pdf=pdf_path,
+        inspection={"kind": "born-digital", "page_count": 1},
+        tabraw=tabraw.model_dump(mode="json"),
+        artifacts={},
+    )
+    assert report["whether_bar_detection_succeeded"] is False
+    assert report["primary_blocker_stage"] == "bar_detection"
+
+
 def test_build_ir_refuses_bar_box_construction_failures(tmp_path) -> None:
     unsafe_fixtures = [
         ("generated_pdf_one_accepted_barline.pdf", "pdf_bar_box_requires_two_boundaries"),
@@ -1466,6 +1531,8 @@ def test_build_ir_refuses_bar_box_construction_failures(tmp_path) -> None:
         ("generated_pdf_candidate_left_of_boxes.pdf", "pdf_candidate_unassigned_to_bar"),
         ("generated_pdf_candidate_on_boundary.pdf", "pdf_candidate_on_bar_boundary"),
         ("generated_pdf_multi_system_one_failed.pdf", "pdf_partial_grouping_one_system_unboxed"),
+        ("generated_pdf_one_accepted_one_rejected.pdf", "pdf_bar_box_one_boundary_rejected"),
+        ("generated_pdf_two_short_barlines.pdf", "pdf_bar_box_single_system_failure"),
     ]
     for filename, expected_warning in unsafe_fixtures:
         pdf_path = Path("tests/fixtures/pdf") / filename
