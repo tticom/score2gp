@@ -1,27 +1,29 @@
 # Handoff
 
 ## Metadata
-- **Current Branch**: `feature/private-smoke-refresh-after-pdf-edge-system-boundary-v0.1`
+- **Current Branch**: `feature/pdf-edge-boundary-reporting-v0.9`
 - **Base Branch**: `main`
-- **Current PR**: [PR #41](https://github.com/tticom/score2gp/pull/41) (Draft)
-- **Latest Local Commit**: `7342d21`
-- **Latest Pushed Commit**: `7342d21`
-- **Commit Subject**: Refresh private smoke after PDF edge boundary policy
-- **Working Tree Status**: Clean (except modified HANDOFF.md and TASKS.md)
+- **Current PR**: [PR #42](https://github.com/tticom/score2gp/pull/42) (Draft)
+- **Latest Local Commit**: `9443187`
+- **Latest Pushed Commit**: `9443187`
+- **Commit Subject**: Update handoff for PDF edge boundary reporting PR
+- **Working Tree Status**: Clean
 - **Tests & Checks Run**:
-  - `python -m pytest` -> 238 passed cleanly in 13.19s
+  - `python -m pytest` -> 239 passed cleanly in 11.20s
   - `python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
   - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid
   - `git diff --check` -> passed cleanly
   - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep` is tracked under Git
-- **GitHub Check Status**: N/A
+- **GitHub Check Status**: Passed
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or diagnostic outputs are tracked or committed. All outputs under `work/` are ignored.
 
 ## What Changed in the Task
-- **Re-ran the private-safe smoke workflow locally**: Executed `python scripts/private_e2e_smoke.py --out work/private_e2e_smoke_after_pdf_edge_system_boundary_v0_1` successfully.
-- **Updated the private-safe blocker summary**: Summarized exact page counts, candidate counts, grouping statuses, warning codes, timing preflight results, and next diagnostic recommendations.
-- **Validated conservative fallback rejection policy**: Verified that on `private_input_1` page 2 system 6 (where one accepted boundary and one rejected boundary exist), our new conservative fallback policy successfully rejects unsafe edge fallback due to the ambiguous candidate / rejected barline in the inference direction. It generated clear warnings (`pdf_bar_box_edge_boundary_fallback_rejected`, `pdf_bar_box_edge_boundary_ambiguous`, and `pdf_bar_box_inferred_boundary_requires_clear_system_edge`) and kept grouping as `partial_pdf_grouping`.
-- **Identified next blockers and recommended branch**: Evaluated primary/secondary blockers and categorized the next steps.
+- **Defined and implemented PDF Edge-Boundary Fallback Reporting**: Created a private-safe edge-boundary reporting contract (`pdf-edge-boundary-report.json` and `pdf-edge-boundary-report.html`) containing anonymized page and system indexes, observed/accepted/rejected/inferred boundary counts, fallback considered/accepted/rejected status, fallback rejection reason codes, missing sides, accepted/rejected boundary sides, candidate counts, candidates assigned to system/bar, candidates unassigned due to failed boundary, and remediation hints. It explicitly excludes all private score details, note names, lyrics, chord symbols, or raw PDF text.
+- **Enriched telemetry**: Programmatically injected system index and page index inside all edge fallback warnings in `src/score2gp/pdf.py` for clean programmatic extraction.
+- **Linked grouping reports**: Added direct links to both the JSON and HTML edge-boundary reports inside `grouping-diagnostics.html`'s artifacts list.
+- **Referenced reports in compiler gates**: Injected references to `pdf_edge_boundary_report_html` and `grouping_diagnostics_html` directly in the `BuildIrInputRiskError` failure diagnostics json when compilation refuses a `tabraw-import` grouping failure.
+- **Public unit test integration**: Added comprehensive test `test_pdf_edge_boundary_report` to `tests/test_pdf.py` verifying JSON schema values, HTML page content, and compiler gate references.
+- **Private E2E smoke integration**: Re-ran the private E2E smoke tests locally and confirmed that `pdf-edge-boundary-report.json`, `pdf-edge-boundary-report.html`, and `grouping-diagnostics.html` are compiled correctly and populated under the ignored `work/` folder for `private_input_1`.
 
 ## Private Smoke Blocker Summary (No Private Content Included)
 - **`private_input_1`** (`pdf-tab-musicxml`):
@@ -34,6 +36,7 @@
   - **Accepted barline count**: System 6 on page 2 has 1 accepted boundary and 1 rejected boundary. The other 13 systems have accepted barlines and successfully constructed bar boxes.
   - **Rejected barline/boundary count**: 1 on system 6 page 2.
   - **Inferred boundary count**: 0 (rejected).
+  - **Fallback considered**: True
   - **Fallback accepted/rejected count**: 0 accepted / 1 rejected.
   - **Fallback rejection reason counts**: 1 (`pdf_bar_box_edge_boundary_fallback_rejected` due to rejected candidate / ambiguous barline in the inference direction).
   - **Too-narrow inferred box count**: 0.
@@ -103,6 +106,9 @@
   - **Artifact paths under work/**:
     - `work/private_e2e_smoke_after_pdf_edge_system_boundary_v0_1/private_input_1/extracted.tabraw.json`
     - `work/private_e2e_smoke_after_pdf_edge_system_boundary_v0_1/private_input_1/warnings.json`
+    - `work/private_e2e_smoke_after_pdf_edge_system_boundary_v0_1/private_input_1/pdf-edge-boundary-report.json`
+    - `work/private_e2e_smoke_after_pdf_edge_system_boundary_v0_1/private_input_1/pdf-edge-boundary-report.html`
+    - `work/private_e2e_smoke_after_pdf_edge_system_boundary_v0_1/private_input_1/grouping-diagnostics.html`
     - `work/private_e2e_smoke_after_pdf_edge_system_boundary_v0_1/private_input_1/musicxml-unrecoverable-timing-report.json`
     - `work/private_e2e_smoke_after_pdf_edge_system_boundary_v0_1/private_input_1/musicxml-unrecoverable-timing-report.html`
     - `work/private_e2e_smoke_after_pdf_edge_system_boundary_v0_1/private_input_1/build_error.json`
@@ -121,15 +127,15 @@
   - **Timing status**: `not_attempted`.
 
 ## Comparison with Previous Blocker Summary
-- **Previous summary**: `private_input_1` had grouping status `partial_pdf_grouping` and system 6 on page 2 had one accepted boundary and one rejected boundary. Under PR #39 (v0.7), system 6 was simply unboxed as `pdf_bar_box_one_boundary_rejected`.
-- **Current summary**: Under the new conservative edge system boundary fallback policy (PR #40), fallback is analyzed and programmatically **rejected** due to ambiguous vertical candidates / rejected barline in the inference direction. Consequently, system 6 remains safely unboxed under `pdf_bar_box_one_boundary_rejected` with rich explicit warning details (`pdf_bar_box_edge_boundary_fallback_rejected`, `pdf_bar_box_edge_boundary_ambiguous`, `pdf_bar_box_inferred_boundary_requires_clear_system_edge`). The behavior is exactly as expected, keeping strict safety gates without regressions.
+- **Previous summary**: `private_input_1` had grouping status `partial_pdf_grouping` and system 6 on page 2 had fallback rejected safely under PR #41 (v0.8).
+- **Current summary**: Rejection behavior remains correctly strict, keeping `partial_pdf_grouping` and blocking ScoreIR generation. However, the system now exports `pdf-edge-boundary-report.json` and `pdf-edge-boundary-report.html` detailing observed, accepted, rejected, and inferred counts, affected playable candidates, unassigned candidates, rejection reasons, and actionable remediation hints. These reports are beautifully rendered in HTML, linked under `grouping-diagnostics.html`'s artifacts list, and referenced directly inside compiler failure diagnostics json payloads.
 
 ## Current Top Blocker Classification
 1. **`pdf_bar_box_one_boundary_rejected`** (Primary PDF grouping blocker stage)
 2. **`musicxml_timing_repair_not_safe`** (Primary MusicXML timeline voice overlap blocker)
 
 ## Next Recommended Branch
-- **`feature/pdf-edge-boundary-reporting-v0.9`**: Since fallback is correctly rejected and the same blocker remains, the next step is to improve edge-boundary error reporting/diagnostics.
+- **`feature/pdf-string-assignment-public-fixtures-v0.4`**: Since grouping fallback rejection reporting is complete and fully verified, the next blocker area to address is string assignment heuristics and public fixtures.
 
 ## Explicit Scope Boundaries
 - **Do not** commit any private inputs, private outputs, private GP files, private PDFs, private summaries, private HTML diagnostics, or any `work/` contents.

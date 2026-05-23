@@ -1656,3 +1656,79 @@ def test_build_ir_allows_safe_fallback_fixture(tmp_path) -> None:
     extract_tab(pdf_path, tabraw_path)
     build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
     assert ir_path.exists()
+
+
+def test_pdf_edge_boundary_report(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_edge_ambiguous_fallback.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "edge_ambig.tabraw.json"
+
+    # 1. Run extraction and verify reports exist
+    extract_tab(pdf_path, tabraw_path)
+
+    report_json_path = tmp_path / "pdf-edge-boundary-report.json"
+    report_html_path = tmp_path / "pdf-edge-boundary-report.html"
+    grouping_html_path = tmp_path / "grouping-diagnostics.html"
+
+    assert report_json_path.exists()
+    assert report_html_path.exists()
+    assert grouping_html_path.exists()
+
+    # 2. Check JSON report fields
+    report = json.loads(report_json_path.read_text(encoding="utf-8"))
+    assert report["report_version"] == "pdf-edge-boundary-report.v0.9"
+    assert report["page_index"] == 1
+    assert report["system_index"] == 1
+    assert report["system_has_playable_candidates"] is True
+    assert report["observed_boundary_count"] == 2
+    assert report["accepted_boundary_count"] == 1
+    assert report["rejected_boundary_count"] == 1
+    assert report["inferred_boundary_count"] == 0
+    assert report["fallback_considered"] is True
+    assert report["fallback_accepted"] is False
+    assert report["fallback_rejected"] is True
+    assert "pdf_bar_box_edge_boundary_ambiguous" in report["fallback_rejection_reasons"]
+    assert report["missing_side"] == "left"
+    assert report["candidate_count_in_failed_system"] > 0
+    assert report["playable_candidate_count_in_failed_system"] > 0
+    assert report["candidates_unassigned_due_to_failed_boundary"] > 0
+    assert report["whether_grouping_remains_partial"] is True
+    assert report["whether_build_ir_blocked"] is True
+    assert "Remediation:" in report["remediation_hint"]
+
+    # 3. Private safety checks
+    for key, value in report.items():
+        val_str = str(value)
+        # Avoid private-like content or specific musical symbols
+        assert "E#" not in val_str
+        assert "Cmaj7" not in val_str
+        assert "fret_sequence" not in val_str
+        assert "<chord/>" not in val_str
+
+    # 4. Check HTML report content
+    html_content = report_html_path.read_text(encoding="utf-8")
+    assert "PDF Edge-Boundary Fallback Rejected" in html_content
+    assert "Fallback Rejected &amp; ScoreIR Blocked" in html_content
+    assert "pdf_bar_box_edge_boundary_ambiguous" in html_content
+    assert "Remediation:" in html_content
+
+    # 5. Check grouping diagnostics HTML links
+    grouping_html = grouping_html_path.read_text(encoding="utf-8")
+    assert "pdf-edge-boundary-report.json" in grouping_html
+    assert "pdf-edge-boundary-report.html" in grouping_html
+
+    # 6. Check build-ir refusal diagnostics reference
+    ir_path = tmp_path / "failed.ir.json"
+    diag_path = tmp_path / "failed.diagnostics.json"
+
+    with pytest.raises(BuildIrInputRiskError) as exc_info:
+        build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path, diag_path)
+
+    assert exc_info.value.category == "partial_pdf_grouping"
+    assert exc_info.value.stage == "tabraw-import"
+
+    assert diag_path.exists()
+    diag_payload = json.loads(diag_path.read_text(encoding="utf-8"))
+    assert diag_payload["pdf_edge_boundary_report_html"] == "pdf-edge-boundary-report.html"
+    assert diag_payload["pdf_edge_boundary_report_json"] == "pdf-edge-boundary-report.json"
+    assert diag_payload["grouping_diagnostics_html"] == "grouping-diagnostics.html"
