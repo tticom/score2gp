@@ -3,10 +3,10 @@
 ## Metadata
 - **Current Branch**: `feature/private-smoke-refresh-after-pdf-layout-v0.3`
 - **Base Branch**: `main`
-- **Current PR**: TBD
-- **Latest Local Commit**: `0f5fb37d97e6ac668cb460f622d27ae300d82204`
-- **Latest Pushed Commit**: `0f5fb37d97e6ac668cb460f622d27ae300d82204`
-- **Commit Subject**: Merge pull request #27 from tticom/feature/pdf-layout-public-fixtures-v0.3
+- **Current PR**: [#28](https://github.com/tticom/score2gp/pull/28) (Draft)
+- **Latest Local Commit**: `8b3992db0517b1880f2e7be2dd9155e10dc1efdd`
+- **Latest Pushed Commit**: `8b3992db0517b1880f2e7be2dd9155e10dc1efdd`
+- **Commit Subject**: Refresh private smoke after PDF layout diagnostics
 - **Working Tree Status**: Clean
 - **Tests & Checks Run**:
   - `python -m pytest` -> 197 passed
