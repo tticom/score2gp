@@ -2127,6 +2127,17 @@ def _tabraw_unsafe_grouping_warning_codes(tabraw: TabRaw) -> list[str]:
         "pdf_string_assignment_compact_staff_ambiguous",
         "pdf_playable_candidate_requires_string_assignment",
         "pdf_string_assignment_not_enough_for_build_ir",
+
+        # New Fret Refinement Blocker Codes
+        "pdf_fret_digits_not_merged_gap_too_large",
+        "pdf_fret_digits_not_merged_vertical_misalignment",
+        "pdf_fret_bbox_too_tall",
+        "pdf_fret_bbox_too_wide",
+        "pdf_fret_bbox_too_small",
+        "pdf_fret_outside_valid_range",
+        "pdf_fret_non_digit_rejected",
+        "pdf_fret_optical_bounds_confidence_below_threshold",
+        "pdf_fret_refinement_not_enough_for_build_ir",
     }
     return sorted({str(warning.get("code")) for warning in tabraw.warnings if warning.get("code") in unsafe})
 

@@ -76,7 +76,73 @@ def build_grouping_diagnostics(
     )
     non_playable_excluded_count = sum(1 for c in candidates if c.get("parsed_fret") is None)
 
+    # 1. New Fret Refinement Metrics
+    total_numeric_candidates = sum(1 for c in candidates if any(char.isdigit() for char in str(c.get("raw_text", ""))))
+    excluded_digit_like_count = sum(1 for c in candidates if c.get("parsed_fret") is None and any(char.isdigit() for char in str(c.get("raw_text", ""))))
+    single_digit_count = sum(1 for c in playable if len(str(c.get("parsed_fret", ""))) == 1)
+    multi_digit_count = sum(1 for c in playable if len(str(c.get("parsed_fret", ""))) > 1)
+    split_span_merge_count = sum(1 for c in playable if "pdf_fret_split_text_span_merged" in (c.get("raw", {}).get("assignment_warnings", []) or []))
+    rejected_merge_count = sum(1 for c in candidates if any(w in (c.get("raw", {}).get("assignment_warnings", []) or []) for w in ("pdf_fret_digits_not_merged_gap_too_large", "pdf_fret_digits_not_merged_vertical_misalignment")))
+
+    # Fret rejection reason counts
+    rejection_reason_counts = {}
+    fret_warning_keys = [
+        "pdf_fret_digits_not_merged_gap_too_large",
+        "pdf_fret_digits_not_merged_vertical_misalignment",
+        "pdf_fret_bbox_too_tall",
+        "pdf_fret_bbox_too_wide",
+        "pdf_fret_bbox_too_small",
+        "pdf_fret_outside_valid_range",
+        "pdf_fret_non_digit_rejected",
+        "pdf_fret_optical_bounds_confidence_below_threshold",
+        "pdf_fret_refinement_not_enough_for_build_ir",
+    ]
+    for key in fret_warning_keys:
+        rejection_reason_counts[key] = sum(
+            1 for c in candidates
+            if key in (c.get("raw", {}).get("assignment_warnings", []) or [])
+        ) + sum(1 for w in tabraw.get("warnings", []) if w.get("code") == key)
+
+    all_gaps = []
+    all_y_deltas = []
+    all_widths = []
+    all_heights = []
+    for c in candidates:
+        raw_cand = c.get("raw", {})
+        if isinstance(raw_cand, dict):
+            all_gaps.extend(raw_cand.get("fret_gaps", []))
+            all_y_deltas.extend(raw_cand.get("fret_y_deltas", []))
+        bbox = c.get("bbox")
+        if isinstance(bbox, dict):
+            w = float(bbox.get("x1", 0)) - float(bbox.get("x0", 0))
+            h = float(bbox.get("y1", 0)) - float(bbox.get("y0", 0))
+            all_widths.append(w)
+            all_heights.append(h)
+
+    fret_bbox_metrics = {
+        "avg_width": round(sum(all_widths) / len(all_widths), 3) if all_widths else 0.0,
+        "avg_height": round(sum(all_heights) / len(all_heights), 3) if all_heights else 0.0,
+        "max_vertical_misalignment_delta": round(max(all_y_deltas), 3) if all_y_deltas else 0.0,
+        "max_horizontal_gap_between_digits": round(max(all_gaps), 3) if all_gaps else 0.0,
+    }
+
+    # Candidate classification counts
+    candidate_classifications = {
+        "playable_fret": kind_counts.get("fret", 0),
+        "non_playable_technique": kind_counts.get("technique-text", 0),
+        "non_playable_chord_or_text": kind_counts.get("chord-symbol", 0) + kind_counts.get("candidate-text", 0),
+        "excluded_page_or_legend_number": sum(1 for c in candidates if "pdf_fret_page_or_legend_number_excluded" in (c.get("raw", {}).get("assignment_warnings", []) or [])),
+        "ambiguous_digit_group": sum(1 for c in candidates if any(w in (c.get("raw", {}).get("assignment_warnings", []) or []) for w in ("pdf_fret_digits_not_merged_gap_too_large", "pdf_fret_digits_not_merged_vertical_misalignment"))),
+    }
+
     warning_codes = [str(warning.get("code", "warning")) for warning in tabraw.get("warnings", [])]
+    for c in candidates:
+        aw = c.get("raw", {}).get("assignment_warnings", [])
+        if isinstance(aw, list):
+            for code in aw:
+                if code not in warning_codes:
+                    warning_codes.append(code)
+
     grouping_status = grouping_status_for_tabraw(tabraw)
     grouping = _grouping_evidence_summary(candidates)
     ascii_candidates = [
@@ -135,6 +201,7 @@ def build_grouping_diagnostics(
     whether_string_assignment_succeeded = inferred_string_assignment_count > 0
 
     is_blocked = grouping_status not in ("grouped", "ascii_grouped")
+    has_fret_blockers = any(rejection_reason_counts.values())
 
     # Determine primary_blocker_stage
     primary_blocker_stage = "none"
@@ -144,13 +211,16 @@ def build_grouping_diagnostics(
         primary_blocker_stage = "unsupported_input_class"
     elif not whether_bar_detection_succeeded:
         primary_blocker_stage = "bar_detection"
+    elif has_fret_blockers:
+        primary_blocker_stage = "fret_refinement"
     elif not whether_string_assignment_succeeded:
         primary_blocker_stage = "string_assignment"
     elif is_blocked:
         primary_blocker_stage = "timing_alignment"
+
     is_string_assignment_primary_blocker = (primary_blocker_stage == "string_assignment")
     is_string_assignment_secondary_blocker = (is_blocked and not is_string_assignment_primary_blocker and unassigned_string_candidate_count > 0)
-    upstream_blocks_first = is_blocked and primary_blocker_stage in ("system_detection", "bar_detection")
+    upstream_blocks_first = is_blocked and primary_blocker_stage in ("system_detection", "bar_detection", "fret_refinement")
 
     return {
         "schema_version": GROUPING_DIAGNOSTICS_VERSION if "GROUPING_DIAGNOSTICS_VERSION" in globals() else GROUPING_DIAGNOSTICS_SCHEMA_VERSION,
@@ -208,6 +278,19 @@ def build_grouping_diagnostics(
         "whether_string_assignment_succeeded": whether_string_assignment_succeeded,
         "whether_build_ir_blocked": is_blocked,
         "primary_blocker_stage": primary_blocker_stage,
+
+        # New Fret Refinement Fields
+        "total_numeric_candidates": total_numeric_candidates,
+        "excluded_digit_like_count": excluded_digit_like_count,
+        "single_digit_count": single_digit_count,
+        "multi_digit_count": multi_digit_count,
+        "split_span_merge_count": split_span_merge_count,
+        "rejected_merge_count": rejected_merge_count,
+        "rejection_reason_counts": rejection_reason_counts,
+        "fret_bbox_metrics": fret_bbox_metrics,
+        "candidate_classifications": candidate_classifications,
+        "is_fret_refinement_primary_blocker": primary_blocker_stage == "fret_refinement",
+        "is_fret_refinement_secondary_blocker": is_blocked and primary_blocker_stage != "fret_refinement" and has_fret_blockers,
     }
 
 
@@ -310,6 +393,17 @@ def grouping_status_for_tabraw(tabraw: dict[str, Any]) -> str:
         "pdf_bar_box_inferred_boundary_candidate_ambiguous",
         "pdf_bar_box_inferred_boundary_requires_clear_system_edge",
         "pdf_bar_box_inferred_boundary_not_enough_for_build_ir",
+
+        # New Fret Refinement Blocker Codes
+        "pdf_fret_digits_not_merged_gap_too_large",
+        "pdf_fret_digits_not_merged_vertical_misalignment",
+        "pdf_fret_bbox_too_tall",
+        "pdf_fret_bbox_too_wide",
+        "pdf_fret_bbox_too_small",
+        "pdf_fret_outside_valid_range",
+        "pdf_fret_non_digit_rejected",
+        "pdf_fret_optical_bounds_confidence_below_threshold",
+        "pdf_fret_refinement_not_enough_for_build_ir",
     }
 
     if warning_codes.intersection(unsupported_codes):
@@ -414,6 +508,8 @@ def write_grouping_diagnostics_html(path: str | Path, report: dict[str, Any]) ->
         primary_stage = report.get("primary_blocker_stage", "unknown")
         if primary_stage == "system_detection":
             hint_text = "System detection is incomplete; use a clearer born-digital fixture, improve public layout heuristics, or review manually."
+        elif primary_stage == "fret_refinement":
+            hint_text = "Playable fret evidence must be numeric, inside a detected tab staff, and unambiguously grouped before string/bar assignment."
         elif primary_stage == "string_assignment":
             hint_text = "Playable fret candidates require unambiguous assignment to one of the six detected tab strings."
         elif primary_stage == "bar_detection":
@@ -509,6 +605,19 @@ def write_grouping_diagnostics_html(path: str | Path, report: dict[str, Any]) ->
   <dt>Partial ASCII-tab blocks</dt><dd>{report.get("ascii_tab_partial_block_count", 0)}</dd>
   <dt>ASCII timing candidates</dt><dd>{report.get("ascii_timing_candidate_count", 0)}</dd>
   <dt>ASCII timing status counts</dt><dd><code>{html.escape(json.dumps(report.get("ascii_timing_status_counts", {}), sort_keys=True))}</code></dd>
+</dl>
+<h2>Fret Refinement</h2>
+<dl>
+  <dt>Total numeric candidates</dt><dd>{report.get("total_numeric_candidates", 0)}</dd>
+  <dt>Excluded digit-like candidates</dt><dd>{report.get("excluded_digit_like_count", 0)}</dd>
+  <dt>Single-digit frets</dt><dd>{report.get("single_digit_count", 0)}</dd>
+  <dt>Multi-digit frets</dt><dd>{report.get("multi_digit_count", 0)}</dd>
+  <dt>Split-span merged frets</dt><dd>{report.get("split_span_merge_count", 0)}</dd>
+  <dt>Rejected digit merges</dt><dd>{report.get("rejected_merge_count", 0)}</dd>
+  <dt>Rejection reasons</dt><dd><code>{html.escape(json.dumps(report.get("rejection_reason_counts", {}), sort_keys=True))}</code></dd>
+  <dt>Average width / height</dt><dd>{report.get("fret_bbox_metrics", {}).get("avg_width", 0.0)}pt / {report.get("fret_bbox_metrics", {}).get("avg_height", 0.0)}pt</dd>
+  <dt>Max gap / vertical misalignment</dt><dd>{report.get("fret_bbox_metrics", {}).get("max_horizontal_gap_between_digits", 0.0)}pt / {report.get("fret_bbox_metrics", {}).get("max_vertical_misalignment_delta", 0.0)}pt</dd>
+  <dt>Candidate classifications</dt><dd><code>{html.escape(json.dumps(report.get("candidate_classifications", {}), sort_keys=True))}</code></dd>
 </dl>
 <h2>Warning Codes</h2>
 <ul>{warning_items}</ul>
