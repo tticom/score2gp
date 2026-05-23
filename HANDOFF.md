@@ -1,12 +1,12 @@
 # Handoff
 
 ## Metadata
-- **Current Branch**: `feature/pdf-system-detection-public-fixtures-v0.4`
+- **Current Branch**: `feature/private-smoke-refresh-after-pdf-system-v0.4`
 - **Base Branch**: `main`
-- **Current PR**: [#29](https://github.com/tticom/score2gp/pull/29) (Draft)
-- **Latest Local Commit**: `53f90c329f59edd138ce2500b5c3c109037a9b32`
-- **Latest Pushed Commit**: `53f90c329f59edd138ce2500b5c3c109037a9b32`
-- **Commit Subject**: Add PDF system detection fixtures v0.4
+- **Current PR**: [#30](https://github.com/tticom/score2gp/pull/30) (Draft)
+- **Latest Local Commit**: `334100b8d266c923c039dae766e2334f56b3e3fc`
+- **Latest Pushed Commit**: `334100b8d266c923c039dae766e2334f56b3e3fc`
+- **Commit Subject**: Refresh private smoke after PDF system diagnostics
 - **Working Tree Status**: Clean
 - **Tests & Checks Run**:
   - `python -m pytest` -> 205 passed cleanly
@@ -18,11 +18,12 @@
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or diagnostic outputs are tracked or committed. All outputs under `work/` are ignored.
 
 ## What Changed in the Task
-- Added public synthetic PDF layout fixtures for unresolved drawn staff lines, overlapping systems, ASCII tab blocks without bars, mixed pages, system-detected no barlines, and valid grouped counterparts.
-- Refined the warning taxonomy in `src/score2gp/pdf.py` with 11 precise codes (e.g. `pdf_drawn_system_not_detected`, `pdf_drawn_system_ambiguous`, `pdf_drawn_staff_lines_unresolved`, `pdf_ascii_system_detected`, `pdf_ascii_system_measure_boundaries_missing`, `pdf_ascii_system_timing_unavailable`, `pdf_system_detected_bar_detection_missing`, etc.).
-- Refined diagnostics in `src/score2gp/report.py` to classify `input_class` and `primary_blocker_stage`, distinguishing system-detection blockers from downstream bar-detection blockers.
-- Updated developer-facing HTML grouping report with clear remediation hints.
-- Updated documentation (`architecture.md`, `workflow.md`, `limitations.md`) and task status (`TASKS.md`).
+- Re-ran the private-safe E2E smoke workflow against the real private inputs under the newly integrated PDF system-detection blocker diagnostics (PR #29).
+- Evaluated and recorded the detailed warning codes, counts, and stages on the real inputs without modifying gates or copying any private data.
+- Confirmed that the new layout blockers cleanly separate:
+  - `private_input_1` is classified as `drawn_tab_candidate` and successfully completes system detection but fails bar detection (detected systems: 14, bar boxes: 0), flagging `pdf_system_detected_bar_detection_missing`.
+  - `private_input_2` is classified as `ascii_tab_candidate` and fails system detection (detected systems: 0, ASCII blocks: 3), flagging `pdf_drawn_system_not_detected`, `pdf_ascii_system_detected`, `pdf_ascii_system_measure_boundaries_missing`, and `pdf_ascii_system_timing_unavailable`.
+
 
 
 ## Private Smoke Blocker Classification
@@ -53,19 +54,20 @@
 
 ## Comparison with Previous Summary
 - **Previous Grouping Blocker**: `missing_pdf_grouping` and `pdf-tab-system-not-detected` were the main layout blockers, but the precise boundary between system detection and downstream bar detection was blurred.
-- **Current Grouping Status**: `missing_pdf_grouping` remains the primary layout blocker. However, we have now introduced a clear stage-split diagnostic hierarchy. System detection success and bar detection success are tracked as distinct booleans, and `primary_blocker_stage` maps to `system_detection`, `bar_detection`, `string_assignment`, `timing_alignment`, or `unsupported_input_class`.
-- **Diagnostics Refinement**: The public warning codes and classifications now perfectly model the splits: `private_input_1` is classified as `drawn_tab_candidate` with `primary_blocker_stage: bar_detection` (since systems are detected but barlines/bar boxes are 0), whereas `private_input_2` maps to `primary_blocker_stage: system_detection` (since no drawn systems are found and ASCII blocks lack aligned bar separators).
+- **Current Grouping Status**: `missing_pdf_grouping` remains the primary layout blocker. However, we have now verified that the pipeline's stage-split diagnostic hierarchy correctly identifies the exact blocker stages for real private inputs:
+  - `private_input_1` is classified as `drawn_tab_candidate` with `primary_blocker_stage: bar_detection` (system detection succeeded with 14 systems, but bar detection is completely missing with 0 bar boxes), flagging `pdf_system_detected_bar_detection_missing`.
+  - `private_input_2` is classified as `ascii_tab_candidate` / `unsupported` with `primary_blocker_stage: system_detection` (no drawn systems detected; ASCII blocks are detected but timing/bar boundaries are unavailable), flagging `pdf_drawn_system_not_detected`, `pdf_ascii_system_detected`, `pdf_ascii_system_measure_boundaries_missing`, and `pdf_ascii_system_timing_unavailable`.
 
 ## Current Top Blocker Classification
-- **`pdf_system_detection`** (primary blocker for `private_input_2` - unresolved staff lines and no drawn systems detected)
-- **`pdf_bar_detection`** (primary blocker for `private_input_1` - systems exist but no barlines/bar boxes are detected)
+- **`pdf_bar_detection`** (primary layout blocker for `private_input_1` - systems exist but no barlines/bar boxes are detected).
+- **`pdf_drawn_system_detection`** (primary layout blocker for `private_input_2` - drawn tab system was not detected or resolved).
+- **`pdf_ascii_system_timing_boundary`** (primary ASCII blocker for `private_input_2` - ASCII blocks exist but timing/bar boundaries are unavailable).
 
 ## Recommended Next Branch
-- **`feature/private-smoke-refresh-after-pdf-system-detection-v0.1`** (to re-run the local private E2E diagnostic smoke workflow and verify that the real inputs are correctly classified and reported under the new distinct system/bar blocker stages, input classes, and taxonomy codes).
+- **`feature/pdf-bar-detection-public-fixtures-v0.4`** (to introduce public synthetic PDF fixtures for barlines, rectangle/line detections, and bar-box overlays, ensuring that CI validation remains independent of any private materials).
 
 ## Explicit Scope Boundaries
 - **Do not** commit any private inputs, private outputs, private GP files, private PDFs, private summaries, private HTML diagnostics, or any `work/` contents.
 - **Do not** weaken timing/grouping gates or implement timing auto-repair.
 - **Do not** add OCR/scanned-PDF/ML support.
 - **Do not** push directly to `main`.
-
