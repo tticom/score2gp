@@ -1,60 +1,135 @@
 # Handoff
 
 ## Metadata
-- **Current Branch**: `feature/pdf-edge-system-boundary-public-fixtures-v0.8`
+- **Current Branch**: `feature/private-smoke-refresh-after-pdf-edge-system-boundary-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: [PR #40](https://github.com/tticom/score2gp/pull/40) (Draft)
-- **Latest Local Commit**: `8268b26`
-- **Latest Pushed Commit**: `8268b26`
-- **Commit Subject**: Add PDF edge system boundary fixtures v0.8
-- **Working Tree Status**: Clean (after handoff sync commit)
+- **Current PR**: [PR #41](https://github.com/tticom/score2gp/pull/41) (Draft)
+- **Latest Local Commit**: `7342d21`
+- **Latest Pushed Commit**: `7342d21`
+- **Commit Subject**: Refresh private smoke after PDF edge boundary policy
+- **Working Tree Status**: Clean (except modified HANDOFF.md and TASKS.md)
 - **Tests & Checks Run**:
-  - `python -m pytest` -> 238 passed cleanly
+  - `python -m pytest` -> 238 passed cleanly in 13.19s
   - `python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
   - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid
   - `git diff --check` -> passed cleanly
-  - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep` is tracked
+  - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep` is tracked under Git
 - **GitHub Check Status**: N/A
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or diagnostic outputs are tracked or committed. All outputs under `work/` are ignored.
 
 ## What Changed in the Task
-- **Conservative Fallback Policy Heuristics**: Refined `infer_edge_boundaries` inside `src/score2gp/pdf.py` so that left/right system edge fallbacks are rejected if any rejected barlines exist in the inference direction (`pdf_bar_box_edge_boundary_ambiguous`), if the box is too narrow (`pdf_bar_box_inferred_boundary_too_narrow`), or if candidates lie too close to the inferred boundary (`pdf_bar_box_inferred_boundary_candidate_ambiguous`).
-- **Telemetry and Provenance marking**: Marked safe inferred edge boundaries with `"provenance": "pdf_bar_box_inferred_edge_boundary"` and warning/info codes. Propagated all 10 new warning/info codes cleanly in page diagnostics.
-- **Unsafe whitelists modification**: Excluded the safe fallback warning codes from `drawn_grouping_codes` in `pdf.py` and `_tabraw_unsafe_grouping_warning_codes` in `build_ir.py`. Build-ir will successfully compile if grouping is complete (every candidate has a valid system/bar/string assignment). Any rejected fallback or unassigned candidate continues to block compilation.
-- **10 programmatically generated public PDF regressions**: Created generator script `tests/fixtures/pdf/make_edge_boundary_fallback_pdfs.py` to compile 10 new synthetic layout fixtures.
-- **Test suite updates**: Updated existing test assertions in `tests/test_pdf.py` to assert success on safe fallback cases, and added 10 exhaustive new tests covering safe fallbacks, rejections, telemetry, and compiler gating logic.
+- **Re-ran the private-safe smoke workflow locally**: Executed `python scripts/private_e2e_smoke.py --out work/private_e2e_smoke_after_pdf_edge_system_boundary_v0_1` successfully.
+- **Updated the private-safe blocker summary**: Summarized exact page counts, candidate counts, grouping statuses, warning codes, timing preflight results, and next diagnostic recommendations.
+- **Validated conservative fallback rejection policy**: Verified that on `private_input_1` page 2 system 6 (where one accepted boundary and one rejected boundary exist), our new conservative fallback policy successfully rejects unsafe edge fallback due to the ambiguous candidate / rejected barline in the inference direction. It generated clear warnings (`pdf_bar_box_edge_boundary_fallback_rejected`, `pdf_bar_box_edge_boundary_ambiguous`, and `pdf_bar_box_inferred_boundary_requires_clear_system_edge`) and kept grouping as `partial_pdf_grouping`.
+- **Identified next blockers and recommended branch**: Evaluated primary/secondary blockers and categorized the next steps.
 
-## Private Smoke Blocker Classification (No Private Content Included)
+## Private Smoke Blocker Summary (No Private Content Included)
 - **`private_input_1`** (`pdf-tab-musicxml`):
   - **Input class**: `drawn_tab_candidate`
   - **Page count**: 2
+  - **Text detected**: Yes
+  - **Geometry detected**: Yes
+  - **ASCII block count**: 0
   - **Drawn system count**: 14 (8 on page 1, 6 on page 2)
-  - **Valid barline count per system**: 2 on most systems, but 1 on page 2 system 6.
-  - **Rejected barline count per system**: 0 on most systems, but 1 on page 2 system 6.
-  - **Bar box count**: 13 constructed.
-  - **Grouping status**: `partial_pdf_grouping`.
-  - **Primary blocker stage**: `pdf_bar_box_one_boundary_rejected` (due to system 6 on page 2 having a rejected boundary, which under our refined policy correctly rejects fallback and blocks grouping).
-  - **Timing blocker stage**: `musicxml_timing_repair_not_safe` (MusicXML timing preflight cursor overlap).
+  - **Accepted barline count**: System 6 on page 2 has 1 accepted boundary and 1 rejected boundary. The other 13 systems have accepted barlines and successfully constructed bar boxes.
+  - **Rejected barline/boundary count**: 1 on system 6 page 2.
+  - **Inferred boundary count**: 0 (rejected).
+  - **Fallback accepted/rejected count**: 0 accepted / 1 rejected.
+  - **Fallback rejection reason counts**: 1 (`pdf_bar_box_edge_boundary_fallback_rejected` due to rejected candidate / ambiguous barline in the inference direction).
+  - **Too-narrow inferred box count**: 0.
+  - **Candidate-near-inferred-boundary count**: 0.
+  - **Constructed bar box count**: 13 constructed.
+  - **Unboxed system count**: 1 (system 6 on page 2).
+  - **Systems with playable candidates**: 14.
+  - **Unboxed systems with playable candidates**: 1 (system 6 on page 2).
+  - **Total candidate count**: 329.
+  - **Playable candidate count**: 203.
+  - **Non-playable candidate count**: 126.
+  - **Candidates assigned to system**: 282.
+  - **Candidates assigned to bar**: 265.
+  - **Candidates assigned to string**: 141.
+  - **Grouping status**: `partial_pdf_grouping`
+  - **Primary PDF blocker stage**: `pdf_bar_box_one_boundary_rejected` (due to system 6 on page 2 having a rejected boundary, which correctly rejects fallback and blocks grouping).
+  - **Secondary PDF reason codes**:
+    - `ambiguous_bar_assignment`
+    - `ambiguous_string_assignment`
+    - `incomplete_tab_staff`
+    - `missing_pdf_barlines`
+    - `pdf_bar_box_construction_not_enough_for_build_ir`
+    - `pdf_bar_box_edge_boundary_ambiguous`
+    - `pdf_bar_box_edge_boundary_fallback_rejected`
+    - `pdf_bar_box_edge_system_missing_boundary`
+    - `pdf_bar_box_inferred_boundary_not_enough_for_build_ir`
+    - `pdf_bar_box_inferred_boundary_requires_clear_system_edge`
+    - `pdf_bar_box_missing_right_boundary`
+    - `pdf_bar_box_one_boundary_rejected`
+    - `pdf_bar_box_requires_two_boundaries`
+    - `pdf_bar_boxes_missing`
+    - `pdf_bar_boxes_not_constructible`
+    - `pdf_bar_detection_not_enough_for_build_ir`
+    - `pdf_barline_ambiguous`
+    - `pdf_barline_too_short`
+    - `pdf_barlines_missing`
+    - `pdf_barlines_not_detected_in_system`
+    - `pdf_candidate_near_missing_bar_boundary`
+    - `pdf_candidate_outside_bar`
+    - `pdf_candidate_outside_system`
+    - `pdf_candidate_unassigned_due_to_unboxed_system`
+    - `pdf_candidate_unassigned_to_bar`
+    - `pdf_candidates_unassigned_to_bar`
+    - `pdf_candidates_unassigned_to_string`
+    - `pdf_candidates_unassigned_to_system`
+    - `pdf_drawn_system_ambiguous`
+    - `pdf_grouping_confidence_below_threshold`
+    - `pdf_grouping_not_safe_for_build_ir`
+    - `pdf_layout_detection_requires_manual_review`
+    - `pdf_missing_pdf_grouping_blocks_build_ir`
+    - `pdf_multi_system_order_ambiguous`
+    - `pdf_partial_grouping_one_system_unboxed`
+    - `pdf_partial_grouping_with_playable_candidates`
+    - `pdf_partial_system_detection`
+    - `pdf_string_assignment_ambiguous`
+    - `pdf_string_assignment_missing`
+    - `pdf_system_bbox_ambiguous`
+    - `pdf_system_order_ambiguous`
+    - `pdf_tab_staff_ambiguous`
+    - `pdf_tab_staff_incomplete`
+  - **Timing blocker stage**: `musicxml_timing_repair_not_safe` (preflight VoiceOverlapError with 66 overfull or overlapping events).
+  - **Calibration possible status**: `unrecoverable_scenario` (due to timing risk).
+  - **Alignment status**: `failed`.
+  - **ScoreIR gate status**: `refused`.
+  - **GP writing status**: `not_attempted` (refused at IR gate).
+  - **Stage reached**: PDF extraction raw output completed, MusicXML preflight timing risk flagged.
+  - **Artifact paths under work/**:
+    - `work/private_e2e_smoke_after_pdf_edge_system_boundary_v0_1/private_input_1/extracted.tabraw.json`
+    - `work/private_e2e_smoke_after_pdf_edge_system_boundary_v0_1/private_input_1/warnings.json`
+    - `work/private_e2e_smoke_after_pdf_edge_system_boundary_v0_1/private_input_1/musicxml-unrecoverable-timing-report.json`
+    - `work/private_e2e_smoke_after_pdf_edge_system_boundary_v0_1/private_input_1/musicxml-unrecoverable-timing-report.html`
+    - `work/private_e2e_smoke_after_pdf_edge_system_boundary_v0_1/private_input_1/build_error.json`
 
 - **`private_input_2`** (`pdf-tab-only`):
   - **Input class**: `ascii_tab_candidate` / `unsupported`
   - **Page count**: 1
+  - **Text detected**: Yes
+  - **Geometry detected**: Yes
+  - **ASCII block count**: 1
+  - **Total candidate count**: 71.
+  - **Playable candidate count**: 54.
+  - **Non-playable candidate count**: 17.
   - **Grouping status**: `missing_pdf_grouping`
-  - **Primary PDF blocker stage**: `drawn_system_detection` and `ascii_system_detection`
+  - **Primary PDF blocker stage**: `drawn_system_detection` and `ascii_system_detection` (`pdf-tab-system-not-detected`).
+  - **Timing status**: `not_attempted`.
 
-## Known Limitations
-- Partial PDF grouping still blocks build-ir.
-- Inferred edge boundaries are conservative and provenance-marked.
-- Missing internal boundaries remain unsafe and are never inferred.
-- No private PDFs are used as fixtures.
-- No OCR, scanned-PDF support, ML layout recognition, MusicXML repair, or GPIF expansion.
+## Comparison with Previous Blocker Summary
+- **Previous summary**: `private_input_1` had grouping status `partial_pdf_grouping` and system 6 on page 2 had one accepted boundary and one rejected boundary. Under PR #39 (v0.7), system 6 was simply unboxed as `pdf_bar_box_one_boundary_rejected`.
+- **Current summary**: Under the new conservative edge system boundary fallback policy (PR #40), fallback is analyzed and programmatically **rejected** due to ambiguous vertical candidates / rejected barline in the inference direction. Consequently, system 6 remains safely unboxed under `pdf_bar_box_one_boundary_rejected` with rich explicit warning details (`pdf_bar_box_edge_boundary_fallback_rejected`, `pdf_bar_box_edge_boundary_ambiguous`, `pdf_bar_box_inferred_boundary_requires_clear_system_edge`). The behavior is exactly as expected, keeping strict safety gates without regressions.
 
-## Remaining Risks
-- Timing auto-repair is unimplemented; timing preflight overlap risks continue to block compilation.
-- Scanned/rasterized tab formats remain unsupported.
+## Current Top Blocker Classification
+1. **`pdf_bar_box_one_boundary_rejected`** (Primary PDF grouping blocker stage)
+2. **`musicxml_timing_repair_not_safe`** (Primary MusicXML timeline voice overlap blocker)
 
-## Next Recommended Task
-- **`feature/private-smoke-refresh-after-pdf-edge-system-boundary-v0.1`**: Re-run the local private E2E diagnostic smoke workflow to verify that our conservative boundary inference policy correctly rejects fallback and reports `pdf_bar_box_one_boundary_rejected` for system 6 on page 2 of `private_input_1`.
+## Next Recommended Branch
+- **`feature/pdf-edge-boundary-reporting-v0.9`**: Since fallback is correctly rejected and the same blocker remains, the next step is to improve edge-boundary error reporting/diagnostics.
 
 ## Explicit Scope Boundaries
 - **Do not** commit any private inputs, private outputs, private GP files, private PDFs, private summaries, private HTML diagnostics, or any `work/` contents.
