@@ -193,6 +193,34 @@ class _TabSystem:
             warnings.append("pdf_bar_boxes_missing")
             if self.barline_candidates_count > 0:
                 warnings.append("pdf_bar_boxes_not_constructible")
+                warnings.append("pdf_bar_box_construction_not_enough_for_build_ir")
+                if len(self.barlines) == 1:
+                    warnings.append("pdf_bar_box_requires_two_boundaries")
+                    warnings.append("pdf_bar_box_missing_right_boundary")
+        else:
+            # Check too narrow boxes
+            for left, right in zip(self.barlines, self.barlines[1:]):
+                if abs(right - left) < 30.0:
+                    warnings.append("pdf_bar_box_too_narrow")
+                    warnings.append("pdf_bar_box_construction_not_enough_for_build_ir")
+
+            # Check boxes outside system horizontal bounds
+            for left, right in zip(self.barlines, self.barlines[1:]):
+                if left < self.x0 - 2.0 or right > self.x1 + 2.0:
+                    warnings.append("pdf_bar_box_outside_system_bounds")
+                    warnings.append("pdf_bar_box_construction_not_enough_for_build_ir")
+
+            # Check overlapping boxes
+            boxes = []
+            for left, right in zip(self.barlines, self.barlines[1:]):
+                boxes.append((left, right))
+            for i, box1 in enumerate(boxes):
+                for box2 in boxes[i+1:]:
+                    start1, end1 = min(box1[0], box1[1]), max(box1[0], box1[1])
+                    start2, end2 = min(box2[0], box2[1]), max(box2[0], box2[1])
+                    if max(start1, start2) < min(end1, end2):
+                        warnings.append("pdf_bar_box_overlaps_neighbor")
+                        warnings.append("pdf_bar_box_construction_not_enough_for_build_ir")
         return warnings
 
     @property
@@ -250,14 +278,14 @@ class _TabSystem:
         if x is None or len(self.barlines) < 2:
             return None, ["missing_pdf_barlines", "pdf_barlines_missing"] if x is not None else []
         if x < self.barlines[0] - 2.0 or x > self.barlines[-1] + 2.0:
-            return None, ["pdf_candidate_outside_bar", "ambiguous_bar_assignment"]
+            return None, ["pdf_candidate_outside_bar", "ambiguous_bar_assignment", "pdf_candidate_unassigned_to_bar"]
         internal_barlines = self.barlines[1:-1]
         if any(abs(x - barline) <= self.ambiguous_bar_tolerance for barline in internal_barlines):
-            return None, ["ambiguous_bar_assignment", "pdf_barlines_ambiguous"]
+            return None, ["ambiguous_bar_assignment", "pdf_barlines_ambiguous", "pdf_candidate_on_bar_boundary", "pdf_candidate_boundary_ambiguous", "pdf_bar_box_boundary_ambiguous"]
         for index, (left, right) in enumerate(zip(self.barlines, self.barlines[1:]), start=1):
             if left - 2.0 <= x <= right + 2.0:
                 return index, []
-        return None, ["ambiguous_bar_assignment"]
+        return None, ["ambiguous_bar_assignment", "pdf_candidate_unassigned_to_bar"]
 
     @property
     def line_spacing(self) -> float:
@@ -538,13 +566,72 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                             "severity": "warning",
                             "grouping_status": "partial"
                         })
-                    if len(system.barlines) >= 2:
+                    # Propagate system grouping warnings to page warnings
+                    for gw in system.grouping_warnings:
+                        if gw == "pdf_bar_box_too_narrow":
+                            warnings.append({
+                                "code": "pdf_bar_box_too_narrow",
+                                "message": f"One or more bar boxes are too narrow in system {system.system_index} on page {page_number}.",
+                                "severity": "warning",
+                                "grouping_status": "partial"
+                            })
+                            warnings.append({
+                                "code": "pdf_bar_box_construction_not_enough_for_build_ir",
+                                "message": f"Bar box construction failed in system {system.system_index} on page {page_number}.",
+                                "severity": "warning",
+                                "grouping_status": "partial"
+                            })
+                        elif gw == "pdf_bar_box_outside_system_bounds":
+                            warnings.append({
+                                "code": "pdf_bar_box_outside_system_bounds",
+                                "message": f"One or more bar boxes extend outside system horizontal bounds in system {system.system_index} on page {page_number}.",
+                                "severity": "warning",
+                                "grouping_status": "partial"
+                            })
+                            warnings.append({
+                                "code": "pdf_bar_box_construction_not_enough_for_build_ir",
+                                "message": f"Bar box construction failed in system {system.system_index} on page {page_number}.",
+                                "severity": "warning",
+                                "grouping_status": "partial"
+                            })
+                        elif gw == "pdf_bar_box_overlaps_neighbor":
+                            warnings.append({
+                                "code": "pdf_bar_box_overlaps_neighbor",
+                                "message": f"One or more bar boxes overlap with their neighbors in system {system.system_index} on page {page_number}.",
+                                "severity": "warning",
+                                "grouping_status": "partial"
+                            })
+                            warnings.append({
+                                "code": "pdf_bar_box_construction_not_enough_for_build_ir",
+                                "message": f"Bar box construction failed in system {system.system_index} on page {page_number}.",
+                                "severity": "warning",
+                                "grouping_status": "partial"
+                            })
+                        elif gw == "pdf_bar_box_requires_two_boundaries":
+                            warnings.append({
+                                "code": "pdf_bar_box_requires_two_boundaries",
+                                "message": f"A bar box requires at least two accepted barlines in system {system.system_index} on page {page_number}.",
+                                "severity": "warning",
+                                "grouping_status": "partial"
+                            })
+                    if len(system.barlines) >= 2 and not any(w in system.grouping_warnings for w in ("pdf_bar_box_too_narrow", "pdf_bar_box_outside_system_bounds", "pdf_bar_box_overlaps_neighbor")):
                         warnings.append({
                             "code": "pdf_bar_boxes_constructed",
                             "message": f"Bar boxes successfully constructed in system {system.system_index} on page {page_number}.",
                             "severity": "info",
                             "grouping_status": "grouped"
                         })
+
+                # Check if some systems are unboxed while others are boxed on this page
+                has_any_unboxed_system = any(len(sys.barlines) < 2 or any(w in sys.grouping_warnings for w in ("pdf_bar_box_too_narrow", "pdf_bar_box_outside_system_bounds", "pdf_bar_box_overlaps_neighbor")) for sys in systems)
+                has_any_boxed_system = any(len(sys.barlines) >= 2 and not any(w in sys.grouping_warnings for w in ("pdf_bar_box_too_narrow", "pdf_bar_box_outside_system_bounds", "pdf_bar_box_overlaps_neighbor")) for sys in systems)
+                if has_any_unboxed_system and has_any_boxed_system:
+                    warnings.append({
+                        "code": "pdf_partial_grouping_one_system_unboxed",
+                        "message": f"At least one system lacks bar boxes while another has boxes on page {page_number}.",
+                        "severity": "warning",
+                        "grouping_status": "partial"
+                    })
 
                 # Check for vertically overlapping systems on the page
                 has_overlap = False
@@ -1382,6 +1469,15 @@ def _append_grouping_warnings(raw: dict[str, Any], meta: dict[str, int] | None =
                 "missing_grouping_dimensions": missing,
             }
         )
+    if not unsafe_codes and not missing:
+        raw["warnings"].append(
+            {
+                "code": "pdf_grouping_complete",
+                "message": "PDF layout grouping is complete.",
+                "severity": "info",
+                "grouping_status": "grouped",
+            }
+        )
 
 
 def _unsafe_grouping_codes(fret_candidates: list[dict[str, Any]], page_warnings: list[dict[str, Any]]) -> list[str]:
@@ -1461,6 +1557,21 @@ def _unsafe_grouping_codes(fret_candidates: list[dict[str, Any]], page_warnings:
         "pdf_barline_rejected_relative_height",
         "pdf_barline_validation_threshold_boundary",
         "pdf_barline_validation_not_enough_for_build_ir",
+
+        # New Phase 6 Bar Box Construction Codes
+        "pdf_bar_box_requires_two_boundaries",
+        "pdf_bar_box_missing_left_boundary",
+        "pdf_bar_box_missing_right_boundary",
+        "pdf_bar_box_boundary_ambiguous",
+        "pdf_bar_box_too_narrow",
+        "pdf_bar_box_overlaps_neighbor",
+        "pdf_bar_box_outside_system_bounds",
+        "pdf_candidate_between_bar_boxes",
+        "pdf_candidate_on_bar_boundary",
+        "pdf_candidate_boundary_ambiguous",
+        "pdf_candidate_unassigned_to_bar",
+        "pdf_partial_grouping_one_system_unboxed",
+        "pdf_bar_box_construction_not_enough_for_build_ir",
     }
     codes: set[str] = set()
     for candidate in fret_candidates:
@@ -1555,6 +1666,22 @@ def _specific_grouping_warning(code: str, grouping_counts: dict[str, int]) -> di
         "pdf_barline_rejected_relative_height": "Barline candidate rejected by relative staff-height check.",
         "pdf_barline_validation_threshold_boundary": "Barline candidate is at validation threshold boundary.",
         "pdf_barline_validation_not_enough_for_build_ir": "Barline validation is incomplete and not safe to build IR.",
+
+        # New Phase 6 Bar Box Construction messages
+        "pdf_bar_box_requires_two_boundaries": "A bar box requires at least two accepted barlines to define its boundaries.",
+        "pdf_bar_box_missing_left_boundary": "A bar box is missing its left boundary.",
+        "pdf_bar_box_missing_right_boundary": "A bar box is missing its right boundary.",
+        "pdf_bar_box_boundary_ambiguous": "The boundary of the bar box is ambiguous.",
+        "pdf_bar_box_too_narrow": "One or more bar boxes are too narrow to trust.",
+        "pdf_bar_box_overlaps_neighbor": "One or more bar boxes overlap with their neighbors.",
+        "pdf_bar_box_outside_system_bounds": "One or more bar boxes extend outside system horizontal bounds.",
+        "pdf_candidate_between_bar_boxes": "Fret candidate lies between bar boxes.",
+        "pdf_candidate_on_bar_boundary": "Fret candidate lies exactly or nearly on a bar boundary.",
+        "pdf_candidate_boundary_ambiguous": "Fret candidate boundary assignment is ambiguous.",
+        "pdf_candidate_unassigned_to_bar": "Fret candidate lies outside all constructed bar boxes.",
+        "pdf_partial_grouping_one_system_unboxed": "PDF grouping is partial because at least one system lacks bar boxes.",
+        "pdf_grouping_complete": "PDF layout grouping is complete.",
+        "pdf_bar_box_construction_not_enough_for_build_ir": "PDF bar-box construction is incomplete and not safe to build IR.",
     }
     return {
         "code": code,

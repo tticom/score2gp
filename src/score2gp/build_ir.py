@@ -1932,6 +1932,22 @@ def _tabraw_grouping_risk(tabraw: TabRaw) -> dict[str, object] | None:
             "pdf_barline_rejected_relative_height",
             "pdf_barline_validation_threshold_boundary",
             "pdf_barline_validation_not_enough_for_build_ir",
+
+            # New Phase 6 Bar Box Construction Codes
+            "pdf_bar_box_requires_two_boundaries",
+            "pdf_bar_box_missing_left_boundary",
+            "pdf_bar_box_missing_right_boundary",
+            "pdf_bar_box_boundary_ambiguous",
+            "pdf_bar_box_too_narrow",
+            "pdf_bar_box_overlaps_neighbor",
+            "pdf_bar_box_outside_system_bounds",
+            "pdf_candidate_between_bar_boxes",
+            "pdf_candidate_on_bar_boundary",
+            "pdf_candidate_boundary_ambiguous",
+            "pdf_candidate_unassigned_to_bar",
+            "pdf_partial_grouping_one_system_unboxed",
+            "pdf_grouping_complete",
+            "pdf_bar_box_construction_not_enough_for_build_ir",
         }
     ]
     counts["tabraw_warning_codes"] = counts["warning_codes"]
@@ -2020,6 +2036,21 @@ def _tabraw_unsafe_grouping_warning_codes(tabraw: TabRaw) -> list[str]:
         "pdf_barline_rejected_relative_height",
         "pdf_barline_validation_threshold_boundary",
         "pdf_barline_validation_not_enough_for_build_ir",
+
+        # New Phase 6 Bar Box Construction Codes
+        "pdf_bar_box_requires_two_boundaries",
+        "pdf_bar_box_missing_left_boundary",
+        "pdf_bar_box_missing_right_boundary",
+        "pdf_bar_box_boundary_ambiguous",
+        "pdf_bar_box_too_narrow",
+        "pdf_bar_box_overlaps_neighbor",
+        "pdf_bar_box_outside_system_bounds",
+        "pdf_candidate_between_bar_boxes",
+        "pdf_candidate_on_bar_boundary",
+        "pdf_candidate_boundary_ambiguous",
+        "pdf_candidate_unassigned_to_bar",
+        "pdf_partial_grouping_one_system_unboxed",
+        "pdf_bar_box_construction_not_enough_for_build_ir",
     }
     return sorted({str(warning.get("code")) for warning in tabraw.warnings if warning.get("code") in unsafe})
 
