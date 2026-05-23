@@ -3,11 +3,11 @@
 ## Metadata
 - **Current Branch**: `feature/private-smoke-refresh-after-pdf-barline-validation-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: PR #34 (Draft)
-- **Latest Local Commit**: `b4d3499` (base merge point of PR #33)
-- **Latest Pushed Commit**: `b4d3499` (base merge point of PR #33)
+- **Current PR**: [PR #34](https://github.com/tticom/score2gp/pull/34) (Draft)
+- **Latest Local Commit**: `37992c8`
+- **Latest Pushed Commit**: `37992c8`
 - **Commit Subject**: Refresh private smoke after PDF barline validation
-- **Working Tree Status**: Clean (prior to handoff commit)
+- **Working Tree Status**: Clean
 - **Tests & Checks Run**:
   - `python -m pytest` -> 213 passed cleanly
   - `python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
