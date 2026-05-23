@@ -337,7 +337,7 @@ def write_grouping_diagnostics_html(path: str | Path, report: dict[str, Any]) ->
         if primary_stage == "system_detection":
             hint_text = "System detection is incomplete; use a clearer born-digital fixture, improve public layout heuristics, or review manually."
         elif primary_stage == "bar_detection":
-            hint_text = "System detection succeeded; bar detection is the next blocker."
+            hint_text = "System detection succeeded, but safe bar boxes could not be constructed."
         else:
             hint_text = "PDF layout grouping is unsafe; use a clearer born-digital fixture, improve public layout heuristics, or review manually."
 
@@ -458,6 +458,10 @@ def _grouping_evidence_summary(candidates: list[dict[str, Any]]) -> dict[str, An
                 "candidate_ids": [],
                 "string_assigned_candidate_ids": [],
                 "bar_assigned_candidate_ids": [],
+                "barline_candidates_count": raw.get("barline_candidates_count"),
+                "valid_barline_count": raw.get("valid_barline_count"),
+                "rejected_barline_count": raw.get("rejected_barline_count"),
+                "rejection_reasons": raw.get("rejection_reasons"),
             }
         systems[key]["candidate_ids"].append(candidate.get("id"))
         if candidate.get("string") is not None:
@@ -479,6 +483,12 @@ def _grouping_system_html(system: dict[str, Any]) -> str:
     bbox = system.get("tab_staff_bbox", {})
     bbox_text = json.dumps(bbox, sort_keys=True)
     warnings = ", ".join(str(item) for item in system.get("grouping_warnings", [])) or "none"
+    barline_cands = system.get("barline_candidates_count")
+    valid_barlines = system.get("valid_barline_count")
+    rejected_barlines = system.get("rejected_barline_count")
+    reasons = system.get("rejection_reasons")
+    reasons_str = json.dumps(reasons) if reasons else "none"
+
     return (
         "<li>"
         f"page {html.escape(str(system.get('page_index')))}, "
@@ -489,10 +499,10 @@ def _grouping_system_html(system: dict[str, Any]) -> str:
         f"string lines: {html.escape(str(len(system.get('tab_line_ys', []))))}; "
         f"bar boxes: {html.escape(str(len(system.get('bar_boxes', []))))}; "
         f"candidate assignments: {html.escape(str(len(system.get('candidate_ids', []))))}; "
+        f"barline candidates: {html.escape(str(barline_cands))}; "
+        f"valid barlines: {html.escape(str(valid_barlines))}; "
+        f"rejected barlines: {html.escape(str(rejected_barlines))} (reasons: {html.escape(reasons_str)}); "
         f"grouping confidence: {html.escape(str(system.get('grouping_confidence')))}; "
-        f"ASCII timing: {html.escape(str(system.get('ascii_timing_status')))}; "
-        f"ASCII bar separators: {html.escape(str(system.get('ascii_bar_separator_count')))}; "
-        f"ASCII measure segments: {html.escape(str(system.get('ascii_measure_segment_count')))}; "
         f"warnings: {html.escape(warnings)}"
         "</li>"
     )
