@@ -1,61 +1,59 @@
 # Handoff
 
 ## Metadata
-- **Current Branch**: `feature/pdf-string-assignment-public-fixtures-v0.4`
+- **Current Branch**: `feature/pdf-fret-refinement-v0.5`
 - **Base Branch**: `main`
-- **Current PR**: [PR #43](https://github.com/tticom/score2gp/pull/43) (Draft)
-- **Latest Local Commit**: `71e53e8`
-- **Latest Pushed Commit**: `71e53e8`
-- **Commit Subject**: Implement PDF string assignment heuristics and public fixtures
+- **Current PR**: [PR #44](https://github.com/tticom/score2gp/pull/44) (Draft)
+- **Latest Local Commit**: `f2672bd`
+- **Latest Pushed Commit**: `f2672bd`
+- **Commit Subject**: Add PDF fret refinement fixtures v0.5
 - **Working Tree Status**: Clean (except modified `HANDOFF.md` once saved)
 - **Tests & Checks Run**:
-  - `python -m pytest` -> 249 passed cleanly in 14.70s
+  - `python -m pytest` -> 262 passed cleanly in 17.42s
   - `python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
   - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid
   - `git diff --check` -> passed cleanly
   - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep` is tracked under Git
-- **GitHub Check Status**: N/A
+- **GitHub Check Status**: N/A (Draft PR)
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or diagnostic outputs are tracked or committed. All outputs under `work/` are ignored.
 
 ## What Changed in the Task
-- **Added 10 Public Synthetic PDF Fixtures**: Created a programmatic generator `tests/fixtures/pdf/make_string_assignment_pdfs.py` compiling 10 public synthetic PDF fixtures under `tests/fixtures/pdf/` mapping to key string assignment conditions:
-  1. `generated_pdf_string_assignment_valid.pdf`: Six-line tab staff with single-digit fret numbers centered on each string.
-  2. `generated_pdf_string_assignment_multidigit.pdf`: Valid staff with multi-digit fret numbers (e.g., "10", "12", "15").
-  3. `generated_pdf_string_assignment_offset_tolerant.pdf`: Candidate slightly above/below a string line but inside the tolerance threshold.
-  4. `generated_pdf_string_assignment_between_lines.pdf`: Candidate exactly between two string lines.
-  5. `generated_pdf_string_assignment_outside_staff.pdf`: Candidate outside the top/bottom staff region.
-  6. `generated_pdf_string_assignment_compact_staff.pdf`: Compact staff where vertical spacing between lines is too small (`< 8.0`).
-  7. `generated_pdf_string_assignment_techniques.pdf`: Inline technique markers near strings (e.g., 'h', 'p', '/').
-  8. `generated_pdf_string_assignment_chords.pdf`: Chord symbols above the staff.
-  9. `generated_pdf_string_assignment_grouped_success.pdf`: Fully grouped page where system, bar, and string assignment all succeed.
-  10. `generated_pdf_string_assignment_upstream_blocked.pdf`: String assignment succeeds but upstream edge-boundary/bar-box failures remain.
-- **Defined Taxonomy of 14 String-Related Warning/Reason/Provenance Codes**:
-  - `pdf_string_assignment_nearest_line`: Success code indicating a fret candidate was successfully assigned to the nearest string line.
-  - `pdf_string_assignment_outside_staff`: Blocker warning for a fret candidate lying outside the vertical bounds of the tab staff.
-  - `pdf_string_assignment_between_lines`: Blocker warning for a fret candidate lying exactly between two string lines.
-  - `pdf_string_assignment_too_far_from_line`: Blocker warning for a fret candidate too far from any string line to assign safely.
-  - `pdf_string_assignment_overlaps_multiple_bands`: Blocker warning for a fret candidate whose height overlaps multiple string lines.
-  - `pdf_string_assignment_confidence_below_threshold`: Blocker warning for low-confidence string assignment.
-  - `pdf_string_assignment_compact_staff_ambiguous`: Blocker warning for compact staff spacing preventing safe assignment.
-  - `pdf_playable_candidate_requires_string_assignment`: Blocker warning that playable fret candidates require unambiguous string assignment.
-  - `pdf_non_playable_text_not_string_assigned`: Info code indicating non-playable text candidates do not require string assignment.
-  - `pdf_multidigit_fret_string_assigned`: Success code for a multi-digit fret candidate successfully assigned.
-  - `pdf_string_assignment_not_enough_for_build_ir`: Blocker warning indicating one or more playable candidates lack safe string assignment.
-  - `pdf_string_assignment_succeeded_upstream_grouping_still_blocks`: Info warning indicating string assignment succeeded, but upstream system/bar grouping blockers prevent full grouping.
-  - `pdf_candidates_unassigned_to_string`: Blocker warning indicating candidates inside system/bar are not assignable to any string.
-  - `ambiguous_string_assignment`: Blocker warning indicating candidate is too far or ambiguous.
-- **Implemented Conservative Heuristics in Layout Parsing**:
-  - Refined `string_for_y` in `src/score2gp/pdf.py` to analyze line spacing, height, compact spacing (`< 8.0`), outside staff bounds, and between-strings midpoints.
-  - Refined `_extract_pdf_text_candidates` to assign strings, calculate vertical height, classify non-playable text elements (chords, techniques), and attach correct warning/provenance codes.
-- **Corrected Compiler Gates and Blockers Whitelists**:
-  - Correctly categorized Phase 9 string assignment codes, ensuring success/info codes (like `nearest_line`, `multidigit`, `non_playable_text_excluded`, and `succeeded_upstream_grouping_still_blocks`) are **excluded** from build-blocking whitelists (`drawn_grouping_codes` in `pdf.py` and `_tabraw_unsafe_grouping_warning_codes` in `build_ir.py`), while strict blockers block ScoreIR building.
-  - Robustly refined `_append_grouping_warnings` to gather all candidate and page warnings when identifying upstream blockers.
-- **Enriched HTML/JSON Diagnostics**:
-  - Appended string assignment metrics, blockers, and remediation advice to Master Grouping HTML/JSON reports in `report.py`.
-  - Added per-candidate string distance and assignment details to system-level HTML tables.
-- **Robust Candidate Classification and Capping**:
-  - Excluded words containing "string" or "strings" from being classified as technique-text because of the "ring" token, resolving title extraction issues.
-  - Only cap candidate confidence to `0.65` when actual unsafe/blocker layout warnings are present.
+- **Added 11 Public Synthetic PDF Fixtures**: Created a programmatic generator `tests/fixtures/pdf/make_fret_refinement_pdfs.py` compiling 11 public synthetic PDF fixtures under `tests/fixtures/pdf/` mapping to key fret-refinement scenarios:
+  1. `generated_pdf_fret_clean_single_digit.pdf`: Clean single-digit frets on six tab strings.
+  2. `generated_pdf_fret_clean_multidigit.pdf`: Clean multi-digit frets such as 10, 12, 15.
+  3. `generated_pdf_fret_split_span_merged.pdf`: Multi-digit fret split into separate text spans but tightly aligned.
+  4. `generated_pdf_fret_gap_too_large.pdf`: Adjacent digits too far apart horizontally.
+  5. `generated_pdf_fret_vertical_misalignment.pdf`: Adjacent digits vertically misaligned.
+  6. `generated_pdf_fret_technique_marker.pdf`: Digit near technique marker (e.g. 7h9, 5/7, 8b).
+  7. `generated_pdf_fret_chord_text_excluded.pdf`: Chord symbol or section text containing digits above staff (e.g. A7 or Verse 2).
+  8. `generated_pdf_fret_page_legend_excluded.pdf`: Page number / legend number outside tab system.
+  9. `generated_pdf_fret_oversized_tall.pdf`: Oversized/tall text that overlaps multiple string bands.
+  10. `generated_pdf_fret_tiny_noisy.pdf`: Tiny/noisy digit-like text.
+  11. `generated_pdf_fret_grouped_success.pdf`: Valid grouped counterpart where fret refinement, system, bar, and string assignment all succeed.
+- **Defined Taxonomy of 16 Fret-Related Warning/Reason/Provenance Codes**:
+  - `pdf_fret_single_digit_extracted`: Clean single-digit fret candidate successfully extracted.
+  - `pdf_fret_multidigit_extracted`: Clean multi-digit fret candidate successfully extracted.
+  - `pdf_fret_digits_merged`: Horizontally close digits successfully merged into a single multi-digit candidate.
+  - `pdf_fret_digits_not_merged_gap_too_large`: Rejection warning when horizontal gap between digits is too large to merge.
+  - `pdf_fret_digits_not_merged_vertical_misalignment`: Rejection warning when digits are vertically misaligned.
+  - `pdf_fret_split_text_span_merged`: Indicates horizontal merging performed across distinct PyMuPDF text spans.
+  - `pdf_fret_bbox_too_tall`: Rejection warning when candidate bounding box height exceeds maximum limit.
+  - `pdf_fret_bbox_too_wide`: Rejection warning when candidate bounding box width exceeds maximum limit.
+  - `pdf_fret_bbox_too_small`: Rejection warning when candidate bounding box is too small/noisy.
+  - `pdf_fret_outside_valid_range`: Rejection warning when numeric fret value is outside valid range (`0 <= fret <= 24`).
+  - `pdf_fret_non_digit_rejected`: Rejection warning when candidate contains invalid non-digit characters.
+  - `pdf_fret_technique_marker_excluded`: Technique symbols near fret digits are preserved as separate non-playable technique markers.
+  - `pdf_fret_chord_text_digit_excluded`: Digits inside chord symbols or section text above staff are excluded from playable fret candidates.
+  - `pdf_fret_page_or_legend_number_excluded`: Page/legend numbers outside the staff are excluded.
+  - `pdf_fret_optical_bounds_confidence_below_threshold`: Rejection warning when optical bounding box dimensions are low-confidence.
+  - `pdf_fret_refinement_not_enough_for_build_ir`: Blocker warning refusing ScoreIR construction due to unresolved fret ambiguities.
+- **Implemented Conservative Heuristics for Horizontal & Vertical Grouping**:
+  - Horizontal gap grouping threshold set to `5.0` pixels, and vertical offset alignment threshold set to `2.0` pixels inside the same string band.
+  - Estimated proportional bounding boxes for split parts of technique mixed words (like `7h9`, `5/7`, `8b`) based on character length relative to overall word width.
+  - Retained string distance and unassigned-to-string warning metadata on unassigned candidates to preserve robust downstream string diagnostics.
+- **Enriched HTML/JSON Master Grouping Diagnostics**:
+  - Integrated complete metrics for fret refinement, classification, merge counts, and rejection codes.
+  - Updated visual Master Grouping report with a dedicated Fret Refinement section and clear remediation instructions.
 
 ## Private Smoke Blocker Summary (No Private Content Included)
 - **`private_input_1`** (`pdf-tab-musicxml`):
@@ -93,15 +91,15 @@
   - **Timing status**: `not_attempted`.
 
 ## Comparison with Previous Blocker Summary
-- **Previous summary**: `private_input_1` had grouping status `partial_pdf_grouping` and system 6 on page 2 had fallback rejected safely under PR #42 (v0.9).
-- **Current summary**: Rejection behavior remains correctly strict, keeping `partial_pdf_grouping` and blocking ScoreIR generation. Non-playable chord symbols and techniques are successfully preserved and excluded from string blocking. Success codes do not block the build, and the diagnostics accurately report the string metrics (141 candidates assigned to string).
+- **Previous summary**: `private_input_1` had grouping status `partial_pdf_grouping` and system 6 on page 2 had fallback rejected safely under PR #43.
+- **Current summary**: Rejection behavior remains correctly strict, keeping `partial_pdf_grouping` and blocking ScoreIR generation. Non-playable chord symbols, page/legend numbers, and techniques are successfully preserved and excluded from playable fret blocking. Fret refinement successfully identifies clean candidates while flagging ambiguous or rejected merge boundaries appropriately, keeping ScoreIR gates fully secure.
 
 ## Current Top Blocker Classification
 1. **`pdf_bar_box_one_boundary_rejected`** (Primary PDF grouping blocker stage)
 2. **`musicxml_timing_repair_not_safe`** (Primary MusicXML timeline voice overlap blocker)
 
 ## Next Recommended Branch
-- **`feature/pdf-fret-refinement-v0.5`**: Once the draft PR for string assignment is merged into main, the next recommended branch is `feature/pdf-fret-refinement-v0.5` to refine fret number optical bounds and handle OCR/digit alignment edge cases.
+- **`feature/pdf-pitch-tuning-v0.6`**: Once the draft PR for fret refinement is merged into main, the next recommended branch is `feature/pdf-pitch-tuning-v0.6` to refine pitch/tuning layout parsing and improve timing mapping.
 
 ## Explicit Scope Boundaries
 - **Do not** commit any private inputs, private outputs, private GP files, private PDFs, private summaries, private HTML diagnostics, or any `work/` contents.
