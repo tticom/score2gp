@@ -2315,6 +2315,7 @@ def _tabraw_unsafe_grouping_warning_codes(tabraw: TabRaw) -> list[str]:
         "pdf_fret_digits_not_merged_gap_too_large",
         "pdf_fret_digits_not_merged_vertical_misalignment",
         "pdf_fret_digits_overlap_ambiguous",
+        "pdf_fret_digit_symbol_overlap_ambiguous",
         "pdf_fret_bbox_too_tall",
         "pdf_fret_bbox_too_wide",
         "pdf_fret_bbox_too_small",

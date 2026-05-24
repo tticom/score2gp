@@ -2205,3 +2205,52 @@ def test_tuning_does_not_infer_strings_or_frets(tmp_path) -> None:
     raw = TabRaw.model_validate(extract_tab(PDF_TUNING_EXPLICIT_EADGBE, tabraw_path))
     playable = [c for c in raw.candidates if c.parsed_fret is not None]
     assert all(c.raw.get("is_tuning_evidence") is None for c in playable)
+
+
+def test_pdf_fret_custom_width_digits(tmp_path) -> None:
+    pdf_path = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_fret_custom_width_digits.pdf"
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "fret_custom_width.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+
+    # Assert safe custom font widths are successfully processed and accepted
+    # 5 (fontsize 7), 3 (fontsize 13), (5), [3], 7., 8, h
+    fret_candidates = [c for c in raw.candidates if c.kind == "fret"]
+    assert len(fret_candidates) == 6
+    assert [c.parsed_fret for c in fret_candidates] == [8, 5, 3, 5, 3, 7]
+    assert all(c.confidence >= 0.70 for c in fret_candidates)
+
+
+def test_pdf_fret_ligature_overlapping_ambiguous(tmp_path) -> None:
+    pdf_path = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_fret_ligature_overlapping_ambiguous.pdf"
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "fret_ligature_ambig.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+
+    # Assert unsafe visual overlaps and squished ligatures are downgraded/refused
+    # 5 and h overlapping horizontally, and 9p squished (fontsize 5)
+    fret_candidates = [c for c in raw.candidates if c.kind == "fret"]
+    assert len(fret_candidates) == 2
+
+    warning_codes = {warning.get("code") for warning in raw.warnings}
+    assert "pdf_fret_digit_symbol_overlap_ambiguous" in warning_codes
+    assert "pdf_fret_refinement_not_enough_for_build_ir" in warning_codes
+
+    # Check that they have low confidence (< 0.70)
+    assert all(c.confidence < 0.70 for c in fret_candidates)
+
+
+def test_build_ir_refuses_ligature_overlapping_ambiguous(tmp_path) -> None:
+    pdf_path = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_fret_ligature_overlapping_ambiguous.pdf"
+    tabraw_path = tmp_path / "fret_ligature_refuse.tabraw.json"
+    ir_path = tmp_path / "fret_ligature_refuse.ir.json"
+
+    extract_tab(pdf_path, tabraw_path)
+
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+
+    assert not ir_path.exists()
+    assert raised.value.category == "partial_pdf_grouping"
+    payload = raised.value.to_diagnostics_payload()
+    assert "pdf_fret_digit_symbol_overlap_ambiguous" in payload["details"]["warning_codes"]

@@ -184,6 +184,38 @@ def make_pdf_fret_overlapping_digits_ambiguous() -> None:
     _save(doc, "generated_pdf_fret_overlapping_digits_ambiguous.pdf")
 
 
+def make_pdf_fret_custom_width_digits() -> None:
+    # 14. Custom font digits with unusual width (narrow/wide glyphs, parentheses (5), clean separations)
+    doc, page = _new_page("Custom Width Digits and Parentheses")
+    line_ys = [120, 134, 148, 162, 176, 190]
+    _draw_tab_lines(page, line_ys=line_ys)
+    _draw_barlines(page, line_ys=line_ys, bar_xs=[88, 205, 322])
+    # Safe custom width/size digits
+    _write_fret(page, "5", 100, line_ys[1], fontsize=7)  # small but clear
+    _write_fret(page, "3", 130, line_ys[2], fontsize=13)  # large but clear
+    # Digit adjacent to parentheses/brackets/punctuation (which are tech_chars)
+    _write_fret(page, "(5)", 160, line_ys[3])  # parenthesized fret (e.g. ghost note)
+    _write_fret(page, "[3]", 220, line_ys[4])  # bracketed fret
+    _write_fret(page, "7.", 250, line_ys[5])  # digit with punctuation
+    _write_fret(page, "8", 280, line_ys[0])  # clean counterpart
+    _write_fret(page, "h", 289, line_ys[0])  # clearly separated technique
+    _save(doc, "generated_pdf_fret_custom_width_digits.pdf")
+
+
+def make_pdf_fret_ligature_overlapping_ambiguous() -> None:
+    # 15. Unsafe ligatures, deeply overlapping digit/symbol text
+    doc, page = _new_page("Ligature and Overlapping Ambiguous")
+    line_ys = [120, 134, 148, 162, 176, 190]
+    _draw_tab_lines(page, line_ys=line_ys)
+    _draw_barlines(page, line_ys=line_ys, bar_xs=[88, 205, 322])
+    # Overlapping digit and symbol (drawn separately but overlapping horizontally > 1.5 pt)
+    _write_fret(page, "5", 100, line_ys[1])
+    _write_fret(page, "h", 101.5, line_ys[1])  # deep overlap: dx = 1.5 pt
+    # Unsafe highly-compressed/ligature mixed word (tiny font making the split digit width < 4.0 pt)
+    _write_fret(page, "9p", 150, line_ys[2], fontsize=5)
+    _save(doc, "generated_pdf_fret_ligature_overlapping_ambiguous.pdf")
+
+
 def main() -> None:
     make_pdf_fret_clean_single_digit()
     make_pdf_fret_clean_multidigit()
@@ -198,6 +230,8 @@ def main() -> None:
     make_pdf_fret_grouped_success()
     make_pdf_fret_touching_digits_safe()
     make_pdf_fret_overlapping_digits_ambiguous()
+    make_pdf_fret_custom_width_digits()
+    make_pdf_fret_ligature_overlapping_ambiguous()
 
 
 if __name__ == "__main__":

@@ -1,15 +1,15 @@
 # Handoff
 
 ## Metadata
-- **Current Branch**: `feature/pdf-fret-refinement-v0.8`
+- **Current Branch**: `feature/pdf-fret-optical-bounds-v0.9`
 - **Base Branch**: `main`
-- **Current PR**: [PR #48](https://github.com/tticom/score2gp/pull/48) (Draft)
-- **Latest Local Commit**: `378f6c2`
-- **Latest Pushed Commit**: `378f6c2`
-- **Commit Subject**: feat: refine PDF fret digit size gates and horizontal overlap grouping filters v0.8
+- **Current PR**: [PR #49](https://github.com/tticom/score2gp/pull/49) (Draft)
+- **Latest Local Commit**: `963d274`
+- **Latest Pushed Commit**: `963d274`
+- **Commit Subject**: Refine fret candidate confidence scoring, character-splitting, and digit-symbol overlap gates v0.9
 - **Working Tree Status**: Clean (except modified `HANDOFF.md` once saved, and local untracked venv/test outputs)
 - **Tests & Checks Run**:
-  - `.venv\Scripts\pytest` -> 287 passed cleanly in 14.54s (including 3 new fret overlap tests)
+  - `.venv\Scripts\pytest` -> 290 passed cleanly in 16.01s (including 3 new custom width & ligature overlap tests)
   - `.venv\Scripts\python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
   - `.venv\Scripts\python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid
   - `git diff --check` -> passed cleanly
@@ -18,26 +18,26 @@
 - **GitHub Check Status**: N/A / pending
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or diagnostic outputs are tracked or committed. All outputs under `work/` are ignored.
 
-## Cleanup Performed for PR #47 Leftovers
-- Verified that PR #47 accidentally tracked several root generated/diagnostic files: `grouping-diagnostics.html`, `inspect/inspect_pdf.json`, `inspect/pages/page-001.png`, `overlays/page-001-grouping.png`, `tuning_outside.tabraw.json`, and `warnings.json`.
-- Removed these leftover files completely from Git tracking using `git rm -r` as part of the immediate cleanup prerequisite.
-- Committed the cleanup as `c26b270` before proceeding to feature implementation.
-- Verified with `git ls-files` that these files are no longer tracked in our branch.
-
 ## What Changed in the Task
-- **Refined Fret Digit Merging Logic (`pdf.py`)**:
-  - Expanded the horizontal adjacent merging gap to support safe touch/overlap down to `-3.0 pt` (when vertically aligned within `2.0 pt`), allowing tight/touching digit spans to merge successfully into multi-digit frets (e.g. `"10"`).
-  - Introduced `pdf_fret_digits_overlap_ambiguous` blocker warning code when the horizontal overlap is too deep (`gap < -3.0 pt`) or vertically misaligned with an overlap, marking both digit spans as unsafe to prevent silent corruption.
-- **Added Blocker Whitelists (`build_ir.py` & `pdf.py`)**:
-  - Registered `pdf_fret_digits_overlap_ambiguous` under `drawn_grouping_codes` in `pdf.py` and mapped it to a descriptive error message in `_WARNING_MESSAGE_MAP`.
-  - Whitelisted it in `_tabraw_unsafe_grouping_warning_codes` in `build_ir.py` to ensure `build_ir` cleanly refuses compilation on ambiguous/deep overlaps.
+- **Broadened Mixed-Word Technique/Symbol Splitting (`pdf.py`)**:
+  - Expanded `tech_chars` in `_split_technique_mixed_words` to support parentheses `()`, brackets `[]`, and punctuation `.,-`.
+  - Adjusted the splitting regex to `r"(\d+|[hpsvbr~/\\()\[\].,\-]+)"` to cleanly isolate pure digit parts from adjacent non-playable symbol/punctuation wrappers.
+- **Visual Bounds Validation on Split Digits (`pdf.py`)**:
+  - Added a validation check in `_split_technique_mixed_words` to detect if a split digit part has a resulting bounding box `width < 4.0 pt`, flagging it with `pdf_fret_digit_symbol_overlap_ambiguous` and `pdf_fret_refinement_not_enough_for_build_ir` to catch highly compressed ligatures.
+- **Digit-Symbol Horizontally Close Overlap Detection (`pdf.py`)**:
+  - Implemented logic comparing all merged playable fret candidates against non-playable symbol candidates on the same system. If they horizontally overlap (`overlap > 1.5 pt`) and are vertically close (`dy <= 6.0 pt`), it flags them with `pdf_fret_digit_symbol_overlap_ambiguous`.
+- **Refined Fret Candidate Confidence Scoring (`pdf.py`)**:
+  - Added parameter passing of `width`, `height`, `line_spacing`, and `assignment_warnings` to `_candidate_confidence`.
+  - Introduced confidence deductions inside `_candidate_confidence` for extremely small bounds, aspect ratio anomalies, and `pdf_fret_digit_symbol_overlap_ambiguous` warnings.
+- **Safety Gate Integration in `build_ir.py`**:
+  - Registered `pdf_fret_digit_symbol_overlap_ambiguous` under unsafe grouping warnings whitelists in `build_ir.py` so that the compiler blocks ScoreIR compilation and prevents converting uncertain text into playable notes.
 - **Created 2 New Public Synthetic PDF Fixtures (`make_fret_refinement_pdfs.py`)**:
-  - `generated_pdf_fret_touching_digits_safe.pdf`: Digits `"1 "` and `"0"` written close together with trailing whitespace (to force separate word tokens during PyMuPDF parsing) resulting in a safe touching overlap (`gap = -2.0 pt`).
-  - `generated_pdf_fret_overlapping_digits_ambiguous.pdf`: Digits with too deep of an overlap (`gap = -5.0 pt`).
-- **Added 3 New Fret Refinement Unit Tests (`test_pdf.py`)**:
-  - `test_pdf_fret_touching_digits_safe`: Asserts that touching digits successfully merge into `"10"`.
-  - `test_pdf_fret_overlapping_digits_ambiguous`: Asserts that deep overlaps trigger the `pdf_fret_digits_overlap_ambiguous` blocker warning.
-  - `test_build_ir_refuses_overlapping_digits_ambiguous`: Asserts that `build_ir` cleanly raises `BuildIrInputRiskError` and refuses IR compilation on deep overlaps.
+  - `generated_pdf_fret_custom_width_digits.pdf`: Safe narrow/wide fonts, parentheses `(5)`, brackets `[3]`, punctuation `7.`, and clean `h` separation.
+  - `generated_pdf_fret_ligature_overlapping_ambiguous.pdf`: Unsafe deep horizontal overlap of `5` and `h` (overlap = 1.5 pt), and extremely squished `"9p"` ligature word at `fontsize=5`.
+- **Added 3 New Unit Tests (`test_pdf.py`)**:
+  - `test_pdf_fret_custom_width_digits`: Asserts that safe custom-width / parentheses parse successfully and get accepted with confidence >= 0.70.
+  - `test_pdf_fret_ligature_overlapping_ambiguous`: Asserts that unsafe visual overlaps/ligatures are rejected and flagged with `pdf_fret_digit_symbol_overlap_ambiguous` (confidence < 0.70).
+  - `test_build_ir_refuses_ligature_overlapping_ambiguous`: Asserts that `build_ir` refuses compilation with `BuildIrInputRiskError` on ambiguous overlaps.
 
 ## Private Smoke Blocker Summary (No Private Content Included)
 - **`private_input_1`** (`pdf-tab-musicxml`):
@@ -73,7 +73,7 @@
 2. **`musicxml_timing_repair_not_safe`** (Primary MusicXML timeline voice overlap blocker)
 
 ## Next Recommended Task / Branch
-- **`feature/pdf-fret-optical-bounds-v0.9`**: Refine fret candidate character-recognition confidence scoring and handle custom fonts or ligature character widths (e.g. numbers overlapping with symbols).
+- **`feature/pdf-timing-refinement-v1.0`**: Design a strategy for refining timing preflight checks, resolving voice durational overlaps, or establishing safe heuristics for aligning vector-layout events.
 
 ## Explicit Scope Boundaries
 - **Do not** commit any private inputs, private outputs, private GP files, private PDFs, private summaries, private HTML diagnostics, or any `work/` contents.
