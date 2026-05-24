@@ -382,3 +382,34 @@ def test_unrecoverable_timing_report_generation(tmp_path) -> None:
     assert "remediation guidance" in html_content.lower()
     assert "table" in html_content.lower()
 
+
+def test_conservative_musicxml_timing_remediation(tmp_path) -> None:
+    # 1. Test parse_musicxml with allow_remediation=True
+    imported = parse_musicxml(FIXTURES / "timing_overfull_measure.musicxml", allow_remediation=True)
+    issues = analyze_musicxml_timing(imported)
+
+    # Overfull bar error should be absent under remediation
+    assert not any(issue.code == "musicxml-overfull-bar" and issue.severity == "error" for issue in issues)
+
+    # Remediation warning should be present
+    assert any(issue.code == "musicxml_timing_overfull_resolved" and issue.severity == "warning" for issue in issues)
+
+    # Truncated note duration should be recorded in warnings
+    assert any(w.code == "musicxml_duration_truncated_to_measure_boundary" for w in imported.warnings)
+
+    # Verify that the parsed note duration was successfully truncated
+    measure = imported.parts[0].measures[0]
+    assert len(measure.notes) == 2
+    # The second note originally had duration 10, should be truncated to 8
+    assert measure.notes[1].duration_divisions == 8
+
+    # 2. Test successful build_ir compilation with allow_remediation=True
+    out_ir = tmp_path / "remediated.ir.json"
+    score = build_ir_from_files(
+        FIXTURES / "timing_overfull_measure.musicxml",
+        TABRAW,
+        out_path=out_ir,
+        allow_remediation=True,
+    )
+    assert score is not None
+    assert out_ir.exists()
