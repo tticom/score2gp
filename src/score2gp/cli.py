@@ -132,6 +132,8 @@ def build_ir_command(
     out: Path = typer.Option(...),
     diagnostics_out: Optional[Path] = typer.Option(None, "--diagnostics-out"),
     ascii_alignment: Optional[Path] = typer.Option(None, "--ascii-alignment"),
+    allow_remediation: bool = typer.Option(False, "--allow-remediation"),
+    allow_skip_unboxed: bool = typer.Option(False, "--allow-skip-unboxed-systems"),
 ) -> None:
     """Build a limited ScoreIR file from synthetic MusicXML plus TabRaw inputs."""
     if musicxml is None or tabraw is None:
@@ -140,7 +142,14 @@ def build_ir_command(
             "and supports only the limited synthetic MusicXML + TabRaw alignment path."
         )
     try:
-        score, diagnostics = build_ir_with_diagnostics_from_files(musicxml, tabraw, out, ascii_alignment)
+        score, diagnostics = build_ir_with_diagnostics_from_files(
+            musicxml,
+            tabraw,
+            out,
+            ascii_alignment,
+            allow_remediation=allow_remediation,
+            allow_skip_unboxed=allow_skip_unboxed,
+        )
     except BuildIrInputRiskError as exc:
         payload = exc.to_diagnostics_payload()
         if exc.category == "missing_pdf_grouping" and tabraw is not None:
