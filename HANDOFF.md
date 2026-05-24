@@ -5,9 +5,9 @@
 - **Current Branch**: `feature/private-smoke-refresh-after-pdf-timing-refinement-v1.0`
 - **Base Branch**: `main`
 - **Current PR**: [PR #51](https://github.com/tticom/score2gp/pull/51) (Draft)
-- **Latest Local Commit**: `e549fae5ae812193324b27c5812b2973d58bbd77`
-- **Latest Pushed Commit**: `e549fae5ae812193324b27c5812b2973d58bbd77`
-- **Latest Commit Subject**: `Mark private-safe smoke refresh task as completed`
+- **Latest Local Commit**: `bebf4ebe316f87a662abf813b229ff7bd1916093`
+- **Latest Pushed Commit**: `bebf4ebe316f87a662abf813b229ff7bd1916093`
+- **Latest Commit Subject**: `Update HANDOFF.md with private smoke refresh findings`
 - **Working Tree Status Before Handoff Update**: Clean
 - **GitHub Check Status**: Pending (triggered by current feature branch push)
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, private summaries, overlays, logs, diagnostic outputs, or `work/` contents are tracked.
