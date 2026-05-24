@@ -4,10 +4,10 @@
 - **Current Branch**: `feature/pdf-pitch-tuning-v0.6`
 - **Base Branch**: `main`
 - **Current PR**: None (Feature Branch)
-- **Latest Local Commit**: `9e3e555`
+- **Latest Local Commit**: `766a581`
 - **Latest Pushed Commit**: `9e3e555`
-- **Commit Subject**: Merge pull request #44 from tticom/feature/pdf-fret-refinement-v0.5
-- **Working Tree Status**: Modified/untracked files present, ready to commit and push
+- **Commit Subject**: Refine PDF pitch and tuning layout parsing and public fixtures v0.6
+- **Working Tree Status**: Clean (except modified `HANDOFF.md` once saved, and untracked diagnostic/inspect outputs)
 - **Tests & Checks Run**:
   - `python -m pytest` -> 274 passed cleanly in 17.33s
   - `python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
