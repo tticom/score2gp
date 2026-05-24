@@ -27,6 +27,7 @@
 - Extend diagnostics with PDF-derived TabRaw evidence counts and extraction quality flags.
 - Add per-system and ignored non-playable candidate diagnostics for PDF-derived TabRaw.
 - Add per-bar x-to-onset diagnostics with visual fret groups, MusicXML onset groups, drift/error values, chord-stack flags, ambiguity counts, and quality labels.
+- Add `pdf-timing-refinement.v1.0` classifications so invalid MusicXML timing, unsupported polyphony, and safe/partial/ambiguous/incompatible vector timing evidence are explicit without enabling automatic repair.
 - Use the diagnostics to decide when a controlled private fixture is safe to try.
 - Run private fixtures only through ignored diagnostic workflows with sanitized summaries.
 - Reproduce private failure classes with public fixtures: Audiveris-like MusicXML timing risk and PDF extraction without grouping.
