@@ -5,9 +5,9 @@
 - **Current Branch**: `feature/private-smoke-refresh-after-pdf-timing-refinement-v1.0`
 - **Base Branch**: `main`
 - **Current PR**: [PR #51](https://github.com/tticom/score2gp/pull/51) (Draft)
-- **Latest Local Commit**: `3488f68ba2615a8cdb3e402290dc2ca8274ae841`
-- **Latest Pushed Commit**: `f280ca13a5c77784b2fc9f3003b24674967306f7`
-- **Latest Commit Subject**: `Document cross-agent final report rule in AGENTS.md`
+- **Latest Local Commit**: `4943a84876dbe49ec9d441edf30c30dd3c61e1f1`
+- **Latest Pushed Commit**: `4943a84876dbe49ec9d441edf30c30dd3c61e1f1`
+- **Latest Commit Subject**: `Update HANDOFF.md with cross-agent rule changes`
 - **Working Tree Status Before Handoff Update**: Clean
 - **GitHub Check Status**: Pending (triggered by current feature branch push)
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, private summaries, overlays, logs, diagnostic outputs, or `work/` contents are tracked.
