@@ -325,7 +325,7 @@ def build_grouping_diagnostics(
             "whether_tuning_used_for_grouping": False,
             "whether_tuning_used_for_string_assignment": False,
             "whether_tuning_used_for_fret_inference": False,
-            "whether_timing_mapping_implemented": False,
+            "whether_timing_mapping_implemented": True,
             "is_pitch_tuning_primary_blocker": primary_blocker_stage == "pitch_tuning",
             "is_pitch_tuning_secondary_blocker": is_blocked and primary_blocker_stage != "pitch_tuning" and tuning_evidence_count > 0,
         },
@@ -3435,6 +3435,206 @@ def write_pdf_edge_boundary_report_html(path: str | Path, report: dict[str, Any]
       </ul>
       <pre><code>{html.escape(json.dumps(report, indent=2, sort_keys=True))}</code></pre>
     </div>
+  </div>
+</body>
+</html>
+"""
+    out.write_text(body, encoding="utf-8")
+
+
+def write_pdf_timing_mapping_diagnostics_html(path: str | Path, payload: dict[str, Any], json_path_ref: str | Path | None = None) -> None:
+    """Write an inspectable developer-facing HTML report for PDF Timing Mapping diagnostics."""
+    out = Path(path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    # Get the timing mapping dictionary
+    mapping_data = payload.get("pdf_timing_mapping")
+    if not mapping_data and "schema_version" in payload and payload.get("schema_version") == "pdf-timing-mapping.v0.7":
+        mapping_data = payload
+    if not mapping_data:
+        mapping_data = payload.get("details", {}).get("pdf_timing_mapping") or payload.get("details", {})
+
+    quality = mapping_data.get("quality", "unknown") if isinstance(mapping_data, dict) else "unknown"
+    grouping_safe = mapping_data.get("grouping_safe") if isinstance(mapping_data, dict) else False
+    timing_source_safe = mapping_data.get("timing_source_safe") if isinstance(mapping_data, dict) else False
+    attempted = mapping_data.get("whether_mapping_attempted") if isinstance(mapping_data, dict) else False
+    refused = mapping_data.get("whether_mapping_refused") if isinstance(mapping_data, dict) else True
+    refusal_reason_codes = mapping_data.get("refusal_reason_codes", []) if isinstance(mapping_data, dict) else []
+
+    status_label = "Attempted" if attempted else "Refused"
+    status_class = "status-allowed" if attempted and not refused else "status-refused"
+
+    remediation = mapping_data.get("remediation_hint") if isinstance(mapping_data, dict) else None
+    if not remediation:
+        remediation = "Timing mapping is diagnostic evidence only and cannot repair unsafe PDF grouping or unsafe MusicXML timing."
+
+    reason_list = "\n".join(f"<li><code>{html.escape(str(code))}</code></li>" for code in refusal_reason_codes) if refusal_reason_codes else "<li><em>None</em></li>"
+
+    # Per-bar table
+    per_bar = payload.get("per_bar", [])
+    bar_rows = []
+    if per_bar:
+        for bar in per_bar:
+            bar_index = bar.get("bar_index", 0)
+            candidate_count = bar.get("playable_candidate_count", 0)
+            onset_count = bar.get("musicxml_pitched_onset_group_count", 0)
+            bar_quality = bar.get("quality", "unknown")
+            bar_quality_class = "status-allowed" if bar_quality == "good" else ("status-warning" if bar_quality == "warning" else "status-refused")
+
+            relative_errors = bar.get("relative_errors") or []
+            max_err = bar.get("max_relative_error")
+            mean_err = bar.get("mean_absolute_relative_error")
+
+            err_str = f"Max: {max_err}, Mean: {mean_err}" if max_err is not None else "N/A"
+            warnings_str = ", ".join(bar.get("x_to_onset_warnings", [])) or "None"
+
+            bar_rows.append(f"""<tr>
+              <td>Bar {bar_index}</td>
+              <td>{candidate_count}</td>
+              <td>{onset_count}</td>
+              <td><span class="badge {bar_quality_class}">{html.escape(str(bar_quality))}</span></td>
+              <td>{html.escape(err_str)}</td>
+              <td>{html.escape(warnings_str)}</td>
+            </tr>""")
+        bars_html = "\n".join(bar_rows)
+    else:
+        bars_html = """<tr><td colspan="6" class="empty-state">No per-bar alignment details available (timing mapping was refused or not attempted).</td></tr>"""
+
+    json_ref = html.escape(str(json_path_ref or "N/A"))
+
+    body = f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PDF Timing Mapping Diagnostics</title>
+  <style>
+    body {{
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      line-height: 1.6;
+      color: #f8f9fa;
+      background-color: #121212;
+      margin: 0;
+      padding: 2rem;
+    }}
+    .container {{
+      max-width: 960px;
+      margin: 0 auto;
+      background: #1e1e1e;
+      padding: 2rem;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    }}
+    h1 {{
+      color: #ffffff;
+      border-bottom: 2px solid #333;
+      padding-bottom: 0.5rem;
+    }}
+    .badge {{
+      display: inline-block;
+      padding: 0.25em 0.6em;
+      font-size: 75%;
+      font-weight: 700;
+      line-height: 1;
+      text-align: center;
+      white-space: nowrap;
+      vertical-align: baseline;
+      border-radius: 0.25rem;
+    }}
+    .status-allowed {{
+      background-color: #28a745;
+      color: #fff;
+    }}
+    .status-warning {{
+      background-color: #ffc107;
+      color: #212529;
+    }}
+    .status-refused {{
+      background-color: #dc3545;
+      color: #fff;
+    }}
+    .remediation-box {{
+      background-color: #2d1a1c;
+      border: 1px solid #6b2024;
+      color: #ffc2c4;
+      padding: 1rem;
+      margin: 1.5rem 0;
+      border-radius: 4px;
+    }}
+    table {{
+      width: 100%;
+      margin-top: 1.5rem;
+      border-collapse: collapse;
+      background-color: #1a1a1a;
+    }}
+    th, td {{
+      padding: 0.75rem;
+      text-align: left;
+      border-bottom: 1px solid #333;
+    }}
+    th {{
+      background-color: #262626;
+      color: #ffffff;
+    }}
+    .empty-state {{
+      text-align: center;
+      color: #888;
+      font-style: italic;
+    }}
+    pre {{
+      background-color: #151515;
+      padding: 1rem;
+      border-radius: 4px;
+      overflow-x: auto;
+    }}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>PDF Timing Mapping Diagnostics</h1>
+    <p>Status: <span class="badge {status_class}">{status_label}</span></p>
+
+    <div class="remediation-box">
+      <strong>Remediation:</strong> {html.escape(remediation)}
+    </div>
+
+    <h2>Tuning/Timing Mapping Evidence</h2>
+    <ul>
+      <li><strong>Contract Schema Version:</strong> <code>pdf-timing-mapping.v0.7</code></li>
+      <li><strong>Input Class:</strong> <code>{html.escape(str(mapping_data.get("input_class", "unknown") if isinstance(mapping_data, dict) else "unknown"))}</code></li>
+      <li><strong>Grouping Status:</strong> <code>{html.escape(str(mapping_data.get("grouping_status", "unknown") if isinstance(mapping_data, dict) else "unknown"))}</code></li>
+      <li><strong>Grouping Safe:</strong> <code>{str(grouping_safe).lower()}</code></li>
+      <li><strong>Timing Source Safe:</strong> <code>{str(timing_source_safe).lower()}</code></li>
+      <li><strong>MusicXML Timing Preflight Status:</strong> <code>{html.escape(str(mapping_data.get("musicxml_timing_preflight_status", "unknown") if isinstance(mapping_data, dict) else "unknown"))}</code></li>
+      <li><strong>Mapping Attempted:</strong> <code>{str(attempted).lower()}</code></li>
+      <li><strong>Mapping Refused:</strong> <code>{str(refused).lower()}</code></li>
+      <li><strong>Overall Mapping Quality:</strong> <span class="badge {status_class if not refused else 'status-refused'}">{html.escape(quality)}</span></li>
+    </ul>
+
+    <h2>Refusal & Ambiguity Reason Codes</h2>
+    <ul>
+      {reason_list}
+    </ul>
+
+    <h2>Per-Bar Spacing & Spacing Alignment</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Bar Index</th>
+          <th>PDF Candidates</th>
+          <th>MusicXML Onsets</th>
+          <th>Quality</th>
+          <th>Drift Errors</th>
+          <th>Warnings</th>
+        </tr>
+      </thead>
+      <tbody>
+        {bars_html}
+      </tbody>
+    </table>
+
+    <h2>JSON Reference</h2>
+    <p>Diagnostics payload: <code>{json_ref}</code></p>
   </div>
 </body>
 </html>
