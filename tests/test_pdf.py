@@ -2317,3 +2317,107 @@ def test_build_ir_refuses_ligature_overlapping_ambiguous(tmp_path) -> None:
     assert raised.value.category == "partial_pdf_grouping"
     payload = raised.value.to_diagnostics_payload()
     assert "pdf_fret_digit_symbol_overlap_ambiguous" in payload["details"]["warning_codes"]
+
+
+def test_synthetic_unboxed_system_recovery(tmp_path) -> None:
+    # 1. Test Single-Measure System-Wide Recovery (Zero-Barline Fallback)
+    pdf_path = Path(__file__).parent / "fixtures" / "pdf" / "generated_unboxed_system_tab.pdf"
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "unboxed_recovery.tabraw.json"
+    extract_tab(pdf_path, tabraw_path)
+    raw = TabRaw.from_json_file(tabraw_path)
+    print("DEBUG: warnings =", raw.warnings)
+    print("DEBUG: candidates =", [c.model_dump() for c in raw.candidates])
+
+    ir_path = tmp_path / "unboxed_recovery.ir.json"
+    diag_path = tmp_path / "unboxed_recovery.diagnostics.json"
+
+    # With allow_skip_unboxed=True, the zero-barline system should be recovered,
+    # the candidates assigned to bar 1, and the ScoreIR generated successfully.
+    score = build_ir_from_files(
+        GENERATED_MUSICXML,
+        tabraw_path,
+        ir_path,
+        diagnostics_out_path=diag_path,
+        allow_skip_unboxed=True,
+    )
+    assert score is not None
+    assert ir_path.exists()
+
+    # The recovered system and bar index in output events should be 1
+    # Check score.warnings to verify recovered warnings are logged
+    warning_codes = {w.code for w in score.warnings}
+    assert "pdf_system_recovered_as_single_measure" in warning_codes
+    assert "pdf_bar_box_system_wide_fallback" in warning_codes
+
+    # Events should be successfully aligned
+    assert len(score.bars) > 0
+    all_notes = []
+    for bar in score.bars:
+        for event in bar.events:
+            if event.notes:
+                all_notes.extend(event.notes)
+    assert len(all_notes) == 2
+
+
+
+def test_synthetic_unboxed_system_skipper(tmp_path) -> None:
+    # 2. Test Opt-In System-Skipping Compiler Progression
+    pdf_path = Path(__file__).parent / "fixtures" / "pdf" / "generated_unboxed_system_tab.pdf"
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "unboxed_skipper.tabraw.json"
+    extract_tab(pdf_path, tabraw_path)
+
+    ir_path = tmp_path / "unboxed_skipper.ir.json"
+    diag_path = tmp_path / "unboxed_skipper.diagnostics.json"
+
+    # Baseline: without skipping or recovery (or if we manually mark it unboxed in warnings)
+    # Let's verify that when allow_skip_unboxed is True, we can build the IR successfully
+    # Wait, the unboxed system tab has zero barlines, so by default it is recovered.
+    # To test the skipper, let's load the tabraw, manually inject an unboxed warning and unbox barlines, and test build_ir
+    raw = TabRaw.from_json_file(tabraw_path)
+    # Mark it unboxed by clearing barlines/bar_boxes and injecting an unboxed system warning
+    new_candidates = []
+    for c in raw.candidates:
+        new_candidates.append(c.model_copy(update={"bar_index": None}))
+    raw.candidates = new_candidates
+    raw.warnings.append({
+        "code": "pdf_barlines_not_detected_in_system",
+        "message": "No barlines detected in system 1 on page 1.",
+        "severity": "warning",
+        "page_index": 1,
+        "system_index": 1,
+    })
+    raw.warnings.append({
+        "code": "pdf_barline_too_short",
+        "message": "Barline candidate too short in system 1 on page 1.",
+        "severity": "warning",
+        "page_index": 1,
+        "system_index": 1,
+    })
+    raw.warnings.append({
+        "code": "pdf_partial_grouping_one_system_unboxed",
+        "message": "Unboxed system on page 1.",
+        "severity": "warning",
+        "page_index": 1,
+    })
+    raw.to_json_file(tabraw_path)
+
+    # 1. Verification with allow_skip_unboxed=False (should raise BuildIrInputRiskError)
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path, allow_skip_unboxed=False)
+    assert raised.value.category == "partial_pdf_grouping"
+
+    # 2. Verification with allow_skip_unboxed=True (should compile ScoreIR successfully and skip unboxed system)
+    score = build_ir_from_files(
+        GENERATED_MUSICXML,
+        tabraw_path,
+        ir_path,
+        diagnostics_out_path=diag_path,
+        allow_skip_unboxed=True,
+    )
+    assert score is not None
+    assert ir_path.exists()
+
+    # Assert skipped system warning is logged
+    assert any(w.code == "pdf_unboxed_system_skipped" for w in score.warnings)

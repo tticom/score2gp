@@ -21,6 +21,7 @@ def run_private_diagnostic_smoke(
     musicxml_path: str | Path | None,
     out_dir: str | Path,
     allow_remediation: bool = False,
+    allow_skip_unboxed: bool = False,
 ) -> dict[str, Any]:
     """Run a local private diagnostic workflow and return a sanitized summary."""
 
@@ -65,6 +66,7 @@ def run_private_diagnostic_smoke(
                 tabraw_path,
                 ir_path,
                 allow_remediation=allow_remediation,
+                allow_skip_unboxed=allow_skip_unboxed,
             )
             diagnostics.to_json_file(diagnostics_path)
             _add_build_summary(summary, diagnostics)

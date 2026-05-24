@@ -479,6 +479,8 @@ def grouping_status_for_tabraw(tabraw: dict[str, Any]) -> str:
         "pdf_bar_box_inferred_left_boundary",
         "pdf_bar_box_inferred_right_boundary",
         "pdf_bar_box_edge_boundary_fallback_used",
+        "pdf_system_recovered_as_single_measure",
+        "pdf_bar_box_system_wide_fallback",
     }
     blocking_partial_codes = partial_codes - fallback_used_codes
 
