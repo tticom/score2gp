@@ -2,11 +2,12 @@
 
 ## Next
 
-- [ ] Run a private-safe smoke refresh after `pdf-timing-refinement.v1.0` merges, reporting only timing/layout counts and categories.
 - [ ] Add developer-facing HTML styling and compact thumbnails for grouping diagnostics.
 - [ ] Add a public partial-to-recovery design note before attempting any automatic grouping repair.
 
 ## Done
+
+- [x] Run a private-safe smoke refresh after `pdf-timing-refinement.v1.0` merges, reporting only timing/layout counts and categories.
 
 - [x] Add public-safe `pdf-timing-refinement.v1.0` diagnostics to distinguish invalid MusicXML timing, unsupported-but-valid polyphony, and safe/partial/ambiguous/incompatible vector x-to-onset evidence without implementing timing repair.
 - [x] Add public synthetic PDF fixtures and conservative diagnostics/heuristics for born-digital PDF fret-number extraction, optical bounds, and digit horizontal/vertical grouping, preserving strict compiler gates (feature/pdf-fret-refinement-v0.5).
