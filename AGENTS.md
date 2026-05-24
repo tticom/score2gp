@@ -57,6 +57,97 @@ Do not put private musical content, private PDF text, private fret sequences, pr
 
 Keep `HANDOFF.md` private-safe and useful enough that a new agent can continue without reading previous chat history.
 
+# Cross-agent final report rule
+
+At the end of every task, the final response must include a complete, copy/pasteable final report for another assistant that cannot access GitHub.
+
+The final report must be based on local Git, GitHub CLI output, HANDOFF.md, TASKS.md, and the actual verification commands run.
+
+The report must include:
+
+## Repository State
+- current branch
+- base branch
+- whether local branch tracks origin
+- latest local commit hash and subject
+- latest pushed commit hash and subject
+- working tree status
+- whether local branch is clean and synchronized
+
+## Pull Request State
+- PR number
+- PR URL
+- PR title
+- PR state: draft/open/ready/merged/closed
+- whether PR is draft
+- whether PR is mergeable if known
+- GitHub check status
+- names/statuses of relevant checks where available
+- whether the PR was created, updated, marked ready, or left draft
+- whether the PR was merged: yes/no
+- merge commit hash if merged
+
+## Verification Results
+- exact test command and result
+- schema export command and result
+- validate-ir command and result
+- git diff --check result
+- git diff -- schemas result
+- private/work audit command and result
+- root generated-artifact audit result if relevant
+- public E2E smoke result if relevant
+
+## Private-Safety Result
+- whether any private PDFs, GP files, MusicXML/MXL files, overlays, logs, summaries, diagnostics, or work/ outputs are tracked
+- exact result of git ls-files fixtures/private work
+- confirmation that only fixtures/private/.gitkeep is tracked under private/work paths
+- any untracked private outputs must be named only by safe path category, not content
+
+## What Changed
+- concise bullet list of implementation changes
+- public fixtures added or updated
+- diagnostics/reporting added or updated
+- docs/tasks/handoff files updated
+- strict gates preserved
+
+## Current Blocker Classification
+- top blocker
+- secondary blockers
+- current private-safe summary using only anonymized counts/statuses/reason codes
+- comparison with previous summary if known
+- whether the blocker improved, stayed same, or moved to a new stage
+
+## Scope Boundaries Preserved
+Explicitly state whether these were preserved:
+- no private files committed
+- no work/ outputs committed
+- no OCR
+- no scanned-PDF support
+- no ML layout recognition
+- no MusicXML timing repair
+- no GPIF expansion
+- no tuning/pitch inference used to bypass geometry gates
+- no loosening of grouping/string/fret/timing/build-ir gates
+
+## Next Recommended Task
+- exact next branch name
+- goal of next branch
+- why this is the next branch
+- explicit non-goals for next branch
+- whether next task should wait for current PR merge
+
+The final response must not rely on “see PR” or “see GitHub” as the only source. Include the information directly.
+
+If the task stops early, the final report must include:
+- where it stopped
+- exact pending/failing command or condition
+- what was already committed
+- what was already pushed
+- PR status if any
+- safest next action
+
+HANDOFF.md must contain the same essential state before the final response is given.
+
 # Planning and execution rule
 
 Unless the user explicitly asks for planning only, do not stop after creating an implementation plan. Create a short plan if useful, then continue into implementation.
