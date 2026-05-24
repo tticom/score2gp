@@ -1,59 +1,45 @@
 # Handoff
 
 ## Metadata
-- **Current Branch**: `feature/pdf-fret-refinement-v0.5`
+- **Current Branch**: `feature/pdf-pitch-tuning-v0.6`
 - **Base Branch**: `main`
-- **Current PR**: [PR #44](https://github.com/tticom/score2gp/pull/44) (Draft)
-- **Latest Local Commit**: `f2672bd`
-- **Latest Pushed Commit**: `f2672bd`
-- **Commit Subject**: Add PDF fret refinement fixtures v0.5
-- **Working Tree Status**: Clean (except modified `HANDOFF.md` once saved)
+- **Current PR**: None (Feature Branch)
+- **Latest Local Commit**: `9e3e555`
+- **Latest Pushed Commit**: `9e3e555`
+- **Commit Subject**: Merge pull request #44 from tticom/feature/pdf-fret-refinement-v0.5
+- **Working Tree Status**: Modified/untracked files present, ready to commit and push
 - **Tests & Checks Run**:
-  - `python -m pytest` -> 262 passed cleanly in 17.42s
+  - `python -m pytest` -> 274 passed cleanly in 17.33s
   - `python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
   - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid
   - `git diff --check` -> passed cleanly
   - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep` is tracked under Git
-- **GitHub Check Status**: N/A (Draft PR)
+- **GitHub Check Status**: N/A
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or diagnostic outputs are tracked or committed. All outputs under `work/` are ignored.
 
 ## What Changed in the Task
-- **Added 11 Public Synthetic PDF Fixtures**: Created a programmatic generator `tests/fixtures/pdf/make_fret_refinement_pdfs.py` compiling 11 public synthetic PDF fixtures under `tests/fixtures/pdf/` mapping to key fret-refinement scenarios:
-  1. `generated_pdf_fret_clean_single_digit.pdf`: Clean single-digit frets on six tab strings.
-  2. `generated_pdf_fret_clean_multidigit.pdf`: Clean multi-digit frets such as 10, 12, 15.
-  3. `generated_pdf_fret_split_span_merged.pdf`: Multi-digit fret split into separate text spans but tightly aligned.
-  4. `generated_pdf_fret_gap_too_large.pdf`: Adjacent digits too far apart horizontally.
-  5. `generated_pdf_fret_vertical_misalignment.pdf`: Adjacent digits vertically misaligned.
-  6. `generated_pdf_fret_technique_marker.pdf`: Digit near technique marker (e.g. 7h9, 5/7, 8b).
-  7. `generated_pdf_fret_chord_text_excluded.pdf`: Chord symbol or section text containing digits above staff (e.g. A7 or Verse 2).
-  8. `generated_pdf_fret_page_legend_excluded.pdf`: Page number / legend number outside tab system.
-  9. `generated_pdf_fret_oversized_tall.pdf`: Oversized/tall text that overlaps multiple string bands.
-  10. `generated_pdf_fret_tiny_noisy.pdf`: Tiny/noisy digit-like text.
-  11. `generated_pdf_fret_grouped_success.pdf`: Valid grouped counterpart where fret refinement, system, bar, and string assignment all succeed.
-- **Defined Taxonomy of 16 Fret-Related Warning/Reason/Provenance Codes**:
-  - `pdf_fret_single_digit_extracted`: Clean single-digit fret candidate successfully extracted.
-  - `pdf_fret_multidigit_extracted`: Clean multi-digit fret candidate successfully extracted.
-  - `pdf_fret_digits_merged`: Horizontally close digits successfully merged into a single multi-digit candidate.
-  - `pdf_fret_digits_not_merged_gap_too_large`: Rejection warning when horizontal gap between digits is too large to merge.
-  - `pdf_fret_digits_not_merged_vertical_misalignment`: Rejection warning when digits are vertically misaligned.
-  - `pdf_fret_split_text_span_merged`: Indicates horizontal merging performed across distinct PyMuPDF text spans.
-  - `pdf_fret_bbox_too_tall`: Rejection warning when candidate bounding box height exceeds maximum limit.
-  - `pdf_fret_bbox_too_wide`: Rejection warning when candidate bounding box width exceeds maximum limit.
-  - `pdf_fret_bbox_too_small`: Rejection warning when candidate bounding box is too small/noisy.
-  - `pdf_fret_outside_valid_range`: Rejection warning when numeric fret value is outside valid range (`0 <= fret <= 24`).
-  - `pdf_fret_non_digit_rejected`: Rejection warning when candidate contains invalid non-digit characters.
-  - `pdf_fret_technique_marker_excluded`: Technique symbols near fret digits are preserved as separate non-playable technique markers.
-  - `pdf_fret_chord_text_digit_excluded`: Digits inside chord symbols or section text above staff are excluded from playable fret candidates.
-  - `pdf_fret_page_or_legend_number_excluded`: Page/legend numbers outside the staff are excluded.
-  - `pdf_fret_optical_bounds_confidence_below_threshold`: Rejection warning when optical bounding box dimensions are low-confidence.
-  - `pdf_fret_refinement_not_enough_for_build_ir`: Blocker warning refusing ScoreIR construction due to unresolved fret ambiguities.
-- **Implemented Conservative Heuristics for Horizontal & Vertical Grouping**:
-  - Horizontal gap grouping threshold set to `5.0` pixels, and vertical offset alignment threshold set to `2.0` pixels inside the same string band.
-  - Estimated proportional bounding boxes for split parts of technique mixed words (like `7h9`, `5/7`, `8b`) based on character length relative to overall word width.
-  - Retained string distance and unassigned-to-string warning metadata on unassigned candidates to preserve robust downstream string diagnostics.
-- **Enriched HTML/JSON Master Grouping Diagnostics**:
-  - Integrated complete metrics for fret refinement, classification, merge counts, and rejection codes.
-  - Updated visual Master Grouping report with a dedicated Fret Refinement section and clear remediation instructions.
+- **Added 10 Public Synthetic PDF Fixtures**: programmatically generated via `tests/fixtures/pdf/make_pitch_tuning_pdfs.py` to cover all crucial layout and pitch/tuning scenarios:
+  1. `generated_pdf_tuning_standard_text.pdf`: Standard tuning text page-wide.
+  2. `generated_pdf_tuning_explicit_eadgbe.pdf`: Explicit EADGBE six-string labels.
+  3. `generated_pdf_tuning_alternate_dadgad.pdf`: Alternate DADGAD six-string labels.
+  4. `generated_pdf_tuning_label_outside.pdf`: Standard tuning text outside system bounds.
+  5. `generated_pdf_tuning_conflict.pdf`: Conflicting Standard and Drop D tuning texts on the same page.
+  6. `generated_pdf_tuning_malformed.pdf`: Malformed "Tuning: Standardish" text.
+  7. `generated_pdf_tuning_chord_resembling.pdf`: Chord symbol resembling a pitch label above staff.
+  8. `generated_pdf_tuning_section_note_names.pdf`: Section text containing note names.
+  9. `generated_pdf_tuning_valid_grouping.pdf`: Valid system/bar/string/fret grouping with tuning evidence.
+  10. `generated_pdf_tuning_timing_unimplemented.pdf`: Proves timing mapping remains not implemented.
+- **Defined Taxonomy of 5 Pitch/Tuning Blocker Codes**:
+  - `pdf_tuning_conflict_detected`: Conflict among vertical string labels or multiple page-wide tuning texts.
+  - `pdf_tuning_label_ambiguous`: Tuning labels are ambiguous or conflict on the page.
+  - `pdf_tuning_label_malformed`: Malformed tuning label.
+  - `pdf_tuning_format_unsupported`: Unsupported tuning format.
+  - `pdf_pitch_tuning_diagnostics_not_enough_for_build_ir`: Diagnostic blocker refusing ScoreIR construction due to unresolved tuning ambiguities.
+- **Implemented Conservative Heuristics & Diagnostics**:
+  - Refined page-wide standard tuning detection checking line-texts case-insensitively and detecting conflicts when multiple tuning styles are matched on the same page.
+  - Implemented explicit vertical six-string label detection on the left side of systems, verifying clean alignment to staff line Ys.
+  - Whitelisted outside/unassociated tuning warnings in candidate preservation logic (`_should_keep_candidate`) to ensure non-playable tuning candidates are correctly reported and not silently filtered out.
+  - Integrated full whitelisting of the new pitch/tuning blocker codes in the `unsafe` warning codes list inside `build_ir.py`, correctly refusing ScoreIR construction when blockers are detected.
 
 ## Private Smoke Blocker Summary (No Private Content Included)
 - **`private_input_1`** (`pdf-tab-musicxml`):
@@ -91,15 +77,15 @@
   - **Timing status**: `not_attempted`.
 
 ## Comparison with Previous Blocker Summary
-- **Previous summary**: `private_input_1` had grouping status `partial_pdf_grouping` and system 6 on page 2 had fallback rejected safely under PR #43.
-- **Current summary**: Rejection behavior remains correctly strict, keeping `partial_pdf_grouping` and blocking ScoreIR generation. Non-playable chord symbols, page/legend numbers, and techniques are successfully preserved and excluded from playable fret blocking. Fret refinement successfully identifies clean candidates while flagging ambiguous or rejected merge boundaries appropriately, keeping ScoreIR gates fully secure.
+- **Previous summary**: `private_input_1` had grouping status `partial_pdf_grouping` and system 6 on page 2 had fallback rejected safely under PR #44.
+- **Current summary**: Rejection behavior remains correctly strict, keeping `partial_pdf_grouping` and blocking ScoreIR generation. The new pitch/tuning parser accurately preserves, classifies, and reports all PDF pitch/tuning evidence without inferring playable frets/strings or loosening geometry gates, keeping ScoreIR gates fully secure.
 
 ## Current Top Blocker Classification
 1. **`pdf_bar_box_one_boundary_rejected`** (Primary PDF grouping blocker stage)
 2. **`musicxml_timing_repair_not_safe`** (Primary MusicXML timeline voice overlap blocker)
 
-## Next Recommended Branch
-- **`feature/pdf-pitch-tuning-v0.6`**: Once the draft PR for fret refinement is merged into main, the next recommended branch is `feature/pdf-pitch-tuning-v0.6` to refine pitch/tuning layout parsing and improve timing mapping.
+## Next Recommended Task / Branch
+- **`feature/pdf-timing-mapping-v0.7`**: Refine timing mapping alignment for PDF-derived TabRaw, utilizing onsets and calibration metrics to build/repair robust PDF ScoreIR.
 
 ## Explicit Scope Boundaries
 - **Do not** commit any private inputs, private outputs, private GP files, private PDFs, private summaries, private HTML diagnostics, or any `work/` contents.
