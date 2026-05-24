@@ -1023,9 +1023,13 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                     for sys2 in systems[i+1:]:
                         y_min1, y_max1 = min(sys1.line_ys), max(sys1.line_ys)
                         y_min2, y_max2 = min(sys2.line_ys), max(sys2.line_ys)
-                        # Check horizontal overlap with a tolerance of 5.0pt
-                        x_overlap = not (sys1.x1 < sys2.x0 - 5.0 or sys2.x1 < sys1.x0 - 5.0)
-                        if x_overlap:
+                        # Only check vertical overlap if systems belong to the same column (X ranges overlap > 75% of minimum width)
+                        width1 = sys1.x1 - sys1.x0
+                        width2 = sys2.x1 - sys2.x0
+                        overlap_width = max(0.0, min(sys1.x1, sys2.x1) - max(sys1.x0, sys2.x0))
+                        min_width = min(width1, width2)
+                        overlap_ratio = overlap_width / min_width if min_width > 0 else 0.0
+                        if overlap_ratio > 0.75:
                             # Identify upper and lower system
                             if (sum(sys1.line_ys)/len(sys1.line_ys)) < (sum(sys2.line_ys)/len(sys2.line_ys)):
                                 sys_upper, sys_lower = sys1, sys2
@@ -3120,7 +3124,7 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
             x_val = (s.x0 + s.x1) / 2
             y_min = min(s.y0, s.y1)
             y_max = max(s.y0, s.y1)
-            if y_max >= y0 - 15.0 and y_min <= y1 + 15.0 and x0 - 50.0 <= x_val <= x1 + 50.0:
+            if y_max >= y0 - 15.0 and y_min <= y1 + 15.0 and x0 - 25.0 <= x_val <= x1 + 25.0:
                 system_candidates.append(s)
 
         barline_candidates_count = len(system_candidates)
@@ -3301,7 +3305,38 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
         )
         next_bar_index += max(1, len(valid_barlines) - 1)
         system_index += 1
-    return systems
+
+    # Deduplicate overlapping ghost systems where one is a subset of another
+    non_ghost_systems = []
+    for sys1 in systems:
+        is_ghost = False
+        for sys2 in systems:
+            if sys1.system_index == sys2.system_index:
+                continue
+            if len(sys1.line_ys) <= len(sys2.line_ys):
+                # Check if all line Ys in sys1 are close to line Ys in sys2
+                all_lines_matched = True
+                for y1 in sys1.line_ys:
+                    if not any(abs(y1 - y2) <= 1.0 for y2 in sys2.line_ys):
+                        all_lines_matched = False
+                        break
+                if all_lines_matched:
+                    # Check horizontal overlap
+                    overlap_width = max(0.0, min(sys1.x1, sys2.x1) - max(sys1.x0, sys2.x0))
+                    width1 = sys1.x1 - sys1.x0
+                    if width1 > 0 and (overlap_width / width1) > 0.8:
+                        if len(sys1.line_ys) < len(sys2.line_ys) or sys1.system_index > sys2.system_index:
+                            is_ghost = True
+                            break
+        if not is_ghost:
+            non_ghost_systems.append(sys1)
+
+    # Re-index remaining systems
+    final_systems = []
+    for idx, sys in enumerate(non_ghost_systems, start=1):
+        from dataclasses import replace
+        final_systems.append(replace(sys, system_index=idx))
+    return final_systems
 
 
 def _drawing_segments(drawings: list[dict[str, Any]]) -> list[_LineSegment]:
