@@ -2535,3 +2535,49 @@ def test_pdf_dense_string_assignment_ambiguous(tmp_path) -> None:
     assert not ir_path.exists()
     payload = raised.value.to_diagnostics_payload()
     assert "pdf_string_assignment_ambiguous" in payload["details"]["tabraw_warning_codes"] or "ambiguous_string_assignment" in payload["details"]["tabraw_warning_codes"]
+
+
+def test_pdf_multi_column_layout_safe(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_multi_column_layout.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "multi_column.tabraw.json"
+    ir_path = tmp_path / "multi_column.ir.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+
+    # Verify no vertical overlap order ambiguity warnings exist
+    assert "pdf_multi_system_order_ambiguous" not in warning_codes
+    assert "pdf_system_order_ambiguous" not in warning_codes
+
+    # Should compile successfully to ScoreIR
+    score = build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+    assert score is not None
+    assert ir_path.exists()
+
+    # Verify column-aware reading order system and bar assignment
+    playable = sorted(
+        [c for c in tabraw.candidates if c.parsed_fret is not None],
+        key=lambda c: (c.page_index, c.system_index, c.bar_index)
+    )
+    assert len(playable) == 4
+
+    # Candidate '3' -> System 1 (Column 1 top), Bar 1
+    assert playable[0].raw_text == "3"
+    assert playable[0].system_index == 1
+    assert playable[0].bar_index == 1
+
+    # Candidate '5' -> System 2 (Column 1 bottom), Bar 3
+    assert playable[1].raw_text == "5"
+    assert playable[1].system_index == 2
+    assert playable[1].bar_index == 3
+
+    # Candidate '2' -> System 3 (Column 2 top), Bar 5
+    assert playable[2].raw_text == "2"
+    assert playable[2].system_index == 3
+    assert playable[2].bar_index == 5
+
+    # Candidate '7' -> System 4 (Column 2 bottom), Bar 7
+    assert playable[3].raw_text == "7"
+    assert playable[3].system_index == 4
+    assert playable[3].bar_index == 7

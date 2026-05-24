@@ -10,6 +10,7 @@ Ground rules:
 - Prefer staged outputs: rendered pages, overlays, raw extraction JSON, strict ScoreIR JSON, warnings, and reports.
 - Unsupported notation must be surfaced in warnings or reports, not silently dropped.
 - Keep modules small, typed, and tested.
+- Code and tests must be written before any PR is raised. Do not create tasks or PRs solely to run tests or update markdown files. Validation and markdown updates must be performed as a result of actual code changes within the same task.
 
 # Persistent handoff rule
 
