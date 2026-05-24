@@ -2,20 +2,20 @@
 
 ## Metadata
 
-- **Current Branch**: `feature/private-smoke-refresh-after-unboxed-recovery-v0.1`
+- **Current Branch**: `feature/pdf-system-overlap-public-fixtures-v0.2`
 - **Base Branch**: `main`
-- **Current PR**: [PR #62](https://github.com/tticom/score2gp/pull/62) (Draft)
-- **Latest Local Commit**: `72341b49ab787265be7df826be7df826be7df826`
-- **Latest Pushed Commit**: `72341b49ab787265be7df826be7df826be7df826`
-- **Latest Commit Subject**: `chore: private smoke refresh after unboxed recovery v0.1`
-- **Working Tree Status Before Handoff Update**: Modified `HANDOFF.md` only (clean workspace)
+- **Current PR**: [PR #63](https://github.com/tticom/score2gp/pull/63) (Draft)
+- **Latest Local Commit**: `14340cc`
+- **Latest Pushed Commit**: `14340cc`
+- **Latest Commit Subject**: `feat: implement advanced vertical partitioning heuristics for same-column vertical overlaps and dense adjacent systems`
+- **Working Tree Status Before Handoff Update**: Modified `TASKS.md` and `HANDOFF.md` (clean code changes)
 - **GitHub Check Status**: N/A
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or `work/` contents are tracked.
 - **Root Generated-Artifact Audit**: Clean. `git ls-files grouping-diagnostics.html inspect overlays warnings.json tuning_outside.tabraw.json` returned no tracked files.
 
 ## Tests And Checks Run
 
-- `python -m pytest` -> 306 passed (100% success).
+- `python -m pytest` -> 310 passed (100% success).
 - `python -m score2gp.cli export-schema --out schemas` -> passed.
 - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid.
 - `git diff --check` -> passed.
@@ -25,36 +25,36 @@
 
 ## What Changed In This Task
 
-- **Executed E2E Private-Safe Smoke Refresh**:
-  - Run the diagnostic pipeline against local private inputs (`scripts/private_e2e_smoke.py`) with unboxed skips and zero-barline fallback recovery fully integrated.
-  - Verified that all inputs complete the diagnostic pass cleanly.
-- **Anonymized Blocker & Skip Taxonomy Results**:
-  - **`private_input_1`**:
-    - **Timing Status**: `passed` (remediation resolved all timing risk).
-    - **Unboxed System 6 (Page 2)**: Contained rejected short barlines (`pdf_barline_too_short`) and ambiguous barlines, and was thus successfully **skipped** under `--allow-skip-unboxed-systems`.
-    - **Compilation Gate Refused**: Compilation is still refused because of other severe visual layout/grouping ambiguities.
-    - **Primary Blocker**: Severe vertical system layout overlap ambiguities on both Page 1 and Page 2: `pdf_multi_system_order_ambiguous`, `pdf_system_order_ambiguous`, `pdf_tab_staff_ambiguous`, `pdf_system_bbox_ambiguous`.
-    - **Secondary Blocker**: String assignment ambiguities (`pdf_string_assignment_not_enough_for_build_ir`, `pdf_string_assignment_missing`).
-  - **`private_input_custom` & `private_input_2`**:
-    - Complete the extract-tab phase cleanly without timing data, waiting for matching MusicXML files (`provide-matching-musicxml-before-build-ir`).
+- **Created Public Synthetic PDF Overlap Fixtures**:
+  - `generated_pdf_system_overlap_same_column.pdf`: Truly interleaved/overlapping vertical ranges (refused).
+  - `generated_pdf_system_overlap_ambiguous_bbox.pdf`: Borderline vertical overlap with a playable fret candidate in the gap between staves (refused).
+  - `generated_pdf_system_overlap_dense_adjacent.pdf`: Dense adjacent vertical systems with no fret candidates in the gap (resolved/safe).
+  - `generated_pdf_system_overlap_safe_counterpart.pdf`: Clean well-spaced vertical systems control (resolved/safe).
+  - Created `tests/fixtures/pdf/make_generated_system_overlap_pdfs.py` to compile these fixtures deterministically.
+- **Refined PDF Overlap Partitioning Heuristics**:
+  - Replaced simple `has_overlap` Y-range overlap with a refined partitioning check in `src/score2gp/pdf.py`.
+  - Significant vertical overlaps (> 4.0pt) are immediately refused as ambiguous.
+  - Minor overlaps/gaps (< 20.0pt) are only refused if a playable fret candidate falls within the critical gap region between the systems. Otherwise, they are safely ordered and grouped without any blocker warnings!
+- **Added Comprehensive Pytest Coverage**:
+  - Added `test_pdf_system_overlap_same_column_refused`, `test_pdf_system_overlap_ambiguous_bbox_refused`, `test_pdf_system_overlap_dense_adjacent_safely_ordered`, and `test_pdf_system_overlap_safe_counterpart_safely_ordered` in `tests/test_pdf.py`.
 - **Tasks & Handoff Update**:
-  - Added smoke refresh task to `TASKS.md` under Done.
-  - Fully documented E2E findings and branch metadata in `HANDOFF.md`.
+  - Updated `TASKS.md` Next and Done sections.
+  - Fully updated branch metadata, checks, and E2E findings in `HANDOFF.md`.
 
 ## Known Limitations
 
-- Real private layouts with complex column formatting or visual overlap will require specialized spatial heuristics (like horizontal/vertical column separation) to group safely.
+- Visual overlaps with dense interleaved staff lines are truly ambiguous and will continue to be refused.
 
 ## Remaining Risks
 
-- Overlapping visual staff boundaries on `private_input_1` prevent complete grouping and ScoreIR generation until columns/overlaps are resolved.
+- Same-column string assignment ambiguities on visually close layouts can block IR generation until coordinate-based string alignment is resolved.
 
 ## Next Recommended Task
 
-- **Horizontal/Vertical Overlap Heuristics**: Build a feature branch (e.g. `feature/pdf-vertical-overlap-heuristics-v0.1`) to resolve vertical staff system overlap ordering and clustering ambiguities through spatial clustering or column separation.
+- **String Assignment Alignment Heuristics**: Address same-column vertical string assignment ambiguities (`pdf_string_assignment_not_enough_for_build_ir` / `pdf_string_assignment_missing`) by implementing robust staff-line proximity calculations.
 
 ## Explicit Scope Boundaries
 
-- **No new automatic grouping, bar-box repair, or timing mapping** implemented.
+- **No new automatic grouping or bar-box repair** implemented.
 - **No altering of edge-boundary fallback or build-ir compiler gates**.
 - **No private scores, diagnostic overlays, or raw XML/PDF snippets committed**.
