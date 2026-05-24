@@ -3,10 +3,11 @@
 ## Metadata
 - **Current Branch**: `feature/pdf-timing-mapping-v0.7`
 - **Base Branch**: `main`
-- **Current PR**: N/A (will be created in draft)
-- **Latest Local Commit**: `9c1e367` (Merge pull request #45)
-- **Latest Pushed Commit**: `9c1e367` (Merge pull request #45)
-- **Working Tree Status**: Modified files: docs/architecture.md, docs/limitations.md, src/score2gp/build_ir.py, src/score2gp/report.py, tests/test_pdf.py. Untracked file: tests/test_pdf_timing_mapping.py.
+- **Current PR**: [PR #46](https://github.com/tticom/score2gp/pull/46) (Draft)
+- **Latest Local Commit**: `9876791`
+- **Latest Pushed Commit**: `9876791`
+- **Commit Subject**: Add PDF timing mapping diagnostics v0.7
+- **Working Tree Status**: Clean (except modified `HANDOFF.md` once saved, and untracked diagnostic/inspect outputs)
 - **Tests & Checks Run**:
   - `python -m pytest` -> 284 passed cleanly in 14.69s (including 10 new timing mapping tests)
   - `python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
