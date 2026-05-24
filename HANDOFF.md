@@ -4,11 +4,11 @@
 
 - **Current Branch**: `feature/unboxed-system-recovery-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: N/A (Draft PR will be created next)
-- **Latest Local Commit**: `f8f863e7c527027c0f16ea1cfd8c7c90b63c8a9f`
-- **Latest Pushed Commit**: `f8f863e7c527027c0f16ea1cfd8c7c90b63c8a9f`
-- **Latest Commit Subject**: `Merge pull request #60 from tticom/docs/unboxed-system-recovery-design-v0.1`
-- **Working Tree Status Before Handoff Update**: Modified files (`build_ir.py`, `cli.py`, `pdf.py`, `private_diagnostics.py`, `report.py`, `private_e2e_smoke.py`, `test_pdf.py`, `TASKS.md`) and untracked synthetic fixtures.
+- **Current PR**: [PR #61](https://github.com/tticom/score2gp/pull/61) (Draft)
+- **Latest Local Commit**: `c05f25d304a0ccfc3aee5be92cd712c98d63a8a3`
+- **Latest Pushed Commit**: `c05f25d304a0ccfc3aee5be92cd712c98d63a8a3`
+- **Latest Commit Subject**: `feat: implement unboxed system recovery and skipping v0.1`
+- **Working Tree Status Before Handoff Update**: Modified `HANDOFF.md` only (clean workspace)
 - **GitHub Check Status**: N/A
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or `work/` contents are tracked.
 - **Root Generated-Artifact Audit**: Clean. `git ls-files grouping-diagnostics.html inspect overlays warnings.json tuning_outside.tabraw.json` returned no tracked files.
