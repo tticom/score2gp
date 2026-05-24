@@ -1004,6 +1004,20 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
 
                 # Check for vertically overlapping systems on the page
                 has_overlap = False
+                # Collect all playable fret candidates on the page for bbox ambiguity check
+                page_playable_candidates = []
+                for word in words:
+                    raw_text = str(word[4]).strip()
+                    if not raw_text:
+                        continue
+                    bbox_values = [float(word[0]), float(word[1]), float(word[2]), float(word[3])]
+                    cx = (bbox_values[0] + bbox_values[2]) / 2
+                    cy = (bbox_values[1] + bbox_values[3]) / 2
+                    if _point_in_ascii_block(ascii_blocks, cx, cy):
+                        continue
+                    if parse_fret_text(raw_text) is not None:
+                        page_playable_candidates.append((cx, cy))
+
                 for i, sys1 in enumerate(systems):
                     for sys2 in systems[i+1:]:
                         y_min1, y_max1 = min(sys1.line_ys), max(sys1.line_ys)
@@ -1011,9 +1025,31 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                         # Check horizontal overlap with a tolerance of 5.0pt
                         x_overlap = not (sys1.x1 < sys2.x0 - 5.0 or sys2.x1 < sys1.x0 - 5.0)
                         if x_overlap:
-                            # Check overlap with a small tolerance of 1.0pt
-                            if y_min1 <= y_max2 + 1.0 and y_min2 <= y_max1 + 1.0:
+                            # Identify upper and lower system
+                            if (sum(sys1.line_ys)/len(sys1.line_ys)) < (sum(sys2.line_ys)/len(sys2.line_ys)):
+                                sys_upper, sys_lower = sys1, sys2
+                                y_min_upper, y_max_upper = y_min1, y_max1
+                                y_min_lower, y_max_lower = y_min2, y_max2
+                            else:
+                                sys_upper, sys_lower = sys2, sys1
+                                y_min_upper, y_max_upper = y_min2, y_max2
+                                y_min_lower, y_max_lower = y_min1, y_max1
+
+                            # 1. Deep vertical overlap (overlap > 4.0pt) is always ambiguous
+                            if y_min_lower < y_max_upper - 4.0:
                                 has_overlap = True
+                                break
+
+                            # 2. Check if a fret candidate falls in the critical gap region between close systems
+                            # Only treat as ambiguous if the systems are dense (gap < 20.0pt)
+                            if y_min_lower - y_max_upper < 20.0:
+                                x0_overlap = max(sys_upper.x0, sys_lower.x0) - 5.0
+                                x1_overlap = min(sys_upper.x1, sys_lower.x1) + 5.0
+                                for cx, cy in page_playable_candidates:
+                                    if (y_max_upper - 4.0 <= cy <= y_min_lower + 4.0) and (x0_overlap <= cx <= x1_overlap):
+                                        has_overlap = True
+                                        break
+                            if has_overlap:
                                 break
                     if has_overlap:
                         break
