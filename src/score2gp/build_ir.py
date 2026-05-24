@@ -90,6 +90,55 @@ class BuildIrInputRiskError(ValueError):
             "details": self.details,
         }
 
+        # Promote or construct pdf_timing_mapping
+        if "pdf_timing_mapping" in self.details:
+            payload["pdf_timing_mapping"] = self.details["pdf_timing_mapping"]
+        else:
+            refusal_reason_codes = []
+            grouping_safe = True
+            timing_source_safe = True
+            musicxml_timing_preflight_status = "safe"
+            grouping_status = "grouped"
+
+            if self.stage == "musicxml-import" and self.category == "musicxml_timing_risk":
+                refusal_reason_codes.append("pdf_timing_mapping_not_attempted_musicxml_unsafe")
+                timing_source_safe = False
+                musicxml_timing_preflight_status = "unsafe"
+            elif self.stage == "musicxml-import" and self.category == "musicxml_scoreir_polyphony_gate_refused":
+                refusal_reason_codes.append("pdf_timing_mapping_polyphony_not_supported")
+                timing_source_safe = False
+                musicxml_timing_preflight_status = "unsafe"
+            elif self.stage == "tabraw-import":
+                refusal_reason_codes.append("pdf_timing_mapping_not_attempted_grouping_unsafe")
+                grouping_safe = False
+                grouping_status = "partial_pdf_grouping"
+
+            if not refusal_reason_codes:
+                refusal_reason_codes.append("pdf_timing_mapping_refused")
+
+            payload["pdf_timing_mapping"] = {
+                "contract_version": "pdf-timing-mapping.v0.7",
+                "input_class": "drawn_tab_candidate",
+                "grouping_status": grouping_status,
+                "grouping_safe": grouping_safe,
+                "timing_source_safe": timing_source_safe,
+                "musicxml_timing_preflight_status": musicxml_timing_preflight_status,
+                "whether_mapping_attempted": False,
+                "whether_mapping_refused": True,
+                "refusal_reason_codes": sorted(list(set(refusal_reason_codes))),
+                "quality": "refused",
+                "whether_scoreir_written": False,
+                "remediation_hint": "Timing mapping is diagnostic evidence only and cannot repair unsafe PDF grouping or unsafe MusicXML timing.",
+                "per_bar": [],
+                "matched_x_onset_group_count": 0,
+                "unmatched_x_group_count": 0,
+                "unmatched_onset_group_count": 0,
+                "mean_absolute_relative_error": None,
+                "max_relative_error": None,
+                "monotonic": None,
+                "ambiguity_count": 0,
+            }
+
         if self.stage == "musicxml-import":
             # 1. Counts
             overfull_bars = set()
@@ -338,6 +387,7 @@ class BuildIrDiagnostics(BaseModel):
     per_system: list[SystemAlignmentDiagnostics] = Field(default_factory=list)
     per_bar: list[BarAlignmentDiagnostics] = Field(default_factory=list)
     warnings: list[dict[str, object]] = Field(default_factory=list)
+    pdf_timing_mapping: dict[str, object] | None = None
 
     def to_json_file(self, path: str | Path) -> None:
         out = Path(path)
@@ -361,9 +411,13 @@ def build_ir_from_files(
         )
         if diagnostics_out_path is not None:
             diagnostics.to_json_file(diagnostics_out_path)
-            from .report import write_symbol_attachment_diagnostics_html
+            from .report import write_symbol_attachment_diagnostics_html, write_pdf_timing_mapping_diagnostics_html
             html_path = Path(diagnostics_out_path).parent / "symbol-attachment-diagnostics.html"
             write_symbol_attachment_diagnostics_html(html_path, diagnostics, score, tabraw_path=tabraw_path)
+
+            # Write PDF timing mapping HTML!
+            mapping_html_path = Path(diagnostics_out_path).parent / "pdf-timing-mapping-diagnostics.html"
+            write_pdf_timing_mapping_diagnostics_html(mapping_html_path, diagnostics.model_dump(mode="json"), json_path_ref=Path(diagnostics_out_path).name)
         return score
     except BuildIrInputRiskError as exc:
         if diagnostics_out_path is not None:
@@ -372,6 +426,12 @@ def build_ir_from_files(
             out_path_p = Path(diagnostics_out_path)
             out_path_p.parent.mkdir(parents=True, exist_ok=True)
             out_path_p.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+            # Write PDF timing mapping HTML!
+            from .report import write_pdf_timing_mapping_diagnostics_html
+            mapping_html_path = out_path_p.parent / "pdf-timing-mapping-diagnostics.html"
+            write_pdf_timing_mapping_diagnostics_html(mapping_html_path, payload, json_path_ref=out_path_p.name)
+
             if exc.stage == "ascii-scoreir-gate":
                 from .report import write_ascii_gate_diagnostics_html
                 html_path = out_path_p.parent / "ascii-scoreir-gate-diagnostics.html"
@@ -974,6 +1034,18 @@ def build_ir_with_diagnostics_from_imports(
     )
     _attach_symbols_and_techniques(score, tabraw)
     diagnostics = _build_diagnostics(musicxml, tabraw, score, candidate_pools, ascii_gate_details=ascii_gate_details)
+    if diagnostics.pdf_timing_mapping:
+        mapping = diagnostics.pdf_timing_mapping
+        is_monotonic = mapping.get("monotonic")
+        if is_monotonic is False:
+            reason_codes = mapping.get("refusal_reason_codes") or []
+            category = "pdf_timing_mapping_non_monotonic"
+            raise BuildIrInputRiskError(
+                category=category,
+                stage="tabraw-import",
+                message=f"PDF timing mapping is unsafe: {', '.join(reason_codes)}",
+                details={"pdf_timing_mapping": mapping, "grouping_status": "grouped", "grouping_safe": True},
+            )
     return score, diagnostics
 
 
@@ -1484,6 +1556,116 @@ def _build_diagnostics(
     tech_attached = sum(1 for c in tech_cands if c.id in attached_tech_ids)
     tech_unattached = tech_found - tech_attached
 
+    # Computations for pdf_timing_mapping
+    matched_x_onset_group_count = 0
+    unmatched_x_group_count = 0
+    unmatched_onset_group_count = 0
+    total_bar_relative_errors = []
+    max_relative_error = None
+    all_monotonic = True
+    total_ambiguity_count = 0
+    refusal_reason_codes = []
+    has_chord_stack = False
+
+    per_bar_mapping = []
+    for diag in per_bar:
+        x_len = len(diag.candidate_x_groups)
+        onset_len = len(diag.musicxml_onset_groups)
+        matched = min(x_len, onset_len)
+        matched_x_onset_group_count += matched
+        unmatched_x_group_count += max(0, x_len - onset_len)
+        unmatched_onset_group_count += max(0, onset_len - x_len)
+
+        if diag.mean_absolute_relative_error is not None:
+            total_bar_relative_errors.append(diag.mean_absolute_relative_error)
+        if diag.max_relative_error is not None:
+            if max_relative_error is None or diag.max_relative_error > max_relative_error:
+                max_relative_error = diag.max_relative_error
+
+        if diag.monotonic_x is False:
+            all_monotonic = False
+
+        total_ambiguity_count += diag.ambiguous_x_group_count
+        if diag.has_chord_stack:
+            has_chord_stack = True
+
+        per_bar_mapping.append({
+            "bar_index": diag.bar_index,
+            "playable_candidate_count": diag.playable_candidate_count,
+            "musicxml_pitched_onset_group_count": diag.musicxml_pitched_onset_group_count,
+            "candidate_x_groups": [g.model_dump() if hasattr(g, "model_dump") else g for g in diag.candidate_x_groups],
+            "musicxml_onset_groups": [g.model_dump() if hasattr(g, "model_dump") else g for g in diag.musicxml_onset_groups],
+            "mean_absolute_relative_error": diag.mean_absolute_relative_error,
+            "max_relative_error": diag.max_relative_error,
+            "monotonic": diag.monotonic_x,
+            "ambiguity_count": diag.ambiguous_x_group_count,
+            "warnings": diag.x_to_onset_warnings,
+            "quality": diag.quality,
+        })
+
+    total_playable_count = sum(diag.playable_candidate_count for diag in per_bar)
+
+    overall_quality = "good"
+    if total_playable_count == 0:
+        overall_quality = "unknown"
+        refusal_reason_codes.append("pdf_timing_mapping_quality_unknown")
+    else:
+        if unmatched_x_group_count > 0:
+            refusal_reason_codes.append("pdf_timing_mapping_x_group_unmatched")
+            overall_quality = "warning"
+        if unmatched_onset_group_count > 0:
+            refusal_reason_codes.append("pdf_timing_mapping_onset_group_unmatched")
+            overall_quality = "warning"
+        if matched_x_onset_group_count == 0:
+            overall_quality = "poor"
+            refusal_reason_codes.append("pdf_timing_mapping_not_enough_for_build_ir")
+        if all_monotonic is False:
+            overall_quality = "poor"
+            refusal_reason_codes.append("pdf_timing_mapping_non_monotonic")
+        if max_relative_error is not None:
+            if max_relative_error > 0.3:
+                overall_quality = "poor"
+                refusal_reason_codes.append("pdf_timing_mapping_quality_poor")
+            elif max_relative_error > 0.15:
+                if overall_quality != "poor":
+                    overall_quality = "warning"
+                refusal_reason_codes.append("pdf_timing_mapping_quality_warning")
+        if total_ambiguity_count > 0:
+            if overall_quality != "poor":
+                overall_quality = "warning"
+            refusal_reason_codes.append("pdf_timing_mapping_ambiguous_x_group")
+        if has_chord_stack:
+            refusal_reason_codes.append("pdf_timing_mapping_chord_stack_requires_review")
+
+        if overall_quality == "good":
+            refusal_reason_codes.append("pdf_timing_mapping_quality_good")
+        elif overall_quality == "poor":
+            refusal_reason_codes.append("pdf_timing_mapping_refused")
+
+    whether_mapping_refused = (overall_quality == "poor" or all_monotonic is False)
+
+    pdf_timing_mapping_dict = {
+        "contract_version": "pdf-timing-mapping.v0.7",
+        "input_class": getattr(tabraw, "input_class", "drawn_tab_candidate"),
+        "grouping_status": "grouped",
+        "grouping_safe": True,
+        "timing_source_safe": True,
+        "musicxml_timing_preflight_status": "safe",
+        "whether_mapping_attempted": True,
+        "whether_mapping_refused": whether_mapping_refused,
+        "refusal_reason_codes": sorted(list(set(refusal_reason_codes))),
+        "quality": overall_quality,
+        "whether_scoreir_written": not whether_mapping_refused,
+        "per_bar": per_bar_mapping,
+        "matched_x_onset_group_count": matched_x_onset_group_count,
+        "unmatched_x_group_count": unmatched_x_group_count,
+        "unmatched_onset_group_count": unmatched_onset_group_count,
+        "mean_absolute_relative_error": round(sum(total_bar_relative_errors) / len(total_bar_relative_errors), 3) if total_bar_relative_errors else None,
+        "max_relative_error": max_relative_error,
+        "monotonic": all_monotonic if per_bar else None,
+        "ambiguity_count": total_ambiguity_count,
+    }
+
     return BuildIrDiagnostics(
         musicxml_source=musicxml.source_path,
         tabraw_source=tabraw.source_pdf,
@@ -1537,6 +1719,7 @@ def _build_diagnostics(
         per_system=_system_diagnostics(tabraw, candidate_pools),
         per_bar=per_bar,
         warnings=[warning.model_dump(mode="json", exclude_none=True) for warning in warnings],
+        pdf_timing_mapping=pdf_timing_mapping_dict,
     )
 
 
@@ -2145,6 +2328,12 @@ def _tabraw_unsafe_grouping_warning_codes(tabraw: TabRaw) -> list[str]:
         "pdf_tuning_label_malformed",
         "pdf_tuning_format_unsupported",
         "pdf_pitch_tuning_diagnostics_not_enough_for_build_ir",
+
+        # New PDF Spacing & Timing Mapping Blocker Codes
+        "pdf_timing_mapping_refused",
+        "pdf_timing_mapping_not_enough_for_build_ir",
+        "pdf_timing_mapping_group_count_mismatch",
+        "pdf_timing_mapping_non_monotonic",
     }
     return sorted({str(warning.get("code")) for warning in tabraw.warnings if warning.get("code") in unsafe})
 
