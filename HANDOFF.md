@@ -4,10 +4,10 @@
 
 - **Current Branch**: `feature/pdf-vertical-system-overlap-resolution-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: TBD
-- **Latest Local Commit**: `9f1e8e14c632dd4c0259e71a2a983f6404ee2b88`
-- **Latest Pushed Commit**: `9f1e8e14c632dd4c0259e71a2a983f6404ee2b88`
-- **Latest Commit Subject**: `feat: resolve vertical system overlap ambiguities v0.1`
+- **Current PR**: [PR #57](https://github.com/tticom/score2gp/pull/57) (Draft)
+- **Latest Local Commit**: `02dd1751e78cf118da3db712bc8e3932f736253e`
+- **Latest Pushed Commit**: `02dd1751e78cf118da3db712bc8e3932f736253e`
+- **Latest Commit Subject**: `chore: sync handoff SHA in HANDOFF.md`
 - **Working Tree Status Before Handoff Update**: Clean
 - **GitHub Check Status**: N/A
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or `work/` contents are tracked.
