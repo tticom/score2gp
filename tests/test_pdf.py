@@ -2038,3 +2038,131 @@ def test_build_ir_does_not_refuse_excluded_non_playable_without_string_bar(tmp_p
     # The extraction warnings here are non-blocking (e.g. info or page number excluded is not in build blocking whitelist)
     # Therefore, build_ir should not raise BuildIrInputRiskError on this tabraw
     pass
+
+
+PDF_TUNING_STANDARD_TEXT = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_tuning_standard_text.pdf"
+PDF_TUNING_EXPLICIT_EADGBE = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_tuning_explicit_eadgbe.pdf"
+PDF_TUNING_ALTERNATE_DADGAD = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_tuning_alternate_dadgad.pdf"
+PDF_TUNING_LABEL_OUTSIDE = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_tuning_label_outside.pdf"
+PDF_TUNING_CONFLICT = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_tuning_conflict.pdf"
+PDF_TUNING_MALFORMED = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_tuning_malformed.pdf"
+PDF_TUNING_CHORD_RESEMBLING = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_tuning_chord_resembling.pdf"
+PDF_TUNING_SECTION_NOTE_NAMES = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_tuning_section_note_names.pdf"
+PDF_TUNING_VALID_GROUPING = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_tuning_valid_grouping.pdf"
+PDF_TUNING_TIMING_UNIMPLEMENTED = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_tuning_timing_unimplemented.pdf"
+
+
+def test_pdf_tuning_standard_text(tmp_path) -> None:
+    assert PDF_TUNING_STANDARD_TEXT.exists()
+    tabraw_path = tmp_path / "tuning_standard.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_TUNING_STANDARD_TEXT, tabraw_path))
+    tuning_cands = [c for c in raw.candidates if "pdf_tuning_standard_detected" in (c.raw.get("assignment_warnings") or [])]
+    assert len(tuning_cands) > 0
+    assert all(c.kind == "candidate-text" for c in tuning_cands)
+    assert any("pdf_tuning_not_used_for_string_assignment" in (c.raw.get("assignment_warnings") or []) for c in tuning_cands)
+
+
+def test_pdf_tuning_explicit_eadgbe(tmp_path) -> None:
+    assert PDF_TUNING_EXPLICIT_EADGBE.exists()
+    tabraw_path = tmp_path / "tuning_eadgbe.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_TUNING_EXPLICIT_EADGBE, tabraw_path))
+    tuning_cands = [c for c in raw.candidates if "pdf_tuning_string_labels_aligned" in (c.raw.get("assignment_warnings") or [])]
+    assert len(tuning_cands) == 6
+    assert all(c.string is not None for c in tuning_cands)
+    string_notes = {c.string: c.raw_text for c in tuning_cands}
+    assert string_notes[1] == "E"
+    assert string_notes[2] == "B"
+    assert string_notes[6] == "E"
+
+
+def test_pdf_tuning_alternate_dadgad(tmp_path) -> None:
+    assert PDF_TUNING_ALTERNATE_DADGAD.exists()
+    tabraw_path = tmp_path / "tuning_dadgad.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_TUNING_ALTERNATE_DADGAD, tabraw_path))
+    tuning_cands = [c for c in raw.candidates if "pdf_tuning_string_labels_aligned" in (c.raw.get("assignment_warnings") or [])]
+    assert len(tuning_cands) == 6
+    string_notes = {c.string: c.raw_text for c in tuning_cands}
+    assert string_notes[1] == "D"
+    assert string_notes[6] == "D"
+
+
+def test_pdf_tuning_label_outside(tmp_path) -> None:
+    assert PDF_TUNING_LABEL_OUTSIDE.exists()
+    tabraw_path = tmp_path / "tuning_outside.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_TUNING_LABEL_OUTSIDE, tabraw_path))
+    tuning_cands = [c for c in raw.candidates if "pdf_tuning_label_outside_system" in (c.raw.get("assignment_warnings") or [])]
+    assert len(tuning_cands) > 0
+    assert all(c.system_index is None for c in tuning_cands)
+
+
+def test_pdf_tuning_conflict(tmp_path) -> None:
+    assert PDF_TUNING_CONFLICT.exists()
+    tabraw_path = tmp_path / "tuning_conflict.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_TUNING_CONFLICT, tabraw_path))
+    warning_codes = {warning.get("code") for warning in raw.warnings}
+    assert "pdf_tuning_conflict_detected" in warning_codes
+    assert "pdf_tuning_label_ambiguous" in warning_codes
+
+
+def test_pdf_tuning_malformed(tmp_path) -> None:
+    assert PDF_TUNING_MALFORMED.exists()
+    tabraw_path = tmp_path / "tuning_malformed.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_TUNING_MALFORMED, tabraw_path))
+    warning_codes = {warning.get("code") for warning in raw.warnings}
+    assert "pdf_tuning_label_malformed" in warning_codes
+    assert "pdf_tuning_format_unsupported" in warning_codes
+
+
+def test_pdf_tuning_chord_resembling(tmp_path) -> None:
+    assert PDF_TUNING_CHORD_RESEMBLING.exists()
+    tabraw_path = tmp_path / "tuning_chord.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_TUNING_CHORD_RESEMBLING, tabraw_path))
+    tuning_cands = [c for c in raw.candidates if "pdf_tuning_string_labels_aligned" in (c.raw.get("assignment_warnings") or [])]
+    assert len(tuning_cands) == 0
+    chord_cands = [c for c in raw.candidates if "pdf_fret_chord_text_digit_excluded" in (c.raw.get("assignment_warnings") or []) or c.raw_text == "E"]
+    assert len(chord_cands) > 0
+
+
+def test_pdf_tuning_section_note_names(tmp_path) -> None:
+    assert PDF_TUNING_SECTION_NOTE_NAMES.exists()
+    tabraw_path = tmp_path / "tuning_section.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_TUNING_SECTION_NOTE_NAMES, tabraw_path))
+    tuning_cands = [c for c in raw.candidates if "pdf_tuning_string_labels_aligned" in (c.raw.get("assignment_warnings") or [])]
+    assert len(tuning_cands) == 0
+
+
+def test_pdf_tuning_valid_grouping(tmp_path) -> None:
+    assert PDF_TUNING_VALID_GROUPING.exists()
+    tabraw_path = tmp_path / "tuning_valid.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_TUNING_VALID_GROUPING, tabraw_path))
+    assert grouping_status_for_tabraw(raw.model_dump(mode="json")) == "grouped"
+
+
+def test_pdf_tuning_timing_unimplemented(tmp_path) -> None:
+    assert PDF_TUNING_TIMING_UNIMPLEMENTED.exists()
+    tabraw_path = tmp_path / "tuning_timing.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_TUNING_TIMING_UNIMPLEMENTED, tabraw_path))
+    from score2gp.report import build_grouping_diagnostics
+    report = build_grouping_diagnostics(source_pdf=PDF_TUNING_TIMING_UNIMPLEMENTED, inspection={"page_count": 1}, tabraw=raw.model_dump(mode="json"), artifacts={})
+    assert report["pitch_tuning"]["tuning_evidence_count"] > 0
+    assert report["pitch_tuning"]["whether_timing_mapping_implemented"] is False
+    assert report["candidate_classifications"]["non_playable_tuning_text"] > 0
+
+
+def test_build_ir_refuses_tuning_blockers(tmp_path) -> None:
+    assert PDF_TUNING_CONFLICT.exists()
+    tabraw_path = tmp_path / "tuning_refuse.tabraw.json"
+    ir_path = tmp_path / "tuning_refuse.ir.json"
+    extract_tab(PDF_TUNING_CONFLICT, tabraw_path)
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+    assert not ir_path.exists()
+    assert raised.value.category in ("partial_pdf_grouping", "pdf_tuning_conflict_detected")
+
+
+def test_tuning_does_not_infer_strings_or_frets(tmp_path) -> None:
+    assert PDF_TUNING_EXPLICIT_EADGBE.exists()
+    tabraw_path = tmp_path / "tuning_no_infer.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_TUNING_EXPLICIT_EADGBE, tabraw_path))
+    playable = [c for c in raw.candidates if c.parsed_fret is not None]
+    assert all(c.raw.get("is_tuning_evidence") is None for c in playable)
