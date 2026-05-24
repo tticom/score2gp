@@ -4,9 +4,9 @@
 
 - **Current Branch**: `docs/partial-to-recovery-design-note-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: Draft PR (pending creation in Phase 5)
-- **Latest Local Commit**: `83e338166b57d6056b4df3ea5ad45a96324ad727`
-- **Latest Pushed Commit**: `83e338166b57d6056b4df3ea5ad45a96324ad727`
+- **Current PR**: [PR #54](https://github.com/tticom/score2gp/pull/54) (Draft)
+- **Latest Local Commit**: `10a7092bb469622d1df7b0dfcf7ee7d4dfbf7032`
+- **Latest Pushed Commit**: `10a7092bb469622d1df7b0dfcf7ee7d4dfbf7032`
 - **Latest Commit Subject**: `docs: add public partial-to-recovery design note`
 - **Working Tree Status Before Handoff Update**: Clean
 - **GitHub Check Status**: N/A
