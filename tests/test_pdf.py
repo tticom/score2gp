@@ -2145,7 +2145,7 @@ def test_pdf_tuning_timing_unimplemented(tmp_path) -> None:
     from score2gp.report import build_grouping_diagnostics
     report = build_grouping_diagnostics(source_pdf=PDF_TUNING_TIMING_UNIMPLEMENTED, inspection={"page_count": 1}, tabraw=raw.model_dump(mode="json"), artifacts={})
     assert report["pitch_tuning"]["tuning_evidence_count"] > 0
-    assert report["pitch_tuning"]["whether_timing_mapping_implemented"] is False
+    assert report["pitch_tuning"]["whether_timing_mapping_implemented"] is True
     assert report["candidate_classifications"]["non_playable_tuning_text"] > 0
 
 

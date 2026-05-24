@@ -67,5 +67,10 @@ Known limitations:
 - GPIF support is minimal and may not cover every Guitar Pro feature.
 - Unsupported or uncertain notation must be reported in warnings and conversion reports.
 - The public end-to-end PDF-to-GP proof (`tests/test_e2e_pdf_to_gp.py`) demonstrates pipeline correctness on a highly controlled, synthetic public ASCII-tab PDF and compatible MusicXML fixture. It does not prove or guarantee arbitrary commercial PDF conversion, OCR, scanned-PDF support, or general PDF-to-GP authoring.
+- **PDF-to-MusicXML Timing Mapping and Spacing Telemetry Limits**: PDF timing mapping diagnostics are strictly diagnostic and do not perform timing repair, automatic timing calibration, candidate movement, or onset fabrication.
+  - **Refusal Preconditions**: Mapping is refused or not attempted if PDF grouping is unsafe or MusicXML timing preflight has fatal timing risks. In such cases, the mapping status is cleanly marked as refused, and no mapping is performed.
+  - **Refusal Gates**: Monotonicity is strictly enforced. If visual x-positions across bars are non-monotonic, build-ir compilation is refused (`pdf_timing_mapping_non_monotonic`) and raises a `BuildIrInputRiskError`.
+  - **Telemetry and Spacing Metrics**: Telemetry records per-bar x-groups, MusicXML onsets, unmatched count deltas, mean absolute relative error, and max relative error. Incompact or uneven spacings generate warnings but do not block score generation unless non-monotonicity is detected.
+  - **Diagnostic-only Nature**: Spacing metrics and visual HTML badges (`pdf-timing-mapping-diagnostics.html`) are diagnostic evidence only. The pipeline does not write ScoreIR unless all upstream grouping, timing, and monotonicity gates pass cleanly.
 
 This tool is for files the user owns or has permission to process. It must not be used to bypass DRM or copy protected scores from unauthorised sources.

@@ -145,6 +145,21 @@ To assist developers in diagnosing edge-boundary fallback rejections without exp
   - **Remediation guidance**: Providing actionable instructions to regenerate the PDF, repair barlines, or manually review layout constraints.
 - **Integration**: The grouping diagnostics HTML (`grouping-diagnostics.html`) includes direct links to both the JSON and HTML edge-boundary reports under the Artifacts list. Furthermore, the `BuildIrInputRiskError` failure diagnostics payload references these report filenames during a `tabraw-import` stage refusal, and the E2E smoke test summary records their relative paths within the ignored `work/` folder.
 
+## PDF Timing Ingestion & Spacing Mapping Diagnostics
+
+To safely evaluate physical visual spacing against musical timings, `build_ir` implements a conservative PDF-derived TabRaw x-position to MusicXML pitched onset timing mapping diagnostics module:
+- **Separation of Concerns**: The mapping is purely diagnostic. It does not perform timing repair, calibrate fret widths, move candidates, or alter MusicXML durations.
+- **Contract Schema Version**: Telemetry is structured under the `pdf-timing-mapping.v0.7` schema version. It populates grouping safety status, MusicXML timing safety status, whether mapping was attempted or refused, precise error reason codes, matched/unmatched group counts, absolute/relative spacing drift metrics, and monotonicity status.
+- **HTML Visual Report (`pdf-timing-mapping-diagnostics.html`)**: Renders a visually premium dark-mode summary of the spacing alignment. It provides:
+  - **Verdict block**: Highlighting quality class (`good`, `warning`, `poor`, `unknown`, `refused`), attempted/refused status, and clear refusal reason codes.
+  - **Grid layout**: For grouping safety, timing source safety, and MusicXML timing preflight status.
+  - **Per-bar spacing comparison table**: Showcasing candidate counts, pitched onset counts, bar quality, absolute relative errors, and visual drift warnings.
+  - **Remediation guidance**: Explicitly stating that timing mapping is diagnostic-only and cannot repair timing.
+- **Strict Gating Rules**:
+  - **Refusal Preconditions**: If PDF grouping is unsafe (`partial_pdf_grouping`) or MusicXML timing preflight fails, mapping is refused/not attempted.
+  - **Monotonicity Check**: If candidate x-positions across bars are non-monotonic, build-ir compilation is refused with `pdf_timing_mapping_non_monotonic` and raises a `BuildIrInputRiskError`.
+  - **Build-ir Gates**: Poor quality or uneven spacing triggers warnings and visual telemetry but does not block ScoreIR compilation, allowing controlled, slightly uneven born-digital inputs to succeed while reporting clear spacing risks.
+
 ## Public End-to-End PDF-to-GP Proof Slice
 
 To demonstrate the structural integrity of the entire staged pipeline (PDF extraction, alignment, ScoreIR building, validation, GP writing, package validation, and semantic fact comparison), there is a public end-to-end integration proof.
