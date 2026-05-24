@@ -4,9 +4,9 @@
 - **Current Branch**: `feature/ascii-scoreir-gate-refusal-diagnostics-v0.1`
 - **Base Branch**: `main`
 - **Current PR**: #8 (URL: https://github.com/tticom/score2gp/pull/8)
-- **Latest Local Commit**: `027db3ea3cd5f635e2cc0e62dc49d32e4226333d`
-- **Latest Pushed Commit**: `027db3ea3cd5f635e2cc0e62dc49d32e4226333d`
-- **Commit Subject**: `Update handoff after PR readiness`
+- **Latest Local Commit**: `aa9c43919f7e209eeaa7ede1536f605f4f6fa23b`
+- **Latest Pushed Commit**: `aa9c43919f7e209eeaa7ede1536f605f4f6fa23b`
+- **Commit Subject**: `Document routine command permissions`
 - **Working Tree Status**: Clean
 - **Tests & Checks Run**:
   - `python -m pytest` -> 114 passed
@@ -18,8 +18,8 @@
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL files, overlays, logs, or diagnostic outputs are tracked or staged.
 
 ## What Changed in the Task
-- Added a stronger persistent project rule in `AGENTS.md` to ensure `HANDOFF.md` is updated, committed, and pushed to the remote feature branch at the end of every task.
-- Updated `HANDOFF.md` to align with the latest pushed commit status, ready-for-review status, and passing remote check results.
+- Added a stronger persistent project rule, planning/execution rule, and allowed routine commands in `AGENTS.md` to ensure `HANDOFF.md` is updated, committed, and pushed to the remote feature branch at the end of every task.
+- Updated `HANDOFF.md` to align with the latest pushed commit status, ready-for-review status, passing remote check results, and documented routine command permissions.
 
 ## Known Limitations
 - Refusal diagnostics are JSON-focused. Developer-facing HTML rendering for ASCII gate failures is a follow-up branch.
