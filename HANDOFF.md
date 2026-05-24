@@ -4,10 +4,10 @@
 
 - **Current Branch**: `feature/private-smoke-refresh-after-vertical-overlap-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: N/A
-- **Latest Local Commit**: 1d24e7188413d941c1032fa8f68a01706549ab1b
-- **Latest Pushed Commit**: 1d24e7188413d941c1032fa8f68a01706549ab1b
-- **Latest Commit Subject**: Merge pull request #57 from tticom/feature/pdf-vertical-system-overlap-resolution-v0.1
+- **Current PR**: [PR #58](https://github.com/tticom/score2gp/pull/58) (Draft)
+- **Latest Local Commit**: `83a71ebcdcc0877e777b244039352f711deee5eb`
+- **Latest Pushed Commit**: `83a71ebcdcc0877e777b244039352f711deee5eb`
+- **Latest Commit Subject**: `chore: private smoke refresh after vertical overlap resolution v0.1`
 - **Working Tree Status Before Handoff Update**: Clean
 - **GitHub Check Status**: N/A
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or `work/` contents are tracked.
