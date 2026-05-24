@@ -4,12 +4,12 @@
 
 - **Current Branch**: `feature/pdf-horizontal-staff-partition-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: N/A (Will be created next using `gh pr create --draft --fill`)
-- **Latest Local Commit**: `c3b5dba`
-- **Latest Pushed Commit**: N/A (Will push current branch next)
-- **Latest Commit Subject**: `Implement horizontal staff partitioning heuristics to safely resolve multi-column layouts`
-- **Working Tree Status Before Handoff Update**: Clean implementation and tests committed. Update of `TASKS.md` and `HANDOFF.md` in progress.
-- **GitHub Check Status**: N/A
+- **Current PR**: #66 (https://github.com/tticom/score2gp/pull/66)
+- **Latest Local Commit**: `d77077b`
+- **Latest Pushed Commit**: `d77077b`
+- **Latest Commit Subject**: `Implement system-level ghost system deduplication to filter overlapping duplicate systems while preserving overlap checks on ambiguity tests`
+- **Working Tree Status Before Handoff Update**: All code and tests committed and pushed. Update of `HANDOFF.md` in progress.
+- **GitHub Check Status**: Pending (Run in progress)
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or `work/` contents are tracked.
 - **Root Generated-Artifact Audit**: Clean. `git ls-files grouping-diagnostics.html inspect overlays warnings.json tuning_outside.tabraw.json` returned no tracked files.
 
@@ -27,8 +27,8 @@
 
 - **Updated AGENTS.md Ground Rules**:
   - Enforced a strict ground rule stating that code and tests must be written before any PR is raised (no markdown-only or tests-only PRs).
-- **Horizontal Line Deduplication**:
-  - Implemented horizontal drawing line segment deduplication in `_detect_tab_systems` inside `src/score2gp/pdf.py` to merge duplicate/overlapping lines. This completely prevents ghost/duplicate staves from causing false-positive vertical overlap blocks.
+- **System-Level Ghost System Deduplication**:
+  - Added a smart, layout-aware deduplicator at the end of `_detect_tab_systems` inside `src/score2gp/pdf.py` to identify and filter overlapping ghost systems (where one detected system's line Ys and X span are a subset of another complete system). This cleanly resolves overlapping layout warnings (ghost staves) on real private scores while keeping same-column layout ambiguity test cases fully functional and correctly refusing compilation for genuine visual overlap risks.
 - **Refined Column Overlap Ratio Check**:
   - Increased the horizontal overlap threshold ratio from `0.45` to `0.75` in `src/score2gp/pdf.py` to ensure that vertical overlap checks are decoupled between independent columns.
 - **Restricted Horizontal Barline Search Range**:
@@ -50,7 +50,7 @@
 
 ## Next Recommended Task
 
-- **MusicXML Timing and Alignment Review**: Evaluate and address remaining timing-alignment blockers on Page 2 of real private scores, or merge the current branch first.
+- **MusicXML Timing and Alignment Review**: Evaluate and address remaining timing-alignment blockers on Page 2 of real private scores, or merge the current PR (#66) first.
 
 ## Explicit Scope Boundaries
 
