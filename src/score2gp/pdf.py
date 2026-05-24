@@ -2848,12 +2848,18 @@ def _write_grouping_overlays(
         candidates_by_page.setdefault(int(page_index), []).append(candidate)
 
     message = "candidate text found; no usable tab staff/bar/string grouping inferred"
+    text_color = (0.8, 0.05, 0.05)
     if grouping_status == "grouped":
         message = "candidate text found; tab staff/bar/string grouping inferred"
+        text_color = (0.05, 0.55, 0.15)
+    elif grouping_status == "recovered":
+        message = "candidate text found; conservative PDF edge-boundary recovery fallback used"
+        text_color = (0.05, 0.55, 0.15)
     elif grouping_status == "partial":
         message = "candidate text found; tab staff/bar/string grouping is partial"
     elif grouping_status == "ascii_grouped":
         message = "ASCII tab rows found; row/string grouping inferred, timing alignment unavailable"
+        text_color = (0.05, 0.55, 0.15)
     elif grouping_status == "partial_ascii":
         message = "ASCII tab rows found; row grouping is partial"
     elif grouping_status == "ambiguous":
@@ -2872,7 +2878,7 @@ def _write_grouping_overlays(
                 fitz.Point(36, 24),
                 message,
                 fontsize=10,
-                color=(0.8, 0.05, 0.05),
+                color=text_color,
             )
             for structure in grouping_structures:
                 staff_bbox = structure.get("staff_bbox")
