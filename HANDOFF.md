@@ -5,9 +5,9 @@
 - **Current Branch**: `feature/private-smoke-refresh-after-pdf-timing-refinement-v1.0`
 - **Base Branch**: `main`
 - **Current PR**: [PR #51](https://github.com/tticom/score2gp/pull/51) (Draft)
-- **Latest Local Commit**: `bebf4ebe316f87a662abf813b229ff7bd1916093`
-- **Latest Pushed Commit**: `bebf4ebe316f87a662abf813b229ff7bd1916093`
-- **Latest Commit Subject**: `Update HANDOFF.md with private smoke refresh findings`
+- **Latest Local Commit**: `3488f68ba2615a8cdb3e402290dc2ca8274ae841`
+- **Latest Pushed Commit**: `f280ca13a5c77784b2fc9f3003b24674967306f7`
+- **Latest Commit Subject**: `Document cross-agent final report rule in AGENTS.md`
 - **Working Tree Status Before Handoff Update**: Clean
 - **GitHub Check Status**: Pending (triggered by current feature branch push)
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, private summaries, overlays, logs, diagnostic outputs, or `work/` contents are tracked.
@@ -25,6 +25,7 @@
 
 ## What Changed
 
+- Updated `AGENTS.md` to add a permanent "Cross-agent final report rule" defining clear expectations for final task reporting.
 - Ran the E2E private smoke runner `scripts/private_e2e_smoke.py` against local real private inputs to generate ignored diagnostic outputs under `work/`.
 - Generated private-safe E2E summaries (`work/private_e2e_smoke_v0_1/private_e2e_summary.json` and `work/private_e2e_smoke_v0_1/private_e2e_summary.md`).
 - Fully compared the new `pdf-timing-refinement.v1.0` classifications and issue codes against real OMR timing risk inputs on `private_input_1`.
