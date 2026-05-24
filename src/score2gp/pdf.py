@@ -276,14 +276,19 @@ class _TabSystem:
         return boxes
 
     def string_for_y(
-        self, y: float | None, height: float | None = None, systematic_offset: float = 0.0
+        self, y: float | None, height: float | None = None, systematic_offset: float = 0.0, relaxed_tolerance: bool = False
     ) -> tuple[int | None, int | None, float | None, list[str]]:
         if y is None:
             return None, None, None, []
         calibrated_y = y - systematic_offset
         distances = [(abs(line_y - calibrated_y), index + 1) for index, line_y in enumerate(self.line_ys)]
         distance, line_index = min(distances, key=lambda item: item[0])
-        tolerance = max(4.5, self.line_spacing * 0.42)
+        if relaxed_tolerance:
+            tolerance = max(6.0, self.line_spacing * 0.75)
+        else:
+            tolerance = max(5.0, self.line_spacing * 0.48)
+
+
 
         warnings = []
 
@@ -337,14 +342,24 @@ class _TabSystem:
     def local_bar_for_x(self, x: float | None) -> tuple[int | None, list[str]]:
         if x is None or len(self.barlines) < 2:
             return None, ["missing_pdf_barlines", "pdf_barlines_missing"] if x is not None else []
-        if x < self.barlines[0] - 2.0 or x > self.barlines[-1] + 2.0:
+
+        # Outer boundary snapping: up to 24.0 pixels (matching horizontal margin of the system)
+        outer_tolerance = 24.0
+        if x < self.barlines[0] - outer_tolerance or x > self.barlines[-1] + outer_tolerance:
             return None, ["pdf_candidate_outside_bar", "ambiguous_bar_assignment", "pdf_candidate_unassigned_to_bar"]
+
         internal_barlines = self.barlines[1:-1]
         if any(abs(x - barline) <= self.ambiguous_bar_tolerance for barline in internal_barlines):
             return None, ["ambiguous_bar_assignment", "pdf_barlines_ambiguous", "pdf_candidate_on_bar_boundary", "pdf_candidate_boundary_ambiguous", "pdf_bar_box_boundary_ambiguous"]
+
         for index, (left, right) in enumerate(zip(self.barlines, self.barlines[1:]), start=1):
-            if left - 2.0 <= x <= right + 2.0:
+            left_tol = outer_tolerance if left == self.barlines[0] else 4.5
+            right_tol = outer_tolerance if right == self.barlines[-1] else 4.5
+
+            if left - left_tol <= x <= right + right_tol:
                 warnings = []
+                if x < left or x > right:
+                    warnings.append("pdf_candidate_outside_bar")
                 if self.inferred_left is not None and abs(left - self.inferred_left) < 1.0:
                     warnings.append("pdf_bar_box_inferred_left_boundary")
                 if self.inferred_right is not None and abs(right - self.inferred_right) < 1.0:
@@ -428,7 +443,7 @@ class _TabSystem:
         if x is None or y is None:
             return False
         horizontal_margin = 24.0
-        top_margin = max(34.0, self.line_spacing * 2.5)
+        top_margin = max(18.0, self.line_spacing * 2.2)
         bottom_margin = max(12.0, self.line_spacing)
         return (
             self.x0 - horizontal_margin <= x <= self.x1 + horizontal_margin
@@ -1464,6 +1479,30 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                 if not digits:
                     continue
 
+                # Reconstruct missing 6th line if exactly 5 lines are detected
+                if len(system.line_ys) == 5:
+                    spacing = system.line_spacing
+                    potential_top = system.line_ys[0] - spacing
+                    potential_bottom = system.line_ys[-1] + spacing
+
+                    top_votes = 0
+                    bottom_votes = 0
+                    tol = max(4.5, spacing * 0.48)
+
+                    for d in digits:
+                        y_center = (d["y0"] + d["y1"]) / 2
+                        if abs(y_center - potential_top) <= tol:
+                            top_votes += 1
+                        elif abs(y_center - potential_bottom) <= tol:
+                            bottom_votes += 1
+
+                    if top_votes > 0 and top_votes >= bottom_votes:
+                        new_ys = [round(potential_top, 3)] + system.line_ys
+                        object.__setattr__(system, "line_ys", new_ys)
+                    elif bottom_votes > 0 and bottom_votes > top_votes:
+                        new_ys = system.line_ys + [round(potential_bottom, 3)]
+                        object.__setattr__(system, "line_ys", new_ys)
+
                 # Calculate systematic vertical offset for this system
                 diffs = []
                 for d in digits:
@@ -1477,6 +1516,8 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                             closest_diff = y_center - line_y
                     if closest_dist < system.line_spacing * 0.36:
                         diffs.append(closest_diff)
+
+
 
                 systematic_offset = 0.0
                 if diffs:
@@ -1504,6 +1545,44 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                         d["string_distance"] = string_dist
                         d["string_warnings"] = string_warnings
                         unassigned_digits.append(d)
+
+                # Pass 2: Chord-cluster string snapping for remaining unassigned digits
+                still_unassigned = []
+                for ud in unassigned_digits:
+                    ud_cx = (ud["x0"] + ud["x1"]) / 2
+                    has_assigned_neighbor = False
+                    for od in digits:
+                        if od is not ud and od.get("assigned_string") is not None:
+                            od_cx = (od["x0"] + od["x1"]) / 2
+                            if abs(ud_cx - od_cx) <= 6.0:
+                                has_assigned_neighbor = True
+                                break
+                    if has_assigned_neighbor:
+                        y_center = ud["y_center"]
+                        height = ud["height_val"]
+                        line_idx, string, string_dist, string_warnings = system.string_for_y(
+                            y_center, height, systematic_offset, relaxed_tolerance=True
+                        )
+                        if string is not None:
+                            ud["assigned_string"] = string
+                            ud["assigned_line_index"] = line_idx
+                            ud["string_distance"] = string_dist
+                            clean_warnings = [
+                                w for w in string_warnings
+                                if w not in (
+                                    "pdf_string_assignment_outside_staff",
+                                    "pdf_string_assignment_missing",
+                                    "ambiguous_string_assignment",
+                                    "pdf_string_assignment_ambiguous"
+                                )
+                            ]
+                            clean_warnings.append("pdf_string_assignment_nearest_line")
+                            ud["string_warnings"] = clean_warnings
+                            digit_by_string[string].append(ud)
+                            continue
+                    still_unassigned.append(ud)
+                unassigned_digits = still_unassigned
+
 
                 merged_on_system = []
                 for string in range(1, 7):
@@ -1626,6 +1705,37 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
 
             all_page_candidates.sort(key=lambda c: (round(c["y0"], 3), round(c["x0"], 3), c["text"]))
 
+            # Pass 1: Assign initial bar_index to all candidates
+            for pc in all_page_candidates:
+                x = (pc["x0"] + pc["x1"]) / 2
+                y = (pc["y0"] + pc["y1"]) / 2
+                system = _nearest_system(systems, x, y)
+                pc["system_ref"] = system
+                if system is not None:
+                    bar_idx, bar_warns = system.bar_for_x(x)
+                    pc["initial_bar_index"] = bar_idx
+                    pc["initial_bar_warnings"] = bar_warns
+                else:
+                    pc["initial_bar_index"] = None
+                    pc["initial_bar_warnings"] = []
+
+            # Pass 2: Chord-cluster bar snapping for unassigned fret candidates
+            for pc in all_page_candidates:
+                is_fret = parse_fret_text(pc["text"]) is not None and not pc.get("is_tuning_evidence")
+                if is_fret and pc.get("initial_bar_index") is None and pc.get("system_ref") is not None:
+                    system = pc["system_ref"]
+                    pc_cx = (pc["x0"] + pc["x1"]) / 2
+                    for opc in all_page_candidates:
+                        if opc is not pc and opc.get("system_ref") == system:
+                            opc_is_fret = parse_fret_text(opc["text"]) is not None and not opc.get("is_tuning_evidence")
+                            if opc_is_fret and opc.get("initial_bar_index") is not None:
+                                opc_cx = (opc["x0"] + opc["x1"]) / 2
+                                if abs(pc_cx - opc_cx) <= 6.0:
+                                    pc["initial_bar_index"] = opc["initial_bar_index"]
+                                    pc["initial_bar_warnings"] = []
+                                    break
+
+
             for pc in all_page_candidates:
                 raw_text = pc["text"]
                 bbox_values = [pc["x0"], pc["y0"], pc["x1"], pc["y1"]]
@@ -1705,7 +1815,9 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                     for w in string_warnings:
                         if w not in assignment_warnings:
                             assignment_warnings.append(w)
-                    bar_index, bar_warnings = system.bar_for_x(x)
+                    bar_index = pc.get("initial_bar_index")
+                    bar_warnings = pc.get("initial_bar_warnings", [])
+
                     if bar_index is None and is_fret_candidate:
                         assignment_warnings.append("pdf_candidates_unassigned_to_bar")
                         assignment_warnings.append("pdf_candidate_unassigned_to_bar")
