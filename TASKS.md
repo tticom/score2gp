@@ -4,6 +4,8 @@
 
 ## Done
 
+- [x] Refresh E2E private smoke blocker summary after vertical overlap resolution v0.1 to evaluate the impact on multi-system visual overlaps on page 1 of private_input_1.
+
 - [x] Resolve vertical system overlap ambiguities and implement column-aware system ordering.
 
 - [x] Execute a private-safe smoke refresh after conservative edge-boundary recovery to verify safety heuristics and blocker taxonomy updates.
