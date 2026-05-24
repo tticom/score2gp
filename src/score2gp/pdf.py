@@ -776,7 +776,9 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                             "code": "pdf_barline_candidates_present_but_invalid",
                             "message": f"Barline candidates were present but all were rejected in system {system.system_index} on page {page_number}.",
                             "severity": "warning",
-                            "grouping_status": "missing"
+                            "grouping_status": "missing",
+                            "page_index": page_number,
+                            "system_index": system.system_index,
                         })
                     reasons = system.rejection_reasons or {}
                     if reasons.get("pdf_barline_too_short", 0) > 0:
@@ -784,70 +786,90 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                             "code": "pdf_barline_too_short",
                             "message": f"One or more barline candidates are too short in system {system.system_index} on page {page_number}.",
                             "severity": "warning",
-                            "grouping_status": "partial"
+                            "grouping_status": "partial",
+                            "page_index": page_number,
+                            "system_index": system.system_index,
                         })
                     if reasons.get("pdf_barline_does_not_cross_staff", 0) > 0:
                         warnings.append({
                             "code": "pdf_barline_does_not_cross_staff",
                             "message": f"One or more barline candidates do not cross the tab staff in system {system.system_index} on page {page_number}.",
                             "severity": "warning",
-                            "grouping_status": "partial"
+                            "grouping_status": "partial",
+                            "page_index": page_number,
+                            "system_index": system.system_index,
                         })
                     if reasons.get("pdf_barline_outside_system_bounds", 0) > 0:
                         warnings.append({
                             "code": "pdf_barline_outside_system_bounds",
                             "message": f"One or more barline candidates are outside the system bounds in system {system.system_index} on page {page_number}.",
                             "severity": "warning",
-                            "grouping_status": "partial"
+                            "grouping_status": "partial",
+                            "page_index": page_number,
+                            "system_index": system.system_index,
                         })
                     if reasons.get("pdf_barline_ambiguous", 0) > 0:
                         warnings.append({
                             "code": "pdf_barline_ambiguous",
                             "message": f"One or more barline candidates are horizontally ambiguous in system {system.system_index} on page {page_number}.",
                             "severity": "warning",
-                            "grouping_status": "ambiguous"
+                            "grouping_status": "ambiguous",
+                            "page_index": page_number,
+                            "system_index": system.system_index,
                         })
                     if reasons.get("pdf_barline_too_short_absolute", 0) > 0:
                         warnings.append({
                             "code": "pdf_barline_too_short_absolute",
                             "message": f"One or more barline candidates are below absolute height threshold in system {system.system_index} on page {page_number}.",
                             "severity": "warning",
-                            "grouping_status": "partial"
+                            "grouping_status": "partial",
+                            "page_index": page_number,
+                            "system_index": system.system_index,
                         })
                     if reasons.get("pdf_barline_too_short_relative_to_staff", 0) > 0:
                         warnings.append({
                             "code": "pdf_barline_too_short_relative_to_staff",
                             "message": f"One or more barline candidates are below relative staff-height threshold in system {system.system_index} on page {page_number}.",
                             "severity": "warning",
-                            "grouping_status": "partial"
+                            "grouping_status": "partial",
+                            "page_index": page_number,
+                            "system_index": system.system_index,
                         })
                     if reasons.get("pdf_barline_crosses_insufficient_string_gaps", 0) > 0:
                         warnings.append({
                             "code": "pdf_barline_crosses_insufficient_string_gaps",
                             "message": f"One or more barline candidates cross too few string gaps in system {system.system_index} on page {page_number}.",
                             "severity": "warning",
-                            "grouping_status": "partial"
+                            "grouping_status": "partial",
+                            "page_index": page_number,
+                            "system_index": system.system_index,
                         })
                     if reasons.get("pdf_barline_partial_staff_crossing", 0) > 0:
                         warnings.append({
                             "code": "pdf_barline_partial_staff_crossing",
                             "message": f"One or more barline candidates only partially cross the staff in system {system.system_index} on page {page_number}.",
                             "severity": "warning",
-                            "grouping_status": "partial"
+                            "grouping_status": "partial",
+                            "page_index": page_number,
+                            "system_index": system.system_index,
                         })
                     if reasons.get("pdf_barline_outside_staff_region", 0) > 0:
                         warnings.append({
                             "code": "pdf_barline_outside_staff_region",
                             "message": f"One or more barline candidates are outside the staff region in system {system.system_index} on page {page_number}.",
                             "severity": "warning",
-                            "grouping_status": "partial"
+                            "grouping_status": "partial",
+                            "page_index": page_number,
+                            "system_index": system.system_index,
                         })
                     if reasons.get("pdf_barline_rejected_relative_height", 0) > 0:
                         warnings.append({
                             "code": "pdf_barline_rejected_relative_height",
                             "message": f"One or more barline candidates were rejected by relative staff-height check in system {system.system_index} on page {page_number}.",
                             "severity": "warning",
-                            "grouping_status": "partial"
+                            "grouping_status": "partial",
+                            "page_index": page_number,
+                            "system_index": system.system_index,
                         })
                     # Propagate system grouping warnings to page warnings
                     for gw in system.grouping_warnings:
@@ -856,46 +878,60 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                                 "code": "pdf_bar_box_too_narrow",
                                 "message": f"One or more bar boxes are too narrow in system {system.system_index} on page {page_number}.",
                                 "severity": "warning",
-                                "grouping_status": "partial"
+                                "grouping_status": "partial",
+                                "page_index": page_number,
+                                "system_index": system.system_index,
                             })
                             warnings.append({
                                 "code": "pdf_bar_box_construction_not_enough_for_build_ir",
                                 "message": f"Bar box construction failed in system {system.system_index} on page {page_number}.",
                                 "severity": "warning",
-                                "grouping_status": "partial"
+                                "grouping_status": "partial",
+                                "page_index": page_number,
+                                "system_index": system.system_index,
                             })
                         elif gw == "pdf_bar_box_outside_system_bounds":
                             warnings.append({
                                 "code": "pdf_bar_box_outside_system_bounds",
                                 "message": f"One or more bar boxes extend outside system horizontal bounds in system {system.system_index} on page {page_number}.",
                                 "severity": "warning",
-                                "grouping_status": "partial"
+                                "grouping_status": "partial",
+                                "page_index": page_number,
+                                "system_index": system.system_index,
                             })
                             warnings.append({
                                 "code": "pdf_bar_box_construction_not_enough_for_build_ir",
                                 "message": f"Bar box construction failed in system {system.system_index} on page {page_number}.",
                                 "severity": "warning",
-                                "grouping_status": "partial"
+                                "grouping_status": "partial",
+                                "page_index": page_number,
+                                "system_index": system.system_index,
                             })
                         elif gw == "pdf_bar_box_overlaps_neighbor":
                             warnings.append({
                                 "code": "pdf_bar_box_overlaps_neighbor",
                                 "message": f"One or more bar boxes overlap with their neighbors in system {system.system_index} on page {page_number}.",
                                 "severity": "warning",
-                                "grouping_status": "partial"
+                                "grouping_status": "partial",
+                                "page_index": page_number,
+                                "system_index": system.system_index,
                             })
                             warnings.append({
                                 "code": "pdf_bar_box_construction_not_enough_for_build_ir",
                                 "message": f"Bar box construction failed in system {system.system_index} on page {page_number}.",
                                 "severity": "warning",
-                                "grouping_status": "partial"
+                                "grouping_status": "partial",
+                                "page_index": page_number,
+                                "system_index": system.system_index,
                             })
                         elif gw == "pdf_bar_box_requires_two_boundaries":
                             warnings.append({
                                 "code": "pdf_bar_box_requires_two_boundaries",
                                 "message": f"A bar box requires at least two accepted barlines in system {system.system_index} on page {page_number}.",
                                 "severity": "warning",
-                                "grouping_status": "partial"
+                                "grouping_status": "partial",
+                                "page_index": page_number,
+                                "system_index": system.system_index,
                             })
                         elif gw == "pdf_bar_box_inferred_left_boundary":
                             warnings.append({
