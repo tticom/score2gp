@@ -5,10 +5,10 @@
 - **Current Branch**: `feature/private-smoke-refresh-after-edge-recovery-v0.1`
 - **Base Branch**: `main`
 - **Current PR**: TBD
-- **Latest Local Commit**: TBD
-- **Latest Pushed Commit**: TBD
-- **Latest Commit Subject**: TBD
-- **Working Tree Status Before Handoff Update**: Modified
+- **Latest Local Commit**: `1a183845c06809cf3ee1e1cdd2135eb0c4d283d6`
+- **Latest Pushed Commit**: `1a183845c06809cf3ee1e1cdd2135eb0c4d283d6`
+- **Latest Commit Subject**: `chore: private smoke refresh after edge-boundary recovery v0.1`
+- **Working Tree Status Before Handoff Update**: Clean
 - **GitHub Check Status**: N/A
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or `work/` contents are tracked.
 - **Root Generated-Artifact Audit**: Clean. `git ls-files grouping-diagnostics.html inspect overlays warnings.json tuning_outside.tabraw.json` returned no tracked files.
