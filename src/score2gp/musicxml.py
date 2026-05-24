@@ -87,12 +87,14 @@ class MusicXmlVoiceCursorModel:
         measure_number: str,
         divisions: int,
         expected_duration_divisions: float | None,
+        allow_remediation: bool = False,
     ):
         self.part_id = part_id
         self.measure_index = measure_index
         self.measure_number = measure_number
         self.divisions = divisions
         self.expected_duration_divisions = expected_duration_divisions
+        self.allow_remediation = allow_remediation
 
         self.parsing_cursor = 0
         self.last_note_onset: dict[int, int] = {}
@@ -116,6 +118,8 @@ class MusicXmlVoiceCursorModel:
         self.measure_underfull = False
 
         self.note_onsets: dict[int, int] = {}
+        self.note_truncated_durations: dict[int, int] = {}
+        self.timing_repair_attempted = False
 
     def simulate(self, measure_node: ET.Element) -> MusicXmlVoiceCursorDiagnostics:
         note_index = 0
@@ -140,10 +144,37 @@ class MusicXmlVoiceCursorModel:
                         if "musicxml_chord_stack_without_anchor" not in self.secondary_reasons:
                             self.secondary_reasons.append("musicxml_chord_stack_without_anchor")
                         onset = self.parsing_cursor
+
+                    if self.allow_remediation and self.expected_duration_divisions is not None:
+                        expected = int(self.expected_duration_divisions)
+                        if onset >= expected:
+                            onset = expected
+                            if duration > 0:
+                                duration = 0
+                                self.note_truncated_durations[note_index] = 0
+                                self.timing_repair_attempted = True
+                        elif onset < expected and onset + duration > expected:
+                            duration = expected - onset
+                            self.note_truncated_durations[note_index] = duration
+                            self.timing_repair_attempted = True
+
                     self.chord_stack_count += 1
                     self.note_onsets[note_index] = onset
                 else:
                     onset = self.parsing_cursor
+                    if self.allow_remediation and self.expected_duration_divisions is not None:
+                        expected = int(self.expected_duration_divisions)
+                        if onset >= expected:
+                            onset = expected
+                            if duration > 0:
+                                duration = 0
+                                self.note_truncated_durations[note_index] = 0
+                                self.timing_repair_attempted = True
+                        elif onset < expected and onset + duration > expected:
+                            duration = expected - onset
+                            self.note_truncated_durations[note_index] = duration
+                            self.timing_repair_attempted = True
+
                     self.last_note_onset[voice] = onset
                     self.note_onsets[note_index] = onset
                     if voice not in self.voice_cursor_starts:
@@ -303,9 +334,14 @@ class MusicXmlVoiceCursorModel:
                 if "musicxml_same_voice_rest_note_overlap" not in self.secondary_reasons:
                     self.secondary_reasons.append("musicxml_same_voice_rest_note_overlap")
 
+        if self.timing_repair_attempted:
+            if "musicxml_timing_overfull_resolved" not in self.secondary_reasons:
+                self.secondary_reasons.append("musicxml_timing_overfull_resolved")
+
         if self.measure_overfull or self.same_voice_overlap_count > 0 or self.cross_voice_overlap_count > 0 or "musicxml_invalid_duration_grid" in self.secondary_reasons:
-            if "musicxml_timing_repair_not_attempted" not in self.secondary_reasons:
-                self.secondary_reasons.append("musicxml_timing_repair_not_attempted")
+            if not self.timing_repair_attempted:
+                if "musicxml_timing_repair_not_attempted" not in self.secondary_reasons:
+                    self.secondary_reasons.append("musicxml_timing_repair_not_attempted")
             if "musicxml_timing_calibration_required" not in self.secondary_reasons:
                 self.secondary_reasons.append("musicxml_timing_calibration_required")
 
@@ -341,7 +377,7 @@ class MusicXmlVoiceCursorModel:
             primary_reason=self.primary_reason,
             secondary_reasons=self.secondary_reasons,
             timing_calibration_possible=timing_calibration_possible,
-            timing_repair_attempted=False,
+            timing_repair_attempted=self.timing_repair_attempted,
             overfull_divisions=overfull_divisions,
             affected_event_ids=affected_event_ids,
         )
@@ -473,7 +509,7 @@ class MusicXmlImport(BaseModel):
     warnings: list[MusicXmlWarning] = Field(default_factory=list)
 
 
-def parse_musicxml(path: str | Path) -> MusicXmlImport:
+def parse_musicxml(path: str | Path, *, allow_remediation: bool = False) -> MusicXmlImport:
     xml_path = Path(path)
     root = _parse_musicxml_root(xml_path)
     if _local_name(root.tag) != "score-partwise":
@@ -488,7 +524,7 @@ def parse_musicxml(path: str | Path) -> MusicXmlImport:
     for part_node in _children(root, "part"):
         part_id = part_node.get("id") or f"part-{len(parts) + 1}"
         part_name = part_names.get(part_id, part_id)
-        parts.append(_parse_part(part_node, part_id, part_name, warnings))
+        parts.append(_parse_part(part_node, part_id, part_name, warnings, allow_remediation=allow_remediation))
 
     return MusicXmlImport(
         source_path=str(xml_path),
@@ -1278,6 +1314,22 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
             # Enrich all generated issues with the voice cursor diagnostics if present
             vcd = measure.voice_cursor_diagnostics
             if vcd is not None:
+                if vcd.timing_repair_attempted:
+                    issues.append(
+                        MusicXmlTimingIssue(
+                            code="musicxml_timing_overfull_resolved",
+                            message=f"Measure {measure.number} overfull issue was conservatively resolved by truncating note durations to the measure boundary.",
+                            severity="warning",
+                            part_id=part.id,
+                            measure_index=measure.index,
+                            measure_number=measure.number,
+                            expected_duration_divisions=expected,
+                            meter=meter_str,
+                            backup_forward_count=measure.backup_forward_count,
+                            voice_extents=voice_extents,
+                            voice_durations=voice_durations,
+                        )
+                    )
                 if "musicxml_invalid_duration_grid" in vcd.secondary_reasons:
                     issues.append(
                         MusicXmlTimingIssue(
@@ -1569,6 +1621,8 @@ def _parse_part(
     part_id: str,
     part_name: str,
     warnings: list[MusicXmlWarning],
+    *,
+    allow_remediation: bool = False,
 ) -> MusicXmlPart:
     measures = []
     current_divisions = 1
@@ -1603,6 +1657,7 @@ def _parse_part(
             measure_number=measure_number,
             divisions=temp_div,
             expected_duration_divisions=temp_expected,
+            allow_remediation=allow_remediation,
         )
         voice_cursor_diagnostics = model.simulate(measure_node)
 
@@ -1639,6 +1694,20 @@ def _parse_part(
                     last_note_onset=onset_val,
                     warnings=warnings,
                 )
+                if model.note_truncated_durations and note_index in model.note_truncated_durations:
+                    orig_duration = note.duration_divisions
+                    note.duration_divisions = model.note_truncated_durations[note_index]
+                    warnings.append(
+                        MusicXmlWarning(
+                            code="musicxml_duration_truncated_to_measure_boundary",
+                            message=(
+                                f"Measure {measure_number} note {note.id} duration truncated from "
+                                f"{orig_duration} to {note.duration_divisions} divisions to fit measure boundary."
+                            ),
+                            severity="warning",
+                            source_path=note.source_path,
+                        )
+                    )
                 notes.append(note)
                 if not note.grace and not note.chord:
                     cursor = onset_val + note.duration_divisions

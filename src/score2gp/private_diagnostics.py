@@ -20,6 +20,7 @@ def run_private_diagnostic_smoke(
     pdf_path: str | Path,
     musicxml_path: str | Path | None,
     out_dir: str | Path,
+    allow_remediation: bool = False,
 ) -> dict[str, Any]:
     """Run a local private diagnostic workflow and return a sanitized summary."""
 
@@ -59,7 +60,12 @@ def run_private_diagnostic_smoke(
         try:
             prepared_musicxml, preparation = prepare_musicxml_for_import(musicxml, out)
             summary["musicxml"].update(preparation)
-            score, diagnostics = build_ir_with_diagnostics_from_files(prepared_musicxml, tabraw_path, ir_path)
+            score, diagnostics = build_ir_with_diagnostics_from_files(
+                prepared_musicxml,
+                tabraw_path,
+                ir_path,
+                allow_remediation=allow_remediation,
+            )
             diagnostics.to_json_file(diagnostics_path)
             _add_build_summary(summary, diagnostics)
             validated, validation_errors = validate_score_ir_file(ir_path)

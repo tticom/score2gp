@@ -36,6 +36,7 @@ def run_pipeline_for_input(
     pdf_path: Path,
     musicxml_path: Optional[Path],
     output_base: Path,
+    allow_remediation: bool = False,
 ) -> Dict[str, Any]:
     """Run E2E diagnostic pipeline for a single input and return its private-safe summary."""
     label = anonymize_name(pdf_path)
@@ -49,6 +50,7 @@ def run_pipeline_for_input(
             pdf_path=pdf_path,
             musicxml_path=musicxml_path,
             out_dir=out_dir,
+            allow_remediation=allow_remediation,
         )
     except Exception as exc:
         summary_raw = {
@@ -246,7 +248,7 @@ def main():
     summaries = []
     for pdf_path, mxl_path in inputs:
         print(f"Processing {pdf_path.name}...")
-        safe_summary = run_pipeline_for_input(pdf_path, mxl_path, output_base)
+        safe_summary = run_pipeline_for_input(pdf_path, mxl_path, output_base, allow_remediation=True)
         summaries.append(safe_summary)
 
     # Write master summary JSON

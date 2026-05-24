@@ -536,6 +536,8 @@ def build_ir_from_files(
     out_path: str | Path | None = None,
     diagnostics_out_path: str | Path | None = None,
     ascii_alignment_path: str | Path | None = None,
+    *,
+    allow_remediation: bool = False,
 ) -> ScoreIR:
     try:
         score, diagnostics = build_ir_with_diagnostics_from_files(
@@ -543,6 +545,7 @@ def build_ir_from_files(
             tabraw_path,
             out_path,
             ascii_alignment_path=ascii_alignment_path,
+            allow_remediation=allow_remediation,
         )
         if diagnostics_out_path is not None:
             diagnostics.to_json_file(diagnostics_out_path)
@@ -602,8 +605,10 @@ def build_ir_with_diagnostics_from_files(
     tabraw_path: str | Path,
     out_path: str | Path | None = None,
     ascii_alignment_path: str | Path | None = None,
+    *,
+    allow_remediation: bool = False,
 ) -> tuple[ScoreIR, BuildIrDiagnostics]:
-    musicxml = parse_musicxml(musicxml_path)
+    musicxml = parse_musicxml(musicxml_path, allow_remediation=allow_remediation)
     tabraw = TabRaw.from_json_file(tabraw_path)
     ascii_gate_details = None
     if ascii_alignment_path is not None:
