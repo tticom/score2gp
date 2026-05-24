@@ -538,6 +538,7 @@ def build_ir_from_files(
     ascii_alignment_path: str | Path | None = None,
     *,
     allow_remediation: bool = False,
+    allow_skip_unboxed: bool = False,
 ) -> ScoreIR:
     try:
         score, diagnostics = build_ir_with_diagnostics_from_files(
@@ -546,6 +547,7 @@ def build_ir_from_files(
             out_path,
             ascii_alignment_path=ascii_alignment_path,
             allow_remediation=allow_remediation,
+            allow_skip_unboxed=allow_skip_unboxed,
         )
         if diagnostics_out_path is not None:
             diagnostics.to_json_file(diagnostics_out_path)
@@ -607,6 +609,7 @@ def build_ir_with_diagnostics_from_files(
     ascii_alignment_path: str | Path | None = None,
     *,
     allow_remediation: bool = False,
+    allow_skip_unboxed: bool = False,
 ) -> tuple[ScoreIR, BuildIrDiagnostics]:
     musicxml = parse_musicxml(musicxml_path, allow_remediation=allow_remediation)
     tabraw = TabRaw.from_json_file(tabraw_path)
@@ -633,7 +636,12 @@ def build_ir_with_diagnostics_from_files(
                 timing_issues=gate.timing_issues,
                 details=gate.details,
             )
-    score, diagnostics = build_ir_with_diagnostics_from_imports(musicxml, tabraw, ascii_gate_details=ascii_gate_details)
+    score, diagnostics = build_ir_with_diagnostics_from_imports(
+        musicxml,
+        tabraw,
+        ascii_gate_details=ascii_gate_details,
+        allow_skip_unboxed=allow_skip_unboxed,
+    )
     if out_path is not None:
         out = Path(out_path)
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -1058,7 +1066,151 @@ def build_ir_with_diagnostics_from_imports(
     tabraw: TabRaw,
     *,
     ascii_gate_details: dict[str, object] | None = None,
+    allow_skip_unboxed: bool = False,
 ) -> tuple[ScoreIR, BuildIrDiagnostics]:
+    if allow_skip_unboxed:
+        unboxed_systems = set()
+        for w in tabraw.warnings:
+            code = w.get("code")
+            if code in (
+                "pdf_barlines_not_detected_in_system",
+                "pdf_bar_boxes_not_constructible",
+                "pdf_bar_box_construction_not_enough_for_build_ir",
+                "pdf_bar_box_one_boundary_rejected",
+                "pdf_bar_box_edge_system_missing_boundary",
+                "pdf_bar_boxes_missing",
+            ):
+                p_idx = w.get("page_index") or w.get("page_number")
+                s_idx = w.get("system_index")
+                if p_idx is not None and s_idx is not None:
+                    unboxed_systems.add((int(p_idx), int(s_idx)))
+
+        if unboxed_systems:
+            recovered_systems = set()
+            skipped_systems = set()
+            for p_idx, s_idx in unboxed_systems:
+                has_rejected_barlines = any(
+                    str(w.get("code", "")).startswith("pdf_barline_")
+                    and (w.get("page_index") or w.get("page_number")) is not None
+                    and int(w.get("page_index") or w.get("page_number")) == p_idx
+                    and w.get("system_index") is not None
+                    and int(w.get("system_index")) == s_idx
+                    for w in tabraw.warnings
+                )
+                if not has_rejected_barlines:
+                    recovered_systems.add((p_idx, s_idx))
+                else:
+                    skipped_systems.add((p_idx, s_idx))
+
+            # Recover zero-barline systems
+            # Recover zero-barline systems
+            if recovered_systems:
+                new_candidates = []
+                for candidate in tabraw.candidates:
+                    if candidate.page_index is not None and candidate.system_index is not None:
+                        if (candidate.page_index, candidate.system_index) in recovered_systems:
+                            candidate = candidate.model_copy(update={"bar_index": 1})
+                    new_candidates.append(candidate)
+                tabraw.candidates = new_candidates
+
+                # Filter out missing bar warnings for recovered systems
+                filtered_warnings = []
+                for w in tabraw.warnings:
+                    p_idx = w.get("page_index") or w.get("page_number")
+                    s_idx = w.get("system_index")
+                    code = w.get("code")
+                    if p_idx is not None and s_idx is not None:
+                        if (int(p_idx), int(s_idx)) in recovered_systems:
+                            if code in (
+                                "pdf_barlines_not_detected_in_system",
+                                "pdf_bar_boxes_not_constructible",
+                                "pdf_bar_detection_not_enough_for_build_ir",
+                                "pdf_barlines_missing",
+                                "pdf_bar_boxes_missing",
+                                "pdf_bar_box_construction_not_enough_for_build_ir",
+                                "pdf_candidate_unassigned_due_to_unboxed_system",
+                                "pdf_candidate_unassigned_to_bar",
+                            ):
+                                continue
+                    filtered_warnings.append(w)
+                tabraw.warnings = filtered_warnings
+
+                # Log recovered warnings
+                for p_idx, s_idx in sorted(recovered_systems):
+                    tabraw.warnings.extend([
+                        {"code": "pdf_system_recovered_as_single_measure", "message": f"System {s_idx} on page {p_idx} recovered.", "severity": "info", "page_index": p_idx, "system_index": s_idx},
+                        {"code": "pdf_bar_box_system_wide_fallback", "message": f"System-wide fallback used for system {s_idx} on page {p_idx}.", "severity": "info", "page_index": p_idx, "system_index": s_idx}
+                    ])
+
+            # Skip remaining unboxed systems
+            if skipped_systems:
+                new_candidates = []
+                for candidate in tabraw.candidates:
+                    if candidate.page_index is not None and candidate.system_index is not None:
+                        if (candidate.page_index, candidate.system_index) in skipped_systems:
+                            continue
+                    new_candidates.append(candidate)
+                tabraw.candidates = new_candidates
+
+                # Filter out all warnings for skipped systems
+                filtered_warnings = []
+                for w in tabraw.warnings:
+                    p_idx = w.get("page_index") or w.get("page_number")
+                    s_idx = w.get("system_index")
+                    if p_idx is not None and s_idx is not None:
+                        if (int(p_idx), int(s_idx)) in skipped_systems:
+                            continue
+                    filtered_warnings.append(w)
+                tabraw.warnings = filtered_warnings
+
+                for p_idx, s_idx in sorted(skipped_systems):
+                    tabraw.warnings.append({
+                        "code": "pdf_unboxed_system_skipped",
+                        "message": f"Unassigned candidates from unboxed system {s_idx} on page {p_idx} were skipped.",
+                        "severity": "warning",
+                        "page_index": p_idx,
+                        "system_index": s_idx,
+                    })
+
+            # Clean up page-level unboxed system warning and grouping taxonomy warning codes
+            UNSAFE_GROUPING_CODES = set(_tabraw_unsafe_grouping_warning_codes(tabraw))
+            UNSAFE_GROUPING_CODES.update({
+                "pdf_barlines_not_detected_in_system",
+                "pdf_bar_boxes_not_constructible",
+                "pdf_bar_detection_not_enough_for_build_ir",
+                "pdf_barlines_missing",
+                "pdf_bar_boxes_missing",
+                "pdf_bar_box_construction_not_enough_for_build_ir",
+                "pdf_candidate_unassigned_due_to_unboxed_system",
+                "pdf_candidate_unassigned_to_bar",
+                "pdf_candidates_unassigned_to_bar",
+                "pdf_fret_optical_bounds_confidence_below_threshold",
+                "pdf_fret_refinement_not_enough_for_build_ir",
+                "pdf_grouping_confidence_below_threshold",
+                "pdf_grouping_not_safe_for_build_ir",
+                "pdf_input_class_drawn_tab_requires_barlines",
+                "pdf_layout_detection_requires_manual_review",
+                "pdf_missing_pdf_grouping_blocks_build_ir",
+                "pdf_partial_grouping_with_playable_candidates",
+                "pdf_system_detected_bar_detection_missing",
+                "missing_pdf_grouping",
+                "partial_pdf_grouping",
+                "pdf_partial_grouping_one_system_unboxed",
+                "pdf_string_assignment_succeeded_upstream_grouping_still_blocks",
+                "pdf_candidate_near_missing_bar_boundary",
+            })
+            filtered_warnings = []
+            for w in tabraw.warnings:
+                code = w.get("code")
+                if code in UNSAFE_GROUPING_CODES:
+                    continue
+                filtered_warnings.append(w)
+            tabraw.warnings = filtered_warnings
+
+
+
+
+
     warnings = _musicxml_warnings(musicxml)
     timing_issues = analyze_musicxml_timing(musicxml)
     if ascii_gate_details is None:

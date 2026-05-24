@@ -750,19 +750,25 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                             "code": "pdf_barlines_not_detected_in_system",
                             "message": f"Less than 2 valid barlines detected in system {system.system_index} on page {page_number}.",
                             "severity": "warning",
-                            "grouping_status": "missing"
+                            "grouping_status": "missing",
+                            "page_index": page_number,
+                            "system_index": system.system_index,
                         })
                         warnings.append({
                             "code": "pdf_bar_boxes_not_constructible",
                             "message": f"Bar boxes are not constructible in system {system.system_index} on page {page_number}.",
                             "severity": "warning",
-                            "grouping_status": "missing"
+                            "grouping_status": "missing",
+                            "page_index": page_number,
+                            "system_index": system.system_index,
                         })
                         warnings.append({
                             "code": "pdf_bar_detection_not_enough_for_build_ir",
                             "message": f"Bar detection is incomplete in system {system.system_index} on page {page_number}.",
                             "severity": "warning",
-                            "grouping_status": "missing"
+                            "grouping_status": "missing",
+                            "page_index": page_number,
+                            "system_index": system.system_index,
                         })
                     if system.rejected_barline_count > 0 and len(system.barlines) == 0:
                         warnings.append({
