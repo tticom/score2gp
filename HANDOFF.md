@@ -4,10 +4,10 @@
 
 - **Current Branch**: `feature/private-smoke-refresh-after-edge-recovery-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: TBD
-- **Latest Local Commit**: `1a183845c06809cf3ee1e1cdd2135eb0c4d283d6`
-- **Latest Pushed Commit**: `1a183845c06809cf3ee1e1cdd2135eb0c4d283d6`
-- **Latest Commit Subject**: `chore: private smoke refresh after edge-boundary recovery v0.1`
+- **Current PR**: [PR #56](https://github.com/tticom/score2gp/pull/56) (Draft)
+- **Latest Local Commit**: `e14c33a8eb0a980377c933fd0ca7849ffaf57cdb`
+- **Latest Pushed Commit**: `e14c33a8eb0a980377c933fd0ca7849ffaf57cdb`
+- **Latest Commit Subject**: `chore: sync handoff SHA in HANDOFF.md`
 - **Working Tree Status Before Handoff Update**: Clean
 - **GitHub Check Status**: N/A
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or `work/` contents are tracked.
