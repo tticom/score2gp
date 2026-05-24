@@ -1606,14 +1606,38 @@ def test_synthetic_edge_left_fallback(tmp_path) -> None:
     assert "pdf_bar_box_edge_boundary_fallback_used" in warning_codes
     assert "pdf_bar_box_inferred_left_boundary" in warning_codes
 
-    from score2gp.report import build_grouping_diagnostics
+    from score2gp.report import build_grouping_diagnostics, grouping_status_for_tabraw, write_grouping_diagnostics_html
+    tabraw_dict = tabraw.model_dump(mode="json")
+    assert grouping_status_for_tabraw(tabraw_dict) == "recovered"
+
     report = build_grouping_diagnostics(
         source_pdf=pdf_path,
         inspection={"kind": "born-digital", "page_count": 1},
-        tabraw=tabraw.model_dump(mode="json"),
+        tabraw=tabraw_dict,
         artifacts={},
     )
+    assert report["grouping_status"] == "recovered"
     assert report["whether_bar_detection_succeeded"] is True
+
+    # Compile the grouping HTML diagnostics and verify the verdict is correct
+    html_path = tmp_path / "grouping-diagnostics.html"
+    write_grouping_diagnostics_html(html_path, report)
+    assert html_path.exists()
+    html_content = html_path.read_text(encoding="utf-8")
+    assert "Extraction succeeded with conservative PDF edge-boundary recovery fallback; grouping is safe for alignment." in html_content
+    assert "RECOVERED" in html_content
+
+    # Build IR to check compiler compilation and grouping_status in the JSON payload
+    ir_path = tmp_path / "edge_left.ir.json"
+    diag_path = tmp_path / "edge_left.diag.json"
+    build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path, diag_path)
+    assert ir_path.exists()
+    assert diag_path.exists()
+
+    import json
+    diag_data = json.loads(diag_path.read_text(encoding="utf-8"))
+    assert diag_data["pdf_timing_mapping"]["grouping_status"] == "recovered"
+    assert diag_data["pdf_timing_mapping"]["grouping_safe"] is True
 
 
 def test_synthetic_edge_right_fallback(tmp_path) -> None:
