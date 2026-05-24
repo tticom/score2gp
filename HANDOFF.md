@@ -5,10 +5,10 @@
 - **Current Branch**: `feature/pdf-edge-boundary-recovery-v0.1`
 - **Base Branch**: `main`
 - **Current PR**: TBD
-- **Latest Local Commit**: TBD
-- **Latest Pushed Commit**: TBD
-- **Latest Commit Subject**: TBD
-- **Working Tree Status Before Handoff Update**: Modified
+- **Latest Local Commit**: `e8e8d064af99a180a5a2c63b585c373aa634f5c3`
+- **Latest Pushed Commit**: `e8e8d064af99a180a5a2c63b585c373aa634f5c3`
+- **Latest Commit Subject**: `feat: implement conservative edge-boundary recovery v0.1`
+- **Working Tree Status Before Handoff Update**: Clean
 - **GitHub Check Status**: N/A
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or `work/` contents are tracked.
 - **Root Generated-Artifact Audit**: Clean. `git ls-files grouping-diagnostics.html inspect overlays tuning_outside.tabraw.json warnings.json` returned no tracked files.
