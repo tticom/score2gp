@@ -4,7 +4,7 @@
 
 - **Current Branch**: `feature/pdf-fret-snapping-refinement-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: Draft PR to be created (`feature/pdf-fret-snapping-refinement-v0.1`)
+- **Current PR**: PR #68 (https://github.com/tticom/score2gp/pull/68)
 - **Latest Local Commit**: `bfada5a41d02dfd31b0f011ba48be9038875732c` ("Refine horizontal bar and vertical string snapping heuristics to resolve missing assignments on digital PDFs")
 - **Working Tree Status**: Modified HANDOFF.md and TASKS.md.
 
