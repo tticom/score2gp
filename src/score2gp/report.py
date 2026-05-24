@@ -3460,6 +3460,9 @@ def write_pdf_timing_mapping_diagnostics_html(path: str | Path, payload: dict[st
     attempted = mapping_data.get("whether_mapping_attempted") if isinstance(mapping_data, dict) else False
     refused = mapping_data.get("whether_mapping_refused") if isinstance(mapping_data, dict) else True
     refusal_reason_codes = mapping_data.get("refusal_reason_codes", []) if isinstance(mapping_data, dict) else []
+    refinement_contract = mapping_data.get("refinement_contract_version", "pdf-timing-refinement.v1.0") if isinstance(mapping_data, dict) else "pdf-timing-refinement.v1.0"
+    refinement_classification = mapping_data.get("mapping_quality_classification", quality) if isinstance(mapping_data, dict) else quality
+    refinement_reason_codes = mapping_data.get("refinement_reason_codes", []) if isinstance(mapping_data, dict) else []
 
     status_label = "Attempted" if attempted else "Refused"
     status_class = "status-allowed" if attempted and not refused else "status-refused"
@@ -3469,9 +3472,10 @@ def write_pdf_timing_mapping_diagnostics_html(path: str | Path, payload: dict[st
         remediation = "Timing mapping is diagnostic evidence only and cannot repair unsafe PDF grouping or unsafe MusicXML timing."
 
     reason_list = "\n".join(f"<li><code>{html.escape(str(code))}</code></li>" for code in refusal_reason_codes) if refusal_reason_codes else "<li><em>None</em></li>"
+    refinement_reason_list = "\n".join(f"<li><code>{html.escape(str(code))}</code></li>" for code in refinement_reason_codes) if refinement_reason_codes else "<li><em>None</em></li>"
 
     # Per-bar table
-    per_bar = payload.get("per_bar", [])
+    per_bar = mapping_data.get("per_bar", payload.get("per_bar", [])) if isinstance(mapping_data, dict) else payload.get("per_bar", [])
     bar_rows = []
     if per_bar:
         for bar in per_bar:
@@ -3601,6 +3605,7 @@ def write_pdf_timing_mapping_diagnostics_html(path: str | Path, payload: dict[st
     <h2>Tuning/Timing Mapping Evidence</h2>
     <ul>
       <li><strong>Contract Schema Version:</strong> <code>pdf-timing-mapping.v0.7</code></li>
+      <li><strong>Timing Refinement Version:</strong> <code>{html.escape(str(refinement_contract))}</code></li>
       <li><strong>Input Class:</strong> <code>{html.escape(str(mapping_data.get("input_class", "unknown") if isinstance(mapping_data, dict) else "unknown"))}</code></li>
       <li><strong>Grouping Status:</strong> <code>{html.escape(str(mapping_data.get("grouping_status", "unknown") if isinstance(mapping_data, dict) else "unknown"))}</code></li>
       <li><strong>Grouping Safe:</strong> <code>{str(grouping_safe).lower()}</code></li>
@@ -3609,11 +3614,17 @@ def write_pdf_timing_mapping_diagnostics_html(path: str | Path, payload: dict[st
       <li><strong>Mapping Attempted:</strong> <code>{str(attempted).lower()}</code></li>
       <li><strong>Mapping Refused:</strong> <code>{str(refused).lower()}</code></li>
       <li><strong>Overall Mapping Quality:</strong> <span class="badge {status_class if not refused else 'status-refused'}">{html.escape(quality)}</span></li>
+      <li><strong>Timing Refinement Classification:</strong> <code>{html.escape(str(refinement_classification))}</code></li>
     </ul>
 
     <h2>Refusal & Ambiguity Reason Codes</h2>
     <ul>
       {reason_list}
+    </ul>
+
+    <h2>Timing Refinement Reason Codes</h2>
+    <ul>
+      {refinement_reason_list}
     </ul>
 
     <h2>Per-Bar Spacing & Spacing Alignment</h2>
