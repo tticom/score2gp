@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>PDF Grouping Diagnostics</title></head>
+<body>
+<h1>PDF Grouping Diagnostics</h1>
+<p>Extraction and grouping are present for the inspected candidates.</p>
+<p>Alignment/build-ir was not attempted by this extraction report. ScoreIR was not written.</p>
+
+<h2>Grouping Status</h2>
+<dl>
+  <dt>Source PDF</dt><dd>c:\Users\niall\src\Python\score2gp\tests\fixtures\pdf\generated_pdf_tuning_label_outside.pdf</dd>
+  <dt>Inspection kind</dt><dd>born-digital</dd>
+  <dt>Input class</dt><dd>drawn_tab_candidate</dd>
+  <dt>Page count</dt><dd>1</dd>
+  <dt>Grouping status</dt><dd>grouped</dd>
+  <dt>Text/Geometry Detected Status</dt><dd>Yes</dd>
+  <dt>Drawn Systems Detected</dt><dd>1</dd>
+  <dt>ASCII Blocks Detected</dt><dd>0</dd>
+  <dt>System Detection Status</dt><dd>Detected</dd>
+  <dt>Staff-line Detection Status</dt><dd>Detected</dd>
+  <dt>Bar Detection Status</dt><dd>Detected</dd>
+  <dt>String Assignment Status</dt><dd>Assigned</dd>
+  <dt>Primary Blocker Stage</dt><dd><code>none</code></dd>
+  <dt>Build-IR Blocked Status</dt><dd>No (safe grouping)</dd>
+  <dt>ScoreIR Written Status</dt><dd>No</dd>
+  <dt>Primary Layout Warning</dt><dd>pdf_bar_boxes_constructed</dd>
+  <dt>Secondary Layout Warnings</dt><dd>pdf_fret_single_digit_extracted, pdf_grouping_complete, pdf_layout_details, pdf_string_assignment_nearest_line, pdf_timing_mapping_not_implemented, pdf_tuning_standard_detected, tab-extraction-incomplete</dd>
+</dl>
+<h2>Candidate Counts</h2>
+<dl>
+  <dt>Candidate count</dt><dd>1</dd>
+  <dt>Playable fret candidates</dt><dd>1</dd>
+  <dt>Chord symbol candidates</dt><dd>0</dd>
+  <dt>Technique text candidates</dt><dd>0</dd>
+  <dt>Inferred systems</dt><dd>1</dd>
+  <dt>Inferred bars</dt><dd>1</dd>
+  <dt>String assignments</dt><dd>1</dd>
+  <dt>Unassigned string candidates</dt><dd>0</dd>
+  <dt>Ambiguous string candidates</dt><dd>0</dd>
+  <dt>Candidates outside staff</dt><dd>0</dd>
+  <dt>Candidates between strings</dt><dd>0</dd>
+  <dt>Non-playable text excluded</dt><dd>0</dd>
+  <dt>ASCII-tab candidates</dt><dd>0</dd>
+  <dt>ASCII-tab blocks</dt><dd>0</dd>
+  <dt>Complete ASCII-tab blocks</dt><dd>0</dd>
+  <dt>Partial ASCII-tab blocks</dt><dd>0</dd>
+  <dt>ASCII timing candidates</dt><dd>0</dd>
+  <dt>ASCII timing status counts</dt><dd><code>{}</code></dd>
+</dl>
+<h2>Fret Refinement</h2>
+<dl>
+  <dt>Total numeric candidates</dt><dd>1</dd>
+  <dt>Excluded digit-like candidates</dt><dd>0</dd>
+  <dt>Single-digit frets</dt><dd>1</dd>
+  <dt>Multi-digit frets</dt><dd>0</dd>
+  <dt>Split-span merged frets</dt><dd>0</dd>
+  <dt>Rejected digit merges</dt><dd>0</dd>
+  <dt>Rejection reasons</dt><dd><code>{&quot;pdf_fret_bbox_too_small&quot;: 0, &quot;pdf_fret_bbox_too_tall&quot;: 0, &quot;pdf_fret_bbox_too_wide&quot;: 0, &quot;pdf_fret_digits_not_merged_gap_too_large&quot;: 0, &quot;pdf_fret_digits_not_merged_vertical_misalignment&quot;: 0, &quot;pdf_fret_non_digit_rejected&quot;: 0, &quot;pdf_fret_optical_bounds_confidence_below_threshold&quot;: 0, &quot;pdf_fret_outside_valid_range&quot;: 0, &quot;pdf_fret_refinement_not_enough_for_build_ir&quot;: 0}</code></dd>
+  <dt>Average width / height</dt><dd>6.0pt / 12.49pt</dd>
+  <dt>Max gap / vertical misalignment</dt><dd>0.0pt / 0.0pt</dd>
+  <dt>Candidate classifications</dt><dd><code>{&quot;ambiguous_digit_group&quot;: 0, &quot;chord_text_not_tuning&quot;: 0, &quot;excluded_page_or_legend_number&quot;: 0, &quot;malformed_tuning_label&quot;: 0, &quot;non_playable_chord_or_text&quot;: 0, &quot;non_playable_technique&quot;: 0, &quot;non_playable_tuning_text&quot;: 0, &quot;pitch_layout_evidence&quot;: 0, &quot;playable_fret&quot;: 1, &quot;section_text_not_tuning&quot;: 0}</code></dd>
+</dl>
+<h2>Pitch / Tuning Evidence</h2>
+<dl>
+  <dt>Tuning evidence count</dt><dd>0</dd>
+  <dt>Page-level tuning labels</dt><dd>0</dd>
+  <dt>System-associated tuning labels</dt><dd>0</dd>
+  <dt>Per-string tuning labels</dt><dd>0</dd>
+  <dt>Ambiguous/conflicting tunings</dt><dd>0</dd>
+  <dt>Malformed/unsupported tunings</dt><dd>0</dd>
+  <dt>Used for grouping</dt><dd>false</dd>
+  <dt>Used for string assignment</dt><dd>false</dd>
+  <dt>Used for fret inference</dt><dd>false</dd>
+  <dt>Timing mapping implemented</dt><dd>false</dd>
+</dl>
+<p><em>Remediation Hint: Tuning labels are recorded as evidence but do not replace safe system/bar/string/fret geometry.</em></p>
+<h2>Warning Codes</h2>
+<ul><li>pdf_bar_boxes_constructed</li>
+<li>pdf_fret_single_digit_extracted</li>
+<li>pdf_grouping_complete</li>
+<li>pdf_layout_details</li>
+<li>pdf_string_assignment_nearest_line</li>
+<li>pdf_timing_mapping_not_implemented</li>
+<li>pdf_tuning_standard_detected</li>
+<li>tab-extraction-incomplete</li></ul>
+<h2>Inferred Grouping</h2>
+<dl>
+  <dt>System count</dt><dd>1</dd>
+  <dt>Bar box count</dt><dd>2</dd>
+  <dt>Assigned candidate count</dt><dd>1</dd>
+</dl>
+<ul><li>page 1, system 1, staff 1; source: six-horizontal-lines; Tab staff bbox: <code>{&quot;page&quot;: 1, &quot;x0&quot;: 72.0, &quot;x1&quot;: 332.0, &quot;y0&quot;: 120.0, &quot;y1&quot;: 190.0}</code>; string lines: 6; bar boxes: 2; candidate assignments: 1; barline candidates: 3; valid barlines: 3; rejected barlines: 0 (reasons:  (reasons: pdf_fret_single_digit_extracted, pdf_string_assignment_nearest_line));<br/>&nbsp;&nbsp;&nbsp;&nbsp;Candidates details:<ul><li>Candidate at x=88.0 (height=70.0, crossed=5 gaps, staff_h=70.0, coverage=1.0) decision: accepted (reasons: absolute_height=accepted, relative_crossing=accepted, error=none)</li><li>Candidate at x=205.0 (height=70.0, crossed=5 gaps, staff_h=70.0, coverage=1.0) decision: accepted (reasons: absolute_height=accepted, relative_crossing=accepted, error=none)</li><li>Candidate at x=322.0 (height=70.0, crossed=5 gaps, staff_h=70.0, coverage=1.0) decision: accepted (reasons: absolute_height=accepted, relative_crossing=accepted, error=none)</li></ul> <br/>&nbsp;&nbsp;&nbsp;&nbsp;Candidates details:<ul><li>Candidate &#x27;pdf-p001-c0001&#x27; (fret &#x27;3&#x27;): string=2, dist=0.075pt, confidence=0.9 (reasons: pdf_fret_single_digit_extracted, pdf_string_assignment_nearest_line)</li></ul> grouping confidence: 0.86; warnings: none</li></ul>
+<h2>Artifacts</h2>
+<ul>
+  <li>TabRaw: <a href="tuning_outside.tabraw.json">tuning_outside.tabraw.json</a></li>
+  <li>Warnings: <a href="warnings.json">warnings.json</a></li>
+  <li>Diagnostic HTML: grouping-diagnostics.html</li>
+  
+  
+</ul>
+<h2>Overlays</h2>
+<ul><li><a href="overlays/page-001-grouping.png">overlays/page-001-grouping.png</a></li></ul>
+<h2>Raw Summary</h2>
+<pre>{
+  &quot;schema_version&quot;: &quot;pdf-grouping-diagnostics.v0.1&quot;,
+  &quot;source_pdf_path&quot;: &quot;c:\\Users\\niall\\src\\Python\\score2gp\\tests\\fixtures\\pdf\\generated_pdf_tuning_label_outside.pdf&quot;,
+  &quot;inspection_kind&quot;: &quot;born-digital&quot;,
+  &quot;input_class&quot;: &quot;drawn_tab_candidate&quot;,
+  &quot;page_count&quot;: 1,
+  &quot;total_text_candidate_count&quot;: 1,
+  &quot;playable_fret_candidate_count&quot;: 1,
+  &quot;chord_symbol_candidate_count&quot;: 0,
+  &quot;technique_text_candidate_count&quot;: 0,
+  &quot;candidate_text_count&quot;: 0,
+  &quot;inferred_system_count&quot;: 1,
+  &quot;inferred_bar_count&quot;: 1,
+  &quot;inferred_string_assignment_count&quot;: 1,
+  &quot;unassigned_string_candidate_count&quot;: 0,
+  &quot;ambiguous_string_candidate_count&quot;: 0,
+  &quot;outside_staff_candidate_count&quot;: 0,
+  &quot;between_strings_candidate_count&quot;: 0,
+  &quot;non_playable_excluded_count&quot;: 0,
+  &quot;is_string_assignment_primary_blocker&quot;: false,
+  &quot;is_string_assignment_secondary_blocker&quot;: false,
+  &quot;upstream_blocks_first&quot;: false,
+  &quot;grouping_status&quot;: &quot;grouped&quot;,
+  &quot;ascii_tab_candidate_count&quot;: 0,
+  &quot;ascii_tab_block_count&quot;: 0,
+  &quot;ascii_tab_complete_block_count&quot;: 0,
+  &quot;ascii_tab_partial_block_count&quot;: 0,
+  &quot;ascii_timing_candidate_count&quot;: 0,
+  &quot;ascii_timing_status_counts&quot;: {},
+  &quot;ascii_timing_partial_candidate_count&quot;: 0,
+  &quot;ascii_timing_unavailable_candidate_count&quot;: 0,
+  &quot;ascii_timing_safe_candidate_count&quot;: 0,
+  &quot;warning_codes&quot;: [
+    &quot;pdf_bar_boxes_constructed&quot;,
+    &quot;pdf_fret_single_digit_extracted&quot;,
+    &quot;pdf_grouping_complete&quot;,
+    &quot;pdf_layout_details&quot;,
+    &quot;pdf_string_assignment_nearest_line&quot;,
+    &quot;pdf_timing_mapping_not_implemented&quot;,
+    &quot;pdf_tuning_standard_detected&quot;,
+    &quot;tab-extraction-incomplete&quot;
+  ],
+  &quot;alignment_attempted&quot;: false,
+  &quot;scoreir_written&quot;: false,
+  &quot;grouping&quot;: {
+    &quot;schema_version&quot;: &quot;pdf-grouping.v0.1&quot;,
+    &quot;system_count&quot;: 1,
+    &quot;bar_box_count&quot;: 2,
+    &quot;assigned_candidate_count&quot;: 1,
+    &quot;systems&quot;: [
+      {
+        &quot;page_index&quot;: 1,
+        &quot;system_index&quot;: 1,
+        &quot;staff_index&quot;: 1,
+        &quot;tab_staff_bbox&quot;: {
+          &quot;page&quot;: 1,
+          &quot;x0&quot;: 72.0,
+          &quot;y0&quot;: 120.0,
+          &quot;x1&quot;: 332.0,
+          &quot;y1&quot;: 190.0
+        },
+        &quot;tab_line_ys&quot;: [
+          120.0,
+          134.0,
+          148.0,
+          162.0,
+          176.0,
+          190.0
+        ],
+        &quot;barline_xs&quot;: [
+          88.0,
+          205.0,
+          322.0
+        ],
+        &quot;bar_boxes&quot;: [
+          {
+            &quot;page&quot;: 1,
+            &quot;system_index&quot;: 1,
+            &quot;staff_index&quot;: 1,
+            &quot;bar_index&quot;: 1,
+            &quot;x0&quot;: 88.0,
+            &quot;y0&quot;: 120.0,
+            &quot;x1&quot;: 205.0,
+            &quot;y1&quot;: 190.0,
+            &quot;confidence&quot;: 0.86
+          },
+          {
+            &quot;page&quot;: 1,
+            &quot;system_index&quot;: 1,
+            &quot;staff_index&quot;: 1,
+            &quot;bar_index&quot;: 2,
+            &quot;x0&quot;: 205.0,
+            &quot;y0&quot;: 120.0,
+            &quot;x1&quot;: 322.0,
+            &quot;y1&quot;: 190.0,
+            &quot;confidence&quot;: 0.86
+          }
+        ],
+        &quot;grouping_confidence&quot;: 0.86,
+        &quot;grouping_version&quot;: &quot;pdf-grouping.v0.1&quot;,
+        &quot;system_inference&quot;: &quot;six-horizontal-lines&quot;,
+        &quot;ascii_timing_status&quot;: null,
+        &quot;ascii_timing_confidence&quot;: null,
+        &quot;ascii_bar_separator_count&quot;: null,
+        &quot;ascii_bar_separators_aligned&quot;: null,
+        &quot;ascii_measure_segment_count&quot;: null,
+        &quot;grouping_warnings&quot;: [],
+        &quot;candidate_ids&quot;: [
+          &quot;pdf-p001-c0001&quot;
+        ],
+        &quot;string_assigned_candidate_ids&quot;: [
+          &quot;pdf-p001-c0001&quot;
+        ],
+        &quot;bar_assigned_candidate_ids&quot;: [
+          &quot;pdf-p001-c0001&quot;
+        ],
+        &quot;barline_candidates_count&quot;: 3,
+        &quot;valid_barline_count&quot;: 3,
+        &quot;rejected_barline_count&quot;: 0,
+        &quot;rejection_reasons&quot;: {
+          &quot;pdf_barline_outside_system_bounds&quot;: 0,
+          &quot;pdf_barline_too_short&quot;: 0,
+          &quot;pdf_barline_does_not_cross_staff&quot;: 0,
+          &quot;pdf_barline_ambiguous&quot;: 0,
+          &quot;pdf_barline_too_short_absolute&quot;: 0,
+          &quot;pdf_barline_too_short_relative_to_staff&quot;: 0,
+          &quot;pdf_barline_crosses_insufficient_string_gaps&quot;: 0,
+          &quot;pdf_barline_partial_staff_crossing&quot;: 0,
+          &quot;pdf_barline_outside_staff_region&quot;: 0,
+          &quot;pdf_barline_rejected_relative_height&quot;: 0
+        },
+        &quot;barline_candidates_details&quot;: [
+          {
+            &quot;x&quot;: 88.0,
+            &quot;y_min&quot;: 120.0,
+            &quot;y_max&quot;: 190.0,
+            &quot;height&quot;: 70.0,
+            &quot;staff_height&quot;: 70.0,
+            &quot;coverage_ratio&quot;: 1.0,
+            &quot;gaps_crossed&quot;: 5,
+            &quot;absolute_height_decision&quot;: &quot;accepted&quot;,
+            &quot;relative_staff_crossing_decision&quot;: &quot;accepted&quot;,
+            &quot;final_decision&quot;: &quot;accepted&quot;,
+            &quot;rejection_reason&quot;: null
+          },
+          {
+            &quot;x&quot;: 205.0,
+            &quot;y_min&quot;: 120.0,
+            &quot;y_max&quot;: 190.0,
+            &quot;height&quot;: 70.0,
+            &quot;staff_height&quot;: 70.0,
+            &quot;coverage_ratio&quot;: 1.0,
+            &quot;gaps_crossed&quot;: 5,
+            &quot;absolute_height_decision&quot;: &quot;accepted&quot;,
+            &quot;relative_staff_crossing_decision&quot;: &quot;accepted&quot;,
+            &quot;final_decision&quot;: &quot;accepted&quot;,
+            &quot;rejection_reason&quot;: null
+          },
+          {
+            &quot;x&quot;: 322.0,
+            &quot;y_min&quot;: 120.0,
+            &quot;y_max&quot;: 190.0,
+            &quot;height&quot;: 70.0,
+            &quot;staff_height&quot;: 70.0,
+            &quot;coverage_ratio&quot;: 1.0,
+            &quot;gaps_crossed&quot;: 5,
+            &quot;absolute_height_decision&quot;: &quot;accepted&quot;,
+            &quot;relative_staff_crossing_decision&quot;: &quot;accepted&quot;,
+            &quot;final_decision&quot;: &quot;accepted&quot;,
+            &quot;rejection_reason&quot;: null
+          }
+        ],
+        &quot;candidate_details&quot;: [
+          {
+            &quot;id&quot;: &quot;pdf-p001-c0001&quot;,
+            &quot;raw_text&quot;: &quot;3&quot;,
+            &quot;parsed_fret&quot;: 3,
+            &quot;kind&quot;: &quot;fret&quot;,
+            &quot;string&quot;: 2,
+            &quot;string_distance&quot;: 0.075,
+            &quot;reasons&quot;: [
+              &quot;pdf_fret_single_digit_extracted&quot;,
+              &quot;pdf_string_assignment_nearest_line&quot;
+            ],
+            &quot;confidence&quot;: 0.9
+          }
+        ]
+      }
+    ]
+  },
+  &quot;artifacts&quot;: {
+    &quot;tab_raw&quot;: &quot;tuning_outside.tabraw.json&quot;,
+    &quot;warnings&quot;: &quot;warnings.json&quot;,
+    &quot;diagnostic_html&quot;: &quot;grouping-diagnostics.html&quot;,
+    &quot;overlay_images&quot;: [
+      &quot;overlays/page-001-grouping.png&quot;
+    ]
+  },
+  &quot;drawn_system_count&quot;: 1,
+  &quot;ascii_block_count&quot;: 0,
+  &quot;staff_line_count&quot;: 6,
+  &quot;system_ambiguity_count&quot;: 0,
+  &quot;whether_system_detection_succeeded&quot;: true,
+  &quot;whether_bar_detection_succeeded&quot;: true,
+  &quot;whether_string_assignment_succeeded&quot;: true,
+  &quot;whether_build_ir_blocked&quot;: false,
+  &quot;primary_blocker_stage&quot;: &quot;none&quot;,
+  &quot;total_numeric_candidates&quot;: 1,
+  &quot;excluded_digit_like_count&quot;: 0,
+  &quot;single_digit_count&quot;: 1,
+  &quot;multi_digit_count&quot;: 0,
+  &quot;split_span_merge_count&quot;: 0,
+  &quot;rejected_merge_count&quot;: 0,
+  &quot;rejection_reason_counts&quot;: {
+    &quot;pdf_fret_digits_not_merged_gap_too_large&quot;: 0,
+    &quot;pdf_fret_digits_not_merged_vertical_misalignment&quot;: 0,
+    &quot;pdf_fret_bbox_too_tall&quot;: 0,
+    &quot;pdf_fret_bbox_too_wide&quot;: 0,
+    &quot;pdf_fret_bbox_too_small&quot;: 0,
+    &quot;pdf_fret_outside_valid_range&quot;: 0,
+    &quot;pdf_fret_non_digit_rejected&quot;: 0,
+    &quot;pdf_fret_optical_bounds_confidence_below_threshold&quot;: 0,
+    &quot;pdf_fret_refinement_not_enough_for_build_ir&quot;: 0
+  },
+  &quot;fret_bbox_metrics&quot;: {
+    &quot;avg_width&quot;: 6.0,
+    &quot;avg_height&quot;: 12.49,
+    &quot;max_vertical_misalignment_delta&quot;: 0.0,
+    &quot;max_horizontal_gap_between_digits&quot;: 0.0
+  },
+  &quot;candidate_classifications&quot;: {
+    &quot;playable_fret&quot;: 1,
+    &quot;non_playable_technique&quot;: 0,
+    &quot;non_playable_chord_or_text&quot;: 0,
+    &quot;excluded_page_or_legend_number&quot;: 0,
+    &quot;ambiguous_digit_group&quot;: 0,
+    &quot;non_playable_tuning_text&quot;: 0,
+    &quot;pitch_layout_evidence&quot;: 0,
+    &quot;chord_text_not_tuning&quot;: 0,
+    &quot;section_text_not_tuning&quot;: 0,
+    &quot;malformed_tuning_label&quot;: 0
+  },
+  &quot;is_fret_refinement_primary_blocker&quot;: false,
+  &quot;is_fret_refinement_secondary_blocker&quot;: false,
+  &quot;pitch_tuning&quot;: {
+    &quot;tuning_evidence_count&quot;: 0,
+    &quot;page_level_tuning_labels&quot;: 0,
+    &quot;system_associated_tuning_labels&quot;: 0,
+    &quot;per_string_tuning_label_count&quot;: 0,
+    &quot;ambiguous_conflicting_tuning_count&quot;: 0,
+    &quot;malformed_unsupported_tuning_count&quot;: 0,
+    &quot;whether_tuning_used_for_grouping&quot;: false,
+    &quot;whether_tuning_used_for_string_assignment&quot;: false,
+    &quot;whether_tuning_used_for_fret_inference&quot;: false,
+    &quot;whether_timing_mapping_implemented&quot;: false,
+    &quot;is_pitch_tuning_primary_blocker&quot;: false,
+    &quot;is_pitch_tuning_secondary_blocker&quot;: false
+  }
+}</pre>
+</body>
+</html>
