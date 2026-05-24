@@ -4,6 +4,8 @@
 
 ## Done
 
+- [x] Perform a localized private smoke test review under `allow_remediation=True` and draft a public design note (`docs/unboxed-system-recovery.md`) outlining unboxed system recovery and skips (docs/unboxed-system-recovery-design-v0.1).
+
 - [x] Address the `musicxml_timing_risk` (specifically the 66 overfull or overlapping events blocking `private_input_1`) by implementing conservative timeline resolution or bounded tolerance heuristics in the MusicXML preflight logic (feature/musicxml-timing-risk-remediation-v0.1).
 
 - [x] Refresh E2E private smoke blocker summary after vertical overlap resolution v0.1 to evaluate the impact on multi-system visual overlaps on page 1 of private_input_1.
