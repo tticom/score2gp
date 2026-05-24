@@ -4,10 +4,10 @@
 
 - **Current Branch**: `feature/pdf-edge-boundary-recovery-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: TBD
-- **Latest Local Commit**: `e8e8d064af99a180a5a2c63b585c373aa634f5c3`
-- **Latest Pushed Commit**: `e8e8d064af99a180a5a2c63b585c373aa634f5c3`
-- **Latest Commit Subject**: `feat: implement conservative edge-boundary recovery v0.1`
+- **Current PR**: [PR #55](https://github.com/tticom/score2gp/pull/55) (Draft)
+- **Latest Local Commit**: `fc27af59b62da13eb3bbf4b17f7fa01ef3bc4f61`
+- **Latest Pushed Commit**: `fc27af59b62da13eb3bbf4b17f7fa01ef3bc4f61`
+- **Latest Commit Subject**: `chore: sync handoff SHA in HANDOFF.md`
 - **Working Tree Status Before Handoff Update**: Clean
 - **GitHub Check Status**: N/A
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or `work/` contents are tracked.
