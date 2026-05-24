@@ -31,6 +31,12 @@ from .ir import (
     Tuplet,
     Track,
     WarningItem,
+    SlideTechnique,
+    BendTechnique,
+    VibratoTechnique,
+    HammerOnTechnique,
+    PullOffTechnique,
+    UnsupportedTechnique,
 )
 from .musicxml import (
     MusicXmlHarmony,
@@ -48,6 +54,132 @@ from .tabraw import TabCandidate, TabRaw
 TRACK_ID = "gtr-1"
 DIAGNOSTICS_SCHEMA_VERSION = "build-ir-diagnostics.v0.1"
 ASCII_SCOREIR_GATE_VERSION = "ascii-scoreir-gate.v0.1"
+PDF_TIMING_REFINEMENT_VERSION = "pdf-timing-refinement.v1.0"
+
+_MUSICXML_INVALID_TIMING_CODES = {
+    "musicxml-overfull-bar",
+    "musicxml-underfull-bar",
+    "musicxml_backup_forward_alignment_ambiguous",
+    "musicxml_backup_forward_risk",
+    "musicxml_backup_rewinds_before_measure_start",
+    "musicxml_compound_meter_overfull",
+    "musicxml_divisions_changed_mid_measure",
+    "musicxml_divisions_missing",
+    "musicxml_duration_missing",
+    "musicxml_duration_zero",
+    "musicxml_forward_exceeds_measure_end",
+    "musicxml_invalid_duration_grid",
+    "musicxml_many_timing_risks",
+    "musicxml_repeated_backup_forward_risk",
+    "musicxml_rest_overlap",
+    "musicxml_rest_voice_overlap",
+    "musicxml_tuplet_unsupported",
+    "musicxml_unbalanced_backup_forward",
+    "musicxml_voice_cursor_overlap",
+    "musicxml_voice_duration_overfull",
+    "musicxml-voice-overlap",
+}
+
+_MUSICXML_UNSUPPORTED_POLYPHONY_CODES = {
+    "musicxml_cross_voice_overlap_unsupported",
+    "musicxml_cross_voice_timing_unsupported",
+    "musicxml_multivoice_timing_not_supported",
+    "musicxml_polyphony_not_supported",
+    "musicxml_valid_multivoice_unsupported",
+}
+
+_MUSICXML_DERIVED_BLOCKER_CODES = {
+    "musicxml_alignment_not_attempted_due_to_timing_risk",
+    "musicxml_voice_cursor_alignment_risk",
+}
+
+
+def _musicxml_timing_refinement_summary(issues: list[MusicXmlTimingIssue]) -> dict[str, object]:
+    """Return private-safe MusicXML timing classification telemetry."""
+
+    issue_counts: dict[str, int] = {}
+    severity_counts: dict[str, int] = {}
+    primary_reason_counts: dict[str, int] = {}
+    secondary_reason_counts: dict[str, int] = {}
+    affected_measures: set[tuple[str, int]] = set()
+    affected_voices: set[tuple[str, int, int]] = set()
+    affected_events: set[str] = set()
+    invalid_timing_issue_count = 0
+    unsupported_polyphony_issue_count = 0
+    derived_blocker_issue_count = 0
+
+    for issue in issues:
+        issue_counts[issue.code] = issue_counts.get(issue.code, 0) + 1
+        severity_counts[issue.severity] = severity_counts.get(issue.severity, 0) + 1
+        affected_measures.add((issue.part_id, issue.measure_index))
+        if issue.voice is not None:
+            affected_voices.add((issue.part_id, issue.measure_index, issue.voice))
+        if issue.musicxml_note_id:
+            affected_events.add(issue.musicxml_note_id)
+        affected_events.update(issue.affected_event_ids)
+        if issue.primary_reason:
+            primary_reason_counts[issue.primary_reason] = primary_reason_counts.get(issue.primary_reason, 0) + 1
+        for reason in issue.secondary_reasons:
+            secondary_reason_counts[reason] = secondary_reason_counts.get(reason, 0) + 1
+
+        if issue.severity == "error":
+            if _issue_has_code(issue, _MUSICXML_INVALID_TIMING_CODES):
+                invalid_timing_issue_count += 1
+            elif _issue_has_code(issue, _MUSICXML_UNSUPPORTED_POLYPHONY_CODES):
+                unsupported_polyphony_issue_count += 1
+            elif _issue_has_code(issue, _MUSICXML_DERIVED_BLOCKER_CODES):
+                derived_blocker_issue_count += 1
+
+    error_count = severity_counts.get("error", 0)
+    if error_count == 0 and not issues:
+        classification = "timing_safe"
+    elif error_count == 0:
+        classification = "timing_warning_or_info_only"
+    elif invalid_timing_issue_count and unsupported_polyphony_issue_count:
+        classification = "mixed_invalid_timing_and_unsupported_polyphony_refused"
+    elif invalid_timing_issue_count:
+        classification = "invalid_timing_refused"
+    elif unsupported_polyphony_issue_count:
+        classification = "unsupported_polyphony_refused"
+    elif derived_blocker_issue_count:
+        classification = "derived_timing_blocker_refused"
+    else:
+        classification = "timing_refused"
+
+    return {
+        "contract_version": PDF_TIMING_REFINEMENT_VERSION,
+        "timing_classification": classification,
+        "issue_counts": dict(sorted(issue_counts.items())),
+        "severity_counts": dict(sorted(severity_counts.items())),
+        "invalid_timing_issue_count": invalid_timing_issue_count,
+        "unsupported_polyphony_issue_count": unsupported_polyphony_issue_count,
+        "derived_blocker_issue_count": derived_blocker_issue_count,
+        "affected_measure_count": len(affected_measures),
+        "affected_voice_count": len(affected_voices),
+        "affected_event_count": len(affected_events),
+        "primary_reason_counts": dict(sorted(primary_reason_counts.items())),
+        "secondary_reason_counts": dict(sorted(secondary_reason_counts.items())),
+        "automatic_repair_attempted": False,
+        "remediation_hint": _musicxml_timing_refinement_remediation(classification),
+    }
+
+
+def _issue_has_code(issue: MusicXmlTimingIssue, codes: set[str]) -> bool:
+    return issue.code in codes or any(reason in codes for reason in issue.secondary_reasons)
+
+
+def _musicxml_timing_refinement_remediation(classification: str) -> str:
+    if classification == "unsupported_polyphony_refused":
+        return "MusicXML timing is valid enough to classify, but ScoreIR writing for multi-voice/polyphonic structures is unsupported."
+    if classification == "mixed_invalid_timing_and_unsupported_polyphony_refused":
+        return "Resolve invalid timing first, then handle unsupported polyphony explicitly; automatic repair is not implemented."
+    if classification == "invalid_timing_refused":
+        return "Fix or regenerate MusicXML timing; automatic timing repair is not implemented."
+    if classification == "timing_warning_or_info_only":
+        return "Review timing warnings before trusting alignment; no automatic timing repair was attempted."
+    if classification == "timing_safe":
+        return "MusicXML timing preflight did not find blocking timing errors."
+    return "Timing refinement is diagnostic only; unsafe or unsupported timing remains refused."
 
 
 class BuildIrInputRiskError(ValueError):
@@ -72,16 +204,195 @@ class BuildIrInputRiskError(ValueError):
         issue_counts: dict[str, int] = {}
         for issue in self.timing_issues:
             issue_counts[issue.code] = issue_counts.get(issue.code, 0) + 1
-        return {
+
+        payload = {
             "schema_version": "build-ir-failure-diagnostics.v0.1",
             "stage": self.stage,
             "category": self.category,
             "message": str(self),
+            "timing_refinement_contract_version": PDF_TIMING_REFINEMENT_VERSION,
             "timing_issue_count": len(self.timing_issues),
             "timing_issue_counts": dict(sorted(issue_counts.items())),
             "timing_issues": [issue.model_dump(mode="json", exclude_none=True) for issue in self.timing_issues],
             "details": self.details,
         }
+
+        # Promote or construct pdf_timing_mapping
+        if "pdf_timing_mapping" in self.details:
+            payload["pdf_timing_mapping"] = self.details["pdf_timing_mapping"]
+        else:
+            refusal_reason_codes = []
+            grouping_safe = True
+            timing_source_safe = True
+            musicxml_timing_preflight_status = "safe"
+            grouping_status = "grouped"
+
+            if self.stage == "musicxml-import" and self.category == "musicxml_timing_risk":
+                refusal_reason_codes.append("pdf_timing_mapping_not_attempted_musicxml_unsafe")
+                timing_source_safe = False
+                musicxml_timing_preflight_status = "unsafe"
+            elif self.stage == "musicxml-import" and self.category == "musicxml_scoreir_polyphony_gate_refused":
+                refusal_reason_codes.append("pdf_timing_mapping_polyphony_not_supported")
+                timing_source_safe = False
+                musicxml_timing_preflight_status = "unsafe"
+            elif self.stage == "tabraw-import":
+                refusal_reason_codes.append("pdf_timing_mapping_not_attempted_grouping_unsafe")
+                grouping_safe = False
+                grouping_status = "partial_pdf_grouping"
+
+            if not refusal_reason_codes:
+                refusal_reason_codes.append("pdf_timing_mapping_refused")
+
+            payload["pdf_timing_mapping"] = {
+                "contract_version": "pdf-timing-mapping.v0.7",
+                "refinement_contract_version": PDF_TIMING_REFINEMENT_VERSION,
+                "input_class": "drawn_tab_candidate",
+                "grouping_status": grouping_status,
+                "grouping_safe": grouping_safe,
+                "timing_source_safe": timing_source_safe,
+                "musicxml_timing_preflight_status": musicxml_timing_preflight_status,
+                "whether_mapping_attempted": False,
+                "whether_mapping_refused": True,
+                "refusal_reason_codes": sorted(list(set(refusal_reason_codes))),
+                "mapping_quality_classification": "refused",
+                "refinement_reason_codes": sorted(list(set(refusal_reason_codes + ["pdf_timing_refinement_refused"]))),
+                "safe_layout_evidence": False,
+                "partial_layout_evidence": False,
+                "ambiguous_layout_evidence": False,
+                "incompatible_layout_evidence": False,
+                "quality": "refused",
+                "whether_scoreir_written": False,
+                "remediation_hint": "Timing mapping is diagnostic evidence only and cannot repair unsafe PDF grouping or unsafe MusicXML timing.",
+                "per_bar": [],
+                "matched_x_onset_group_count": 0,
+                "unmatched_x_group_count": 0,
+                "unmatched_onset_group_count": 0,
+                "mean_absolute_relative_error": None,
+                "max_relative_error": None,
+                "monotonic": None,
+                "ambiguity_count": 0,
+            }
+
+        if self.stage == "musicxml-import":
+            # 1. Counts
+            overfull_bars = set()
+            underfull_bars = set()
+            affected_events = set()
+            tie_continuity_risks = 0
+            many_risk_summaries = 0
+            invalid_grids = 0
+
+            # Gather overlaps: max overlap count per (part_id, measure_index)
+            overlap_by_measure = {}
+
+            for issue in self.timing_issues:
+                # overfull bar check
+                if (issue.code in ("musicxml-overfull-bar", "musicxml_compound_meter_overfull", "musicxml_voice_duration_overfull")
+                        or "musicxml_voice_duration_overfull" in issue.secondary_reasons
+                        or "musicxml_same_voice_measure_overfull" in issue.secondary_reasons):
+                    overfull_bars.add((issue.part_id, issue.measure_index))
+
+                # underfull bar check
+                if (issue.code in ("musicxml-underfull-bar", "musicxml_compound_meter_underfull", "musicxml_voice_duration_underfull")
+                        or "musicxml_voice_duration_underfull" in issue.secondary_reasons):
+                    underfull_bars.add((issue.part_id, issue.measure_index))
+
+                # affected event ids
+                if issue.affected_event_ids:
+                    affected_events.update(issue.affected_event_ids)
+                if issue.musicxml_note_id:
+                    affected_events.add(issue.musicxml_note_id)
+
+                # overlaps per measure
+                if issue.overlap_count is not None:
+                    key = (issue.part_id, issue.measure_index)
+                    overlap_by_measure[key] = max(overlap_by_measure.get(key, 0), issue.overlap_count)
+
+                # tie continuity
+                if issue.code == "musicxml_tie_continuity_risk":
+                    tie_continuity_risks += 1
+
+                # many timing risks
+                if issue.code in ("musicxml_many_timing_risks", "musicxml_repeated_backup_forward_risk"):
+                    many_risk_summaries += 1
+
+                # invalid duration grid
+                if issue.code == "musicxml_invalid_duration_grid":
+                    invalid_grids += 1
+
+            overfull_bar_count = len(overfull_bars)
+            underfull_bar_count = len(underfull_bars)
+            affected_event_count = len(affected_events)
+            overlap_count = sum(overlap_by_measure.values())
+
+            # 2. Calibration details
+            calibration_possible = False
+            if self.timing_issues:
+                # Check if any issue is considered calibratable
+                any_candidate = any(issue.timing_calibration_possible for issue in self.timing_issues)
+
+                # Check blocking reasons
+                blocking_reasons = []
+                if tie_continuity_risks > 0:
+                    blocking_reasons.append("musicxml_tie_continuity_blocks_calibration")
+                if overlap_count > 0:
+                    blocking_reasons.append("musicxml_overlap_blocks_calibration")
+                if many_risk_summaries > 0:
+                    blocking_reasons.append("musicxml_many_risks_block_calibration")
+                if invalid_grids > 0:
+                    blocking_reasons.append("musicxml_invalid_grid_blocks_calibration")
+                if overfull_bar_count > 0 and underfull_bar_count > 0:
+                    blocking_reasons.append("musicxml_mixed_underfull_overfull_blocks_calibration")
+
+                has_large_overfull = any(
+                    "musicxml_overfull_too_large_for_calibration" in issue.secondary_reasons
+                    for issue in self.timing_issues
+                )
+                if has_large_overfull:
+                    blocking_reasons.append("musicxml_overfull_too_large_for_calibration")
+
+                has_non_calibratable_error = any(
+                    not issue.timing_calibration_possible
+                    for issue in self.timing_issues
+                    if issue.severity == "error" and issue.code != "musicxml_alignment_not_attempted_due_to_timing_risk"
+                )
+                if has_non_calibratable_error and "musicxml_timing_calibration_not_safe" not in blocking_reasons:
+                    blocking_reasons.append("musicxml_timing_calibration_not_safe")
+
+                if any_candidate and not blocking_reasons:
+                    calibration_possible = True
+                    calibration_candidate_reason = "musicxml_timing_calibration_candidate"
+                    calibration_blocking_reasons = []
+                else:
+                    calibration_possible = False
+                    calibration_candidate_reason = None
+                    calibration_blocking_reasons = sorted(list(set(blocking_reasons)))
+                    if not calibration_blocking_reasons:
+                        calibration_blocking_reasons = ["musicxml_timing_calibration_not_safe"]
+            else:
+                calibration_possible = False
+                calibration_candidate_reason = None
+                calibration_blocking_reasons = []
+
+            payload.update({
+                "calibration_possible": calibration_possible,
+                "calibration_candidate_reason": calibration_candidate_reason,
+                "calibration_blocking_reasons": calibration_blocking_reasons,
+                "overfull_bar_count": overfull_bar_count,
+                "underfull_bar_count": underfull_bar_count,
+                "affected_event_count": affected_event_count,
+                "overlap_count": overlap_count,
+                "tie_continuity_risk_count": tie_continuity_risks,
+                "many_risk_summary_count": many_risk_summaries,
+                "invalid_grid_count": invalid_grids,
+                "automatic_repair_attempted": False,
+                "remediation_hint": "Fix or regenerate MusicXML timing; automatic timing repair is not implemented.",
+                "unrecoverable_timing_report_json": "musicxml-unrecoverable-timing-report.json",
+                "unrecoverable_timing_report_html": "musicxml-unrecoverable-timing-report.html",
+                "musicxml_timing_refinement": _musicxml_timing_refinement_summary(self.timing_issues),
+            })
+
+        return payload
 
 
 class CandidateXGroupDiagnostics(BaseModel):
@@ -186,6 +497,12 @@ class BuildIrDiagnostics(BaseModel):
     unmatched_musicxml_note_count: int
     unmatched_tabraw_candidate_count: int
     ignored_non_playable_candidate_count: int
+    symbol_attachment_chord_candidates_found: int = 0
+    symbol_attachment_chord_candidates_attached: int = 0
+    symbol_attachment_chord_candidates_unattached: int = 0
+    symbol_attachment_technique_candidates_found: int = 0
+    symbol_attachment_technique_candidates_attached: int = 0
+    symbol_attachment_technique_candidates_unattached: int = 0
     unsupported_construct_warnings: list[str] = Field(default_factory=list)
     warning_count: int
     confidence_flags: list[dict[str, object]] = Field(default_factory=list)
@@ -205,6 +522,7 @@ class BuildIrDiagnostics(BaseModel):
     per_system: list[SystemAlignmentDiagnostics] = Field(default_factory=list)
     per_bar: list[BarAlignmentDiagnostics] = Field(default_factory=list)
     warnings: list[dict[str, object]] = Field(default_factory=list)
+    pdf_timing_mapping: dict[str, object] | None = None
 
     def to_json_file(self, path: str | Path) -> None:
         out = Path(path)
@@ -219,15 +537,64 @@ def build_ir_from_files(
     diagnostics_out_path: str | Path | None = None,
     ascii_alignment_path: str | Path | None = None,
 ) -> ScoreIR:
-    score, diagnostics = build_ir_with_diagnostics_from_files(
-        musicxml_path,
-        tabraw_path,
-        out_path,
-        ascii_alignment_path=ascii_alignment_path,
-    )
-    if diagnostics_out_path is not None:
-        diagnostics.to_json_file(diagnostics_out_path)
-    return score
+    try:
+        score, diagnostics = build_ir_with_diagnostics_from_files(
+            musicxml_path,
+            tabraw_path,
+            out_path,
+            ascii_alignment_path=ascii_alignment_path,
+        )
+        if diagnostics_out_path is not None:
+            diagnostics.to_json_file(diagnostics_out_path)
+            from .report import write_symbol_attachment_diagnostics_html, write_pdf_timing_mapping_diagnostics_html
+            html_path = Path(diagnostics_out_path).parent / "symbol-attachment-diagnostics.html"
+            write_symbol_attachment_diagnostics_html(html_path, diagnostics, score, tabraw_path=tabraw_path)
+
+            # Write PDF timing mapping HTML!
+            mapping_html_path = Path(diagnostics_out_path).parent / "pdf-timing-mapping-diagnostics.html"
+            write_pdf_timing_mapping_diagnostics_html(mapping_html_path, diagnostics.model_dump(mode="json"), json_path_ref=Path(diagnostics_out_path).name)
+        return score
+    except BuildIrInputRiskError as exc:
+        if diagnostics_out_path is not None:
+            import json
+            payload = exc.to_diagnostics_payload()
+            out_path_p = Path(diagnostics_out_path)
+            out_path_p.parent.mkdir(parents=True, exist_ok=True)
+            out_path_p.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+            # Write PDF timing mapping HTML!
+            from .report import write_pdf_timing_mapping_diagnostics_html
+            mapping_html_path = out_path_p.parent / "pdf-timing-mapping-diagnostics.html"
+            write_pdf_timing_mapping_diagnostics_html(mapping_html_path, payload, json_path_ref=out_path_p.name)
+
+            if exc.stage == "ascii-scoreir-gate":
+                from .report import write_ascii_gate_diagnostics_html
+                html_path = out_path_p.parent / "ascii-scoreir-gate-diagnostics.html"
+                write_ascii_gate_diagnostics_html(html_path, payload, json_path_ref=out_path_p.name)
+            elif exc.stage == "musicxml-import":
+                from .report import write_musicxml_timing_diagnostics_html, write_musicxml_unrecoverable_timing_report
+                html_path = out_path_p.parent / "musicxml-timing-diagnostics.html"
+                write_musicxml_timing_diagnostics_html(html_path, payload, json_path_ref=out_path_p.name)
+                
+                # Write unrecoverable timing reports as sidecars
+                unrec_json_path = out_path_p.parent / "musicxml-unrecoverable-timing-report.json"
+                unrec_html_path = out_path_p.parent / "musicxml-unrecoverable-timing-report.html"
+                write_musicxml_unrecoverable_timing_report(
+                    unrec_json_path,
+                    unrec_html_path,
+                    payload,
+                    source_path=str(musicxml_path),
+                )
+            elif exc.stage == "tabraw-import":
+                # Reference edge-boundary reports if they exist
+                if (out_path_p.parent / "pdf-edge-boundary-report.html").exists():
+                    payload["pdf_edge_boundary_report_html"] = "pdf-edge-boundary-report.html"
+                    payload["pdf_edge_boundary_report_json"] = "pdf-edge-boundary-report.json"
+                if (out_path_p.parent / "grouping-diagnostics.html").exists():
+                    payload["grouping_diagnostics_html"] = "grouping-diagnostics.html"
+                out_path_p.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        raise
+
 
 
 def build_ir_with_diagnostics_from_files(
@@ -653,6 +1020,29 @@ def _dedupe(values: list[str]) -> list[str]:
     return result
 
 
+def _pdf_timing_refinement_classification(
+    *,
+    total_playable_count: int,
+    matched_x_onset_group_count: int,
+    unmatched_x_group_count: int,
+    unmatched_onset_group_count: int,
+    total_ambiguity_count: int,
+    overall_quality: str,
+    all_monotonic: bool,
+) -> tuple[str, list[str]]:
+    if total_playable_count == 0 or matched_x_onset_group_count == 0:
+        return "unavailable", ["pdf_timing_refinement_unavailable_layout_evidence"]
+    if overall_quality == "poor" or all_monotonic is False:
+        return "incompatible", ["pdf_timing_refinement_incompatible_layout_evidence"]
+    if total_ambiguity_count > 0:
+        return "ambiguous", ["pdf_timing_refinement_ambiguous_layout_evidence"]
+    if unmatched_x_group_count > 0 or unmatched_onset_group_count > 0 or overall_quality == "warning":
+        return "partial", ["pdf_timing_refinement_partial_layout_evidence"]
+    if overall_quality == "good":
+        return "safe", ["pdf_timing_refinement_safe_layout_evidence"]
+    return "partial", ["pdf_timing_refinement_partial_layout_evidence"]
+
+
 def build_ir_from_imports(musicxml: MusicXmlImport, tabraw: TabRaw) -> ScoreIR:
     score, _ = build_ir_with_diagnostics_from_imports(musicxml, tabraw)
     return score
@@ -666,16 +1056,37 @@ def build_ir_with_diagnostics_from_imports(
 ) -> tuple[ScoreIR, BuildIrDiagnostics]:
     warnings = _musicxml_warnings(musicxml)
     timing_issues = analyze_musicxml_timing(musicxml)
+    if ascii_gate_details is None:
+        for issue in timing_issues:
+            if issue.code in ("musicxml_duration_missing", "musicxml_duration_zero"):
+                issue.severity = "error"
     warnings.extend(_musicxml_timing_issue_warnings(timing_issues))
     fatal_timing_issues = [issue for issue in timing_issues if issue.severity == "error"]
     if fatal_timing_issues:
-        raise BuildIrInputRiskError(
-            category="musicxml_timing_risk",
-            stage="musicxml-import",
-            message=(
+        category = "musicxml_timing_risk"
+        if all(
+            issue.code in (
+                "musicxml_polyphony_not_supported",
+                "musicxml_multivoice_timing_not_supported",
+                "musicxml_cross_voice_timing_unsupported",
+                "musicxml_valid_multivoice_unsupported",
+                "musicxml_voice_cursor_alignment_risk",
+                "musicxml_alignment_not_attempted_due_to_timing_risk",
+                "musicxml_many_timing_risks",
+            )
+            for issue in fatal_timing_issues
+        ):
+            category = "musicxml_scoreir_polyphony_gate_refused"
+            message = "MusicXML timing is valid but contains unsupported polyphony/multi-voice structures."
+        else:
+            message = (
                 "MusicXML timing risk prevents ScoreIR output: "
                 f"{len(fatal_timing_issues)} overfull or overlapping event(s) would violate ScoreIR timing."
-            ),
+            )
+        raise BuildIrInputRiskError(
+            category=category,
+            stage="musicxml-import",
+            message=message,
             timing_issues=timing_issues,
         )
     grouping_risk = None if ascii_gate_details is not None else _tabraw_grouping_risk(tabraw)
@@ -779,7 +1190,20 @@ def build_ir_with_diagnostics_from_imports(
         bars=bars,
         warnings=warnings,
     )
+    _attach_symbols_and_techniques(score, tabraw)
     diagnostics = _build_diagnostics(musicxml, tabraw, score, candidate_pools, ascii_gate_details=ascii_gate_details)
+    if diagnostics.pdf_timing_mapping:
+        mapping = diagnostics.pdf_timing_mapping
+        is_monotonic = mapping.get("monotonic")
+        if is_monotonic is False:
+            reason_codes = mapping.get("refusal_reason_codes") or []
+            category = "pdf_timing_mapping_non_monotonic"
+            raise BuildIrInputRiskError(
+                category=category,
+                stage="tabraw-import",
+                message=f"PDF timing mapping is unsafe: {', '.join(reason_codes)}",
+                details={"pdf_timing_mapping": mapping, "grouping_status": "grouped", "grouping_safe": True},
+            )
     return score, diagnostics
 
 
@@ -1263,6 +1687,160 @@ def _build_diagnostics(
         for event in bar.events
         if event.confidence < 0.75
     ]
+
+    chord_cands = [c for c in tabraw.candidates if c.kind == "chord-symbol"]
+    tech_cands = [c for c in tabraw.candidates if c.kind == "technique-text"]
+
+    attached_chord_ids = set()
+    for bar in score.bars:
+        for event in bar.events:
+            for prov in event.provenance:
+                if prov.raw_token_id:
+                    attached_chord_ids.add(prov.raw_token_id)
+
+    attached_tech_ids = set()
+    for bar in score.bars:
+        for event in bar.events:
+            for note in event.notes:
+                for prov in note.provenance:
+                    if prov.raw_token_id:
+                        attached_tech_ids.add(prov.raw_token_id)
+
+    chord_found = len(chord_cands)
+    chord_attached = sum(1 for c in chord_cands if c.id in attached_chord_ids)
+    chord_unattached = chord_found - chord_attached
+
+    tech_found = len(tech_cands)
+    tech_attached = sum(1 for c in tech_cands if c.id in attached_tech_ids)
+    tech_unattached = tech_found - tech_attached
+
+    # Computations for pdf_timing_mapping
+    matched_x_onset_group_count = 0
+    unmatched_x_group_count = 0
+    unmatched_onset_group_count = 0
+    total_bar_relative_errors = []
+    max_relative_error = None
+    all_monotonic = True
+    total_ambiguity_count = 0
+    refusal_reason_codes = []
+    has_chord_stack = False
+
+    per_bar_mapping = []
+    for diag in per_bar:
+        x_len = len(diag.candidate_x_groups)
+        onset_len = len(diag.musicxml_onset_groups)
+        matched = min(x_len, onset_len)
+        matched_x_onset_group_count += matched
+        unmatched_x_group_count += max(0, x_len - onset_len)
+        unmatched_onset_group_count += max(0, onset_len - x_len)
+
+        if diag.mean_absolute_relative_error is not None:
+            total_bar_relative_errors.append(diag.mean_absolute_relative_error)
+        if diag.max_relative_error is not None:
+            if max_relative_error is None or diag.max_relative_error > max_relative_error:
+                max_relative_error = diag.max_relative_error
+
+        if diag.monotonic_x is False:
+            all_monotonic = False
+
+        total_ambiguity_count += diag.ambiguous_x_group_count
+        if diag.has_chord_stack:
+            has_chord_stack = True
+
+        per_bar_mapping.append({
+            "bar_index": diag.bar_index,
+            "playable_candidate_count": diag.playable_candidate_count,
+            "musicxml_pitched_onset_group_count": diag.musicxml_pitched_onset_group_count,
+            "candidate_x_groups": [g.model_dump() if hasattr(g, "model_dump") else g for g in diag.candidate_x_groups],
+            "musicxml_onset_groups": [g.model_dump() if hasattr(g, "model_dump") else g for g in diag.musicxml_onset_groups],
+            "mean_absolute_relative_error": diag.mean_absolute_relative_error,
+            "max_relative_error": diag.max_relative_error,
+            "monotonic": diag.monotonic_x,
+            "ambiguity_count": diag.ambiguous_x_group_count,
+            "warnings": diag.x_to_onset_warnings,
+            "quality": diag.quality,
+        })
+
+    total_playable_count = sum(diag.playable_candidate_count for diag in per_bar)
+
+    overall_quality = "good"
+    if total_playable_count == 0:
+        overall_quality = "unknown"
+        refusal_reason_codes.append("pdf_timing_mapping_quality_unknown")
+    else:
+        if unmatched_x_group_count > 0:
+            refusal_reason_codes.append("pdf_timing_mapping_x_group_unmatched")
+            overall_quality = "warning"
+        if unmatched_onset_group_count > 0:
+            refusal_reason_codes.append("pdf_timing_mapping_onset_group_unmatched")
+            overall_quality = "warning"
+        if matched_x_onset_group_count == 0:
+            overall_quality = "poor"
+            refusal_reason_codes.append("pdf_timing_mapping_not_enough_for_build_ir")
+        if all_monotonic is False:
+            overall_quality = "poor"
+            refusal_reason_codes.append("pdf_timing_mapping_non_monotonic")
+        if max_relative_error is not None:
+            if max_relative_error > 0.3:
+                overall_quality = "poor"
+                refusal_reason_codes.append("pdf_timing_mapping_quality_poor")
+            elif max_relative_error > 0.15:
+                if overall_quality != "poor":
+                    overall_quality = "warning"
+                refusal_reason_codes.append("pdf_timing_mapping_quality_warning")
+        if total_ambiguity_count > 0:
+            if overall_quality != "poor":
+                overall_quality = "warning"
+            refusal_reason_codes.append("pdf_timing_mapping_ambiguous_x_group")
+        if has_chord_stack:
+            refusal_reason_codes.append("pdf_timing_mapping_chord_stack_requires_review")
+
+        if overall_quality == "good":
+            refusal_reason_codes.append("pdf_timing_mapping_quality_good")
+        elif overall_quality == "poor":
+            refusal_reason_codes.append("pdf_timing_mapping_refused")
+
+    whether_mapping_refused = (overall_quality == "poor" or all_monotonic is False)
+    mapping_quality_classification, refinement_reason_codes = _pdf_timing_refinement_classification(
+        total_playable_count=total_playable_count,
+        matched_x_onset_group_count=matched_x_onset_group_count,
+        unmatched_x_group_count=unmatched_x_group_count,
+        unmatched_onset_group_count=unmatched_onset_group_count,
+        total_ambiguity_count=total_ambiguity_count,
+        overall_quality=overall_quality,
+        all_monotonic=all_monotonic,
+    )
+
+    pdf_timing_mapping_dict = {
+        "contract_version": "pdf-timing-mapping.v0.7",
+        "refinement_contract_version": PDF_TIMING_REFINEMENT_VERSION,
+        "input_class": getattr(tabraw, "input_class", "drawn_tab_candidate"),
+        "grouping_status": "grouped",
+        "grouping_safe": True,
+        "timing_source_safe": True,
+        "musicxml_timing_preflight_status": "safe",
+        "whether_mapping_attempted": True,
+        "whether_mapping_refused": whether_mapping_refused,
+        "refusal_reason_codes": sorted(list(set(refusal_reason_codes))),
+        "mapping_quality_classification": mapping_quality_classification,
+        "refinement_reason_codes": sorted(list(set(refinement_reason_codes))),
+        "safe_layout_evidence": mapping_quality_classification == "safe",
+        "partial_layout_evidence": mapping_quality_classification == "partial",
+        "ambiguous_layout_evidence": mapping_quality_classification == "ambiguous",
+        "incompatible_layout_evidence": mapping_quality_classification == "incompatible",
+        "quality": overall_quality,
+        "whether_scoreir_written": not whether_mapping_refused,
+        "remediation_hint": "Timing mapping is diagnostic evidence only; do not repair or infer missing timing from PDF x positions.",
+        "per_bar": per_bar_mapping,
+        "matched_x_onset_group_count": matched_x_onset_group_count,
+        "unmatched_x_group_count": unmatched_x_group_count,
+        "unmatched_onset_group_count": unmatched_onset_group_count,
+        "mean_absolute_relative_error": round(sum(total_bar_relative_errors) / len(total_bar_relative_errors), 3) if total_bar_relative_errors else None,
+        "max_relative_error": max_relative_error,
+        "monotonic": all_monotonic if per_bar else None,
+        "ambiguity_count": total_ambiguity_count,
+    }
+
     return BuildIrDiagnostics(
         musicxml_source=musicxml.source_path,
         tabraw_source=tabraw.source_pdf,
@@ -1287,6 +1865,12 @@ def _build_diagnostics(
         unmatched_musicxml_note_count=totals["unmatched_musicxml_note_count"],
         unmatched_tabraw_candidate_count=len(candidate_pools.unused()),
         ignored_non_playable_candidate_count=sum(1 for candidate in tabraw.candidates if candidate.parsed_fret is None),
+        symbol_attachment_chord_candidates_found=chord_found,
+        symbol_attachment_chord_candidates_attached=chord_attached,
+        symbol_attachment_chord_candidates_unattached=chord_unattached,
+        symbol_attachment_technique_candidates_found=tech_found,
+        symbol_attachment_technique_candidates_attached=tech_attached,
+        symbol_attachment_technique_candidates_unattached=tech_unattached,
         unsupported_construct_warnings=[
             code
             for code in warning_codes
@@ -1310,6 +1894,7 @@ def _build_diagnostics(
         per_system=_system_diagnostics(tabraw, candidate_pools),
         per_bar=per_bar,
         warnings=[warning.model_dump(mode="json", exclude_none=True) for warning in warnings],
+        pdf_timing_mapping=pdf_timing_mapping_dict,
     )
 
 
@@ -1549,7 +2134,8 @@ def _x_to_onset_warnings(
 
 def _tabraw_grouping_risk(tabraw: TabRaw) -> dict[str, object] | None:
     playable = [candidate for candidate in tabraw.candidates if candidate.parsed_fret is not None]
-    if not playable:
+    unsafe_codes = _tabraw_unsafe_grouping_warning_codes(tabraw)
+    if not playable and not unsafe_codes:
         return None
     warning_codes = [
         str(warning.get("code"))
@@ -1565,6 +2151,7 @@ def _tabraw_grouping_risk(tabraw: TabRaw) -> dict[str, object] | None:
     counts: dict[str, object] = {
         "total_candidate_count": len(tabraw.candidates),
         "playable_candidate_count": len(playable),
+        "playable_fret_candidate_count": len(playable),
         "playable_candidates_with_system": sum(1 for candidate in playable if candidate.system_index is not None),
         "playable_candidates_with_bar": sum(1 for candidate in playable if candidate.bar_index is not None),
         "playable_candidates_with_string": sum(1 for candidate in playable if candidate.string is not None),
@@ -1617,9 +2204,10 @@ def _tabraw_grouping_risk(tabraw: TabRaw) -> dict[str, object] | None:
             return None
         counts["missing_grouping_dimensions"] = []
         counts["unsafe_grouping_warning_codes"] = unsafe_codes
-        counts["grouping_status"] = "partial"
-        counts["category"] = "partial_pdf_grouping"
+        counts["grouping_status"] = "missing" if len(playable) == 0 else "partial"
+        counts["category"] = "missing_pdf_grouping" if len(playable) == 0 else "partial_pdf_grouping"
         counts["warning_codes"] = unsafe_codes
+        counts["tabraw_warning_codes"] = unsafe_codes
         return counts
     counts["missing_grouping_dimensions"] = missing
     unsafe_codes = _tabraw_unsafe_grouping_warning_codes(tabraw)
@@ -1642,8 +2230,131 @@ def _tabraw_grouping_risk(tabraw: TabRaw) -> dict[str, object] | None:
             "incomplete_tab_staff",
             "ambiguous_string_assignment",
             "ambiguous_bar_assignment",
+            "pdf_no_systems_detected",
+            "pdf_partial_system_detection",
+            "pdf_tab_staff_missing",
+            "pdf_tab_staff_incomplete",
+            "pdf_tab_staff_ambiguous",
+            "pdf_barlines_missing",
+            "pdf_barlines_ambiguous",
+            "pdf_bar_boxes_missing",
+            "pdf_string_lines_missing",
+            "pdf_string_assignment_missing",
+            "pdf_string_assignment_ambiguous",
+            "pdf_candidate_outside_system",
+            "pdf_candidate_outside_bar",
+            "pdf_candidate_between_strings",
+            "pdf_multi_system_order_ambiguous",
+            "pdf_page_layout_unsupported",
+            "pdf_text_candidate_without_geometry",
+            "pdf_ascii_and_drawn_layout_conflict",
+            "pdf_grouping_not_safe_for_build_ir",
+
+            # New Phase 4/8 Codes
+            "pdf_text_geometry_present_but_no_safe_system",
+            "pdf_tab_candidates_present_but_system_not_detected",
+            "pdf_drawn_geometry_present_but_staff_unresolved",
+            "pdf_tab_staff_lines_fragmented",
+            "pdf_tab_staff_lines_overlapping",
+            "pdf_tab_staff_spacing_inconsistent",
+            "pdf_system_bbox_ambiguous",
+            "pdf_system_order_ambiguous",
+            "pdf_candidates_unassigned_to_system",
+            "pdf_candidates_unassigned_to_bar",
+            "pdf_candidates_unassigned_to_string",
+            "pdf_partial_grouping_with_playable_candidates",
+            "pdf_grouping_confidence_below_threshold",
+            "pdf_missing_pdf_grouping_blocks_build_ir",
+            "pdf_layout_detection_requires_manual_review",
+
+            # Refined system-detection and bar-detection codes
+            "pdf_drawn_system_not_detected",
+            "pdf_drawn_system_ambiguous",
+            "pdf_drawn_staff_lines_unresolved",
+            "pdf_ascii_system_detected",
+            "pdf_ascii_system_measure_boundaries_missing",
+            "pdf_ascii_system_timing_unavailable",
+            "pdf_system_detected_bar_detection_missing",
+            "pdf_system_detection_succeeded_but_grouping_incomplete",
+            "pdf_input_class_ascii_tab_requires_alignment",
+            "pdf_input_class_drawn_tab_requires_barlines",
+            "pdf_system_detection_not_enough_for_build_ir",
+            "pdf_barlines_not_detected_in_system",
+            "pdf_barline_candidates_present_but_invalid",
+            "pdf_barline_does_not_cross_staff",
+            "pdf_barline_too_short",
+            "pdf_barline_outside_system_bounds",
+            "pdf_barline_ambiguous",
+            "pdf_bar_boxes_not_constructible",
+            "pdf_bar_detection_succeeded_string_assignment_pending",
+            "pdf_bar_detection_not_enough_for_build_ir",
+
+            # Refined barline-validation taxonomy blocker codes
+            "pdf_barline_too_short_absolute",
+            "pdf_barline_too_short_relative_to_staff",
+            "pdf_barline_crosses_insufficient_string_gaps",
+            "pdf_barline_partial_staff_crossing",
+            "pdf_barline_outside_staff_region",
+            "pdf_barline_rejected_relative_height",
+            "pdf_barline_validation_threshold_boundary",
+            "pdf_barline_validation_not_enough_for_build_ir",
+
+            # New Phase 6 Bar Box Construction Codes
+            "pdf_bar_box_requires_two_boundaries",
+            "pdf_bar_box_missing_left_boundary",
+            "pdf_bar_box_missing_right_boundary",
+            "pdf_bar_box_boundary_ambiguous",
+            "pdf_bar_box_too_narrow",
+            "pdf_bar_box_overlaps_neighbor",
+            "pdf_bar_box_outside_system_bounds",
+            "pdf_candidate_between_bar_boxes",
+            "pdf_candidate_on_bar_boundary",
+            "pdf_candidate_boundary_ambiguous",
+            "pdf_candidate_unassigned_to_bar",
+            "pdf_partial_grouping_one_system_unboxed",
+            "pdf_grouping_complete",
+            "pdf_bar_box_construction_not_enough_for_build_ir",
+
+            # New Phase 7 Bar Box Construction Edge Cases Codes
+            "pdf_bar_box_single_system_failure",
+            "pdf_bar_box_edge_system_missing_boundary",
+            "pdf_bar_box_one_boundary_rejected",
+            "pdf_barline_short_but_near_staff_boundary",
+            "pdf_barline_ambiguous_on_edge_system",
+            "pdf_candidate_unassigned_due_to_unboxed_system",
+            "pdf_candidate_near_missing_bar_boundary",
+            "pdf_boundary_candidate_blocks_full_grouping",
+            "pdf_full_grouping_requires_all_systems_boxed",
+            "pdf_grouping_complete_all_playable_candidates_assigned",
+
+            # New Phase 8 Edge System Boundary Fallback Codes
+            "pdf_bar_box_inferred_edge_boundary",
+            "pdf_bar_box_inferred_left_boundary",
+            "pdf_bar_box_inferred_right_boundary",
+            "pdf_bar_box_edge_boundary_fallback_used",
+            "pdf_bar_box_edge_boundary_fallback_rejected",
+            "pdf_bar_box_edge_boundary_ambiguous",
+            "pdf_bar_box_inferred_boundary_too_narrow",
+            "pdf_bar_box_inferred_boundary_candidate_ambiguous",
+            "pdf_bar_box_inferred_boundary_requires_clear_system_edge",
+            "pdf_bar_box_inferred_boundary_not_enough_for_build_ir",
+
+            # New PDF String Assignment Codes
+            "pdf_string_assignment_nearest_line",
+            "pdf_string_assignment_outside_staff",
+            "pdf_string_assignment_between_lines",
+            "pdf_string_assignment_too_far_from_line",
+            "pdf_string_assignment_overlaps_multiple_bands",
+            "pdf_string_assignment_confidence_below_threshold",
+            "pdf_string_assignment_compact_staff_ambiguous",
+            "pdf_playable_candidate_requires_string_assignment",
+            "pdf_non_playable_text_not_string_assigned",
+            "pdf_multidigit_fret_string_assigned",
+            "pdf_string_assignment_not_enough_for_build_ir",
+            "pdf_string_assignment_succeeded_upstream_grouping_still_blocks",
         }
     ]
+    counts["tabraw_warning_codes"] = counts["warning_codes"]
     return counts
 
 
@@ -1660,6 +2371,146 @@ def _tabraw_unsafe_grouping_warning_codes(tabraw: TabRaw) -> list[str]:
         "ambiguous_ascii_tab_timing",
         "unsupported_ascii_tab_rhythm",
         "ascii_tab_measure_boundary_missing",
+
+        "pdf_no_systems_detected",
+        "pdf_partial_system_detection",
+        "pdf_tab_staff_missing",
+        "pdf_tab_staff_incomplete",
+        "pdf_tab_staff_ambiguous",
+        "pdf_barlines_missing",
+        "pdf_barlines_ambiguous",
+        "pdf_bar_boxes_missing",
+        "pdf_string_lines_missing",
+        "pdf_string_assignment_missing",
+        "pdf_string_assignment_ambiguous",
+        "pdf_candidate_outside_system",
+        "pdf_candidate_outside_bar",
+        "pdf_candidate_between_strings",
+        "pdf_multi_system_order_ambiguous",
+        "pdf_page_layout_unsupported",
+        "pdf_text_candidate_without_geometry",
+        "pdf_ascii_and_drawn_layout_conflict",
+        "pdf_grouping_not_safe_for_build_ir",
+
+        # New Phase 4/8 Codes
+        "pdf_text_geometry_present_but_no_safe_system",
+        "pdf_tab_candidates_present_but_system_not_detected",
+        "pdf_drawn_geometry_present_but_staff_unresolved",
+        "pdf_tab_staff_lines_fragmented",
+        "pdf_tab_staff_lines_overlapping",
+        "pdf_tab_staff_spacing_inconsistent",
+        "pdf_system_bbox_ambiguous",
+        "pdf_system_order_ambiguous",
+        "pdf_candidates_unassigned_to_system",
+        "pdf_candidates_unassigned_to_bar",
+        "pdf_candidates_unassigned_to_string",
+        "pdf_partial_grouping_with_playable_candidates",
+        "pdf_grouping_confidence_below_threshold",
+        "pdf_missing_pdf_grouping_blocks_build_ir",
+        "pdf_layout_detection_requires_manual_review",
+
+        # Refined system-detection and bar-detection codes
+        "pdf_drawn_system_not_detected",
+        "pdf_drawn_system_ambiguous",
+        "pdf_drawn_staff_lines_unresolved",
+        "pdf_ascii_system_detected",
+        "pdf_ascii_system_measure_boundaries_missing",
+        "pdf_ascii_system_timing_unavailable",
+        "pdf_system_detected_bar_detection_missing",
+        "pdf_system_detection_succeeded_but_grouping_incomplete",
+        "pdf_input_class_ascii_tab_requires_alignment",
+        "pdf_input_class_drawn_tab_requires_barlines",
+        "pdf_system_detection_not_enough_for_build_ir",
+        "pdf_barlines_not_detected_in_system",
+        "pdf_barline_candidates_present_but_invalid",
+        "pdf_barline_does_not_cross_staff",
+        "pdf_barline_too_short",
+        "pdf_barline_outside_system_bounds",
+        "pdf_barline_ambiguous",
+        "pdf_bar_boxes_not_constructible",
+        "pdf_bar_detection_succeeded_string_assignment_pending",
+        "pdf_bar_detection_not_enough_for_build_ir",
+
+        # Refined barline-validation taxonomy blocker codes
+        "pdf_barline_too_short_absolute",
+        "pdf_barline_too_short_relative_to_staff",
+        "pdf_barline_crosses_insufficient_string_gaps",
+        "pdf_barline_partial_staff_crossing",
+        "pdf_barline_outside_staff_region",
+        "pdf_barline_rejected_relative_height",
+        "pdf_barline_validation_threshold_boundary",
+        "pdf_barline_validation_not_enough_for_build_ir",
+
+        # New Phase 6 Bar Box Construction Codes
+        "pdf_bar_box_requires_two_boundaries",
+        "pdf_bar_box_missing_left_boundary",
+        "pdf_bar_box_missing_right_boundary",
+        "pdf_bar_box_boundary_ambiguous",
+        "pdf_bar_box_too_narrow",
+        "pdf_bar_box_overlaps_neighbor",
+        "pdf_bar_box_outside_system_bounds",
+        "pdf_candidate_between_bar_boxes",
+        "pdf_candidate_on_bar_boundary",
+        "pdf_candidate_boundary_ambiguous",
+        "pdf_candidate_unassigned_to_bar",
+        "pdf_partial_grouping_one_system_unboxed",
+        "pdf_bar_box_construction_not_enough_for_build_ir",
+
+        # New Phase 7 Bar Box Construction Edge Cases Codes
+        "pdf_bar_box_single_system_failure",
+        "pdf_bar_box_edge_system_missing_boundary",
+        "pdf_bar_box_one_boundary_rejected",
+        "pdf_barline_short_but_near_staff_boundary",
+        "pdf_barline_ambiguous_on_edge_system",
+        "pdf_candidate_unassigned_due_to_unboxed_system",
+        "pdf_candidate_near_missing_bar_boundary",
+        "pdf_boundary_candidate_blocks_full_grouping",
+        "pdf_full_grouping_requires_all_systems_boxed",
+        "pdf_grouping_complete_all_playable_candidates_assigned",
+
+        # New Phase 8 Edge System Boundary Fallback Codes
+        "pdf_bar_box_edge_boundary_fallback_rejected",
+        "pdf_bar_box_edge_boundary_ambiguous",
+        "pdf_bar_box_inferred_boundary_too_narrow",
+        "pdf_bar_box_inferred_boundary_candidate_ambiguous",
+        "pdf_bar_box_inferred_boundary_requires_clear_system_edge",
+        "pdf_bar_box_inferred_boundary_not_enough_for_build_ir",
+
+        # New PDF String Assignment Codes
+        "pdf_string_assignment_outside_staff",
+        "pdf_string_assignment_between_lines",
+        "pdf_string_assignment_too_far_from_line",
+        "pdf_string_assignment_overlaps_multiple_bands",
+        "pdf_string_assignment_confidence_below_threshold",
+        "pdf_string_assignment_compact_staff_ambiguous",
+        "pdf_playable_candidate_requires_string_assignment",
+        "pdf_string_assignment_not_enough_for_build_ir",
+
+        # New Fret Refinement Blocker Codes
+        "pdf_fret_digits_not_merged_gap_too_large",
+        "pdf_fret_digits_not_merged_vertical_misalignment",
+        "pdf_fret_digits_overlap_ambiguous",
+        "pdf_fret_digit_symbol_overlap_ambiguous",
+        "pdf_fret_bbox_too_tall",
+        "pdf_fret_bbox_too_wide",
+        "pdf_fret_bbox_too_small",
+        "pdf_fret_outside_valid_range",
+        "pdf_fret_non_digit_rejected",
+        "pdf_fret_optical_bounds_confidence_below_threshold",
+        "pdf_fret_refinement_not_enough_for_build_ir",
+
+        # New Pitch / Tuning Blocker Codes
+        "pdf_tuning_conflict_detected",
+        "pdf_tuning_label_ambiguous",
+        "pdf_tuning_label_malformed",
+        "pdf_tuning_format_unsupported",
+        "pdf_pitch_tuning_diagnostics_not_enough_for_build_ir",
+
+        # New PDF Spacing & Timing Mapping Blocker Codes
+        "pdf_timing_mapping_refused",
+        "pdf_timing_mapping_not_enough_for_build_ir",
+        "pdf_timing_mapping_group_count_mismatch",
+        "pdf_timing_mapping_non_monotonic",
     }
     return sorted({str(warning.get("code")) for warning in tabraw.warnings if warning.get("code") in unsafe})
 
@@ -1923,3 +2774,234 @@ def _standard_guitar_tuning() -> Tuning:
             TuningString(number=6, pitch=40, name="E2"),
         ],
     )
+
+
+def _classify_technique(text: str) -> str | None:
+    t = text.strip().lower()
+    if t in ("slide", "sl.", "sl"):
+        return "slide"
+    if t in ("bend", "b"):
+        return "bend"
+    if t in ("vibrato", "vib", "v"):
+        return "vibrato"
+    if t in ("hammer-on", "h", "hammer"):
+        return "hammer-on"
+    if t in ("pull-off", "p", "pull"):
+        return "pull-off"
+    return None
+
+
+def _remove_not_aligned_warning(score: ScoreIR, candidate: TabCandidate) -> None:
+    score.warnings = [
+        w for w in score.warnings
+        if not (w.code == f"tabraw-{candidate.kind}-not-aligned" and w.provenance and w.provenance[0].raw_token_id == candidate.id)
+    ]
+
+
+def _attach_symbols_and_techniques(score: ScoreIR, tabraw: TabRaw) -> None:
+    bars_by_index = {bar.index: bar for bar in score.bars}
+
+    for candidate in tabraw.candidates:
+        if candidate.kind not in ("chord-symbol", "technique-text"):
+            continue
+
+        bar_idx = candidate.bar_index
+        # If candidate lacks a bar index, or the target bar does not exist:
+        if bar_idx is None or bar_idx not in bars_by_index:
+            if candidate.kind == "chord-symbol":
+                score.warnings.append(
+                    WarningItem(
+                        code="symbol_attachment_requires_timing" if bar_idx is None else "unattached_chord_symbol",
+                        message=f"Chord symbol '{candidate.raw_text}' has no valid timed bar/event target.",
+                        severity="warning",
+                        provenance=[candidate.to_provenance()],
+                    )
+                )
+            else:
+                score.warnings.append(
+                    WarningItem(
+                        code="technique_attachment_requires_note_target" if bar_idx is None else "unattached_technique_text",
+                        message=f"Technique text '{candidate.raw_text}' has no valid timed bar target.",
+                        severity="warning",
+                        provenance=[candidate.to_provenance()],
+                    )
+                )
+            continue
+
+        bar = bars_by_index[bar_idx]
+
+        if candidate.kind == "chord-symbol":
+            # Chord symbol attachment
+            if not bar.events:
+                score.warnings.append(
+                    WarningItem(
+                        code="symbol_attachment_requires_timing",
+                        message=f"Chord symbol '{candidate.raw_text}' requires a timed event target in bar {bar_idx}.",
+                        severity="warning",
+                        provenance=[candidate.to_provenance()],
+                    )
+                )
+                continue
+
+            # Fallback to the first event of the bar if candidate.x is None
+            if candidate.x is None:
+                event = bar.events[0]
+                event.chord_symbol = candidate.raw_text
+                event.provenance.append(candidate.to_provenance())
+                _remove_not_aligned_warning(score, candidate)
+                continue
+
+            # Visual proximity logic
+            # Let's extract visual coordinate x for each event in the bar
+            events_with_x = []
+            for event in bar.events:
+                x_coords = []
+                for note in event.notes:
+                    for prov in note.provenance:
+                        if prov.raw and prov.raw.get("x") is not None:
+                            try:
+                                x_val = float(prov.raw["x"])
+                                x_coords.append(x_val)
+                            except (ValueError, TypeError):
+                                pass
+                if x_coords:
+                    events_with_x.append((sum(x_coords) / len(x_coords), event))
+                else:
+                    events_with_x.append((None, event))
+
+            # If all events have no visual coordinates, fallback to first event
+            valid_events_with_x = [(x, ev) for x, ev in events_with_x if x is not None]
+            if not valid_events_with_x:
+                event = bar.events[0]
+                event.chord_symbol = candidate.raw_text
+                event.provenance.append(candidate.to_provenance())
+                _remove_not_aligned_warning(score, candidate)
+                continue
+
+            # Sort valid events by their x-coordinate
+            valid_events_with_x.sort(key=lambda item: item[0])
+            first_event_x = valid_events_with_x[0][0]
+
+            # If candidate.x is at or before the first event's x position, map to first event
+            if candidate.x <= first_event_x:
+                event = bar.events[0]
+                event.chord_symbol = candidate.raw_text
+                event.provenance.append(candidate.to_provenance())
+                _remove_not_aligned_warning(score, candidate)
+                continue
+
+            # Find closest event by absolute visual distance
+            dists = []
+            for ev_x, ev in valid_events_with_x:
+                dists.append((abs(ev_x - candidate.x), ev))
+            dists.sort(key=lambda item: item[0])
+
+            best_dist, best_event = dists[0]
+
+            # Ambiguity check: if there's a tie or a second event within a tight range (e.g. 2.0 units), refuse attachment
+            if len(dists) > 1 and abs(dists[0][0] - dists[1][0]) < 2.0:
+                score.warnings.append(
+                    WarningItem(
+                        code="ambiguous_chord_symbol_attachment",
+                        message=f"Chord symbol '{candidate.raw_text}' has ambiguous visual targets in bar {bar_idx}.",
+                        severity="warning",
+                        provenance=[candidate.to_provenance()],
+                    )
+                )
+            else:
+                best_event.chord_symbol = candidate.raw_text
+                best_event.provenance.append(candidate.to_provenance())
+                _remove_not_aligned_warning(score, candidate)
+
+        elif candidate.kind == "technique-text":
+            # Technique text attachment
+            kind = _classify_technique(candidate.raw_text)
+            if kind is None:
+                score.warnings.append(
+                    WarningItem(
+                        code="unsupported_technique_text",
+                        message=f"Technique text '{candidate.raw_text}' is unsupported in v0.1 vocabulary.",
+                        severity="warning",
+                        provenance=[candidate.to_provenance()],
+                    )
+                )
+                continue
+
+            notes = [note for event in bar.events for note in event.notes]
+            if not notes:
+                score.warnings.append(
+                    WarningItem(
+                        code="technique_attachment_requires_note_target",
+                        message=f"Technique text '{candidate.raw_text}' requires a note target in bar {bar_idx}.",
+                        severity="warning",
+                        provenance=[candidate.to_provenance()],
+                    )
+                )
+                continue
+
+            # Differentiate by kind
+            if kind in ("hammer-on", "pull-off"):
+                # Span/link technique requires exactly two notes in the bar
+                if len(notes) != 2:
+                    score.warnings.append(
+                        WarningItem(
+                            code="ambiguous_technique_attachment",
+                            message=f"Span technique '{candidate.raw_text}' requires exactly two notes in bar {bar_idx}.",
+                            severity="warning",
+                            provenance=[candidate.to_provenance()],
+                        )
+                    )
+                    continue
+
+                # Ensure notes are in chronological order (which they are, because events are sorted)
+                note1, note2 = notes
+                event1 = next(ev for ev in bar.events if note1 in ev.notes)
+                event2 = next(ev for ev in bar.events if note2 in ev.notes)
+
+                # Ensure they are at different onset times
+                if event1.timing.onset_ticks >= event2.timing.onset_ticks:
+                    score.warnings.append(
+                        WarningItem(
+                            code="ambiguous_technique_attachment",
+                            message=f"Span technique '{candidate.raw_text}' endpoints are not sequential in bar {bar_idx}.",
+                            severity="warning",
+                            provenance=[candidate.to_provenance()],
+                        )
+                    )
+                    continue
+
+                # Unambiguous: attach to note1 targeting event2.id
+                if kind == "hammer-on":
+                    tech = HammerOnTechnique(kind="hammer-on", target_event_id=event2.id)
+                else:
+                    tech = PullOffTechnique(kind="pull-off", target_event_id=event2.id)
+
+                note1.techniques.append(tech)
+                note1.provenance.append(candidate.to_provenance())
+                _remove_not_aligned_warning(score, candidate)
+
+            else:
+                # Slide, Bend, Vibrato require exactly one note in the bar
+                if len(notes) != 1:
+                    score.warnings.append(
+                        WarningItem(
+                            code="ambiguous_technique_attachment",
+                            message=f"Technique '{candidate.raw_text}' requires exactly one note target in bar {bar_idx}.",
+                            severity="warning",
+                            provenance=[candidate.to_provenance()],
+                        )
+                    )
+                    continue
+
+                # Unambiguous: attach to the single note
+                target_note = notes[0]
+                if kind == "slide":
+                    tech = SlideTechnique(kind="slide", style="unknown", direction="unknown", target_event_id=None)
+                elif kind == "bend":
+                    tech = BendTechnique(kind="bend", semitones=None, points=[], text=None)
+                else:
+                    tech = VibratoTechnique(kind="vibrato", width="unknown", speed="unknown")
+
+                target_note.techniques.append(tech)
+                target_note.provenance.append(candidate.to_provenance())
+                _remove_not_aligned_warning(score, candidate)

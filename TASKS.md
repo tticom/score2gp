@@ -2,15 +2,57 @@
 
 ## Next
 
+- [ ] Run a private-safe smoke refresh after `pdf-timing-refinement.v1.0` merges, reporting only timing/layout counts and categories.
 - [ ] Add developer-facing HTML styling and compact thumbnails for grouping diagnostics.
-- [ ] Add public reproductions for more Audiveris timing patterns before another private run.
-- [ ] Attach PDF-derived chord symbols and technique text to ScoreIR events once timing calibration exists.
-- [ ] Add developer-facing HTML rendering for ASCII ScoreIR gate refusal diagnostics.
-- [ ] Add HTML conversion report styling and unsupported-technique summaries.
 - [ ] Add a public partial-to-recovery design note before attempting any automatic grouping repair.
 
 ## Done
 
+- [x] Add public-safe `pdf-timing-refinement.v1.0` diagnostics to distinguish invalid MusicXML timing, unsupported-but-valid polyphony, and safe/partial/ambiguous/incompatible vector x-to-onset evidence without implementing timing repair.
+- [x] Add public synthetic PDF fixtures and conservative diagnostics/heuristics for born-digital PDF fret-number extraction, optical bounds, and digit horizontal/vertical grouping, preserving strict compiler gates (feature/pdf-fret-refinement-v0.5).
+- [x] Improve public-safe reporting, telemetry, and diagnostics for edge-boundary fallback rejection, compiling `pdf-edge-boundary-report.json`, premium standalone `pdf-edge-boundary-report.html`, and integrating references to them in both grouping overlays and compiler gates (feature/pdf-edge-boundary-reporting-v0.9).
+
+- [x] Refresh E2E private smoke blocker summary after PDF edge system boundary fixtures v0.8 to verify that the conservative boundary inference policy correctly rejects unsafe fallback and reports `pdf_bar_box_one_boundary_rejected` for system 6 on page 2 of `private_input_1` (`feature/private-smoke-refresh-after-pdf-edge-system-boundary-v0.1`).
+
+- [x] Add public synthetic PDF layout fixtures and conservative diagnostics/heuristics for edge systems where one accepted bar boundary exists and the other boundary is missing or rejected (feature/pdf-edge-system-boundary-public-fixtures-v0.8).
+
+- [x] Refresh E2E private smoke blocker summary after PDF bar-box edge case fixtures v0.7 to verify whether the unboxed system 6 on page 2 of private_input_1 is correctly identified and classified under the new taxonomy (feature/private-smoke-refresh-after-pdf-bar-box-edge-cases-v0.1).
+- [x] Refresh E2E private smoke blocker summary after PDF bar-box construction v0.6 to verify whether the new bar-box construction heuristics, taxonomy codes, and candidate boundary checks are accurately reported for real private layouts (feature/private-smoke-refresh-after-pdf-bar-box-construction-v0.1).
+- [x] Add public synthetic PDF fixtures and conservative diagnostics/heuristics for bar-box construction and candidate assignment after barline validation succeeds (feature/pdf-bar-box-construction-public-fixtures-v0.6).
+- [x] Add private-safe unrecoverable MusicXML timing diagnostic reports and user-facing remediation advice for unrecoverable timeline cursor overlaps (feature/musicxml-unrecoverable-timing-report-v0.1).
+- [x] Refresh E2E private smoke blocker summary after PDF barline validation v0.5 to evaluate whether the relative crossing rules accept compact barlines on the real inputs (feature/private-smoke-refresh-after-pdf-barline-validation-v0.1).
+- [x] Add public synthetic PDF barline validation fixtures and heuristics to refine vertical candidate rejection thresholds (feature/pdf-barline-validation-public-fixtures-v0.5).
+
+- [x] Refresh E2E private smoke blocker summary after PDF bar detection fixtures v0.4 to verify that real private inputs report detailed barline candidates, accepted/rejected, and sub-blocker telemetry (feature/private-smoke-refresh-after-pdf-bar-detection-v0.1).
+
+- [x] Refresh E2E private smoke blocker summary after PDF system detection fixtures v0.4 to verify distinct layout stages and blocker taxonomies (feature/private-smoke-refresh-after-pdf-system-v0.4).
+
+- [x] Add public synthetic PDF fixtures for unresolved staff lines and scanned-tab system boundaries, separating system detection from bar detection and drawn from ASCII input classes (feature/pdf-system-detection-public-fixtures-v0.4).
+
+- [x] Refresh the E2E private smoke blocker summary after PDF layout diagnostics v0.3 to evaluate real inputs and identify detailed layout warning codes (PR #28).
+
+- [x] Add public synthetic PDF layout fixtures and diagnostics for the remaining missing_pdf_grouping / system-not-detected blocker classes (feature/pdf-layout-public-fixtures-v0.3).
+
+- [x] Refresh the private smoke blocker summary after MusicXML calibration-boundary diagnostics to confirm calibration feasibility on real inputs (PR #26).
+
+- [x] Add public synthetic MusicXML fixtures and diagnostics for unrecoverable invalid timing / non-safe calibration scenarios, refining calibration boundary feasibility telemetry and blocking reasons (PR #25).
+
+- [x] Re-run the E2E private smoke workflow to verify that the new same-voice invalid timing and overfull measure diagnostics accurately classify and report the exact counts and calibration feasibility on the private inputs (PR #24).
+
+- [x] Add public synthetic MusicXML fixtures and tests for invalid same-voice timing / overfull measures, refining preflight diagnostics, calibration boundaries, and developer-facing reports (PR #23).
+- [x] Refresh private smoke blocker summary after voice cursor model (PR #22).
+- [x] Implement a deterministic MusicXML voice cursor/timeline model that correctly interprets backup/forward/chord/rest/voice cursor movement, separating same-voice overlaps (timing risk) from valid but unsupported cross-voice polyphony (polyphony gate refusal).
+- [x] Refresh private smoke blocker summary after MusicXML timing public fixtures v0.3 (PR #19).
+- [x] Add a third round of public synthetic MusicXML timing fixtures (v0.3) focused on remaining voice cursor alignment, backup/forward movement, and Audiveris-like timing risks, with refined preflight diagnostics and tests.
+- [x] Refresh private smoke blocker summary after MusicXML timing public fixtures (PR #17).
+- [x] Add public synthetic MusicXML timing blocker fixtures for compound meter (12/8) and backup/forward voice cursor movements, with refined preflight diagnostics and error taxonomy.
+- [x] Refresh private-safe diagnostic smoke blocker summary after recent PDF layout and MusicXML preflight timing diagnostics work.
+- [x] Improve PDF grouping and system layout diagnostics based on private-smoke warning classes without tuning to private files, adding public synthetic fixtures for layout failure modes and blocking unsafe grouping in build_ir.
+- [x] Improve public MusicXML timing/overlap diagnostics, error taxonomy, and developer-facing HTML reports.
+- [x] Local private-safe E2E diagnostic smoke workflow to evaluate real private score fixtures and generate anonymized master summaries.
+- [x] Public end-to-end PDF-to-GP conversion proof slice targeting a controlled public ASCII-tab PDF + compatible MusicXML.
+- [x] Attach PDF-derived chord symbols and technique text to ScoreIR events once timing calibration exists.
+- [x] Developer-facing HTML rendering for attached and unattached chord/technique evidence in generated ScoreIR.
 - [x] Repository scaffold.
 - [x] ScoreIR v0.1 contract, schema export, validation, and semantic comparison.
 - [x] GP inspection command.
@@ -51,3 +93,4 @@
 - [x] Tiny public `ascii-scoreir-gate.v0.1` success path for ASCII TabRaw plus compatible MusicXML alignment.
 - [x] Conservative ASCII ScoreIR gate refusal diagnostics for missing sidecars, unsafe sidecars, unsupported techniques, missing string/fret evidence, broad polyphony, and MusicXML timing risk.
 - [x] Public ASCII ScoreIR gate refusal taxonomy for missing mappings, non-one-to-one mappings, unsupported chord symbols, missing measure/onset evidence, missing MusicXML duration source, and failure diagnostics sidecars.
+- [x] Developer-facing HTML rendering for ASCII ScoreIR gate refusal diagnostics.

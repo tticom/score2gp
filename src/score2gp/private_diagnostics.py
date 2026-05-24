@@ -79,6 +79,25 @@ def run_private_diagnostic_smoke(
             build_error_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
             summary["outputs"]["build_error"] = build_error_path.name
             _record_build_ir_risk(summary, exc, build_error_path.name)
+            if exc.stage == "ascii-scoreir-gate":
+                from .report import write_ascii_gate_diagnostics_html
+                html_path = build_error_path.parent / "ascii-scoreir-gate-diagnostics.html"
+                write_ascii_gate_diagnostics_html(html_path, payload, json_path_ref=build_error_path.name)
+            elif exc.stage == "musicxml-import":
+                from .report import write_musicxml_unrecoverable_timing_report, write_musicxml_timing_diagnostics_html
+                html_legacy_path = build_error_path.parent / "musicxml-timing-diagnostics.html"
+                write_musicxml_timing_diagnostics_html(html_legacy_path, payload, json_path_ref=build_error_path.name)
+                
+                unrec_json_path = build_error_path.parent / "musicxml-unrecoverable-timing-report.json"
+                unrec_html_path = build_error_path.parent / "musicxml-unrecoverable-timing-report.html"
+                write_musicxml_unrecoverable_timing_report(
+                    unrec_json_path,
+                    unrec_html_path,
+                    payload,
+                    source_path=str(prepared_musicxml),
+                )
+                summary["outputs"]["unrecoverable_timing_report_json"] = unrec_json_path.name
+                summary["outputs"]["unrecoverable_timing_report_html"] = unrec_html_path.name
         except Exception as exc:  # noqa: BLE001
             sanitized_error = _sanitize_exception_message(exc, [pdf, musicxml])
             build_error_path.write_text(
@@ -399,6 +418,12 @@ def _grouping_artifact_outputs(out_dir: Path) -> dict[str, Any]:
         outputs["warnings"] = warnings_path.name
     if grouping_report_path.exists():
         outputs["grouping_diagnostics_html"] = grouping_report_path.name
+    unrec_json = out_dir / "musicxml-unrecoverable-timing-report.json"
+    unrec_html = out_dir / "musicxml-unrecoverable-timing-report.html"
+    if unrec_json.exists():
+        outputs["unrecoverable_timing_report_json"] = unrec_json.name
+    if unrec_html.exists():
+        outputs["unrecoverable_timing_report_html"] = unrec_html.name
     if overlay_names:
         outputs["grouping_overlay_count"] = len(overlay_names)
         outputs["grouping_overlays"] = overlay_names

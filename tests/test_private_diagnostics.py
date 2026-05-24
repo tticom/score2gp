@@ -91,7 +91,10 @@ def test_private_diagnostic_runner_summarizes_timing_risk_without_private_conten
     assert summary["build_ir"]["failed"] is True
     assert summary["build_ir"]["stage"] == "musicxml-import"
     assert summary["build_ir"]["error_category"] == "musicxml_timing_risk"
-    assert summary["build_ir"]["musicxml_timing_issue_counts"] == {"musicxml-overfull-bar": 1}
+    assert summary["build_ir"]["musicxml_timing_issue_counts"] == {
+        "musicxml-overfull-bar": 1,
+        "musicxml_alignment_not_attempted_due_to_timing_risk": 1,
+    }
     assert summary["build_ir"]["output_files_produced"] == {"tabraw": True, "score_ir": False, "diagnostics": False}
     assert "musicxml_timing_risk" in summary["suitability"]["recommendation_categories"]
     assert "alignment_not_attempted" in summary["suitability"]["recommendation_categories"]

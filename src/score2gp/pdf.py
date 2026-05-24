@@ -93,6 +93,12 @@ def extract_tab(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
         tabraw_path = out / "tab_raw.json"
     out.mkdir(parents=True, exist_ok=True)
     inspection = inspect_pdf(path, out / "inspect")
+    meta = {
+        "detected_systems": 0,
+        "detected_staves": 0,
+        "detected_bar_boxes": 0,
+        "detected_string_lines": 0,
+    }
     raw: dict[str, Any] = {
         "schema_version": TABRAW_SCHEMA_VERSION,
         "source_pdf": str(path),
@@ -114,9 +120,9 @@ def extract_tab(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001
         raw["warnings"].append({"code": "pymupdf-unavailable", "message": str(exc), "severity": "error"})
     else:
-        raw["candidates"].extend(_extract_pdf_text_candidates(Path(path), raw["warnings"]))
+        raw["candidates"].extend(_extract_pdf_text_candidates(Path(path), raw["warnings"], meta))
 
-    _append_grouping_warnings(raw)
+    _append_grouping_warnings(raw, meta)
     raw = TabRaw.model_validate(raw).model_dump(mode="json", exclude_none=True)
     _write_grouping_artifacts(Path(path), out, tabraw_path, inspection, raw)
     tabraw_path.write_text(json.dumps(raw, indent=2), encoding="utf-8")
@@ -151,6 +157,14 @@ class _TabSystem:
     x0: float
     x1: float
     barlines: list[float]
+    barline_candidates_count: int = 0
+    valid_barline_count: int = 0
+    rejected_barline_count: int = 0
+    rejection_reasons: dict[str, int] = None
+    barline_candidates_details: list[dict[str, Any]] = None
+    inferred_left: float | None = None
+    inferred_right: float | None = None
+    inferred_warnings: list[str] = None
 
     @property
     def staff_bbox(self) -> dict[str, float | int]:
@@ -164,8 +178,11 @@ class _TabSystem:
 
     @property
     def grouping_confidence(self) -> float:
-        if len(self.line_ys) == 6 and len(self.barlines) >= 2:
-            return 0.86
+        if len(self.barlines) >= 2:
+            if self.inferred_left is not None or self.inferred_right is not None:
+                return 0.72
+            if len(self.line_ys) == 6:
+                return 0.86
         if len(self.line_ys) == 6:
             return 0.58
         return 0.35
@@ -175,8 +192,54 @@ class _TabSystem:
         warnings = []
         if len(self.line_ys) != 6:
             warnings.append("incomplete_tab_staff")
+            warnings.append("pdf_tab_staff_incomplete")
+        if self.inferred_warnings:
+            warnings.extend(self.inferred_warnings)
         if len(self.barlines) < 2:
             warnings.append("missing_pdf_barlines")
+            warnings.append("pdf_barlines_missing")
+            warnings.append("pdf_bar_boxes_missing")
+            if self.barline_candidates_count > 0:
+                warnings.append("pdf_bar_boxes_not_constructible")
+                warnings.append("pdf_bar_box_construction_not_enough_for_build_ir")
+                if len(self.barlines) == 1:
+                    warnings.append("pdf_bar_box_requires_two_boundaries")
+                    warnings.append("pdf_bar_box_missing_right_boundary")
+                    if self.rejected_barline_count > 0:
+                        warnings.append("pdf_bar_box_one_boundary_rejected")
+                        warnings.append("pdf_bar_box_edge_system_missing_boundary")
+                else:
+                    if self.rejected_barline_count > 0:
+                        warnings.append("pdf_bar_box_single_system_failure")
+                        reasons = self.rejection_reasons or {}
+                        if reasons.get("pdf_barline_too_short", 0) > 0 or reasons.get("pdf_barline_too_short_absolute", 0) > 0:
+                            warnings.append("pdf_barline_short_but_near_staff_boundary")
+                        if reasons.get("pdf_barline_ambiguous", 0) > 0:
+                            warnings.append("pdf_barline_ambiguous_on_edge_system")
+        else:
+            # Check too narrow boxes
+            for left, right in zip(self.barlines, self.barlines[1:]):
+                if abs(right - left) < 30.0:
+                    warnings.append("pdf_bar_box_too_narrow")
+                    warnings.append("pdf_bar_box_construction_not_enough_for_build_ir")
+
+            # Check boxes outside system horizontal bounds
+            for left, right in zip(self.barlines, self.barlines[1:]):
+                if left < self.x0 - 2.0 or right > self.x1 + 2.0:
+                    warnings.append("pdf_bar_box_outside_system_bounds")
+                    warnings.append("pdf_bar_box_construction_not_enough_for_build_ir")
+
+            # Check overlapping boxes
+            boxes = []
+            for left, right in zip(self.barlines, self.barlines[1:]):
+                boxes.append((left, right))
+            for i, box1 in enumerate(boxes):
+                for box2 in boxes[i+1:]:
+                    start1, end1 = min(box1[0], box1[1]), max(box1[0], box1[1])
+                    start2, end2 = min(box2[0], box2[1]), max(box2[0], box2[1])
+                    if max(start1, start2) < min(end1, end2):
+                        warnings.append("pdf_bar_box_overlaps_neighbor")
+                        warnings.append("pdf_bar_box_construction_not_enough_for_build_ir")
         return warnings
 
     @property
@@ -187,8 +250,15 @@ class _TabSystem:
     def bar_boxes(self) -> list[dict[str, float | int]]:
         if len(self.barlines) < 2:
             return []
-        return [
-            {
+        boxes = []
+        for index, (left, right) in enumerate(zip(self.barlines, self.barlines[1:])):
+            inferred = []
+            if self.inferred_left is not None and abs(left - self.inferred_left) < 1.0:
+                inferred.append("left")
+            if self.inferred_right is not None and abs(right - self.inferred_right) < 1.0:
+                inferred.append("right")
+
+            box_dict = {
                 "page": self.page_index,
                 "system_index": self.system_index,
                 "staff_index": self.staff_index,
@@ -199,20 +269,57 @@ class _TabSystem:
                 "y1": round(self.line_ys[-1], 3),
                 "confidence": self.grouping_confidence,
             }
-            for index, (left, right) in enumerate(zip(self.barlines, self.barlines[1:]))
-        ]
+            if inferred:
+                box_dict["inferred_boundaries"] = inferred
+                box_dict["provenance"] = "pdf_bar_box_inferred_edge_boundary"
+            boxes.append(box_dict)
+        return boxes
 
-    def string_for_y(self, y: float | None) -> tuple[int | None, int | None, float | None, list[str]]:
+    def string_for_y(
+        self, y: float | None, height: float | None = None
+    ) -> tuple[int | None, int | None, float | None, list[str]]:
         if y is None:
             return None, None, None, []
         distances = [(abs(line_y - y), index + 1) for index, line_y in enumerate(self.line_ys)]
         distance, line_index = min(distances, key=lambda item: item[0])
         tolerance = max(4.0, self.line_spacing * 0.38)
-        ambiguous_tolerance = max(tolerance, self.line_spacing * 0.58)
-        if distance > tolerance:
-            warnings = ["ambiguous_string_assignment"] if distance <= ambiguous_tolerance else []
+
+        warnings = []
+
+        # Check compact staff spacing
+        if self.line_spacing < 8.0:
+            warnings.append("pdf_string_assignment_compact_staff_ambiguous")
+            warnings.append("pdf_string_assignment_confidence_below_threshold")
+
+        # Check overlaps multiple bands
+        if height is not None and height > self.line_spacing * 1.5:
+            warnings.append("pdf_string_assignment_overlaps_multiple_bands")
+            warnings.append("pdf_string_assignment_ambiguous")
+            warnings.append("ambiguous_string_assignment")
             return None, None, distance, warnings
-        return line_index, line_index, distance, []
+
+        min_y = min(self.line_ys)
+        max_y = max(self.line_ys)
+
+        # Check outside staff bounds
+        if y < min_y - tolerance or y > max_y + tolerance:
+            warnings.append("pdf_string_assignment_outside_staff")
+            warnings.append("pdf_string_assignment_missing")
+            return None, None, distance, warnings
+
+        if distance > tolerance:
+            warnings.append("ambiguous_string_assignment")
+            warnings.append("pdf_string_assignment_ambiguous")
+            if min_y <= y <= max_y:
+                warnings.append("pdf_string_assignment_between_lines")
+                warnings.append("pdf_candidate_between_strings")
+            if distance > self.line_spacing * 0.65:
+                warnings.append("pdf_string_assignment_too_far_from_line")
+                warnings.append("pdf_string_assignment_missing")
+            return None, None, distance, warnings
+
+        warnings.append("pdf_string_assignment_nearest_line")
+        return line_index, line_index, distance, warnings
 
     def bar_for_x(self, x: float | None) -> tuple[int | None, list[str]]:
         local_bar, warnings = self.local_bar_for_x(x)
@@ -228,14 +335,78 @@ class _TabSystem:
 
     def local_bar_for_x(self, x: float | None) -> tuple[int | None, list[str]]:
         if x is None or len(self.barlines) < 2:
-            return None, ["missing_pdf_barlines"] if x is not None else []
+            return None, ["missing_pdf_barlines", "pdf_barlines_missing"] if x is not None else []
+        if x < self.barlines[0] - 2.0 or x > self.barlines[-1] + 2.0:
+            return None, ["pdf_candidate_outside_bar", "ambiguous_bar_assignment", "pdf_candidate_unassigned_to_bar"]
         internal_barlines = self.barlines[1:-1]
         if any(abs(x - barline) <= self.ambiguous_bar_tolerance for barline in internal_barlines):
-            return None, ["ambiguous_bar_assignment"]
+            return None, ["ambiguous_bar_assignment", "pdf_barlines_ambiguous", "pdf_candidate_on_bar_boundary", "pdf_candidate_boundary_ambiguous", "pdf_bar_box_boundary_ambiguous"]
         for index, (left, right) in enumerate(zip(self.barlines, self.barlines[1:]), start=1):
             if left - 2.0 <= x <= right + 2.0:
-                return index, []
-        return None, ["ambiguous_bar_assignment"]
+                warnings = []
+                if self.inferred_left is not None and abs(left - self.inferred_left) < 1.0:
+                    warnings.append("pdf_bar_box_inferred_left_boundary")
+                if self.inferred_right is not None and abs(right - self.inferred_right) < 1.0:
+                    warnings.append("pdf_bar_box_inferred_right_boundary")
+                return index, warnings
+        return None, ["ambiguous_bar_assignment", "pdf_candidate_unassigned_to_bar"]
+
+    def infer_edge_boundaries(self, playable_xs: list[float], rejected_xs: list[float]) -> tuple[float | None, float | None, list[str]]:
+        inferred_left = None
+        inferred_right = None
+        warnings = []
+
+        if len(self.barlines) != 1:
+            return None, None, []
+
+        mid_x = self.barlines[0]
+        ambig_tol = self.ambiguous_bar_tolerance
+
+        # Left inference
+        left_candidates = [x for x in playable_xs if x < mid_x]
+        if left_candidates:
+            # Check if there are any rejected barlines to the left
+            left_rejected = [rx for rx in rejected_xs if rx < mid_x]
+            if left_rejected:
+                warnings.append("pdf_bar_box_edge_boundary_ambiguous")
+                warnings.append("pdf_bar_box_inferred_boundary_requires_clear_system_edge")
+                warnings.append("pdf_bar_box_edge_boundary_fallback_rejected")
+            # Check too narrow
+            elif mid_x - self.x0 < 30.0:
+                warnings.append("pdf_bar_box_inferred_boundary_too_narrow")
+                warnings.append("pdf_bar_box_edge_boundary_fallback_rejected")
+            # Check candidate near inferred boundary
+            elif any(x - self.x0 < ambig_tol for x in left_candidates):
+                warnings.append("pdf_bar_box_inferred_boundary_candidate_ambiguous")
+                warnings.append("pdf_bar_box_edge_boundary_fallback_rejected")
+            else:
+                inferred_left = self.x0
+                warnings.append("pdf_bar_box_inferred_left_boundary")
+                warnings.append("pdf_bar_box_edge_boundary_fallback_used")
+
+        # Right inference
+        right_candidates = [x for x in playable_xs if x > mid_x]
+        if right_candidates:
+            # Check if there are any rejected barlines to the right
+            right_rejected = [rx for rx in rejected_xs if rx > mid_x]
+            if right_rejected:
+                warnings.append("pdf_bar_box_edge_boundary_ambiguous")
+                warnings.append("pdf_bar_box_inferred_boundary_requires_clear_system_edge")
+                warnings.append("pdf_bar_box_edge_boundary_fallback_rejected")
+            # Check too narrow
+            elif self.x1 - mid_x < 30.0:
+                warnings.append("pdf_bar_box_inferred_boundary_too_narrow")
+                warnings.append("pdf_bar_box_edge_boundary_fallback_rejected")
+            # Check candidate near inferred boundary
+            elif any(self.x1 - x < ambig_tol for x in right_candidates):
+                warnings.append("pdf_bar_box_inferred_boundary_candidate_ambiguous")
+                warnings.append("pdf_bar_box_edge_boundary_fallback_rejected")
+            else:
+                inferred_right = self.x1
+                warnings.append("pdf_bar_box_inferred_right_boundary")
+                warnings.append("pdf_bar_box_edge_boundary_fallback_used")
+
+        return inferred_left, inferred_right, warnings
 
     @property
     def line_spacing(self) -> float:
@@ -367,7 +538,94 @@ class _AsciiTimingEvidence:
         return None
 
 
-def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _split_technique_mixed_words(words: list[tuple[float, float, float, float, str, int, int, int]]) -> list[dict[str, Any]]:
+    refined = []
+    tech_chars = set("hpsvbr~/\\()[].,-")
+
+    for word_index, word in enumerate(words, start=1):
+        raw_text = str(word[4]).strip()
+        if not raw_text:
+            continue
+        bbox_values = [float(word[0]), float(word[1]), float(word[2]), float(word[3])]
+
+        from .tabraw import _looks_like_chord_symbol
+        if _looks_like_chord_symbol(raw_text):
+            refined.append({
+                "x0": bbox_values[0],
+                "y0": bbox_values[1],
+                "x1": bbox_values[2],
+                "y1": bbox_values[3],
+                "text": raw_text,
+                "block_no": int(word[5]) if len(word) > 5 else None,
+                "line_no": int(word[6]) if len(word) > 6 else None,
+                "word_no": int(word[7]) if len(word) > 7 else None,
+                "word_index": word_index,
+                "warnings": [],
+                "provenance": [],
+            })
+            continue
+
+        has_digit = any(char.isdigit() for char in raw_text)
+        has_tech = any(char in tech_chars for char in raw_text.lower())
+
+        if has_digit and has_tech:
+            parts = [m.group(0) for m in re.finditer(r"(\d+|[hpsvbr~/\\()\[\].,\-]+)", raw_text, re.IGNORECASE)]
+            if len(parts) > 1:
+                L = len(raw_text)
+                W = bbox_values[2] - bbox_values[0]
+                current_start = 0
+                for part in parts:
+                    part_start = raw_text.find(part, current_start)
+                    part_end = part_start + len(part)
+                    current_start = part_end
+
+                    part_x0 = bbox_values[0] + (part_start / L) * W
+                    part_x1 = bbox_values[0] + (part_end / L) * W
+
+                    part_warnings = []
+                    part_provenance = []
+
+                    is_digit_part = any(c.isdigit() for c in part)
+                    if is_digit_part:
+                        part_width = part_x1 - part_x0
+                        if part_width < 4.0:
+                            part_warnings.append("pdf_fret_digit_symbol_overlap_ambiguous")
+                            part_warnings.append("pdf_fret_refinement_not_enough_for_build_ir")
+                    else:
+                        part_warnings.append("pdf_fret_technique_marker_excluded")
+
+                    refined.append({
+                        "x0": part_x0,
+                        "y0": bbox_values[1],
+                        "x1": part_x1,
+                        "y1": bbox_values[3],
+                        "text": part,
+                        "block_no": int(word[5]) if len(word) > 5 else None,
+                        "line_no": int(word[6]) if len(word) > 6 else None,
+                        "word_no": int(word[7]) if len(word) > 7 else None,
+                        "word_index": word_index,
+                        "warnings": part_warnings,
+                        "provenance": part_provenance,
+                    })
+                continue
+
+        refined.append({
+            "x0": bbox_values[0],
+            "y0": bbox_values[1],
+            "x1": bbox_values[2],
+            "y1": bbox_values[3],
+            "text": raw_text,
+            "block_no": int(word[5]) if len(word) > 5 else None,
+            "line_no": int(word[6]) if len(word) > 6 else None,
+            "word_no": int(word[7]) if len(word) > 7 else None,
+            "word_index": word_index,
+            "warnings": [],
+            "provenance": [],
+        })
+    return refined
+
+
+def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]], meta: dict[str, int]) -> list[dict[str, Any]]:
     import fitz  # type: ignore[import-not-found]
 
     candidates = []
@@ -376,27 +634,15 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]])
         for page_number, page in enumerate(doc, start=1):
             systems = _detect_tab_systems(page, page_number)
             ascii_blocks = _detect_ascii_tab_blocks(page, page_number, first_system_index=len(systems) + 1)
-            if not systems:
-                warnings.append(
-                    {
-                        "code": "pdf-tab-system-not-detected",
-                        "message": f"No six-line tab system was inferred on page {page_number}; candidates may lack string/bar estimates.",
-                        "severity": "info",
-                    }
-                )
-            if ascii_blocks:
-                warnings.extend(_ascii_tab_warnings(page_number, ascii_blocks))
-                ascii_candidates = _ascii_candidates_from_blocks(
-                    ascii_blocks,
-                    first_candidate_index=filtered_index + 1,
-                )
-                candidates.extend(ascii_candidates)
-                filtered_index += len(ascii_candidates)
+
             words = sorted(
                 page.get_text("words"),
                 key=lambda word: (round(float(word[1]), 3), round(float(word[0]), 3), str(word[4])),
             )
-            for word_index, word in enumerate(words, start=1):
+            # Identify systems that actually contain at least one playable candidate
+            systems_with_playable_candidates = set()
+            system_playable_xs = {}
+            for word in words:
                 raw_text = str(word[4]).strip()
                 if not raw_text:
                     continue
@@ -407,23 +653,1023 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]])
                     continue
                 if ascii_blocks and parse_fret_text(raw_text) is not None:
                     continue
+                is_fret_candidate = parse_fret_text(raw_text) is not None
+                if is_fret_candidate:
+                    system = _nearest_system(systems, x, y)
+                    if system is not None:
+                        systems_with_playable_candidates.add(system.system_index)
+                        if system.system_index not in system_playable_xs:
+                            system_playable_xs[system.system_index] = []
+                        system_playable_xs[system.system_index].append(x)
+
+            # Apply edge-boundary fallback inference policy
+            from dataclasses import replace
+            updated_systems = []
+            for system in systems:
+                if len(system.barlines) == 1:
+                    p_xs = system_playable_xs.get(system.system_index, [])
+                    rej_xs = [d["x"] for d in (system.barline_candidates_details or []) if d.get("final_decision") == "rejected"]
+                    inf_left, inf_right, inf_warnings = system.infer_edge_boundaries(p_xs, rej_xs)
+                    if inf_left is not None or inf_right is not None:
+                        new_barlines = list(system.barlines)
+                        if inf_left is not None:
+                            new_barlines.append(inf_left)
+                        if inf_right is not None:
+                            new_barlines.append(inf_right)
+                        new_barlines = sorted(list(set(new_barlines)))
+                        system = replace(
+                            system,
+                            barlines=new_barlines,
+                            inferred_left=inf_left,
+                            inferred_right=inf_right,
+                            inferred_warnings=inf_warnings,
+                            valid_barline_count=len(new_barlines),
+                        )
+                    elif inf_warnings:
+                        system = replace(
+                            system,
+                            inferred_warnings=inf_warnings,
+                        )
+                updated_systems.append(system)
+            systems = updated_systems
+
+            # Accumulate metadata
+            for system in systems:
+                meta["detected_systems"] += 1
+                meta["detected_staves"] += 1
+                meta["detected_bar_boxes"] += len(system.bar_boxes)
+                meta["detected_string_lines"] += len(system.line_ys)
+
+            drawings = page.get_drawings()
+            segments = list(_drawing_segments(drawings))
+            has_horizontal = any(abs(s.y0 - s.y1) <= 2.0 and abs(s.x1 - s.x0) >= 15.0 for s in segments)
+            text_blocks = [b for b in page.get_text("blocks") if b[4].strip()]
+
+            if not systems:
+                warnings.append(
+                    {
+                        "code": "pdf-tab-system-not-detected",
+                        "message": f"No six-line tab system was inferred on page {page_number}; candidates may lack string/bar estimates.",
+                        "severity": "info",
+                    }
+                )
+                if drawings and text_blocks:
+                    warnings.append({
+                        "code": "pdf_text_geometry_present_but_no_safe_system",
+                        "message": f"Both text and drawn geometry are present, but no safe tab system could be inferred on page {page_number}.",
+                        "severity": "warning",
+                        "grouping_status": "missing",
+                    })
+                    warnings.append({
+                        "code": "pdf_drawn_geometry_present_but_staff_unresolved",
+                        "message": f"Drawn geometry exists, but staff lines could not be resolved into a tab system on page {page_number}.",
+                        "severity": "warning",
+                        "grouping_status": "missing",
+                    })
+                if has_horizontal:
+                    warnings.append({
+                        "code": "pdf_tab_staff_lines_fragmented",
+                        "message": f"Tab staff lines are fragmented or broken on page {page_number}.",
+                        "severity": "warning",
+                        "grouping_status": "missing",
+                    })
+            else:
+                for system in systems:
+                    if system.system_index not in systems_with_playable_candidates:
+                        if len(system.barlines) >= 2 and not any(w in system.grouping_warnings for w in ("pdf_bar_box_too_narrow", "pdf_bar_box_outside_system_bounds", "pdf_bar_box_overlaps_neighbor")):
+                            warnings.append({
+                                "code": "pdf_bar_boxes_constructed",
+                                "message": f"Bar boxes successfully constructed in system {system.system_index} on page {page_number}.",
+                                "severity": "info",
+                                "grouping_status": "grouped"
+                            })
+                        continue
+
+                    if len(system.barlines) < 2:
+                        warnings.append({
+                            "code": "pdf_barlines_not_detected_in_system",
+                            "message": f"Less than 2 valid barlines detected in system {system.system_index} on page {page_number}.",
+                            "severity": "warning",
+                            "grouping_status": "missing"
+                        })
+                        warnings.append({
+                            "code": "pdf_bar_boxes_not_constructible",
+                            "message": f"Bar boxes are not constructible in system {system.system_index} on page {page_number}.",
+                            "severity": "warning",
+                            "grouping_status": "missing"
+                        })
+                        warnings.append({
+                            "code": "pdf_bar_detection_not_enough_for_build_ir",
+                            "message": f"Bar detection is incomplete in system {system.system_index} on page {page_number}.",
+                            "severity": "warning",
+                            "grouping_status": "missing"
+                        })
+                    if system.rejected_barline_count > 0 and len(system.barlines) == 0:
+                        warnings.append({
+                            "code": "pdf_barline_candidates_present_but_invalid",
+                            "message": f"Barline candidates were present but all were rejected in system {system.system_index} on page {page_number}.",
+                            "severity": "warning",
+                            "grouping_status": "missing"
+                        })
+                    reasons = system.rejection_reasons or {}
+                    if reasons.get("pdf_barline_too_short", 0) > 0:
+                        warnings.append({
+                            "code": "pdf_barline_too_short",
+                            "message": f"One or more barline candidates are too short in system {system.system_index} on page {page_number}.",
+                            "severity": "warning",
+                            "grouping_status": "partial"
+                        })
+                    if reasons.get("pdf_barline_does_not_cross_staff", 0) > 0:
+                        warnings.append({
+                            "code": "pdf_barline_does_not_cross_staff",
+                            "message": f"One or more barline candidates do not cross the tab staff in system {system.system_index} on page {page_number}.",
+                            "severity": "warning",
+                            "grouping_status": "partial"
+                        })
+                    if reasons.get("pdf_barline_outside_system_bounds", 0) > 0:
+                        warnings.append({
+                            "code": "pdf_barline_outside_system_bounds",
+                            "message": f"One or more barline candidates are outside the system bounds in system {system.system_index} on page {page_number}.",
+                            "severity": "warning",
+                            "grouping_status": "partial"
+                        })
+                    if reasons.get("pdf_barline_ambiguous", 0) > 0:
+                        warnings.append({
+                            "code": "pdf_barline_ambiguous",
+                            "message": f"One or more barline candidates are horizontally ambiguous in system {system.system_index} on page {page_number}.",
+                            "severity": "warning",
+                            "grouping_status": "ambiguous"
+                        })
+                    if reasons.get("pdf_barline_too_short_absolute", 0) > 0:
+                        warnings.append({
+                            "code": "pdf_barline_too_short_absolute",
+                            "message": f"One or more barline candidates are below absolute height threshold in system {system.system_index} on page {page_number}.",
+                            "severity": "warning",
+                            "grouping_status": "partial"
+                        })
+                    if reasons.get("pdf_barline_too_short_relative_to_staff", 0) > 0:
+                        warnings.append({
+                            "code": "pdf_barline_too_short_relative_to_staff",
+                            "message": f"One or more barline candidates are below relative staff-height threshold in system {system.system_index} on page {page_number}.",
+                            "severity": "warning",
+                            "grouping_status": "partial"
+                        })
+                    if reasons.get("pdf_barline_crosses_insufficient_string_gaps", 0) > 0:
+                        warnings.append({
+                            "code": "pdf_barline_crosses_insufficient_string_gaps",
+                            "message": f"One or more barline candidates cross too few string gaps in system {system.system_index} on page {page_number}.",
+                            "severity": "warning",
+                            "grouping_status": "partial"
+                        })
+                    if reasons.get("pdf_barline_partial_staff_crossing", 0) > 0:
+                        warnings.append({
+                            "code": "pdf_barline_partial_staff_crossing",
+                            "message": f"One or more barline candidates only partially cross the staff in system {system.system_index} on page {page_number}.",
+                            "severity": "warning",
+                            "grouping_status": "partial"
+                        })
+                    if reasons.get("pdf_barline_outside_staff_region", 0) > 0:
+                        warnings.append({
+                            "code": "pdf_barline_outside_staff_region",
+                            "message": f"One or more barline candidates are outside the staff region in system {system.system_index} on page {page_number}.",
+                            "severity": "warning",
+                            "grouping_status": "partial"
+                        })
+                    if reasons.get("pdf_barline_rejected_relative_height", 0) > 0:
+                        warnings.append({
+                            "code": "pdf_barline_rejected_relative_height",
+                            "message": f"One or more barline candidates were rejected by relative staff-height check in system {system.system_index} on page {page_number}.",
+                            "severity": "warning",
+                            "grouping_status": "partial"
+                        })
+                    # Propagate system grouping warnings to page warnings
+                    for gw in system.grouping_warnings:
+                        if gw == "pdf_bar_box_too_narrow":
+                            warnings.append({
+                                "code": "pdf_bar_box_too_narrow",
+                                "message": f"One or more bar boxes are too narrow in system {system.system_index} on page {page_number}.",
+                                "severity": "warning",
+                                "grouping_status": "partial"
+                            })
+                            warnings.append({
+                                "code": "pdf_bar_box_construction_not_enough_for_build_ir",
+                                "message": f"Bar box construction failed in system {system.system_index} on page {page_number}.",
+                                "severity": "warning",
+                                "grouping_status": "partial"
+                            })
+                        elif gw == "pdf_bar_box_outside_system_bounds":
+                            warnings.append({
+                                "code": "pdf_bar_box_outside_system_bounds",
+                                "message": f"One or more bar boxes extend outside system horizontal bounds in system {system.system_index} on page {page_number}.",
+                                "severity": "warning",
+                                "grouping_status": "partial"
+                            })
+                            warnings.append({
+                                "code": "pdf_bar_box_construction_not_enough_for_build_ir",
+                                "message": f"Bar box construction failed in system {system.system_index} on page {page_number}.",
+                                "severity": "warning",
+                                "grouping_status": "partial"
+                            })
+                        elif gw == "pdf_bar_box_overlaps_neighbor":
+                            warnings.append({
+                                "code": "pdf_bar_box_overlaps_neighbor",
+                                "message": f"One or more bar boxes overlap with their neighbors in system {system.system_index} on page {page_number}.",
+                                "severity": "warning",
+                                "grouping_status": "partial"
+                            })
+                            warnings.append({
+                                "code": "pdf_bar_box_construction_not_enough_for_build_ir",
+                                "message": f"Bar box construction failed in system {system.system_index} on page {page_number}.",
+                                "severity": "warning",
+                                "grouping_status": "partial"
+                            })
+                        elif gw == "pdf_bar_box_requires_two_boundaries":
+                            warnings.append({
+                                "code": "pdf_bar_box_requires_two_boundaries",
+                                "message": f"A bar box requires at least two accepted barlines in system {system.system_index} on page {page_number}.",
+                                "severity": "warning",
+                                "grouping_status": "partial"
+                            })
+                        elif gw == "pdf_bar_box_inferred_left_boundary":
+                            warnings.append({
+                                "code": "pdf_bar_box_inferred_left_boundary",
+                                "message": f"Left edge boundary was inferred in system {system.system_index} on page {page_number}.",
+                                "severity": "info",
+                                "grouping_status": "grouped",
+                                "system_index": system.system_index,
+                                "page_index": page_number,
+                            })
+                        elif gw == "pdf_bar_box_inferred_right_boundary":
+                            warnings.append({
+                                "code": "pdf_bar_box_inferred_right_boundary",
+                                "message": f"Right edge boundary was inferred in system {system.system_index} on page {page_number}.",
+                                "severity": "info",
+                                "grouping_status": "grouped",
+                                "system_index": system.system_index,
+                                "page_index": page_number,
+                            })
+                        elif gw == "pdf_bar_box_edge_boundary_fallback_used":
+                            warnings.append({
+                                "code": "pdf_bar_box_edge_boundary_fallback_used",
+                                "message": f"Edge boundary fallback was used in system {system.system_index} on page {page_number}.",
+                                "severity": "info",
+                                "grouping_status": "grouped",
+                                "system_index": system.system_index,
+                                "page_index": page_number,
+                            })
+                        elif gw == "pdf_bar_box_edge_boundary_fallback_rejected":
+                            warnings.append({
+                                "code": "pdf_bar_box_edge_boundary_fallback_rejected",
+                                "message": f"Edge boundary fallback was rejected in system {system.system_index} on page {page_number}.",
+                                "severity": "warning",
+                                "grouping_status": "partial",
+                                "system_index": system.system_index,
+                                "page_index": page_number,
+                            })
+                            warnings.append({
+                                "code": "pdf_bar_box_inferred_boundary_not_enough_for_build_ir",
+                                "message": f"Inferred boundary failure blocks IR generation in system {system.system_index} on page {page_number}.",
+                                "severity": "warning",
+                                "grouping_status": "partial",
+                                "system_index": system.system_index,
+                                "page_index": page_number,
+                            })
+                        elif gw == "pdf_bar_box_edge_boundary_ambiguous":
+                            warnings.append({
+                                "code": "pdf_bar_box_edge_boundary_ambiguous",
+                                "message": f"Edge boundary fallback is ambiguous in system {system.system_index} on page {page_number}.",
+                                "severity": "warning",
+                                "grouping_status": "partial",
+                                "system_index": system.system_index,
+                                "page_index": page_number,
+                            })
+                        elif gw == "pdf_bar_box_inferred_boundary_too_narrow":
+                            warnings.append({
+                                "code": "pdf_bar_box_inferred_boundary_too_narrow",
+                                "message": f"Inferred boundary would produce a box too narrow in system {system.system_index} on page {page_number}.",
+                                "severity": "warning",
+                                "grouping_status": "partial",
+                                "system_index": system.system_index,
+                                "page_index": page_number,
+                            })
+                        elif gw == "pdf_bar_box_inferred_boundary_candidate_ambiguous":
+                            warnings.append({
+                                "code": "pdf_bar_box_inferred_boundary_candidate_ambiguous",
+                                "message": f"A fret candidate lies too close to the inferred boundary in system {system.system_index} on page {page_number}.",
+                                "severity": "warning",
+                                "grouping_status": "partial",
+                                "system_index": system.system_index,
+                                "page_index": page_number,
+                            })
+                        elif gw == "pdf_bar_box_inferred_boundary_requires_clear_system_edge":
+                            warnings.append({
+                                "code": "pdf_bar_box_inferred_boundary_requires_clear_system_edge",
+                                "message": f"Inferred boundary requires a clear, non-ambiguous system edge in system {system.system_index} on page {page_number}.",
+                                "severity": "warning",
+                                "grouping_status": "partial",
+                                "system_index": system.system_index,
+                                "page_index": page_number,
+                            })
+                    if len(system.barlines) >= 2 and not any(w in system.grouping_warnings for w in ("pdf_bar_box_too_narrow", "pdf_bar_box_outside_system_bounds", "pdf_bar_box_overlaps_neighbor")):
+                        warnings.append({
+                            "code": "pdf_bar_boxes_constructed",
+                            "message": f"Bar boxes successfully constructed in system {system.system_index} on page {page_number}.",
+                            "severity": "info",
+                            "grouping_status": "grouped"
+                        })
+
+                # Check if some systems are unboxed while others are boxed on this page
+                has_any_unboxed_system = any(
+                    (len(sys.barlines) < 2 or any(w in sys.grouping_warnings for w in ("pdf_bar_box_too_narrow", "pdf_bar_box_outside_system_bounds", "pdf_bar_box_overlaps_neighbor")))
+                    and sys.system_index in systems_with_playable_candidates
+                    for sys in systems
+                )
+                has_any_boxed_system = any(
+                    len(sys.barlines) >= 2 and not any(w in sys.grouping_warnings for w in ("pdf_bar_box_too_narrow", "pdf_bar_box_outside_system_bounds", "pdf_bar_box_overlaps_neighbor"))
+                    for sys in systems
+                )
+                if has_any_unboxed_system and has_any_boxed_system:
+                    warnings.append({
+                        "code": "pdf_partial_grouping_one_system_unboxed",
+                        "message": f"At least one system lacks bar boxes while another has boxes on page {page_number}.",
+                        "severity": "warning",
+                        "grouping_status": "partial"
+                    })
+
+                # Check for vertically overlapping systems on the page
+                has_overlap = False
+                for i, sys1 in enumerate(systems):
+                    for sys2 in systems[i+1:]:
+                        y_min1, y_max1 = min(sys1.line_ys), max(sys1.line_ys)
+                        y_min2, y_max2 = min(sys2.line_ys), max(sys2.line_ys)
+                        # Check overlap with a small tolerance of 1.0pt
+                        if y_min1 <= y_max2 + 1.0 and y_min2 <= y_max1 + 1.0:
+                            has_overlap = True
+                            break
+                    if has_overlap:
+                        break
+                if has_overlap:
+                    warnings.append({
+                        "code": "pdf_multi_system_order_ambiguous",
+                        "message": f"Multiple tab systems have vertically overlapping ranges on page {page_number}.",
+                        "severity": "warning",
+                        "grouping_status": "ambiguous",
+                    })
+                    warnings.append({
+                        "code": "pdf_system_order_ambiguous",
+                        "message": f"System order is ambiguous across visually close systems on page {page_number}.",
+                        "severity": "warning",
+                        "grouping_status": "ambiguous",
+                    })
+                    warnings.append({
+                        "code": "pdf_tab_staff_ambiguous",
+                        "message": "Tab systems layout is ambiguous due to vertical overlap.",
+                        "severity": "warning",
+                        "grouping_status": "ambiguous",
+                    })
+                    warnings.append({
+                        "code": "pdf_system_bbox_ambiguous",
+                        "message": "Tab system bounding boxes are overlapping or ambiguous on page {page_number}.",
+                        "severity": "warning",
+                        "grouping_status": "ambiguous",
+                    })
+
+            if len(systems) > 0 and len(ascii_blocks) > 0:
+                warnings.append({
+                    "code": "pdf_ascii_and_drawn_layout_conflict",
+                    "message": f"Both ASCII blocks and drawn systems exist on page {page_number}.",
+                    "severity": "warning",
+                    "grouping_status": "unsupported",
+                })
+                warnings.append({
+                    "code": "pdf_page_layout_unsupported",
+                    "message": f"Unsupported mixed page layout on page {page_number}.",
+                    "severity": "warning",
+                    "grouping_status": "unsupported",
+                })
+
+            if ascii_blocks:
+                warnings.extend(_ascii_tab_warnings(page_number, ascii_blocks))
+                ascii_candidates = _ascii_candidates_from_blocks(
+                    ascii_blocks,
+                    first_candidate_index=filtered_index + 1,
+                )
+                candidates.extend(ascii_candidates)
+                filtered_index += len(ascii_candidates)
+
+            # Pre-process, split mixed technique words, and group playable digits conservatively
+            refined_words = _split_technique_mixed_words(words)
+
+            # Reconstruct lines to find Standard and other Tunings page-wide
+            line_words = {}
+            for rw in refined_words:
+                b_no = rw.get("block_no") or 0
+                l_no = rw.get("line_no") or 0
+                key = (b_no, l_no)
+                if key not in line_words:
+                    line_words[key] = []
+                line_words[key].append(rw)
+
+            line_texts = {}
+            for key in line_words:
+                line_words[key] = sorted(line_words[key], key=lambda w: w["x0"])
+                line_texts[key] = " ".join(w["text"] for w in line_words[key])
+
+            # Detect tunings per line/page to check for conflicts
+            page_detected_tunings = set()
+            for key, line_text in line_texts.items():
+                if re.search(r"\bstandard\s+tuning\b", line_text, re.IGNORECASE):
+                    page_detected_tunings.add("standard")
+                if re.search(r"\bdrop\s+d\b", line_text, re.IGNORECASE):
+                    page_detected_tunings.add("drop_d")
+                if re.search(r"\bdadgad\b", line_text, re.IGNORECASE):
+                    page_detected_tunings.add("dadgad")
+
+            has_page_tuning_conflict = len(page_detected_tunings) > 1
+
+            if has_page_tuning_conflict:
+                for key, w_list in line_words.items():
+                    line_text = line_texts[key]
+                    is_match = (
+                        re.search(r"\bstandard\s+tuning\b", line_text, re.IGNORECASE) or
+                        re.search(r"\bdrop\s+d\b", line_text, re.IGNORECASE) or
+                        re.search(r"\bdadgad\b", line_text, re.IGNORECASE)
+                    )
+                    if is_match:
+                        for w in w_list:
+                            w["is_tuning_evidence"] = True
+                            if "warnings" not in w:
+                                w["warnings"] = []
+                            w["warnings"].extend([
+                                "pdf_tuning_conflict_detected",
+                                "pdf_tuning_label_ambiguous",
+                                "pdf_pitch_tuning_diagnostics_not_enough_for_build_ir"
+                            ])
+                            w["tuning_classification"] = "malformed_tuning_label"
+                warnings.append({
+                    "code": "pdf_tuning_conflict_detected",
+                    "message": f"Conflicting tuning labels detected on page {page_number}.",
+                    "severity": "warning",
+                })
+                warnings.append({
+                    "code": "pdf_tuning_label_ambiguous",
+                    "message": f"Ambiguous tuning label detected on page {page_number}.",
+                    "severity": "warning",
+                })
+                warnings.append({
+                    "code": "pdf_pitch_tuning_diagnostics_not_enough_for_build_ir",
+                    "message": f"Pitch/tuning diagnostics block build-ir on page {page_number}.",
+                    "severity": "warning",
+                })
+            else:
+                for key, w_list in line_words.items():
+                    line_text = line_texts[key]
+                    if re.search(r"\bstandard\s+tuning\b", line_text, re.IGNORECASE):
+                        for w in w_list:
+                            w["is_tuning_evidence"] = True
+                            if "warnings" not in w:
+                                w["warnings"] = []
+                            w["warnings"].extend([
+                                "pdf_tuning_standard_detected",
+                                "pdf_tuning_text_preserved_non_playable",
+                                "pdf_tuning_not_used_for_string_assignment",
+                                "pdf_tuning_not_used_for_fret_inference",
+                                "pdf_timing_mapping_not_implemented",
+                                "pdf_pitch_layout_evidence_detected"
+                            ])
+                            w["tuning_classification"] = "non_playable_tuning_text"
+                        warnings.append({
+                            "code": "pdf_tuning_standard_detected",
+                            "message": f"Standard tuning text detected on page {page_number}.",
+                            "severity": "info",
+                        })
+                        warnings.append({
+                            "code": "pdf_timing_mapping_not_implemented",
+                            "message": f"Timing mapping is not implemented on page {page_number}.",
+                            "severity": "info",
+                        })
+                    elif "tuning" in line_text.lower():
+                        if "standardish" in line_text.lower():
+                            for w in w_list:
+                                w["is_tuning_evidence"] = True
+                                if "warnings" not in w:
+                                    w["warnings"] = []
+                                w["warnings"].extend([
+                                    "pdf_tuning_label_malformed",
+                                    "pdf_tuning_format_unsupported",
+                                    "pdf_pitch_tuning_diagnostics_not_enough_for_build_ir"
+                                ])
+                                w["tuning_classification"] = "malformed_tuning_label"
+                            warnings.append({
+                                "code": "pdf_tuning_label_malformed",
+                                "message": f"Malformed tuning label detected on page {page_number}.",
+                                "severity": "warning",
+                            })
+                            warnings.append({
+                                "code": "pdf_tuning_format_unsupported",
+                                "message": f"Unsupported tuning format on page {page_number}.",
+                                "severity": "warning",
+                            })
+                            warnings.append({
+                                "code": "pdf_pitch_tuning_diagnostics_not_enough_for_build_ir",
+                                "message": f"Pitch/tuning diagnostics block build-ir on page {page_number}.",
+                                "severity": "warning",
+                            })
+
+            # Scan next to each system for explicit string tuning labels
+            _PITCH_LABEL_RE = re.compile(r"^[a-gA-G][#b]?[1-8]?$")
+            for system in systems:
+                left_words = []
+                for w in refined_words:
+                    if w.get("is_tuning_evidence"):
+                        continue
+                    x = (w["x0"] + w["x1"]) / 2
+                    y = (w["y0"] + w["y1"]) / 2
+                    if system.x0 - 55.0 <= x < system.x0 and system.line_ys[0] - 6.0 <= y <= system.line_ys[-1] + 6.0:
+                        left_words.append((w, x, y))
+
+                string_matches = {i: [] for i in range(6)}
+                for w, x, y in left_words:
+                    text = w["text"].strip()
+                    if _PITCH_LABEL_RE.match(text):
+                        distances = [abs(line_y - y) for line_y in system.line_ys]
+                        min_dist = min(distances)
+                        nearest_str_idx = distances.index(min_dist)
+                        if min_dist <= 3.0:
+                            string_matches[nearest_str_idx].append((w, min_dist))
+
+                if all(len(string_matches[i]) == 1 for i in range(6)):
+                    tuning_notes = [string_matches[i][0][0]["text"].upper() for i in range(6)]
+                    is_eadgbe = (tuning_notes == ["E", "B", "G", "D", "A", "E"])
+                    for i in range(6):
+                        w = string_matches[i][0][0]
+                        w["is_tuning_evidence"] = True
+                        if "warnings" not in w:
+                            w["warnings"] = []
+                        w["warnings"].extend([
+                            "pdf_tuning_explicit_strings_detected",
+                            "pdf_tuning_string_labels_aligned",
+                            "pdf_tuning_text_preserved_non_playable",
+                            "pdf_tuning_not_used_for_string_assignment",
+                            "pdf_tuning_not_used_for_fret_inference",
+                            "pdf_pitch_layout_evidence_detected"
+                        ])
+                        w["tuning_classification"] = "non_playable_tuning_text"
+                        w["tuning_string"] = i + 1
+                        w["tuning_system"] = system.system_index
+                        if is_eadgbe:
+                            w["warnings"].append("pdf_tuning_standard_detected")
+                    warnings.append({
+                        "code": "pdf_tuning_explicit_strings_detected",
+                        "message": f"Explicit six-string tuning labels detected on page {page_number}.",
+                        "severity": "info",
+                    })
+                    warnings.append({
+                        "code": "pdf_tuning_string_labels_aligned",
+                        "message": f"Tuning labels cleanly aligned with string lines on page {page_number}.",
+                        "severity": "info",
+                    })
+                else:
+                    has_conflict = any(len(string_matches[i]) > 1 for i in range(6))
+                    if has_conflict:
+                        for i in range(6):
+                            for w, _ in string_matches[i]:
+                                w["is_tuning_evidence"] = True
+                                if "warnings" not in w:
+                                    w["warnings"] = []
+                                w["warnings"].extend([
+                                    "pdf_tuning_conflict_detected",
+                                    "pdf_tuning_label_ambiguous",
+                                    "pdf_pitch_tuning_diagnostics_not_enough_for_build_ir"
+                                ])
+                                w["tuning_classification"] = "malformed_tuning_label"
+                        warnings.append({
+                            "code": "pdf_tuning_conflict_detected",
+                            "message": f"Tuning conflict detected on page {page_number}.",
+                            "severity": "warning",
+                        })
+                        warnings.append({
+                            "code": "pdf_tuning_label_ambiguous",
+                            "message": f"Ambiguous tuning label detected on page {page_number}.",
+                            "severity": "warning",
+                        })
+                        warnings.append({
+                            "code": "pdf_pitch_tuning_diagnostics_not_enough_for_build_ir",
+                            "message": f"Pitch/tuning diagnostics block build-ir on page {page_number}.",
+                            "severity": "warning",
+                        })
+
+            # Check for unassociated/outside tuning labels, chords, or section note names
+            for w in refined_words:
+                if w.get("is_tuning_evidence"):
+                    continue
+                text = w["text"].strip()
+                if text.lower() == "standard" or text.upper() in {"E", "B", "G", "D", "A", "F#", "C#"}:
+                    x = (w["x0"] + w["x1"]) / 2
+                    y = (w["y0"] + w["y1"]) / 2
+                    system = _nearest_system(systems, x, y)
+                    is_chord = False
+                    if system is not None:
+                        min_y = min(system.line_ys)
+                        tolerance = max(4.0, system.line_spacing * 0.38)
+                        if y < min_y - tolerance and system.x0 <= x <= system.x1:
+                            is_chord = True
+                    if is_chord:
+                        if "warnings" not in w:
+                            w["warnings"] = []
+                        w["warnings"].append("pdf_fret_chord_text_digit_excluded")
+                        w["tuning_classification"] = "chord_text_not_tuning"
+                        continue
+
+                    b_no = w.get("block_no") or 0
+                    l_no = w.get("line_no") or 0
+                    line_text = line_texts.get((b_no, l_no), "").lower()
+                    if "verse" in line_text or "intro" in line_text or "chorus" in line_text or "section" in line_text:
+                        if "warnings" not in w:
+                            w["warnings"] = []
+                        w["tuning_classification"] = "section_text_not_tuning"
+                        continue
+
+                    w["is_tuning_evidence"] = True
+                    if "warnings" not in w:
+                        w["warnings"] = []
+                    if system is None or not system.candidate_zone_contains(x, y):
+                        w["warnings"].append("pdf_tuning_label_outside_system")
+                        w["warnings"].append("pdf_tuning_label_unassociated")
+                        w["tuning_classification"] = "non_playable_tuning_text"
+                    else:
+                        w["warnings"].append("pdf_tuning_label_unassociated")
+                        w["tuning_classification"] = "non_playable_tuning_text"
+                    w["warnings"].extend([
+                        "pdf_tuning_text_preserved_non_playable",
+                        "pdf_tuning_not_used_for_string_assignment",
+                        "pdf_tuning_not_used_for_fret_inference",
+                        "pdf_pitch_layout_evidence_detected"
+                    ])
+
+            # Check for unassociated/outside tuning labels for ALL identified tuning evidence
+            for w in refined_words:
+                if not w.get("is_tuning_evidence"):
+                    continue
+                # If explicit string labels aligned, they are cleanly aligned and associated, so skip
+                if "pdf_tuning_string_labels_aligned" in w.get("warnings", []):
+                    continue
+
+                # Check system bounds
+                x = (w["x0"] + w["x1"]) / 2
+                y = (w["y0"] + w["y1"]) / 2
                 system = _nearest_system(systems, x, y)
-                line_index = None
-                string = None
-                string_distance = None
-                assignment_warnings: list[str] = []
+                if "warnings" not in w:
+                    w["warnings"] = []
+
+                if system is None or not system.candidate_zone_contains(x, y):
+                    if "pdf_tuning_label_outside_system" not in w["warnings"]:
+                        w["warnings"].append("pdf_tuning_label_outside_system")
+                    if "pdf_tuning_label_unassociated" not in w["warnings"]:
+                        w["warnings"].append("pdf_tuning_label_unassociated")
+                else:
+                    if "pdf_tuning_label_unassociated" not in w["warnings"]:
+                        w["warnings"].append("pdf_tuning_label_unassociated")
+
+            system_digits = {sys.system_index: [] for sys in systems}
+            system_digits_merged = {sys.system_index: [] for sys in systems}
+            non_playable_words = []
+
+            for rw in refined_words:
+                text = rw["text"]
+                x = (rw["x0"] + rw["x1"]) / 2
+                y = (rw["y0"] + rw["y1"]) / 2
+
+                if _point_in_ascii_block(ascii_blocks, x, y):
+                    continue
+                if ascii_blocks and parse_fret_text(text) is not None:
+                    continue
+
+                if rw.get("is_tuning_evidence"):
+                    non_playable_words.append(rw)
+                    continue
+
+                system = _nearest_system(systems, x, y)
+                if system is None:
+                    if text.isdigit() or any(c.isdigit() for c in text):
+                        rw["warnings"].append("pdf_fret_page_or_legend_number_excluded")
+                    non_playable_words.append(rw)
+                    continue
+
+                if not system.candidate_zone_contains(x, y):
+                    if text.isdigit() or any(c.isdigit() for c in text):
+                        rw["warnings"].append("pdf_fret_page_or_legend_number_excluded")
+                    non_playable_words.append(rw)
+                    continue
+
+                min_y = min(system.line_ys)
+                tolerance = max(4.0, system.line_spacing * 0.38)
+                is_above_staff = y < min_y - tolerance
+
+                if text.isdigit():
+                    system_digits[system.system_index].append(rw)
+                else:
+                    if any(c.isdigit() for c in text):
+                        rw["warnings"].append("pdf_fret_chord_text_digit_excluded")
+                    non_playable_words.append(rw)
+
+            for system in systems:
+                digits = system_digits.get(system.system_index, [])
+                if not digits:
+                    continue
+
+                digit_by_string = {s: [] for s in range(1, 7)}
+                unassigned_digits = []
+
+                for d in digits:
+                    y_center = (d["y0"] + d["y1"]) / 2
+                    height = d["y1"] - d["y0"]
+                    line_idx, string, string_dist, string_warnings = system.string_for_y(y_center, height)
+
+                    d["y_center"] = y_center
+                    d["height_val"] = height
+                    d["width_val"] = d["x1"] - d["x0"]
+
+                    if string is not None:
+                        d["assigned_string"] = string
+                        d["assigned_line_index"] = line_idx
+                        d["string_distance"] = string_dist
+                        d["string_warnings"] = string_warnings
+                        digit_by_string[string].append(d)
+                    else:
+                        d["string_distance"] = string_dist
+                        d["string_warnings"] = string_warnings
+                        unassigned_digits.append(d)
+
+                merged_on_system = []
+                for string in range(1, 7):
+                    string_digits = sorted(digit_by_string[string], key=lambda d: d["x0"])
+                    i = 0
+                    while i < len(string_digits):
+                        d1 = string_digits[i]
+                        j = i + 1
+
+                        merged_text = d1["text"]
+                        merged_x0 = d1["x0"]
+                        merged_y0 = d1["y0"]
+                        merged_x1 = d1["x1"]
+                        merged_y1 = d1["y1"]
+                        merged_warnings = list(d1.get("warnings", []))
+                        merged_provenance = list(d1.get("provenance", []))
+                        merged_string_warnings = list(d1.get("string_warnings", []))
+
+                        merged_gaps = []
+                        merged_y_deltas = []
+
+                        while j < len(string_digits):
+                            d2 = string_digits[j]
+                            gap = d2["x0"] - merged_x1
+                            y_center1 = (merged_y0 + merged_y1) / 2
+                            y_center2 = (d2["y0"] + d2["y1"]) / 2
+                            vertical_offset = abs(y_center2 - y_center1)
+
+                            if -3.0 <= gap <= 5.0:
+                                if vertical_offset <= 2.0:
+                                    merged_text += d2["text"]
+                                    merged_x1 = d2["x1"]
+                                    merged_y0 = min(merged_y0, d2["y0"])
+                                    merged_y1 = max(merged_y1, d2["y1"])
+                                    merged_warnings.append("pdf_fret_digits_merged")
+                                    merged_warnings.append("pdf_fret_split_text_span_merged")
+                                    merged_gaps.append(gap)
+                                    merged_y_deltas.append(vertical_offset)
+                                    j += 1
+                                else:
+                                    d2["warnings"].append("pdf_fret_digits_not_merged_vertical_misalignment")
+                                    d2["warnings"].append("pdf_fret_refinement_not_enough_for_build_ir")
+                                    break
+                            elif gap < -3.0:
+                                d2["warnings"].append("pdf_fret_digits_overlap_ambiguous")
+                                d2["warnings"].append("pdf_fret_refinement_not_enough_for_build_ir")
+                                merged_warnings.append("pdf_fret_digits_overlap_ambiguous")
+                                merged_warnings.append("pdf_fret_refinement_not_enough_for_build_ir")
+                                break
+                            elif 5.0 < gap <= 12.0:
+                                d2["warnings"].append("pdf_fret_digits_not_merged_gap_too_large")
+                                d2["warnings"].append("pdf_fret_refinement_not_enough_for_build_ir")
+                                break
+                            else:
+                                break
+
+                        merged_dict = {
+                            "x0": merged_x0,
+                            "y0": merged_y0,
+                            "x1": merged_x1,
+                            "y1": merged_y1,
+                            "text": merged_text,
+                            "block_no": d1["block_no"],
+                            "line_no": d1["line_no"],
+                            "word_no": d1["word_no"],
+                            "word_index": d1["word_index"],
+                            "warnings": merged_warnings,
+                            "provenance": merged_provenance,
+                            "assigned_string": string,
+                            "assigned_line_index": d1["assigned_line_index"],
+                            "string_distance": d1["string_distance"],
+                            "string_warnings": merged_string_warnings,
+                            "is_playable_fret": True,
+                            "fret_gaps": merged_gaps,
+                            "fret_y_deltas": merged_y_deltas,
+                        }
+                        merged_on_system.append(merged_dict)
+                        i = j
+
+                for ud in unassigned_digits:
+                    ud["is_playable_fret"] = True
+                    ud["assigned_string"] = None
+                    ud["assigned_line_index"] = None
+                    ud["string_distance"] = ud.get("string_distance")
+                    ud["string_warnings"] = ud.get("string_warnings", [])
+                    merged_on_system.append(ud)
+
+                system_digits_merged[system.system_index] = merged_on_system
+
+            # Horizontal overlap check between playable fret candidates and non-playable symbol candidates on each system
+            for system in systems:
+                merged_candidates = system_digits_merged.get(system.system_index, [])
+                if not merged_candidates:
+                    continue
+                system_non_playables = []
+                for npw in non_playable_words:
+                    npw_x = (npw["x0"] + npw["x1"]) / 2
+                    npw_y = (npw["y0"] + npw["y1"]) / 2
+                    if _nearest_system(systems, npw_x, npw_y) == system:
+                        system_non_playables.append(npw)
+
+                for mc in merged_candidates:
+                    for npw in system_non_playables:
+                        overlap = min(mc["x1"], npw["x1"]) - max(mc["x0"], npw["x0"])
+                        mc_y_center = (mc["y0"] + mc["y1"]) / 2
+                        npw_y_center = (npw["y0"] + npw["y1"]) / 2
+                        dy = abs(mc_y_center - npw_y_center)
+                        if overlap > 1.5 and dy <= 6.0:
+                            if "warnings" not in mc:
+                                mc["warnings"] = []
+                            if "pdf_fret_digit_symbol_overlap_ambiguous" not in mc["warnings"]:
+                                mc["warnings"].append("pdf_fret_digit_symbol_overlap_ambiguous")
+                            if "pdf_fret_refinement_not_enough_for_build_ir" not in mc["warnings"]:
+                                mc["warnings"].append("pdf_fret_refinement_not_enough_for_build_ir")
+
+            all_page_candidates = []
+            for sys in systems:
+                all_page_candidates.extend(system_digits_merged[sys.system_index])
+            all_page_candidates.extend(non_playable_words)
+
+            all_page_candidates.sort(key=lambda c: (round(c["y0"], 3), round(c["x0"], 3), c["text"]))
+
+            for pc in all_page_candidates:
+                raw_text = pc["text"]
+                bbox_values = [pc["x0"], pc["y0"], pc["x1"], pc["y1"]]
+                x = (pc["x0"] + pc["x1"]) / 2
+                y = (pc["y0"] + pc["y1"]) / 2
+
+                system = _nearest_system(systems, x, y)
+                line_index = pc.get("assigned_line_index")
+                string = pc.get("assigned_string")
+                string_distance = pc.get("string_distance")
+
+                if pc.get("is_tuning_evidence"):
+                    string = pc.get("tuning_string")
+                    line_index = pc.get("tuning_string")
+
+                assignment_warnings = list(pc.get("warnings", []))
+                is_fret_candidate = parse_fret_text(raw_text) is not None and not pc.get("is_tuning_evidence")
+
+                # Enforce size / range checks on playable Candidates
+                if is_fret_candidate and pc.get("is_playable_fret"):
+                    fret_val = parse_fret_text(raw_text)
+                    if fret_val is not None:
+                        if not (0 <= fret_val <= 24):
+                            assignment_warnings.append("pdf_fret_outside_valid_range")
+                            assignment_warnings.append("pdf_fret_refinement_not_enough_for_build_ir")
+
+                        height = pc["y1"] - pc["y0"]
+                        width = pc["x1"] - pc["x0"]
+                        line_spacing = system.line_spacing if system is not None else 12.0
+
+                        if height > line_spacing * 1.2 or height > 18.0:
+                            assignment_warnings.append("pdf_fret_bbox_too_tall")
+                            assignment_warnings.append("pdf_fret_refinement_not_enough_for_build_ir")
+                        if width > line_spacing * 2.5 or width > 35.0:
+                            assignment_warnings.append("pdf_fret_bbox_too_wide")
+                            assignment_warnings.append("pdf_fret_refinement_not_enough_for_build_ir")
+                        if width < 2.0 or height < 2.0:
+                            assignment_warnings.append("pdf_fret_bbox_too_small")
+                            assignment_warnings.append("pdf_fret_refinement_not_enough_for_build_ir")
+
+                        if len(raw_text) == 1:
+                            assignment_warnings.append("pdf_fret_single_digit_extracted")
+                        elif len(raw_text) > 1:
+                            assignment_warnings.append("pdf_fret_multidigit_extracted")
+
+                if not is_fret_candidate:
+                    if "pdf_fret_technique_marker_excluded" not in assignment_warnings and "pdf_fret_chord_text_digit_excluded" not in assignment_warnings and "pdf_fret_page_or_legend_number_excluded" not in assignment_warnings:
+                        classification = pc.get("tuning_classification")
+                        if classification == "chord_text_not_tuning":
+                            assignment_warnings.append("pdf_fret_chord_text_digit_excluded")
+                        elif classification == "section_text_not_tuning":
+                            assignment_warnings.append("pdf_fret_page_or_legend_number_excluded")
+                        elif classification == "non_playable_tuning_text":
+                            assignment_warnings.append("pdf_non_playable_text_not_string_assigned")
+                        else:
+                            from .tabraw import _looks_like_chord_symbol
+                            if _looks_like_chord_symbol(raw_text):
+                                assignment_warnings.append("pdf_fret_chord_text_digit_excluded")
+                            elif any(c.isdigit() for c in raw_text):
+                                assignment_warnings.append("pdf_fret_chord_text_digit_excluded")
+
                 if system is not None:
-                    line_index, string, string_distance, string_warnings = system.string_for_y(y)
-                    assignment_warnings.extend(string_warnings)
-                if system is not None:
+                    if x < system.x0 or x > system.x1:
+                        if "pdf_tuning_label_outside_system" not in assignment_warnings and "pdf_tuning_label_unassociated" not in assignment_warnings and not pc.get("is_tuning_evidence"):
+                            assignment_warnings.append("pdf_candidate_outside_system")
+                    string_warnings = pc.get("string_warnings", [])
+                    if is_fret_candidate:
+                        if string is None:
+                            assignment_warnings.append("pdf_playable_candidate_requires_string_assignment")
+                            assignment_warnings.append("pdf_string_assignment_missing")
+                            assignment_warnings.append("pdf_candidates_unassigned_to_string")
+                        elif len(raw_text) > 1:
+                            assignment_warnings.append("pdf_multidigit_fret_string_assigned")
+                    else:
+                        if "pdf_non_playable_text_not_string_assigned" not in assignment_warnings:
+                            assignment_warnings.append("pdf_non_playable_text_not_string_assigned")
+                    for w in string_warnings:
+                        if w not in assignment_warnings:
+                            assignment_warnings.append(w)
                     bar_index, bar_warnings = system.bar_for_x(x)
+                    if bar_index is None and is_fret_candidate:
+                        assignment_warnings.append("pdf_candidates_unassigned_to_bar")
+                        assignment_warnings.append("pdf_candidate_unassigned_to_bar")
+                        if len(system.barlines) < 2:
+                            assignment_warnings.append("pdf_candidate_unassigned_due_to_unboxed_system")
+                        if any(w in bar_warnings for w in ("missing_pdf_barlines", "pdf_barlines_missing", "pdf_candidate_outside_bar")):
+                            assignment_warnings.append("pdf_candidate_near_missing_bar_boundary")
+                    if is_fret_candidate:
+                        if "pdf_candidate_on_bar_boundary" in bar_warnings or "pdf_barlines_ambiguous" in bar_warnings:
+                            assignment_warnings.append("pdf_boundary_candidate_blocks_full_grouping")
                     assignment_warnings.extend(bar_warnings)
                 else:
                     bar_index = None
+                    if is_fret_candidate:
+                        assignment_warnings.append("pdf_candidates_unassigned_to_system")
+                        assignment_warnings.append("pdf_playable_candidate_requires_string_assignment")
+                        assignment_warnings.append("pdf_string_assignment_missing")
+                        assignment_warnings.append("pdf_candidates_unassigned_to_string")
+                    else:
+                        if "pdf_non_playable_text_not_string_assigned" not in assignment_warnings:
+                            assignment_warnings.append("pdf_non_playable_text_not_string_assigned")
+
                 bar_bounds = system.bar_bounds_for_x(x) if system is not None else None
-                confidence = _candidate_confidence(raw_text, system, string, bar_index, x)
-                if assignment_warnings:
+                height_val = pc["y1"] - pc["y0"]
+                width_val = pc["x1"] - pc["x0"]
+                line_spacing_val = system.line_spacing if system is not None else 12.0
+                confidence = _candidate_confidence(
+                    raw_text,
+                    system,
+                    string,
+                    bar_index,
+                    x,
+                    width=width_val,
+                    height=height_val,
+                    line_spacing=line_spacing_val,
+                    assignment_warnings=assignment_warnings,
+                )
+
+                if is_fret_candidate and confidence < 0.70:
+                    assignment_warnings.append("pdf_fret_optical_bounds_confidence_below_threshold")
+                    assignment_warnings.append("pdf_fret_refinement_not_enough_for_build_ir")
+
+                unsafe_assign = [w for w in assignment_warnings if w not in {
+                    "pdf_string_assignment_nearest_line",
+                    "pdf_multidigit_fret_string_assigned",
+                    "pdf_non_playable_text_not_string_assigned",
+                    "pdf_fret_single_digit_extracted",
+                    "pdf_fret_multidigit_extracted",
+                    "pdf_fret_digits_merged",
+                    "pdf_fret_split_text_span_merged",
+                    "pdf_fret_technique_marker_excluded",
+                    "pdf_fret_chord_text_digit_excluded",
+                    "pdf_fret_page_or_legend_number_excluded",
+                    # Pitch / Tuning Info Warnings
+                    "pdf_tuning_standard_detected",
+                    "pdf_tuning_explicit_strings_detected",
+                    "pdf_tuning_string_labels_aligned",
+                    "pdf_tuning_label_outside_system",
+                    "pdf_tuning_label_unassociated",
+                    "pdf_tuning_text_preserved_non_playable",
+                    "pdf_tuning_not_used_for_string_assignment",
+                    "pdf_tuning_not_used_for_fret_inference",
+                    "pdf_pitch_layout_evidence_detected",
+                    "pdf_timing_mapping_not_implemented",
+                }]
+                if unsafe_assign:
                     confidence = min(confidence, 0.65)
+
                 candidate = make_tab_candidate(
                     candidate_id=f"pdf-p{page_number:03d}-c{filtered_index + 1:04d}",
                     raw_text=raw_text,
@@ -436,10 +1682,10 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]])
                     line_index=line_index,
                     string=string,
                     raw={
-                        "pdf_word_index": word_index,
-                        "pdf_block_number": int(word[5]) if len(word) > 5 else None,
-                        "pdf_line_number": int(word[6]) if len(word) > 6 else None,
-                        "pdf_word_number": int(word[7]) if len(word) > 7 else None,
+                        "pdf_word_index": pc["word_index"],
+                        "pdf_block_number": pc["block_no"],
+                        "pdf_line_number": pc["line_no"],
+                        "pdf_word_number": pc["word_no"],
                         "grouping_version": "pdf-grouping.v0.1" if system is not None else None,
                         "system_inference": "six-horizontal-lines" if system is not None else None,
                         "grouping_status": system.grouping_status if system is not None else None,
@@ -449,6 +1695,10 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]])
                         "grouping_confidence": round(system.grouping_confidence, 3) if system is not None else None,
                         "grouping_warnings": system.grouping_warnings if system is not None else None,
                         "assignment_warnings": assignment_warnings or None,
+                        "refusal_reason": (
+                            assignment_warnings[0] if assignment_warnings
+                            else (system.grouping_warnings[0] if system is not None and system.grouping_warnings else None)
+                        ),
                         "tab_staff_bbox": system.staff_bbox if system is not None else None,
                         "tab_line_ys": [round(line_y, 3) for line_y in system.line_ys] if system is not None else None,
                         "barline_count": len(system.barlines) if system is not None else None,
@@ -463,6 +1713,13 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]])
                         else None,
                         "bar_x_min": round(bar_bounds[0], 3) if bar_bounds is not None else None,
                         "bar_x_max": round(bar_bounds[1], 3) if bar_bounds is not None else None,
+                        "barline_candidates_count": system.barline_candidates_count if system is not None else None,
+                        "valid_barline_count": system.valid_barline_count if system is not None else None,
+                        "rejected_barline_count": system.rejected_barline_count if system is not None else None,
+                        "rejection_reasons": system.rejection_reasons if system is not None else None,
+                        "barline_candidates_details": system.barline_candidates_details if system is not None else None,
+                        "fret_gaps": pc.get("fret_gaps", []),
+                        "fret_y_deltas": pc.get("fret_y_deltas", []),
                     },
                 )
                 if not _should_keep_candidate(candidate.model_dump(mode="json", exclude_none=True)):
@@ -908,11 +2165,11 @@ def _point_in_ascii_block(blocks: list[_AsciiTabBlock], x: float | None, y: floa
     return any(block.contains_point(x, y) for block in blocks)
 
 
-def _append_grouping_warnings(raw: dict[str, Any]) -> None:
+def _append_grouping_warnings(raw: dict[str, Any], meta: dict[str, int] | None = None) -> None:
     candidates = raw.get("candidates", [])
-    fret_candidates = [candidate for candidate in candidates if candidate.get("parsed_fret") is not None]
-    if not candidates or not fret_candidates:
+    if not candidates:
         return
+    fret_candidates = [candidate for candidate in candidates if candidate.get("parsed_fret") is not None]
 
     grouping_counts = {
         "total_candidate_count": len(candidates),
@@ -923,6 +2180,59 @@ def _append_grouping_warnings(raw: dict[str, Any]) -> None:
         "fret_candidates_with_bar": sum(1 for candidate in fret_candidates if candidate.get("bar_index") is not None),
         "fret_candidates_with_string": sum(1 for candidate in fret_candidates if candidate.get("string") is not None),
     }
+
+    if meta:
+        grouping_counts.update({
+            "detected_systems": meta.get("detected_systems", 0),
+            "detected_staves": meta.get("detected_staves", 0),
+            "detected_bar_boxes": meta.get("detected_bar_boxes", 0),
+            "detected_string_lines": meta.get("detected_string_lines", 0),
+        })
+        raw["warnings"].append({
+            "code": "pdf_layout_details",
+            "message": "Detected tab systems layout details.",
+            "severity": "info",
+            "detected_systems": meta.get("detected_systems", 0),
+            "detected_staves": meta.get("detected_staves", 0),
+            "detected_bar_boxes": meta.get("detected_bar_boxes", 0),
+            "detected_string_lines": meta.get("detected_string_lines", 0),
+        })
+
+    if (grouping_counts["fret_candidates_with_system"] == 0 and len(fret_candidates) > 0) or (meta is not None and meta.get("detected_systems", 0) == 0):
+        raw["warnings"].append({
+            "code": "pdf_no_systems_detected",
+            "message": "No horizontal tab systems were detected on the page(s).",
+            "severity": "warning",
+            "grouping_status": "missing",
+        })
+        raw["warnings"].append({
+            "code": "pdf_tab_staff_missing",
+            "message": "Tab staff lines are missing or not detected.",
+            "severity": "warning",
+            "grouping_status": "missing",
+        })
+        raw["warnings"].append({
+            "code": "pdf_string_lines_missing",
+            "message": "Tab string lines are completely missing.",
+            "severity": "warning",
+            "grouping_status": "missing",
+        })
+        if len(fret_candidates) > 0:
+            raw["warnings"].append({
+                "code": "pdf_tab_candidates_present_but_system_not_detected",
+                "message": "Playable fret candidates present, but no tab system detected.",
+                "severity": "warning",
+                "grouping_status": "missing",
+            })
+
+    if 0 < grouping_counts["fret_candidates_with_system"] < len(fret_candidates):
+        raw["warnings"].append({
+            "code": "pdf_partial_system_detection",
+            "message": "Horizontal tab systems were only partially detected.",
+            "severity": "warning",
+            "grouping_status": "partial",
+        })
+
     missing = []
     if grouping_counts["fret_candidates_with_system"] < len(fret_candidates):
         missing.append("system")
@@ -930,7 +2240,176 @@ def _append_grouping_warnings(raw: dict[str, Any]) -> None:
         missing.append("bar")
     if grouping_counts["fret_candidates_with_string"] < len(fret_candidates):
         missing.append("string")
-    unsafe_codes = _unsafe_grouping_codes(fret_candidates)
+
+    # Generate refined system-detection blocker taxonomy warnings
+    warning_codes_present = {w.get("code") for w in raw.get("warnings", [])}
+    if "pdf_no_systems_detected" in warning_codes_present or "pdf_tab_candidates_present_but_system_not_detected" in warning_codes_present:
+        raw["warnings"].append({
+            "code": "pdf_drawn_system_not_detected",
+            "message": "Drawn tab system was not detected or resolved.",
+            "severity": "warning",
+            "grouping_status": "missing"
+        })
+        raw["warnings"].append({
+            "code": "pdf_system_detection_not_enough_for_build_ir",
+            "message": "PDF system detection is incomplete and not safe to build IR.",
+            "severity": "warning",
+            "grouping_status": "missing"
+        })
+    if "pdf_drawn_geometry_present_but_staff_unresolved" in warning_codes_present or "pdf_tab_staff_lines_fragmented" in warning_codes_present:
+        raw["warnings"].append({
+            "code": "pdf_drawn_staff_lines_unresolved",
+            "message": "Drawn staff lines are fragmented, overlapping, or unresolved.",
+            "severity": "warning",
+            "grouping_status": "missing"
+        })
+
+    if "pdf_multi_system_order_ambiguous" in warning_codes_present or "pdf_system_order_ambiguous" in warning_codes_present or "pdf_tab_staff_ambiguous" in warning_codes_present:
+        raw["warnings"].append({
+            "code": "pdf_drawn_system_ambiguous",
+            "message": "Tab system layout vertical ordering is ambiguous.",
+            "severity": "warning",
+            "grouping_status": "ambiguous"
+        })
+
+    ascii_candidates = [c for c in candidates if isinstance(c.get("raw"), dict) and c["raw"].get("parser_version") == "ascii-tab.v0.1"]
+    if "ascii_tab_detected" in warning_codes_present or ascii_candidates:
+        raw["warnings"].append({
+            "code": "pdf_ascii_system_detected",
+            "message": "ASCII tab system block was detected.",
+            "severity": "info",
+            "grouping_status": "ascii_grouped"
+        })
+        if "ascii_tab_measure_boundary_missing" in warning_codes_present:
+            raw["warnings"].append({
+                "code": "pdf_ascii_system_measure_boundaries_missing",
+                "message": "ASCII blocks lack aligned bar separators to define measure boundaries.",
+                "severity": "warning",
+                "grouping_status": "ascii_grouped"
+            })
+        if "ascii_tab_timing_unavailable" in warning_codes_present or "partial_ascii_tab_timing" in warning_codes_present or "ambiguous_ascii_tab_timing" in warning_codes_present:
+            raw["warnings"].append({
+                "code": "pdf_ascii_system_timing_unavailable",
+                "message": "ASCII blocks lack safe timing or alignment evidence.",
+                "severity": "warning",
+                "grouping_status": "ascii_grouped"
+            })
+            raw["warnings"].append({
+                "code": "pdf_input_class_ascii_tab_requires_alignment",
+                "message": "ASCII-tab input class requires an alignment sidecar.",
+                "severity": "warning",
+                "grouping_status": "ascii_grouped"
+            })
+
+    has_systems = (meta is not None and meta.get("detected_systems", 0) > 0) or grouping_counts["fret_candidates_with_system"] > 0
+    has_bars = (meta is not None and meta.get("detected_bar_boxes", 0) > 0) or grouping_counts["fret_candidates_with_bar"] > 0
+    if has_systems and not has_bars:
+        raw["warnings"].append({
+            "code": "pdf_system_detected_bar_detection_missing",
+            "message": "System detection succeeded, but bar/barline detection is missing.",
+            "severity": "warning",
+            "grouping_status": "missing"
+        })
+        raw["warnings"].append({
+            "code": "pdf_input_class_drawn_tab_requires_barlines",
+            "message": "Drawn-tab input class requires visible barlines.",
+            "severity": "warning",
+            "grouping_status": "missing"
+        })
+
+    is_blocked = ("pdf_grouping_not_safe_for_build_ir" in warning_codes_present or "pdf_missing_pdf_grouping_blocks_build_ir" in warning_codes_present or "missing_pdf_grouping" in warning_codes_present)
+    if has_systems and is_blocked:
+        raw["warnings"].append({
+            "code": "pdf_system_detection_succeeded_but_grouping_incomplete",
+            "message": "System detection succeeded, but overall layout grouping remains partial or unsafe.",
+            "severity": "warning",
+            "grouping_status": "partial"
+        })
+    if has_systems and has_bars and ("pdf_candidates_unassigned_to_string" in warning_codes_present or "pdf_string_assignment_missing" in warning_codes_present or "pdf_string_assignment_ambiguous" in warning_codes_present or "pdf_string_lines_missing" in warning_codes_present):
+        raw["warnings"].append({
+            "code": "pdf_bar_detection_succeeded_string_assignment_pending",
+            "message": "Bar detection succeeded, but string assignment is the next blocker.",
+            "severity": "warning",
+            "grouping_status": "partial"
+        })
+
+    unsafe_codes = _unsafe_grouping_codes(fret_candidates, raw.get("warnings", []))
+    if grouping_counts["fret_candidates_with_string"] < len(fret_candidates):
+        raw["warnings"].append({
+            "code": "pdf_string_assignment_not_enough_for_build_ir",
+            "message": "One or more playable fret candidates lack safe string assignment.",
+            "severity": "warning",
+            "grouping_status": "partial"
+        })
+    elif len(fret_candidates) > 0:
+        upstream_blockers = {
+            "pdf_bar_box_one_boundary_rejected",
+            "pdf_partial_grouping_one_system_unboxed",
+            "pdf_bar_boxes_not_constructible",
+            "pdf_barlines_missing",
+            "missing_pdf_barlines",
+            "pdf_bar_boxes_missing",
+            "pdf_bar_box_edge_boundary_fallback_rejected",
+            "pdf_bar_box_edge_boundary_ambiguous",
+            "pdf_bar_box_inferred_boundary_too_narrow",
+            "pdf_bar_box_inferred_boundary_candidate_ambiguous",
+            "pdf_bar_box_inferred_boundary_requires_clear_system_edge",
+            "pdf_bar_box_inferred_boundary_not_enough_for_build_ir",
+        }
+        all_grouping_warnings = {w.get("code") for w in raw.get("warnings", []) if w.get("code")}
+        for candidate in fret_candidates:
+            cand_raw = candidate.get("raw")
+            if isinstance(cand_raw, dict):
+                gws = cand_raw.get("grouping_warnings")
+                if isinstance(gws, list):
+                    for gw in gws:
+                        all_grouping_warnings.add(gw)
+        if any(ub in all_grouping_warnings for ub in upstream_blockers):
+            raw["warnings"].append({
+                "code": "pdf_string_assignment_succeeded_upstream_grouping_still_blocks",
+                "message": "String assignment succeeded for all playable candidates, but upstream grouping still blocks full grouping.",
+                "severity": "warning",
+                "grouping_status": "partial"
+            })
+
+    unsafe_codes = _unsafe_grouping_codes(fret_candidates, raw.get("warnings", []))
+    if unsafe_codes or missing:
+        raw["warnings"].append({
+            "code": "pdf_grouping_not_safe_for_build_ir",
+            "message": "PDF grouping contains warnings and is not safe to build IR.",
+            "severity": "warning",
+            "grouping_status": "partial" if unsafe_codes else "missing",
+        })
+        raw["warnings"].append({
+            "code": "pdf_missing_pdf_grouping_blocks_build_ir",
+            "message": "Missing PDF grouping blocks build-ir from writing ScoreIR.",
+            "severity": "warning",
+            "grouping_status": "missing",
+        })
+        raw["warnings"].append({
+            "code": "pdf_layout_detection_requires_manual_review",
+            "message": "PDF layout grouping is unsafe and requires manual review.",
+            "severity": "warning",
+            "grouping_status": "partial" if unsafe_codes else "missing",
+        })
+        if len(fret_candidates) > 0 and unsafe_codes:
+            raw["warnings"].append({
+                "code": "pdf_partial_grouping_with_playable_candidates",
+                "message": "Playable candidates exist but grouping is partial and unsafe.",
+                "severity": "warning",
+                "grouping_status": "partial",
+            })
+        has_low_confidence = any(c.get("confidence", 1.0) < 0.7 for c in fret_candidates)
+        if has_low_confidence:
+            raw["warnings"].append({
+                "code": "pdf_grouping_confidence_below_threshold",
+                "message": "Fret grouping confidence is below safe threshold.",
+                "severity": "warning",
+                "grouping_status": "partial",
+            })
+        # Re-evaluate unsafe codes to include the new ones
+        unsafe_codes = _unsafe_grouping_codes(fret_candidates, raw.get("warnings", []))
+
     if unsafe_codes:
         raw["warnings"].append(
             {
@@ -962,14 +2441,159 @@ def _append_grouping_warnings(raw: dict[str, Any]) -> None:
                 "missing_grouping_dimensions": missing,
             }
         )
+    if not unsafe_codes and not missing:
+        raw["warnings"].append(
+            {
+                "code": "pdf_grouping_complete",
+                "message": "PDF layout grouping is complete.",
+                "severity": "info",
+                "grouping_status": "grouped",
+            }
+        )
 
 
-def _unsafe_grouping_codes(fret_candidates: list[dict[str, Any]]) -> list[str]:
+def _unsafe_grouping_codes(fret_candidates: list[dict[str, Any]], page_warnings: list[dict[str, Any]]) -> list[str]:
     drawn_grouping_codes = {
         "missing_pdf_barlines",
         "incomplete_tab_staff",
         "ambiguous_string_assignment",
         "ambiguous_bar_assignment",
+
+        "pdf_no_systems_detected",
+        "pdf_partial_system_detection",
+        "pdf_tab_staff_missing",
+        "pdf_tab_staff_incomplete",
+        "pdf_tab_staff_ambiguous",
+        "pdf_barlines_missing",
+        "pdf_barlines_ambiguous",
+        "pdf_bar_boxes_missing",
+        "pdf_string_lines_missing",
+        "pdf_string_assignment_missing",
+        "pdf_string_assignment_ambiguous",
+        "pdf_candidate_outside_system",
+        "pdf_candidate_outside_bar",
+        "pdf_candidate_between_strings",
+        "pdf_multi_system_order_ambiguous",
+        "pdf_page_layout_unsupported",
+        "pdf_text_candidate_without_geometry",
+        "pdf_ascii_and_drawn_layout_conflict",
+        "pdf_grouping_not_safe_for_build_ir",
+
+        # New Phase 4/8 Codes
+        "pdf_text_geometry_present_but_no_safe_system",
+        "pdf_tab_candidates_present_but_system_not_detected",
+        "pdf_drawn_geometry_present_but_staff_unresolved",
+        "pdf_tab_staff_lines_fragmented",
+        "pdf_tab_staff_lines_overlapping",
+        "pdf_tab_staff_spacing_inconsistent",
+        "pdf_system_bbox_ambiguous",
+        "pdf_system_order_ambiguous",
+        "pdf_candidates_unassigned_to_system",
+        "pdf_candidates_unassigned_to_bar",
+        "pdf_candidates_unassigned_to_string",
+        "pdf_partial_grouping_with_playable_candidates",
+        "pdf_grouping_confidence_below_threshold",
+        "pdf_missing_pdf_grouping_blocks_build_ir",
+        "pdf_layout_detection_requires_manual_review",
+
+        # Refined system-detection taxonomy blocker codes
+        "pdf_drawn_system_not_detected",
+        "pdf_drawn_system_ambiguous",
+        "pdf_drawn_staff_lines_unresolved",
+        "pdf_ascii_system_detected",
+        "pdf_ascii_system_measure_boundaries_missing",
+        "pdf_ascii_system_timing_unavailable",
+        "pdf_system_detected_bar_detection_missing",
+        "pdf_system_detection_succeeded_but_grouping_incomplete",
+        "pdf_input_class_ascii_tab_requires_alignment",
+        "pdf_input_class_drawn_tab_requires_barlines",
+        "pdf_system_detection_not_enough_for_build_ir",
+
+        # Refined bar-detection taxonomy blocker codes
+        "pdf_barlines_not_detected_in_system",
+        "pdf_barline_candidates_present_but_invalid",
+        "pdf_barline_does_not_cross_staff",
+        "pdf_barline_too_short",
+        "pdf_barline_outside_system_bounds",
+        "pdf_barline_ambiguous",
+        "pdf_bar_boxes_not_constructible",
+        "pdf_bar_detection_succeeded_string_assignment_pending",
+        "pdf_bar_detection_not_enough_for_build_ir",
+
+        # Refined barline-validation taxonomy blocker codes
+        "pdf_barline_too_short_absolute",
+        "pdf_barline_too_short_relative_to_staff",
+        "pdf_barline_crosses_insufficient_string_gaps",
+        "pdf_barline_partial_staff_crossing",
+        "pdf_barline_outside_staff_region",
+        "pdf_barline_rejected_relative_height",
+        "pdf_barline_validation_threshold_boundary",
+        "pdf_barline_validation_not_enough_for_build_ir",
+
+        # New Phase 6 Bar Box Construction Codes
+        "pdf_bar_box_requires_two_boundaries",
+        "pdf_bar_box_missing_left_boundary",
+        "pdf_bar_box_missing_right_boundary",
+        "pdf_bar_box_boundary_ambiguous",
+        "pdf_bar_box_too_narrow",
+        "pdf_bar_box_overlaps_neighbor",
+        "pdf_bar_box_outside_system_bounds",
+        "pdf_candidate_between_bar_boxes",
+        "pdf_candidate_on_bar_boundary",
+        "pdf_candidate_boundary_ambiguous",
+        "pdf_candidate_unassigned_to_bar",
+        "pdf_partial_grouping_one_system_unboxed",
+        "pdf_bar_box_construction_not_enough_for_build_ir",
+
+        # New Phase 7 Bar Box Construction Edge Cases Codes
+        "pdf_bar_box_single_system_failure",
+        "pdf_bar_box_edge_system_missing_boundary",
+        "pdf_bar_box_one_boundary_rejected",
+        "pdf_barline_short_but_near_staff_boundary",
+        "pdf_barline_ambiguous_on_edge_system",
+        "pdf_candidate_unassigned_due_to_unboxed_system",
+        "pdf_candidate_near_missing_bar_boundary",
+        "pdf_boundary_candidate_blocks_full_grouping",
+        "pdf_full_grouping_requires_all_systems_boxed",
+        "pdf_grouping_complete_all_playable_candidates_assigned",
+
+        # New Phase 8 Edge System Boundary Fallback Codes
+        "pdf_bar_box_edge_boundary_fallback_rejected",
+        "pdf_bar_box_edge_boundary_ambiguous",
+        "pdf_bar_box_inferred_boundary_too_narrow",
+        "pdf_bar_box_inferred_boundary_candidate_ambiguous",
+        "pdf_bar_box_inferred_boundary_requires_clear_system_edge",
+        "pdf_bar_box_inferred_boundary_not_enough_for_build_ir",
+
+        # New PDF String Assignment Codes
+        "pdf_string_assignment_outside_staff",
+        "pdf_string_assignment_between_lines",
+        "pdf_string_assignment_too_far_from_line",
+        "pdf_string_assignment_overlaps_multiple_bands",
+        "pdf_string_assignment_confidence_below_threshold",
+        "pdf_string_assignment_compact_staff_ambiguous",
+        "pdf_playable_candidate_requires_string_assignment",
+        "pdf_string_assignment_not_enough_for_build_ir",
+
+        # New Fret Refinement Blocker Codes
+        "pdf_fret_digits_not_merged_gap_too_large",
+        "pdf_fret_digits_not_merged_vertical_misalignment",
+        "pdf_fret_digits_overlap_ambiguous",
+        "pdf_fret_digit_symbol_overlap_ambiguous",
+        "pdf_fret_bbox_too_tall",
+        "pdf_fret_bbox_too_wide",
+        "pdf_fret_bbox_too_small",
+        "pdf_fret_outside_valid_range",
+        "pdf_fret_non_digit_rejected",
+        "pdf_fret_optical_bounds_confidence_below_threshold",
+        "pdf_fret_refinement_not_enough_for_build_ir",
+
+        # New Pitch / Tuning Blocker Codes
+        "pdf_tuning_conflict_detected",
+        "pdf_tuning_label_ambiguous",
+        "pdf_tuning_label_malformed",
+        "pdf_tuning_format_unsupported",
+        "pdf_pitch_tuning_diagnostics_not_enough_for_build_ir",
     }
     codes: set[str] = set()
     for candidate in fret_candidates:
@@ -980,6 +2604,10 @@ def _unsafe_grouping_codes(fret_candidates: list[dict[str, Any]]) -> list[str]:
             values = raw.get(field, [])
             if isinstance(values, list):
                 codes.update(str(value) for value in values if value in drawn_grouping_codes)
+    for warning in page_warnings:
+        code = warning.get("code")
+        if code in drawn_grouping_codes:
+            codes.add(code)
     return sorted(codes)
 
 
@@ -989,6 +2617,147 @@ def _specific_grouping_warning(code: str, grouping_counts: dict[str, int]) -> di
         "incomplete_tab_staff": "A partial tab staff was inferred, but fewer than six string lines were detected.",
         "ambiguous_string_assignment": "One or more fret candidates are too far from a single string line to assign safely.",
         "ambiguous_bar_assignment": "One or more fret candidates are too close to a bar boundary to assign safely.",
+
+        "pdf_no_systems_detected": "No horizontal tab systems were detected on the page(s).",
+        "pdf_partial_system_detection": "Horizontal tab systems were only partially detected.",
+        "pdf_tab_staff_missing": "Tab staff lines are missing or not detected.",
+        "pdf_tab_staff_incomplete": "A partial tab staff was inferred, but fewer than six string lines were detected.",
+        "pdf_tab_staff_ambiguous": "Tab systems layout is ambiguous due to vertical overlap.",
+        "pdf_barlines_missing": "A tab staff was inferred, but reliable barlines were not detected.",
+        "pdf_barlines_ambiguous": "One or more fret candidates are too close to a barline to assign safely.",
+        "pdf_bar_boxes_missing": "Measure bar boxes could not be inferred.",
+        "pdf_string_lines_missing": "Tab string lines are completely missing.",
+        "pdf_string_assignment_missing": "String lines were not detected, or the candidate is too far to assign.",
+        "pdf_string_assignment_ambiguous": "Candidate is too far from a single string line to assign safely.",
+        "pdf_candidate_outside_system": "Candidate is located horizontally outside the detected tab system.",
+        "pdf_candidate_outside_bar": "Candidate is located outside the detected system barlines.",
+        "pdf_candidate_between_strings": "Candidate is located too far from string lines (between strings).",
+        "pdf_multi_system_order_ambiguous": "Multiple tab systems have vertically overlapping ranges.",
+        "pdf_page_layout_unsupported": "Page layout is unsupported.",
+        "pdf_text_candidate_without_geometry": "Candidate text lacks valid geometry.",
+        "pdf_ascii_and_drawn_layout_conflict": "Both ASCII blocks and drawn systems exist on page.",
+        "pdf_grouping_not_safe_for_build_ir": "PDF grouping contains warnings and is not safe to build IR.",
+
+        # New messages
+        "pdf_text_geometry_present_but_no_safe_system": "Text and drawn geometry both present, but no safe system box can be inferred.",
+        "pdf_tab_candidates_present_but_system_not_detected": "Playable fret candidates present, but no tab system detected.",
+        "pdf_drawn_geometry_present_but_staff_unresolved": "Drawn geometry present, but staff unresolved.",
+        "pdf_tab_staff_lines_fragmented": "Six-ish tab lines present but fragmented or broken so staff is unresolved.",
+        "pdf_tab_staff_lines_overlapping": "Tab staff lines are overlapping and unresolved.",
+        "pdf_tab_staff_spacing_inconsistent": "Tab staff spacing is inconsistent and unresolved.",
+        "pdf_system_bbox_ambiguous": "Tab system bounding boxes are overlapping or ambiguous.",
+        "pdf_system_order_ambiguous": "System order is ambiguous across visually close systems.",
+        "pdf_candidates_unassigned_to_system": "Candidates inside page but unassigned to any system.",
+        "pdf_candidates_unassigned_to_bar": "Candidates inside a detected system but outside all detected bars.",
+        "pdf_candidates_unassigned_to_string": "Candidates inside a detected system/bar but not assignable to a string.",
+        "pdf_partial_grouping_with_playable_candidates": "Playable candidates exist but grouping is partial and unsafe.",
+        "pdf_grouping_confidence_below_threshold": "Fret grouping confidence is below safe threshold.",
+        "pdf_missing_pdf_grouping_blocks_build_ir": "Missing PDF grouping blocks build-ir from writing ScoreIR.",
+        "pdf_layout_detection_requires_manual_review": "PDF layout grouping is unsafe and requires manual review.",
+
+        # Refined blocker taxonomy messages
+        "pdf_drawn_system_not_detected": "Drawn tab system was not detected or resolved.",
+        "pdf_drawn_system_ambiguous": "Tab system layout vertical ordering is ambiguous.",
+        "pdf_drawn_staff_lines_unresolved": "Drawn staff lines are fragmented, overlapping, or unresolved.",
+        "pdf_ascii_system_detected": "ASCII tab system block was detected.",
+        "pdf_ascii_system_measure_boundaries_missing": "ASCII blocks lack aligned bar separators to define measure boundaries.",
+        "pdf_ascii_system_timing_unavailable": "ASCII blocks lack safe timing or alignment evidence.",
+        "pdf_system_detected_bar_detection_missing": "System detection succeeded, but bar/barline detection is missing.",
+        "pdf_system_detection_succeeded_but_grouping_incomplete": "System detection succeeded, but overall layout grouping remains partial or unsafe.",
+        "pdf_input_class_ascii_tab_requires_alignment": "ASCII-tab input class requires an alignment sidecar.",
+        "pdf_input_class_drawn_tab_requires_barlines": "Drawn-tab input class requires visible barlines.",
+        "pdf_system_detection_not_enough_for_build_ir": "PDF system detection is incomplete and not safe to build IR.",
+
+        # Refined bar-detection blocker taxonomy messages
+        "pdf_barlines_not_detected_in_system": "System detected but no barlines found.",
+        "pdf_barline_candidates_present_but_invalid": "Barline candidates exist but are invalid.",
+        "pdf_barline_does_not_cross_staff": "Vertical lines present but do not cross tab staff.",
+        "pdf_barline_too_short": "Vertical lines too short to trust.",
+        "pdf_barline_outside_system_bounds": "Barlines outside detected system bounds.",
+        "pdf_barline_ambiguous": "Ambiguous extra vertical lines detected.",
+        "pdf_bar_boxes_not_constructible": "Measure bar boxes could not be constructed from barlines.",
+        "pdf_bar_detection_succeeded_string_assignment_pending": "Bar detection succeeded, but string assignment is the next blocker.",
+        "pdf_bar_detection_not_enough_for_build_ir": "PDF bar detection is incomplete and not safe to build IR.",
+
+        # Refined barline-validation blocker taxonomy messages
+        "pdf_barline_too_short_absolute": "Barline height below absolute threshold.",
+        "pdf_barline_too_short_relative_to_staff": "Barline height below relative staff-crossing threshold.",
+        "pdf_barline_crosses_insufficient_string_gaps": "Barline candidate crosses too few string gaps.",
+        "pdf_barline_partial_staff_crossing": "Barline candidate crosses only part of the tab staff.",
+        "pdf_barline_outside_staff_region": "Barline candidate is outside the staff region.",
+        "pdf_barline_rejected_relative_height": "Barline candidate rejected by relative staff-height check.",
+        "pdf_barline_validation_threshold_boundary": "Barline candidate is at validation threshold boundary.",
+        "pdf_barline_validation_not_enough_for_build_ir": "Barline validation is incomplete and not safe to build IR.",
+
+        # New Phase 6 Bar Box Construction messages
+        "pdf_bar_box_requires_two_boundaries": "A bar box requires at least two accepted barlines to define its boundaries.",
+        "pdf_bar_box_missing_left_boundary": "A bar box is missing its left boundary.",
+        "pdf_bar_box_missing_right_boundary": "A bar box is missing its right boundary.",
+        "pdf_bar_box_boundary_ambiguous": "The boundary of the bar box is ambiguous.",
+        "pdf_bar_box_too_narrow": "One or more bar boxes are too narrow to trust.",
+        "pdf_bar_box_overlaps_neighbor": "One or more bar boxes overlap with their neighbors.",
+        "pdf_bar_box_outside_system_bounds": "One or more bar boxes extend outside system horizontal bounds.",
+        "pdf_candidate_between_bar_boxes": "Fret candidate lies between bar boxes.",
+        "pdf_candidate_on_bar_boundary": "Fret candidate lies exactly or nearly on a bar boundary.",
+        "pdf_candidate_boundary_ambiguous": "Fret candidate boundary assignment is ambiguous.",
+        "pdf_candidate_unassigned_to_bar": "Fret candidate lies outside all constructed bar boxes.",
+        "pdf_partial_grouping_one_system_unboxed": "PDF grouping is partial because at least one system lacks bar boxes.",
+        "pdf_grouping_complete": "PDF layout grouping is complete.",
+        "pdf_bar_box_construction_not_enough_for_build_ir": "PDF bar-box construction is incomplete and not safe to build IR.",
+
+        # New Phase 7 Bar Box Construction Edge Cases messages
+        "pdf_bar_box_single_system_failure": "PDF grouping contains a system with zero accepted barlines.",
+        "pdf_bar_box_edge_system_missing_boundary": "An edge system is missing one or more boundaries.",
+        "pdf_bar_box_one_boundary_rejected": "One accepted and one rejected boundary detected on system.",
+        "pdf_barline_short_but_near_staff_boundary": "Short barlines detected near the staff boundaries.",
+        "pdf_barline_ambiguous_on_edge_system": "Ambiguous barlines detected on edge system.",
+        "pdf_candidate_unassigned_due_to_unboxed_system": "Fret candidate is unassigned because its system lacks boxes.",
+        "pdf_candidate_near_missing_bar_boundary": "Fret candidate is near a missing bar boundary.",
+        "pdf_boundary_candidate_blocks_full_grouping": "Boundary candidate ambiguity blocks full grouping.",
+        "pdf_full_grouping_requires_all_systems_boxed": "Full grouping is blocked because one or more systems lack bar boxes.",
+        "pdf_grouping_complete_all_playable_candidates_assigned": "All playable fret candidates are safely assigned to systems, bars, and strings.",
+
+        # New Phase 8 Edge System Boundary Fallback messages
+        "pdf_bar_box_edge_boundary_fallback_rejected": "Edge boundary fallback was rejected.",
+        "pdf_bar_box_edge_boundary_ambiguous": "Edge boundary fallback is ambiguous.",
+        "pdf_bar_box_inferred_boundary_too_narrow": "Inferred boundary is too narrow.",
+        "pdf_bar_box_inferred_boundary_candidate_ambiguous": "Fret candidate is too close to inferred boundary.",
+        "pdf_bar_box_inferred_boundary_requires_clear_system_edge": "Inferred boundary requires clear system edge.",
+        "pdf_bar_box_inferred_boundary_not_enough_for_build_ir": "Inferred boundary is incomplete.",
+
+        # New PDF String Assignment Messages
+        "pdf_string_assignment_nearest_line": "Fret candidate assigned to the nearest string line.",
+        "pdf_string_assignment_outside_staff": "Fret candidate lies outside the vertical bounds of the tab staff.",
+        "pdf_string_assignment_between_lines": "Fret candidate lies exactly between two string lines.",
+        "pdf_string_assignment_too_far_from_line": "Fret candidate is too far from any string line to assign safely.",
+        "pdf_string_assignment_overlaps_multiple_bands": "Fret candidate bounding box height overlaps multiple string lines.",
+        "pdf_string_assignment_confidence_below_threshold": "String assignment confidence is below safe threshold.",
+        "pdf_string_assignment_compact_staff_ambiguous": "Tab staff spacing is too compact for safe string assignment.",
+        "pdf_playable_candidate_requires_string_assignment": "Playable fret candidates require unambiguous string assignment.",
+        "pdf_non_playable_text_not_string_assigned": "Non-playable text candidate does not require string assignment.",
+        "pdf_multidigit_fret_string_assigned": "Multi-digit fret candidate successfully assigned to string.",
+        "pdf_string_assignment_not_enough_for_build_ir": "One or more playable fret candidates lack safe string assignment.",
+        "pdf_string_assignment_succeeded_upstream_grouping_still_blocks": "String assignment succeeded for all playable candidates, but upstream system/bar grouping still blocks full grouping.",
+
+        # New Fret Refinement Messages
+        "pdf_fret_single_digit_extracted": "Single-digit fret successfully extracted.",
+        "pdf_fret_multidigit_extracted": "Multi-digit fret successfully extracted.",
+        "pdf_fret_digits_merged": "Horizontally adjacent digits successfully merged.",
+        "pdf_fret_digits_not_merged_gap_too_large": "Adjacent digits too far apart horizontally to merge safely.",
+        "pdf_fret_digits_not_merged_vertical_misalignment": "Adjacent digits vertically misaligned and not merged safely.",
+        "pdf_fret_digits_overlap_ambiguous": "Playable fret candidates overlap horizontally too deeply or ambiguously.",
+        "pdf_fret_digit_symbol_overlap_ambiguous": "Playable fret candidate overlaps with adjacent technique symbol or is a squished ligature.",
+        "pdf_fret_split_text_span_merged": "Split text span digits merged into one candidate.",
+        "pdf_fret_bbox_too_tall": "Fret candidate bounding box is too tall to be a valid fret.",
+        "pdf_fret_bbox_too_wide": "Fret candidate bounding box is too wide to be a valid fret.",
+        "pdf_fret_bbox_too_small": "Fret candidate bounding box is too small or noisy to be a valid fret.",
+        "pdf_fret_outside_valid_range": "Fret candidate value is outside allowed valid range (0-24).",
+        "pdf_fret_non_digit_rejected": "Fret candidate contains non-digit characters and is rejected.",
+        "pdf_fret_technique_marker_excluded": "Technique symbol near fret digit excluded from playable value.",
+        "pdf_fret_chord_text_digit_excluded": "Chord symbol or section text digit above staff excluded from fret evidence.",
+        "pdf_fret_page_or_legend_number_excluded": "Page or legend number outside tab system excluded from fret evidence.",
+        "pdf_fret_optical_bounds_confidence_below_threshold": "Fret optical bounds confidence is below safe threshold.",
+        "pdf_fret_refinement_not_enough_for_build_ir": "One or more playable fret candidates lack unambiguous digit grouping/extraction.",
     }
     return {
         "code": code,
@@ -1036,6 +2805,20 @@ def _write_grouping_artifacts(
         "diagnostic_html": _relative_artifact_path(html_path, out_dir),
         "overlay_images": [_relative_artifact_path(path, out_dir) for path in overlay_paths],
     }
+
+    from score2gp.report import build_pdf_edge_boundary_report, write_pdf_edge_boundary_report_html
+
+    edge_report = build_pdf_edge_boundary_report(raw)
+    if edge_report:
+        edge_json_path = out_dir / "pdf-edge-boundary-report.json"
+        edge_json_path.write_text(json.dumps(edge_report, indent=2), encoding="utf-8")
+
+        edge_html_path = out_dir / "pdf-edge-boundary-report.html"
+        write_pdf_edge_boundary_report_html(edge_html_path, edge_report)
+
+        artifacts["pdf_edge_boundary_report_json"] = _relative_artifact_path(edge_json_path, out_dir)
+        artifacts["pdf_edge_boundary_report_html"] = _relative_artifact_path(edge_html_path, out_dir)
+
     report = build_grouping_diagnostics(
         source_pdf=pdf_path,
         inspection=inspection,
@@ -1073,6 +2856,10 @@ def _write_grouping_overlays(
         message = "ASCII tab rows found; row/string grouping inferred, timing alignment unavailable"
     elif grouping_status == "partial_ascii":
         message = "ASCII tab rows found; row grouping is partial"
+    elif grouping_status == "ambiguous":
+        message = "candidate text found; tab staff/bar/string grouping is ambiguous"
+    elif grouping_status == "unsupported":
+        message = "candidate text found; tab staff layout is unsupported"
 
     overlay_paths: list[Path] = []
     with fitz.open(pdf_path) as doc:
@@ -1219,7 +3006,34 @@ def _relative_artifact_path(path: Path, base: Path) -> str:
 def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
     segments = list(_drawing_segments(page.get_drawings()))
     horizontal = sorted((segment for segment in segments if segment.is_horizontal), key=lambda segment: segment.y0)
-    vertical = sorted((segment for segment in segments if segment.is_vertical), key=lambda segment: segment.x0)
+
+    # Extract vertical candidates with a wider margin
+    raw_verticals = []
+    for s in segments:
+        if abs(s.x0 - s.x1) <= 2.0 and abs(s.y1 - s.y0) >= 10.0:
+            raw_verticals.append(s)
+
+    # Deduplicate raw verticals that are essentially the same line
+    deduped_verticals = []
+    for s in raw_verticals:
+        x_s = (s.x0 + s.x1) / 2
+        y_min_s = min(s.y0, s.y1)
+        y_max_s = max(s.y0, s.y1)
+        found_similar = False
+        for i, existing in enumerate(deduped_verticals):
+            x_e = (existing.x0 + existing.x1) / 2
+            y_min_e = min(existing.y0, existing.y1)
+            y_max_e = max(existing.y0, existing.y1)
+            if abs(x_s - x_e) <= 1.0 and not (y_max_s < y_min_e or y_max_e < y_min_s):
+                new_y_min = min(y_min_s, y_min_e)
+                new_y_max = max(y_max_s, y_max_e)
+                new_x = (x_s + x_e) / 2
+                deduped_verticals[i] = _LineSegment(new_x, new_y_min, new_x, new_y_max)
+                found_similar = True
+                break
+        if not found_similar:
+            deduped_verticals.append(s)
+
     systems = []
     system_index = 1
     next_bar_index = 1
@@ -1230,14 +3044,174 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
         x1 = max(max(line.x0, line.x1) for line in group)
         y0 = min(line_ys)
         y1 = max(line_ys)
-        barlines = [
-            round((line.x0 + line.x1) / 2, 3)
-            for line in vertical
-            if x0 - 8.0 <= (line.x0 + line.x1) / 2 <= x1 + 8.0
-            and min(line.y0, line.y1) <= y0 + 4.0
-            and max(line.y0, line.y1) >= y1 - 4.0
-        ]
-        barlines = _unique_sorted(barlines)
+
+        system_candidates = []
+        for s in deduped_verticals:
+            x_val = (s.x0 + s.x1) / 2
+            y_min = min(s.y0, s.y1)
+            y_max = max(s.y0, s.y1)
+            if y_max >= y0 - 15.0 and y_min <= y1 + 15.0 and x0 - 50.0 <= x_val <= x1 + 50.0:
+                system_candidates.append(s)
+
+        barline_candidates_count = len(system_candidates)
+        rejection_reasons = {
+            "pdf_barline_outside_system_bounds": 0,
+            "pdf_barline_too_short": 0,
+            "pdf_barline_does_not_cross_staff": 0,
+            "pdf_barline_ambiguous": 0,
+            "pdf_barline_too_short_absolute": 0,
+            "pdf_barline_too_short_relative_to_staff": 0,
+            "pdf_barline_crosses_insufficient_string_gaps": 0,
+            "pdf_barline_partial_staff_crossing": 0,
+            "pdf_barline_outside_staff_region": 0,
+            "pdf_barline_rejected_relative_height": 0,
+        }
+
+        valid_barlines = []
+        rejected_count = 0
+        details = []
+        staff_height = y1 - y0
+
+        for s in system_candidates:
+            x_val = (s.x0 + s.x1) / 2
+            y_min = min(s.y0, s.y1)
+            y_max = max(s.y0, s.y1)
+            height = y_max - y_min
+
+            # 1. Check horizontal bounds
+            if x_val < x0 - 8.0 or x_val > x1 + 8.0:
+                rejection_reasons["pdf_barline_outside_system_bounds"] += 1
+                rejected_count += 1
+                details.append({
+                    "x": round(x_val, 3),
+                    "y_min": round(y_min, 3),
+                    "y_max": round(y_max, 3),
+                    "height": round(height, 3),
+                    "staff_height": round(staff_height, 3),
+                    "coverage_ratio": 0.0,
+                    "gaps_crossed": 0,
+                    "absolute_height_decision": "rejected",
+                    "relative_staff_crossing_decision": "rejected",
+                    "final_decision": "rejected",
+                    "rejection_reason": "pdf_barline_outside_system_bounds",
+                })
+                continue
+
+            # 2. Check staff intersection
+            if y_max < y0 or y_min > y1:
+                rejection_reasons["pdf_barline_outside_staff_region"] += 1
+                rejection_reasons["pdf_barline_does_not_cross_staff"] += 1
+                rejected_count += 1
+                details.append({
+                    "x": round(x_val, 3),
+                    "y_min": round(y_min, 3),
+                    "y_max": round(y_max, 3),
+                    "height": round(height, 3),
+                    "staff_height": round(staff_height, 3),
+                    "coverage_ratio": 0.0,
+                    "gaps_crossed": 0,
+                    "absolute_height_decision": "rejected",
+                    "relative_staff_crossing_decision": "rejected",
+                    "final_decision": "rejected",
+                    "rejection_reason": "pdf_barline_outside_staff_region",
+                })
+                continue
+
+            # Calculate gaps crossed
+            ys = sorted(line_ys)
+            gaps_crossed = 0
+            for i in range(len(ys) - 1):
+                if y_min <= ys[i] + 1.5 and y_max >= ys[i+1] - 1.5:
+                    gaps_crossed += 1
+
+            # Intersection height and coverage ratio
+            overlap_y_min = max(y_min, y0)
+            overlap_y_max = min(y_max, y1)
+            overlap_height = max(0.0, overlap_y_max - overlap_y_min)
+            coverage_ratio = overlap_height / staff_height if staff_height > 0 else 0.0
+
+            crosses_entire_staff = (y_min <= y0 + 4.0 and y_max >= y1 - 4.0) or (gaps_crossed >= len(ys) - 1)
+
+            absolute_height_ok = (height >= 40.0)
+            relative_height_ok = crosses_entire_staff
+            is_accepted_relative = (height >= 20.0 and relative_height_ok)
+            is_accepted = (absolute_height_ok or is_accepted_relative) and relative_height_ok
+
+            rejection_reason = None
+            if not relative_height_ok:
+                if gaps_crossed < len(ys) - 2:
+                    rejection_reason = "pdf_barline_crosses_insufficient_string_gaps"
+                    rejection_reasons["pdf_barline_crosses_insufficient_string_gaps"] += 1
+                    rejection_reasons["pdf_barline_does_not_cross_staff"] += 1
+                else:
+                    rejection_reason = "pdf_barline_partial_staff_crossing"
+                    rejection_reasons["pdf_barline_partial_staff_crossing"] += 1
+                    rejection_reasons["pdf_barline_does_not_cross_staff"] += 1
+            elif not is_accepted:
+                # Crossed the staff region, but too short (e.g. < 20pt)
+                rejection_reason = "pdf_barline_too_short_absolute"
+                rejection_reasons["pdf_barline_too_short_absolute"] += 1
+                rejection_reasons["pdf_barline_too_short"] += 1
+
+            if rejection_reason is None and not is_accepted:
+                rejection_reason = "pdf_barline_rejected_relative_height"
+                rejection_reasons["pdf_barline_rejected_relative_height"] += 1
+                rejection_reasons["pdf_barline_too_short"] += 1
+
+            # Check ambiguity among candidates that otherwise would be valid barlines
+            if is_accepted:
+                is_ambiguous = False
+                for other in system_candidates:
+                    if other is s:
+                        continue
+                    other_x = (other.x0 + other.x1) / 2
+                    other_y_min = min(other.y0, other.y1)
+                    other_y_max = max(other.y0, other.y1)
+                    other_height = other_y_max - other_y_min
+
+                    # Estimate other gaps crossed
+                    other_gaps = 0
+                    for i in range(len(ys) - 1):
+                        if other_y_min <= ys[i] + 1.5 and other_y_max >= ys[i+1] - 1.5:
+                            other_gaps += 1
+                    other_crosses = (other_y_min <= y0 + 4.0 and other_y_max >= y1 - 4.0) or (other_gaps >= len(ys) - 1)
+                    other_accepted = ((other_height >= 40.0) or (other_height >= 20.0 and other_crosses)) and other_crosses
+
+                    if other_accepted and abs(x_val - other_x) < 6.0:
+                        is_ambiguous = True
+                        break
+
+                if is_ambiguous:
+                    is_accepted = False
+                    rejection_reason = "pdf_barline_ambiguous"
+                    rejection_reasons["pdf_barline_ambiguous"] += 1
+
+            if not is_accepted:
+                if rejection_reason is None:
+                    rejection_reason = "pdf_barline_too_short"
+                    rejection_reasons["pdf_barline_too_short"] += 1
+                elif height < 40.0:
+                    rejection_reasons["pdf_barline_too_short"] += 1
+                rejected_count += 1
+            else:
+                valid_barlines.append(round(x_val, 3))
+
+            details.append({
+                "x": round(x_val, 3),
+                "y_min": round(y_min, 3),
+                "y_max": round(y_max, 3),
+                "height": round(height, 3),
+                "staff_height": round(staff_height, 3),
+                "coverage_ratio": round(coverage_ratio, 3),
+                "gaps_crossed": gaps_crossed,
+                "absolute_height_decision": "accepted" if absolute_height_ok else "rejected",
+                "relative_staff_crossing_decision": "accepted" if relative_height_ok else "rejected",
+                "final_decision": "accepted" if is_accepted else "rejected",
+                "rejection_reason": rejection_reason,
+            })
+
+        valid_barlines = _unique_sorted(valid_barlines)
+
         systems.append(
             _TabSystem(
                 page_index=page_index,
@@ -1247,10 +3221,15 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
                 line_ys=line_ys,
                 x0=x0,
                 x1=x1,
-                barlines=barlines,
+                barlines=valid_barlines,
+                barline_candidates_count=barline_candidates_count,
+                valid_barline_count=len(valid_barlines),
+                rejected_barline_count=rejected_count,
+                rejection_reasons=rejection_reasons,
+                barline_candidates_details=details,
             )
         )
-        next_bar_index += max(1, len(barlines) - 1)
+        next_bar_index += max(1, len(valid_barlines) - 1)
         system_index += 1
     return systems
 
@@ -1283,20 +3262,86 @@ def _six_line_groups(lines: list[_LineSegment]) -> list[list[_LineSegment]]:
 
 
 def _tab_line_groups(lines: list[_LineSegment]) -> list[list[_LineSegment]]:
+    sorted_lines = sorted(lines, key=lambda l: (l.y0 + l.y1) / 2)
+    n = len(sorted_lines)
+    used = set()
     groups = []
-    index = 0
-    while index < len(lines):
-        group = lines[index : index + 6]
-        if len(group) == 6 and _looks_like_tab_line_group(group):
-            groups.append(group)
-            index += 6
+
+    # Try to find 6-line groups first
+    for i0 in range(n):
+        if i0 in used:
             continue
-        group = lines[index : index + 5]
-        if len(group) == 5 and _looks_like_tab_line_group(group):
-            groups.append(group)
-            index += 5
-        else:
-            index += 1
+        for i1 in range(i0 + 1, n):
+            if i1 in used:
+                continue
+            y0 = (sorted_lines[i0].y0 + sorted_lines[i0].y1) / 2
+            y1 = (sorted_lines[i1].y0 + sorted_lines[i1].y1) / 2
+            gap = y1 - y0
+            if gap < 6.0 or gap > 24.0:
+                continue
+
+            group_indices = [i0, i1]
+            for step in range(2, 6):
+                target_y = y0 + step * gap
+                best_idx = None
+                best_diff = 2.5
+                for j in range(group_indices[-1] + 1, n):
+                    if j in used:
+                        continue
+                    yj = (sorted_lines[j].y0 + sorted_lines[j].y1) / 2
+                    diff = abs(yj - target_y)
+                    if diff < best_diff:
+                        best_diff = diff
+                        best_idx = j
+                if best_idx is not None:
+                    group_indices.append(best_idx)
+                else:
+                    break
+
+            if len(group_indices) == 6:
+                group = [sorted_lines[idx] for idx in group_indices]
+                groups.append(group)
+                used.update(group_indices)
+                break
+
+    # Also find 5-line groups among the remaining unused lines
+    for i0 in range(n):
+        if i0 in used:
+            continue
+        for i1 in range(i0 + 1, n):
+            if i1 in used:
+                continue
+            y0 = (sorted_lines[i0].y0 + sorted_lines[i0].y1) / 2
+            y1 = (sorted_lines[i1].y0 + sorted_lines[i1].y1) / 2
+            gap = y1 - y0
+            if gap < 6.0 or gap > 24.0:
+                continue
+
+            group_indices = [i0, i1]
+            for step in range(2, 5):
+                target_y = y0 + step * gap
+                best_idx = None
+                best_diff = 2.5
+                for j in range(group_indices[-1] + 1, n):
+                    if j in used:
+                        continue
+                    yj = (sorted_lines[j].y0 + sorted_lines[j].y1) / 2
+                    diff = abs(yj - target_y)
+                    if diff < best_diff:
+                        best_diff = diff
+                        best_idx = j
+                if best_idx is not None:
+                    group_indices.append(best_idx)
+                else:
+                    break
+
+            if len(group_indices) == 5:
+                group = [sorted_lines[idx] for idx in group_indices]
+                groups.append(group)
+                used.update(group_indices)
+                break
+
+    groups.sort(key=lambda g: sum((l.y0 + l.y1)/2 for l in g) / len(g))
     return groups
 
 
@@ -1336,6 +3381,11 @@ def _candidate_confidence(
     string: int | None,
     bar_index: int | None,
     x: float | None,
+    *,
+    width: float | None = None,
+    height: float | None = None,
+    line_spacing: float = 12.0,
+    assignment_warnings: list[str] | None = None,
 ) -> float:
     base = 0.55 if raw_text.strip().isdigit() else 0.35
     if system is not None:
@@ -1348,7 +3398,32 @@ def _candidate_confidence(
         base += 0.05
     if x is not None:
         base += 0.05
-    return min(base, 0.9)
+
+    # Deduct confidence based on visual/optical warnings
+    if assignment_warnings:
+        if "pdf_fret_digit_symbol_overlap_ambiguous" in assignment_warnings:
+            base -= 0.3
+        if "pdf_fret_bbox_too_tall" in assignment_warnings:
+            base -= 0.25
+        if "pdf_fret_bbox_too_wide" in assignment_warnings:
+            base -= 0.25
+        if "pdf_fret_bbox_too_small" in assignment_warnings:
+            base -= 0.25
+        if "pdf_fret_outside_valid_range" in assignment_warnings:
+            base -= 0.3
+        if "pdf_fret_digits_overlap_ambiguous" in assignment_warnings:
+            base -= 0.3
+
+    # Deduct confidence based on physical/optical bounds
+    if width is not None and height is not None:
+        if width < 4.0:
+            base -= 0.25
+        if height < 4.5:
+            base -= 0.25
+        if width > height * 1.8:
+            base -= 0.15
+
+    return max(0.1, min(base, 0.9))
 
 
 def _should_keep_candidate(candidate: dict[str, Any]) -> bool:
@@ -1357,6 +3432,14 @@ def _should_keep_candidate(candidate: dict[str, Any]) -> bool:
     text = str(candidate.get("raw_text", "")).strip().lower()
     raw = candidate.get("raw", {})
     near_tab_system = isinstance(raw, dict) and raw.get("system_inference") is not None
+    warnings = raw.get("assignment_warnings", []) if isinstance(raw, dict) else []
+    if any(w in warnings for w in (
+        "pdf_fret_page_or_legend_number_excluded",
+        "pdf_fret_chord_text_digit_excluded",
+        "pdf_tuning_label_outside_system",
+        "pdf_tuning_label_unassociated",
+    )):
+        return True
     return text in {"x"} or near_tab_system
 
 
