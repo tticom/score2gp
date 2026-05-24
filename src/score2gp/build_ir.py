@@ -54,6 +54,132 @@ from .tabraw import TabCandidate, TabRaw
 TRACK_ID = "gtr-1"
 DIAGNOSTICS_SCHEMA_VERSION = "build-ir-diagnostics.v0.1"
 ASCII_SCOREIR_GATE_VERSION = "ascii-scoreir-gate.v0.1"
+PDF_TIMING_REFINEMENT_VERSION = "pdf-timing-refinement.v1.0"
+
+_MUSICXML_INVALID_TIMING_CODES = {
+    "musicxml-overfull-bar",
+    "musicxml-underfull-bar",
+    "musicxml_backup_forward_alignment_ambiguous",
+    "musicxml_backup_forward_risk",
+    "musicxml_backup_rewinds_before_measure_start",
+    "musicxml_compound_meter_overfull",
+    "musicxml_divisions_changed_mid_measure",
+    "musicxml_divisions_missing",
+    "musicxml_duration_missing",
+    "musicxml_duration_zero",
+    "musicxml_forward_exceeds_measure_end",
+    "musicxml_invalid_duration_grid",
+    "musicxml_many_timing_risks",
+    "musicxml_repeated_backup_forward_risk",
+    "musicxml_rest_overlap",
+    "musicxml_rest_voice_overlap",
+    "musicxml_tuplet_unsupported",
+    "musicxml_unbalanced_backup_forward",
+    "musicxml_voice_cursor_overlap",
+    "musicxml_voice_duration_overfull",
+    "musicxml-voice-overlap",
+}
+
+_MUSICXML_UNSUPPORTED_POLYPHONY_CODES = {
+    "musicxml_cross_voice_overlap_unsupported",
+    "musicxml_cross_voice_timing_unsupported",
+    "musicxml_multivoice_timing_not_supported",
+    "musicxml_polyphony_not_supported",
+    "musicxml_valid_multivoice_unsupported",
+}
+
+_MUSICXML_DERIVED_BLOCKER_CODES = {
+    "musicxml_alignment_not_attempted_due_to_timing_risk",
+    "musicxml_voice_cursor_alignment_risk",
+}
+
+
+def _musicxml_timing_refinement_summary(issues: list[MusicXmlTimingIssue]) -> dict[str, object]:
+    """Return private-safe MusicXML timing classification telemetry."""
+
+    issue_counts: dict[str, int] = {}
+    severity_counts: dict[str, int] = {}
+    primary_reason_counts: dict[str, int] = {}
+    secondary_reason_counts: dict[str, int] = {}
+    affected_measures: set[tuple[str, int]] = set()
+    affected_voices: set[tuple[str, int, int]] = set()
+    affected_events: set[str] = set()
+    invalid_timing_issue_count = 0
+    unsupported_polyphony_issue_count = 0
+    derived_blocker_issue_count = 0
+
+    for issue in issues:
+        issue_counts[issue.code] = issue_counts.get(issue.code, 0) + 1
+        severity_counts[issue.severity] = severity_counts.get(issue.severity, 0) + 1
+        affected_measures.add((issue.part_id, issue.measure_index))
+        if issue.voice is not None:
+            affected_voices.add((issue.part_id, issue.measure_index, issue.voice))
+        if issue.musicxml_note_id:
+            affected_events.add(issue.musicxml_note_id)
+        affected_events.update(issue.affected_event_ids)
+        if issue.primary_reason:
+            primary_reason_counts[issue.primary_reason] = primary_reason_counts.get(issue.primary_reason, 0) + 1
+        for reason in issue.secondary_reasons:
+            secondary_reason_counts[reason] = secondary_reason_counts.get(reason, 0) + 1
+
+        if issue.severity == "error":
+            if _issue_has_code(issue, _MUSICXML_INVALID_TIMING_CODES):
+                invalid_timing_issue_count += 1
+            elif _issue_has_code(issue, _MUSICXML_UNSUPPORTED_POLYPHONY_CODES):
+                unsupported_polyphony_issue_count += 1
+            elif _issue_has_code(issue, _MUSICXML_DERIVED_BLOCKER_CODES):
+                derived_blocker_issue_count += 1
+
+    error_count = severity_counts.get("error", 0)
+    if error_count == 0 and not issues:
+        classification = "timing_safe"
+    elif error_count == 0:
+        classification = "timing_warning_or_info_only"
+    elif invalid_timing_issue_count and unsupported_polyphony_issue_count:
+        classification = "mixed_invalid_timing_and_unsupported_polyphony_refused"
+    elif invalid_timing_issue_count:
+        classification = "invalid_timing_refused"
+    elif unsupported_polyphony_issue_count:
+        classification = "unsupported_polyphony_refused"
+    elif derived_blocker_issue_count:
+        classification = "derived_timing_blocker_refused"
+    else:
+        classification = "timing_refused"
+
+    return {
+        "contract_version": PDF_TIMING_REFINEMENT_VERSION,
+        "timing_classification": classification,
+        "issue_counts": dict(sorted(issue_counts.items())),
+        "severity_counts": dict(sorted(severity_counts.items())),
+        "invalid_timing_issue_count": invalid_timing_issue_count,
+        "unsupported_polyphony_issue_count": unsupported_polyphony_issue_count,
+        "derived_blocker_issue_count": derived_blocker_issue_count,
+        "affected_measure_count": len(affected_measures),
+        "affected_voice_count": len(affected_voices),
+        "affected_event_count": len(affected_events),
+        "primary_reason_counts": dict(sorted(primary_reason_counts.items())),
+        "secondary_reason_counts": dict(sorted(secondary_reason_counts.items())),
+        "automatic_repair_attempted": False,
+        "remediation_hint": _musicxml_timing_refinement_remediation(classification),
+    }
+
+
+def _issue_has_code(issue: MusicXmlTimingIssue, codes: set[str]) -> bool:
+    return issue.code in codes or any(reason in codes for reason in issue.secondary_reasons)
+
+
+def _musicxml_timing_refinement_remediation(classification: str) -> str:
+    if classification == "unsupported_polyphony_refused":
+        return "MusicXML timing is valid enough to classify, but ScoreIR writing for multi-voice/polyphonic structures is unsupported."
+    if classification == "mixed_invalid_timing_and_unsupported_polyphony_refused":
+        return "Resolve invalid timing first, then handle unsupported polyphony explicitly; automatic repair is not implemented."
+    if classification == "invalid_timing_refused":
+        return "Fix or regenerate MusicXML timing; automatic timing repair is not implemented."
+    if classification == "timing_warning_or_info_only":
+        return "Review timing warnings before trusting alignment; no automatic timing repair was attempted."
+    if classification == "timing_safe":
+        return "MusicXML timing preflight did not find blocking timing errors."
+    return "Timing refinement is diagnostic only; unsafe or unsupported timing remains refused."
 
 
 class BuildIrInputRiskError(ValueError):
@@ -84,6 +210,7 @@ class BuildIrInputRiskError(ValueError):
             "stage": self.stage,
             "category": self.category,
             "message": str(self),
+            "timing_refinement_contract_version": PDF_TIMING_REFINEMENT_VERSION,
             "timing_issue_count": len(self.timing_issues),
             "timing_issue_counts": dict(sorted(issue_counts.items())),
             "timing_issues": [issue.model_dump(mode="json", exclude_none=True) for issue in self.timing_issues],
@@ -118,6 +245,7 @@ class BuildIrInputRiskError(ValueError):
 
             payload["pdf_timing_mapping"] = {
                 "contract_version": "pdf-timing-mapping.v0.7",
+                "refinement_contract_version": PDF_TIMING_REFINEMENT_VERSION,
                 "input_class": "drawn_tab_candidate",
                 "grouping_status": grouping_status,
                 "grouping_safe": grouping_safe,
@@ -126,6 +254,12 @@ class BuildIrInputRiskError(ValueError):
                 "whether_mapping_attempted": False,
                 "whether_mapping_refused": True,
                 "refusal_reason_codes": sorted(list(set(refusal_reason_codes))),
+                "mapping_quality_classification": "refused",
+                "refinement_reason_codes": sorted(list(set(refusal_reason_codes + ["pdf_timing_refinement_refused"]))),
+                "safe_layout_evidence": False,
+                "partial_layout_evidence": False,
+                "ambiguous_layout_evidence": False,
+                "incompatible_layout_evidence": False,
                 "quality": "refused",
                 "whether_scoreir_written": False,
                 "remediation_hint": "Timing mapping is diagnostic evidence only and cannot repair unsafe PDF grouping or unsafe MusicXML timing.",
@@ -255,6 +389,7 @@ class BuildIrInputRiskError(ValueError):
                 "remediation_hint": "Fix or regenerate MusicXML timing; automatic timing repair is not implemented.",
                 "unrecoverable_timing_report_json": "musicxml-unrecoverable-timing-report.json",
                 "unrecoverable_timing_report_html": "musicxml-unrecoverable-timing-report.html",
+                "musicxml_timing_refinement": _musicxml_timing_refinement_summary(self.timing_issues),
             })
 
         return payload
@@ -883,6 +1018,29 @@ def _dedupe(values: list[str]) -> list[str]:
         seen.add(value)
         result.append(value)
     return result
+
+
+def _pdf_timing_refinement_classification(
+    *,
+    total_playable_count: int,
+    matched_x_onset_group_count: int,
+    unmatched_x_group_count: int,
+    unmatched_onset_group_count: int,
+    total_ambiguity_count: int,
+    overall_quality: str,
+    all_monotonic: bool,
+) -> tuple[str, list[str]]:
+    if total_playable_count == 0 or matched_x_onset_group_count == 0:
+        return "unavailable", ["pdf_timing_refinement_unavailable_layout_evidence"]
+    if overall_quality == "poor" or all_monotonic is False:
+        return "incompatible", ["pdf_timing_refinement_incompatible_layout_evidence"]
+    if total_ambiguity_count > 0:
+        return "ambiguous", ["pdf_timing_refinement_ambiguous_layout_evidence"]
+    if unmatched_x_group_count > 0 or unmatched_onset_group_count > 0 or overall_quality == "warning":
+        return "partial", ["pdf_timing_refinement_partial_layout_evidence"]
+    if overall_quality == "good":
+        return "safe", ["pdf_timing_refinement_safe_layout_evidence"]
+    return "partial", ["pdf_timing_refinement_partial_layout_evidence"]
 
 
 def build_ir_from_imports(musicxml: MusicXmlImport, tabraw: TabRaw) -> ScoreIR:
@@ -1643,9 +1801,19 @@ def _build_diagnostics(
             refusal_reason_codes.append("pdf_timing_mapping_refused")
 
     whether_mapping_refused = (overall_quality == "poor" or all_monotonic is False)
+    mapping_quality_classification, refinement_reason_codes = _pdf_timing_refinement_classification(
+        total_playable_count=total_playable_count,
+        matched_x_onset_group_count=matched_x_onset_group_count,
+        unmatched_x_group_count=unmatched_x_group_count,
+        unmatched_onset_group_count=unmatched_onset_group_count,
+        total_ambiguity_count=total_ambiguity_count,
+        overall_quality=overall_quality,
+        all_monotonic=all_monotonic,
+    )
 
     pdf_timing_mapping_dict = {
         "contract_version": "pdf-timing-mapping.v0.7",
+        "refinement_contract_version": PDF_TIMING_REFINEMENT_VERSION,
         "input_class": getattr(tabraw, "input_class", "drawn_tab_candidate"),
         "grouping_status": "grouped",
         "grouping_safe": True,
@@ -1654,8 +1822,15 @@ def _build_diagnostics(
         "whether_mapping_attempted": True,
         "whether_mapping_refused": whether_mapping_refused,
         "refusal_reason_codes": sorted(list(set(refusal_reason_codes))),
+        "mapping_quality_classification": mapping_quality_classification,
+        "refinement_reason_codes": sorted(list(set(refinement_reason_codes))),
+        "safe_layout_evidence": mapping_quality_classification == "safe",
+        "partial_layout_evidence": mapping_quality_classification == "partial",
+        "ambiguous_layout_evidence": mapping_quality_classification == "ambiguous",
+        "incompatible_layout_evidence": mapping_quality_classification == "incompatible",
         "quality": overall_quality,
         "whether_scoreir_written": not whether_mapping_refused,
+        "remediation_hint": "Timing mapping is diagnostic evidence only; do not repair or infer missing timing from PDF x positions.",
         "per_bar": per_bar_mapping,
         "matched_x_onset_group_count": matched_x_onset_group_count,
         "unmatched_x_group_count": unmatched_x_group_count,
