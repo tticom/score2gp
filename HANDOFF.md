@@ -4,6 +4,23 @@
 
 - **Current Branch**: `feature/pdf-timing-refinement-v1.0`
 - **Base Branch**: `main`
+- **Current PR**: #8 (URL: https://github.com/tticom/score2gp/pull/8)
+- **Latest Local Commit**: `aa9c43919f7e209eeaa7ede1536f605f4f6fa23b`
+- **Latest Pushed Commit**: `aa9c43919f7e209eeaa7ede1536f605f4f6fa23b`
+- **Commit Subject**: `Document routine command permissions`
+- **Working Tree Status**: Clean
+- **Tests & Checks Run**:
+  - `python -m pytest` -> 114 passed
+  - `python -m score2gp.cli export-schema --out schemas` -> passed
+  - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid
+  - `git diff --check` -> passed
+  - `git diff -- schemas` -> empty
+- **GitHub Check Status**: Passing (All remote checks passed on PR #8 for commit `027db3e`)
+- **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL files, overlays, logs, or diagnostic outputs are tracked or staged.
+
+## What Changed in the Task
+- Added a stronger persistent project rule, planning/execution rule, and allowed routine commands in `AGENTS.md` to ensure `HANDOFF.md` is updated, committed, and pushed to the remote feature branch at the end of every task.
+- Updated `HANDOFF.md` to align with the latest pushed commit status, ready-for-review status, passing remote check results, and documented routine command permissions.
 - **Current PR**: [PR #50](https://github.com/tticom/score2gp/pull/50) (Draft)
 - **Latest PR #49 Merge Commit on Main**: `edb80eacf78a282073afed135f91fa20627be29a`
 - **Latest Implementation Commit**: `8224fdf Add PDF timing refinement diagnostics v1.0`
