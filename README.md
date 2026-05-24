@@ -75,6 +75,8 @@ See [docs/musicxml-tabraw-build-ir.md](docs/musicxml-tabraw-build-ir.md) for the
 
 See [docs/private-diagnostics.md](docs/private-diagnostics.md) for the local-only private diagnostic workflow.
 
+See [docs/partial-to-recovery.md](docs/partial-to-recovery.md) for the PDF layout partial-to-recovery strategy, constraints, and public fixture requirements.
+
 ```powershell
 python -m pip install -e .[dev]
 python -m pytest
