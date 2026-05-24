@@ -1004,6 +1004,45 @@ def test_refined_overlapping_systems_diagnostics(tmp_path) -> None:
     assert "pdf_system_order_ambiguous" in warning_codes
 
 
+def test_refined_vertical_overlap_resolved_diagnostics(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_vertical_overlap_resolved.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "vertical_overlap_resolved.tabraw.json"
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+
+    # Verify no vertical overlap order ambiguity warnings exist
+    assert "pdf_multi_system_order_ambiguous" not in warning_codes
+    assert "pdf_system_order_ambiguous" not in warning_codes
+
+    # Verify column-aware reading order system and bar assignment
+    playable = sorted(
+        [c for c in tabraw.candidates if c.parsed_fret is not None],
+        key=lambda c: (c.page_index, c.system_index, c.bar_index)
+    )
+    assert len(playable) == 4
+
+    # Candidate '3' -> System 1 (Column 1 top), Bar 1
+    assert playable[0].raw_text == "3"
+    assert playable[0].system_index == 1
+    assert playable[0].bar_index == 1
+
+    # Candidate '5' -> System 2 (Column 1 bottom), Bar 3
+    assert playable[1].raw_text == "5"
+    assert playable[1].system_index == 2
+    assert playable[1].bar_index == 3
+
+    # Candidate '2' -> System 3 (Column 2 top), Bar 5
+    assert playable[2].raw_text == "2"
+    assert playable[2].system_index == 3
+    assert playable[2].bar_index == 5
+
+    # Candidate '7' -> System 4 (Column 2 bottom), Bar 7
+    assert playable[3].raw_text == "7"
+    assert playable[3].system_index == 4
+    assert playable[3].bar_index == 7
+
+
 def test_refined_ascii_three_blocks_no_bars_diagnostics(tmp_path) -> None:
     pdf_path = Path("tests/fixtures/pdf/generated_ascii_tab_three_blocks_no_bars.pdf")
     assert pdf_path.exists()
