@@ -2,11 +2,14 @@
 
 ## Next
 
-- [x] Implement same-page multi-column or horizontal staff partition heuristics to resolve Page 1's vertical system overlap ambiguity blocker (`pdf_multi_system_order_ambiguous` / `pdf_system_order_ambiguous`) on real multi-column private scores (feature/pdf-horizontal-staff-partition-v0.1).
+- [ ] Address the remaining 24 string assignment gaps and 5 bar assignment gaps on the valid systems of `private_input_1` to completely pass the grouping phase.
 
 ## Done
 
+- [x] Implement measure synchronization logic in `build-ir` to safely align TabRaw measures with the MusicXML timeline even when an entire PDF system (or measure block) has been safely skipped during extraction (feature/musicxml-alignment-skipped-system-sync-v0.1).
+
 - [x] Execute a private-safe E2E smoke review using `scripts/private_e2e_smoke.py` to evaluate the combined impact of vertical overlap resolution and robust string proximity calibration on real private inputs (chore/private-smoke-refresh-after-string-assignment-v0.1).
+
 
 - [x] Implement same-column vertical string assignment heuristics to resolve `pdf_string_assignment_not_enough_for_build_ir` and `pdf_string_assignment_missing` blockers, using robust vertical proximity heuristics and systematic offset calibration (feature/pdf-string-assignment-heuristics-v0.1).
 
