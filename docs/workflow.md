@@ -584,7 +584,9 @@ This command is expected to exit non-zero and write a `build-ir-failure-diagnost
 
 `build-ir` also refuses PDF-derived TabRaw when playable fret candidates exist but system/string/bar grouping is absent. In that case the failure category is `missing_pdf_grouping`, and no ScoreIR file is written. This keeps ungrouped fret text from being treated as reliable musical evidence. ASCII-tab inputs are also refused until timing is safe; complete ASCII-row extraction fails with `ascii_tab_timing_unavailable`, while incomplete ASCII row grouping fails with `partial_ascii_tab_grouping`.
 
-When reading `build-ir-diagnostics.v0.1`, check each bar's `quality`, `candidate_x_groups`, `musicxml_onset_groups`, `mean_absolute_relative_error`, `max_relative_error`, `ambiguous_x_group_count`, and `x_to_onset_warnings`. `good` means the current x-order heuristic is internally consistent for the controlled input. `warning`, `poor`, or `unknown` should block trust in automatic conversion until the geometry is inspected.
+Timing refinement v1.0 adds explicit JSON classifications without changing conversion gates. For MusicXML failures, inspect `musicxml_timing_refinement.timing_classification`: `invalid_timing_refused` means the MusicXML timeline is broken, while `unsupported_polyphony_refused` means timing was valid enough to classify but ScoreIR/build-ir does not yet support that multi-voice shape. `automatic_repair_attempted` remains `false`.
+
+When reading `build-ir-diagnostics.v0.1`, check each bar's `quality`, `mapping_quality_classification`, `candidate_x_groups`, `musicxml_onset_groups`, `mean_absolute_relative_error`, `max_relative_error`, `ambiguous_x_group_count`, and `x_to_onset_warnings`. `safe` means the current x-order heuristic is internally consistent for the controlled input. `partial`, `ambiguous`, `incompatible`, `refused`, or `unknown` should block trust in automatic conversion until the geometry and MusicXML timing are inspected.
 
 ## Private Diagnostic Smoke
 

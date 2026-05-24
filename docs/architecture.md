@@ -120,7 +120,9 @@ To make MusicXML timing and overlap failures easy to understand and inspect for 
 - **Refined Timing Diagnostic Codes**: The preflight catches same-voice overfull measures, accumulated small duration overflow, same-voice event overlap, rest/note overlap, backup without voice switch overlap, event extending past measure, compound meter overfull, and invalid duration grid cases using a taxonomy of precise codes.
 - **Calibration Boundary & Metadata**: The diagnostics track precise metrics: calibration feasibility, overfull divisions, overlap counts, and affected event IDs. Calibration is flagged as possible only if the overfull error is small (<= 1 quarter note beat), events remain ordered, and no overlaps occur.
 - **Synthetic Public Fixtures**: Public synthetic MusicXML timing blocker fixtures (v0.2, v0.3, and v0.4) are added under `tests/fixtures/musicxml/` to safely reproduce and test these specific failure modes, ensuring CI validation remains independent of any private materials.
+- **Timing Refinement v1.0**: Failure diagnostics include `pdf-timing-refinement.v1.0` telemetry that classifies MusicXML timing as `invalid_timing_refused`, `unsupported_polyphony_refused`, `mixed_invalid_timing_and_unsupported_polyphony_refused`, `timing_warning_or_info_only`, or `timing_safe`. These classifications are counts/status metadata only; they do not repair MusicXML.
 - **No Automatic Repair**: The current implementation does not attempt automatic timing repair or calibration, and strict timing safety gates remain fully intact.
+See [Timing Refinement v1.0 Design Note](timing-refinement-v1.0.md) for the public-safe boundary.
 
 ## Unrecoverable MusicXML Timing Reports
 
@@ -150,9 +152,11 @@ To assist developers in diagnosing edge-boundary fallback rejections without exp
 To safely evaluate physical visual spacing against musical timings, `build_ir` implements a conservative PDF-derived TabRaw x-position to MusicXML pitched onset timing mapping diagnostics module:
 - **Separation of Concerns**: The mapping is purely diagnostic. It does not perform timing repair, calibrate fret widths, move candidates, or alter MusicXML durations.
 - **Contract Schema Version**: Telemetry is structured under the `pdf-timing-mapping.v0.7` schema version. It populates grouping safety status, MusicXML timing safety status, whether mapping was attempted or refused, precise error reason codes, matched/unmatched group counts, absolute/relative spacing drift metrics, and monotonicity status.
+- **Timing Refinement Classification**: The mapping payload also includes `pdf-timing-refinement.v1.0` fields that classify vector layout evidence as `safe`, `partial`, `ambiguous`, `incompatible`, `unavailable`, or `refused`. This makes x-to-onset evidence easier to review without treating it as repair authority.
 - **HTML Visual Report (`pdf-timing-mapping-diagnostics.html`)**: Renders a visually premium dark-mode summary of the spacing alignment. It provides:
   - **Verdict block**: Highlighting quality class (`good`, `warning`, `poor`, `unknown`, `refused`), attempted/refused status, and clear refusal reason codes.
   - **Grid layout**: For grouping safety, timing source safety, and MusicXML timing preflight status.
+  - **Timing refinement details**: Showing the v1.0 classification and reason codes while JSON remains the source of truth.
   - **Per-bar spacing comparison table**: Showcasing candidate counts, pitched onset counts, bar quality, absolute relative errors, and visual drift warnings.
   - **Remediation guidance**: Explicitly stating that timing mapping is diagnostic-only and cannot repair timing.
 - **Strict Gating Rules**:
