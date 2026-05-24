@@ -1023,9 +1023,13 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                     for sys2 in systems[i+1:]:
                         y_min1, y_max1 = min(sys1.line_ys), max(sys1.line_ys)
                         y_min2, y_max2 = min(sys2.line_ys), max(sys2.line_ys)
-                        # Check horizontal overlap with a tolerance of 5.0pt
-                        x_overlap = not (sys1.x1 < sys2.x0 - 5.0 or sys2.x1 < sys1.x0 - 5.0)
-                        if x_overlap:
+                        # Only check vertical overlap if systems belong to the same column (X ranges overlap > 75% of minimum width)
+                        width1 = sys1.x1 - sys1.x0
+                        width2 = sys2.x1 - sys2.x0
+                        overlap_width = max(0.0, min(sys1.x1, sys2.x1) - max(sys1.x0, sys2.x0))
+                        min_width = min(width1, width2)
+                        overlap_ratio = overlap_width / min_width if min_width > 0 else 0.0
+                        if overlap_ratio > 0.75:
                             # Identify upper and lower system
                             if (sum(sys1.line_ys)/len(sys1.line_ys)) < (sum(sys2.line_ys)/len(sys2.line_ys)):
                                 sys_upper, sys_lower = sys1, sys2
@@ -3077,6 +3081,27 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
     segments = list(_drawing_segments(page.get_drawings()))
     horizontal = sorted((segment for segment in segments if segment.is_horizontal), key=lambda segment: segment.y0)
 
+    # Deduplicate raw horizontals that are essentially the same line
+    deduped_horizontals = []
+    for s in horizontal:
+        y_s = (s.y0 + s.y1) / 2
+        x_min_s = min(s.x0, s.x1)
+        x_max_s = max(s.x0, s.x1)
+        found_similar = False
+        for i, existing in enumerate(deduped_horizontals):
+            y_e = (existing.y0 + existing.y1) / 2
+            x_min_e = min(existing.x0, existing.x1)
+            x_max_e = max(existing.x0, existing.x1)
+            if abs(y_s - y_e) <= 1.0 and not (x_max_s < x_min_e or x_max_e < x_min_s):
+                new_x_min = min(x_min_s, x_min_e)
+                new_x_max = max(x_max_s, x_max_e)
+                new_y = (y_s + y_e) / 2
+                deduped_horizontals[i] = _LineSegment(new_x_min, new_y, new_x_max, new_y)
+                found_similar = True
+                break
+        if not found_similar:
+            deduped_horizontals.append(s)
+
     # Extract vertical candidates with a wider margin
     raw_verticals = []
     for s in segments:
@@ -3108,7 +3133,7 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
     system_index = 1
     next_bar_index = 1
 
-    for group in _tab_line_groups(horizontal):
+    for group in _tab_line_groups(deduped_horizontals):
         line_ys = [round((line.y0 + line.y1) / 2, 3) for line in group]
         x0 = min(min(line.x0, line.x1) for line in group)
         x1 = max(max(line.x0, line.x1) for line in group)
@@ -3120,7 +3145,7 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
             x_val = (s.x0 + s.x1) / 2
             y_min = min(s.y0, s.y1)
             y_max = max(s.y0, s.y1)
-            if y_max >= y0 - 15.0 and y_min <= y1 + 15.0 and x0 - 50.0 <= x_val <= x1 + 50.0:
+            if y_max >= y0 - 15.0 and y_min <= y1 + 15.0 and x0 - 25.0 <= x_val <= x1 + 25.0:
                 system_candidates.append(s)
 
         barline_candidates_count = len(system_candidates)
