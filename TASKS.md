@@ -2,10 +2,11 @@
 
 ## Next
 
-- [ ] Add developer-facing HTML styling and compact thumbnails for grouping diagnostics.
 - [ ] Add a public partial-to-recovery design note before attempting any automatic grouping repair.
 
 ## Done
+
+- [x] Add developer-facing HTML styling and compact thumbnails for grouping diagnostics.
 
 - [x] Run a private-safe smoke refresh after `pdf-timing-refinement.v1.0` merges, reporting only timing/layout counts and categories.
 
