@@ -4,11 +4,11 @@
 
 - **Current Branch**: `docs/unboxed-system-recovery-design-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: TBD
-- **Latest Local Commit**: TBD
-- **Latest Pushed Commit**: TBD
+- **Current PR**: [PR #60](https://github.com/tticom/score2gp/pull/60) (Draft)
+- **Latest Local Commit**: `9e5276dc5df2937f9863b3b913dddc61967c57aa`
+- **Latest Pushed Commit**: `9e5276dc5df2937f9863b3b913dddc61967c57aa`
 - **Latest Commit Subject**: `docs: add unboxed system recovery design note v0.1`
-- **Working Tree Status Before Handoff Update**: Modified
+- **Working Tree Status Before Handoff Update**: Clean
 - **GitHub Check Status**: N/A
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or `work/` contents are tracked.
 - **Root Generated-Artifact Audit**: Clean. `git ls-files grouping-diagnostics.html inspect overlays warnings.json tuning_outside.tabraw.json` returned no tracked files.
