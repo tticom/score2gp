@@ -1,0 +1,37 @@
+[
+  {
+    "code": "tab-extraction-incomplete",
+    "message": "This phase records born-digital text candidates with heuristic staff/string/bar estimates where page geometry allows it; full optical tab alignment is pending."
+  },
+  {
+    "code": "pdf_bar_boxes_constructed",
+    "message": "Bar boxes successfully constructed in system 1 on page 1.",
+    "severity": "info",
+    "grouping_status": "grouped"
+  },
+  {
+    "code": "pdf_tuning_standard_detected",
+    "message": "Standard tuning text detected on page 1.",
+    "severity": "info"
+  },
+  {
+    "code": "pdf_timing_mapping_not_implemented",
+    "message": "Timing mapping is not implemented on page 1.",
+    "severity": "info"
+  },
+  {
+    "code": "pdf_layout_details",
+    "message": "Detected tab systems layout details.",
+    "severity": "info",
+    "detected_systems": 1,
+    "detected_staves": 1,
+    "detected_bar_boxes": 2,
+    "detected_string_lines": 6
+  },
+  {
+    "code": "pdf_grouping_complete",
+    "message": "PDF layout grouping is complete.",
+    "severity": "info",
+    "grouping_status": "grouped"
+  }
+]
