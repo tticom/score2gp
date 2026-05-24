@@ -2,13 +2,13 @@
 
 ## Metadata
 
-- **Current Branch**: `feature/unboxed-system-recovery-v0.1`
+- **Current Branch**: `feature/private-smoke-refresh-after-unboxed-recovery-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: [PR #61](https://github.com/tticom/score2gp/pull/61) (Draft)
-- **Latest Local Commit**: `c05f25d304a0ccfc3aee5be92cd712c98d63a8a3`
-- **Latest Pushed Commit**: `c05f25d304a0ccfc3aee5be92cd712c98d63a8a3`
-- **Latest Commit Subject**: `feat: implement unboxed system recovery and skipping v0.1`
-- **Working Tree Status Before Handoff Update**: Modified `HANDOFF.md` only (clean workspace)
+- **Current PR**: N/A (Draft PR will be created next)
+- **Latest Local Commit**: `fe7dffea3b80b7e28dbdf7231498b82c668615b8`
+- **Latest Pushed Commit**: `fe7dffea3b80b7e28dbdf7231498b82c668615b8`
+- **Latest Commit Subject**: `Merge pull request #61 from tticom/feature/unboxed-system-recovery-v0.1`
+- **Working Tree Status Before Handoff Update**: Modified `TASKS.md` and untracked temporary smoke outputs.
 - **GitHub Check Status**: N/A
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or `work/` contents are tracked.
 - **Root Generated-Artifact Audit**: Clean. `git ls-files grouping-diagnostics.html inspect overlays warnings.json tuning_outside.tabraw.json` returned no tracked files.
@@ -25,38 +25,36 @@
 
 ## What Changed In This Task
 
-- **Implemented Single-Measure System-Wide Recovery (Zero-Barline Fallback)**:
-  - Updated Pydantic candidate preprocessing logic inside `build_ir.py`.
-  - When `allow_skip_unboxed=True` is enabled, clean unboxed systems (exactly 0 detected barlines and 0 rejected barlines) are recovered into a single system-wide measure by mapping candidate `bar_index` to 1.
-  - Clears all corresponding missing bar grouping warnings and appends telemetry info warnings: `pdf_system_recovered_as_single_measure` and `pdf_bar_box_system_wide_fallback`.
-- **Implemented Opt-In System-Skipping Compiler Progression**:
-  - When `allow_skip_unboxed=True` is enabled, unboxed systems containing rejected barlines (warnings starting with `pdf_barline_`) are cleanly skipped.
-  - Skips candidate assignment for these systems and filters out all corresponding warnings while logging `pdf_unboxed_system_skipped`.
-- **Structured Warning Diagnostics**:
-  - Added `page_index` and `system_index` keys to unboxed warnings (`pdf_barlines_not_detected_in_system`, `pdf_bar_boxes_not_constructible`, and `pdf_bar_detection_not_enough_for_build_ir`) inside `pdf.py` for structured parsability.
-- **Added Public Synthetic Fixtures & Pytest Verification**:
-  - Created public synthetic unboxed staff tab PDF (`generated_unboxed_system_tab.pdf`) and its generator script.
-  - Wrote comprehensive coverage in `tests/test_pdf.py` (`test_synthetic_unboxed_system_recovery` and `test_synthetic_unboxed_system_skipper`) asserting that both fallbacks function exactly as designed.
-- **Enabled Skipper in CLI and Local Smoke Pass**:
-  - Wired `--allow-skip-unboxed-systems` to the CLI and enabled it in `scripts/private_e2e_smoke.py`.
-  - Executed private-safe smoke refresh showing correct execution and private-safe summary metrics.
+- **Executed E2E Private-Safe Smoke Refresh**:
+  - Run the diagnostic pipeline against local private inputs (`scripts/private_e2e_smoke.py`) with unboxed skips and zero-barline fallback recovery fully integrated.
+  - Verified that all inputs complete the diagnostic pass cleanly.
+- **Anonymized Blocker & Skip Taxonomy Results**:
+  - **`private_input_1`**:
+    - **Timing Status**: `passed` (remediation resolved all timing risk).
+    - **Unboxed System 6 (Page 2)**: Contained rejected short barlines (`pdf_barline_too_short`) and ambiguous barlines, and was thus successfully **skipped** under `--allow-skip-unboxed-systems`.
+    - **Compilation Gate Refused**: Compilation is still refused because of other severe visual layout/grouping ambiguities.
+    - **Primary Blocker**: Severe vertical system layout overlap ambiguities on both Page 1 and Page 2: `pdf_multi_system_order_ambiguous`, `pdf_system_order_ambiguous`, `pdf_tab_staff_ambiguous`, `pdf_system_bbox_ambiguous`.
+    - **Secondary Blocker**: String assignment ambiguities (`pdf_string_assignment_not_enough_for_build_ir`, `pdf_string_assignment_missing`).
+  - **`private_input_custom` & `private_input_2`**:
+    - Complete the extract-tab phase cleanly without timing data, waiting for matching MusicXML files (`provide-matching-musicxml-before-build-ir`).
+- **Tasks & Handoff Update**:
+  - Added smoke refresh task to `TASKS.md` under Done.
+  - Fully documented E2E findings and branch metadata in `HANDOFF.md`.
 
 ## Known Limitations
 
-- Layout geometry parsing remains strictly conservative. Recovery and skips are strictly opt-in parameters.
+- Real private layouts with complex column formatting or visual overlap will require specialized spatial heuristics (like horizontal/vertical column separation) to group safely.
 
 ## Remaining Risks
 
-- Ambiguous visual layout blockers (e.g. overlapping visual staff systems, compact spacing, fragmented staffs) will still block compiler progression, which is correct and maintains strict safety gates.
+- Overlapping visual staff boundaries on `private_input_1` prevent complete grouping and ScoreIR generation until columns/overlaps are resolved.
 
 ## Next Recommended Task
 
-- Run a full private-safe E2E smoke review following the PR merge to evaluate and classify the remaining visual/timing blockers across other private inputs.
+- **Horizontal/Vertical Overlap Heuristics**: Build a feature branch (e.g. `feature/pdf-vertical-overlap-heuristics-v0.1`) to resolve vertical staff system overlap ordering and clustering ambiguities through spatial clustering or column separation.
 
 ## Explicit Scope Boundaries
 
-- **No MusicXML Timing Slicing**: Slicing PDF geometry using MusicXML structure is forbidden to preserve spatial layout independence.
-- **No Guessing Missing Internal Barlines**: Spatially partitioning system gaps is forbidden.
-- **No loosening of default compiler safety gates**: Skipping/recovery are strictly opt-in.
-- **No ML or OCR layout recognition** used.
-- **No private musical scores or overlays committed**.
+- **No new automatic grouping, bar-box repair, or timing mapping** implemented.
+- **No altering of edge-boundary fallback or build-ir compiler gates**.
+- **No private scores, diagnostic overlays, or raw XML/PDF snippets committed**.
