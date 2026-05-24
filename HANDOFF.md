@@ -2,12 +2,12 @@
 
 ## Metadata
 
-- **Current Branch**: `feature/pdf-vertical-system-overlap-resolution-v0.1`
+- **Current Branch**: `feature/private-smoke-refresh-after-vertical-overlap-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: [PR #57](https://github.com/tticom/score2gp/pull/57) (Draft)
-- **Latest Local Commit**: `02dd1751e78cf118da3db712bc8e3932f736253e`
-- **Latest Pushed Commit**: `02dd1751e78cf118da3db712bc8e3932f736253e`
-- **Latest Commit Subject**: `chore: sync handoff SHA in HANDOFF.md`
+- **Current PR**: N/A
+- **Latest Local Commit**: 1d24e7188413d941c1032fa8f68a01706549ab1b
+- **Latest Pushed Commit**: 1d24e7188413d941c1032fa8f68a01706549ab1b
+- **Latest Commit Subject**: Merge pull request #57 from tticom/feature/pdf-vertical-system-overlap-resolution-v0.1
 - **Working Tree Status Before Handoff Update**: Clean
 - **GitHub Check Status**: N/A
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or `work/` contents are tracked.
@@ -23,14 +23,18 @@
 - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep`.
 - `git ls-files grouping-diagnostics.html inspect overlays warnings.json tuning_outside.tabraw.json` -> empty.
 
-## What Changed
+## What Changed In This Task
 
-- **Implemented Column-Aware Sorting Heuristics**: Added a robust column-aware system ordering algorithm in `_tab_line_groups` in `src/score2gp/pdf.py`. It partitions horizontal staff lines into vertical columns, sorts columns left-to-right, and sorts systems within each column top-to-bottom.
-- **Refined Vertical Overlap Check**: Refined the vertical overlap warning check in `pdf.py` to require horizontal overlap too. This prevents vertical overlap warnings on clean multi-column layouts where X ranges are disjoint.
-- **Created Public Synthetic Fixtures**: Added a generator script `tests/fixtures/pdf/make_generated_vertical_overlap_tab_pdf.py` and generated PDF `tests/fixtures/pdf/generated_pdf_vertical_overlap_resolved.pdf` representing a two-column staff layout with vertically overlapping Y-ranges but disjoint X-ranges.
-- **Comprehensive Unit Testing**: Added `test_refined_vertical_overlap_resolved_diagnostics` in `tests/test_pdf.py` to assert that layout ambiguity warnings are completely absent, and verify the correct column-aware system and bar numbering order.
-- **Executed Private Smoke Refresh**: Ran `scripts/private_e2e_smoke.py` to evaluate the impact on real private inputs (results were clean and verified).
-- **Tasks Checklist**: Marked the task as completed under the `## Done` section in `TASKS.md`.
+- **Executed Private Smoke Refresh**: Ran `scripts/private_e2e_smoke.py` to evaluate the impact of the newly merged column-aware vertical overlap resolution (PR #57) on real private score inputs (specifically, `private_input_1` page 1).
+- **Anonymized Findings of the Smoke Refresh**:
+  - **`private_input_1`**:
+    - **Page 1 Overlaps**: 8 systems on page 1 were successfully grouped into bar boxes (`pdf_bar_boxes_constructed` successfully in systems 1-8). However, because these systems reside in a single column and overlap both horizontally and vertically, page-level overlap warnings `pdf_multi_system_order_ambiguous` (along with `pdf_system_order_ambiguous`, `pdf_tab_staff_ambiguous`, `pdf_system_bbox_ambiguous`) are still triggered.
+    - **Page 2 Boundaries**: Systems 1-5 were successfully grouped into bar boxes. System 6 remains unboxed due to missing/ambiguous bar boundaries (`pdf_barlines_not_detected_in_system`, `pdf_bar_boxes_not_constructible`, etc.), triggering `pdf_partial_grouping_one_system_unboxed`.
+    - **Primary Blocker**: The score remains blocked from writing ScoreIR by `"musicxml_timing_risk"` due to 66 overfull or overlapping events in the matching MusicXML.
+  - **`private_input_custom`**:
+    - Remains in `"partial_pdf_grouping"` (secondary code `missing_pdf_grouping`) and is blocked by `"provide-matching-musicxml-before-build-ir"` (no matching MusicXML).
+  - **`private_input_2`**:
+    - Remains in `"missing_pdf_grouping"` (secondary codes `missing_pdf_grouping`, `pdf-tab-system-not-detected`) and is blocked by `"provide-matching-musicxml-before-build-ir"` (no matching MusicXML).
 
 ## Known Limitations
 
@@ -38,11 +42,12 @@
 
 ## Remaining Risks
 
-- Complex multi-system visual overlaps on page 1 of `private_input_1` require vertical layout resolution.
+- **MusicXML Timing Risk**: 66 overfull or overlapping events in `private_input_1` prevent ScoreIR output under the conservative preflight safety gate.
+- **Unboxed Systems**: Page 2 System 6 in `private_input_1` lacks bar boxes due to missing barline geometry.
 
 ## Next Recommended Task
 
-- Run a private-safe smoke refresh after this recovery merges to verify whether unboxed edge systems (like system 6 of private_input_1) are successfully recovered under this conservative edge-boundary policy.
+- **Remediate MusicXML Timing Risk**: Implement conservative timeline resolution or tolerance heuristics in `build_ir` to handle overfull or overlapping events safely, or refine the preflight gate to allow compilation where safe (next feature branch: `feature/musicxml-timing-risk-remediation-v0.1`).
 
 ## Explicit Scope Boundaries
 
