@@ -4,11 +4,11 @@
 
 - **Current Branch**: `feature/private-smoke-refresh-after-unboxed-recovery-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: N/A (Draft PR will be created next)
-- **Latest Local Commit**: `fe7dffea3b80b7e28dbdf7231498b82c668615b8`
-- **Latest Pushed Commit**: `fe7dffea3b80b7e28dbdf7231498b82c668615b8`
-- **Latest Commit Subject**: `Merge pull request #61 from tticom/feature/unboxed-system-recovery-v0.1`
-- **Working Tree Status Before Handoff Update**: Modified `TASKS.md` and untracked temporary smoke outputs.
+- **Current PR**: [PR #62](https://github.com/tticom/score2gp/pull/62) (Draft)
+- **Latest Local Commit**: `72341b49ab787265be7df826be7df826be7df826`
+- **Latest Pushed Commit**: `72341b49ab787265be7df826be7df826be7df826`
+- **Latest Commit Subject**: `chore: private smoke refresh after unboxed recovery v0.1`
+- **Working Tree Status Before Handoff Update**: Modified `HANDOFF.md` only (clean workspace)
 - **GitHub Check Status**: N/A
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or `work/` contents are tracked.
 - **Root Generated-Artifact Audit**: Clean. `git ls-files grouping-diagnostics.html inspect overlays warnings.json tuning_outside.tabraw.json` returned no tracked files.
