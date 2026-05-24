@@ -2,9 +2,9 @@
 
 ## Next
 
-- [ ] Add a public partial-to-recovery design note before attempting any automatic grouping repair.
-
 ## Done
+
+- [x] Add a public partial-to-recovery design note before attempting any automatic grouping repair.
 
 - [x] Add developer-facing HTML styling and compact thumbnails for grouping diagnostics.
 

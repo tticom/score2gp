@@ -80,7 +80,7 @@ Current status: first-pass candidate extraction only. It writes `tabraw.v0.1` ca
 
 When extraction finds playable-looking fret text, `extract-tab` writes `grouping-diagnostics.html` and one overlay image per page. Open the HTML report first. It records whether grouping is `grouped`, `partial`, or `missing`; whether alignment was attempted; and whether ScoreIR was written. The overlays show extracted token boxes plus any inferred tab staff boxes, six string lines, barlines, bar boxes, and assigned string/bar labels. Missing or partial grouping means the evidence is inspectable but unsafe for automatic `build-ir`.
 
-PDF grouping v0.1 is intentionally narrow. It uses born-digital drawing geometry from the public generated fixtures: six near-horizontal tab lines define a tab staff, vertical lines crossing that staff define bar boxes, fret text is assigned to the nearest string line, and x-position chooses the bar. It does not perform OCR, recover hidden staff geometry, or calibrate arbitrary engraving.
+PDF grouping v0.1 is intentionally narrow. It uses born-digital drawing geometry from the public generated fixtures: six near-horizontal tab lines define a tab staff, vertical lines crossing that staff define bar boxes, fret text is assigned to the nearest string line, and x-position chooses the bar. It does not perform OCR, recover hidden staff geometry, or calibrate arbitrary engraving. For the future design and constraints regarding automatic layout recovery of partial grouping failure modes, see the [PDF Layout Partial-to-Recovery Strategy](partial-to-recovery.md) design note.
 
 Controlled public PDF regression:
 
