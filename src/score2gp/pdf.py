@@ -540,7 +540,7 @@ class _AsciiTimingEvidence:
 
 def _split_technique_mixed_words(words: list[tuple[float, float, float, float, str, int, int, int]]) -> list[dict[str, Any]]:
     refined = []
-    tech_chars = set("hpsvbr~/\\")
+    tech_chars = set("hpsvbr~/\\()[].,-")
 
     for word_index, word in enumerate(words, start=1):
         raw_text = str(word[4]).strip()
@@ -569,7 +569,7 @@ def _split_technique_mixed_words(words: list[tuple[float, float, float, float, s
         has_tech = any(char in tech_chars for char in raw_text.lower())
 
         if has_digit and has_tech:
-            parts = [m.group(0) for m in re.finditer(r"(\d+|[hpsvbr~/\\b]+)", raw_text, re.IGNORECASE)]
+            parts = [m.group(0) for m in re.finditer(r"(\d+|[hpsvbr~/\\()\[\].,\-]+)", raw_text, re.IGNORECASE)]
             if len(parts) > 1:
                 L = len(raw_text)
                 W = bbox_values[2] - bbox_values[0]
@@ -585,8 +585,13 @@ def _split_technique_mixed_words(words: list[tuple[float, float, float, float, s
                     part_warnings = []
                     part_provenance = []
 
-                    is_pure_tech = all(c in tech_chars or c.lower() in ("b", "r") for c in part)
-                    if is_pure_tech:
+                    is_digit_part = any(c.isdigit() for c in part)
+                    if is_digit_part:
+                        part_width = part_x1 - part_x0
+                        if part_width < 4.0:
+                            part_warnings.append("pdf_fret_digit_symbol_overlap_ambiguous")
+                            part_warnings.append("pdf_fret_refinement_not_enough_for_build_ir")
+                    else:
                         part_warnings.append("pdf_fret_technique_marker_excluded")
 
                     refined.append({
@@ -1484,6 +1489,32 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
 
                 system_digits_merged[system.system_index] = merged_on_system
 
+            # Horizontal overlap check between playable fret candidates and non-playable symbol candidates on each system
+            for system in systems:
+                merged_candidates = system_digits_merged.get(system.system_index, [])
+                if not merged_candidates:
+                    continue
+                system_non_playables = []
+                for npw in non_playable_words:
+                    npw_x = (npw["x0"] + npw["x1"]) / 2
+                    npw_y = (npw["y0"] + npw["y1"]) / 2
+                    if _nearest_system(systems, npw_x, npw_y) == system:
+                        system_non_playables.append(npw)
+
+                for mc in merged_candidates:
+                    for npw in system_non_playables:
+                        overlap = min(mc["x1"], npw["x1"]) - max(mc["x0"], npw["x0"])
+                        mc_y_center = (mc["y0"] + mc["y1"]) / 2
+                        npw_y_center = (npw["y0"] + npw["y1"]) / 2
+                        dy = abs(mc_y_center - npw_y_center)
+                        if overlap > 1.5 and dy <= 6.0:
+                            if "warnings" not in mc:
+                                mc["warnings"] = []
+                            if "pdf_fret_digit_symbol_overlap_ambiguous" not in mc["warnings"]:
+                                mc["warnings"].append("pdf_fret_digit_symbol_overlap_ambiguous")
+                            if "pdf_fret_refinement_not_enough_for_build_ir" not in mc["warnings"]:
+                                mc["warnings"].append("pdf_fret_refinement_not_enough_for_build_ir")
+
             all_page_candidates = []
             for sys in systems:
                 all_page_candidates.extend(system_digits_merged[sys.system_index])
@@ -1594,7 +1625,20 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                             assignment_warnings.append("pdf_non_playable_text_not_string_assigned")
 
                 bar_bounds = system.bar_bounds_for_x(x) if system is not None else None
-                confidence = _candidate_confidence(raw_text, system, string, bar_index, x)
+                height_val = pc["y1"] - pc["y0"]
+                width_val = pc["x1"] - pc["x0"]
+                line_spacing_val = system.line_spacing if system is not None else 12.0
+                confidence = _candidate_confidence(
+                    raw_text,
+                    system,
+                    string,
+                    bar_index,
+                    x,
+                    width=width_val,
+                    height=height_val,
+                    line_spacing=line_spacing_val,
+                    assignment_warnings=assignment_warnings,
+                )
 
                 if is_fret_candidate and confidence < 0.70:
                     assignment_warnings.append("pdf_fret_optical_bounds_confidence_below_threshold")
@@ -2535,6 +2579,7 @@ def _unsafe_grouping_codes(fret_candidates: list[dict[str, Any]], page_warnings:
         "pdf_fret_digits_not_merged_gap_too_large",
         "pdf_fret_digits_not_merged_vertical_misalignment",
         "pdf_fret_digits_overlap_ambiguous",
+        "pdf_fret_digit_symbol_overlap_ambiguous",
         "pdf_fret_bbox_too_tall",
         "pdf_fret_bbox_too_wide",
         "pdf_fret_bbox_too_small",
@@ -2701,6 +2746,7 @@ def _specific_grouping_warning(code: str, grouping_counts: dict[str, int]) -> di
         "pdf_fret_digits_not_merged_gap_too_large": "Adjacent digits too far apart horizontally to merge safely.",
         "pdf_fret_digits_not_merged_vertical_misalignment": "Adjacent digits vertically misaligned and not merged safely.",
         "pdf_fret_digits_overlap_ambiguous": "Playable fret candidates overlap horizontally too deeply or ambiguously.",
+        "pdf_fret_digit_symbol_overlap_ambiguous": "Playable fret candidate overlaps with adjacent technique symbol or is a squished ligature.",
         "pdf_fret_split_text_span_merged": "Split text span digits merged into one candidate.",
         "pdf_fret_bbox_too_tall": "Fret candidate bounding box is too tall to be a valid fret.",
         "pdf_fret_bbox_too_wide": "Fret candidate bounding box is too wide to be a valid fret.",
@@ -3335,6 +3381,11 @@ def _candidate_confidence(
     string: int | None,
     bar_index: int | None,
     x: float | None,
+    *,
+    width: float | None = None,
+    height: float | None = None,
+    line_spacing: float = 12.0,
+    assignment_warnings: list[str] | None = None,
 ) -> float:
     base = 0.55 if raw_text.strip().isdigit() else 0.35
     if system is not None:
@@ -3347,7 +3398,32 @@ def _candidate_confidence(
         base += 0.05
     if x is not None:
         base += 0.05
-    return min(base, 0.9)
+
+    # Deduct confidence based on visual/optical warnings
+    if assignment_warnings:
+        if "pdf_fret_digit_symbol_overlap_ambiguous" in assignment_warnings:
+            base -= 0.3
+        if "pdf_fret_bbox_too_tall" in assignment_warnings:
+            base -= 0.25
+        if "pdf_fret_bbox_too_wide" in assignment_warnings:
+            base -= 0.25
+        if "pdf_fret_bbox_too_small" in assignment_warnings:
+            base -= 0.25
+        if "pdf_fret_outside_valid_range" in assignment_warnings:
+            base -= 0.3
+        if "pdf_fret_digits_overlap_ambiguous" in assignment_warnings:
+            base -= 0.3
+
+    # Deduct confidence based on physical/optical bounds
+    if width is not None and height is not None:
+        if width < 4.0:
+            base -= 0.25
+        if height < 4.5:
+            base -= 0.25
+        if width > height * 1.8:
+            base -= 0.15
+
+    return max(0.1, min(base, 0.9))
 
 
 def _should_keep_candidate(candidate: dict[str, Any]) -> bool:
