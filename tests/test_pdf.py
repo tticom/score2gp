@@ -2421,3 +2421,77 @@ def test_synthetic_unboxed_system_skipper(tmp_path) -> None:
 
     # Assert skipped system warning is logged
     assert any(w.code == "pdf_unboxed_system_skipped" for w in score.warnings)
+
+
+def test_pdf_system_overlap_same_column_refused(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_system_overlap_same_column.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "same_column.tabraw.json"
+    ir_path = tmp_path / "same_column.ir.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+    assert "pdf_system_order_ambiguous" in warning_codes or "pdf_multi_system_order_ambiguous" in warning_codes
+
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+
+    assert not ir_path.exists()
+    payload = raised.value.to_diagnostics_payload()
+    assert "pdf_system_order_ambiguous" in payload["details"]["tabraw_warning_codes"] or "pdf_multi_system_order_ambiguous" in payload["details"]["tabraw_warning_codes"]
+
+
+def test_pdf_system_overlap_ambiguous_bbox_refused(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_system_overlap_ambiguous_bbox.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "ambiguous_bbox.tabraw.json"
+    ir_path = tmp_path / "ambiguous_bbox.ir.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+    assert "pdf_system_bbox_ambiguous" in warning_codes
+
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+
+    assert not ir_path.exists()
+    payload = raised.value.to_diagnostics_payload()
+    assert "pdf_system_bbox_ambiguous" in payload["details"]["tabraw_warning_codes"]
+
+
+def test_pdf_system_overlap_dense_adjacent_safely_ordered(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_system_overlap_dense_adjacent.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "dense_adjacent.tabraw.json"
+    ir_path = tmp_path / "dense_adjacent.ir.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+    # Verify no vertical overlap/bbox order ambiguity warnings exist
+    assert "pdf_multi_system_order_ambiguous" not in warning_codes
+    assert "pdf_system_order_ambiguous" not in warning_codes
+    assert "pdf_system_bbox_ambiguous" not in warning_codes
+
+    # Should compile successfully to ScoreIR
+    score = build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+    assert score is not None
+    assert ir_path.exists()
+
+
+def test_pdf_system_overlap_safe_counterpart_safely_ordered(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_system_overlap_safe_counterpart.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "safe_counterpart.tabraw.json"
+    ir_path = tmp_path / "safe_counterpart.ir.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+    # Verify no vertical overlap/bbox order ambiguity warnings exist
+    assert "pdf_multi_system_order_ambiguous" not in warning_codes
+    assert "pdf_system_order_ambiguous" not in warning_codes
+    assert "pdf_system_bbox_ambiguous" not in warning_codes
+
+    # Should compile successfully to ScoreIR
+    score = build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+    assert score is not None
+    assert ir_path.exists()
