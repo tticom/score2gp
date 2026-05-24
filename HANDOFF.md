@@ -2,20 +2,20 @@
 
 ## Metadata
 
-- **Current Branch**: `chore/private-smoke-refresh-after-string-assignment-v0.1`
+- **Current Branch**: `feature/pdf-horizontal-staff-partition-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: N/A (Will be created next using `gh pr create --draft --fill`)
-- **Latest Local Commit**: `5348206`
-- **Latest Pushed Commit**: `5348206`
-- **Latest Commit Subject**: `Merge pull request #64 from tticom/feature/pdf-string-assignment-heuristics-v0.1`
-- **Working Tree Status Before Handoff Update**: Modified `TASKS.md` and `HANDOFF.md` (clean code changes)
-- **GitHub Check Status**: N/A
+- **Current PR**: #66 (https://github.com/tticom/score2gp/pull/66)
+- **Latest Local Commit**: `d77077b`
+- **Latest Pushed Commit**: `d77077b`
+- **Latest Commit Subject**: `Implement system-level ghost system deduplication to filter overlapping duplicate systems while preserving overlap checks on ambiguity tests`
+- **Working Tree Status Before Handoff Update**: All code and tests committed and pushed. Update of `HANDOFF.md` in progress.
+- **GitHub Check Status**: Pending (Run in progress)
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or `work/` contents are tracked.
 - **Root Generated-Artifact Audit**: Clean. `git ls-files grouping-diagnostics.html inspect overlays warnings.json tuning_outside.tabraw.json` returned no tracked files.
 
 ## Tests And Checks Run
 
-- `python -m pytest` -> 312 passed (100% success).
+- `python -m pytest` -> 313 passed (100% success).
 - `python -m score2gp.cli export-schema --out schemas` -> passed.
 - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid.
 - `git diff --check` -> passed.
@@ -25,36 +25,35 @@
 
 ## What Changed In This Task
 
-- **Executed E2E Private-Safe Smoke Refresh**:
-  - Run the diagnostic pipeline against local private inputs (`scripts/private_e2e_smoke.py`) with systematic vertical offset calibration for string assignments fully integrated.
-  - Verified that all inputs complete the diagnostic pass cleanly.
-- **Anonymized Blocker & Diagnostic Telemetry Results**:
-  - **`private_input_1`**:
-    - **Timing Status**: `failed` (preflight was skipped because grouping is still blocked).
-    - **Page 2 System 6**: Contained rejected short and ambiguous barlines, and was thus successfully **skipped** under `--allow-skip-unboxed-systems`.
-    - **String Proximity Calibration**: Highly successful! The previous string assignment blockers (`pdf_string_assignment_not_enough_for_build_ir` / `pdf_string_assignment_missing`) have been completely cleared for the main staves (only 1 stray unassigned/outside candidate warning remains on the page).
-    - **Compilation Gate Refused**: Compilation is still refused due to Page 1 visual layout blockers.
-    - **Primary Blocker**: Severe vertical system layout overlap ambiguities on Page 1: `pdf_multi_system_order_ambiguous`, `pdf_system_order_ambiguous`, `pdf_tab_staff_ambiguous`, `pdf_system_bbox_ambiguous`.
-  - **`private_input_custom` & `private_input_2`**:
-    - Complete the extract-tab phase cleanly without timing data, waiting for matching MusicXML files (`provide-matching-musicxml-before-build-ir`).
-- **Tasks & Handoff Update**:
-  - Added smoke refresh task to `TASKS.md` under Done.
-  - Fully documented E2E findings and branch metadata in `HANDOFF.md`.
+- **Updated AGENTS.md Ground Rules**:
+  - Enforced a strict ground rule stating that code and tests must be written before any PR is raised (no markdown-only or tests-only PRs).
+- **System-Level Ghost System Deduplication**:
+  - Added a smart, layout-aware deduplicator at the end of `_detect_tab_systems` inside `src/score2gp/pdf.py` to identify and filter overlapping ghost systems (where one detected system's line Ys and X span are a subset of another complete system). This cleanly resolves overlapping layout warnings (ghost staves) on real private scores while keeping same-column layout ambiguity test cases fully functional and correctly refusing compilation for genuine visual overlap risks.
+- **Refined Column Overlap Ratio Check**:
+  - Increased the horizontal overlap threshold ratio from `0.45` to `0.75` in `src/score2gp/pdf.py` to ensure that vertical overlap checks are decoupled between independent columns.
+- **Restricted Horizontal Barline Search Range**:
+  - Reduced the horizontal candidate search margin for barlines from `50.0` to `25.0` in `src/score2gp/pdf.py`. This prevents cross-column barline collection, eliminating false-positive `pdf_barline_outside_system_bounds` warnings on neighboring columns.
+- **Created Multi-Column Layout Synthetic PDF Fixture**:
+  - Wrote a python script `tests/fixtures/pdf/make_multi_column_layout_pdf.py` and compiled a public born-digital PDF fixture `generated_pdf_multi_column_layout.pdf` simulating a multi-column guitar score page where left and right systems overlap vertically.
+- **Appended Pytest Test Coverage**:
+  - Added the `test_pdf_multi_column_layout_safe` unit test case in `tests/test_pdf.py` proving that clean multi-column layouts parse cleanly without any vertical overlap blockers and compile successfully to ScoreIR.
+- **E2E Private Smoke Test Verification**:
+  - Ran `scripts/private_e2e_smoke.py` showing that Page 1 vertical system overlap ambiguity blockers (`pdf_multi_system_order_ambiguous`, `pdf_system_order_ambiguous`, `pdf_tab_staff_ambiguous`, `pdf_system_bbox_ambiguous`) have been completely and cleanly cleared on real private inputs (Page 1 grouping successfully resolved!).
 
 ## Known Limitations
 
-- Multi-column layouts or dense systems that have interleaving line coordinates on Page 1 of `private_input_1` will continue to be refused until horizontal/multi-column partitions are implemented.
+- Real private scores may still contain local timing-alignment risks or partial grouping warnings on other pages (e.g. Page 2 system 6 has short barlines).
 
 ## Remaining Risks
 
-- Complex multi-system pages on real private scores will be blocked until a robust same-page horizontal staff partition is designed.
+- Complex multi-system pages with severe vertical overlapping text outside of staff bounds may require further refinement if they span both column ranges.
 
 ## Next Recommended Task
 
-- **Horizontal Staff Partition Heuristics**: Build a feature branch (e.g. `feature/pdf-horizontal-staff-partition-v0.1`) to resolve vertical system overlap ordering and clustering ambiguities through same-page horizontal column separation or staff line grouping refinement.
+- **MusicXML Timing and Alignment Review**: Evaluate and address remaining timing-alignment blockers on Page 2 of real private scores, or merge the current PR (#66) first.
 
 ## Explicit Scope Boundaries
 
-- **No new automatic grouping or bar-box repair** implemented.
-- **No altering of edge-boundary fallback or build-ir compiler gates**.
-- **No private scores, diagnostic overlays, or raw XML/PDF snippets committed**.
+- **No OCR, scanned-PDF, or ML layout recognition** used.
+- **No private files or work/ outputs committed**.
+- **No altering of the build-ir compiler gates or the edge-boundary fallback**.

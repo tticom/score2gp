@@ -2,7 +2,7 @@
 
 ## Next
 
-- [ ] Implement same-page multi-column or horizontal staff partition heuristics to resolve Page 1's vertical system overlap ambiguity blocker (`pdf_multi_system_order_ambiguous` / `pdf_system_order_ambiguous`) on real multi-column private scores (feature/pdf-horizontal-staff-partition-v0.1).
+- [x] Implement same-page multi-column or horizontal staff partition heuristics to resolve Page 1's vertical system overlap ambiguity blocker (`pdf_multi_system_order_ambiguous` / `pdf_system_order_ambiguous`) on real multi-column private scores (feature/pdf-horizontal-staff-partition-v0.1).
 
 ## Done
 
