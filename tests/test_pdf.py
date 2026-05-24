@@ -2495,3 +2495,43 @@ def test_pdf_system_overlap_safe_counterpart_safely_ordered(tmp_path) -> None:
     score = build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
     assert score is not None
     assert ir_path.exists()
+
+
+def test_pdf_dense_string_assignment_safe(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_dense_string_assignment_safe.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "dense_string_safe.tabraw.json"
+    ir_path = tmp_path / "dense_string_safe.ir.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+
+    # Verify no string assignment ambiguity or missing string assignment warnings exist
+    assert "pdf_string_assignment_ambiguous" not in warning_codes
+    assert "pdf_string_assignment_missing" not in warning_codes
+    assert "pdf_string_assignment_not_enough_for_build_ir" not in warning_codes
+
+    # Should compile successfully to ScoreIR
+    score = build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+    assert score is not None
+    assert ir_path.exists()
+
+
+def test_pdf_dense_string_assignment_ambiguous(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_dense_string_assignment_ambiguous.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "dense_string_ambig.tabraw.json"
+    ir_path = tmp_path / "dense_string_ambig.ir.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+
+    # The genuinely equidistant candidate must trigger string assignment ambiguity
+    assert "pdf_string_assignment_ambiguous" in warning_codes or "ambiguous_string_assignment" in warning_codes
+
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+
+    assert not ir_path.exists()
+    payload = raised.value.to_diagnostics_payload()
+    assert "pdf_string_assignment_ambiguous" in payload["details"]["tabraw_warning_codes"] or "ambiguous_string_assignment" in payload["details"]["tabraw_warning_codes"]
