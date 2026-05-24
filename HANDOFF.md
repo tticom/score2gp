@@ -3,10 +3,10 @@
 ## Metadata
 - **Current Branch**: `feature/pdf-pitch-tuning-v0.6`
 - **Base Branch**: `main`
-- **Current PR**: None (Feature Branch)
-- **Latest Local Commit**: `766a581`
-- **Latest Pushed Commit**: `9e3e555`
-- **Commit Subject**: Refine PDF pitch and tuning layout parsing and public fixtures v0.6
+- **Current PR**: [PR #45](https://github.com/tticom/score2gp/pull/45) (Draft)
+- **Latest Local Commit**: `93b5046`
+- **Latest Pushed Commit**: `93b5046`
+- **Commit Subject**: Update HANDOFF.md with latest committed hash and status
 - **Working Tree Status**: Clean (except modified `HANDOFF.md` once saved, and untracked diagnostic/inspect outputs)
 - **Tests & Checks Run**:
   - `python -m pytest` -> 274 passed cleanly in 17.33s
