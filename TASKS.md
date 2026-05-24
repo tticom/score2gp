@@ -4,6 +4,8 @@
 
 ## Done
 
+- [x] Execute a private-safe smoke refresh using scripts/private_e2e_smoke.py with Skipping and Recovery heuristics, analyzing unboxed system status and remaining layout blockers (feature/private-smoke-refresh-after-unboxed-recovery-v0.1).
+
 - [x] Implement Single-Measure System-Wide Recovery (Zero-Barline Fallback) and Opt-In System-Skipping Compiler Progression, verified completely with public synthetic born-digital PDF fixtures (feature/unboxed-system-recovery-v0.1).
 
 - [x] Perform a localized private smoke test review under `allow_remediation=True` and draft a public design note (`docs/unboxed-system-recovery.md`) outlining unboxed system recovery and skips (docs/unboxed-system-recovery-design-v0.1).
