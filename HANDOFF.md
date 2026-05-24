@@ -1,15 +1,14 @@
 # Handoff
 
 ## Metadata
-- **Current Branch**: `feature/pdf-pitch-tuning-v0.6`
+- **Current Branch**: `feature/pdf-timing-mapping-v0.7`
 - **Base Branch**: `main`
-- **Current PR**: [PR #45](https://github.com/tticom/score2gp/pull/45) (Draft)
-- **Latest Local Commit**: `93b5046`
-- **Latest Pushed Commit**: `93b5046`
-- **Commit Subject**: Update HANDOFF.md with latest committed hash and status
-- **Working Tree Status**: Clean (except modified `HANDOFF.md` once saved, and untracked diagnostic/inspect outputs)
+- **Current PR**: N/A (will be created in draft)
+- **Latest Local Commit**: `9c1e367` (Merge pull request #45)
+- **Latest Pushed Commit**: `9c1e367` (Merge pull request #45)
+- **Working Tree Status**: Modified files: docs/architecture.md, docs/limitations.md, src/score2gp/build_ir.py, src/score2gp/report.py, tests/test_pdf.py. Untracked file: tests/test_pdf_timing_mapping.py.
 - **Tests & Checks Run**:
-  - `python -m pytest` -> 274 passed cleanly in 17.33s
+  - `python -m pytest` -> 284 passed cleanly in 14.69s (including 10 new timing mapping tests)
   - `python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
   - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid
   - `git diff --check` -> passed cleanly
@@ -18,38 +17,31 @@
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or diagnostic outputs are tracked or committed. All outputs under `work/` are ignored.
 
 ## What Changed in the Task
-- **Added 10 Public Synthetic PDF Fixtures**: programmatically generated via `tests/fixtures/pdf/make_pitch_tuning_pdfs.py` to cover all crucial layout and pitch/tuning scenarios:
-  1. `generated_pdf_tuning_standard_text.pdf`: Standard tuning text page-wide.
-  2. `generated_pdf_tuning_explicit_eadgbe.pdf`: Explicit EADGBE six-string labels.
-  3. `generated_pdf_tuning_alternate_dadgad.pdf`: Alternate DADGAD six-string labels.
-  4. `generated_pdf_tuning_label_outside.pdf`: Standard tuning text outside system bounds.
-  5. `generated_pdf_tuning_conflict.pdf`: Conflicting Standard and Drop D tuning texts on the same page.
-  6. `generated_pdf_tuning_malformed.pdf`: Malformed "Tuning: Standardish" text.
-  7. `generated_pdf_tuning_chord_resembling.pdf`: Chord symbol resembling a pitch label above staff.
-  8. `generated_pdf_tuning_section_note_names.pdf`: Section text containing note names.
-  9. `generated_pdf_tuning_valid_grouping.pdf`: Valid system/bar/string/fret grouping with tuning evidence.
-  10. `generated_pdf_tuning_timing_unimplemented.pdf`: Proves timing mapping remains not implemented.
-- **Defined Taxonomy of 5 Pitch/Tuning Blocker Codes**:
-  - `pdf_tuning_conflict_detected`: Conflict among vertical string labels or multiple page-wide tuning texts.
-  - `pdf_tuning_label_ambiguous`: Tuning labels are ambiguous or conflict on the page.
-  - `pdf_tuning_label_malformed`: Malformed tuning label.
-  - `pdf_tuning_format_unsupported`: Unsupported tuning format.
-  - `pdf_pitch_tuning_diagnostics_not_enough_for_build_ir`: Diagnostic blocker refusing ScoreIR construction due to unresolved tuning ambiguities.
-- **Implemented Conservative Heuristics & Diagnostics**:
-  - Refined page-wide standard tuning detection checking line-texts case-insensitively and detecting conflicts when multiple tuning styles are matched on the same page.
-  - Implemented explicit vertical six-string label detection on the left side of systems, verifying clean alignment to staff line Ys.
-  - Whitelisted outside/unassociated tuning warnings in candidate preservation logic (`_should_keep_candidate`) to ensure non-playable tuning candidates are correctly reported and not silently filtered out.
-  - Integrated full whitelisting of the new pitch/tuning blocker codes in the `unsafe` warning codes list inside `build_ir.py`, correctly refusing ScoreIR construction when blockers are detected.
+- **Defined PDF Timing-Mapping / Spacing Telemetry Schema (`pdf-timing-mapping.v0.7`)**:
+  - Populates diagnostic metrics: `contract_version`, `input_class`, `grouping_status`, `grouping_safe`, `timing_source_safe`, `musicxml_timing_preflight_status`, `whether_mapping_attempted`, `whether_mapping_refused`, `refusal_reason_codes`, `quality`, `whether_scoreir_written`, `remediation_hint`, `per_bar`, `matched_x_onset_group_count`, `unmatched_x_group_count`, `unmatched_onset_group_count`, `mean_absolute_relative_error`, `max_relative_error`, `monotonic`, `ambiguity_count`.
+  - Added Pydantic field `pdf_timing_mapping` on `BuildIrDiagnostics` class.
+- **Implemented Visually Rich Developer Diagnostics HTML Report (`pdf-timing-mapping-diagnostics.html`)**:
+  - Visual dark-mode premium dashboard showing attempting/refused verdict, tabular comparison of per-bar spacing, drift metrics, ambiguity, and remediation info.
+  - Automatically written on both successful runs and `BuildIrInputRiskError` failure paths.
+- **Added 4 Timing-Mapping Blocker Taxonomy Codes**:
+  - `pdf_timing_mapping_refused`
+  - `pdf_timing_mapping_not_enough_for_build_ir`
+  - `pdf_timing_mapping_group_count_mismatch`
+  - `pdf_timing_mapping_non_monotonic`
+  - Whitelisted these in `_tabraw_unsafe_grouping_warning_codes` to cleanly enforce gates.
+- **Enforced Strict Compiler Gates & Preflight Safeties**:
+  - Attempt timing mapping only if grouping is safe and preflight MusicXML timing is safe.
+  - Strictly block ScoreIR compilation and raise `BuildIrInputRiskError` if visual x-positions across bars are non-monotonic (`monotonic == False`), ensuring correct ordering.
+  - Allow slightly uneven spacings to pass with warning/poor quality warnings in diagnostics JSON/HTML without breaking build-ir, satisfying existing spacing regression tests.
+- **Added 10 Public Synthetic Timing Mapping Tests**:
+  - Programmatically exercises clean one-bar spacing (good), clean multi-bar spacing (good), extra PDF x group (warning/poor), missing PDF x group (warning/poor), non-monotonic ordering (refused), ambiguous close x groups (warning/poor), chord stack (review flagged), unsupported polyphony (refused), unsafe MusicXML timing (refused), unsafe PDF grouping (refused).
+  - All 284 project tests are now passing cleanly!
 
 ## Private Smoke Blocker Summary (No Private Content Included)
 - **`private_input_1`** (`pdf-tab-musicxml`):
   - **Input class**: `drawn_tab_candidate`
   - **Page count**: 2
-  - **Text detected**: Yes
-  - **Geometry detected**: Yes
-  - **ASCII block count**: 0
   - **Drawn system count**: 14 (8 on page 1, 6 on page 2)
-  - **Accepted barline count**: System 6 on page 2 has 1 accepted boundary and 1 rejected boundary. The other 13 systems have accepted barlines and successfully constructed bar boxes.
   - **Constructed bar box count**: 13 constructed.
   - **Unboxed system count**: 1 (system 6 on page 2).
   - **Total candidate count**: 329.
@@ -59,15 +51,14 @@
   - **Candidates assigned to bar**: 265.
   - **Candidates assigned to string**: 141.
   - **Grouping status**: `partial_pdf_grouping`
-  - **Primary PDF blocker stage**: `pdf_bar_box_one_boundary_rejected` (due to system 6 on page 2 having a rejected boundary, which correctly rejects fallback and blocks grouping).
+  - **Primary PDF blocker stage**: `pdf_bar_box_one_boundary_rejected` (system 6 on page 2 has 1 accepted and 1 rejected boundary, blocking fallback and grouping).
   - **Timing blocker stage**: `musicxml_timing_repair_not_safe` (preflight VoiceOverlapError with 66 overfull or overlapping events).
   - **ScoreIR gate status**: `refused` (blocked by PDF grouping and timing).
+  - **PDF Timing Mapping Status**: `refused` (with `pdf_timing_mapping_not_attempted_grouping_unsafe` and `pdf_timing_mapping_not_attempted_musicxml_unsafe`).
 
 - **`private_input_2`** (`pdf-tab-only`):
   - **Input class**: `ascii_tab_candidate` / `unsupported`
   - **Page count**: 1
-  - **Text detected**: Yes
-  - **Geometry detected**: Yes
   - **ASCII block count**: 1
   - **Total candidate count**: 71.
   - **Playable candidate count**: 54.
@@ -75,17 +66,14 @@
   - **Grouping status**: `missing_pdf_grouping`
   - **Primary PDF blocker stage**: `drawn_system_detection` and `ascii_system_detection` (`pdf-tab-system-not-detected`).
   - **Timing status**: `not_attempted`.
-
-## Comparison with Previous Blocker Summary
-- **Previous summary**: `private_input_1` had grouping status `partial_pdf_grouping` and system 6 on page 2 had fallback rejected safely under PR #44.
-- **Current summary**: Rejection behavior remains correctly strict, keeping `partial_pdf_grouping` and blocking ScoreIR generation. The new pitch/tuning parser accurately preserves, classifies, and reports all PDF pitch/tuning evidence without inferring playable frets/strings or loosening geometry gates, keeping ScoreIR gates fully secure.
+  - **PDF Timing Mapping Status**: `refused` (with `pdf_timing_mapping_not_attempted_grouping_unsafe` and `pdf_timing_mapping_not_attempted_missing_musicxml`).
 
 ## Current Top Blocker Classification
 1. **`pdf_bar_box_one_boundary_rejected`** (Primary PDF grouping blocker stage)
 2. **`musicxml_timing_repair_not_safe`** (Primary MusicXML timeline voice overlap blocker)
 
 ## Next Recommended Task / Branch
-- **`feature/pdf-timing-mapping-v0.7`**: Refine timing mapping alignment for PDF-derived TabRaw, utilizing onsets and calibration metrics to build/repair robust PDF ScoreIR.
+- **`feature/pdf-fret-refinement-v0.8`**: Focus on refining fret digit height/width size gates and horizontal digit overlap grouping filters to build premium ScoreIR.
 
 ## Explicit Scope Boundaries
 - **Do not** commit any private inputs, private outputs, private GP files, private PDFs, private summaries, private HTML diagnostics, or any `work/` contents.
