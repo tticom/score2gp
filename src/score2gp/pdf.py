@@ -3081,27 +3081,6 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
     segments = list(_drawing_segments(page.get_drawings()))
     horizontal = sorted((segment for segment in segments if segment.is_horizontal), key=lambda segment: segment.y0)
 
-    # Deduplicate raw horizontals that are essentially the same line
-    deduped_horizontals = []
-    for s in horizontal:
-        y_s = (s.y0 + s.y1) / 2
-        x_min_s = min(s.x0, s.x1)
-        x_max_s = max(s.x0, s.x1)
-        found_similar = False
-        for i, existing in enumerate(deduped_horizontals):
-            y_e = (existing.y0 + existing.y1) / 2
-            x_min_e = min(existing.x0, existing.x1)
-            x_max_e = max(existing.x0, existing.x1)
-            if abs(y_s - y_e) <= 1.0 and not (x_max_s < x_min_e or x_max_e < x_min_s):
-                new_x_min = min(x_min_s, x_min_e)
-                new_x_max = max(x_max_s, x_max_e)
-                new_y = (y_s + y_e) / 2
-                deduped_horizontals[i] = _LineSegment(new_x_min, new_y, new_x_max, new_y)
-                found_similar = True
-                break
-        if not found_similar:
-            deduped_horizontals.append(s)
-
     # Extract vertical candidates with a wider margin
     raw_verticals = []
     for s in segments:
@@ -3133,7 +3112,7 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
     system_index = 1
     next_bar_index = 1
 
-    for group in _tab_line_groups(deduped_horizontals):
+    for group in _tab_line_groups(horizontal):
         line_ys = [round((line.y0 + line.y1) / 2, 3) for line in group]
         x0 = min(min(line.x0, line.x1) for line in group)
         x1 = max(max(line.x0, line.x1) for line in group)
@@ -3326,7 +3305,38 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
         )
         next_bar_index += max(1, len(valid_barlines) - 1)
         system_index += 1
-    return systems
+
+    # Deduplicate overlapping ghost systems where one is a subset of another
+    non_ghost_systems = []
+    for sys1 in systems:
+        is_ghost = False
+        for sys2 in systems:
+            if sys1.system_index == sys2.system_index:
+                continue
+            if len(sys1.line_ys) <= len(sys2.line_ys):
+                # Check if all line Ys in sys1 are close to line Ys in sys2
+                all_lines_matched = True
+                for y1 in sys1.line_ys:
+                    if not any(abs(y1 - y2) <= 1.0 for y2 in sys2.line_ys):
+                        all_lines_matched = False
+                        break
+                if all_lines_matched:
+                    # Check horizontal overlap
+                    overlap_width = max(0.0, min(sys1.x1, sys2.x1) - max(sys1.x0, sys2.x0))
+                    width1 = sys1.x1 - sys1.x0
+                    if width1 > 0 and (overlap_width / width1) > 0.8:
+                        if len(sys1.line_ys) < len(sys2.line_ys) or sys1.system_index > sys2.system_index:
+                            is_ghost = True
+                            break
+        if not is_ghost:
+            non_ghost_systems.append(sys1)
+
+    # Re-index remaining systems
+    final_systems = []
+    for idx, sys in enumerate(non_ghost_systems, start=1):
+        from dataclasses import replace
+        final_systems.append(replace(sys, system_index=idx))
+    return final_systems
 
 
 def _drawing_segments(drawings: list[dict[str, Any]]) -> list[_LineSegment]:
