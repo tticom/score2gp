@@ -1002,10 +1002,13 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                     for sys2 in systems[i+1:]:
                         y_min1, y_max1 = min(sys1.line_ys), max(sys1.line_ys)
                         y_min2, y_max2 = min(sys2.line_ys), max(sys2.line_ys)
-                        # Check overlap with a small tolerance of 1.0pt
-                        if y_min1 <= y_max2 + 1.0 and y_min2 <= y_max1 + 1.0:
-                            has_overlap = True
-                            break
+                        # Check horizontal overlap with a tolerance of 5.0pt
+                        x_overlap = not (sys1.x1 < sys2.x0 - 5.0 or sys2.x1 < sys1.x0 - 5.0)
+                        if x_overlap:
+                            # Check overlap with a small tolerance of 1.0pt
+                            if y_min1 <= y_max2 + 1.0 and y_min2 <= y_max1 + 1.0:
+                                has_overlap = True
+                                break
                     if has_overlap:
                         break
                 if has_overlap:
@@ -3347,7 +3350,33 @@ def _tab_line_groups(lines: list[_LineSegment]) -> list[list[_LineSegment]]:
                 used.update(group_indices)
                 break
 
-    groups.sort(key=lambda g: sum((l.y0 + l.y1)/2 for l in g) / len(g))
+    # Column-aware sorting: group into columns based on horizontal overlap and proximity
+    columns: list[list[list[_LineSegment]]] = []
+    # Sort groups left-to-right first by minimum X coordinate to discover columns in left-to-right order
+    sorted_groups_left_to_right = sorted(groups, key=lambda g: min(min(l.x0, l.x1) for l in g))
+    for g in sorted_groups_left_to_right:
+        gx0 = min(min(l.x0, l.x1) for l in g)
+        gx1 = max(max(l.x0, l.x1) for l in g)
+        placed = False
+        for col in columns:
+            col_x0 = min(min(min(l.x0, l.x1) for l in cg) for cg in col)
+            col_x1 = max(max(max(l.x0, l.x1) for l in cg) for cg in col)
+            # Check horizontal overlap with a 15.0pt tolerance
+            if not (gx1 < col_x0 - 15.0 or gx0 > col_x1 + 15.0):
+                col.append(g)
+                placed = True
+                break
+        if not placed:
+            columns.append([g])
+
+    # Sort each column top-to-bottom by Y, and flatten in left-to-right column order
+    final_groups = []
+    columns.sort(key=lambda col: min(min(min(l.x0, l.x1) for l in cg) for cg in col))
+    for col in columns:
+        col.sort(key=lambda g: sum((l.y0 + l.y1)/2 for l in g) / len(g))
+        final_groups.extend(col)
+    
+    groups = final_groups
     return groups
 
 

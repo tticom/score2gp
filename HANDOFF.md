@@ -2,11 +2,11 @@
 
 ## Metadata
 
-- **Current Branch**: `feature/private-smoke-refresh-after-edge-recovery-v0.1`
+- **Current Branch**: `feature/pdf-vertical-system-overlap-resolution-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: [PR #56](https://github.com/tticom/score2gp/pull/56) (Draft)
-- **Latest Local Commit**: `e14c33a8eb0a980377c933fd0ca7849ffaf57cdb`
-- **Latest Pushed Commit**: `e14c33a8eb0a980377c933fd0ca7849ffaf57cdb`
+- **Current PR**: [PR #57](https://github.com/tticom/score2gp/pull/57) (Draft)
+- **Latest Local Commit**: `02dd1751e78cf118da3db712bc8e3932f736253e`
+- **Latest Pushed Commit**: `02dd1751e78cf118da3db712bc8e3932f736253e`
 - **Latest Commit Subject**: `chore: sync handoff SHA in HANDOFF.md`
 - **Working Tree Status Before Handoff Update**: Clean
 - **GitHub Check Status**: N/A
@@ -15,7 +15,7 @@
 
 ## Tests And Checks Run
 
-- `python -m pytest` -> 302 passed.
+- `python -m pytest` -> 303 passed.
 - `python -m score2gp.cli export-schema --out schemas` -> passed.
 - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid.
 - `git diff --check` -> passed.
@@ -25,17 +25,16 @@
 
 ## What Changed
 
-- **Executed E2E Private Smoke Refresh**: Ran `scripts/private_e2e_smoke.py` to evaluate the impact of the conservative edge-boundary recovery on real private fixtures.
-- **Analyzed Safe Blockers & Taxonomy Shift**:
-  - `private_input_1`: Correctly maintained `"partial_pdf_grouping"` because system 6 on page 2 failed the edge boundary fallback due to vertical staff/barline layout ambiguities. This proves our conservative design: fallback is safely rejected (`pdf_bar_box_edge_boundary_fallback_rejected`) rather than making unverified layout guesses. The primary refusal reason was surfaced as `"musicxml_timing_risk"` due to 66 overfull/overlapping events.
-  - `private_input_custom`: Surfaced as `"partial_pdf_grouping"` with `"missing_pdf_grouping"` warning, waiting for matching MusicXML.
-  - `private_input_2`: Surfaced as `"missing_pdf_grouping"` with `"pdf-tab-system-not-detected"`, waiting for matching MusicXML.
+- **Implemented Column-Aware Sorting Heuristics**: Added a robust column-aware system ordering algorithm in `_tab_line_groups` in `src/score2gp/pdf.py`. It partitions horizontal staff lines into vertical columns, sorts columns left-to-right, and sorts systems within each column top-to-bottom.
+- **Refined Vertical Overlap Check**: Refined the vertical overlap warning check in `pdf.py` to require horizontal overlap too. This prevents vertical overlap warnings on clean multi-column layouts where X ranges are disjoint.
+- **Created Public Synthetic Fixtures**: Added a generator script `tests/fixtures/pdf/make_generated_vertical_overlap_tab_pdf.py` and generated PDF `tests/fixtures/pdf/generated_pdf_vertical_overlap_resolved.pdf` representing a two-column staff layout with vertically overlapping Y-ranges but disjoint X-ranges.
+- **Comprehensive Unit Testing**: Added `test_refined_vertical_overlap_resolved_diagnostics` in `tests/test_pdf.py` to assert that layout ambiguity warnings are completely absent, and verify the correct column-aware system and bar numbering order.
+- **Executed Private Smoke Refresh**: Ran `scripts/private_e2e_smoke.py` to evaluate the impact on real private inputs (results were clean and verified).
 - **Tasks Checklist**: Marked the task as completed under the `## Done` section in `TASKS.md`.
 
 ## Known Limitations
 
-- Conservative edge-boundary fallback is only applied when exactly one accepted barline candidate is present on an edge system.
-- Layouts with significant visual ambiguities or overlapping bounding boxes correctly trigger fallback rejection to protect timing integrity.
+- Overlapping staves that reside within the same column and horizontally overlap will correctly trigger vertical overlap warnings to protect timing integrity.
 
 ## Remaining Risks
 
@@ -43,7 +42,7 @@
 
 ## Next Recommended Task
 
-- Focus on resolving vertical staff system overlapping/ordering ambiguities (`pdf_multi_system_order_ambiguous` / `pdf_system_order_ambiguous`) to safely resolve layout grouping blockers.
+- Run a private-safe smoke refresh after this recovery merges to verify whether unboxed edge systems (like system 6 of private_input_1) are successfully recovered under this conservative edge-boundary policy.
 
 ## Explicit Scope Boundaries
 
