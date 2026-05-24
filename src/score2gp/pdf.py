@@ -276,13 +276,14 @@ class _TabSystem:
         return boxes
 
     def string_for_y(
-        self, y: float | None, height: float | None = None
+        self, y: float | None, height: float | None = None, systematic_offset: float = 0.0
     ) -> tuple[int | None, int | None, float | None, list[str]]:
         if y is None:
             return None, None, None, []
-        distances = [(abs(line_y - y), index + 1) for index, line_y in enumerate(self.line_ys)]
+        calibrated_y = y - systematic_offset
+        distances = [(abs(line_y - calibrated_y), index + 1) for index, line_y in enumerate(self.line_ys)]
         distance, line_index = min(distances, key=lambda item: item[0])
-        tolerance = max(4.0, self.line_spacing * 0.38)
+        tolerance = max(4.5, self.line_spacing * 0.42)
 
         warnings = []
 
@@ -302,7 +303,7 @@ class _TabSystem:
         max_y = max(self.line_ys)
 
         # Check outside staff bounds
-        if y < min_y - tolerance or y > max_y + tolerance:
+        if calibrated_y < min_y - tolerance or calibrated_y > max_y + tolerance:
             warnings.append("pdf_string_assignment_outside_staff")
             warnings.append("pdf_string_assignment_missing")
             return None, None, distance, warnings
@@ -310,7 +311,7 @@ class _TabSystem:
         if distance > tolerance:
             warnings.append("ambiguous_string_assignment")
             warnings.append("pdf_string_assignment_ambiguous")
-            if min_y <= y <= max_y:
+            if min_y <= calibrated_y <= max_y:
                 warnings.append("pdf_string_assignment_between_lines")
                 warnings.append("pdf_candidate_between_strings")
             if distance > self.line_spacing * 0.65:
@@ -1423,13 +1424,31 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                 if not digits:
                     continue
 
+                # Calculate systematic vertical offset for this system
+                diffs = []
+                for d in digits:
+                    y_center = (d["y0"] + d["y1"]) / 2
+                    closest_diff = None
+                    closest_dist = float("inf")
+                    for line_y in system.line_ys:
+                        dist = abs(line_y - y_center)
+                        if dist < closest_dist:
+                            closest_dist = dist
+                            closest_diff = y_center - line_y
+                    if closest_dist < system.line_spacing * 0.36:
+                        diffs.append(closest_diff)
+
+                systematic_offset = 0.0
+                if diffs:
+                    systematic_offset = sorted(diffs)[len(diffs) // 2]
+
                 digit_by_string = {s: [] for s in range(1, 7)}
                 unassigned_digits = []
 
                 for d in digits:
                     y_center = (d["y0"] + d["y1"]) / 2
                     height = d["y1"] - d["y0"]
-                    line_idx, string, string_dist, string_warnings = system.string_for_y(y_center, height)
+                    line_idx, string, string_dist, string_warnings = system.string_for_y(y_center, height, systematic_offset)
 
                     d["y_center"] = y_center
                     d["height_val"] = height
