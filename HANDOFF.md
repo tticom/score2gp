@@ -5,10 +5,10 @@
 - **Current Branch**: `feature/pdf-vertical-system-overlap-resolution-v0.1`
 - **Base Branch**: `main`
 - **Current PR**: TBD
-- **Latest Local Commit**: TBD
-- **Latest Pushed Commit**: TBD
-- **Latest Commit Subject**: TBD
-- **Working Tree Status Before Handoff Update**: Modified
+- **Latest Local Commit**: `9f1e8e14c632dd4c0259e71a2a983f6404ee2b88`
+- **Latest Pushed Commit**: `9f1e8e14c632dd4c0259e71a2a983f6404ee2b88`
+- **Latest Commit Subject**: `feat: resolve vertical system overlap ambiguities v0.1`
+- **Working Tree Status Before Handoff Update**: Clean
 - **GitHub Check Status**: N/A
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or `work/` contents are tracked.
 - **Root Generated-Artifact Audit**: Clean. `git ls-files grouping-diagnostics.html inspect overlays warnings.json tuning_outside.tabraw.json` returned no tracked files.
