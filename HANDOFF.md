@@ -1,42 +1,43 @@
 # Handoff
 
 ## Metadata
-- **Current Branch**: `feature/pdf-timing-mapping-v0.7`
+- **Current Branch**: `feature/pdf-fret-refinement-v0.8`
 - **Base Branch**: `main`
-- **Current PR**: [PR #46](https://github.com/tticom/score2gp/pull/46) (Draft)
-- **Latest Local Commit**: `9876791`
-- **Latest Pushed Commit**: `9876791`
-- **Commit Subject**: Add PDF timing mapping diagnostics v0.7
-- **Working Tree Status**: Clean (except modified `HANDOFF.md` once saved, and untracked diagnostic/inspect outputs)
+- **Current PR**: [PR #48](https://github.com/tticom/score2gp/pull/48) (Draft)
+- **Latest Local Commit**: `378f6c2`
+- **Latest Pushed Commit**: `378f6c2`
+- **Commit Subject**: feat: refine PDF fret digit size gates and horizontal overlap grouping filters v0.8
+- **Working Tree Status**: Clean (except modified `HANDOFF.md` once saved, and local untracked venv/test outputs)
 - **Tests & Checks Run**:
-  - `python -m pytest` -> 284 passed cleanly in 14.69s (including 10 new timing mapping tests)
-  - `python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
-  - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid
+  - `.venv\Scripts\pytest` -> 287 passed cleanly in 14.54s (including 3 new fret overlap tests)
+  - `.venv\Scripts\python -m score2gp.cli export-schema --out schemas` -> passed with no diffs
+  - `.venv\Scripts\python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid
   - `git diff --check` -> passed cleanly
   - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep` is tracked under Git
-- **GitHub Check Status**: N/A
+  - `git ls-files grouping-diagnostics.html inspect overlays tuning_outside.tabraw.json warnings.json` -> completely cleaned up / empty
+- **GitHub Check Status**: N/A / pending
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or diagnostic outputs are tracked or committed. All outputs under `work/` are ignored.
 
+## Cleanup Performed for PR #47 Leftovers
+- Verified that PR #47 accidentally tracked several root generated/diagnostic files: `grouping-diagnostics.html`, `inspect/inspect_pdf.json`, `inspect/pages/page-001.png`, `overlays/page-001-grouping.png`, `tuning_outside.tabraw.json`, and `warnings.json`.
+- Removed these leftover files completely from Git tracking using `git rm -r` as part of the immediate cleanup prerequisite.
+- Committed the cleanup as `c26b270` before proceeding to feature implementation.
+- Verified with `git ls-files` that these files are no longer tracked in our branch.
+
 ## What Changed in the Task
-- **Defined PDF Timing-Mapping / Spacing Telemetry Schema (`pdf-timing-mapping.v0.7`)**:
-  - Populates diagnostic metrics: `contract_version`, `input_class`, `grouping_status`, `grouping_safe`, `timing_source_safe`, `musicxml_timing_preflight_status`, `whether_mapping_attempted`, `whether_mapping_refused`, `refusal_reason_codes`, `quality`, `whether_scoreir_written`, `remediation_hint`, `per_bar`, `matched_x_onset_group_count`, `unmatched_x_group_count`, `unmatched_onset_group_count`, `mean_absolute_relative_error`, `max_relative_error`, `monotonic`, `ambiguity_count`.
-  - Added Pydantic field `pdf_timing_mapping` on `BuildIrDiagnostics` class.
-- **Implemented Visually Rich Developer Diagnostics HTML Report (`pdf-timing-mapping-diagnostics.html`)**:
-  - Visual dark-mode premium dashboard showing attempting/refused verdict, tabular comparison of per-bar spacing, drift metrics, ambiguity, and remediation info.
-  - Automatically written on both successful runs and `BuildIrInputRiskError` failure paths.
-- **Added 4 Timing-Mapping Blocker Taxonomy Codes**:
-  - `pdf_timing_mapping_refused`
-  - `pdf_timing_mapping_not_enough_for_build_ir`
-  - `pdf_timing_mapping_group_count_mismatch`
-  - `pdf_timing_mapping_non_monotonic`
-  - Whitelisted these in `_tabraw_unsafe_grouping_warning_codes` to cleanly enforce gates.
-- **Enforced Strict Compiler Gates & Preflight Safeties**:
-  - Attempt timing mapping only if grouping is safe and preflight MusicXML timing is safe.
-  - Strictly block ScoreIR compilation and raise `BuildIrInputRiskError` if visual x-positions across bars are non-monotonic (`monotonic == False`), ensuring correct ordering.
-  - Allow slightly uneven spacings to pass with warning/poor quality warnings in diagnostics JSON/HTML without breaking build-ir, satisfying existing spacing regression tests.
-- **Added 10 Public Synthetic Timing Mapping Tests**:
-  - Programmatically exercises clean one-bar spacing (good), clean multi-bar spacing (good), extra PDF x group (warning/poor), missing PDF x group (warning/poor), non-monotonic ordering (refused), ambiguous close x groups (warning/poor), chord stack (review flagged), unsupported polyphony (refused), unsafe MusicXML timing (refused), unsafe PDF grouping (refused).
-  - All 284 project tests are now passing cleanly!
+- **Refined Fret Digit Merging Logic (`pdf.py`)**:
+  - Expanded the horizontal adjacent merging gap to support safe touch/overlap down to `-3.0 pt` (when vertically aligned within `2.0 pt`), allowing tight/touching digit spans to merge successfully into multi-digit frets (e.g. `"10"`).
+  - Introduced `pdf_fret_digits_overlap_ambiguous` blocker warning code when the horizontal overlap is too deep (`gap < -3.0 pt`) or vertically misaligned with an overlap, marking both digit spans as unsafe to prevent silent corruption.
+- **Added Blocker Whitelists (`build_ir.py` & `pdf.py`)**:
+  - Registered `pdf_fret_digits_overlap_ambiguous` under `drawn_grouping_codes` in `pdf.py` and mapped it to a descriptive error message in `_WARNING_MESSAGE_MAP`.
+  - Whitelisted it in `_tabraw_unsafe_grouping_warning_codes` in `build_ir.py` to ensure `build_ir` cleanly refuses compilation on ambiguous/deep overlaps.
+- **Created 2 New Public Synthetic PDF Fixtures (`make_fret_refinement_pdfs.py`)**:
+  - `generated_pdf_fret_touching_digits_safe.pdf`: Digits `"1 "` and `"0"` written close together with trailing whitespace (to force separate word tokens during PyMuPDF parsing) resulting in a safe touching overlap (`gap = -2.0 pt`).
+  - `generated_pdf_fret_overlapping_digits_ambiguous.pdf`: Digits with too deep of an overlap (`gap = -5.0 pt`).
+- **Added 3 New Fret Refinement Unit Tests (`test_pdf.py`)**:
+  - `test_pdf_fret_touching_digits_safe`: Asserts that touching digits successfully merge into `"10"`.
+  - `test_pdf_fret_overlapping_digits_ambiguous`: Asserts that deep overlaps trigger the `pdf_fret_digits_overlap_ambiguous` blocker warning.
+  - `test_build_ir_refuses_overlapping_digits_ambiguous`: Asserts that `build_ir` cleanly raises `BuildIrInputRiskError` and refuses IR compilation on deep overlaps.
 
 ## Private Smoke Blocker Summary (No Private Content Included)
 - **`private_input_1`** (`pdf-tab-musicxml`):
@@ -55,7 +56,6 @@
   - **Primary PDF blocker stage**: `pdf_bar_box_one_boundary_rejected` (system 6 on page 2 has 1 accepted and 1 rejected boundary, blocking fallback and grouping).
   - **Timing blocker stage**: `musicxml_timing_repair_not_safe` (preflight VoiceOverlapError with 66 overfull or overlapping events).
   - **ScoreIR gate status**: `refused` (blocked by PDF grouping and timing).
-  - **PDF Timing Mapping Status**: `refused` (with `pdf_timing_mapping_not_attempted_grouping_unsafe` and `pdf_timing_mapping_not_attempted_musicxml_unsafe`).
 
 - **`private_input_2`** (`pdf-tab-only`):
   - **Input class**: `ascii_tab_candidate` / `unsupported`
@@ -67,14 +67,13 @@
   - **Grouping status**: `missing_pdf_grouping`
   - **Primary PDF blocker stage**: `drawn_system_detection` and `ascii_system_detection` (`pdf-tab-system-not-detected`).
   - **Timing status**: `not_attempted`.
-  - **PDF Timing Mapping Status**: `refused` (with `pdf_timing_mapping_not_attempted_grouping_unsafe` and `pdf_timing_mapping_not_attempted_missing_musicxml`).
 
 ## Current Top Blocker Classification
 1. **`pdf_bar_box_one_boundary_rejected`** (Primary PDF grouping blocker stage)
 2. **`musicxml_timing_repair_not_safe`** (Primary MusicXML timeline voice overlap blocker)
 
 ## Next Recommended Task / Branch
-- **`feature/pdf-fret-refinement-v0.8`**: Focus on refining fret digit height/width size gates and horizontal digit overlap grouping filters to build premium ScoreIR.
+- **`feature/pdf-fret-optical-bounds-v0.9`**: Refine fret candidate character-recognition confidence scoring and handle custom fonts or ligature character widths (e.g. numbers overlapping with symbols).
 
 ## Explicit Scope Boundaries
 - **Do not** commit any private inputs, private outputs, private GP files, private PDFs, private summaries, private HTML diagnostics, or any `work/` contents.

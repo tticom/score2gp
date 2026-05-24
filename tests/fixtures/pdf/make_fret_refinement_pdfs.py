@@ -162,6 +162,28 @@ def make_pdf_fret_grouped_success() -> None:
     _save(doc, "generated_pdf_fret_grouped_success.pdf")
 
 
+def make_pdf_fret_touching_digits_safe() -> None:
+    # 12. Touching digits safe to merge
+    doc, page = _new_page("Touching Digits Safe to Merge")
+    line_ys = [120, 134, 148, 162, 176, 190]
+    _draw_tab_lines(page, line_ys=line_ys)
+    _draw_barlines(page, line_ys=line_ys, bar_xs=[88, 205, 322])
+    _write_fret(page, "1 ", 100, line_ys[1])
+    _write_fret(page, "0", 104, line_ys[1])  # dx = 4.0, gap = -2.0 (safe touch/overlap)
+    _save(doc, "generated_pdf_fret_touching_digits_safe.pdf")
+
+
+def make_pdf_fret_overlapping_digits_ambiguous() -> None:
+    # 13. Overlapping digits too deep / ambiguous
+    doc, page = _new_page("Overlapping Digits Ambiguous")
+    line_ys = [120, 134, 148, 162, 176, 190]
+    _draw_tab_lines(page, line_ys=line_ys)
+    _draw_barlines(page, line_ys=line_ys, bar_xs=[88, 205, 322])
+    _write_fret(page, "1 ", 100, line_ys[1])
+    _write_fret(page, "0", 101, line_ys[1])  # dx = 1.0, gap = -5.0 (ambiguous/deep overlap)
+    _save(doc, "generated_pdf_fret_overlapping_digits_ambiguous.pdf")
+
+
 def main() -> None:
     make_pdf_fret_clean_single_digit()
     make_pdf_fret_clean_multidigit()
@@ -174,6 +196,8 @@ def main() -> None:
     make_pdf_fret_oversized_tall()
     make_pdf_fret_tiny_noisy()
     make_pdf_fret_grouped_success()
+    make_pdf_fret_touching_digits_safe()
+    make_pdf_fret_overlapping_digits_ambiguous()
 
 
 if __name__ == "__main__":
