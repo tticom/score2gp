@@ -23,6 +23,15 @@
 - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep`.
 - `git ls-files grouping-diagnostics.html inspect overlays warnings.json tuning_outside.tabraw.json` -> empty.
 
+## Explicit Scope Boundaries
+
+- Do not implement silent, unbounded MusicXML timeline mutations. Any adjustments must be mathematically safe and explicitly logged as warnings in the diagnostics JSON.
+- Do not blindly drop valid polyphony, guess missing notes, or mutate timelines unsafely.
+- Do not implement automatic grouping or bar-box repair of PDF internal measures in this branch.
+- Do not use MusicXML pitch or tuning data to infer PDF layout.
+- Do not use, tune to, or track private scores, private overlays, or `work/` artifacts.
+- Do not implement OCR, scanned-PDF support, or ML layout recognition.
+
 ## What Changed In This Task
 
 - **Implemented Conservative Timing Risk Remediation**:
@@ -48,12 +57,3 @@
 ## Next Recommended Task
 
 - **Run Another Private Smoke Refresh & Review**: Perform a smoke test review of `private_input_1` now that timing risk is bypassed, and begin planning for the final groupings/bar-box boundary recovery or next compiler progression.
-
-## Explicit Scope Boundaries
-
-- Do not implement silent, unbounded MusicXML timeline mutations. Any adjustments must be mathematically safe and explicitly logged as warnings in the diagnostics JSON.
-- Do not blindly drop valid polyphony, guess missing notes, or mutate timelines unsafely.
-- Do not implement automatic grouping or bar-box repair of PDF internal measures in this branch.
-- Do not use MusicXML pitch or tuning data to infer PDF layout.
-- Do not use, tune to, or track private scores, private overlays, or `work/` artifacts.
-- Do not implement OCR, scanned-PDF support, or ML layout recognition.
