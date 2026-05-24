@@ -1055,6 +1055,277 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
             # Pre-process, split mixed technique words, and group playable digits conservatively
             refined_words = _split_technique_mixed_words(words)
 
+            # Reconstruct lines to find Standard and other Tunings page-wide
+            line_words = {}
+            for rw in refined_words:
+                b_no = rw.get("block_no") or 0
+                l_no = rw.get("line_no") or 0
+                key = (b_no, l_no)
+                if key not in line_words:
+                    line_words[key] = []
+                line_words[key].append(rw)
+
+            line_texts = {}
+            for key in line_words:
+                line_words[key] = sorted(line_words[key], key=lambda w: w["x0"])
+                line_texts[key] = " ".join(w["text"] for w in line_words[key])
+
+            # Detect tunings per line/page to check for conflicts
+            page_detected_tunings = set()
+            for key, line_text in line_texts.items():
+                if re.search(r"\bstandard\s+tuning\b", line_text, re.IGNORECASE):
+                    page_detected_tunings.add("standard")
+                if re.search(r"\bdrop\s+d\b", line_text, re.IGNORECASE):
+                    page_detected_tunings.add("drop_d")
+                if re.search(r"\bdadgad\b", line_text, re.IGNORECASE):
+                    page_detected_tunings.add("dadgad")
+
+            has_page_tuning_conflict = len(page_detected_tunings) > 1
+
+            if has_page_tuning_conflict:
+                for key, w_list in line_words.items():
+                    line_text = line_texts[key]
+                    is_match = (
+                        re.search(r"\bstandard\s+tuning\b", line_text, re.IGNORECASE) or
+                        re.search(r"\bdrop\s+d\b", line_text, re.IGNORECASE) or
+                        re.search(r"\bdadgad\b", line_text, re.IGNORECASE)
+                    )
+                    if is_match:
+                        for w in w_list:
+                            w["is_tuning_evidence"] = True
+                            if "warnings" not in w:
+                                w["warnings"] = []
+                            w["warnings"].extend([
+                                "pdf_tuning_conflict_detected",
+                                "pdf_tuning_label_ambiguous",
+                                "pdf_pitch_tuning_diagnostics_not_enough_for_build_ir"
+                            ])
+                            w["tuning_classification"] = "malformed_tuning_label"
+                warnings.append({
+                    "code": "pdf_tuning_conflict_detected",
+                    "message": f"Conflicting tuning labels detected on page {page_number}.",
+                    "severity": "warning",
+                })
+                warnings.append({
+                    "code": "pdf_tuning_label_ambiguous",
+                    "message": f"Ambiguous tuning label detected on page {page_number}.",
+                    "severity": "warning",
+                })
+                warnings.append({
+                    "code": "pdf_pitch_tuning_diagnostics_not_enough_for_build_ir",
+                    "message": f"Pitch/tuning diagnostics block build-ir on page {page_number}.",
+                    "severity": "warning",
+                })
+            else:
+                for key, w_list in line_words.items():
+                    line_text = line_texts[key]
+                    if re.search(r"\bstandard\s+tuning\b", line_text, re.IGNORECASE):
+                        for w in w_list:
+                            w["is_tuning_evidence"] = True
+                            if "warnings" not in w:
+                                w["warnings"] = []
+                            w["warnings"].extend([
+                                "pdf_tuning_standard_detected",
+                                "pdf_tuning_text_preserved_non_playable",
+                                "pdf_tuning_not_used_for_string_assignment",
+                                "pdf_tuning_not_used_for_fret_inference",
+                                "pdf_timing_mapping_not_implemented",
+                                "pdf_pitch_layout_evidence_detected"
+                            ])
+                            w["tuning_classification"] = "non_playable_tuning_text"
+                        warnings.append({
+                            "code": "pdf_tuning_standard_detected",
+                            "message": f"Standard tuning text detected on page {page_number}.",
+                            "severity": "info",
+                        })
+                        warnings.append({
+                            "code": "pdf_timing_mapping_not_implemented",
+                            "message": f"Timing mapping is not implemented on page {page_number}.",
+                            "severity": "info",
+                        })
+                    elif "tuning" in line_text.lower():
+                        if "standardish" in line_text.lower():
+                            for w in w_list:
+                                w["is_tuning_evidence"] = True
+                                if "warnings" not in w:
+                                    w["warnings"] = []
+                                w["warnings"].extend([
+                                    "pdf_tuning_label_malformed",
+                                    "pdf_tuning_format_unsupported",
+                                    "pdf_pitch_tuning_diagnostics_not_enough_for_build_ir"
+                                ])
+                                w["tuning_classification"] = "malformed_tuning_label"
+                            warnings.append({
+                                "code": "pdf_tuning_label_malformed",
+                                "message": f"Malformed tuning label detected on page {page_number}.",
+                                "severity": "warning",
+                            })
+                            warnings.append({
+                                "code": "pdf_tuning_format_unsupported",
+                                "message": f"Unsupported tuning format on page {page_number}.",
+                                "severity": "warning",
+                            })
+                            warnings.append({
+                                "code": "pdf_pitch_tuning_diagnostics_not_enough_for_build_ir",
+                                "message": f"Pitch/tuning diagnostics block build-ir on page {page_number}.",
+                                "severity": "warning",
+                            })
+
+            # Scan next to each system for explicit string tuning labels
+            _PITCH_LABEL_RE = re.compile(r"^[a-gA-G][#b]?[1-8]?$")
+            for system in systems:
+                left_words = []
+                for w in refined_words:
+                    if w.get("is_tuning_evidence"):
+                        continue
+                    x = (w["x0"] + w["x1"]) / 2
+                    y = (w["y0"] + w["y1"]) / 2
+                    if system.x0 - 55.0 <= x < system.x0 and system.line_ys[0] - 6.0 <= y <= system.line_ys[-1] + 6.0:
+                        left_words.append((w, x, y))
+
+                string_matches = {i: [] for i in range(6)}
+                for w, x, y in left_words:
+                    text = w["text"].strip()
+                    if _PITCH_LABEL_RE.match(text):
+                        distances = [abs(line_y - y) for line_y in system.line_ys]
+                        min_dist = min(distances)
+                        nearest_str_idx = distances.index(min_dist)
+                        if min_dist <= 3.0:
+                            string_matches[nearest_str_idx].append((w, min_dist))
+
+                if all(len(string_matches[i]) == 1 for i in range(6)):
+                    tuning_notes = [string_matches[i][0][0]["text"].upper() for i in range(6)]
+                    is_eadgbe = (tuning_notes == ["E", "B", "G", "D", "A", "E"])
+                    for i in range(6):
+                        w = string_matches[i][0][0]
+                        w["is_tuning_evidence"] = True
+                        if "warnings" not in w:
+                            w["warnings"] = []
+                        w["warnings"].extend([
+                            "pdf_tuning_explicit_strings_detected",
+                            "pdf_tuning_string_labels_aligned",
+                            "pdf_tuning_text_preserved_non_playable",
+                            "pdf_tuning_not_used_for_string_assignment",
+                            "pdf_tuning_not_used_for_fret_inference",
+                            "pdf_pitch_layout_evidence_detected"
+                        ])
+                        w["tuning_classification"] = "non_playable_tuning_text"
+                        w["tuning_string"] = i + 1
+                        w["tuning_system"] = system.system_index
+                        if is_eadgbe:
+                            w["warnings"].append("pdf_tuning_standard_detected")
+                    warnings.append({
+                        "code": "pdf_tuning_explicit_strings_detected",
+                        "message": f"Explicit six-string tuning labels detected on page {page_number}.",
+                        "severity": "info",
+                    })
+                    warnings.append({
+                        "code": "pdf_tuning_string_labels_aligned",
+                        "message": f"Tuning labels cleanly aligned with string lines on page {page_number}.",
+                        "severity": "info",
+                    })
+                else:
+                    has_conflict = any(len(string_matches[i]) > 1 for i in range(6))
+                    if has_conflict:
+                        for i in range(6):
+                            for w, _ in string_matches[i]:
+                                w["is_tuning_evidence"] = True
+                                if "warnings" not in w:
+                                    w["warnings"] = []
+                                w["warnings"].extend([
+                                    "pdf_tuning_conflict_detected",
+                                    "pdf_tuning_label_ambiguous",
+                                    "pdf_pitch_tuning_diagnostics_not_enough_for_build_ir"
+                                ])
+                                w["tuning_classification"] = "malformed_tuning_label"
+                        warnings.append({
+                            "code": "pdf_tuning_conflict_detected",
+                            "message": f"Tuning conflict detected on page {page_number}.",
+                            "severity": "warning",
+                        })
+                        warnings.append({
+                            "code": "pdf_tuning_label_ambiguous",
+                            "message": f"Ambiguous tuning label detected on page {page_number}.",
+                            "severity": "warning",
+                        })
+                        warnings.append({
+                            "code": "pdf_pitch_tuning_diagnostics_not_enough_for_build_ir",
+                            "message": f"Pitch/tuning diagnostics block build-ir on page {page_number}.",
+                            "severity": "warning",
+                        })
+
+            # Check for unassociated/outside tuning labels, chords, or section note names
+            for w in refined_words:
+                if w.get("is_tuning_evidence"):
+                    continue
+                text = w["text"].strip()
+                if text.lower() == "standard" or text.upper() in {"E", "B", "G", "D", "A", "F#", "C#"}:
+                    x = (w["x0"] + w["x1"]) / 2
+                    y = (w["y0"] + w["y1"]) / 2
+                    system = _nearest_system(systems, x, y)
+                    is_chord = False
+                    if system is not None:
+                        min_y = min(system.line_ys)
+                        tolerance = max(4.0, system.line_spacing * 0.38)
+                        if y < min_y - tolerance and system.x0 <= x <= system.x1:
+                            is_chord = True
+                    if is_chord:
+                        if "warnings" not in w:
+                            w["warnings"] = []
+                        w["warnings"].append("pdf_fret_chord_text_digit_excluded")
+                        w["tuning_classification"] = "chord_text_not_tuning"
+                        continue
+
+                    b_no = w.get("block_no") or 0
+                    l_no = w.get("line_no") or 0
+                    line_text = line_texts.get((b_no, l_no), "").lower()
+                    if "verse" in line_text or "intro" in line_text or "chorus" in line_text or "section" in line_text:
+                        if "warnings" not in w:
+                            w["warnings"] = []
+                        w["tuning_classification"] = "section_text_not_tuning"
+                        continue
+
+                    w["is_tuning_evidence"] = True
+                    if "warnings" not in w:
+                        w["warnings"] = []
+                    if system is None or not system.candidate_zone_contains(x, y):
+                        w["warnings"].append("pdf_tuning_label_outside_system")
+                        w["warnings"].append("pdf_tuning_label_unassociated")
+                        w["tuning_classification"] = "non_playable_tuning_text"
+                    else:
+                        w["warnings"].append("pdf_tuning_label_unassociated")
+                        w["tuning_classification"] = "non_playable_tuning_text"
+                    w["warnings"].extend([
+                        "pdf_tuning_text_preserved_non_playable",
+                        "pdf_tuning_not_used_for_string_assignment",
+                        "pdf_tuning_not_used_for_fret_inference",
+                        "pdf_pitch_layout_evidence_detected"
+                    ])
+
+            # Check for unassociated/outside tuning labels for ALL identified tuning evidence
+            for w in refined_words:
+                if not w.get("is_tuning_evidence"):
+                    continue
+                # If explicit string labels aligned, they are cleanly aligned and associated, so skip
+                if "pdf_tuning_string_labels_aligned" in w.get("warnings", []):
+                    continue
+
+                # Check system bounds
+                x = (w["x0"] + w["x1"]) / 2
+                y = (w["y0"] + w["y1"]) / 2
+                system = _nearest_system(systems, x, y)
+                if "warnings" not in w:
+                    w["warnings"] = []
+
+                if system is None or not system.candidate_zone_contains(x, y):
+                    if "pdf_tuning_label_outside_system" not in w["warnings"]:
+                        w["warnings"].append("pdf_tuning_label_outside_system")
+                    if "pdf_tuning_label_unassociated" not in w["warnings"]:
+                        w["warnings"].append("pdf_tuning_label_unassociated")
+                else:
+                    if "pdf_tuning_label_unassociated" not in w["warnings"]:
+                        w["warnings"].append("pdf_tuning_label_unassociated")
+
             system_digits = {sys.system_index: [] for sys in systems}
             system_digits_merged = {sys.system_index: [] for sys in systems}
             non_playable_words = []
@@ -1067,6 +1338,10 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                 if _point_in_ascii_block(ascii_blocks, x, y):
                     continue
                 if ascii_blocks and parse_fret_text(text) is not None:
+                    continue
+
+                if rw.get("is_tuning_evidence"):
+                    non_playable_words.append(rw)
                     continue
 
                 system = _nearest_system(systems, x, y)
@@ -1221,8 +1496,12 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                 string = pc.get("assigned_string")
                 string_distance = pc.get("string_distance")
 
+                if pc.get("is_tuning_evidence"):
+                    string = pc.get("tuning_string")
+                    line_index = pc.get("tuning_string")
+
                 assignment_warnings = list(pc.get("warnings", []))
-                is_fret_candidate = parse_fret_text(raw_text) is not None
+                is_fret_candidate = parse_fret_text(raw_text) is not None and not pc.get("is_tuning_evidence")
 
                 # Enforce size / range checks on playable Candidates
                 if is_fret_candidate and pc.get("is_playable_fret"):
@@ -1253,15 +1532,24 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
 
                 if not is_fret_candidate:
                     if "pdf_fret_technique_marker_excluded" not in assignment_warnings and "pdf_fret_chord_text_digit_excluded" not in assignment_warnings and "pdf_fret_page_or_legend_number_excluded" not in assignment_warnings:
-                        from .tabraw import _looks_like_chord_symbol
-                        if _looks_like_chord_symbol(raw_text):
+                        classification = pc.get("tuning_classification")
+                        if classification == "chord_text_not_tuning":
                             assignment_warnings.append("pdf_fret_chord_text_digit_excluded")
-                        elif any(c.isdigit() for c in raw_text):
-                            assignment_warnings.append("pdf_fret_chord_text_digit_excluded")
+                        elif classification == "section_text_not_tuning":
+                            assignment_warnings.append("pdf_fret_page_or_legend_number_excluded")
+                        elif classification == "non_playable_tuning_text":
+                            assignment_warnings.append("pdf_non_playable_text_not_string_assigned")
+                        else:
+                            from .tabraw import _looks_like_chord_symbol
+                            if _looks_like_chord_symbol(raw_text):
+                                assignment_warnings.append("pdf_fret_chord_text_digit_excluded")
+                            elif any(c.isdigit() for c in raw_text):
+                                assignment_warnings.append("pdf_fret_chord_text_digit_excluded")
 
                 if system is not None:
                     if x < system.x0 or x > system.x1:
-                        assignment_warnings.append("pdf_candidate_outside_system")
+                        if "pdf_tuning_label_outside_system" not in assignment_warnings and "pdf_tuning_label_unassociated" not in assignment_warnings and not pc.get("is_tuning_evidence"):
+                            assignment_warnings.append("pdf_candidate_outside_system")
                     string_warnings = pc.get("string_warnings", [])
                     if is_fret_candidate:
                         if string is None:
@@ -1271,7 +1559,8 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                         elif len(raw_text) > 1:
                             assignment_warnings.append("pdf_multidigit_fret_string_assigned")
                     else:
-                        assignment_warnings.append("pdf_non_playable_text_not_string_assigned")
+                        if "pdf_non_playable_text_not_string_assigned" not in assignment_warnings:
+                            assignment_warnings.append("pdf_non_playable_text_not_string_assigned")
                     for w in string_warnings:
                         if w not in assignment_warnings:
                             assignment_warnings.append(w)
@@ -1295,7 +1584,8 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                         assignment_warnings.append("pdf_string_assignment_missing")
                         assignment_warnings.append("pdf_candidates_unassigned_to_string")
                     else:
-                        assignment_warnings.append("pdf_non_playable_text_not_string_assigned")
+                        if "pdf_non_playable_text_not_string_assigned" not in assignment_warnings:
+                            assignment_warnings.append("pdf_non_playable_text_not_string_assigned")
 
                 bar_bounds = system.bar_bounds_for_x(x) if system is not None else None
                 confidence = _candidate_confidence(raw_text, system, string, bar_index, x)
@@ -1315,6 +1605,17 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                     "pdf_fret_technique_marker_excluded",
                     "pdf_fret_chord_text_digit_excluded",
                     "pdf_fret_page_or_legend_number_excluded",
+                    # Pitch / Tuning Info Warnings
+                    "pdf_tuning_standard_detected",
+                    "pdf_tuning_explicit_strings_detected",
+                    "pdf_tuning_string_labels_aligned",
+                    "pdf_tuning_label_outside_system",
+                    "pdf_tuning_label_unassociated",
+                    "pdf_tuning_text_preserved_non_playable",
+                    "pdf_tuning_not_used_for_string_assignment",
+                    "pdf_tuning_not_used_for_fret_inference",
+                    "pdf_pitch_layout_evidence_detected",
+                    "pdf_timing_mapping_not_implemented",
                 }]
                 if unsafe_assign:
                     confidence = min(confidence, 0.65)
@@ -2234,6 +2535,13 @@ def _unsafe_grouping_codes(fret_candidates: list[dict[str, Any]], page_warnings:
         "pdf_fret_non_digit_rejected",
         "pdf_fret_optical_bounds_confidence_below_threshold",
         "pdf_fret_refinement_not_enough_for_build_ir",
+
+        # New Pitch / Tuning Blocker Codes
+        "pdf_tuning_conflict_detected",
+        "pdf_tuning_label_ambiguous",
+        "pdf_tuning_label_malformed",
+        "pdf_tuning_format_unsupported",
+        "pdf_pitch_tuning_diagnostics_not_enough_for_build_ir",
     }
     codes: set[str] = set()
     for candidate in fret_candidates:
@@ -3041,7 +3349,12 @@ def _should_keep_candidate(candidate: dict[str, Any]) -> bool:
     raw = candidate.get("raw", {})
     near_tab_system = isinstance(raw, dict) and raw.get("system_inference") is not None
     warnings = raw.get("assignment_warnings", []) if isinstance(raw, dict) else []
-    if any(w in warnings for w in ("pdf_fret_page_or_legend_number_excluded", "pdf_fret_chord_text_digit_excluded")):
+    if any(w in warnings for w in (
+        "pdf_fret_page_or_legend_number_excluded",
+        "pdf_fret_chord_text_digit_excluded",
+        "pdf_tuning_label_outside_system",
+        "pdf_tuning_label_unassociated",
+    )):
         return True
     return text in {"x"} or near_tab_system
 
