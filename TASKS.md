@@ -4,6 +4,8 @@
 
 ## Done
 
+- [x] Execute a private-safe smoke refresh after conservative edge-boundary recovery to verify safety heuristics and blocker taxonomy updates.
+
 - [x] Implement conservative edge-boundary recovery v0.1 with public synthetic born-digital PDF fixtures, dynamic recovered status, and compiler compile-safety integration.
 
 - [x] Add a public partial-to-recovery design note before attempting any automatic grouping repair.
