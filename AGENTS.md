@@ -143,3 +143,16 @@ Still require explicit user confirmation for:
 - reading secrets, .env files, credentials, keys, or tokens
 - changing GitHub repo settings, secrets, or permissions
 - running arbitrary network upload/download commands
+
+Run:
+python -m pytest
+python -m score2gp.cli export-schema --out schemas
+python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json
+git diff --check
+git diff -- schemas
+git ls-files fixtures/private work
+
+If checks pass, commit and push:
+git add AGENTS.md HANDOFF.md
+git commit -m "Document routine command permissions"
+git push origin feature/ascii-scoreir-gate-refusal-diagnostics-v0.1

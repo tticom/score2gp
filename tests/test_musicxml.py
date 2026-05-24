@@ -142,7 +142,10 @@ def test_musicxml_timing_preflight_detects_audiveris_like_overfull_bar() -> None
 
     issues = analyze_musicxml_timing(imported)
 
-    assert [(issue.code, issue.severity) for issue in issues] == [("musicxml-overfull-bar", "error")]
+    assert [(issue.code, issue.severity) for issue in issues] == [
+        ("musicxml-overfull-bar", "error"),
+        ("musicxml_alignment_not_attempted_due_to_timing_risk", "error"),
+    ]
     assert issues[0].expected_duration_divisions == 16
     assert issues[0].end_divisions == 20
 
@@ -152,7 +155,10 @@ def test_musicxml_timing_preflight_flags_12_8_compound_meter_without_error() -> 
 
     issues = analyze_musicxml_timing(imported)
 
-    assert [(issue.code, issue.severity) for issue in issues] == [("musicxml-compound-meter-assumption", "info")]
+    assert [(issue.code, issue.severity) for issue in issues] == [
+        ("musicxml-compound-meter-assumption", "info"),
+        ("valid_compound_meter", "info"),
+    ]
     assert issues[0].expected_duration_divisions == 36
 
 
@@ -166,8 +172,15 @@ def test_musicxml_timing_preflight_records_backup_forward_risk() -> None:
 
     issues = analyze_musicxml_timing(imported)
 
-    assert [(issue.code, issue.severity) for issue in issues] == [("musicxml-overfull-bar", "error")]
-    assert issues[0].voice == 2
+    assert [(issue.code, issue.severity) for issue in issues] == [
+        ("musicxml_forward_exceeds_measure_end", "error"),
+        ("musicxml_unbalanced_backup_forward", "error"),
+        ("musicxml_backup_forward_alignment_ambiguous", "error"),
+        ("musicxml-overfull-bar", "error"),
+        ("musicxml_alignment_not_attempted_due_to_timing_risk", "error"),
+    ]
+    overfull_issue = next(issue for issue in issues if issue.code == "musicxml-overfull-bar")
+    assert overfull_issue.voice == 2
 
 
 def test_musicxml_importer_parses_valid_mxl_with_container(tmp_path) -> None:
@@ -245,5 +258,8 @@ def test_musicxml_timing_preflight_detects_overfull_bar_inside_mxl(tmp_path) -> 
     imported = parse_musicxml(mxl)
     issues = analyze_musicxml_timing(imported)
 
-    assert [(issue.code, issue.severity) for issue in issues] == [("musicxml-overfull-bar", "error")]
+    assert [(issue.code, issue.severity) for issue in issues] == [
+        ("musicxml-overfull-bar", "error"),
+        ("musicxml_alignment_not_attempted_due_to_timing_risk", "error"),
+    ]
     assert issues[0].end_divisions == 20
