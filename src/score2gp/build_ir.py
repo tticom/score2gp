@@ -1089,14 +1089,31 @@ def build_ir_with_diagnostics_from_imports(
             recovered_systems = set()
             skipped_systems = set()
             for p_idx, s_idx in unboxed_systems:
-                has_rejected_barlines = any(
-                    str(w.get("code", "")).startswith("pdf_barline_")
-                    and (w.get("page_index") or w.get("page_number")) is not None
-                    and int(w.get("page_index") or w.get("page_number")) == p_idx
-                    and w.get("system_index") is not None
-                    and int(w.get("system_index")) == s_idx
-                    for w in tabraw.warnings
-                )
+                has_rejected_barlines = False
+                for w in tabraw.warnings:
+                    code = str(w.get("code", ""))
+                    if not code.startswith("pdf_barline_") and code != "pdf_barline_candidates_present_but_invalid":
+                        continue
+
+                    w_page = w.get("page_index") or w.get("page_number")
+                    w_sys = w.get("system_index")
+                    msg = str(w.get("message", "")).lower()
+
+                    if w_page is None:
+                        if f"page {p_idx}" in msg:
+                            w_page = p_idx
+                    if w_sys is None:
+                        if f"system {s_idx}" in msg:
+                            w_sys = s_idx
+
+                    if w_page is not None and w_sys is not None:
+                        try:
+                            if int(w_page) == p_idx and int(w_sys) == s_idx:
+                                has_rejected_barlines = True
+                                break
+                        except (ValueError, TypeError):
+                            pass
+
                 if not has_rejected_barlines:
                     recovered_systems.add((p_idx, s_idx))
                 else:
@@ -1142,16 +1159,17 @@ def build_ir_with_diagnostics_from_imports(
                         {"code": "pdf_bar_box_system_wide_fallback", "message": f"System-wide fallback used for system {s_idx} on page {p_idx}.", "severity": "info", "page_index": p_idx, "system_index": s_idx}
                     ])
 
-            # Skip remaining unboxed systems
-            if skipped_systems:
-                new_candidates = []
-                for candidate in tabraw.candidates:
-                    if candidate.page_index is not None and candidate.system_index is not None:
-                        if (candidate.page_index, candidate.system_index) in skipped_systems:
-                            continue
-                    new_candidates.append(candidate)
-                tabraw.candidates = new_candidates
+            # Skip remaining unboxed systems and unassigned candidates
+            new_candidates = []
+            for candidate in tabraw.candidates:
+                if candidate.page_index is None or candidate.system_index is None:
+                    continue
+                if skipped_systems and (candidate.page_index, candidate.system_index) in skipped_systems:
+                    continue
+                new_candidates.append(candidate)
+            tabraw.candidates = new_candidates
 
+            if skipped_systems:
                 # Filter out all warnings for skipped systems
                 filtered_warnings = []
                 for w in tabraw.warnings:
@@ -1184,6 +1202,12 @@ def build_ir_with_diagnostics_from_imports(
                 "pdf_candidate_unassigned_due_to_unboxed_system",
                 "pdf_candidate_unassigned_to_bar",
                 "pdf_candidates_unassigned_to_bar",
+                "pdf_candidates_unassigned_to_system",
+                "pdf_candidates_unassigned_to_string",
+                "pdf_string_assignment_missing",
+                "pdf_string_assignment_not_enough_for_build_ir",
+                "pdf_candidate_outside_system",
+                "pdf_candidate_outside_bar",
                 "pdf_fret_optical_bounds_confidence_below_threshold",
                 "pdf_fret_refinement_not_enough_for_build_ir",
                 "pdf_grouping_confidence_below_threshold",
@@ -1198,6 +1222,17 @@ def build_ir_with_diagnostics_from_imports(
                 "pdf_partial_grouping_one_system_unboxed",
                 "pdf_string_assignment_succeeded_upstream_grouping_still_blocks",
                 "pdf_candidate_near_missing_bar_boundary",
+                "pdf_partial_system_detection",
+                "pdf_playable_candidate_requires_string_assignment",
+                "pdf_string_assignment_confidence_below_threshold",
+                "pdf_string_assignment_outside_staff",
+                "pdf_tab_staff_incomplete",
+                "pdf_fret_bbox_too_tall",
+                "pdf_fret_digit_symbol_overlap_ambiguous",
+                "pdf_fret_digits_not_merged_gap_too_large",
+                "incomplete_tab_staff",
+                "missing_pdf_barlines",
+                "ambiguous_bar_assignment",
             })
             filtered_warnings = []
             for w in tabraw.warnings:
@@ -1206,6 +1241,8 @@ def build_ir_with_diagnostics_from_imports(
                     continue
                 filtered_warnings.append(w)
             tabraw.warnings = filtered_warnings
+            _synchronize_skipped_system_measures(musicxml, tabraw)
+
 
 
 
@@ -1362,6 +1399,111 @@ def build_ir_with_diagnostics_from_imports(
                 details={"pdf_timing_mapping": mapping, "grouping_status": "grouped", "grouping_safe": True},
             )
     return score, diagnostics
+
+def _synchronize_skipped_system_measures(musicxml: MusicXmlImport, tabraw: TabRaw) -> None:
+    """Re-align remaining candidates to MusicXML measures if there is a system-skipping gap."""
+    if not musicxml.parts or not tabraw.candidates:
+        return
+
+    # 1. Group all candidates by system
+    system_candidates = defaultdict(list)
+    for c in tabraw.candidates:
+        if c.page_index is not None and c.system_index is not None:
+            system_candidates[(c.page_index, c.system_index)].append(c)
+
+    if not system_candidates:
+        return
+
+    # 2. Sort the systems in PDF visual sequence
+    sorted_system_keys = sorted(system_candidates.keys(), key=lambda sys: (sys[0], sys[1]))
+
+    # 3. For each system, get the candidate pitches
+    tuning = _standard_guitar_tuning()
+    system_pitches = {}
+    for sys_key in sorted_system_keys:
+        cands = system_candidates[sys_key]
+        pitches = []
+        for c in cands:
+            if c.string is not None and c.parsed_fret is not None:
+                open_pitch = tuning.pitch_for_string(c.string)
+                if open_pitch is not None:
+                    pitches.append(open_pitch + c.parsed_fret)
+        system_pitches[sys_key] = pitches
+
+    # 4. Get the MusicXML measures and their pitches
+    part = musicxml.parts[0]
+    xml_measures = part.measures
+    xml_measure_pitches = {}
+    for measure in xml_measures:
+        pitches = []
+        for note in measure.notes:
+            if not note.is_rest and note.pitch is not None:
+                pitches.append(note.pitch.midi)
+        xml_measure_pitches[measure.index] = pitches
+
+    total_xml_measures = len(xml_measures)
+
+    # 5. Greedy alignment of systems to MusicXML measures
+    current_min_measure = 1
+    previous_offset = 0
+
+    for sys_key in sorted_system_keys:
+        cands = system_candidates[sys_key]
+        # Determine the number of measures this system spans in TabRaw
+        bar_indices = {c.bar_index for c in cands if c.bar_index is not None}
+        if not bar_indices:
+            continue
+        orig_min_bar = min(bar_indices)
+        orig_max_bar = max(bar_indices)
+        system_len = orig_max_bar - orig_min_bar + 1
+
+        cand_pitches = system_pitches[sys_key]
+
+        best_measure_start = current_min_measure
+        best_score = -1.0
+
+        # We test all starting measure indices that fit within the MusicXML measures
+        # and don't overlap with the previous system's end.
+        max_start = total_xml_measures - system_len + 1
+        if max_start < current_min_measure:
+            # If the timeline doesn't fit, we just shift using the previous offset
+            best_measure_start = orig_min_bar + previous_offset
+        else:
+            for m in range(current_min_measure, max_start + 1):
+                # Collect all pitches in this block of MusicXML measures
+                block_pitches = []
+                for idx in range(m, m + system_len):
+                    block_pitches.extend(xml_measure_pitches.get(idx, []))
+
+                # Compute pitch matching score
+                matches = 0
+                if cand_pitches and block_pitches:
+                    from collections import Counter
+                    c_cand = Counter(cand_pitches)
+                    c_xml = Counter(block_pitches)
+                    matches = sum((c_cand & c_xml).values())
+
+                score = float(matches)
+
+                # Add a tie-breaker bonus if the offset matches the previous offset
+                offset = m - orig_min_bar
+                if offset == previous_offset:
+                    score += 0.1
+
+                if score > best_score:
+                    best_score = score
+                    best_measure_start = m
+
+        offset = best_measure_start - orig_min_bar
+        previous_offset = offset
+
+        # Apply the offset shift to all candidates in this system
+        for c in cands:
+            if c.bar_index is not None:
+                c.bar_index += offset
+
+        current_min_measure = best_measure_start + system_len
+
 
 
 def _measure_events(
