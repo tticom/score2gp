@@ -1423,7 +1423,7 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                             y_center2 = (d2["y0"] + d2["y1"]) / 2
                             vertical_offset = abs(y_center2 - y_center1)
 
-                            if 0.0 <= gap <= 5.0:
+                            if -3.0 <= gap <= 5.0:
                                 if vertical_offset <= 2.0:
                                     merged_text += d2["text"]
                                     merged_x1 = d2["x1"]
@@ -1438,6 +1438,12 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                                     d2["warnings"].append("pdf_fret_digits_not_merged_vertical_misalignment")
                                     d2["warnings"].append("pdf_fret_refinement_not_enough_for_build_ir")
                                     break
+                            elif gap < -3.0:
+                                d2["warnings"].append("pdf_fret_digits_overlap_ambiguous")
+                                d2["warnings"].append("pdf_fret_refinement_not_enough_for_build_ir")
+                                merged_warnings.append("pdf_fret_digits_overlap_ambiguous")
+                                merged_warnings.append("pdf_fret_refinement_not_enough_for_build_ir")
+                                break
                             elif 5.0 < gap <= 12.0:
                                 d2["warnings"].append("pdf_fret_digits_not_merged_gap_too_large")
                                 d2["warnings"].append("pdf_fret_refinement_not_enough_for_build_ir")
@@ -2528,6 +2534,7 @@ def _unsafe_grouping_codes(fret_candidates: list[dict[str, Any]], page_warnings:
         # New Fret Refinement Blocker Codes
         "pdf_fret_digits_not_merged_gap_too_large",
         "pdf_fret_digits_not_merged_vertical_misalignment",
+        "pdf_fret_digits_overlap_ambiguous",
         "pdf_fret_bbox_too_tall",
         "pdf_fret_bbox_too_wide",
         "pdf_fret_bbox_too_small",
@@ -2693,6 +2700,7 @@ def _specific_grouping_warning(code: str, grouping_counts: dict[str, int]) -> di
         "pdf_fret_digits_merged": "Horizontally adjacent digits successfully merged.",
         "pdf_fret_digits_not_merged_gap_too_large": "Adjacent digits too far apart horizontally to merge safely.",
         "pdf_fret_digits_not_merged_vertical_misalignment": "Adjacent digits vertically misaligned and not merged safely.",
+        "pdf_fret_digits_overlap_ambiguous": "Playable fret candidates overlap horizontally too deeply or ambiguously.",
         "pdf_fret_split_text_span_merged": "Split text span digits merged into one candidate.",
         "pdf_fret_bbox_too_tall": "Fret candidate bounding box is too tall to be a valid fret.",
         "pdf_fret_bbox_too_wide": "Fret candidate bounding box is too wide to be a valid fret.",

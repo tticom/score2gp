@@ -1904,6 +1904,8 @@ PDF_FRET_PAGE_LEGEND_EXCLUDED = Path(__file__).parent / "fixtures" / "pdf" / "ge
 PDF_FRET_OVERSIZED_TALL = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_fret_oversized_tall.pdf"
 PDF_FRET_TINY_NOISY = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_fret_tiny_noisy.pdf"
 PDF_FRET_GROUPED_SUCCESS = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_fret_grouped_success.pdf"
+PDF_FRET_TOUCHING_DIGITS_SAFE = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_fret_touching_digits_safe.pdf"
+PDF_FRET_OVERLAPPING_DIGITS_AMBIGUOUS = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_fret_overlapping_digits_ambiguous.pdf"
 
 
 def test_pdf_fret_clean_single_digit(tmp_path) -> None:
@@ -2038,6 +2040,43 @@ def test_build_ir_does_not_refuse_excluded_non_playable_without_string_bar(tmp_p
     # The extraction warnings here are non-blocking (e.g. info or page number excluded is not in build blocking whitelist)
     # Therefore, build_ir should not raise BuildIrInputRiskError on this tabraw
     pass
+
+
+def test_pdf_fret_touching_digits_safe(tmp_path) -> None:
+    assert PDF_FRET_TOUCHING_DIGITS_SAFE.exists()
+    tabraw_path = tmp_path / "fret_touching_safe.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_FRET_TOUCHING_DIGITS_SAFE, tabraw_path))
+    fret_candidates = [c for c in raw.candidates if c.kind == "fret"]
+    assert len(fret_candidates) == 1
+    c = fret_candidates[0]
+    assert c.parsed_fret == 10
+    assert "pdf_fret_digits_merged" in c.raw.get("assignment_warnings", [])
+    assert "pdf_fret_split_text_span_merged" in c.raw.get("assignment_warnings", [])
+
+
+def test_pdf_fret_overlapping_digits_ambiguous(tmp_path) -> None:
+    assert PDF_FRET_OVERLAPPING_DIGITS_AMBIGUOUS.exists()
+    tabraw_path = tmp_path / "fret_overlapping_ambig.tabraw.json"
+    raw = TabRaw.model_validate(extract_tab(PDF_FRET_OVERLAPPING_DIGITS_AMBIGUOUS, tabraw_path))
+    warning_codes = {warning.get("code") for warning in raw.warnings}
+    assert "pdf_fret_digits_overlap_ambiguous" in warning_codes
+    assert "pdf_fret_refinement_not_enough_for_build_ir" in warning_codes
+
+
+def test_build_ir_refuses_overlapping_digits_ambiguous(tmp_path) -> None:
+    assert PDF_FRET_OVERLAPPING_DIGITS_AMBIGUOUS.exists()
+    tabraw_path = tmp_path / "fret_overlapping_ambig_refuse.tabraw.json"
+    ir_path = tmp_path / "fret_overlapping_ambig_refuse.ir.json"
+    extract_tab(PDF_FRET_OVERLAPPING_DIGITS_AMBIGUOUS, tabraw_path)
+
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+
+    assert not ir_path.exists()
+    assert raised.value.category == "partial_pdf_grouping"
+    payload = raised.value.to_diagnostics_payload()
+    assert payload["details"]["grouping_status"] == "partial"
+    assert "pdf_fret_digits_overlap_ambiguous" in payload["details"]["warning_codes"]
 
 
 PDF_TUNING_STANDARD_TEXT = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_tuning_standard_text.pdf"
