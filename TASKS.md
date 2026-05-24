@@ -2,9 +2,11 @@
 
 ## Next
 
-- [ ] Implement same-column vertical string assignment heuristics to resolve `pdf_string_assignment_not_enough_for_build_ir` and `pdf_string_assignment_missing` blockers (feature/pdf-string-assignment-heuristics-v0.1).
+- [ ] Execute a private-safe E2E smoke review using `scripts/private_e2e_smoke.py` to evaluate the combined impact of vertical overlap resolution and robust string proximity calibration on real private inputs (feature/private-smoke-refresh-after-string-assignment-v0.1).
 
 ## Done
+
+- [x] Implement same-column vertical string assignment heuristics to resolve `pdf_string_assignment_not_enough_for_build_ir` and `pdf_string_assignment_missing` blockers, using robust vertical proximity heuristics and systematic offset calibration (feature/pdf-string-assignment-heuristics-v0.1).
 
 - [x] Implement Same-Column Vertical Overlap and Ambiguous Staff BBox Overlap public synthetic PDF fixtures and advanced vertical partitioning heuristics to safely resolve dense adjacent systems while keeping refusal for truly ambiguous layouts (feature/pdf-system-overlap-public-fixtures-v0.2).
 
