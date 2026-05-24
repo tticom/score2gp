@@ -1811,11 +1811,20 @@ def _build_diagnostics(
         all_monotonic=all_monotonic,
     )
 
+    tabraw_warning_codes = {str(w.get("code", "")) for w in tabraw.warnings} if hasattr(tabraw, "warnings") and tabraw.warnings else set()
+    fallback_used_codes = {
+        "pdf_bar_box_inferred_edge_boundary",
+        "pdf_bar_box_inferred_left_boundary",
+        "pdf_bar_box_inferred_right_boundary",
+        "pdf_bar_box_edge_boundary_fallback_used",
+    }
+    grouping_status = "recovered" if tabraw_warning_codes.intersection(fallback_used_codes) else "grouped"
+
     pdf_timing_mapping_dict = {
         "contract_version": "pdf-timing-mapping.v0.7",
         "refinement_contract_version": PDF_TIMING_REFINEMENT_VERSION,
         "input_class": getattr(tabraw, "input_class", "drawn_tab_candidate"),
-        "grouping_status": "grouped",
+        "grouping_status": grouping_status,
         "grouping_safe": True,
         "timing_source_safe": True,
         "musicxml_timing_preflight_status": "safe",

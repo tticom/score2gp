@@ -2,12 +2,12 @@
 
 ## Metadata
 
-- **Current Branch**: `docs/partial-to-recovery-design-note-v0.1`
+- **Current Branch**: `feature/pdf-edge-boundary-recovery-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: [PR #54](https://github.com/tticom/score2gp/pull/54) (Draft)
-- **Latest Local Commit**: `10a7092bb469622d1df7b0dfcf7ee7d4dfbf7032`
-- **Latest Pushed Commit**: `10a7092bb469622d1df7b0dfcf7ee7d4dfbf7032`
-- **Latest Commit Subject**: `docs: add public partial-to-recovery design note`
+- **Current PR**: [PR #55](https://github.com/tticom/score2gp/pull/55) (Draft)
+- **Latest Local Commit**: `fc27af59b62da13eb3bbf4b17f7fa01ef3bc4f61`
+- **Latest Pushed Commit**: `fc27af59b62da13eb3bbf4b17f7fa01ef3bc4f61`
+- **Latest Commit Subject**: `chore: sync handoff SHA in HANDOFF.md`
 - **Working Tree Status Before Handoff Update**: Clean
 - **GitHub Check Status**: N/A
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or `work/` contents are tracked.
@@ -25,30 +25,30 @@
 
 ## What Changed
 
-- **Created docs/partial-to-recovery.md**: Formulated a public-safe architectural design document detailing:
-  - **Context**: Summarizes the strict rejections (like `pdf_bar_box_one_boundary_rejected` and `pdf_partial_grouping_one_system_unboxed`) at the compiler gates.
-  - **Proposed Boundaries**: Outlines mathematically-implied recovery boundaries, specifying constrained edge-boundary fallback tolerances.
-  - **Strict Exclusions**: Excludes guess-based internal barlines partitioning and blocks using MusicXML pitch/tuning to infer OMR layout matching.
-  - **Public Fixture Strategy**: Requires all future grouping recovery algorithms to be proven via public synthetic born-digital regression tests before any local/private file runs.
-- **Documentation References**: Linked the new design note within `README.md` and `docs/workflow.md` to ensure discoverability for developers.
+- **Implemented grouping_status "recovered" dynamically**: Updated `grouping_status_for_tabraw` in `src/score2gp/report.py` to identify the `"recovered"` status when all candidates are grouped using successful edge-boundary fallbacks and no other blocking partial codes exist.
+- **Updated HTML diagnostics badge & verdict**: Updated HTML diagnostics report in `src/score2gp/report.py` to style recovered grouping with green `RECOVERED` badge and safe verdict description.
+- **Enabled compile safety in build-ir**: Updated `_build_diagnostics` in `src/score2gp/build_ir.py` to dynamically set `grouping_status` to `"recovered"` in the `pdf_timing_mapping` metadata if any successful edge boundary fallback warning is present in `tabraw.warnings`.
+- **Enriched PDF grouping overlays**: Updated `_write_grouping_overlays` in `src/score2gp/pdf.py` to support `"recovered"` in layout overlays and print a premium greenish text color for success statuses.
+- **Added comprehensive integration test**: Added a thorough integration test in `tests/test_pdf.py` (`test_synthetic_edge_left_fallback`) to verify all of the above: dynamic `"recovered"` status mapping, HTML verdict formatting, and compile safety in the `build_ir` pipeline.
 - **Tasks Checklist**: Marked the task as completed under the `## Done` section in `TASKS.md`.
 
 ## Known Limitations
 
-- This branch is **documentation-only**. No automatic layout repair or timeline mutation has been implemented.
-- Programmatic OMR decisions continue to reside entirely inside JSON TabRaw schemas.
+- Conservative edge-boundary fallback is only applied when exactly one accepted barline candidate is present on an edge system.
+- No internal barlines guessing or MusicXML layout inference is used.
 
 ## Remaining Risks
 
-- Any future layout repair must be extremely conservative to avoid introducing timing drift or false-positive measure splits.
+- Layout variations in complex edge systems might require further calibration.
 
 ## Next Recommended Task
 
-- Add a public partial-to-recovery design note task is completed. The next logical step is to attempt automatic edge-boundary or bar-box recovery following the strict public fixture-driven design note constraints, or to address broader Audiveris MXL/XML imports.
+- Run a private-safe smoke refresh after this recovery merges to verify whether unboxed edge systems (like system 6 of private_input_1) are successfully recovered under this conservative edge-boundary policy.
 
 ## Explicit Scope Boundaries
 
-- Do not implement automatic grouping or bar-box repair in this branch.
-- Do not alter edge-boundary fallback, timing mapping, or `build-ir` compiler gates.
+- Do not implement automatic grouping or bar-box repair of internal measures.
+- Do not use MusicXML pitch or tuning data to infer PDF layout.
+- Do not alter timing mapping or weaken the final `build-ir` compiler safety gates.
 - Do not use, tune to, or track private scores, private overlays, or `work/` artifacts.
-- Do not propose OCR, scanned-PDF support, or ML layout recognition.
+- Do not implement OCR, scanned-PDF support, or ML layout recognition.

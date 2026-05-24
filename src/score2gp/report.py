@@ -213,7 +213,7 @@ def build_grouping_diagnostics(
     whether_bar_detection_succeeded = len(inferred_bars) > 0 and not has_bar_box_warnings
     whether_string_assignment_succeeded = inferred_string_assignment_count > 0
 
-    is_blocked = grouping_status not in ("grouped", "ascii_grouped")
+    is_blocked = grouping_status not in ("grouped", "ascii_grouped", "recovered")
     has_fret_blockers = any(rejection_reason_counts.values())
     has_pitch_tuning_blockers = any(code in warning_codes for code in (
         "pdf_tuning_conflict_detected",
@@ -473,13 +473,26 @@ def grouping_status_for_tabraw(tabraw: dict[str, Any]) -> str:
 
     if system_count == 0 and bar_count == 0 and string_count == 0:
         return "missing"
+
+    fallback_used_codes = {
+        "pdf_bar_box_inferred_edge_boundary",
+        "pdf_bar_box_inferred_left_boundary",
+        "pdf_bar_box_inferred_right_boundary",
+        "pdf_bar_box_edge_boundary_fallback_used",
+    }
+    blocking_partial_codes = partial_codes - fallback_used_codes
+
     if (
         system_count < len(playable)
         or bar_count < len(playable)
         or string_count < len(playable)
-        or warning_codes.intersection(partial_codes)
+        or warning_codes.intersection(blocking_partial_codes)
     ):
         return "partial"
+
+    if warning_codes.intersection(fallback_used_codes):
+        return "recovered"
+
     return "grouped"
 
 
@@ -506,6 +519,8 @@ def write_grouping_diagnostics_html(path: str | Path, report: dict[str, Any]) ->
         verdict = "Extraction succeeded, but grouping/layout is ambiguous and unsafe."
     elif grouping_status == "unsupported":
         verdict = "Extraction succeeded, but layout/format is unsupported."
+    elif grouping_status == "recovered":
+        verdict = "Extraction succeeded with conservative PDF edge-boundary recovery fallback; grouping is safe for alignment."
     elif grouping_status == "ascii_grouped":
         timing_counts = report.get("ascii_timing_status_counts", {})
         if isinstance(timing_counts, dict) and timing_counts.get("timing_partial"):
@@ -527,8 +542,11 @@ def write_grouping_diagnostics_html(path: str | Path, report: dict[str, Any]) ->
     elif grouping_status in ("grouped", "ascii_grouped"):
         status_class = "status-grouped"
         badge_text = "GROUPED"
+    elif grouping_status == "recovered":
+        status_class = "status-grouped"
+        badge_text = "RECOVERED"
 
-    is_blocked = grouping_status not in ("grouped", "ascii_grouped")
+    is_blocked = grouping_status not in ("grouped", "ascii_grouped", "recovered")
     build_ir_blocked_status = "Yes, blocked (unsafe PDF layout grouping)" if is_blocked else "No (safe grouping)"
 
     # Text/geometry detection status
