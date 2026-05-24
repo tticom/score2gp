@@ -126,6 +126,14 @@ def build_grouping_diagnostics(
         "max_horizontal_gap_between_digits": round(max(all_gaps), 3) if all_gaps else 0.0,
     }
 
+    # Pitch/Tuning metrics
+    tuning_evidence_count = sum(1 for c in candidates if any(w.startswith("pdf_tuning_") or w.startswith("pdf_pitch_") for w in (c.get("raw", {}).get("assignment_warnings", []) or [])))
+    page_level_tuning_labels = sum(1 for c in candidates if "pdf_tuning_label_outside_system" in (c.get("raw", {}).get("assignment_warnings", []) or []))
+    system_associated_tuning_labels = sum(1 for c in candidates if any(w in (c.get("raw", {}).get("assignment_warnings", []) or []) for w in ("pdf_tuning_standard_detected", "pdf_tuning_explicit_strings_detected", "pdf_tuning_string_labels_aligned")) and c.get("system_index") is not None)
+    per_string_tuning_label_count = sum(1 for c in candidates if "pdf_tuning_string_labels_aligned" in (c.get("raw", {}).get("assignment_warnings", []) or []) and c.get("string") is not None)
+    ambiguous_conflicting_tuning_count = sum(1 for c in candidates if any(w in (c.get("raw", {}).get("assignment_warnings", []) or []) for w in ("pdf_tuning_conflict_detected", "pdf_tuning_label_ambiguous")))
+    malformed_unsupported_tuning_count = sum(1 for c in candidates if any(w in (c.get("raw", {}).get("assignment_warnings", []) or []) for w in ("pdf_tuning_label_malformed", "pdf_tuning_format_unsupported")))
+
     # Candidate classification counts
     candidate_classifications = {
         "playable_fret": kind_counts.get("fret", 0),
@@ -133,6 +141,11 @@ def build_grouping_diagnostics(
         "non_playable_chord_or_text": kind_counts.get("chord-symbol", 0) + kind_counts.get("candidate-text", 0),
         "excluded_page_or_legend_number": sum(1 for c in candidates if "pdf_fret_page_or_legend_number_excluded" in (c.get("raw", {}).get("assignment_warnings", []) or [])),
         "ambiguous_digit_group": sum(1 for c in candidates if any(w in (c.get("raw", {}).get("assignment_warnings", []) or []) for w in ("pdf_fret_digits_not_merged_gap_too_large", "pdf_fret_digits_not_merged_vertical_misalignment"))),
+        "non_playable_tuning_text": sum(1 for c in candidates if any(w in (c.get("raw", {}).get("assignment_warnings", []) or []) for w in ("pdf_tuning_standard_detected", "pdf_tuning_explicit_strings_detected", "pdf_tuning_string_labels_aligned", "pdf_tuning_label_outside_system", "pdf_tuning_label_unassociated", "pdf_tuning_text_preserved_non_playable"))),
+        "pitch_layout_evidence": sum(1 for c in candidates if "pdf_pitch_layout_evidence_detected" in (c.get("raw", {}).get("assignment_warnings", []) or [])),
+        "chord_text_not_tuning": sum(1 for c in candidates if "pdf_fret_chord_text_digit_excluded" in (c.get("raw", {}).get("assignment_warnings", []) or [])),
+        "section_text_not_tuning": sum(1 for c in candidates if "pdf_fret_page_or_legend_number_excluded" in (c.get("raw", {}).get("assignment_warnings", []) or [])),
+        "malformed_tuning_label": sum(1 for c in candidates if any(w in (c.get("raw", {}).get("assignment_warnings", []) or []) for w in ("pdf_tuning_label_malformed", "pdf_tuning_format_unsupported"))),
     }
 
     warning_codes = [str(warning.get("code", "warning")) for warning in tabraw.get("warnings", [])]
@@ -202,6 +215,13 @@ def build_grouping_diagnostics(
 
     is_blocked = grouping_status not in ("grouped", "ascii_grouped")
     has_fret_blockers = any(rejection_reason_counts.values())
+    has_pitch_tuning_blockers = any(code in warning_codes for code in (
+        "pdf_tuning_conflict_detected",
+        "pdf_tuning_label_ambiguous",
+        "pdf_tuning_label_malformed",
+        "pdf_tuning_format_unsupported",
+        "pdf_pitch_tuning_diagnostics_not_enough_for_build_ir",
+    ))
 
     # Determine primary_blocker_stage
     primary_blocker_stage = "none"
@@ -215,6 +235,8 @@ def build_grouping_diagnostics(
         primary_blocker_stage = "fret_refinement"
     elif not whether_string_assignment_succeeded:
         primary_blocker_stage = "string_assignment"
+    elif has_pitch_tuning_blockers:
+        primary_blocker_stage = "pitch_tuning"
     elif is_blocked:
         primary_blocker_stage = "timing_alignment"
 
@@ -291,6 +313,22 @@ def build_grouping_diagnostics(
         "candidate_classifications": candidate_classifications,
         "is_fret_refinement_primary_blocker": primary_blocker_stage == "fret_refinement",
         "is_fret_refinement_secondary_blocker": is_blocked and primary_blocker_stage != "fret_refinement" and has_fret_blockers,
+
+        # New Pitch / Tuning Fields
+        "pitch_tuning": {
+            "tuning_evidence_count": tuning_evidence_count,
+            "page_level_tuning_labels": page_level_tuning_labels,
+            "system_associated_tuning_labels": system_associated_tuning_labels,
+            "per_string_tuning_label_count": per_string_tuning_label_count,
+            "ambiguous_conflicting_tuning_count": ambiguous_conflicting_tuning_count,
+            "malformed_unsupported_tuning_count": malformed_unsupported_tuning_count,
+            "whether_tuning_used_for_grouping": False,
+            "whether_tuning_used_for_string_assignment": False,
+            "whether_tuning_used_for_fret_inference": False,
+            "whether_timing_mapping_implemented": False,
+            "is_pitch_tuning_primary_blocker": primary_blocker_stage == "pitch_tuning",
+            "is_pitch_tuning_secondary_blocker": is_blocked and primary_blocker_stage != "pitch_tuning" and tuning_evidence_count > 0,
+        },
     }
 
 
@@ -318,6 +356,8 @@ def grouping_status_for_tabraw(tabraw: dict[str, Any]) -> str:
         "pdf_string_assignment_ambiguous",
         "pdf_system_bbox_ambiguous",
         "pdf_system_order_ambiguous",
+        "pdf_tuning_conflict_detected",
+        "pdf_tuning_label_ambiguous",
     }
     missing_codes = {
         "pdf_no_systems_detected",
@@ -404,6 +444,11 @@ def grouping_status_for_tabraw(tabraw: dict[str, Any]) -> str:
         "pdf_fret_non_digit_rejected",
         "pdf_fret_optical_bounds_confidence_below_threshold",
         "pdf_fret_refinement_not_enough_for_build_ir",
+
+        # New Pitch / Tuning Blocker Codes
+        "pdf_tuning_label_malformed",
+        "pdf_tuning_format_unsupported",
+        "pdf_pitch_tuning_diagnostics_not_enough_for_build_ir",
     }
 
     if warning_codes.intersection(unsupported_codes):
@@ -619,6 +664,20 @@ def write_grouping_diagnostics_html(path: str | Path, report: dict[str, Any]) ->
   <dt>Max gap / vertical misalignment</dt><dd>{report.get("fret_bbox_metrics", {}).get("max_horizontal_gap_between_digits", 0.0)}pt / {report.get("fret_bbox_metrics", {}).get("max_vertical_misalignment_delta", 0.0)}pt</dd>
   <dt>Candidate classifications</dt><dd><code>{html.escape(json.dumps(report.get("candidate_classifications", {}), sort_keys=True))}</code></dd>
 </dl>
+<h2>Pitch / Tuning Evidence</h2>
+<dl>
+  <dt>Tuning evidence count</dt><dd>{report.get("pitch_tuning", {}).get("tuning_evidence_count", 0)}</dd>
+  <dt>Page-level tuning labels</dt><dd>{report.get("pitch_tuning", {}).get("page_level_tuning_labels", 0)}</dd>
+  <dt>System-associated tuning labels</dt><dd>{report.get("pitch_tuning", {}).get("system_associated_tuning_labels", 0)}</dd>
+  <dt>Per-string tuning labels</dt><dd>{report.get("pitch_tuning", {}).get("per_string_tuning_label_count", 0)}</dd>
+  <dt>Ambiguous/conflicting tunings</dt><dd>{report.get("pitch_tuning", {}).get("ambiguous_conflicting_tuning_count", 0)}</dd>
+  <dt>Malformed/unsupported tunings</dt><dd>{report.get("pitch_tuning", {}).get("malformed_unsupported_tuning_count", 0)}</dd>
+  <dt>Used for grouping</dt><dd>{str(report.get("pitch_tuning", {}).get("whether_tuning_used_for_grouping", False)).lower()}</dd>
+  <dt>Used for string assignment</dt><dd>{str(report.get("pitch_tuning", {}).get("whether_tuning_used_for_string_assignment", False)).lower()}</dd>
+  <dt>Used for fret inference</dt><dd>{str(report.get("pitch_tuning", {}).get("whether_tuning_used_for_fret_inference", False)).lower()}</dd>
+  <dt>Timing mapping implemented</dt><dd>{str(report.get("pitch_tuning", {}).get("whether_timing_mapping_implemented", False)).lower()}</dd>
+</dl>
+<p><em>Remediation Hint: Tuning labels are recorded as evidence but do not replace safe system/bar/string/fret geometry.</em></p>
 <h2>Warning Codes</h2>
 <ul>{warning_items}</ul>
 <h2>Inferred Grouping</h2>

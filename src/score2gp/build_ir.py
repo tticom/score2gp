@@ -2138,6 +2138,13 @@ def _tabraw_unsafe_grouping_warning_codes(tabraw: TabRaw) -> list[str]:
         "pdf_fret_non_digit_rejected",
         "pdf_fret_optical_bounds_confidence_below_threshold",
         "pdf_fret_refinement_not_enough_for_build_ir",
+
+        # New Pitch / Tuning Blocker Codes
+        "pdf_tuning_conflict_detected",
+        "pdf_tuning_label_ambiguous",
+        "pdf_tuning_label_malformed",
+        "pdf_tuning_format_unsupported",
+        "pdf_pitch_tuning_diagnostics_not_enough_for_build_ir",
     }
     return sorted({str(warning.get("code")) for warning in tabraw.warnings if warning.get("code") in unsafe})
 
