@@ -2,9 +2,11 @@
 
 ## Next
 
-- [ ] Re-run the E2E private smoke test on further private inputs to verify future rendering discrepancies and clean up ignored warnings.
+- [ ] Advance to Milestone 5 (Technique Coverage) - serialize bends, slides, and vibratos in the GPIF writer.
 
 ## Done
+
+- [x] Implement GPIF XML generation for tied notes and tuplets (triplets) in the Guitar Pro writer (`src/score2gp/gpif.py`), mapping tie and tuplet properties from ScoreIR models into valid GP7-compatible XML tags (`feature/gpif-ties-and-tuplets-v0.1`).
 
 - [x] Perform a structural and auditory validation of the successfully compiled Guitar Pro package (`private_input_1.gp`), identify, synthetically reproduce, and fix dynamic default time signature inference in MusicXML and robust, octave-invariant, continuous skipped-system synchronization in build-ir alignment (fix/gpif-rendering-fidelity-v0.1).
 
