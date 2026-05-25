@@ -1396,6 +1396,23 @@
           "title": "Direction",
           "type": "string"
         },
+        "flags": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Flags"
+        },
+        "glissando": {
+          "default": false,
+          "title": "Glissando",
+          "type": "boolean"
+        },
         "kind": {
           "const": "slide",
           "default": "slide",
@@ -1409,6 +1426,8 @@
             "legato",
             "slide-in",
             "slide-out",
+            "glissando",
+            "grace",
             "unknown"
           ],
           "title": "Style",

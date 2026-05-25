@@ -1128,3 +1128,44 @@ def test_gpif_microtonal_bends(tmp_path) -> None:
         assert tb_prop is not None
         assert tb_prop.find("Enable") is not None
 
+
+def test_gpif_slide_styling(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_slide_styling.ir.json")
+    
+    # Let's also dynamically test the flag override on a manual edit
+    score.bars[0].events[0].notes[0].techniques[0].flags = 256
+    
+    out = tmp_path / "slide_styling.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        events = root.findall(".//Event")
+        event_map = {e.get("id"): e for e in events}
+
+        # Event e1 note: Shift slide with override flags = 256
+        e1 = event_map["e1"]
+        n1 = e1.find("Note")
+        assert n1.find("Slide") is not None
+        slide_prop1 = n1.find(".//Properties/Property[@name='Slide']/Flags")
+        assert slide_prop1.text == "256"
+
+        # Event e3 note: Glissando slide (style = "glissando")
+        e3 = event_map["e3"]
+        n3 = e3.find("Note")
+        assert n3.find("Slide") is not None
+        assert n3.find("Glissando") is not None
+        
+        slide_prop3 = n3.find(".//Properties/Property[@name='Slide']/Flags")
+        assert slide_prop3.text == "64" # glissando flag
+        
+        gliss_prop = n3.find(".//Properties/Property[@name='Glissando']")
+        assert gliss_prop is not None
+        assert gliss_prop.find("Enable") is not None
+
+
