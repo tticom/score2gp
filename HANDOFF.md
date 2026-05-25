@@ -5,8 +5,8 @@
 - **Current Branch**: `feature/gpif-multi-staff-templates-and-margins-v0.1`
 - **Base Branch**: `main`
 - **Current PR**: PR #98 (https://github.com/tticom/score2gp/pull/98)
-- **Latest Local Commit**: `98f43f5cc9e8b73ea95a91eb50319b49f25f18dc` ("feat: implement advanced multi-staff templates, engraving boundaries, system margins, and bracing bracing properties in GPIF XML generation")
-- **Latest Pushed Commit**: `98f43f5cc9e8b73ea95a91eb50319b49f25f18dc` ("feat: implement advanced multi-staff templates, engraving boundaries, system margins, and bracing bracing properties in GPIF XML generation")
+- **Latest Local Commit**: `5be3aa9b83f1cdade060b4d8718cb1e8a6b4c38b` ("docs: update tasks and handoff for multi-staff templates and margins")
+- **Latest Pushed Commit**: `5be3aa9b83f1cdade060b4d8718cb1e8a6b4c38b` ("docs: update tasks and handoff for multi-staff templates and margins")
 
 - **Working Tree Status**: Clean (except untracked scratch files).
 
