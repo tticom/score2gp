@@ -57,7 +57,7 @@ def test_write_gp_warns_for_unsupported_scoreir_fields(tmp_path) -> None:
     data = score.model_dump(mode="json")
     data["tracks"][0]["midi_program"] = 30
     data["bars"][0]["events"][0]["notes"][0]["techniques"] = [
-        {"kind": "bend", "semitones": 1.0}
+        {"kind": "let-ring"}
     ]
     score_with_unsupported = ScoreIR.model_validate(data)
 
@@ -65,8 +65,9 @@ def test_write_gp_warns_for_unsupported_scoreir_fields(tmp_path) -> None:
     warnings = write_gp(score_with_unsupported, out)
 
     assert any("MIDI" in warning for warning in warnings)
-    assert any("technique 'bend'" in warning for warning in warnings)
+    assert any("technique 'let-ring'" in warning for warning in warnings)
     assert zipfile.is_zipfile(out)
+
 
 
 def test_gpif_ties_and_tuplets(tmp_path) -> None:
@@ -134,3 +135,80 @@ def test_gpif_ties_and_tuplets(tmp_path) -> None:
         assert pt1 is not None
         assert pt1.get("num") == "3"
         assert pt1.get("den") == "2"
+
+
+def test_gpif_core_techniques(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_core_techniques.ir.json")
+    out = tmp_path / "techniques.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        # Retrieve events
+        events = root.findall(".//Event")
+        event_map = {e.get("id"): e for e in events}
+
+        # Check e1 (slide origin)
+        e1 = event_map["e1"]
+        n1 = e1.find("Note")
+        assert n1 is not None
+        assert n1.find("Slide") is not None
+        slide_flag = n1.find(".//Property[@name='Slide']/Flags")
+        assert slide_flag is not None
+        assert slide_flag.text == "2"
+
+        # Check e2 (slide destination - has no slide tag or slide property by default)
+        e2 = event_map["e2"]
+        n2 = e2.find("Note")
+        assert n2 is not None
+        assert n2.find("Slide") is None
+
+        # Check e3 (bend)
+        e3 = event_map["e3"]
+        n3 = e3.find("Note")
+        assert n3 is not None
+        assert n3.find("Bend") is not None
+        bended = n3.find(".//Property[@name='Bended']/Enable")
+        assert bended is not None
+        bend_val = n3.find(".//Property[@name='BendDestinationValue']/Float")
+        assert bend_val is not None
+        assert float(bend_val.text) == 50.0
+
+        # Check e4 (hammer-on origin)
+        e4 = event_map["e4"]
+        n4 = e4.find("Note")
+        assert n4 is not None
+        assert n4.find("HO") is not None
+        hopo_org = n4.find(".//Property[@name='HopoOrigin']/Enable")
+        assert hopo_org is not None
+        assert n4.find(".//Property[@name='HopoDestination']") is None
+
+        # Check e5 (hammer-on destination)
+        e5 = event_map["e5"]
+        n5 = e5.find("Note")
+        assert n5 is not None
+        assert n5.find("HO") is None
+        assert n5.find(".//Property[@name='HopoOrigin']") is None
+        hopo_dst = n5.find(".//Property[@name='HopoDestination']/Enable")
+        assert hopo_dst is not None
+
+        # Check e6 (pull-off origin)
+        e6 = event_map["e6"]
+        n6 = e6.find("Note")
+        assert n6 is not None
+        assert n6.find("PO") is not None
+        hopo_org2 = n6.find(".//Property[@name='HopoOrigin']/Enable")
+        assert hopo_org2 is not None
+
+        # Check e7 (pull-off destination)
+        e7 = event_map["e7"]
+        n7 = e7.find("Note")
+        assert n7 is not None
+        assert n7.find("PO") is None
+        hopo_dst2 = n7.find(".//Property[@name='HopoDestination']/Enable")
+        assert hopo_dst2 is not None

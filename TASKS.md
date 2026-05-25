@@ -2,9 +2,11 @@
 
 ## Next
 
-- [ ] Advance to Milestone 5 (Technique Coverage) - serialize bends, slides, and vibratos in the GPIF writer.
+- [ ] Advance to Milestone 4 & 5 Expansion - serialize grace notes, let-ring, and palm-mute techniques in the GPIF writer.
 
 ## Done
+
+- [x] Implement GPIF XML generation for core guitar techniques (slides, bends, hammer-ons, and pull-offs) in the Guitar Pro writer (`src/score2gp/gpif.py`), mapping these properties from ScoreIR models into valid GP7-compatible XML tags and property structures (`feature/gpif-core-techniques-v0.1`).
 
 - [x] Implement GPIF XML generation for tied notes and tuplets (triplets) in the Guitar Pro writer (`src/score2gp/gpif.py`), mapping tie and tuplet properties from ScoreIR models into valid GP7-compatible XML tags (`feature/gpif-ties-and-tuplets-v0.1`).
 
