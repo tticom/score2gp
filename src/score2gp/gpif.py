@@ -100,6 +100,34 @@ def _event(parent: ET.Element, event: Event) -> None:
     if event.is_rest:
         attrs["rest"] = "true"
     node = ET.SubElement(parent, "Event", attrs)
+
+    if event.timing.notated_duration is not None or event.timing.tuplet is not None:
+        rhythm_node = ET.SubElement(node, "Rhythm")
+        if event.timing.notated_duration is not None:
+            val_map = {
+                "whole": "Whole",
+                "half": "Half",
+                "quarter": "Quarter",
+                "eighth": "Eighth",
+                "16th": "16th",
+                "32nd": "32nd",
+                "64th": "64th",
+                "128th": "128th",
+            }
+            val_str = val_map.get(event.timing.notated_duration.value, event.timing.notated_duration.value.capitalize())
+            _text(rhythm_node, "NoteValue", val_str)
+            if event.timing.notated_duration.dots > 0:
+                ET.SubElement(rhythm_node, "AugmentationDot", {"count": str(event.timing.notated_duration.dots)})
+        if event.timing.tuplet is not None:
+            ET.SubElement(
+                rhythm_node,
+                "PrimaryTuplet",
+                {
+                    "num": str(event.timing.tuplet.actual_notes),
+                    "den": str(event.timing.tuplet.normal_notes),
+                },
+            )
+
     if event.chord_symbol:
         _text(node, "Chord", event.chord_symbol)
     if event.techniques:
@@ -124,6 +152,9 @@ def _note(parent: ET.Element, note: Note) -> None:
     for technique in note.techniques:
         if technique.kind == "tie":
             note_node.set("tie", technique.state)
+            origin_val = "true" if technique.state in ("start", "continue") else "false"
+            dest_val = "true" if technique.state in ("stop", "continue") else "false"
+            ET.SubElement(note_node, "Tie", {"origin": origin_val, "destination": dest_val})
         if technique.kind == "slur":
             note_node.set("slur", technique.state)
     if note.techniques:
@@ -147,8 +178,6 @@ def gpif_warnings(score: ScoreIR) -> list[str]:
             warnings.append(f"track '{track.id}' MIDI program/channel is not represented in the minimal GPIF writer")
     for bar in score.bars:
         for event in bar.events:
-            if event.timing.tuplet is not None:
-                warnings.append(f"event '{event.id}' tuplet timing is not represented in the minimal GPIF writer")
             if event.timing.grace is not None:
                 warnings.append(f"event '{event.id}' grace timing is not represented in the minimal GPIF writer")
             _technique_warnings(warnings, f"event '{event.id}'", event.techniques)

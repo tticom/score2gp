@@ -67,3 +67,70 @@ def test_write_gp_warns_for_unsupported_scoreir_fields(tmp_path) -> None:
     assert any("MIDI" in warning for warning in warnings)
     assert any("technique 'bend'" in warning for warning in warnings)
     assert zipfile.is_zipfile(out)
+
+
+def test_gpif_ties_and_tuplets(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_ties_tuplets.ir.json")
+    out = tmp_path / "ties_tuplets.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        # Retrieve events
+        events = root.findall(".//Event")
+        event_map = {e.get("id"): e for e in events}
+
+        # Check e1 (tie start)
+        e1 = event_map["e1"]
+        n1 = e1.find("Note")
+        assert n1 is not None
+        assert n1.get("tie") == "start"
+        t1 = n1.find("Tie")
+        assert t1 is not None
+        assert t1.get("origin") == "true"
+        assert t1.get("destination") == "false"
+
+        # Check e2 (tie continue)
+        e2 = event_map["e2"]
+        n2 = e2.find("Note")
+        assert n2 is not None
+        assert n2.get("tie") == "continue"
+        t2 = n2.find("Tie")
+        assert t2 is not None
+        assert t2.get("origin") == "true"
+        assert t2.get("destination") == "true"
+
+        # Check e3 (tie stop)
+        e3 = event_map["e3"]
+        n3 = e3.find("Note")
+        assert n3 is not None
+        assert n3.get("tie") == "stop"
+        t3 = n3.find("Tie")
+        assert t3 is not None
+        assert t3.get("origin") == "false"
+        assert t3.get("destination") == "true"
+
+        # Check Rhythm for e1
+        r1 = e1.find("Rhythm")
+        assert r1 is not None
+        nv1 = r1.find("NoteValue")
+        assert nv1 is not None
+        assert nv1.text == "Quarter"
+        assert r1.find("PrimaryTuplet") is None
+
+        # Check Rhythm for et1 (triplet)
+        et1 = event_map["et1"]
+        rt1 = et1.find("Rhythm")
+        assert rt1 is not None
+        nv_t1 = rt1.find("NoteValue")
+        assert nv_t1 is not None
+        assert nv_t1.text == "Eighth"
+        pt1 = rt1.find("PrimaryTuplet")
+        assert pt1 is not None
+        assert pt1.get("num") == "3"
+        assert pt1.get("den") == "2"
