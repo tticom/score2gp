@@ -4,9 +4,9 @@
 
 - **Current Branch**: `feature/gpif-dead-notes-and-tremolo-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: N/A (draft PR will be created)
-- **Latest Local Commit**: `5caebfc` ("Implement GPIF XML dead notes and tremolo whammy curves")
-- **Latest Pushed Commit**: N/A (will be pushed)
+- **Current PR**: #77 (Draft PR: https://github.com/tticom/score2gp/pull/77)
+- **Latest Local Commit**: `a8954af` ("Document dead notes and tremolo bar curves changes in handoff and tasks")
+- **Latest Pushed Commit**: `a8954af` ("Document dead notes and tremolo bar curves changes in handoff and tasks")
 - **Working Tree Status**: Clean.
 
 - **GitHub Check Status**: N/A
