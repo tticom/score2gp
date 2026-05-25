@@ -2,9 +2,11 @@
 
 ## Next
 
-- [ ] Support visual note-level pitch bend variations and tremolo bar curve configurations inside the GPIF XML generator to further complete the guitar techniques pipeline.
+- [ ] Support visual note-level slide configurations and slide styling options inside the GPIF XML generator to further complete the guitar techniques pipeline.
 
 ## Done
+
+- [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for multi-point microtonal bends (quarter-tone tables) and advanced tremolo bar configurations (dive/release curves) in the Guitar Pro writer (`src/score2gp/gpif.py`), verified with public synthetic fixtures and unit tests (`feature/gpif-microtonal-bends-and-advanced-whammy-v0.1`).
 
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for note-level trill techniques (interval or auxiliary fret parameters) in the Guitar Pro writer (`src/score2gp/gpif.py`), verified with public synthetic fixtures and unit tests (`feature/gpif-trills-and-ornaments-v0.1`).
 
