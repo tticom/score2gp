@@ -57,7 +57,7 @@ def test_write_gp_warns_for_unsupported_scoreir_fields(tmp_path) -> None:
     data = score.model_dump(mode="json")
     data["tracks"][0]["midi_program"] = 30
     data["bars"][0]["events"][0]["notes"][0]["techniques"] = [
-        {"kind": "let-ring"}
+        {"kind": "unsupported", "label": "some-weird-technique"}
     ]
     score_with_unsupported = ScoreIR.model_validate(data)
 
@@ -65,8 +65,9 @@ def test_write_gp_warns_for_unsupported_scoreir_fields(tmp_path) -> None:
     warnings = write_gp(score_with_unsupported, out)
 
     assert any("MIDI" in warning for warning in warnings)
-    assert any("technique 'let-ring'" in warning for warning in warnings)
+    assert any("technique 'unsupported'" in warning for warning in warnings)
     assert zipfile.is_zipfile(out)
+
 
 
 
@@ -212,3 +213,77 @@ def test_gpif_core_techniques(tmp_path) -> None:
         assert n7.find("PO") is None
         hopo_dst2 = n7.find(".//Property[@name='HopoDestination']/Enable")
         assert hopo_dst2 is not None
+
+
+def test_gpif_grace_and_spans(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_grace_and_spans.ir.json")
+    out = tmp_path / "grace_spans.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        # Retrieve events
+        events = root.findall(".//Event")
+        event_map = {e.get("id"): e for e in events}
+
+        # Check e1 (let-ring start)
+        e1 = event_map["e1"]
+        n1 = e1.find("Note")
+        assert n1 is not None
+        assert n1.find("LetRing") is not None
+        assert e1.find("GraceNotes") is None
+
+        # Check e2 (inside let-ring span, grace note before beat)
+        e2 = event_map["e2"]
+        n2 = e2.find("Note")
+        assert n2 is not None
+        assert n2.find("LetRing") is not None
+        gn2 = e2.find("GraceNotes")
+        assert gn2 is not None
+        assert gn2.text == "BeforeBeat"
+
+        # Check e3 (let-ring end)
+        e3 = event_map["e3"]
+        n3 = e3.find("Note")
+        assert n3 is not None
+        assert n3.find("LetRing") is not None
+        assert e3.find("GraceNotes") is None
+
+        # Check e4 (outside let-ring)
+        e4 = event_map["e4"]
+        n4 = e4.find("Note")
+        assert n4 is not None
+        assert n4.find("LetRing") is None
+
+        # Check e5 (palm-mute start)
+        e5 = event_map["e5"]
+        n5 = e5.find("Note")
+        assert n5 is not None
+        assert n5.find("PalmMute") is not None
+        assert e5.find("GraceNotes") is None
+
+        # Check e6 (inside palm-mute span, on-beat grace note)
+        e6 = event_map["e6"]
+        n6 = e6.find("Note")
+        assert n6 is not None
+        assert n6.find("PalmMute") is not None
+        gn6 = e6.find("GraceNotes")
+        assert gn6 is not None
+        assert gn6.text == "OnBeat"
+
+        # Check e7 (palm-mute end)
+        e7 = event_map["e7"]
+        n7 = e7.find("Note")
+        assert n7 is not None
+        assert n7.find("PalmMute") is not None
+
+        # Check e8 (outside palm-mute)
+        e8 = event_map["e8"]
+        n8 = e8.find("Note")
+        assert n8 is not None
+        assert n8.find("PalmMute") is None

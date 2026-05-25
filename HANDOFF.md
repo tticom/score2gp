@@ -2,10 +2,10 @@
 
 ## Metadata
 
-- **Current Branch**: `feature/gpif-core-techniques-v0.1`
+- **Current Branch**: `feature/gpif-grace-and-spans-v0.1`
 - **Base Branch**: `main`
 - **Current PR**: N/A (Draft PR to be created)
-- **Latest Local Commit**: `9e732ca` ("Implement GPIF XML serialization for slides, bends, hammer-ons, and pull-offs")
+- **Latest Local Commit**: `4181fe5` ("Implement GPIF XML serialization for grace notes, let-ring spans, and palm-mute spans")
 - **Working Tree Status**: Clean.
 
 - **GitHub Check Status**: N/A
@@ -14,24 +14,26 @@
 
 ## Tests And Checks Run
 
-- `python -m pytest` -> 319 passed (100% success, including new synthetic test `test_gpif_core_techniques` and all existing tests).
+- `python -m pytest` -> 320 passed (100% success, including new synthetic test `test_gpif_grace_and_spans` and all existing tests).
 - `python -m score2gp.cli export-schema --out schemas` -> passed cleanly.
-- `python -m score2gp.cli validate-ir fixtures/public/test_gpif_core_techniques.ir.json` -> valid.
+- `python -m score2gp.cli validate-ir fixtures/public/test_gpif_grace_and_spans.ir.json` -> valid.
 - `git diff --check` -> passed cleanly.
 - `git diff -- schemas` -> empty (no schema differences).
 - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep`.
 
 ## What Changed In This Task
 
-- **Core Guitar Techniques Serialization**:
-  - Implemented direct XML tags (`<Slide>`, `<Bend>`, `<HO>`, `<PO>`) under `<Note>` in `src/score2gp/gpif.py`'s `_note()`.
-  - Implemented exact GP7 property blocks (`Slide`, `HopoOrigin`, `HopoDestination`, `Bended`, and float bended details) under `<Properties>` child of `<Note>`.
-  - Added `"bend"` to `SUPPORTED_MINIMAL_TECHNIQUES` to prevent any warnings from being emitted for bends.
-  - Implemented `_find_hopo_destinations` to pre-compute HO/PO destination notes on matching strings.
+- **Grace Notes Serialization**:
+  - Implemented `<GraceNotes>` element under `<Event>` in `src/score2gp/gpif.py`'s `_event()`. Dynamically maps ScoreIR grace timing and grace techniques to `"OnBeat"` or `"BeforeBeat"` string text values.
+  - Removed obsolete warning for `grace` in `gpif_warnings()`.
+- **Note Spans Serialization (LetRing & PalmMute)**:
+  - Implemented `_find_span_notes()` in `gpif.py` to pre-calculate all note coordinates `(bar_index, onset_ticks, string)` that fall inside let-ring or palm-mute spans, using absolute start ticks for each bar to robustly track spans extending across multiple bars.
+  - Dynamically serialize `<LetRing />` and `<PalmMute />` elements under `<Note>` in `_note()` for all notes inside the respective spans.
+  - Added `"grace"`, `"let-ring"`, and `"palm-mute"` to `SUPPORTED_MINIMAL_TECHNIQUES` to prevent any warnings from being emitted.
 - **Added Public Synthetic Fixtures & Tests**:
-  - Created `fixtures/public/test_gpif_core_techniques.ir.json` modeling slides, bends, hammer-ons, and pull-offs.
-  - Added unit test `test_gpif_core_techniques` in `tests/test_gp_writer.py` asserting correct generated XML tags and properties.
-  - Updated `test_write_gp_warns_for_unsupported_scoreir_fields` to warn for `"let-ring"` instead of the now-supported `"bend"`.
+  - Created `fixtures/public/test_gpif_grace_and_spans.ir.json` modeling grace notes (before beat and on-beat), let-ring spans, and palm-mute spans.
+  - Added unit test `test_gpif_grace_and_spans` in `tests/test_gp_writer.py` asserting correct generated XML tags and attributes.
+  - Updated `test_write_gp_warns_for_unsupported_scoreir_fields` to warn for `"unsupported"` instead of the now-supported `"let-ring"`.
 - **E2E Private Smoke Test Results**:
   - Verified with `scripts/private_e2e_smoke.py` that `private_input_1` compiles cleanly to `ScoreIR` and `Guitar Pro 7 package` (`smoke.gp`) with zero failure reasons, correctly mapping all contiguous bars and reporting ignored skipped events only on the unboxed/skipped Page 2 System 6.
 
@@ -45,7 +47,7 @@
 
 ## Next Recommended Task
 
-- **Milestone 4 & 5 Expansion (Grace Notes and Spans)**: Serialize remaining GP7/GPIF elements like grace notes, let-ring spans, and palm-mute spans in `gpif.py` once they are represented in ScoreIR.
+- **Milestone 4 & 5 Expansion (Multi-voice Events)**: Support multi-voice events serialization in the GPIF writer `gpif.py` to completely finalize all multi-voice notation.
 
 ## Explicit Scope Boundaries
 
