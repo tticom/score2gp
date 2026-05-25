@@ -1564,3 +1564,68 @@ def test_gpif_string_mixer_and_tuning(tmp_path) -> None:
         assert tuning_prop.find("Pitches").text == "40 45 50 55 59 64"
         assert tuning_prop.find("Balance").text == "3.0 2.0 1.0 0.0 -1.0 -2.0"
         assert tuning_prop.find("FineTuning").text == "-10.0 0.0 1.0 -2.3 0.0 5.5"
+
+
+def test_gpif_track_layout_preferences(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_track_preferences.ir.json")
+    out = tmp_path / "track_preferences.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        tracks = root.findall(".//Track")
+        track_map = {t.get("id"): t for t in tracks}
+
+        # Track 1: Tab-Only (systems_layout=2), Stems Up, LineSizing Small
+        t1 = track_map["gtr-1"]
+        assert t1.find("SystemsLayout").text == "2"
+        assert t1.find("Tablature") is not None
+        assert t1.find("Tablature/TabOnly").text == "true"
+
+        tab_prop1 = t1.find(".//Properties/Property[@name='Tablature']")
+        assert tab_prop1 is not None and tab_prop1.find("Enable").text == "true"
+
+        stems_prop1 = t1.find(".//Properties/Property[@name='Stems']")
+        assert stems_prop1 is not None
+        assert stems_prop1.find("Enable").text == "true"
+        assert stems_prop1.find("Direction").text == "Up"
+
+        ls_prop1 = t1.find(".//Properties/Property[@name='LineSizing']")
+        assert ls_prop1 is not None and ls_prop1.find("Size").text == "Small"
+
+        # Track 2: standard+tab (systems_layout=3), Stems Down, LineSizing Large
+        t2 = track_map["gtr-2"]
+        assert t2.find("SystemsLayout").text == "3"
+        assert t2.find("Tablature") is None
+
+        tab_prop2 = t2.find(".//Properties/Property[@name='Tablature']")
+        assert tab_prop2 is not None and tab_prop2.find("Enable").text == "true"
+
+        stems_prop2 = t2.find(".//Properties/Property[@name='Stems']")
+        assert stems_prop2 is not None
+        assert stems_prop2.find("Enable").text == "true"
+        assert stems_prop2.find("Direction").text == "Down"
+
+        ls_prop2 = t2.find(".//Properties/Property[@name='LineSizing']")
+        assert ls_prop2 is not None and ls_prop2.find("Size").text == "Large"
+
+        # Track 3: standard+tab (systems_layout=3), Stems Auto, LineSizing Standard
+        t3 = track_map["gtr-3"]
+        assert t3.find("SystemsLayout").text == "3"
+        assert t3.find("Tablature") is None
+
+        tab_prop3 = t3.find(".//Properties/Property[@name='Tablature']")
+        assert tab_prop3 is not None and tab_prop3.find("Enable").text == "true"
+
+        stems_prop3 = t3.find(".//Properties/Property[@name='Stems']")
+        assert stems_prop3 is not None
+        assert stems_prop3.find("Enable").text == "false"
+        assert stems_prop3.find("Direction").text == "Auto"
+
+        ls_prop3 = t3.find(".//Properties/Property[@name='LineSizing']")
+        assert ls_prop3 is not None and ls_prop3.find("Size").text == "Standard"

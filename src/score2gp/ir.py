@@ -165,6 +165,14 @@ class SoundConfig(BaseModel):
     midi_program: int | None = Field(default=None, ge=0, le=127)
 
 
+class TrackLayoutPreferences(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tab_only: bool = False
+    stem_direction: Literal["auto", "up", "down"] | None = None
+    line_sizing: Literal["standard", "small", "large"] | None = None
+
+
 class Track(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -181,6 +189,7 @@ class Track(BaseModel):
     color: str | None = None
     systems_layout: int | None = Field(default=None, ge=1, le=3)
     sound: SoundConfig | None = None
+    layout_preferences: TrackLayoutPreferences | None = None
 
 
 
