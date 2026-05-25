@@ -2,10 +2,10 @@
 
 ## Metadata
 
-- **Current Branch**: `feature/gpif-ties-and-tuplets-v0.1`
+- **Current Branch**: `feature/gpif-core-techniques-v0.1`
 - **Base Branch**: `main`
 - **Current PR**: N/A (Draft PR to be created)
-- **Latest Local Commit**: `2860210` ("Implement GPIF XML serialization for ties and tuplets")
+- **Latest Local Commit**: `9e732ca` ("Implement GPIF XML serialization for slides, bends, hammer-ons, and pull-offs")
 - **Working Tree Status**: Clean.
 
 - **GitHub Check Status**: N/A
@@ -14,25 +14,24 @@
 
 ## Tests And Checks Run
 
-- `python -m pytest` -> 318 passed (100% success, including new synthetic test `test_gpif_ties_and_tuplets` and all existing tests).
+- `python -m pytest` -> 319 passed (100% success, including new synthetic test `test_gpif_core_techniques` and all existing tests).
 - `python -m score2gp.cli export-schema --out schemas` -> passed cleanly.
-- `python -m score2gp.cli validate-ir fixtures/public/test_gpif_ties_tuplets.ir.json` -> valid.
+- `python -m score2gp.cli validate-ir fixtures/public/test_gpif_core_techniques.ir.json` -> valid.
 - `git diff --check` -> passed cleanly.
 - `git diff -- schemas` -> empty (no schema differences).
 - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep`.
 
 ## What Changed In This Task
 
-- **Tie XML Serialization**:
-  - Implemented `<Tie>` child element serialization under `<Note>` in `src/score2gp/gpif.py`'s `_note()`.
-  - Dynamically map ScoreIR tie states to `origin` and `destination` attributes (`"start"`, `"stop"`, `"continue"`).
-- **Rhythm & Tuplet XML Serialization**:
-  - Implemented `<Rhythm>` child element serialization under `<Event>` in `src/score2gp/gpif.py`'s `_event()`.
-  - Generates `<NoteValue>` (capitalized value e.g. `"Quarter"`, `"Eighth"`), optional `<AugmentationDot count="X" />`, and optional `<PrimaryTuplet num="X" den="Y" />` when tuplet timing or notated duration is present.
-  - Removed obsolete warning for `tuplet` in `gpif_warnings` since they are now fully supported.
+- **Core Guitar Techniques Serialization**:
+  - Implemented direct XML tags (`<Slide>`, `<Bend>`, `<HO>`, `<PO>`) under `<Note>` in `src/score2gp/gpif.py`'s `_note()`.
+  - Implemented exact GP7 property blocks (`Slide`, `HopoOrigin`, `HopoDestination`, `Bended`, and float bended details) under `<Properties>` child of `<Note>`.
+  - Added `"bend"` to `SUPPORTED_MINIMAL_TECHNIQUES` to prevent any warnings from being emitted for bends.
+  - Implemented `_find_hopo_destinations` to pre-compute HO/PO destination notes on matching strings.
 - **Added Public Synthetic Fixtures & Tests**:
-  - Created `fixtures/public/test_gpif_ties_tuplets.ir.json` modeling start, continue, stop ties and eighth-note triplets.
-  - Added unit test `test_gpif_ties_and_tuplets` in `tests/test_gp_writer.py` asserting correct generated XML tags and attributes.
+  - Created `fixtures/public/test_gpif_core_techniques.ir.json` modeling slides, bends, hammer-ons, and pull-offs.
+  - Added unit test `test_gpif_core_techniques` in `tests/test_gp_writer.py` asserting correct generated XML tags and properties.
+  - Updated `test_write_gp_warns_for_unsupported_scoreir_fields` to warn for `"let-ring"` instead of the now-supported `"bend"`.
 - **E2E Private Smoke Test Results**:
   - Verified with `scripts/private_e2e_smoke.py` that `private_input_1` compiles cleanly to `ScoreIR` and `Guitar Pro 7 package` (`smoke.gp`) with zero failure reasons, correctly mapping all contiguous bars and reporting ignored skipped events only on the unboxed/skipped Page 2 System 6.
 
@@ -46,7 +45,7 @@
 
 ## Next Recommended Task
 
-- **Advance to Milestone 5 (Technique Coverage)**: Serialize other core techniques such as slides, bends, hammer-ons, and pull-offs into their corresponding GP7 XML representations within the GPIF writer.
+- **Milestone 4 & 5 Expansion (Grace Notes and Spans)**: Serialize remaining GP7/GPIF elements like grace notes, let-ring spans, and palm-mute spans in `gpif.py` once they are represented in ScoreIR.
 
 ## Explicit Scope Boundaries
 

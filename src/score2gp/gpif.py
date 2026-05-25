@@ -5,7 +5,7 @@ from xml.etree import ElementTree as ET
 
 from .ir import Event, Note, ScoreIR, Technique
 
-SUPPORTED_MINIMAL_TECHNIQUES = {"slide", "vibrato", "hammer-on", "pull-off", "tie", "slur"}
+SUPPORTED_MINIMAL_TECHNIQUES = {"slide", "vibrato", "hammer-on", "pull-off", "tie", "slur", "bend"}
 
 
 def _text(parent: ET.Element, tag: str, value: object | None) -> ET.Element:
@@ -14,15 +14,37 @@ def _text(parent: ET.Element, tag: str, value: object | None) -> ET.Element:
     return child
 
 
+def _find_hopo_destinations(score: ScoreIR) -> set[tuple[int, int, int]]:
+    destinations = set()
+    event_map = {}
+    for bar in score.bars:
+        for event in bar.events:
+            event_map[event.id] = event
+
+    for bar in score.bars:
+        for event in bar.events:
+            for note in event.notes:
+                for tech in note.techniques:
+                    if tech.kind in ("hammer-on", "pull-off") and getattr(tech, "target_event_id", None):
+                        target_ev = event_map.get(tech.target_event_id)
+                        if target_ev:
+                            for target_note in target_ev.notes:
+                                if target_note.string == note.string:
+                                    destinations.add((target_ev.timing.bar_index, target_ev.timing.onset_ticks, target_note.string))
+    return destinations
+
+
 def build_gpif(score: ScoreIR) -> bytes:
     root = ET.Element("GPIF", {"version": "7", "generator": "score2gp"})
     score_node = ET.SubElement(root, "Score")
+
+    hopo_dests = _find_hopo_destinations(score)
 
     _metadata(score_node, score)
     _tempo(score_node, score)
     _tracks(score_node, score)
     _master_bars(score_node, score)
-    _bars(score_node, score)
+    _bars(score_node, score, hopo_dests)
 
     ET.indent(root, space="  ")
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)
@@ -80,15 +102,15 @@ def _master_bars(parent: ET.Element, score: ScoreIR) -> None:
             _text(key, "Mode", bar.key_signature.mode)
 
 
-def _bars(parent: ET.Element, score: ScoreIR) -> None:
+def _bars(parent: ET.Element, score: ScoreIR, hopo_dests: set[tuple[int, int, int]]) -> None:
     bars = ET.SubElement(parent, "Bars")
     for bar in score.bars:
         bar_node = ET.SubElement(bars, "Bar", {"index": str(bar.index)})
         for event in sorted(bar.events, key=lambda item: item.timing.onset_ticks):
-            _event(bar_node, event)
+            _event(bar_node, event, hopo_dests)
 
 
-def _event(parent: ET.Element, event: Event) -> None:
+def _event(parent: ET.Element, event: Event, hopo_dests: set[tuple[int, int, int]]) -> None:
     attrs = {
         "id": event.id,
         "track": event.track_id,
@@ -135,10 +157,10 @@ def _event(parent: ET.Element, event: Event) -> None:
         for technique in event.techniques:
             ET.SubElement(techniques, "Technique", {"name": technique.kind})
     for note in event.notes:
-        _note(node, note)
+        _note(node, note, event.timing.bar_index, event.timing.onset_ticks, hopo_dests)
 
 
-def _note(parent: ET.Element, note: Note) -> None:
+def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, hopo_dests: set[tuple[int, int, int]]) -> None:
     note_node = ET.SubElement(
         parent,
         "Note",
@@ -149,6 +171,13 @@ def _note(parent: ET.Element, note: Note) -> None:
             "confidence": f"{note.confidence:.3f}",
         },
     )
+
+    is_hopo_dest = (bar_index, onset_ticks, note.string) in hopo_dests
+    has_slide = False
+    has_bend = False
+    has_hopo_origin = False
+    bend_semitones = 1.0
+
     for technique in note.techniques:
         if technique.kind == "tie":
             note_node.set("tie", technique.state)
@@ -157,6 +186,69 @@ def _note(parent: ET.Element, note: Note) -> None:
             ET.SubElement(note_node, "Tie", {"origin": origin_val, "destination": dest_val})
         if technique.kind == "slur":
             note_node.set("slur", technique.state)
+        if technique.kind == "slide":
+            has_slide = True
+            ET.SubElement(note_node, "Slide")
+        if technique.kind == "bend":
+            has_bend = True
+            bend_semitones = technique.semitones if technique.semitones is not None else 1.0
+            ET.SubElement(note_node, "Bend")
+        if technique.kind == "hammer-on":
+            has_hopo_origin = True
+            ET.SubElement(note_node, "HO")
+        if technique.kind == "pull-off":
+            has_hopo_origin = True
+            ET.SubElement(note_node, "PO")
+
+    if has_slide or has_bend or has_hopo_origin or is_hopo_dest:
+        properties_node = ET.SubElement(note_node, "Properties")
+
+        fret_prop = ET.SubElement(properties_node, "Property", {"name": "Fret"})
+        _text(fret_prop, "Fret", note.fret)
+
+        string_prop = ET.SubElement(properties_node, "Property", {"name": "String"})
+        _text(string_prop, "String", note.string)
+
+        midi_prop = ET.SubElement(properties_node, "Property", {"name": "Midi"})
+        _text(midi_prop, "Number", note.pitch)
+
+        if has_slide:
+            slide_prop = ET.SubElement(properties_node, "Property", {"name": "Slide"})
+            _text(slide_prop, "Flags", 2)
+
+        if has_hopo_origin:
+            hopo_prop = ET.SubElement(properties_node, "Property", {"name": "HopoOrigin"})
+            ET.SubElement(hopo_prop, "Enable")
+
+        if is_hopo_dest:
+            hopo_dest_prop = ET.SubElement(properties_node, "Property", {"name": "HopoDestination"})
+            ET.SubElement(hopo_dest_prop, "Enable")
+
+        if has_bend:
+            bended_prop = ET.SubElement(properties_node, "Property", {"name": "Bended"})
+            ET.SubElement(bended_prop, "Enable")
+
+            dest_offset = ET.SubElement(properties_node, "Property", {"name": "BendDestinationOffset"})
+            _text(dest_offset, "Float", "100.000000")
+
+            dest_val = ET.SubElement(properties_node, "Property", {"name": "BendDestinationValue"})
+            _text(dest_val, "Float", f"{bend_semitones * 50.0:.6f}")
+
+            mid_off1 = ET.SubElement(properties_node, "Property", {"name": "BendMiddleOffset1"})
+            _text(mid_off1, "Float", "12.000000")
+
+            mid_off2 = ET.SubElement(properties_node, "Property", {"name": "BendMiddleOffset2"})
+            _text(mid_off2, "Float", "12.000000")
+
+            mid_val = ET.SubElement(properties_node, "Property", {"name": "BendMiddleValue"})
+            _text(mid_val, "Float", f"{bend_semitones * 25.0:.6f}")
+
+            orig_off = ET.SubElement(properties_node, "Property", {"name": "BendOriginOffset"})
+            _text(orig_off, "Float", "0.000000")
+
+            orig_val = ET.SubElement(properties_node, "Property", {"name": "BendOriginValue"})
+            _text(orig_val, "Float", "0.000000")
+
     if note.techniques:
         techniques = ET.SubElement(note_node, "Techniques")
         for technique in note.techniques:
