@@ -1055,6 +1055,18 @@
           "title": "Is Dead",
           "type": "boolean"
         },
+        "left_hand_fingering": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Left Hand Fingering"
+        },
         "pitch": {
           "maximum": 127,
           "minimum": 0,
@@ -1067,6 +1079,18 @@
           },
           "title": "Provenance",
           "type": "array"
+        },
+        "right_hand_fingering": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Right Hand Fingering"
         },
         "string": {
           "maximum": 12,
