@@ -2,11 +2,11 @@
 
 ## Metadata
 
-- **Current Branch**: `feature/gpif-view-modes-and-print-overrides-v0.1`
+- **Current Branch**: `feature/gpif-multi-staff-templates-and-margins-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: PR #97 (https://github.com/tticom/score2gp/pull/97)
-- **Latest Local Commit**: `066968fbb6d278d5a58bc6aabf0b189ebf80c173` ("feat: implement visual view modes and print overrides in GPIF XML generation")
-- **Latest Pushed Commit**: `066968fbb6d278d5a58bc6aabf0b189ebf80c173` ("feat: implement visual view modes and print overrides in GPIF XML generation")
+- **Current PR**: PR #98 (https://github.com/tticom/score2gp/pull/98)
+- **Latest Local Commit**: `ac2d8b492a32e0b8367603695224a783db107594` ("docs: finalize HANDOFF.md metadata before push")
+- **Latest Pushed Commit**: `ac2d8b492a32e0b8367603695224a783db107594` ("docs: finalize HANDOFF.md metadata before push")
 
 - **Working Tree Status**: Clean (except untracked scratch files).
 
@@ -16,9 +16,9 @@
 
 ## Tests And Checks Run
 
-- `python -m pytest` -> 347 passed (100% success, including the new GP7 view modes and print overrides unit tests).
-- `python -m score2gp.cli export-schema --out schemas` -> passed cleanly (updated schemas with new `ScoreViewConfig`, `ScorePrintSetup`, and `TrackLayoutPreferences.view_mode` parameters).
-- `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid.
+- `python -m pytest` -> 348 passed (100% success, including the new GP7 multi-staff templates and margins unit tests).
+- `python -m score2gp.cli export-schema --out schemas` -> passed cleanly (updated schemas with new `SystemPageMargins`, `EngravingBoundaries`, `EnsembleBracket` parameters).
+- `python -m score2gp.cli validate-ir fixtures/public/test_gpif_multi_staff_templates.ir.json` -> valid.
 - `git diff --check` -> passed cleanly (zero trailing whitespace or EOF blank line violations).
 - `git diff -- schemas` -> passed cleanly (valid schema additions).
 - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep`.
@@ -27,17 +27,17 @@
 ## What Changed In This Task
 
 - **ScoreIR Schema & Model Expansion**:
-  - Expanded `ScoreLayout` in `src/score2gp/ir.py` with optional `view: ScoreViewConfig | None = None` and `print_setup: ScorePrintSetup | None = None` properties.
-  - Added new `ScoreViewConfig` model in `src/score2gp/ir.py` modeling score view preferences (`mode` as one of `"page"`, `"screen"`, `"horizontal"`, `"vertical"` and `scroll_speed`).
-  - Added new `ScorePrintSetup` model in `src/score2gp/ir.py` modeling toggles for print metadata visibility (`print_title`, `print_subtitle`, `print_artist`, `print_composer`, `print_transcriber`, `print_copyright`, `print_page_numbering`, `print_multi_track`).
-  - Expanded `TrackLayoutPreferences` in `src/score2gp/ir.py` with `view_mode` field.
-  - Successfully exported updated JSON schema version via CLI to reflect these visual layout properties.
+  - Created `SystemPageMargins` model under `src/score2gp/ir.py` modeling top/bottom/left/right page-level system margins.
+  - Created `EngravingBoundaries` model under `src/score2gp/ir.py` modeling custom engraving height/width boundaries.
+  - Created `EnsembleBracket` model under `src/score2gp/ir.py` modeling brackets/braces for staves grouping by `track_ids` and visual style (`brace`, `bracket`, `line`, `none`).
+  - Expanded `ScoreLayout` in `src/score2gp/ir.py` with `system_page_margins`, `engraving_boundaries`, and `ensemble_brackets` properties.
+  - Successfully re-exported updated JSON schema version via the CLI.
 - **GPIF XML Generator Serialization**:
-  - Added `<Score><View>` and `<Score><Print>` elements in `src/score2gp/gpif.py` to serialize score-level view/print overrides (e.g. `<Mode>`, `<ScrollSpeed>` under `<View>`, and `<Title>`, `<Subtitle>`, etc. under `<Print>`).
-  - Added track-level `<View><Mode>...</Mode></View>` and Staff properties `<Property name="ViewMode"><Mode>...</Mode></Property>` mapping track visual view preferences (`view_mode`) under track serialization.
+  - Updated `_page_setup` in `src/score2gp/gpif.py` to write custom engraving boundaries as attributes (`engravingWidth`/`engravingHeight`) on `<PageSetup>` and as a structural `<EngravingBoundaries>` block.
+  - Updated `build_gpif` in `src/score2gp/gpif.py` to serialize a new score-level `<Layout>` block containing `<SystemPageMargins>`, `<Bracing>`, and `<EnsembleBrackets>` with `<Brace>` and `<Bracket>` visual configurations.
 - **Synthetic Testing & Validation**:
-  - Authored a dedicated public synthetic fixture `fixtures/public/test_gpif_view_print_overrides.ir.json` modeling all combinations of score-level and track-level view setups and print layout configurations.
-  - Wrote comprehensive unit tests in `tests/test_gp_writer.py` (`test_gpif_view_print_overrides`) verifying all serialized XML elements are perfectly present and well-formed inside the zipped GPIF XML.
+  - Authored a dedicated public synthetic fixture `fixtures/public/test_gpif_multi_staff_templates.ir.json` modeling various engraving settings.
+  - Wrote comprehensive unit tests in `tests/test_gp_writer.py` (`test_gpif_multi_staff_templates`) verifying layout settings inside the zipped GPIF XML.
 - **E2E Private Smoke Test Results**:
   - Ran E2E private smoke compiler against real private inputs to verify zero regressions or crashes with the new view preferences.
 
@@ -51,7 +51,7 @@
 
 ## Next Recommended Task
 
-- **Support system page margins and dynamic multi-track print templates**: Implement custom margins, page dimension systems, and multi-track print setups inside the GPIF XML generator.
+- **Support custom font stylesheets and notation visual engraving parameters**: Implement customizable stylesheets, music text font preferences, and engraving visual details inside the GPIF XML generator.
 
 ## Explicit Scope Boundaries
 
