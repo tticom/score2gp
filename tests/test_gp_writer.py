@@ -1683,3 +1683,57 @@ def test_gpif_view_print_overrides(tmp_path) -> None:
 
         vm_prop2 = t2.find(".//Properties/Property[@name='ViewMode']")
         assert vm_prop2 is not None and vm_prop2.find("Mode").text == "Page"
+
+
+def test_gpif_multi_staff_templates(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_multi_staff_templates.ir.json")
+    out = tmp_path / "multi_staff_templates.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == ["track 'piano-1' tablature_enabled=false is not represented in the minimal GPIF writer"]
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        # 1. Verify PageSetup Custom Engraving attributes & sub-elements
+        ps = root.find(".//PageSetup")
+        assert ps is not None
+        assert ps.get("engravingWidth") == "175.0"
+        assert ps.get("engravingHeight") == "250.0"
+
+        eb = ps.find("EngravingBoundaries")
+        assert eb is not None
+        assert eb.find("Width").text == "175.0"
+        assert eb.find("Height").text == "250.0"
+
+        # 2. Verify Layout node & SystemPageMargins
+        layout_node = root.find(".//Layout")
+        assert layout_node is not None
+
+        spm = layout_node.find("SystemPageMargins")
+        assert spm is not None
+        assert spm.find("Top").text == "12.0"
+        assert spm.find("Bottom").text == "12.0"
+        assert spm.find("Left").text == "10.0"
+        assert spm.find("Right").text == "10.0"
+
+        # 3. Verify Ensemble Brackets and Bracing nodes
+        bracing_node = layout_node.find("Bracing")
+        assert bracing_node is not None
+        braces = bracing_node.findall("Brace")
+        assert len(braces) == 2
+        assert braces[0].get("style") == "brace"
+        assert braces[0].find("Tracks").text == "gtr-1 piano-1"
+        assert braces[1].get("style") == "bracket"
+        assert braces[1].find("Tracks").text == "gtr-1"
+
+        eb_node = layout_node.find("EnsembleBrackets")
+        assert eb_node is not None
+        brackets = eb_node.findall("Bracket")
+        assert len(brackets) == 2
+        assert brackets[0].get("style") == "brace"
+        assert brackets[0].find("Tracks").text == "gtr-1 piano-1"
+        assert brackets[1].get("style") == "bracket"
+        assert brackets[1].find("Tracks").text == "gtr-1"
