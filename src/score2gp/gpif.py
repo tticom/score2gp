@@ -157,15 +157,24 @@ def _bars(parent: ET.Element, score: ScoreIR, hopo_dests: set[tuple[int, int, in
     bars = ET.SubElement(parent, "Bars")
     for bar in score.bars:
         bar_node = ET.SubElement(bars, "Bar", {"index": str(bar.index)})
-        for event in sorted(bar.events, key=lambda item: item.timing.onset_ticks):
-            _event(bar_node, event, hopo_dests, let_ring_notes, palm_mute_notes)
+
+        events_by_voice = {}
+        for event in bar.events:
+            v_idx = event.timing.voice - 1
+            events_by_voice.setdefault(v_idx, []).append(event)
+
+        voices_node = ET.SubElement(bar_node, "Voices")
+        for v_idx in sorted(events_by_voice.keys()):
+            voice_node = ET.SubElement(voices_node, "Voice", {"id": str(v_idx)})
+            for event in sorted(events_by_voice[v_idx], key=lambda item: item.timing.onset_ticks):
+                _event(voice_node, event, hopo_dests, let_ring_notes, palm_mute_notes)
 
 
 def _event(parent: ET.Element, event: Event, hopo_dests: set[tuple[int, int, int]], let_ring_notes: set[tuple[int, int, int]], palm_mute_notes: set[tuple[int, int, int]]) -> None:
     attrs = {
         "id": event.id,
         "track": event.track_id,
-        "voice": str(event.timing.voice),
+        "voice": str(event.timing.voice - 1),
         "position": _ticks_to_fraction(event.timing.onset_ticks, event.timing.ticks_per_quarter),
         "duration": _ticks_to_fraction(event.timing.duration_ticks, event.timing.ticks_per_quarter),
         "confidence": f"{event.confidence:.3f}",
