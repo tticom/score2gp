@@ -2,9 +2,11 @@
 
 ## Next
 
-- [ ] Advance to Milestone 4 & 5 Expansion - serialize grace notes, let-ring, and palm-mute techniques in the GPIF writer.
+- [ ] Advance to Milestone 4 & 5 Expansion - support multi-voice events serialization in the GPIF writer.
 
 ## Done
+
+- [x] Implement ScoreIR support and GPIF XML generation for grace notes, let-ring spans, and palm-mute spans in the Guitar Pro writer (`src/score2gp/gpif.py`), mapping these properties from ScoreIR models into valid GP7-compatible XML tags (`feature/gpif-grace-and-spans-v0.1`).
 
 - [x] Implement GPIF XML generation for core guitar techniques (slides, bends, hammer-ons, and pull-offs) in the Guitar Pro writer (`src/score2gp/gpif.py`), mapping these properties from ScoreIR models into valid GP7-compatible XML tags and property structures (`feature/gpif-core-techniques-v0.1`).
 

@@ -5,7 +5,7 @@ from xml.etree import ElementTree as ET
 
 from .ir import Event, Note, ScoreIR, Technique
 
-SUPPORTED_MINIMAL_TECHNIQUES = {"slide", "vibrato", "hammer-on", "pull-off", "tie", "slur", "bend"}
+SUPPORTED_MINIMAL_TECHNIQUES = {"slide", "vibrato", "hammer-on", "pull-off", "tie", "slur", "bend", "let-ring", "palm-mute", "grace"}
 
 
 def _text(parent: ET.Element, tag: str, value: object | None) -> ET.Element:
@@ -34,17 +34,68 @@ def _find_hopo_destinations(score: ScoreIR) -> set[tuple[int, int, int]]:
     return destinations
 
 
+def _find_span_notes(score: ScoreIR) -> tuple[set[tuple[int, int, int]], set[tuple[int, int, int]]]:
+    let_ring_notes = set()
+    palm_mute_notes = set()
+
+    # 1. Compute bar absolute start ticks
+    bar_starts = {}
+    current = 0
+    for bar in sorted(score.bars, key=lambda b: b.index):
+        bar_starts[bar.index] = current
+        tpq = 960
+        if bar.events:
+            tpq = bar.events[0].timing.ticks_per_quarter
+        bar_length = int(bar.time_signature.numerator * tpq * 4 / bar.time_signature.denominator)
+        current += bar_length
+
+    # 2. Build map of event_id -> (absolute_onset, bar_index, onset_ticks)
+    event_info = {}
+    for bar in score.bars:
+        for event in bar.events:
+            abs_onset = bar_starts[bar.index] + event.timing.onset_ticks
+            event_info[event.id] = (abs_onset, bar.index, event.timing.onset_ticks)
+
+    # 3. Collect all active spans
+    spans = [] # list of (kind, string, start_abs, end_abs)
+    for bar in score.bars:
+        for event in bar.events:
+            for note in event.notes:
+                for tech in note.techniques:
+                    if tech.kind in ("let-ring", "palm-mute") and getattr(tech, "end_event_id", None):
+                        target_info = event_info.get(tech.end_event_id)
+                        if target_info:
+                            end_abs = target_info[0]
+                            start_abs = bar_starts[bar.index] + event.timing.onset_ticks
+                            spans.append((tech.kind, note.string, start_abs, end_abs))
+
+    # 4. Filter all notes in the score against these spans
+    for bar in score.bars:
+        for event in bar.events:
+            note_abs = bar_starts[bar.index] + event.timing.onset_ticks
+            for note in event.notes:
+                for kind, string, start_abs, end_abs in spans:
+                    if note.string == string and start_abs <= note_abs <= end_abs:
+                        if kind == "let-ring":
+                            let_ring_notes.add((bar.index, event.timing.onset_ticks, note.string))
+                        elif kind == "palm-mute":
+                            palm_mute_notes.add((bar.index, event.timing.onset_ticks, note.string))
+
+    return let_ring_notes, palm_mute_notes
+
+
 def build_gpif(score: ScoreIR) -> bytes:
     root = ET.Element("GPIF", {"version": "7", "generator": "score2gp"})
     score_node = ET.SubElement(root, "Score")
 
     hopo_dests = _find_hopo_destinations(score)
+    let_ring_notes, palm_mute_notes = _find_span_notes(score)
 
     _metadata(score_node, score)
     _tempo(score_node, score)
     _tracks(score_node, score)
     _master_bars(score_node, score)
-    _bars(score_node, score, hopo_dests)
+    _bars(score_node, score, hopo_dests, let_ring_notes, palm_mute_notes)
 
     ET.indent(root, space="  ")
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)
@@ -102,15 +153,15 @@ def _master_bars(parent: ET.Element, score: ScoreIR) -> None:
             _text(key, "Mode", bar.key_signature.mode)
 
 
-def _bars(parent: ET.Element, score: ScoreIR, hopo_dests: set[tuple[int, int, int]]) -> None:
+def _bars(parent: ET.Element, score: ScoreIR, hopo_dests: set[tuple[int, int, int]], let_ring_notes: set[tuple[int, int, int]], palm_mute_notes: set[tuple[int, int, int]]) -> None:
     bars = ET.SubElement(parent, "Bars")
     for bar in score.bars:
         bar_node = ET.SubElement(bars, "Bar", {"index": str(bar.index)})
         for event in sorted(bar.events, key=lambda item: item.timing.onset_ticks):
-            _event(bar_node, event, hopo_dests)
+            _event(bar_node, event, hopo_dests, let_ring_notes, palm_mute_notes)
 
 
-def _event(parent: ET.Element, event: Event, hopo_dests: set[tuple[int, int, int]]) -> None:
+def _event(parent: ET.Element, event: Event, hopo_dests: set[tuple[int, int, int]], let_ring_notes: set[tuple[int, int, int]], palm_mute_notes: set[tuple[int, int, int]]) -> None:
     attrs = {
         "id": event.id,
         "track": event.track_id,
@@ -150,6 +201,17 @@ def _event(parent: ET.Element, event: Event, hopo_dests: set[tuple[int, int, int
                 },
             )
 
+    grace_timing = event.timing.grace
+    if not grace_timing:
+        for note in event.notes:
+            for tech in note.techniques:
+                if tech.kind == "grace":
+                    grace_timing = tech.timing
+                    break
+    if grace_timing is not None:
+        val = "OnBeat" if grace_timing.position == "on-beat" else "BeforeBeat"
+        _text(node, "GraceNotes", val)
+
     if event.chord_symbol:
         _text(node, "Chord", event.chord_symbol)
     if event.techniques:
@@ -157,10 +219,10 @@ def _event(parent: ET.Element, event: Event, hopo_dests: set[tuple[int, int, int
         for technique in event.techniques:
             ET.SubElement(techniques, "Technique", {"name": technique.kind})
     for note in event.notes:
-        _note(node, note, event.timing.bar_index, event.timing.onset_ticks, hopo_dests)
+        _note(node, note, event.timing.bar_index, event.timing.onset_ticks, hopo_dests, let_ring_notes, palm_mute_notes)
 
 
-def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, hopo_dests: set[tuple[int, int, int]]) -> None:
+def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, hopo_dests: set[tuple[int, int, int]], let_ring_notes: set[tuple[int, int, int]], palm_mute_notes: set[tuple[int, int, int]]) -> None:
     note_node = ET.SubElement(
         parent,
         "Note",
@@ -173,6 +235,14 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, hopo
     )
 
     is_hopo_dest = (bar_index, onset_ticks, note.string) in hopo_dests
+    is_let_ring = (bar_index, onset_ticks, note.string) in let_ring_notes
+    is_palm_mute = (bar_index, onset_ticks, note.string) in palm_mute_notes
+
+    if is_let_ring:
+        ET.SubElement(note_node, "LetRing")
+    if is_palm_mute:
+        ET.SubElement(note_node, "PalmMute")
+
     has_slide = False
     has_bend = False
     has_hopo_origin = False
@@ -270,8 +340,6 @@ def gpif_warnings(score: ScoreIR) -> list[str]:
             warnings.append(f"track '{track.id}' MIDI program/channel is not represented in the minimal GPIF writer")
     for bar in score.bars:
         for event in bar.events:
-            if event.timing.grace is not None:
-                warnings.append(f"event '{event.id}' grace timing is not represented in the minimal GPIF writer")
             _technique_warnings(warnings, f"event '{event.id}'", event.techniques)
             for note in event.notes:
                 _technique_warnings(warnings, f"event '{event.id}' note string {note.string}", note.techniques)
