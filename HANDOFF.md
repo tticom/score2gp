@@ -5,8 +5,8 @@
 - **Current Branch**: `feature/gpif-multi-staff-templates-and-margins-v0.1`
 - **Base Branch**: `main`
 - **Current PR**: PR #98 (https://github.com/tticom/score2gp/pull/98)
-- **Latest Local Commit**: `5be3aa9b83f1cdade060b4d8718cb1e8a6b4c38b` ("docs: update tasks and handoff for multi-staff templates and margins")
-- **Latest Pushed Commit**: `5be3aa9b83f1cdade060b4d8718cb1e8a6b4c38b` ("docs: update tasks and handoff for multi-staff templates and margins")
+- **Latest Local Commit**: `ac2d8b492a32e0b8367603695224a783db107594` ("docs: finalize HANDOFF.md metadata before push")
+- **Latest Pushed Commit**: `ac2d8b492a32e0b8367603695224a783db107594` ("docs: finalize HANDOFF.md metadata before push")
 
 - **Working Tree Status**: Clean (except untracked scratch files).
 
