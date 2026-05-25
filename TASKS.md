@@ -2,9 +2,11 @@
 
 ## Next
 
-- [ ] Support track-level visual layout view styles and print layout overrides in the GPIF XML generator.
+- [ ] Support system page margins and dynamic multi-track print templates in the GPIF XML generator.
 
 ## Done
+
+- [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for score-level and track-level visual view modes (scrolling screen vs. paginated page layout) and print formatting layout options (metadata toggles, margins, multi-track layouts), mapping these visual preferences into valid structural GP7-compatible XML blocks (`feature/gpif-view-modes-and-print-overrides-v0.1`).
 
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for track-level visual layout preferences—specifically forced tab-only display modes, stem direction styles, and notation system line sizing constraints—mapping these profiles into valid structural GP7-compatible XML blocks (`feature/gpif-track-layout-preferences-v0.1`).
 

@@ -152,6 +152,26 @@ def build_gpif(score: ScoreIR) -> bytes:
     _text(score_node, "ScoreSystemsDefaultLayout", layout_systems)
     _text(score_node, "ScoreSystemsLayout", layout_systems)
 
+    # Score-level view modes
+    if getattr(score, "layout", None) is not None and score.layout.view is not None:
+        view_node = ET.SubElement(score_node, "View")
+        _text(view_node, "Mode", score.layout.view.mode.capitalize())
+        if score.layout.view.scroll_speed is not None:
+            _text(view_node, "ScrollSpeed", score.layout.view.scroll_speed)
+
+    # Score-level print layouts
+    if getattr(score, "layout", None) is not None and score.layout.print_setup is not None:
+        print_node = ET.SubElement(score_node, "Print")
+        ps_cfg = score.layout.print_setup
+        _text(print_node, "Title", "true" if ps_cfg.print_title else "false")
+        _text(print_node, "Subtitle", "true" if ps_cfg.print_subtitle else "false")
+        _text(print_node, "Artist", "true" if ps_cfg.print_artist else "false")
+        _text(print_node, "Composer", "true" if ps_cfg.print_composer else "false")
+        _text(print_node, "Transcriber", "true" if ps_cfg.print_transcriber else "false")
+        _text(print_node, "Copyright", "true" if ps_cfg.print_copyright else "false")
+        _text(print_node, "PageNumbering", "true" if ps_cfg.print_page_numbering else "false")
+        _text(print_node, "MultiTrack", "true" if ps_cfg.print_multi_track else "false")
+
     event_map = {}
     for bar in score.bars:
         for event in bar.events:
@@ -206,6 +226,10 @@ def _tracks(parent: ET.Element, score: ScoreIR, track_cd_maps: dict[str, dict[st
             if track.layout_preferences.tab_only:
                 tab_node = ET.SubElement(node, "Tablature")
                 _text(tab_node, "TabOnly", "true")
+
+            if track.layout_preferences.view_mode:
+                view_node = ET.SubElement(node, "View")
+                _text(view_node, "Mode", track.layout_preferences.view_mode.capitalize())
 
         if getattr(track, "mixer", None) is not None:
             mixer_node = ET.SubElement(node, "Mixer")
@@ -327,6 +351,11 @@ def _tracks(parent: ET.Element, score: ScoreIR, track_cd_maps: dict[str, dict[st
             if layout_prefs.line_sizing:
                 ls_prop = ET.SubElement(properties_node, "Property", {"name": "LineSizing"})
                 _text(ls_prop, "Size", layout_prefs.line_sizing.capitalize())
+
+            # Track-level view mode property
+            if layout_prefs.view_mode:
+                vm_prop = ET.SubElement(properties_node, "Property", {"name": "ViewMode"})
+                _text(vm_prop, "Mode", layout_prefs.view_mode.capitalize())
 
         # Collect chord diagrams for this track to construct staff properties
         tmap = track_cd_maps.get(track.id, {})
