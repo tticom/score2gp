@@ -742,7 +742,9 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
         ET.SubElement(note_node, "PO")
 
     has_articulation = bool(articulations)
-    if has_slide or has_bend or has_hopo_origin or is_hopo_dest or has_slap or has_pop or has_tapping or has_trill or has_tremolo_bar or has_glissando or has_articulation or has_hammer_on or has_pull_off or has_slur:
+    lh_val = getattr(note, "left_hand_fingering", None)
+    rh_val = getattr(note, "right_hand_fingering", None)
+    if has_slide or has_bend or has_hopo_origin or is_hopo_dest or has_slap or has_pop or has_tapping or has_trill or has_tremolo_bar or has_glissando or has_articulation or has_hammer_on or has_pull_off or has_slur or lh_val or rh_val:
         properties_node = ET.SubElement(note_node, "Properties")
 
         fret_prop = ET.SubElement(properties_node, "Property", {"name": "Fret"})
@@ -753,6 +755,42 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
 
         midi_prop = ET.SubElement(properties_node, "Property", {"name": "Midi"})
         _text(midi_prop, "Number", note.pitch)
+
+        if lh_val:
+            lh_map = {
+                "0": "Open",
+                "open": "Open",
+                "t": "Thumb",
+                "thumb": "Thumb",
+                "1": "Index",
+                "index": "Index",
+                "2": "Middle",
+                "middle": "Middle",
+                "3": "Ring",
+                "ring": "Ring",
+                "4": "Little",
+                "little": "Little"
+            }
+            mapped_lh = lh_map.get(str(lh_val).lower(), str(lh_val).capitalize())
+            lh_prop = ET.SubElement(properties_node, "Property", {"name": "LeftHandFingering"})
+            _text(lh_prop, "Fingering", mapped_lh)
+
+        if rh_val:
+            rh_map = {
+                "p": "Thumb",
+                "thumb": "Thumb",
+                "i": "Index",
+                "index": "Index",
+                "m": "Middle",
+                "middle": "Middle",
+                "a": "Ring",
+                "ring": "Ring",
+                "c": "Little",
+                "little": "Little"
+            }
+            mapped_rh = rh_map.get(str(rh_val).lower(), str(rh_val).capitalize())
+            rh_prop = ET.SubElement(properties_node, "Property", {"name": "RightHandFingering"})
+            _text(rh_prop, "Fingering", mapped_rh)
 
         if "accent" in articulations:
             acc_prop = ET.SubElement(properties_node, "Property", {"name": "Accentuation"})
