@@ -1448,6 +1448,17 @@
         "page_setup": {
           "$ref": "#/$defs/PageSetup"
         },
+        "print_setup": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScorePrintSetup"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "score_systems_layout": {
           "default": 4,
           "maximum": 4,
@@ -1461,9 +1472,97 @@
           },
           "title": "Track Order",
           "type": "array"
+        },
+        "view": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScoreViewConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "title": "ScoreLayout",
+      "type": "object"
+    },
+    "ScorePrintSetup": {
+      "additionalProperties": false,
+      "properties": {
+        "print_artist": {
+          "default": true,
+          "title": "Print Artist",
+          "type": "boolean"
+        },
+        "print_composer": {
+          "default": true,
+          "title": "Print Composer",
+          "type": "boolean"
+        },
+        "print_copyright": {
+          "default": true,
+          "title": "Print Copyright",
+          "type": "boolean"
+        },
+        "print_multi_track": {
+          "default": false,
+          "title": "Print Multi Track",
+          "type": "boolean"
+        },
+        "print_page_numbering": {
+          "default": true,
+          "title": "Print Page Numbering",
+          "type": "boolean"
+        },
+        "print_subtitle": {
+          "default": true,
+          "title": "Print Subtitle",
+          "type": "boolean"
+        },
+        "print_title": {
+          "default": true,
+          "title": "Print Title",
+          "type": "boolean"
+        },
+        "print_transcriber": {
+          "default": true,
+          "title": "Print Transcriber",
+          "type": "boolean"
+        }
+      },
+      "title": "ScorePrintSetup",
+      "type": "object"
+    },
+    "ScoreViewConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "default": "page",
+          "enum": [
+            "page",
+            "screen",
+            "horizontal",
+            "vertical"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "scroll_speed": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scroll Speed"
+        }
+      },
+      "title": "ScoreViewConfig",
       "type": "object"
     },
     "SlapTechnique": {
@@ -2009,6 +2108,24 @@
           "default": false,
           "title": "Tab Only",
           "type": "boolean"
+        },
+        "view_mode": {
+          "anyOf": [
+            {
+              "enum": [
+                "page",
+                "screen",
+                "horizontal",
+                "vertical"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "View Mode"
         }
       },
       "title": "TrackLayoutPreferences",

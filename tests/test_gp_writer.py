@@ -1629,3 +1629,57 @@ def test_gpif_track_layout_preferences(tmp_path) -> None:
 
         ls_prop3 = t3.find(".//Properties/Property[@name='LineSizing']")
         assert ls_prop3 is not None and ls_prop3.find("Size").text == "Standard"
+
+
+def test_gpif_view_print_overrides(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_view_print_overrides.ir.json")
+    out = tmp_path / "view_print_overrides.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        score_node = root.find("Score")
+        assert score_node is not None
+
+        # 1. Score-level view mode assertions
+        view_score = score_node.find("View")
+        assert view_score is not None
+        assert view_score.find("Mode").text == "Screen"
+        assert view_score.find("ScrollSpeed").text == "1.5"
+
+        # 2. Score-level print setup assertions
+        print_score = score_node.find("Print")
+        assert print_score is not None
+        assert print_score.find("Title").text == "false"
+        assert print_score.find("Subtitle").text == "false"
+        assert print_score.find("Artist").text == "true"
+        assert print_score.find("Composer").text == "true"
+        assert print_score.find("Transcriber").text == "false"
+        assert print_score.find("Copyright").text == "false"
+        assert print_score.find("PageNumbering").text == "true"
+        assert print_score.find("MultiTrack").text == "true"
+
+        # 3. Track-level view mode assertions
+        tracks = root.findall(".//Track")
+        track_map = {t.get("id"): t for t in tracks}
+
+        # Track 1: view_mode = screen
+        t1 = track_map["gtr-1"]
+        view_t1 = t1.find("View")
+        assert view_t1 is not None and view_t1.find("Mode").text == "Screen"
+
+        vm_prop1 = t1.find(".//Properties/Property[@name='ViewMode']")
+        assert vm_prop1 is not None and vm_prop1.find("Mode").text == "Screen"
+
+        # Track 2: view_mode = page
+        t2 = track_map["gtr-2"]
+        view_t2 = t2.find("View")
+        assert view_t2 is not None and view_t2.find("Mode").text == "Page"
+
+        vm_prop2 = t2.find(".//Properties/Property[@name='ViewMode']")
+        assert vm_prop2 is not None and vm_prop2.find("Mode").text == "Page"
