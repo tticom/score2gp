@@ -2,11 +2,11 @@
 
 ## Metadata
 
-- **Current Branch**: `feature/gpif-tuning-and-track-formatting-v0.1`
+- **Current Branch**: `feature/pipeline-defensive-sanitization-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: PR #81 (https://github.com/tticom/score2gp/pull/81)
-- **Latest Local Commit**: `3c11202` ("Update HANDOFF.md and TASKS.md")
-- **Latest Pushed Commit**: `3c11202` ("Update HANDOFF.md and TASKS.md")
+- **Current PR**: None (Draft PR to be opened)
+- **Latest Local Commit**: `83a45a1` ("Implement defensive payload sanitization and structural validation preflight gates")
+- **Latest Pushed Commit**: None (To be pushed in feature branch)
 - **Working Tree Status**: Clean (except untracked scratch files).
 
 - **GitHub Check Status**: N/A
@@ -15,35 +15,26 @@
 
 ## Tests And Checks Run
 
-- `python -m pytest` -> 330 passed (100% success, including new synthetic test `test_gpif_tuning_and_formatting`).
+- `python -m pytest` -> 332 passed (100% success, including new synthetic preflight sanitization and clamping tests).
 - `python -m score2gp.cli export-schema --out schemas` -> passed cleanly.
-- `python -m score2gp.cli validate-ir fixtures/public/test_gpif_tuning_formatting.ir.json` -> valid.
+- `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid.
 - `git diff --check` -> passed cleanly.
-- `git diff -- schemas` -> passed with updated schema.
+- `git diff -- schemas` -> passed with no schema differences (preflight validators do not alter public schema).
 - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep`.
 - `python scripts/private_e2e_smoke.py` -> passed cleanly against all private PDF inputs.
 
 ## What Changed In This Task
 
-- **ScoreIR Schema Integration**:
-  - Added optional `color: str | None = None` to the `Track` model to support custom visual coloring.
-  - Updated `semantic_scoreir_summary(score: ScoreIR)` to serialize track `color` properties correctly.
-  - Re-exported the updated JSON schema to `schemas/scoreir.v0.1.schema.json`.
-- **Guitar Pro Writer (GPIF) Serialization**:
-  - **Track Colors**: Added `<Color>` element directly under `<Track>` which captures three RGB values space-separated (e.g. `237 116 116`).
-  - **Layout Views**: Added `<SystemsDefautLayout>` (using GP's custom spelling "Defaut") indicating track visual layout modes based on Pydantic `track.tablature_enabled` (e.g. `3` for standard notation + tablature, or `1` for standard only).
-  - **Custom Tunings**: Restructured `<Staves>` property generation to always generate the staff properties (`Properties`) for every track, including:
-    - `<Property name="CapoFret">`
-    - `<Property name="FretCount">`
-    - `<Property name="PartialCapoFret">`
-    - `<Property name="PartialCapoStringFlags">`
-    - `<Property name="Tuning>` containing `<Pitches>` with space-separated pitch values in reverse string order (low string to high string), `<Instrument>` type, and other label configurations.
-  - Integrated existing `<DiagramCollection>` chord diagram properties inside the same unified `<Properties>` staff node.
-- **GPIF Parser/Inspection Support**:
-  - Fixed a string duplication/accumulation bug in `_summarize_gpif` in `src/score2gp/gp_package.py` when both track-level `String` elements and staff-level `Tuning/Pitches` exist, resolving test verification issues and ensuring accurate string pitch mapping.
+- **Pipeline Defensive Ingestion & Sanitization Gates**:
+  - Implemented `@model_validator(mode="before")` preflight gates on Pydantic models in `src/score2gp/ir.py`:
+    - **TimeSignature**: Clamps fractional or out-of-bounds numerator/denominator values to a safe `1..64` range.
+    - **Timing**: Safely rounds fractional onset/duration ticks, clamps negative time divisions to `>=0`, and voice layouts to a valid `1..8` range.
+    - **Note**: Clamps out-of-bounds strings (`1..12`), negative or excessive frets (`0..36`), and pitch values (`0..127`) to structural safety boundaries.
+- **Structural Pre-Ingestion Validation**:
+  - Configured custom descriptive validation failures using `before` validators on structural collections (**ScoreIR** for tracks/bars/warnings, **Bar** for events, and **Event** for notes/techniques) ensuring they are valid lists, raising clear target exceptions rather than causing generic interpreter crashes.
 - **Synthetic Testing & Validation**:
-  - Authored a dedicated public synthetic fixture `fixtures/public/test_gpif_tuning_formatting.ir.json` modeling Drop D tuning alongside visual track color metadata and tablature options.
-  - Wrote comprehensive unit tests in `tests/test_gp_writer.py` verifying that `<Color>`, `<SystemsDefautLayout>`, and staff `<Properties>` (specifically Pitches, CapoFret, and FretCount) are correctly serialized and structured.
+  - Authored a dedicated public synthetic fixture `fixtures/public/test_malformed_input_clamping.ir.json` containing problematic fractional ticks, out-of-bounds voice layouts, negative frets, and pitch values.
+  - Wrote comprehensive unit tests in `tests/test_ir.py` verifying that clamping and preflight sanitization work cleanly on loading, range/type errors are normalized, and malformed structural arrays raise targeted descriptive failures.
 - **E2E Private Smoke Test Results**:
   - Ran the smoke compiler against real private inputs to verify zero regressions or crashes. All private inputs compiled successfully with valid GP packages generated with no errors or builder issues.
 
