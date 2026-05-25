@@ -3,6 +3,31 @@
     "Bar": {
       "additionalProperties": false,
       "properties": {
+        "anacrusis": {
+          "default": false,
+          "title": "Anacrusis",
+          "type": "boolean"
+        },
+        "barline": {
+          "anyOf": [
+            {
+              "enum": [
+                "regular",
+                "double",
+                "end",
+                "section",
+                "repeat-start",
+                "repeat-end"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Barline"
+        },
         "events": {
           "items": {
             "$ref": "#/$defs/Event"
@@ -42,6 +67,19 @@
           ],
           "default": null,
           "title": "Layout Break"
+        },
+        "repeat_count": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Repeat Count"
         },
         "tempo": {
           "anyOf": [
