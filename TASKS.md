@@ -2,9 +2,11 @@
 
 ## Next
 
-- [ ] Address the remaining 24 string assignment gaps and 5 bar assignment gaps on the valid systems of `private_input_1` to completely pass the grouping phase.
+- [ ] Perform a structural visual validation of the successfully compiled Guitar Pro 7 package (`private_input_1.gp`) to verify auditory/visual alignment.
 
 ## Done
+
+- [x] Address the remaining 24 string assignment gaps and 5 bar assignment gaps on the valid systems of `private_input_1` to completely pass the grouping phase (feature/pdf-fret-snapping-refinement-v0.1).
 
 - [x] Implement measure synchronization logic in `build-ir` to safely align TabRaw measures with the MusicXML timeline even when an entire PDF system (or measure block) has been safely skipped during extraction (feature/musicxml-alignment-skipped-system-sync-v0.1).
 

@@ -2581,3 +2581,37 @@ def test_pdf_multi_column_layout_safe(tmp_path) -> None:
     assert playable[3].raw_text == "7"
     assert playable[3].system_index == 4
     assert playable[3].bar_index == 7
+
+
+def test_edge_candidate_snapping(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_edge_candidate_snapping.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "edge_snap.tabraw.json"
+
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+    playable = sorted(
+        [c for c in tabraw.candidates if c.parsed_fret is not None],
+        key=lambda c: c.x
+    )
+
+    assert len(playable) == 3
+
+    # Check fret "3" at x=85.0 (snapped horizontally to Bar 1)
+    fret_3 = playable[0]
+    assert fret_3.raw_text == "3"
+    assert fret_3.bar_index == 1
+    assert fret_3.string == 2
+    assert "pdf_candidate_outside_bar" not in [w.get("code") for w in tabraw.warnings]
+
+    # Check fret "7" at x=150.0 (snapped vertically to String 1 via relaxed chord cluster snapping)
+    fret_7 = playable[1]
+    assert fret_7.raw_text == "7"
+    assert fret_7.bar_index == 1
+    assert fret_7.string == 1
+    assert "pdf_string_assignment_outside_staff" not in [w.get("code") for w in tabraw.warnings]
+
+    # Check fret "5" at x=150.0
+    fret_5 = playable[2]
+    assert fret_5.raw_text == "5"
+    assert fret_5.bar_index == 1
+    assert fret_5.string == 3
