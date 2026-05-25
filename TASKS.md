@@ -4,6 +4,8 @@
 
 ## Done
 
+- [x] Implement ScoreIR support and GPIF XML generation for tremolo picking and percussive/tapping articulations in the Guitar Pro writer (`src/score2gp/gpif.py`), mapping these properties from ScoreIR models into valid GP7-compatible XML tags and property structures (`feature/gpif-tremolo-picking-and-percussive-articulations-v0.1`).
+
 - [x] Implement ScoreIR support and GPIF XML generation for chord diagrams and vibrato speed/depth curves in the Guitar Pro writer (`src/score2gp/gpif.py`), mapping these properties from ScoreIR models into valid GP7-compatible XML tags and property structures (`feature/gpif-chord-diagrams-and-vibrato-curves-v0.1`).
 
 - [x] Implement ScoreIR support and GPIF XML generation for dead notes and tremolo bar expressions in the Guitar Pro writer (`src/score2gp/gpif.py`), mapping these properties from ScoreIR models into valid GP7-compatible XML tags (`feature/gpif-dead-notes-and-tremolo-v0.1`).
