@@ -309,11 +309,34 @@ def _master_bars(parent: ET.Element, score: ScoreIR) -> None:
             break_val = "Line" if bar.layout_break == "line" else ("Page" if bar.layout_break == "page" else "None")
             _text(node, "Break", break_val)
 
+        if getattr(bar, "barline", None) is not None:
+            barline_map = {
+                "regular": "Simple",
+                "double": "Double",
+                "end": "End",
+                "section": "Section",
+                "repeat-start": "RepeatStart",
+                "repeat-end": "RepeatEnd",
+            }
+            barline_val = barline_map.get(bar.barline, "Simple")
+            _text(node, "Barline", barline_val)
+
+            if bar.barline == "repeat-start":
+                ET.SubElement(node, "RepeatStart")
+            elif bar.barline == "repeat-end":
+                repeat_count = getattr(bar, "repeat_count", None) or 2
+                ET.SubElement(node, "Repeat", {"count": str(repeat_count)})
+
 
 def _bars(parent: ET.Element, score: ScoreIR, hopo_dests: set[tuple[int, int, int]], let_ring_notes: set[tuple[int, int, int]], palm_mute_notes: set[tuple[int, int, int]], track_cd_maps: dict[str, dict[str, str]]) -> None:
     bars = ET.SubElement(parent, "Bars")
     for bar in score.bars:
         bar_node = ET.SubElement(bars, "Bar", {"index": str(bar.index)})
+
+        if getattr(bar, "anacrusis", False):
+            props = ET.SubElement(bar_node, "Properties")
+            anac_prop = ET.SubElement(props, "Property", {"name": "Anacrusis"})
+            ET.SubElement(anac_prop, "Enable")
 
         events_by_voice = {}
         for event in bar.events:

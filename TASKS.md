@@ -2,9 +2,11 @@
 
 ## Next
 
-- [ ] Support custom pickup measure durations and visual bar-line configurations under a new feature branch `feature/gpif-pickup-measures-and-barlines-v0.1` to enhance musical rhythm engraving.
+- [ ] Support visual measure/beat-level dynamic symbols and articulations under a new feature branch `feature/gpif-dynamics-and-articulations-v0.1` to enhance musical interpretation.
 
 ## Done
+
+- [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for pickup measures (incomplete initial bars with custom duration lengths) and custom visual barline configurations (double, end, section lines, repeat marks) in the Guitar Pro writer (`src/score2gp/gpif.py`), verified with public synthetic fixtures and unit tests (`feature/gpif-pickup-measures-and-barlines-v0.1`).
 
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for global page settings (page margins, page width, page height, layout scaling factors) and multi-track layout structures (stacked track order and visibility layouts) in the Guitar Pro writer (`src/score2gp/gpif.py`), verified with public synthetic fixtures and unit tests (`feature/gpif-notation-layout-formatting-v0.1`).
 
