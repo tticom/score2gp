@@ -1637,6 +1637,21 @@
           "title": "Score Systems Layout",
           "type": "integer"
         },
+        "style_collections": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/StyleCollection"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Style Collections"
+        },
         "system_page_margins": {
           "anyOf": [
             {
@@ -1940,6 +1955,37 @@
       ],
       "title": "SourceStage",
       "type": "string"
+    },
+    "StyleCollection": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "StyleCollection",
+      "type": "object"
     },
     "SystemPageMargins": {
       "additionalProperties": false,
@@ -2283,6 +2329,18 @@
     "TrackLayoutPreferences": {
       "additionalProperties": false,
       "properties": {
+        "brackets_visible": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Brackets Visible"
+        },
         "line_sizing": {
           "anyOf": [
             {
@@ -2300,6 +2358,23 @@
           "default": null,
           "title": "Line Sizing"
         },
+        "line_sizing_per_system": {
+          "anyOf": [
+            {
+              "enum": [
+                "standard",
+                "small",
+                "large"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Line Sizing Per System"
+        },
         "stem_direction": {
           "anyOf": [
             {
@@ -2316,6 +2391,18 @@
           ],
           "default": null,
           "title": "Stem Direction"
+        },
+        "stems_visible": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stems Visible"
         },
         "tab_only": {
           "default": false,

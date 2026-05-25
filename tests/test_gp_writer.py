@@ -1793,3 +1793,56 @@ def test_gpif_font_stylesheets(tmp_path) -> None:
         assert f_tab.get("size") == "9.0"
         assert f_tab.get("bold") == "false"
         assert f_tab.get("italic") == "false"
+
+
+def test_gpif_style_collections(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_style_collections.ir.json")
+    out = tmp_path / "style_collections.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        score_node = root.find("Score")
+        assert score_node is not None
+
+        # 1. Verify StyleCollections block & sub-elements
+        sc_node = score_node.find("StyleCollections")
+        assert sc_node is not None
+
+        scs = sc_node.findall("StyleCollection")
+        assert len(scs) == 2
+        assert scs[0].get("id") == "classic"
+        assert scs[0].get("name") == "Classic Engraving Stylesheet"
+        assert scs[0].find("Description").text == "Standard classical guitar formatting preset"
+        assert scs[1].get("id") == "jazz"
+        assert scs[1].get("name") == "Jazz Engraving Stylesheet"
+        assert scs[1].find("Description").text == "Handwritten jazz visual layout preset"
+
+        # 2. Verify track Properties and StaffProperties overrides
+        track = root.find(".//Track[@id='gtr-1']")
+        assert track is not None
+
+        # Loop over both blocks to assert they both have the dynamic rendering overrides
+        for block_name in ("Properties", "StaffProperties"):
+            block = track.find(f".//Staff/{block_name}")
+            assert block is not None
+
+            # Assert Brackets
+            b_prop = block.find("Property[@name='Brackets']")
+            assert b_prop is not None
+            assert b_prop.find("Enable").text == "true"
+
+            # Assert StemVisibility
+            sv_prop = block.find("Property[@name='StemVisibility']")
+            assert sv_prop is not None
+            assert sv_prop.find("Enable").text == "false"
+
+            # Assert LineSizingPerSystem
+            lsps_prop = block.find("Property[@name='LineSizingPerSystem']")
+            assert lsps_prop is not None
+            assert lsps_prop.find("Size").text == "Small"
