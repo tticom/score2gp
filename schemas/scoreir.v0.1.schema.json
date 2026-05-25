@@ -26,6 +26,23 @@
           ],
           "default": null
         },
+        "layout_break": {
+          "anyOf": [
+            {
+              "enum": [
+                "line",
+                "page",
+                "none"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Layout Break"
+        },
         "tempo": {
           "anyOf": [
             {
