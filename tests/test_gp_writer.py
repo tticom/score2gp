@@ -287,3 +287,48 @@ def test_gpif_grace_and_spans(tmp_path) -> None:
         n8 = e8.find("Note")
         assert n8 is not None
         assert n8.find("PalmMute") is None
+
+
+def test_gpif_multi_voice(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_multi_voice.ir.json")
+    out = tmp_path / "multi_voice.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        # Retrieve Bar node
+        bar = root.find(".//Bars/Bar")
+        assert bar is not None
+
+        # Retrieve Voices tag under Bar
+        voices_node = bar.find("Voices")
+        assert voices_node is not None
+
+        # Verify Voice elements
+        voices = voices_node.findall("Voice")
+        assert len(voices) == 2
+
+        # Voice 0
+        v0 = voices[0]
+        assert v0.get("id") == "0"
+        v0_events = v0.findall("Event")
+        assert len(v0_events) == 4
+        for e in v0_events:
+            assert e.get("voice") == "0"
+
+        # Check event IDs in order of onsets
+        assert [e.get("id") for e in v0_events] == ["e1", "e2", "e3", "e4"]
+
+        # Voice 1
+        v1 = voices[1]
+        assert v1.get("id") == "1"
+        v1_events = v1.findall("Event")
+        assert len(v1_events) == 2
+        for e in v1_events:
+            assert e.get("voice") == "1"
+        assert [e.get("id") for e in v1_events] == ["e5", "e6"]
