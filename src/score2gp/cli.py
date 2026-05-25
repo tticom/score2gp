@@ -216,22 +216,178 @@ def align_ascii_musicxml_command(
 @app.command("convert")
 def convert_command(
     input_pdf: Path,
+    musicxml: Optional[Path] = typer.Option(None, "--musicxml", "-m"),
     template: Optional[Path] = typer.Option(None),
     out: Path = typer.Option(...),
     workdir: Path = typer.Option(...),
+    allow_remediation: bool = typer.Option(False, "--allow-remediation"),
+    allow_skip_unboxed: bool = typer.Option(False, "--allow-skip-unboxed-systems"),
 ) -> None:
-    """Run the current staged pipeline and report that full conversion is incomplete."""
+    """Run the complete conversion pipeline: extraction, alignment, IR generation, and GP7 package writing."""
     workdir.mkdir(parents=True, exist_ok=True)
-    pdf_summary = inspect_pdf_file(input_pdf, workdir / "inspect")
-    tab_summary = extract_tab_file(input_pdf, workdir / "tab")
-    warnings = [
-        {
-            "code": "full-conversion-not-implemented",
-            "message": "Current milestone stops before OMR/tab timing alignment and GP writing from PDF.",
+    warnings = []
+    summary = {}
+
+    # Stage 1: Inspect PDF and Extract Tab Candidates
+    try:
+        pdf_summary = inspect_pdf_file(input_pdf, workdir / "inspect")
+        summary["pdf"] = pdf_summary
+    except Exception as exc:
+        warnings.append({"code": "pdf_inspect_failed", "message": f"PDF inspection failed: {str(exc)}", "severity": "error"})
+        write_warnings(workdir / "warnings.json", warnings)
+        write_conversion_report(workdir / "conversion-report.html", "score2gp conversion report", warnings, summary)
+        raise typer.Exit(1)
+
+    try:
+        tabraw_path = workdir / "tab" / "tab_raw.json"
+        tab_summary = extract_tab_file(input_pdf, tabraw_path)
+        summary["tab"] = tab_summary
+        if tab_summary.get("warnings"):
+            for w in tab_summary["warnings"]:
+                if w not in warnings:
+                    warnings.append(w)
+    except Exception as exc:
+        warnings.append({"code": "tab_extraction_failed", "message": f"Tab extraction failed: {str(exc)}", "severity": "error"})
+        write_warnings(workdir / "warnings.json", warnings)
+        write_conversion_report(workdir / "conversion-report.html", "score2gp conversion report", warnings, summary)
+        raise typer.Exit(1)
+
+    # Stage 2: Check for MusicXML Ingestion
+    if musicxml is None:
+        warnings.append({
+            "code": "missing_musicxml",
+            "message": "MusicXML file is required for timing alignment and GP7 conversion.",
+            "severity": "warning",
+        })
+        summary["blocking_reason"] = "missing_musicxml"
+        write_warnings(workdir / "warnings.json", warnings)
+        write_conversion_report(workdir / "conversion-report.html", "score2gp conversion report", warnings, summary)
+        typer.echo(json.dumps({"workdir": str(workdir), "warnings": warnings, "blocking_reason": "missing_musicxml"}, indent=2))
+        return
+
+    if not musicxml.exists():
+        warnings.append({
+            "code": "musicxml_not_found",
+            "message": f"Provided MusicXML file not found: {musicxml}",
+            "severity": "error",
+        })
+        write_warnings(workdir / "warnings.json", warnings)
+        write_conversion_report(workdir / "conversion-report.html", "score2gp conversion report", warnings, summary)
+        raise typer.Exit(1)
+
+    # Check if there are playable ASCII tab candidates in the TabRaw output
+    has_ascii_candidates = any(
+        c.get("parsed_fret") is not None and c.get("raw", {}).get("parser_version") == "ascii-tab.v0.1"
+        for c in tab_summary.get("candidates", [])
+    )
+
+    alignment_path = None
+    if has_ascii_candidates:
+        try:
+            alignment_dir = workdir / "alignment"
+            alignment = align_ascii_musicxml_files(
+                tabraw_path=tabraw_path,
+                musicxml_path=musicxml,
+                out_dir=alignment_dir,
+            )
+            alignment_path = alignment_dir / "ascii_musicxml_alignment.json"
+            summary["alignment"] = {
+                "overall_status": alignment.overall_status,
+                "alignment_attempted": alignment.alignment_attempted,
+                "summary_counts": alignment.summary_counts,
+            }
+            if alignment.warnings:
+                for w in alignment.warnings:
+                    warnings.append(w.model_dump(mode="json", exclude_none=True))
+        except Exception as exc:
+            warnings.append({"code": "ascii_alignment_failed", "message": f"ASCII/MusicXML alignment failed: {str(exc)}", "severity": "error"})
+            write_warnings(workdir / "warnings.json", warnings)
+            write_conversion_report(workdir / "conversion-report.html", "score2gp conversion report", warnings, summary)
+            raise typer.Exit(1)
+
+    # Stage 3: ScoreIR Generation
+    score = None
+    diagnostics = None
+    ir_path = workdir / "score.ir.json"
+    diagnostics_path = workdir / "diagnostics.json"
+
+    try:
+        score, diagnostics = build_ir_with_diagnostics_from_files(
+            musicxml_path=musicxml,
+            tabraw_path=tabraw_path,
+            out_path=ir_path,
+            ascii_alignment_path=alignment_path,
+            allow_remediation=allow_remediation,
+            allow_skip_unboxed=allow_skip_unboxed,
+        )
+        summary["build_ir"] = {
+            "ran": True,
+            "failed": False,
+            "bar_count": len(score.bars),
+            "event_count": sum(len(bar.events) for bar in score.bars),
+            "matched_candidate_count": diagnostics.matched_candidate_count,
+            "unmatched_musicxml_event_count": diagnostics.unmatched_musicxml_event_count,
+            "unmatched_tabraw_candidate_count": diagnostics.unmatched_tabraw_candidate_count,
         }
-    ]
+        if score.warnings:
+            for w in score.warnings:
+                warnings.append(w.model_dump(mode="json", exclude_none=True))
+    except BuildIrInputRiskError as exc:
+        payload = exc.to_diagnostics_payload()
+        if exc.category == "missing_pdf_grouping":
+            payload["artifacts"] = _grouping_artifacts_for_tabraw(tabraw_path)
+        diagnostics_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+        # If it was an ASCII gate refusal, render the appropriate HTML diagnostics
+        if exc.stage == "ascii-scoreir-gate":
+            from .report import write_ascii_gate_diagnostics_html
+            write_ascii_gate_diagnostics_html(workdir / "ascii-scoreir-gate-diagnostics.html", payload, json_path_ref="diagnostics.json")
+
+        warnings.append({
+            "code": exc.category,
+            "message": exc.message,
+            "severity": "error"
+        })
+        summary["build_ir"] = {
+            "ran": False,
+            "failed": True,
+            "error_category": exc.category,
+            "message": exc.message,
+        }
+        write_warnings(workdir / "warnings.json", warnings)
+        write_conversion_report(workdir / "conversion-report.html", "score2gp conversion report", warnings, summary)
+        typer.echo(json.dumps({"workdir": str(workdir), "warnings": warnings, "build_ir_failed": True}, indent=2))
+        return
+    except Exception as exc:
+        warnings.append({"code": "build_ir_failed", "message": f"ScoreIR generation failed: {str(exc)}", "severity": "error"})
+        write_warnings(workdir / "warnings.json", warnings)
+        write_conversion_report(workdir / "conversion-report.html", "score2gp conversion report", warnings, summary)
+        raise typer.Exit(1)
+
+    # Write regular symbol attachment diagnostics report on success
+    if diagnostics is not None:
+        from .report import write_symbol_attachment_diagnostics_html
+        write_symbol_attachment_diagnostics_html(workdir / "symbol-attachment-diagnostics.html", diagnostics, score, tabraw_path=tabraw_path)
+
+    # Stage 4: GP7 Package Writing
+    if score is not None:
+        try:
+            gp_warnings = write_gp(score, out, template)
+            for w in gp_warnings:
+                warnings.append({"code": "gp_write_warning", "message": w, "severity": "warning"})
+            summary["gp_write"] = {
+                "succeeded": True,
+                "output_path": str(out),
+                "warning_count": len(gp_warnings),
+            }
+        except Exception as exc:
+            warnings.append({"code": "gp_write_failed", "message": f"Guitar Pro package writing failed: {str(exc)}", "severity": "error"})
+            write_warnings(workdir / "warnings.json", warnings)
+            write_conversion_report(workdir / "conversion-report.html", "score2gp conversion report", warnings, summary)
+            raise typer.Exit(1)
+
+    # Write warnings and conversion-report
     write_warnings(workdir / "warnings.json", warnings)
-    summary = {"pdf": pdf_summary, "tab": tab_summary, "requested_output": str(out), "template": str(template) if template else None}
     write_conversion_report(workdir / "conversion-report.html", "score2gp conversion report", warnings, summary)
     typer.echo(json.dumps({"workdir": str(workdir), "warnings": warnings}, indent=2))
 
