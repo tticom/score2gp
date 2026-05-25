@@ -282,12 +282,25 @@ def _tracks(parent: ET.Element, score: ScoreIR, track_cd_maps: dict[str, dict[st
 
         # 5. Tuning
         tuning_prop = ET.SubElement(properties_node, "Property", {"name": "Tuning"})
-        pitches_str = " ".join(str(string.pitch) for string in sorted(track.tuning.strings, key=lambda s: s.number, reverse=True))
+        sorted_strings = sorted(track.tuning.strings, key=lambda s: s.number, reverse=True)
+        pitches_str = " ".join(str(string.pitch) for string in sorted_strings)
         _text(tuning_prop, "Pitches", pitches_str)
         inst_type = "Bass" if track.instrument.lower() == "bass" else "Guitar"
         _text(tuning_prop, "Instrument", inst_type)
         _text(tuning_prop, "Label", "None")
         _text(tuning_prop, "LabelVisible", "true")
+
+        # Optional string volume balances & fine tuning offsets
+        has_balances = any(getattr(s, "volume_offset", None) is not None for s in sorted_strings)
+        has_finetunes = any(getattr(s, "fine_tune", None) is not None for s in sorted_strings)
+
+        if has_balances:
+            balances_str = " ".join(str(s.volume_offset if s.volume_offset is not None else 0.0) for s in sorted_strings)
+            _text(tuning_prop, "Balance", balances_str)
+
+        if has_finetunes:
+            finetunes_str = " ".join(str(s.fine_tune if s.fine_tune is not None else 0.0) for s in sorted_strings)
+            _text(tuning_prop, "FineTuning", finetunes_str)
 
         # Collect chord diagrams for this track to construct staff properties
         tmap = track_cd_maps.get(track.id, {})

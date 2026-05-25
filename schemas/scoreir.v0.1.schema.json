@@ -2093,6 +2093,18 @@
     "TuningString": {
       "additionalProperties": false,
       "properties": {
+        "fine_tune": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fine Tune"
+        },
         "name": {
           "title": "Name",
           "type": "string"
@@ -2108,6 +2120,18 @@
           "minimum": 0,
           "title": "Pitch",
           "type": "integer"
+        },
+        "volume_offset": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Volume Offset"
         }
       },
       "required": [
