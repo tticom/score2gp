@@ -2,9 +2,11 @@
 
 ## Next
 
-- [ ] Support visual note-level slide configurations and slide styling options inside the GPIF XML generator to further complete the guitar techniques pipeline.
+- [ ] Support visual note-level hammer-on and pull-off technique variants and visual markers in the GPIF XML generator to enrich notation rendering.
 
 ## Done
+
+- [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for detailed visual slide configurations (curved glissando lines, grace slides, and explicit flag overrides) in the Guitar Pro writer (`src/score2gp/gpif.py`), verified with public synthetic fixtures and unit tests (`feature/gpif-slide-styling-and-destinations-v0.1`).
 
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for multi-point microtonal bends (quarter-tone tables) and advanced tremolo bar configurations (dive/release curves) in the Guitar Pro writer (`src/score2gp/gpif.py`), verified with public synthetic fixtures and unit tests (`feature/gpif-microtonal-bends-and-advanced-whammy-v0.1`).
 
