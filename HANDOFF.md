@@ -5,8 +5,8 @@
 - **Current Branch**: `feature/gpif-slide-styling-and-destinations-v0.1`
 - **Base Branch**: `main`
 - **Current PR**: PR #91 (https://github.com/tticom/score2gp/pull/91)
-- **Latest Local Commit**: `cf0861e` ("Implement advanced visual slide configurations including glissando styling and flag overrides in GPIF XML generation with tests")
-- **Latest Pushed Commit**: N/A (will be pushed shortly)
+- **Latest Local Commit**: `9e8600d` ("docs: update HANDOFF.md and TASKS.md for slide styling implementation")
+- **Latest Pushed Commit**: `9e8600d` ("docs: update HANDOFF.md and TASKS.md for slide styling implementation")
 
 - **Working Tree Status**: Clean (except untracked scratch files).
 
