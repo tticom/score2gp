@@ -4,9 +4,9 @@
 
 - **Current Branch**: `feature/gpif-tuning-and-track-formatting-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: None (Draft PR to be opened)
-- **Latest Local Commit**: `4505d1f` ("Implement custom string counts/tunings and visual track formatting (color and layout views)")
-- **Latest Pushed Commit**: None (To be pushed in feature branch)
+- **Current PR**: PR #81 (https://github.com/tticom/score2gp/pull/81)
+- **Latest Local Commit**: `3c11202` ("Update HANDOFF.md and TASKS.md")
+- **Latest Pushed Commit**: `3c11202` ("Update HANDOFF.md and TASKS.md")
 - **Working Tree Status**: Clean (except untracked scratch files).
 
 - **GitHub Check Status**: N/A
