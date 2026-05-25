@@ -1624,9 +1624,65 @@ def _parse_part(
     *,
     allow_remediation: bool = False,
 ) -> MusicXmlPart:
+    # Pre-scan divisions and max voice cursor length to infer default time signature if missing
+    initial_divisions = 1
+    for m_node in _children(part_node, "measure"):
+        attrs = _child(m_node, "attributes")
+        if attrs is not None:
+            div_node = _child(attrs, "divisions")
+            val = _optional_int_text(div_node)
+            if val is not None and val > 0:
+                initial_divisions = val
+                break
+
+    has_time = False
+    for node in part_node.iter():
+        if _local_name(node.tag) == "time":
+            has_time = True
+            break
+
+    default_time = TimeSignature(numerator=4, denominator=4)
+    if not has_time:
+        max_len = 0
+        for m_node in _children(part_node, "measure"):
+            cursor = 0
+            voice_cursors = {}
+            for child in list(m_node):
+                name = _local_name(child.tag)
+                if name == "note":
+                    grace = _child(child, "grace") is not None
+                    if grace:
+                        continue
+                    chord = _child(child, "chord") is not None
+                    dur_node = _child(child, "duration")
+                    dur = int(dur_node.text) if dur_node is not None else 0
+                    voice_node = _child(child, "voice")
+                    voice = int(voice_node.text) if voice_node is not None else 1
+                    if chord:
+                        # Approximation for pre-scan
+                        onset = cursor - dur
+                    else:
+                        onset = cursor
+                    cursor = onset + dur
+                    voice_cursors[voice] = max(voice_cursors.get(voice, 0), cursor)
+                elif name == "backup":
+                    dur_node = _child(child, "duration")
+                    dur = int(dur_node.text) if dur_node is not None else 0
+                    cursor = max(0, cursor - dur)
+                elif name == "forward":
+                    dur_node = _child(child, "duration")
+                    dur = int(dur_node.text) if dur_node is not None else 0
+                    cursor += dur
+            if voice_cursors:
+                max_len = max(max_len, max(voice_cursors.values()))
+
+        beats = max_len / initial_divisions if initial_divisions > 0 else 0
+        if beats >= 5.5:
+            default_time = TimeSignature(numerator=12, denominator=8)
+
     measures = []
     current_divisions = 1
-    current_time = TimeSignature(numerator=4, denominator=4)
+    current_time = default_time
     current_key: int | None = None
     has_divisions_defined = False
 

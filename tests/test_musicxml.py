@@ -263,3 +263,50 @@ def test_musicxml_timing_preflight_detects_overfull_bar_inside_mxl(tmp_path) -> 
         ("musicxml_alignment_not_attempted_due_to_timing_risk", "error"),
     ]
     assert issues[0].end_divisions == 20
+
+
+def test_musicxml_inferred_time_signature_when_missing(tmp_path) -> None:
+    # 1. Create a synthetic MusicXML file with NO <time> element but has 6 beats
+    musicxml_content = """<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1">
+      <part-name>Guitar</part-name>
+    </score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>1</divisions>
+        <key><fifths>0</fifths></key>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <!-- Voice 1 has notes spanning 6 beats -->
+      <note>
+        <pitch><step>E</step><octave>4</octave></pitch>
+        <duration>3</duration>
+        <voice>1</voice>
+        <type>half</type>
+        <dot/>
+      </note>
+      <note>
+        <pitch><step>G</step><octave>4</octave></pitch>
+        <duration>3</duration>
+        <voice>1</voice>
+        <type>half</type>
+        <dot/>
+      </note>
+    </measure>
+  </part>
+</score-partwise>
+"""
+    xml_file = tmp_path / "missing_time.musicxml"
+    xml_file.write_text(musicxml_content, encoding="utf-8")
+
+    imported = parse_musicxml(xml_file)
+    assert len(imported.parts[0].measures) == 1
+    measure = imported.parts[0].measures[0]
+
+    # It must dynamically infer 12/8 instead of 4/4
+    assert measure.time_signature.numerator == 12
+    assert measure.time_signature.denominator == 8
