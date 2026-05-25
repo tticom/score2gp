@@ -440,3 +440,47 @@ def test_gpif_text_and_slides(tmp_path) -> None:
         assert n6 is not None and n6.find("Slide") is not None
         flags6 = n6.find(".//Property[@name='Slide']/Flags")
         assert flags6 is not None and flags6.text == "4"
+
+
+def test_gpif_dead_notes_and_tremolo(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_dead_notes_tremolo.ir.json")
+    out = tmp_path / "dead_tremolo.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        # Retrieve events
+        events = root.findall(".//Event")
+        event_map = {e.get("id"): e for e in events}
+
+        # Check e1 (DeadNote)
+        e1 = event_map["e1"]
+        n1 = e1.find("Note")
+        assert n1 is not None
+        assert n1.find("DeadNote") is not None
+
+        # Check e2 (TremoloBar)
+        e2 = event_map["e2"]
+        n2 = e2.find("Note")
+        assert n2 is not None
+        tb = n2.find("TremoloBar")
+        assert tb is not None
+
+        points = tb.findall("Point")
+        assert len(points) == 3
+        # Point 1: offset=0, value=0
+        assert float(points[0].get("offset")) == 0.0
+        assert float(points[0].get("value")) == 0.0
+
+        # Point 2: offset=50.000000, value=-100.000000
+        assert float(points[1].get("offset")) == 50.0
+        assert float(points[1].get("value")) == -100.0
+
+        # Point 3: offset=100.000000, value=0.0
+        assert float(points[2].get("offset")) == 100.0
+        assert float(points[2].get("value")) == 0.0

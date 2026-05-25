@@ -5,7 +5,7 @@ from xml.etree import ElementTree as ET
 
 from .ir import Event, Note, ScoreIR, Technique
 
-SUPPORTED_MINIMAL_TECHNIQUES = {"slide", "vibrato", "hammer-on", "pull-off", "tie", "slur", "bend", "let-ring", "palm-mute", "grace"}
+SUPPORTED_MINIMAL_TECHNIQUES = {"slide", "vibrato", "hammer-on", "pull-off", "tie", "slur", "bend", "let-ring", "palm-mute", "grace", "dead-note", "tremolo-bar"}
 
 
 def _text(parent: ET.Element, tag: str, value: object | None) -> ET.Element:
@@ -259,6 +259,8 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, hopo
         ET.SubElement(note_node, "LetRing")
     if is_palm_mute:
         ET.SubElement(note_node, "PalmMute")
+    if getattr(note, "is_dead", False):
+        ET.SubElement(note_node, "DeadNote")
 
     has_slide = False
     slide_flags = 2
@@ -311,6 +313,17 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, hopo
             ET.SubElement(note_node, "PO")
         if technique.kind == "vibrato":
             _text(note_node, "Vibrato", "Wide" if getattr(technique, "width", "unknown") == "wide" else "Slight")
+        if technique.kind == "tremolo-bar":
+            tremolo_node = ET.SubElement(note_node, "TremoloBar")
+            for pt in getattr(technique, "points", []):
+                ET.SubElement(
+                    tremolo_node,
+                    "Point",
+                    {
+                        "offset": f"{pt.offset * 100:.6f}",
+                        "value": f"{pt.value * 50:.6f}",
+                    }
+                )
 
     if has_slide or has_bend or has_hopo_origin or is_hopo_dest:
         properties_node = ET.SubElement(note_node, "Properties")
