@@ -4,9 +4,9 @@
 
 - **Current Branch**: `feature/gpif-fingering-indicators-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: N/A (will be created shortly)
-- **Latest Local Commit**: `0cf921a` ("feat: implement visual left-hand and right-hand fingering indicators in GPIF XML generation with tests")
-- **Latest Pushed Commit**: N/A (will be pushed shortly)
+- **Current PR**: PR #93 (https://github.com/tticom/score2gp/pull/93)
+- **Latest Local Commit**: `3b7f50f` ("docs: update HANDOFF.md and TASKS.md for visual left-hand and right-hand fingering indicators task completion")
+- **Latest Pushed Commit**: `3b7f50f` ("docs: update HANDOFF.md and TASKS.md for visual left-hand and right-hand fingering indicators task completion")
 
 - **Working Tree Status**: Clean (except untracked scratch files and pending docs/tasks modifications).
 
