@@ -5,8 +5,8 @@
 - **Current Branch**: `fix/gpif-rendering-fidelity-v0.1`
 - **Base Branch**: `main`
 - **Current PR**: N/A (Draft PR to be created)
-- **Latest Local Commit**: `671dd18` ("Merge pull request #68 from tticom/feature/pdf-fret-snapping-refinement-v0.1")
-- **Working Tree Status**: Modified `HANDOFF.md`, `TASKS.md`, `src/score2gp/build_ir.py`, `src/score2gp/musicxml.py`, and `tests/test_musicxml.py`.
+- **Latest Local Commit**: `ee22d0e` ("Update HANDOFF.md with latest commit and tree status")
+- **Working Tree Status**: Modified `HANDOFF.md`.
 
 - **GitHub Check Status**: N/A
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or `work/` contents are tracked.
