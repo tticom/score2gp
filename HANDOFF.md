@@ -2,11 +2,11 @@
 
 ## Metadata
 
-- **Current Branch**: `feature/gpif-dynamics-and-vibrato-v0.1`
+- **Current Branch**: `feature/gpif-text-directions-and-slides-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: #75 (Draft PR: https://github.com/tticom/score2gp/pull/75)
-- **Latest Local Commit**: `40cd891` ("Document dynamics and vibrato changes in handoff and tasks")
-- **Latest Pushed Commit**: `40cd891` ("Document dynamics and vibrato changes in handoff and tasks")
+- **Current PR**: N/A (draft PR will be created)
+- **Latest Local Commit**: `6f85215` ("Implement GPIF XML text directions and slide style variants")
+- **Latest Pushed Commit**: N/A (will be pushed)
 - **Working Tree Status**: Clean.
 
 - **GitHub Check Status**: N/A
@@ -15,26 +15,27 @@
 
 ## Tests And Checks Run
 
-- `python -m pytest` -> 324 passed (100% success, including new synthetic test `test_gpif_dynamics_and_vibrato`).
+- `python -m pytest` -> 325 passed (100% success, including new synthetic test `test_gpif_text_and_slides`).
 - `python -m score2gp.cli export-schema --out schemas` -> passed cleanly.
-- `python -m score2gp.cli validate-ir fixtures/public/test_gpif_dynamics_vibrato.ir.json` -> valid.
+- `python -m score2gp.cli validate-ir fixtures/public/test_gpif_text_and_slides.ir.json` -> valid.
 - `git diff --check` -> passed cleanly.
-- `git diff -- schemas` -> passed with updated `dynamic` schema.
+- `git diff -- schemas` -> passed with updated `text` schema.
 - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep`.
 - `python scripts/private_e2e_smoke.py` -> passed cleanly against all private PDF inputs.
 
 ## What Changed In This Task
 
 - **ScoreIR Schema Integration**:
-  - Integrated the `dynamic: str | None = None` field into the `Event` model (`src/score2gp/ir.py`).
-  - Added the `"dynamic"` field inside `semantic_scoreir_summary()` for robust semantic diffing.
+  - Integrated the `text: str | None = None` field into the `Event` model (`src/score2gp/ir.py`).
+  - Added the `"text"` field inside `semantic_scoreir_summary()` for robust semantic diffing.
   - Re-exported the JSON schema cleanly to `schemas/scoreir.v0.1.schema.json`.
-- **GPIF Serialization of Expressive Elements**:
-  - Updated `_event` in `src/score2gp/gpif.py` to write GP7-compatible `<Dynamic>VALUE</Dynamic>` elements directly under `<Event>` using uppercase text mapping (e.g. `MF`, `F`).
-  - Updated `_note` in `src/score2gp/gpif.py` to write GP7-compatible `<Vibrato>Slight|Wide</Vibrato>` elements directly under `<Note>` when a note contains a `vibrato` technique, mapping `width == "wide"` to `Wide` and all other widths to `Slight`.
+- **GPIF Text Direction Serialization**:
+  - Updated `_event` in `src/score2gp/gpif.py` to write GP7-compliant XML tags `<FreeText>`, `<Direction>`, and `<Text>` under `<Event>` using the `text` attribute value.
+- **GPIF Slide Articulation Flags Bitmask**:
+  - Refined `_note` in `src/score2gp/gpif.py` to map visual slide style and direction properties (shift, legato, slide-in up/down, slide-out up/down) into the precise GP7 slide flags bitmask (1, 2, 4, 8, 16, 32).
 - **Synthetic Testing & Validation**:
-  - Authored a dedicated public synthetic fixture `fixtures/public/test_gpif_dynamics_vibrato.ir.json` modeling dynamic changes and narrow/wide vibrato.
-  - Wrote comprehensive unit tests in `tests/test_gp_writer.py` verifying that `<Dynamic>` and `<Vibrato>` tags are correctly structured and parsed in the generated GPIF XML.
+  - Authored a dedicated public synthetic fixture `fixtures/public/test_gpif_text_and_slides.ir.json` modeling all slide style variants and beat-level text directions.
+  - Wrote comprehensive unit tests in `tests/test_gp_writer.py` verifying that `<FreeText>`, `<Direction>`, and `<Text>` tags, along with all slide flags, are correctly structured and parsed in the generated GPIF XML.
 - **E2E Private Smoke Test Results**:
   - Ran the smoke compiler against real private inputs (including `Derek Trucks BB King.pdf`) to verify zero regressions or crashes. All inputs compiled successfully with no builder issues.
 
@@ -48,7 +49,7 @@
 
 ## Next Recommended Task
 
-- **GPIF Rendering Fidelity (Milestone 5)**: Expand coverage for further expressive/ornament tags (such as visual slide variations, chord-diagram formatting, text-directions, or tuplets visual formatting).
+- **Auditory & Visual Ornaments (Milestone 5)**: Expand coverage for further expressive/ornament tags (such as chord diagrams visual formatting, dead notes, or tremolo bar parameters).
 
 ## Explicit Scope Boundaries
 
