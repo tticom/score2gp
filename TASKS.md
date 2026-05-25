@@ -4,6 +4,8 @@
 
 ## Done
 
+- [x] Implement the unified CLI convert orchestration command in the CLI (`src/score2gp/cli.py`) that sequentially executes extraction, alignment, IR generation, and GP packaging, aggregating stage warnings and generating conversion diagnostics reports (`feature/convert-orchestration-v0.1`).
+
 - [x] Implement GPIF XML generation for multi-voice events in the Guitar Pro writer (`src/score2gp/gpif.py`), correctly separating and nesting events inside `<Voice>` containers per measure/beat based on ScoreIR voice IDs (`feature/gpif-multi-voice-v0.1`).
 
 - [x] Implement ScoreIR support and GPIF XML generation for grace notes, let-ring spans, and palm-mute spans in the Guitar Pro writer (`src/score2gp/gpif.py`), mapping these properties from ScoreIR models into valid GP7-compatible XML tags (`feature/gpif-grace-and-spans-v0.1`).
