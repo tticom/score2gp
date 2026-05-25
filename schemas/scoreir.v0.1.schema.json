@@ -235,6 +235,18 @@
           "title": "Confidence",
           "type": "number"
         },
+        "dynamic": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dynamic"
+        },
         "id": {
           "title": "Id",
           "type": "string"
