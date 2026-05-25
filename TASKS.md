@@ -2,9 +2,11 @@
 
 ## Next
 
-- [ ] Support system page margins and dynamic multi-track print templates in the GPIF XML generator.
+- [ ] Support custom font stylesheets and notation visual engraving parameters in the GPIF XML generator.
 
 ## Done
+
+- [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for advanced multi-staff layout templates—specifically dynamic system page margins, custom engraving height/width boundaries, and multi-staff ensemble bracket layouts—mapping these visual preferences into valid structural GP7-compatible XML blocks (`feature/gpif-multi-staff-templates-and-margins-v0.1`).
 
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for score-level and track-level visual view modes (scrolling screen vs. paginated page layout) and print formatting layout options (metadata toggles, margins, multi-track layouts), mapping these visual preferences into valid structural GP7-compatible XML blocks (`feature/gpif-view-modes-and-print-overrides-v0.1`).
 
