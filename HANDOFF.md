@@ -5,8 +5,8 @@
 - **Current Branch**: `feature/gpif-annotations-and-layout-breaks-v0.1`
 - **Base Branch**: `main`
 - **Current PR**: PR #83 (https://github.com/tticom/score2gp/pull/83)
-- **Latest Local Commit**: `b2f4bf7` ("Update HANDOFF.md and TASKS.md")
-- **Latest Pushed Commit**: `b2f4bf7` ("Update HANDOFF.md and TASKS.md")
+- **Latest Local Commit**: `4799ea3` ("Update commit references in HANDOFF.md")
+- **Latest Pushed Commit**: `4799ea3` ("Update commit references in HANDOFF.md")
 - **Working Tree Status**: Clean (except untracked scratch files).
 
 - **GitHub Check Status**: N/A
