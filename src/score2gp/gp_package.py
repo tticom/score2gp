@@ -147,19 +147,25 @@ def _summarize_gpif(root: ET.Element) -> dict[str, Any]:
                         "name": string.get("name"),
                     }
                 )
+
+        has_staff_tuning = False
         for staff in track.findall(".//Staff"):
             pitches_node = staff.find(".//Property[@name='Tuning']/Pitches")
             if pitches_node is not None and pitches_node.text:
                 pitches = pitches_node.text.split()
                 staff_name = _first_text(staff, ["Name"]) or _known_tuning_name(pitches)
-                strings.extend(
-                    {"number": str(index), "pitch": pitch, "name": None}
-                    for index, pitch in enumerate(pitches, start=1)
+                staff_strings = sorted(
+                    [
+                        {"number": str(len(pitches) - index), "pitch": pitch, "name": None}
+                        for index, pitch in enumerate(pitches)
+                    ],
+                    key=lambda s: int(s["number"])
                 )
-                if strings:
-                    tunings.append({"track": name, "name": staff_name, "strings": strings})
-                    strings = []
-        if strings:
+                if staff_strings:
+                    tunings.append({"track": name, "name": staff_name, "strings": staff_strings})
+                    has_staff_tuning = True
+
+        if strings and not has_staff_tuning:
             tunings.append({"track": name, "strings": strings})
 
     tempo = _first_text(root, [".//Tempo/Value", ".//Tempo", ".//Tempos/Tempo/Value"])
