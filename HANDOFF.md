@@ -2,11 +2,11 @@
 
 ## Metadata
 
-- **Current Branch**: `feature/pdf-fret-snapping-refinement-v0.1`
+- **Current Branch**: `fix/gpif-rendering-fidelity-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: PR #68 (https://github.com/tticom/score2gp/pull/68)
-- **Latest Local Commit**: `bfada5a41d02dfd31b0f011ba48be9038875732c` ("Refine horizontal bar and vertical string snapping heuristics to resolve missing assignments on digital PDFs")
-- **Working Tree Status**: Modified HANDOFF.md and TASKS.md.
+- **Current PR**: N/A (Draft PR to be created)
+- **Latest Local Commit**: `ee22d0e` ("Update HANDOFF.md with latest commit and tree status")
+- **Working Tree Status**: Modified `HANDOFF.md`.
 
 - **GitHub Check Status**: N/A
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or `work/` contents are tracked.
@@ -14,7 +14,7 @@
 
 ## Tests And Checks Run
 
-- `python -m pytest` -> 316 passed (100% success, including new synthetic test `test_edge_candidate_snapping`).
+- `python -m pytest` -> 317 passed (100% success, including new synthetic test `test_musicxml_inferred_time_signature_when_missing` and all existing skipped system sync tests).
 - `python -m score2gp.cli export-schema --out schemas` -> passed.
 - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid.
 - `git diff --check` -> passed.
@@ -24,20 +24,19 @@
 
 ## What Changed In This Task
 
-- **Relaxed Horizontal Outer Bar Boundary Snapping**:
-  - Refined `local_bar_for_x` in `src/score2gp/pdf.py` to support safe snapping up to `24.0` pixels (matching horizontal system candidate margin) for outermost barlines.
-  - Successfully assigns shifted boundary fret candidates to their correct bars with a `"pdf_candidate_outside_bar"` warning.
-- **Dynamic 5-Line Incomplete Tab Staff Reconstruction**:
-  - Implemented an advanced vertical line reconstruction heuristic in `_extract_pdf_text_candidates` inside `src/score2gp/pdf.py`.
-  - Prior to string offset calibration and string assignment, systems with exactly 5 lines are scanned. Fret candidates sitting exactly at the position of a missing String 1 (top line) or String 6 (bottom line) are counted, and if supported by layout evidence, the missing line is dynamically prepended or appended in place using Python `object.__setattr__` to reconstruct a perfect 6-line staff.
-  - Resolves `pdf_tab_staff_incomplete` staff-level warnings cleanly.
-- **Spurious Candidates Excluded**:
-  - Refined `top_margin` heuristic in `candidate_zone_contains` from `max(34.0, self.line_spacing * 2.5)` to `max(18.0, self.line_spacing * 2.2)` to safely ignore non-musical digits sitting far above staves.
-- **Created Public Snapping Fixtures**:
-  - Added a new synthetic PDF fixture generator (`tests/fixtures/pdf/make_edge_candidate_snapping_pdfs.py`) producing `generated_pdf_edge_candidate_snapping.pdf`.
-  - Wrote test `test_edge_candidate_snapping` in `tests/test_pdf.py` proving horizontal and vertical snapping correctness.
+- **Dynamic Default Time Signature Inference**:
+  - Implemented dynamic default time signature inference pre-scan in `_parse_part` inside `src/score2gp/musicxml.py`.
+  - When the `<time>` signature tags are missing from a MusicXML file (common in OMR/Audiveris outputs), defaulting blindly to `4/4` previously truncated 63 notes in `12/8` triplet/blues layouts.
+  - By scanning voice note durations and divisions, the pre-scan infers a `12/8` compound meter default when the maximum voice cursor end exceeds `5.5` beats, resolving all massive note truncations cleanly.
+- **Robust, Octave-Invariant Skipped-System Synchronization**:
+  - Refined `_synchronize_skipped_system_measures` in `src/score2gp/build_ir.py`.
+  - Previously, greedy pitch matching was thrown off by the 1-octave (12-semitone) transposition of guitar written pitch vs sounding pitch, matching 0 pitches on measures 1-4 and shifting System 1.1 incorrectly to measure 5, which threw all subsequent systems past the end of the timeline.
+  - Implemented a mathematically rigorous continuity constraint: consecutive visual systems that are not skipped must maintain identical offsets. For boundaries crossing skipped systems, the search utilizes **octave-invariant pitch classes (modulo 12)** to robustly find the resume point.
+  - Aligns all 13 measures on Page 1 and Page 2 flawlessly to their correct MusicXML timeline positions, and safely skips System (2, 6) at the end of the timeline.
+- **Added Public Synthetic Fixtures & Tests**:
+  - Wrote `test_musicxml_inferred_time_signature_when_missing` in `tests/test_musicxml.py` to prove default time-signature inference correct.
 - **E2E Private Smoke Test Results**:
-  - Executed `scripts/private_e2e_smoke.py` proving that `private_input_1` now completely clears all 24 missing string and 5 missing bar assignments, successfully compiles to ScoreIR, writes Guitar Pro 7 package (`private_input_1.gp`), and transitions to **Success** (zero failure reasons).
+  - Verified with `scripts/private_e2e_smoke.py` that `private_input_1` compiles cleanly to `ScoreIR` and `Guitar Pro 7 package` (`smoke.gp`) with zero failure reasons, correctly mapping all contiguous bars and reporting ignored skipped events only on the unboxed/skipped Page 2 System 6.
 
 ## Known Limitations
 
@@ -49,7 +48,7 @@
 
 ## Next Recommended Task
 
-- **Guitar Pro Visual/Auditory Validation**: Perform structural visual validation of the successfully compiled Guitar Pro 7 package (`private_input_1.gp`) to verify musical fidelity of vector-to-onset matching, chord-attached techniques, and skipped system measure synchronization.
+- **Verifying additional private inputs**: Re-run the E2E private smoke test on further private inputs to verify future rendering discrepancies and clean up ignored warnings.
 
 ## Explicit Scope Boundaries
 

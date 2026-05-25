@@ -2,9 +2,11 @@
 
 ## Next
 
-- [ ] Perform a structural visual validation of the successfully compiled Guitar Pro 7 package (`private_input_1.gp`) to verify auditory/visual alignment.
+- [ ] Re-run the E2E private smoke test on further private inputs to verify future rendering discrepancies and clean up ignored warnings.
 
 ## Done
+
+- [x] Perform a structural and auditory validation of the successfully compiled Guitar Pro package (`private_input_1.gp`), identify, synthetically reproduce, and fix dynamic default time signature inference in MusicXML and robust, octave-invariant, continuous skipped-system synchronization in build-ir alignment (fix/gpif-rendering-fidelity-v0.1).
 
 - [x] Address the remaining 24 string assignment gaps and 5 bar assignment gaps on the valid systems of `private_input_1` to completely pass the grouping phase (feature/pdf-fret-snapping-refinement-v0.1).
 

@@ -1070,6 +1070,7 @@ def build_ir_with_diagnostics_from_imports(
 ) -> tuple[ScoreIR, BuildIrDiagnostics]:
     if allow_skip_unboxed:
         unboxed_systems = set()
+        skipped_systems = set()
         for w in tabraw.warnings:
             code = w.get("code")
             if code in (
@@ -1087,7 +1088,6 @@ def build_ir_with_diagnostics_from_imports(
 
         if unboxed_systems:
             recovered_systems = set()
-            skipped_systems = set()
             for p_idx, s_idx in unboxed_systems:
                 has_rejected_barlines = False
                 for w in tabraw.warnings:
@@ -1241,7 +1241,7 @@ def build_ir_with_diagnostics_from_imports(
                     continue
                 filtered_warnings.append(w)
             tabraw.warnings = filtered_warnings
-            _synchronize_skipped_system_measures(musicxml, tabraw)
+            _synchronize_skipped_system_measures(musicxml, tabraw, skipped_systems)
 
 
 
@@ -1400,10 +1400,16 @@ def build_ir_with_diagnostics_from_imports(
             )
     return score, diagnostics
 
-def _synchronize_skipped_system_measures(musicxml: MusicXmlImport, tabraw: TabRaw) -> None:
+def _synchronize_skipped_system_measures(
+    musicxml: MusicXmlImport,
+    tabraw: TabRaw,
+    skipped_systems: set[tuple[int, int]] | None = None,
+) -> None:
     """Re-align remaining candidates to MusicXML measures if there is a system-skipping gap."""
     if not musicxml.parts or not tabraw.candidates:
         return
+
+    skipped = skipped_systems or set()
 
     # 1. Group all candidates by system
     system_candidates = defaultdict(list)
@@ -1414,13 +1420,13 @@ def _synchronize_skipped_system_measures(musicxml: MusicXmlImport, tabraw: TabRa
     if not system_candidates:
         return
 
-    # 2. Sort the systems in PDF visual sequence
-    sorted_system_keys = sorted(system_candidates.keys(), key=lambda sys: (sys[0], sys[1]))
+    # 2. Sort the systems in PDF visual sequence, including skipped systems
+    all_systems = sorted(system_candidates.keys() | skipped, key=lambda sys: (sys[0], sys[1]))
 
     # 3. For each system, get the candidate pitches
     tuning = _standard_guitar_tuning()
     system_pitches = {}
-    for sys_key in sorted_system_keys:
+    for sys_key in system_candidates:
         cands = system_candidates[sys_key]
         pitches = []
         for c in cands:
@@ -1443,11 +1449,15 @@ def _synchronize_skipped_system_measures(musicxml: MusicXmlImport, tabraw: TabRa
 
     total_xml_measures = len(xml_measures)
 
-    # 5. Greedy alignment of systems to MusicXML measures
-    current_min_measure = 1
-    previous_offset = 0
+    # 5. Greedy alignment of systems to MusicXML measures with continuity tracking
+    expected_next_measure = 1
+    after_skipped_gap = False
 
-    for sys_key in sorted_system_keys:
+    for sys_key in all_systems:
+        if sys_key in skipped:
+            after_skipped_gap = True
+            continue
+
         cands = system_candidates[sys_key]
         # Determine the number of measures this system spans in TabRaw
         bar_indices = {c.bar_index for c in cands if c.bar_index is not None}
@@ -1457,52 +1467,51 @@ def _synchronize_skipped_system_measures(musicxml: MusicXmlImport, tabraw: TabRa
         orig_max_bar = max(bar_indices)
         system_len = orig_max_bar - orig_min_bar + 1
 
-        cand_pitches = system_pitches[sys_key]
-
-        best_measure_start = current_min_measure
-        best_score = -1.0
-
-        # We test all starting measure indices that fit within the MusicXML measures
-        # and don't overlap with the previous system's end.
-        max_start = total_xml_measures - system_len + 1
-        if max_start < current_min_measure:
-            # If the timeline doesn't fit, we just shift using the previous offset
-            best_measure_start = orig_min_bar + previous_offset
+        if expected_next_measure == 1:
+            best_measure_start = 1
+            after_skipped_gap = False
+        elif not after_skipped_gap:
+            # Maintain strict alignment continuity when no systems are skipped
+            best_measure_start = expected_next_measure
         else:
-            for m in range(current_min_measure, max_start + 1):
-                # Collect all pitches in this block of MusicXML measures
-                block_pitches = []
-                for idx in range(m, m + system_len):
-                    block_pitches.extend(xml_measure_pitches.get(idx, []))
+            # We had a skipped system! Use pitch-class matching (octave invariant) to search for the resume point.
+            cand_pitches = system_pitches[sys_key]
+            best_measure_start = expected_next_measure
+            best_score = -1.0
 
-                # Compute pitch matching score
-                matches = 0
-                if cand_pitches and block_pitches:
-                    from collections import Counter
-                    c_cand = Counter(cand_pitches)
-                    c_xml = Counter(block_pitches)
-                    matches = sum((c_cand & c_xml).values())
+            max_start = total_xml_measures - system_len + 1
+            if max_start >= expected_next_measure:
+                for m in range(expected_next_measure, max_start + 1):
+                    # Collect all pitches in this block of MusicXML measures
+                    block_pitches = []
+                    for idx in range(m, m + system_len):
+                        block_pitches.extend(xml_measure_pitches.get(idx, []))
 
-                score = float(matches)
+                    # Compute pitch matching score modulo 12 to handle written-vs-sounding octaves
+                    matches = 0
+                    if cand_pitches and block_pitches:
+                        from collections import Counter
+                        cand_classes = [p % 12 for p in cand_pitches]
+                        block_classes = [p % 12 for p in block_pitches]
+                        c_cand = Counter(cand_classes)
+                        c_xml = Counter(block_classes)
+                        matches = sum((c_cand & c_xml).values())
 
-                # Add a tie-breaker bonus if the offset matches the previous offset
-                offset = m - orig_min_bar
-                if offset == previous_offset:
-                    score += 0.1
+                    score = float(matches)
+                    if score > best_score:
+                        best_score = score
+                        best_measure_start = m
 
-                if score > best_score:
-                    best_score = score
-                    best_measure_start = m
+            after_skipped_gap = False
 
         offset = best_measure_start - orig_min_bar
-        previous_offset = offset
 
         # Apply the offset shift to all candidates in this system
         for c in cands:
             if c.bar_index is not None:
                 c.bar_index += offset
 
-        current_min_measure = best_measure_start + system_len
+        expected_next_measure = best_measure_start + system_len
 
 
 
