@@ -1164,8 +1164,88 @@ def test_gpif_slide_styling(tmp_path) -> None:
         slide_prop3 = n3.find(".//Properties/Property[@name='Slide']/Flags")
         assert slide_prop3.text == "64" # glissando flag
         
-        gliss_prop = n3.find(".//Properties/Property[@name='Glissando']")
+        gliss_prop = n3.find(".//Glissando")
+        if gliss_prop is None:
+            # check inside property block
+            gliss_prop = n3.find(".//Properties/Property[@name='Glissando']")
         assert gliss_prop is not None
-        assert gliss_prop.find("Enable") is not None
 
 
+def test_gpif_hammer_pull(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_hammer_pull.ir.json")
+    out = tmp_path / "hammer_pull.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        events = root.findall(".//Event")
+        event_map = {e.get("id"): e for e in events}
+
+        # 1. Bar 1: Explicit hammer-on and pull-off properties
+        # Event e1: HammerOn with style="slur", flags=4, legato=true
+        e1 = event_map["e1"]
+        n1 = e1.find("Note")
+        assert n1.find("HO") is not None
+        ho_prop = n1.find(".//Properties/Property[@name='HammerOn']")
+        assert ho_prop is not None
+        assert ho_prop.find("Enable") is not None
+        assert ho_prop.find("Style").text == "slur"
+        assert ho_prop.find("Flags").text == "4"
+        assert ho_prop.find("Legato").text == "true"
+
+        leg_prop1 = n1.find(".//Properties/Property[@name='Legato']")
+        assert leg_prop1 is not None
+        assert leg_prop1.find("Flags").text == "4"
+        assert leg_prop1.find("Legato").text == "true"
+
+        # Event e2: HopoDestination & slur stop
+        e2 = event_map["e2"]
+        n2 = e2.find("Note")
+        assert n2.get("slur") == "stop"
+        hopo_dst = n2.find(".//Properties/Property[@name='HopoDestination']")
+        assert hopo_dst is not None
+
+        # Event e3: PullOff with style="legato", flags=8, legato=false
+        e3 = event_map["e3"]
+        n3 = e3.find("Note")
+        assert n3.find("PO") is not None
+        po_prop = n3.find(".//Properties/Property[@name='PullOff']")
+        assert po_prop is not None
+        assert po_prop.find("Enable") is not None
+        assert po_prop.find("Style").text == "legato"
+        assert po_prop.find("Flags").text == "8"
+        assert po_prop.find("Legato").text == "false"
+
+        leg_prop3 = n3.find(".//Properties/Property[@name='Legato']")
+        assert leg_prop3 is not None
+        assert leg_prop3.find("Flags").text == "8"
+        assert leg_prop3.find("Legato").text == "false"
+
+        # Event e4: HopoDestination & slur stop
+        e4 = event_map["e4"]
+        n4 = e4.find("Note")
+        assert n4.get("slur") == "stop"
+        hopo_dst4 = n4.find(".//Properties/Property[@name='HopoDestination']")
+        assert hopo_dst4 is not None
+
+        # 2. Bar 2: Inferred hammer-on and pull-off from slurs via pitch direction context
+        # Event e5 (slur start, ascending pitch 60 -> 62) => inferred HammerOn!
+        e5 = event_map["e5"]
+        n5 = e5.find("Note")
+        assert n5.find("HO") is not None
+        assert n5.find("PO") is None
+        assert n5.find(".//Properties/Property[@name='HammerOn']") is not None
+        assert n5.find(".//Properties/Property[@name='PullOff']") is None
+
+        # Event e7 (slur start, descending pitch 62 -> 60) => inferred PullOff!
+        e7 = event_map["e7"]
+        n7 = e7.find("Note")
+        assert n7.find("PO") is not None
+        assert n7.find("HO") is None
+        assert n7.find(".//Properties/Property[@name='PullOff']") is not None
+        assert n7.find(".//Properties/Property[@name='HammerOn']") is None

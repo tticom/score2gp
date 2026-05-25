@@ -759,11 +759,47 @@
     "HammerOnTechnique": {
       "additionalProperties": false,
       "properties": {
+        "flags": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Flags"
+        },
         "kind": {
           "const": "hammer-on",
           "default": "hammer-on",
           "title": "Kind",
           "type": "string"
+        },
+        "legato": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Legato"
+        },
+        "style": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Style"
         },
         "target_event_id": {
           "anyOf": [
@@ -1324,11 +1360,47 @@
     "PullOffTechnique": {
       "additionalProperties": false,
       "properties": {
+        "flags": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Flags"
+        },
         "kind": {
           "const": "pull-off",
           "default": "pull-off",
           "title": "Kind",
           "type": "string"
+        },
+        "legato": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Legato"
+        },
+        "style": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Style"
         },
         "target_event_id": {
           "anyOf": [

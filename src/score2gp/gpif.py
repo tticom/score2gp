@@ -25,7 +25,7 @@ def _find_hopo_destinations(score: ScoreIR) -> set[tuple[int, int, int]]:
         for event in bar.events:
             for note in event.notes:
                 for tech in note.techniques:
-                    if tech.kind in ("hammer-on", "pull-off") and getattr(tech, "target_event_id", None):
+                    if tech.kind in ("hammer-on", "pull-off", "slur") and getattr(tech, "target_event_id", None):
                         target_ev = event_map.get(tech.target_event_id)
                         if target_ev:
                             for target_note in target_ev.notes:
@@ -152,9 +152,14 @@ def build_gpif(score: ScoreIR) -> bytes:
     _text(score_node, "ScoreSystemsDefaultLayout", layout_systems)
     _text(score_node, "ScoreSystemsLayout", layout_systems)
 
+    event_map = {}
+    for bar in score.bars:
+        for event in bar.events:
+            event_map[event.id] = event
+
     _tracks(score_node, score, track_cd_maps)
     _master_bars(score_node, score)
-    _bars(score_node, score, hopo_dests, let_ring_notes, palm_mute_notes, track_cd_maps)
+    _bars(score_node, score, hopo_dests, let_ring_notes, palm_mute_notes, track_cd_maps, event_map)
 
     ET.indent(root, space="  ")
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)
@@ -328,7 +333,7 @@ def _master_bars(parent: ET.Element, score: ScoreIR) -> None:
                 ET.SubElement(node, "Repeat", {"count": str(repeat_count)})
 
 
-def _bars(parent: ET.Element, score: ScoreIR, hopo_dests: set[tuple[int, int, int]], let_ring_notes: set[tuple[int, int, int]], palm_mute_notes: set[tuple[int, int, int]], track_cd_maps: dict[str, dict[str, str]]) -> None:
+def _bars(parent: ET.Element, score: ScoreIR, hopo_dests: set[tuple[int, int, int]], let_ring_notes: set[tuple[int, int, int]], palm_mute_notes: set[tuple[int, int, int]], track_cd_maps: dict[str, dict[str, str]], event_map: dict[str, Event]) -> None:
     bars = ET.SubElement(parent, "Bars")
     for bar in score.bars:
         bar_node = ET.SubElement(bars, "Bar", {"index": str(bar.index)})
@@ -347,10 +352,10 @@ def _bars(parent: ET.Element, score: ScoreIR, hopo_dests: set[tuple[int, int, in
         for v_idx in sorted(events_by_voice.keys()):
             voice_node = ET.SubElement(voices_node, "Voice", {"id": str(v_idx)})
             for event in sorted(events_by_voice[v_idx], key=lambda item: item.timing.onset_ticks):
-                _event(voice_node, event, hopo_dests, let_ring_notes, palm_mute_notes, track_cd_maps)
+                _event(voice_node, event, hopo_dests, let_ring_notes, palm_mute_notes, track_cd_maps, event_map)
 
 
-def _event(parent: ET.Element, event: Event, hopo_dests: set[tuple[int, int, int]], let_ring_notes: set[tuple[int, int, int]], palm_mute_notes: set[tuple[int, int, int]], track_cd_maps: dict[str, dict[str, str]]) -> None:
+def _event(parent: ET.Element, event: Event, hopo_dests: set[tuple[int, int, int]], let_ring_notes: set[tuple[int, int, int]], palm_mute_notes: set[tuple[int, int, int]], track_cd_maps: dict[str, dict[str, str]], event_map: dict[str, Event]) -> None:
     attrs = {
         "id": event.id,
         "track": event.track_id,
@@ -507,10 +512,10 @@ def _event(parent: ET.Element, event: Event, hopo_dests: set[tuple[int, int, int
         for technique in event.techniques:
             ET.SubElement(techniques, "Technique", {"name": technique.kind})
     for note in event.notes:
-        _note(node, note, event.timing.bar_index, event.timing.onset_ticks, event.timing.duration_ticks, hopo_dests, let_ring_notes, palm_mute_notes)
+        _note(node, note, event.timing.bar_index, event.timing.onset_ticks, event.timing.duration_ticks, hopo_dests, let_ring_notes, palm_mute_notes, event_map)
 
 
-def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, duration_ticks: int, hopo_dests: set[tuple[int, int, int]], let_ring_notes: set[tuple[int, int, int]], palm_mute_notes: set[tuple[int, int, int]]) -> None:
+def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, duration_ticks: int, hopo_dests: set[tuple[int, int, int]], let_ring_notes: set[tuple[int, int, int]], palm_mute_notes: set[tuple[int, int, int]], event_map: dict[str, Event]) -> None:
     note_node = ET.SubElement(
         parent,
         "Note",
@@ -558,6 +563,17 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
     trill_fret = None
     trill_interval = None
     has_tremolo_bar = False
+    has_hammer_on = False
+    has_pull_off = False
+    has_slur = False
+    ho_style = None
+    ho_flags = None
+    ho_legato = None
+    po_style = None
+    po_flags = None
+    po_legato = None
+    legato_val = None
+    flags_val = None
 
     for technique in note.techniques:
         if technique.kind == "tie":
@@ -567,6 +583,19 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
             ET.SubElement(note_node, "Tie", {"origin": origin_val, "destination": dest_val})
         if technique.kind == "slur":
             note_node.set("slur", technique.state)
+            has_slur = True
+            target_id = getattr(technique, "target_event_id", None)
+            if target_id:
+                target_ev = event_map.get(target_id)
+                if target_ev:
+                    target_note = next((n for n in target_ev.notes if n.string == note.string), None)
+                    if target_note:
+                        if target_note.pitch > note.pitch:
+                            has_hammer_on = True
+                            has_hopo_origin = True
+                        elif target_note.pitch < note.pitch:
+                            has_pull_off = True
+                            has_hopo_origin = True
         if technique.kind == "slide":
             has_slide = True
             ET.SubElement(note_node, "Slide")
@@ -629,10 +658,33 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
                 ET.SubElement(bend_node, "Point", {"offset": "100.000000", "value": f"{bend_semitones * 50.0:.6f}"})
         if technique.kind == "hammer-on":
             has_hopo_origin = True
+            has_hammer_on = True
+            ho_style = getattr(technique, "style", None)
+            ho_flags = getattr(technique, "flags", None)
+            ho_legato = getattr(technique, "legato", None)
+            if ho_flags is not None:
+                flags_val = ho_flags
+            if ho_legato is not None:
+                legato_val = ho_legato
             ET.SubElement(note_node, "HO")
+            if ho_style == "slur":
+                note_node.set("slur", "start")
+                has_slur = True
+
         if technique.kind == "pull-off":
             has_hopo_origin = True
+            has_pull_off = True
+            po_style = getattr(technique, "style", None)
+            po_flags = getattr(technique, "flags", None)
+            po_legato = getattr(technique, "legato", None)
+            if po_flags is not None:
+                flags_val = po_flags
+            if po_legato is not None:
+                legato_val = po_legato
             ET.SubElement(note_node, "PO")
+            if po_style == "slur":
+                note_node.set("slur", "start")
+                has_slur = True
         if technique.kind == "vibrato":
             _text(note_node, "Vibrato", "Wide" if getattr(technique, "width", "unknown") == "wide" else "Slight")
             curve = getattr(technique, "curve", None)
@@ -684,8 +736,13 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
             trill_fret = getattr(technique, "fret", None)
             trill_interval = getattr(technique, "interval", None)
 
+    if has_hammer_on and not any(ch.tag == "HO" for ch in note_node):
+        ET.SubElement(note_node, "HO")
+    if has_pull_off and not any(ch.tag == "PO" for ch in note_node):
+        ET.SubElement(note_node, "PO")
+
     has_articulation = bool(articulations)
-    if has_slide or has_bend or has_hopo_origin or is_hopo_dest or has_slap or has_pop or has_tapping or has_trill or has_tremolo_bar or has_glissando or has_articulation:
+    if has_slide or has_bend or has_hopo_origin or is_hopo_dest or has_slap or has_pop or has_tapping or has_trill or has_tremolo_bar or has_glissando or has_articulation or has_hammer_on or has_pull_off or has_slur:
         properties_node = ET.SubElement(note_node, "Properties")
 
         fret_prop = ET.SubElement(properties_node, "Property", {"name": "Fret"})
@@ -718,6 +775,39 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
         if is_hopo_dest:
             hopo_dest_prop = ET.SubElement(properties_node, "Property", {"name": "HopoDestination"})
             ET.SubElement(hopo_dest_prop, "Enable")
+            note_node.set("slur", "stop")
+
+        if has_hammer_on:
+            ho_prop = ET.SubElement(properties_node, "Property", {"name": "HammerOn"})
+            ET.SubElement(ho_prop, "Enable")
+            if ho_style is not None:
+                _text(ho_prop, "Style", ho_style)
+            if ho_flags is not None:
+                _text(ho_prop, "Flags", ho_flags)
+            if ho_legato is not None:
+                _text(ho_prop, "Legato", str(ho_legato).lower())
+
+        if has_pull_off:
+            po_prop = ET.SubElement(properties_node, "Property", {"name": "PullOff"})
+            ET.SubElement(po_prop, "Enable")
+            if po_style is not None:
+                _text(po_prop, "Style", po_style)
+            if po_flags is not None:
+                _text(po_prop, "Flags", po_flags)
+            if po_legato is not None:
+                _text(po_prop, "Legato", str(po_legato).lower())
+
+        if legato_val is not None or flags_val is not None:
+            legato_prop = ET.SubElement(properties_node, "Property", {"name": "Legato"})
+            ET.SubElement(legato_prop, "Enable")
+            if flags_val is not None:
+                _text(legato_prop, "Flags", flags_val)
+            if legato_val is not None:
+                _text(legato_prop, "Legato", str(legato_val).lower())
+
+        if has_slur:
+            slur_prop = ET.SubElement(properties_node, "Property", {"name": "Slur"})
+            ET.SubElement(slur_prop, "Enable")
 
         if has_bend:
             bended_prop = ET.SubElement(properties_node, "Property", {"name": "Bended"})
