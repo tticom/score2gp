@@ -5,8 +5,9 @@
 - **Current Branch**: `feature/gpif-notation-layout-formatting-v0.1`
 - **Base Branch**: `main`
 - **Current PR**: PR #84 (https://github.com/tticom/score2gp/pull/84)
-- **Latest Local Commit**: `445d196` ("Implement GPIF page setup sizing, margins, scaling, and track layout")
-- **Latest Pushed Commit**: `445d196` ("Implement GPIF page setup sizing, margins, scaling, and track layout")
+- **Latest Local Commit**: `b529451` ("Update HANDOFF.md and TASKS.md")
+- **Latest Pushed Commit**: `b529451` ("Update HANDOFF.md and TASKS.md")
+
 - **Working Tree Status**: Clean (except untracked scratch files).
 
 - **GitHub Check Status**: N/A
