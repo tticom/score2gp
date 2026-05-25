@@ -366,6 +366,18 @@ def _event(parent: ET.Element, event: Event, hopo_dests: set[tuple[int, int, int
     if event.dynamic:
         _text(node, "Dynamic", event.dynamic.upper())
 
+    if getattr(event, "hairpin", None) is not None:
+        hairpin_map = {
+            "crescendo": "Crescendo",
+            "decrescendo": "Decrescendo",
+            "diminuendo": "Decrescendo",
+            "stop": "None",
+            "none": "None",
+        }
+        hairpin_type = hairpin_map.get(event.hairpin, "None")
+        hp_node = ET.SubElement(node, "Hairpin", {"type": hairpin_type})
+        _text(hp_node, "Type", hairpin_type)
+
     if event.text:
         _text(node, "FreeText", event.text)
         _text(node, "Direction", event.text)
@@ -468,6 +480,17 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, hopo
     if getattr(note, "is_dead", False):
         ET.SubElement(note_node, "DeadNote")
 
+    articulations = getattr(note, "articulations", [])
+    if "staccato" in articulations:
+        ET.SubElement(note_node, "Staccato")
+    if "tenuto" in articulations:
+        ET.SubElement(note_node, "Tenuto")
+    if "accent" in articulations:
+        _text(note_node, "Accent", 1)
+    if "marcato" in articulations:
+        _text(note_node, "Accent", 2)
+        ET.SubElement(note_node, "HeavyAccent")
+
     has_slide = False
     slide_flags = 2
     has_bend = False
@@ -565,7 +588,8 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, hopo
             has_tapping = True
             ET.SubElement(note_node, "Tapped")
 
-    if has_slide or has_bend or has_hopo_origin or is_hopo_dest or has_slap or has_pop or has_tapping:
+    has_articulation = bool(articulations)
+    if has_slide or has_bend or has_hopo_origin or is_hopo_dest or has_slap or has_pop or has_tapping or has_articulation:
         properties_node = ET.SubElement(note_node, "Properties")
 
         fret_prop = ET.SubElement(properties_node, "Property", {"name": "Fret"})
@@ -576,6 +600,16 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, hopo
 
         midi_prop = ET.SubElement(properties_node, "Property", {"name": "Midi"})
         _text(midi_prop, "Number", note.pitch)
+
+        if "accent" in articulations:
+            acc_prop = ET.SubElement(properties_node, "Property", {"name": "Accentuation"})
+            _text(acc_prop, "Value", "Accent")
+        elif "marcato" in articulations:
+            acc_prop = ET.SubElement(properties_node, "Property", {"name": "Accentuation"})
+            _text(acc_prop, "Value", "Marcato")
+        elif "tenuto" in articulations:
+            acc_prop = ET.SubElement(properties_node, "Property", {"name": "Accentuation"})
+            _text(acc_prop, "Value", "Tenuto")
 
         if has_slide:
             slide_prop = ET.SubElement(properties_node, "Property", {"name": "Slide"})

@@ -912,3 +912,61 @@ def test_gpif_pickup_barlines(tmp_path) -> None:
         mb5 = root.find(".//MasterBar[@index='5']")
         assert mb5 is not None
         assert mb5.find("Barline").text == "End"
+
+
+def test_gpif_dynamics_articulations(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_dynamics_articulations.ir.json")
+    out = tmp_path / "dynamics_articulations.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        # 1. Verify Event-level dynamics & Hairpin nodes
+        events = root.findall(".//Event")
+        event_map = {e.get("id"): e for e in events}
+
+        # Event e1: dynamic P, crescendo hairpin
+        e1 = event_map["e1"]
+        assert e1.find("Dynamic").text == "P"
+        h1 = e1.find("Hairpin")
+        assert h1 is not None
+        assert h1.get("type") == "Crescendo"
+        assert h1.find("Type").text == "Crescendo"
+
+        # Event e3: stop hairpin
+        e3 = event_map["e3"]
+        h3 = e3.find("Hairpin")
+        assert h3 is not None
+        assert h3.get("type") == "None"
+        assert h3.find("Type").text == "None"
+
+        # 2. Verify Note-level articulations and properties
+        # Event e1 note: staccato
+        n1 = e1.find("Note")
+        assert n1.find("Staccato") is not None
+
+        # Event e2 note: standard accent
+        e2 = event_map["e2"]
+        n2 = e2.find("Note")
+        assert n2.find("Accent").text == "1"
+        accent_prop1 = n2.find(".//Property[@name='Accentuation']/Value")
+        assert accent_prop1.text == "Accent"
+
+        # Event e3 note: marcato (heavy accent)
+        n3 = e3.find("Note")
+        assert n3.find("Accent").text == "2"
+        assert n3.find("HeavyAccent") is not None
+        accent_prop3 = n3.find(".//Property[@name='Accentuation']/Value")
+        assert accent_prop3.text == "Marcato"
+
+        # Event e4 note: tenuto
+        e4 = event_map["e4"]
+        n4 = e4.find("Note")
+        assert n4.find("Tenuto") is not None
+        tenuto_prop = n4.find(".//Property[@name='Accentuation']/Value")
+        assert tenuto_prop.text == "Tenuto"

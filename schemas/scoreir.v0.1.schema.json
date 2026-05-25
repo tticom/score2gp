@@ -452,6 +452,25 @@
           "default": null,
           "title": "Dynamic"
         },
+        "hairpin": {
+          "anyOf": [
+            {
+              "enum": [
+                "crescendo",
+                "decrescendo",
+                "diminuendo",
+                "stop",
+                "none"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hairpin"
+        },
         "id": {
           "title": "Id",
           "type": "string"
@@ -869,6 +888,19 @@
     "Note": {
       "additionalProperties": false,
       "properties": {
+        "articulations": {
+          "items": {
+            "enum": [
+              "staccato",
+              "accent",
+              "marcato",
+              "tenuto"
+            ],
+            "type": "string"
+          },
+          "title": "Articulations",
+          "type": "array"
+        },
         "confidence": {
           "default": 1.0,
           "maximum": 1.0,
