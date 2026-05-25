@@ -88,6 +88,19 @@ class TimeSignature(BaseModel):
     numerator: int = Field(gt=0, le=64)
     denominator: int = Field(gt=0, le=64)
 
+    @model_validator(mode="before")
+    @classmethod
+    def sanitize_time_signature(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            for field_name in ("numerator", "denominator"):
+                if field_name in data:
+                    try:
+                        val = int(round(float(data[field_name])))
+                        data[field_name] = max(1, min(64, val))
+                    except (ValueError, TypeError):
+                        pass
+        return data
+
     @field_validator("denominator")
     @classmethod
     def denominator_is_power_of_two(cls, value: int) -> int:
@@ -189,6 +202,26 @@ class Timing(BaseModel):
     notated_duration: NotatedDuration | None = None
     tuplet: Tuplet | None = None
     grace: GraceTiming | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def sanitize_timing_data(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            for field_name in ("onset_ticks", "duration_ticks", "ticks_per_quarter", "bar_index", "voice"):
+                if field_name in data:
+                    try:
+                        val = int(round(float(data[field_name])))
+                        if field_name in ("onset_ticks", "duration_ticks"):
+                            data[field_name] = max(0, val)
+                        elif field_name == "ticks_per_quarter":
+                            data[field_name] = max(1, val)
+                        elif field_name == "bar_index":
+                            data[field_name] = max(1, val)
+                        elif field_name == "voice":
+                            data[field_name] = max(1, min(8, val))
+                    except (ValueError, TypeError):
+                        pass
+        return data
 
     @model_validator(mode="after")
     def duration_is_positive_unless_grace(self) -> "Timing":
@@ -377,6 +410,30 @@ class Note(BaseModel):
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     provenance: list[Provenance] = Field(default_factory=list)
 
+    @model_validator(mode="before")
+    @classmethod
+    def sanitize_note_data(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "string" in data:
+                try:
+                    val = int(round(float(data["string"])))
+                    data["string"] = max(1, min(12, val))
+                except (ValueError, TypeError):
+                    pass
+            if "fret" in data:
+                try:
+                    val = int(round(float(data["fret"])))
+                    data["fret"] = max(0, min(36, val))
+                except (ValueError, TypeError):
+                    pass
+            if "pitch" in data:
+                try:
+                    val = int(round(float(data["pitch"])))
+                    data["pitch"] = max(0, min(127, val))
+                except (ValueError, TypeError):
+                    pass
+        return data
+
 
 class ChordFret(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -424,6 +481,16 @@ class Event(BaseModel):
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     provenance: list[Provenance] = Field(default_factory=list)
 
+    @model_validator(mode="before")
+    @classmethod
+    def sanitize_event(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "notes" in data and not isinstance(data["notes"], list):
+                raise ValueError("notes must be a valid JSON array")
+            if "techniques" in data and not isinstance(data["techniques"], list):
+                raise ValueError("techniques must be a valid JSON array")
+        return data
+
     @model_validator(mode="after")
     def rest_note_consistency(self) -> "Event":
         if self.is_rest and self.notes:
@@ -441,6 +508,14 @@ class Bar(BaseModel):
     key_signature: KeySignature | None = None
     events: list[Event] = Field(default_factory=list)
     tempo: Tempo | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def sanitize_bar(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "events" in data and not isinstance(data["events"], list):
+                raise ValueError("events must be a valid JSON array")
+        return data
 
 
 class WarningItem(BaseModel):
@@ -462,6 +537,18 @@ class ScoreIR(BaseModel):
     tracks: list[Track] = Field(min_length=1)
     bars: list[Bar] = Field(default_factory=list)
     warnings: list[WarningItem] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def sanitize_score_ir(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "tracks" in data and not isinstance(data["tracks"], list):
+                raise ValueError("tracks must be a valid JSON array")
+            if "bars" in data and not isinstance(data["bars"], list):
+                raise ValueError("bars must be a valid JSON array")
+            if "warnings" in data and not isinstance(data["warnings"], list):
+                raise ValueError("warnings must be a valid JSON array")
+        return data
 
     @model_validator(mode="after")
     def semantic_contract_is_valid(self) -> "ScoreIR":

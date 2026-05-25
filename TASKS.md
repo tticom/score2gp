@@ -4,6 +4,8 @@
 
 ## Done
 
+- [x] Implement defensive payload sanitization and structural validation preflight gates inside ScoreIR models (`src/score2gp/ir.py`) to clamp anomalous time/pitch/fret/string/voice values and raise targeted failures for malformed structural arrays (`feature/pipeline-defensive-sanitization-v0.1`).
+
 - [x] Implement ScoreIR support and GPIF XML generation for custom string counts/tunings (pitches per string) and track-level visual customisations (color tags and layout views) in the Guitar Pro writer (`src/score2gp/gpif.py`) and ScoreIR (`feature/gpif-tuning-and-track-formatting-v0.1`).
 
 - [x] Implement ScoreIR support and GPIF XML generation for track-level mixer controls (volume, pan, mute, solo) and master tempo changes/automation across the timeline in the Guitar Pro writer (`src/score2gp/gpif.py`) and ScoreIR (`feature/gpif-mixer-and-tempo-automation-v0.1`).
