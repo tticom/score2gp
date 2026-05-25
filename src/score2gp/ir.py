@@ -236,9 +236,11 @@ class SlideTechnique(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["slide"] = "slide"
-    style: Literal["shift", "legato", "slide-in", "slide-out", "unknown"] = "unknown"
+    style: Literal["shift", "legato", "slide-in", "slide-out", "glissando", "grace", "unknown"] = "unknown"
     direction: Literal["up", "down", "unknown"] = "unknown"
     target_event_id: str | None = None
+    glissando: bool = False
+    flags: int | None = None
 
 
 class BendPoint(BaseModel):
