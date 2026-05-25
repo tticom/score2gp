@@ -183,6 +183,9 @@ def _event(parent: ET.Element, event: Event, hopo_dests: set[tuple[int, int, int
         attrs["rest"] = "true"
     node = ET.SubElement(parent, "Event", attrs)
 
+    if event.dynamic:
+        _text(node, "Dynamic", event.dynamic.upper())
+
     if event.timing.notated_duration is not None or event.timing.tuplet is not None:
         rhythm_node = ET.SubElement(node, "Rhythm")
         if event.timing.notated_duration is not None:
@@ -278,6 +281,8 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, hopo
         if technique.kind == "pull-off":
             has_hopo_origin = True
             ET.SubElement(note_node, "PO")
+        if technique.kind == "vibrato":
+            _text(note_node, "Vibrato", "Wide" if getattr(technique, "width", "unknown") == "wide" else "Slight")
 
     if has_slide or has_bend or has_hopo_origin or is_hopo_dest:
         properties_node = ET.SubElement(note_node, "Properties")
