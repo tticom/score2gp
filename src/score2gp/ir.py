@@ -271,6 +271,20 @@ class GraceTechnique(BaseModel):
     timing: GraceTiming | None = None
 
 
+class TremoloBarPoint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    offset: float = Field(ge=0.0, le=1.0)
+    value: float = Field(ge=-12.0, le=12.0)
+
+
+class TremoloBarTechnique(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["tremolo-bar"] = "tremolo-bar"
+    points: list[TremoloBarPoint] = Field(default_factory=list)
+
+
 class UnsupportedTechnique(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -291,6 +305,7 @@ Technique = Annotated[
     | LetRingTechnique
     | PalmMuteTechnique
     | GraceTechnique
+    | TremoloBarTechnique
     | UnsupportedTechnique,
     Field(discriminator="kind"),
 ]
@@ -302,6 +317,7 @@ class Note(BaseModel):
     string: int = Field(ge=1, le=12)
     fret: int = Field(ge=0, le=36)
     pitch: int = Field(ge=0, le=127)
+    is_dead: bool = False
     techniques: list[Technique] = Field(default_factory=list)
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     provenance: list[Provenance] = Field(default_factory=list)

@@ -283,6 +283,7 @@
                 "slide": "#/$defs/SlideTechnique",
                 "slur": "#/$defs/SlurTechnique",
                 "tie": "#/$defs/TieTechnique",
+                "tremolo-bar": "#/$defs/TremoloBarTechnique",
                 "unsupported": "#/$defs/UnsupportedTechnique",
                 "vibrato": "#/$defs/VibratoTechnique"
               },
@@ -318,6 +319,9 @@
               },
               {
                 "$ref": "#/$defs/GraceTechnique"
+              },
+              {
+                "$ref": "#/$defs/TremoloBarTechnique"
               },
               {
                 "$ref": "#/$defs/UnsupportedTechnique"
@@ -626,6 +630,11 @@
           "title": "Fret",
           "type": "integer"
         },
+        "is_dead": {
+          "default": false,
+          "title": "Is Dead",
+          "type": "boolean"
+        },
         "pitch": {
           "maximum": 127,
           "minimum": 0,
@@ -658,6 +667,7 @@
                 "slide": "#/$defs/SlideTechnique",
                 "slur": "#/$defs/SlurTechnique",
                 "tie": "#/$defs/TieTechnique",
+                "tremolo-bar": "#/$defs/TremoloBarTechnique",
                 "unsupported": "#/$defs/UnsupportedTechnique",
                 "vibrato": "#/$defs/VibratoTechnique"
               },
@@ -693,6 +703,9 @@
               },
               {
                 "$ref": "#/$defs/GraceTechnique"
+              },
+              {
+                "$ref": "#/$defs/TremoloBarTechnique"
               },
               {
                 "$ref": "#/$defs/UnsupportedTechnique"
@@ -1188,6 +1201,49 @@
         "tuning"
       ],
       "title": "Track",
+      "type": "object"
+    },
+    "TremoloBarPoint": {
+      "additionalProperties": false,
+      "properties": {
+        "offset": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Offset",
+          "type": "number"
+        },
+        "value": {
+          "maximum": 12.0,
+          "minimum": -12.0,
+          "title": "Value",
+          "type": "number"
+        }
+      },
+      "required": [
+        "offset",
+        "value"
+      ],
+      "title": "TremoloBarPoint",
+      "type": "object"
+    },
+    "TremoloBarTechnique": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "tremolo-bar",
+          "default": "tremolo-bar",
+          "title": "Kind",
+          "type": "string"
+        },
+        "points": {
+          "items": {
+            "$ref": "#/$defs/TremoloBarPoint"
+          },
+          "title": "Points",
+          "type": "array"
+        }
+      },
+      "title": "TremoloBarTechnique",
       "type": "object"
     },
     "Tuning": {
