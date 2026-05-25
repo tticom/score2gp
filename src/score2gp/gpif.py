@@ -218,6 +218,47 @@ def _tracks(parent: ET.Element, score: ScoreIR, track_cd_maps: dict[str, dict[st
                 },
             )
 
+        # Sounds
+        if (
+            getattr(track, "sound", None) is not None
+            or getattr(track, "midi_program", None) is not None
+            or getattr(track, "midi_channel", None) is not None
+        ):
+            sounds = ET.SubElement(node, "Sounds")
+            sound = ET.SubElement(sounds, "Sound")
+
+            # Name
+            name_val = track.name
+            if getattr(track, "sound", None) is not None and track.sound.name is not None:
+                name_val = track.sound.name
+            _text(sound, "Name", name_val)
+
+            # Path
+            if getattr(track, "sound", None) is not None and track.sound.path is not None:
+                _text(sound, "Path", track.sound.path)
+
+            # MidiConnection
+            midi_conn = ET.SubElement(sound, "MidiConnection")
+
+            port_val = 1
+            if getattr(track, "sound", None) is not None:
+                port_val = track.sound.midi_port
+            _text(midi_conn, "Port", port_val)
+
+            chan_val = 1
+            if getattr(track, "sound", None) is not None and track.sound.midi_channel is not None:
+                chan_val = track.sound.midi_channel
+            elif getattr(track, "midi_channel", None) is not None:
+                chan_val = track.midi_channel
+            _text(midi_conn, "Channel", chan_val)
+
+            prog_val = 24
+            if getattr(track, "sound", None) is not None and track.sound.midi_program is not None:
+                prog_val = track.sound.midi_program
+            elif getattr(track, "midi_program", None) is not None:
+                prog_val = track.midi_program
+            _text(midi_conn, "Instrument", prog_val)
+
         # Staves, Staff and Properties (Tuning, FretCount, Capo, etc.)
         staves_node = ET.SubElement(node, "Staves")
         staff_node = ET.SubElement(staves_node, "Staff")
@@ -916,8 +957,6 @@ def gpif_warnings(score: ScoreIR) -> list[str]:
             warnings.append(f"track '{track.id}' tablature_enabled=false is not represented in the minimal GPIF writer")
         if track.staff_count != 1:
             warnings.append(f"track '{track.id}' staff_count={track.staff_count} is not represented in the minimal GPIF writer")
-        if track.midi_program is not None or track.midi_channel is not None:
-            warnings.append(f"track '{track.id}' MIDI program/channel is not represented in the minimal GPIF writer")
     for bar in score.bars:
         for event in bar.events:
             _technique_warnings(warnings, f"event '{event.id}'", event.techniques)

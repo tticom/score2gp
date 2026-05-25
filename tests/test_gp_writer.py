@@ -55,7 +55,7 @@ def test_compare_generated_gp_semantics(tmp_path) -> None:
 def test_write_gp_warns_for_unsupported_scoreir_fields(tmp_path) -> None:
     score = ScoreIR.from_json_file("fixtures/public/tiny_score.ir.json")
     data = score.model_dump(mode="json")
-    data["tracks"][0]["midi_program"] = 30
+    data["tracks"][0]["staff_count"] = 2
     data["bars"][0]["events"][0]["notes"][0]["techniques"] = [
         {"kind": "unsupported", "label": "some-weird-technique"}
     ]
@@ -64,7 +64,7 @@ def test_write_gp_warns_for_unsupported_scoreir_fields(tmp_path) -> None:
     out = tmp_path / "warnings.gp"
     warnings = write_gp(score_with_unsupported, out)
 
-    assert any("MIDI" in warning for warning in warnings)
+    assert any("staff_count" in warning for warning in warnings)
     assert any("technique 'unsupported'" in warning for warning in warnings)
     assert zipfile.is_zipfile(out)
 
@@ -1492,3 +1492,51 @@ def test_gpif_fingering(tmp_path) -> None:
         assert lh4 is not None and lh4.text == "Middle"
         rh4 = n4.find(".//Properties/Property[@name='RightHandFingering']/Fingering")
         assert rh4 is not None and rh4.text == "Ring"
+
+
+def test_gpif_sound_configurations(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_sounds.ir.json")
+    out = tmp_path / "sounds.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        tracks = root.findall(".//Track")
+        track_map = {t.get("id"): t for t in tracks}
+
+        # Track 1: Custom overdrive sound config
+        t1 = track_map["gtr-1"]
+        sounds_1 = t1.find("Sounds")
+        assert sounds_1 is not None
+
+        sound_1 = sounds_1.find("Sound")
+        assert sound_1 is not None
+        assert sound_1.find("Name").text == "Custom Overdrive Guitar"
+        assert sound_1.find("Path").text == "guitar.electric.solid.overdrive"
+
+        midi_conn_1 = sound_1.find("MidiConnection")
+        assert midi_conn_1 is not None
+        assert midi_conn_1.find("Port").text == "2"
+        assert midi_conn_1.find("Channel").text == "3"
+        assert midi_conn_1.find("Instrument").text == "29"
+
+        # Track 2: Fallback midi_channel and midi_program config
+        t2 = track_map["gtr-2"]
+        sounds_2 = t2.find("Sounds")
+        assert sounds_2 is not None
+
+        sound_2 = sounds_2.find("Sound")
+        assert sound_2 is not None
+        assert sound_2.find("Name").text == "Acoustic Rythmn"
+        assert sound_2.find("Path") is None
+
+        midi_conn_2 = sound_2.find("MidiConnection")
+        assert midi_conn_2 is not None
+        assert midi_conn_2.find("Port").text == "1"
+        assert midi_conn_2.find("Channel").text == "4"
+        assert midi_conn_2.find("Instrument").text == "25"
