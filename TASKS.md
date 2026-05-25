@@ -2,9 +2,11 @@
 
 ## Next
 
-- [ ] Support visual measure/beat-level dynamic symbols and articulations under a new feature branch `feature/gpif-dynamics-and-articulations-v0.1` to enhance musical interpretation.
+- [ ] Support visual beat-level symbols and articulations under a new feature branch `feature/gpif-beat-symbols-and-articulations-v0.1` to enhance musical interpretation.
 
 ## Done
+
+- [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for dynamic hairpins (crescendo and decrescendo/diminuendo span markers) and note-level accent articulations (staccato, accent, marcato, tenuto) in the Guitar Pro writer (`src/score2gp/gpif.py`), verified with public synthetic fixtures and unit tests (`feature/gpif-dynamics-and-articulations-v0.1`).
 
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for pickup measures (incomplete initial bars with custom duration lengths) and custom visual barline configurations (double, end, section lines, repeat marks) in the Guitar Pro writer (`src/score2gp/gpif.py`), verified with public synthetic fixtures and unit tests (`feature/gpif-pickup-measures-and-barlines-v0.1`).
 
