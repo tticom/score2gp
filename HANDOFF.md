@@ -4,9 +4,9 @@
 
 - **Current Branch**: `feature/gpif-mixer-and-tempo-automation-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: None (Draft PR to be opened)
-- **Latest Local Commit**: `31596d6` ("Implement track-level mixer calibrations and master tempo timeline automations")
-- **Latest Pushed Commit**: None (To be pushed in feature branch)
+- **Current PR**: PR #80 (https://github.com/tticom/score2gp/pull/80)
+- **Latest Local Commit**: `cc13179` ("Update HANDOFF.md and TASKS.md")
+- **Latest Pushed Commit**: `cc13179` ("Update HANDOFF.md and TASKS.md")
 - **Working Tree Status**: Clean (except untracked scratch files).
 
 - **GitHub Check Status**: N/A
