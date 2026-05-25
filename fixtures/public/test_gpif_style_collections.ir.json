@@ -1,0 +1,108 @@
+{
+  "schema_version": "0.1.0",
+  "metadata": {
+    "title": "Style Collections & Dynamic Staff Test",
+    "artist": "Synthetic Fixture",
+    "composer": "Synthetic Fixture",
+    "transcriber": "score2gp",
+    "copyright": "Public Domain"
+  },
+  "conversion": {
+    "tool_name": "score2gp",
+    "tool_version": "0.1.0",
+    "conversion_timestamp": "2026-05-25T00:00:00Z",
+    "source_file_hash": "sha256:test-style-collections-layout",
+    "source_page_count": 1
+  },
+  "tempo": {
+    "bpm": 120,
+    "text": "Moderato"
+  },
+  "layout": {
+    "page_setup": {
+      "width": 210.0,
+      "height": 297.0,
+      "margins": {
+        "top": 15.0,
+        "bottom": 15.0,
+        "left": 15.0,
+        "right": 15.0
+      },
+      "scale": 1.25
+    },
+    "track_order": ["gtr-1"],
+    "score_systems_layout": 4,
+    "style_collections": [
+      {
+        "id": "classic",
+        "name": "Classic Engraving Stylesheet",
+        "description": "Standard classical guitar formatting preset"
+      },
+      {
+        "id": "jazz",
+        "name": "Jazz Engraving Stylesheet",
+        "description": "Handwritten jazz visual layout preset"
+      }
+    ]
+  },
+  "tracks": [
+    {
+      "id": "gtr-1",
+      "name": "Guitar",
+      "instrument": "steel guitar",
+      "capo": 0,
+      "tablature_enabled": true,
+      "staff_count": 1,
+      "tuning": {
+        "name": "Standard Guitar",
+        "strings": [
+          { "number": 1, "pitch": 64, "name": "E4" },
+          { "number": 2, "pitch": 59, "name": "B3" },
+          { "number": 3, "pitch": 55, "name": "G3" },
+          { "number": 4, "pitch": 50, "name": "D3" },
+          { "number": 5, "pitch": 45, "name": "A2" },
+          { "number": 6, "pitch": 40, "name": "E2" }
+        ]
+      },
+      "layout_preferences": {
+        "tab_only": false,
+        "brackets_visible": true,
+        "stems_visible": false,
+        "line_sizing_per_system": "small"
+      }
+    }
+  ],
+  "bars": [
+    {
+      "index": 1,
+      "time_signature": {
+        "numerator": 4,
+        "denominator": 4
+      },
+      "events": [
+        {
+          "id": "e1",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 0,
+            "duration_ticks": 1920,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "half", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 3,
+              "fret": 2,
+              "pitch": 57,
+              "confidence": 1.0
+            }
+          ],
+          "confidence": 1.0
+        }
+      ]
+    }
+  ],
+  "warnings": []
+}

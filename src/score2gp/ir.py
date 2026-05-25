@@ -172,6 +172,9 @@ class TrackLayoutPreferences(BaseModel):
     stem_direction: Literal["auto", "up", "down"] | None = None
     line_sizing: Literal["standard", "small", "large"] | None = None
     view_mode: Literal["page", "screen", "horizontal", "vertical"] | None = None
+    brackets_visible: bool | None = None
+    stems_visible: bool | None = None
+    line_sizing_per_system: Literal["standard", "small", "large"] | None = None
 
 
 class Track(BaseModel):
@@ -663,6 +666,14 @@ class ScoreFonts(BaseModel):
     symbol_font: str = "Bravura"
 
 
+class StyleCollection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    name: str
+    description: str | None = None
+
+
 class ScoreLayout(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -675,6 +686,7 @@ class ScoreLayout(BaseModel):
     engraving_boundaries: EngravingBoundaries | None = None
     ensemble_brackets: list[EnsembleBracket] | None = None
     fonts: ScoreFonts | None = None
+    style_collections: list[StyleCollection] | None = None
 
 
 class ScoreIR(BaseModel):

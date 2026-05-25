@@ -221,6 +221,17 @@ def build_gpif(score: ScoreIR) -> bytes:
                     "italic": "true" if font_def.italic else "false",
                 })
 
+    # Score-level custom stylesheet style collections
+    if getattr(score, "layout", None) is not None and score.layout.style_collections is not None:
+        sc_node = ET.SubElement(score_node, "StyleCollections")
+        for sc in score.layout.style_collections:
+            item = ET.SubElement(sc_node, "StyleCollection", {
+                "id": sc.id,
+                "name": sc.name,
+            })
+            if sc.description is not None:
+                _text(item, "Description", sc.description)
+
     event_map = {}
     for bar in score.bars:
         for event in bar.events:
@@ -343,108 +354,138 @@ def _tracks(parent: ET.Element, score: ScoreIR, track_cd_maps: dict[str, dict[st
         # Staves, Staff and Properties (Tuning, FretCount, Capo, etc.)
         staves_node = ET.SubElement(node, "Staves")
         staff_node = ET.SubElement(staves_node, "Staff")
-        properties_node = ET.SubElement(staff_node, "Properties")
+        properties_nodes = [
+            ET.SubElement(staff_node, "Properties"),
+            ET.SubElement(staff_node, "StaffProperties")
+        ]
 
         # 1. CapoFret
-        capo_prop = ET.SubElement(properties_node, "Property", {"name": "CapoFret"})
-        _text(capo_prop, "Fret", track.capo)
+        for p_node in properties_nodes:
+            capo_prop = ET.SubElement(p_node, "Property", {"name": "CapoFret"})
+            _text(capo_prop, "Fret", track.capo)
 
         # 2. FretCount
-        fret_prop = ET.SubElement(properties_node, "Property", {"name": "FretCount"})
-        _text(fret_prop, "Number", 24)
+        for p_node in properties_nodes:
+            fret_prop = ET.SubElement(p_node, "Property", {"name": "FretCount"})
+            _text(fret_prop, "Number", 24)
 
         # 3. PartialCapoFret
-        pcapo_prop = ET.SubElement(properties_node, "Property", {"name": "PartialCapoFret"})
-        _text(pcapo_prop, "Fret", 0)
+        for p_node in properties_nodes:
+            pcapo_prop = ET.SubElement(p_node, "Property", {"name": "PartialCapoFret"})
+            _text(pcapo_prop, "Fret", 0)
 
         # 4. PartialCapoStringFlags
-        flags_prop = ET.SubElement(properties_node, "Property", {"name": "PartialCapoStringFlags"})
-        _text(flags_prop, "Bitset", "0" * len(track.tuning.strings))
+        for p_node in properties_nodes:
+            flags_prop = ET.SubElement(p_node, "Property", {"name": "PartialCapoStringFlags"})
+            _text(flags_prop, "Bitset", "0" * len(track.tuning.strings))
 
         # 5. Tuning
-        tuning_prop = ET.SubElement(properties_node, "Property", {"name": "Tuning"})
         sorted_strings = sorted(track.tuning.strings, key=lambda s: s.number, reverse=True)
         pitches_str = " ".join(str(string.pitch) for string in sorted_strings)
-        _text(tuning_prop, "Pitches", pitches_str)
         inst_type = "Bass" if track.instrument.lower() == "bass" else "Guitar"
-        _text(tuning_prop, "Instrument", inst_type)
-        _text(tuning_prop, "Label", "None")
-        _text(tuning_prop, "LabelVisible", "true")
-
-        # Optional string volume balances & fine tuning offsets
         has_balances = any(getattr(s, "volume_offset", None) is not None for s in sorted_strings)
         has_finetunes = any(getattr(s, "fine_tune", None) is not None for s in sorted_strings)
 
-        if has_balances:
-            balances_str = " ".join(str(s.volume_offset if s.volume_offset is not None else 0.0) for s in sorted_strings)
-            _text(tuning_prop, "Balance", balances_str)
+        for p_node in properties_nodes:
+            tuning_prop = ET.SubElement(p_node, "Property", {"name": "Tuning"})
+            _text(tuning_prop, "Pitches", pitches_str)
+            _text(tuning_prop, "Instrument", inst_type)
+            _text(tuning_prop, "Label", "None")
+            _text(tuning_prop, "LabelVisible", "true")
 
-        if has_finetunes:
-            finetunes_str = " ".join(str(s.fine_tune if s.fine_tune is not None else 0.0) for s in sorted_strings)
-            _text(tuning_prop, "FineTuning", finetunes_str)
+            if has_balances:
+                balances_str = " ".join(str(s.volume_offset if s.volume_offset is not None else 0.0) for s in sorted_strings)
+                _text(tuning_prop, "Balance", balances_str)
+
+            if has_finetunes:
+                finetunes_str = " ".join(str(s.fine_tune if s.fine_tune is not None else 0.0) for s in sorted_strings)
+                _text(tuning_prop, "FineTuning", finetunes_str)
 
         # Tablature layout preference
         if track.tablature_enabled:
-            tab_prop = ET.SubElement(properties_node, "Property", {"name": "Tablature"})
-            _text(tab_prop, "Enable", "true")
+            for p_node in properties_nodes:
+                tab_prop = ET.SubElement(p_node, "Property", {"name": "Tablature"})
+                _text(tab_prop, "Enable", "true")
 
         # Stem direction layout preference
         layout_prefs = getattr(track, "layout_preferences", None)
         if layout_prefs is not None:
             if layout_prefs.stem_direction:
-                stems_prop = ET.SubElement(properties_node, "Property", {"name": "Stems"})
-                _text(stems_prop, "Enable", "true" if layout_prefs.stem_direction != "auto" else "false")
-                _text(stems_prop, "Direction", layout_prefs.stem_direction.capitalize())
+                for p_node in properties_nodes:
+                    stems_prop = ET.SubElement(p_node, "Property", {"name": "Stems"})
+                    _text(stems_prop, "Enable", "true" if layout_prefs.stem_direction != "auto" else "false")
+                    _text(stems_prop, "Direction", layout_prefs.stem_direction.capitalize())
 
             # Notation system line sizing constraints
             if layout_prefs.line_sizing:
-                ls_prop = ET.SubElement(properties_node, "Property", {"name": "LineSizing"})
-                _text(ls_prop, "Size", layout_prefs.line_sizing.capitalize())
+                for p_node in properties_nodes:
+                    ls_prop = ET.SubElement(p_node, "Property", {"name": "LineSizing"})
+                    _text(ls_prop, "Size", layout_prefs.line_sizing.capitalize())
 
             # Track-level view mode property
             if layout_prefs.view_mode:
-                vm_prop = ET.SubElement(properties_node, "Property", {"name": "ViewMode"})
-                _text(vm_prop, "Mode", layout_prefs.view_mode.capitalize())
+                for p_node in properties_nodes:
+                    vm_prop = ET.SubElement(p_node, "Property", {"name": "ViewMode"})
+                    _text(vm_prop, "Mode", layout_prefs.view_mode.capitalize())
+
+            # Brackets visibility
+            if layout_prefs.brackets_visible is not None:
+                for p_node in properties_nodes:
+                    b_prop = ET.SubElement(p_node, "Property", {"name": "Brackets"})
+                    _text(b_prop, "Enable", "true" if layout_prefs.brackets_visible else "false")
+
+            # Stem visibility
+            if layout_prefs.stems_visible is not None:
+                for p_node in properties_nodes:
+                    sv_prop = ET.SubElement(p_node, "Property", {"name": "StemVisibility"})
+                    _text(sv_prop, "Enable", "true" if layout_prefs.stems_visible else "false")
+
+            # Line sizing per system
+            if layout_prefs.line_sizing_per_system:
+                for p_node in properties_nodes:
+                    lsps_prop = ET.SubElement(p_node, "Property", {"name": "LineSizingPerSystem"})
+                    _text(lsps_prop, "Size", layout_prefs.line_sizing_per_system.capitalize())
 
         # Collect chord diagrams for this track to construct staff properties
         tmap = track_cd_maps.get(track.id, {})
         if tmap:
-            diag_coll_prop = ET.SubElement(properties_node, "Property", {"name": "DiagramCollection"})
-            items_node = ET.SubElement(diag_coll_prop, "Items")
+            for p_node in properties_nodes:
+                diag_coll_prop = ET.SubElement(p_node, "Property", {"name": "DiagramCollection"})
+                items_node = ET.SubElement(diag_coll_prop, "Items")
 
-            # Reconstruct the diagrams in ID order
-            id_to_cd_dump = {v: k for k, v in tmap.items()}
-            for idx in range(len(tmap)):
-                cd_id = str(idx + 1)
-                dump = id_to_cd_dump[cd_id]
-                from .ir import ChordDiagram
-                cd = ChordDiagram.model_validate_json(dump)
+                # Reconstruct the diagrams in ID order
+                id_to_cd_dump = {v: k for k, v in tmap.items()}
+                for idx in range(len(tmap)):
+                    cd_id = str(idx + 1)
+                    dump = id_to_cd_dump[cd_id]
+                    from .ir import ChordDiagram
+                    cd = ChordDiagram.model_validate_json(dump)
 
-                item_node = ET.SubElement(items_node, "Item", {"id": cd_id, "name": cd.name})
-                diag_node = ET.SubElement(item_node, "Diagram", {
-                    "stringCount": str(cd.string_count),
-                    "fretCount": str(cd.fret_count),
-                    "baseFret": str(cd.base_fret),
-                    "barsStates": "1 1 1 1 1",
-                })
-                for f in cd.frets:
-                    ET.SubElement(diag_node, "Fret", {"string": str(f.string), "fret": str(f.fret)})
-
-                fing_node = ET.SubElement(diag_node, "Fingering")
-                for fg in cd.fingers:
-                    ET.SubElement(fing_node, "Position", {
-                        "finger": fg.finger,
-                        "fret": str(fg.fret),
-                        "string": str(fg.string),
+                    item_node = ET.SubElement(items_node, "Item", {"id": cd_id, "name": cd.name})
+                    diag_node = ET.SubElement(item_node, "Diagram", {
+                        "stringCount": str(cd.string_count),
+                        "fretCount": str(cd.fret_count),
+                        "baseFret": str(cd.base_fret),
+                        "barsStates": "1 1 1 1 1",
                     })
+                    for f in cd.frets:
+                        ET.SubElement(diag_node, "Fret", {"string": str(f.string), "fret": str(f.fret)})
 
-                ET.SubElement(diag_node, "Property", {"name": "ShowName", "type": "bool", "value": "true"})
-                ET.SubElement(diag_node, "Property", {"name": "ShowDiagram", "type": "bool", "value": "false"})
-                ET.SubElement(diag_node, "Property", {"name": "ShowFingering", "type": "bool", "value": "false"})
+                    fing_node = ET.SubElement(diag_node, "Fingering")
+                    for fg in cd.fingers:
+                        ET.SubElement(fing_node, "Position", {
+                            "finger": fg.finger,
+                            "fret": str(fg.fret),
+                            "string": str(fg.string),
+                        })
 
-                chord_node = ET.SubElement(item_node, "Chord")
-                ET.SubElement(chord_node, "KeyNote", {"step": cd.key_note_step, "accidental": cd.key_note_accidental})
-                ET.SubElement(chord_node, "BassNote", {"step": cd.bass_note_step, "accidental": cd.bass_note_accidental})
+                    ET.SubElement(diag_node, "Property", {"name": "ShowName", "type": "bool", "value": "true"})
+                    ET.SubElement(diag_node, "Property", {"name": "ShowDiagram", "type": "bool", "value": "false"})
+                    ET.SubElement(diag_node, "Property", {"name": "ShowFingering", "type": "bool", "value": "false"})
+
+                    chord_node = ET.SubElement(item_node, "Chord")
+                    ET.SubElement(chord_node, "KeyNote", {"step": cd.key_note_step, "accidental": cd.key_note_accidental})
+                    ET.SubElement(chord_node, "BassNote", {"step": cd.bass_note_step, "accidental": cd.bass_note_accidental})
 
 
 
