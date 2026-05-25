@@ -5,7 +5,7 @@ from xml.etree import ElementTree as ET
 
 from .ir import Event, Note, ScoreIR, Technique
 
-SUPPORTED_MINIMAL_TECHNIQUES = {"slide", "vibrato", "hammer-on", "pull-off", "tie", "slur", "bend", "let-ring", "palm-mute", "grace", "dead-note", "tremolo-bar", "tremolo-picking", "slap", "pop", "tapping"}
+SUPPORTED_MINIMAL_TECHNIQUES = {"slide", "vibrato", "hammer-on", "pull-off", "tie", "slur", "bend", "let-ring", "palm-mute", "grace", "dead-note", "tremolo-bar", "tremolo-picking", "slap", "pop", "tapping", "trill"}
 
 
 def _text(parent: ET.Element, tag: str, value: object | None) -> ET.Element:
@@ -552,6 +552,9 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, hopo
     has_slap = False
     has_pop = False
     has_tapping = False
+    has_trill = False
+    trill_fret = None
+    trill_interval = None
 
     for technique in note.techniques:
         if technique.kind == "tie":
@@ -640,9 +643,14 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, hopo
         if technique.kind == "tapping":
             has_tapping = True
             ET.SubElement(note_node, "Tapped")
+        if technique.kind == "trill":
+            has_trill = True
+            ET.SubElement(note_node, "Trill")
+            trill_fret = getattr(technique, "fret", None)
+            trill_interval = getattr(technique, "interval", None)
 
     has_articulation = bool(articulations)
-    if has_slide or has_bend or has_hopo_origin or is_hopo_dest or has_slap or has_pop or has_tapping or has_articulation:
+    if has_slide or has_bend or has_hopo_origin or is_hopo_dest or has_slap or has_pop or has_tapping or has_trill or has_articulation:
         properties_node = ET.SubElement(note_node, "Properties")
 
         fret_prop = ET.SubElement(properties_node, "Property", {"name": "Fret"})
@@ -712,6 +720,13 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, hopo
         if has_tapping:
             tapping_prop = ET.SubElement(properties_node, "Property", {"name": "Tapped"})
             ET.SubElement(tapping_prop, "Enable")
+
+        if has_trill:
+            trill_prop = ET.SubElement(properties_node, "Property", {"name": "Trill"})
+            if trill_fret is not None:
+                _text(trill_prop, "Fret", trill_fret)
+            if trill_interval is not None:
+                _text(trill_prop, "Interval", trill_interval)
 
     if note.techniques:
         techniques = ET.SubElement(note_node, "Techniques")

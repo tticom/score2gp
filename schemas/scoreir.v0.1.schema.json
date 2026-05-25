@@ -608,6 +608,7 @@
                 "tie": "#/$defs/TieTechnique",
                 "tremolo-bar": "#/$defs/TremoloBarTechnique",
                 "tremolo-picking": "#/$defs/TremoloPickingTechnique",
+                "trill": "#/$defs/TrillTechnique",
                 "unsupported": "#/$defs/UnsupportedTechnique",
                 "vibrato": "#/$defs/VibratoTechnique"
               },
@@ -658,6 +659,9 @@
               },
               {
                 "$ref": "#/$defs/TappingTechnique"
+              },
+              {
+                "$ref": "#/$defs/TrillTechnique"
               },
               {
                 "$ref": "#/$defs/UnsupportedTechnique"
@@ -1052,6 +1056,7 @@
                 "tie": "#/$defs/TieTechnique",
                 "tremolo-bar": "#/$defs/TremoloBarTechnique",
                 "tremolo-picking": "#/$defs/TremoloPickingTechnique",
+                "trill": "#/$defs/TrillTechnique",
                 "unsupported": "#/$defs/UnsupportedTechnique",
                 "vibrato": "#/$defs/VibratoTechnique"
               },
@@ -1102,6 +1107,9 @@
               },
               {
                 "$ref": "#/$defs/TappingTechnique"
+              },
+              {
+                "$ref": "#/$defs/TrillTechnique"
               },
               {
                 "$ref": "#/$defs/UnsupportedTechnique"
@@ -1824,6 +1832,47 @@
         }
       },
       "title": "TremoloPickingTechnique",
+      "type": "object"
+    },
+    "TrillTechnique": {
+      "additionalProperties": false,
+      "properties": {
+        "fret": {
+          "anyOf": [
+            {
+              "maximum": 36,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fret"
+        },
+        "interval": {
+          "anyOf": [
+            {
+              "maximum": 24,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Interval"
+        },
+        "kind": {
+          "const": "trill",
+          "default": "trill",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "TrillTechnique",
       "type": "object"
     },
     "Tuning": {
