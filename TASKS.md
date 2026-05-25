@@ -2,9 +2,11 @@
 
 ## Next
 
-- [ ] Support visual beat-level symbols and articulations under a new feature branch `feature/gpif-beat-symbols-and-articulations-v0.1` to enhance musical interpretation.
+- [ ] Support additional performance ornaments and visual notations—specifically trills, tapping variations, and custom slide destinations—in the GPIF XML generator to enrich notation rendering.
 
 ## Done
+
+- [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for beat-level performance symbols—specifically fermatas, rolled arpeggios (up/down chord rollers), and brush directions (downstroke/upstroke indicators)—in the Guitar Pro writer (`src/score2gp/gpif.py`), verified with public synthetic fixtures and unit tests (`feature/gpif-beat-symbols-and-articulations-v0.1`).
 
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for dynamic hairpins (crescendo and decrescendo/diminuendo span markers) and note-level accent articulations (staccato, accent, marcato, tenuto) in the Guitar Pro writer (`src/score2gp/gpif.py`), verified with public synthetic fixtures and unit tests (`feature/gpif-dynamics-and-articulations-v0.1`).
 
