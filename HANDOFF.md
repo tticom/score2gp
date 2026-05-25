@@ -4,13 +4,13 @@
 
 - **Current Branch**: `feature/gpif-microtonal-bends-and-advanced-whammy-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: PR #90 (Draft created during this task)
-- **Latest Local Commit**: `d3e92dd` ("Implement multi-point microtonal bends and advanced tremolo bar curve configurations in GPIF XML generation with comprehensive test coverage")
-- **Latest Pushed Commit**: N/A (will be pushed shortly)
+- **Current PR**: PR #90 (https://github.com/tticom/score2gp/pull/90)
+- **Latest Local Commit**: `483f5e5` ("Update HANDOFF.md and TASKS.md for bends and advanced whammy implementation")
+- **Latest Pushed Commit**: `483f5e5` ("Update HANDOFF.md and TASKS.md for bends and advanced whammy implementation")
 
 - **Working Tree Status**: Clean (except untracked scratch files).
 
-- **GitHub Check Status**: N/A
+- **GitHub Check Status**: Pending (Actions running)
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or `work/` contents are tracked.
 - **Root Generated-Artifact Audit**: Clean. No root generated artifacts tracked.
 
