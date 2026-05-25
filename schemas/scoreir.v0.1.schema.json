@@ -1390,6 +1390,18 @@
           "title": "Capo",
           "type": "integer"
         },
+        "color": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Color"
+        },
         "id": {
           "title": "Id",
           "type": "string"
