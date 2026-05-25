@@ -1737,3 +1737,59 @@ def test_gpif_multi_staff_templates(tmp_path) -> None:
         assert brackets[0].find("Tracks").text == "gtr-1 piano-1"
         assert brackets[1].get("style") == "bracket"
         assert brackets[1].find("Tracks").text == "gtr-1"
+
+
+def test_gpif_font_stylesheets(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_font_stylesheets.ir.json")
+    out = tmp_path / "font_stylesheets.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        score_node = root.find("Score")
+        assert score_node is not None
+
+        # 1. Verify MusicFont and SymbolFont sub-elements
+        assert score_node.find("MusicFont").text == "Jazz"
+        assert score_node.find("SymbolFont").text == "Jazz"
+
+        # 2. Verify Fonts stylesheet block
+        fonts_node = score_node.find("Fonts")
+        assert fonts_node is not None
+
+        fonts = fonts_node.findall("Font")
+        assert len(fonts) == 4
+        font_map = {f.get("id"): f for f in fonts}
+
+        # Title Font assertions
+        f_title = font_map["Title"]
+        assert f_title.get("name") == "Times New Roman"
+        assert f_title.get("size") == "24.0"
+        assert f_title.get("bold") == "true"
+        assert f_title.get("italic") == "false"
+
+        # Header Font assertions
+        f_header = font_map["Header"]
+        assert f_header.get("name") == "Arial"
+        assert f_header.get("size") == "10.0"
+        assert f_header.get("bold") == "false"
+        assert f_header.get("italic") == "true"
+
+        # Lyrics Font assertions
+        f_lyrics = font_map["Lyrics"]
+        assert f_lyrics.get("name") == "Arial"
+        assert f_lyrics.get("size") == "11.0"
+        assert f_lyrics.get("bold") == "false"
+        assert f_lyrics.get("italic") == "false"
+
+        # Tablature Font assertions
+        f_tab = font_map["Tablature"]
+        assert f_tab.get("name") == "Arial"
+        assert f_tab.get("size") == "9.0"
+        assert f_tab.get("bold") == "false"
+        assert f_tab.get("italic") == "false"
