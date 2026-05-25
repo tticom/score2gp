@@ -408,6 +408,7 @@ class Note(BaseModel):
     fret: int = Field(ge=0, le=36)
     pitch: int = Field(ge=0, le=127)
     is_dead: bool = False
+    articulations: list[Literal["staccato", "accent", "marcato", "tenuto"]] = Field(default_factory=list)
     techniques: list[Technique] = Field(default_factory=list)
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     provenance: list[Provenance] = Field(default_factory=list)
@@ -478,6 +479,7 @@ class Event(BaseModel):
     chord_symbol: str | None = None
     chord_diagram: ChordDiagram | None = None
     dynamic: str | None = None
+    hairpin: Literal["crescendo", "decrescendo", "diminuendo", "stop", "none"] | None = None
     text: str | None = None
     techniques: list[Technique] = Field(default_factory=list)
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
@@ -766,6 +768,7 @@ def semantic_scoreir_summary(score: ScoreIR) -> dict[str, Any]:
                         "is_rest": event.is_rest,
                         "chord_symbol": event.chord_symbol,
                         "dynamic": event.dynamic,
+                        "hairpin": event.hairpin,
                         "text": event.text,
                         "notes": [note.model_dump(exclude_none=True, exclude={"provenance"}) for note in event.notes],
                         "techniques": [technique.model_dump(exclude_none=True) for technique in event.techniques],
