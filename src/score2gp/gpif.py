@@ -507,10 +507,10 @@ def _event(parent: ET.Element, event: Event, hopo_dests: set[tuple[int, int, int
         for technique in event.techniques:
             ET.SubElement(techniques, "Technique", {"name": technique.kind})
     for note in event.notes:
-        _note(node, note, event.timing.bar_index, event.timing.onset_ticks, hopo_dests, let_ring_notes, palm_mute_notes)
+        _note(node, note, event.timing.bar_index, event.timing.onset_ticks, event.timing.duration_ticks, hopo_dests, let_ring_notes, palm_mute_notes)
 
 
-def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, hopo_dests: set[tuple[int, int, int]], let_ring_notes: set[tuple[int, int, int]], palm_mute_notes: set[tuple[int, int, int]]) -> None:
+def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, duration_ticks: int, hopo_dests: set[tuple[int, int, int]], let_ring_notes: set[tuple[int, int, int]], palm_mute_notes: set[tuple[int, int, int]]) -> None:
     note_node = ET.SubElement(
         parent,
         "Note",
@@ -549,12 +549,14 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, hopo
     has_bend = False
     has_hopo_origin = False
     bend_semitones = 1.0
+    max_bend_semitones = 1.0
     has_slap = False
     has_pop = False
     has_tapping = False
     has_trill = False
     trill_fret = None
     trill_interval = None
+    has_tremolo_bar = False
 
     for technique in note.techniques:
         if technique.kind == "tie":
@@ -592,7 +594,27 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, hopo
         if technique.kind == "bend":
             has_bend = True
             bend_semitones = technique.semitones if technique.semitones is not None else 1.0
-            ET.SubElement(note_node, "Bend")
+            max_bend_semitones = bend_semitones
+            if getattr(technique, "points", None):
+                max_bend_semitones = max(pt.semitones for pt in technique.points)
+            
+            bend_node = ET.SubElement(note_node, "Bend")
+            if getattr(technique, "points", None):
+                for pt in technique.points:
+                    off_pct = (pt.offset_ticks / max(1, duration_ticks)) * 100.0
+                    val_gp = pt.semitones * 50.0
+                    ET.SubElement(
+                        bend_node,
+                        "Point",
+                        {
+                            "offset": f"{off_pct:.6f}",
+                            "value": f"{val_gp:.6f}",
+                        }
+                    )
+            else:
+                ET.SubElement(bend_node, "Point", {"offset": "0.000000", "value": "0.000000"})
+                ET.SubElement(bend_node, "Point", {"offset": "50.000000", "value": f"{bend_semitones * 50.0:.6f}"})
+                ET.SubElement(bend_node, "Point", {"offset": "100.000000", "value": f"{bend_semitones * 50.0:.6f}"})
         if technique.kind == "hammer-on":
             has_hopo_origin = True
             ET.SubElement(note_node, "HO")
@@ -615,6 +637,7 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, hopo
                         }
                     )
         if technique.kind == "tremolo-bar":
+            has_tremolo_bar = True
             tremolo_node = ET.SubElement(note_node, "TremoloBar")
             for pt in getattr(technique, "points", []):
                 ET.SubElement(
@@ -650,7 +673,7 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, hopo
             trill_interval = getattr(technique, "interval", None)
 
     has_articulation = bool(articulations)
-    if has_slide or has_bend or has_hopo_origin or is_hopo_dest or has_slap or has_pop or has_tapping or has_trill or has_articulation:
+    if has_slide or has_bend or has_hopo_origin or is_hopo_dest or has_slap or has_pop or has_tapping or has_trill or has_tremolo_bar or has_articulation:
         properties_node = ET.SubElement(note_node, "Properties")
 
         fret_prop = ET.SubElement(properties_node, "Property", {"name": "Fret"})
@@ -692,7 +715,7 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, hopo
             _text(dest_offset, "Float", "100.000000")
 
             dest_val = ET.SubElement(properties_node, "Property", {"name": "BendDestinationValue"})
-            _text(dest_val, "Float", f"{bend_semitones * 50.0:.6f}")
+            _text(dest_val, "Float", f"{max_bend_semitones * 50.0:.6f}")
 
             mid_off1 = ET.SubElement(properties_node, "Property", {"name": "BendMiddleOffset1"})
             _text(mid_off1, "Float", "12.000000")
@@ -701,7 +724,7 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, hopo
             _text(mid_off2, "Float", "12.000000")
 
             mid_val = ET.SubElement(properties_node, "Property", {"name": "BendMiddleValue"})
-            _text(mid_val, "Float", f"{bend_semitones * 25.0:.6f}")
+            _text(mid_val, "Float", f"{max_bend_semitones * 25.0:.6f}")
 
             orig_off = ET.SubElement(properties_node, "Property", {"name": "BendOriginOffset"})
             _text(orig_off, "Float", "0.000000")
@@ -727,6 +750,10 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, hopo
                 _text(trill_prop, "Fret", trill_fret)
             if trill_interval is not None:
                 _text(trill_prop, "Interval", trill_interval)
+
+        if has_tremolo_bar:
+            trem_prop = ET.SubElement(properties_node, "Property", {"name": "TremoloBar"})
+            ET.SubElement(trem_prop, "Enable")
 
     if note.techniques:
         techniques = ET.SubElement(note_node, "Techniques")
