@@ -4,6 +4,8 @@
 
 ## Done
 
+- [x] Implement ScoreIR support and GPIF XML generation for text directions and slide style variants in the Guitar Pro writer (`src/score2gp/gpif.py`), mapping these properties from ScoreIR models into valid GP7-compatible XML tags and property structures (`feature/gpif-text-directions-and-slides-v0.1`).
+
 - [x] Implement ScoreIR support and GPIF XML generation for dynamic expressions and vibrato techniques in the Guitar Pro writer (`src/score2gp/gpif.py`), mapping these properties from ScoreIR models into valid GP7-compatible XML tags (`feature/gpif-dynamics-and-vibrato-v0.1`).
 
 - [x] Implement the unified CLI convert orchestration command in the CLI (`src/score2gp/cli.py`) that sequentially executes extraction, alignment, IR generation, and GP packaging, aggregating stage warnings and generating conversion diagnostics reports (`feature/convert-orchestration-v0.1`).
