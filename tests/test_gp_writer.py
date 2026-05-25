@@ -373,3 +373,70 @@ def test_gpif_dynamics_and_vibrato(tmp_path) -> None:
         vib2 = n2.find("Vibrato")
         assert vib2 is not None
         assert vib2.text == "Wide"
+
+
+def test_gpif_text_and_slides(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_text_and_slides.ir.json")
+    out = tmp_path / "text_slides.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        # Retrieve events
+        events = root.findall(".//Event")
+        event_map = {e.get("id"): e for e in events}
+
+        # Check e1 (Verse, shift slide: Flags=1)
+        e1 = event_map["e1"]
+        assert e1.find("FreeText") is not None and e1.find("FreeText").text == "Verse"
+        assert e1.find("Direction") is not None and e1.find("Direction").text == "Verse"
+        assert e1.find("Text") is not None and e1.find("Text").text == "Verse"
+        n1 = e1.find("Note")
+        assert n1 is not None and n1.find("Slide") is not None
+        flags1 = n1.find(".//Property[@name='Slide']/Flags")
+        assert flags1 is not None and flags1.text == "1"
+
+        # Check e2 (Chorus, legato slide: Flags=2)
+        e2 = event_map["e2"]
+        assert e2.find("FreeText") is not None and e2.find("FreeText").text == "Chorus"
+        n2 = e2.find("Note")
+        assert n2 is not None and n2.find("Slide") is not None
+        flags2 = n2.find(".//Property[@name='Slide']/Flags")
+        assert flags2 is not None and flags2.text == "2"
+
+        # Check e3 (Solo, slide-in up: Flags=16)
+        e3 = event_map["e3"]
+        assert e3.find("FreeText") is not None and e3.find("FreeText").text == "Solo"
+        n3 = e3.find("Note")
+        assert n3 is not None and n3.find("Slide") is not None
+        flags3 = n3.find(".//Property[@name='Slide']/Flags")
+        assert flags3 is not None and flags3.text == "16"
+
+        # Check e4 (Bridge, slide-in down: Flags=32)
+        e4 = event_map["e4"]
+        assert e4.find("FreeText") is not None and e4.find("FreeText").text == "Bridge"
+        n4 = e4.find("Note")
+        assert n4 is not None and n4.find("Slide") is not None
+        flags4 = n4.find(".//Property[@name='Slide']/Flags")
+        assert flags4 is not None and flags4.text == "32"
+
+        # Check e5 (Outro, slide-out up: Flags=8)
+        e5 = event_map["e5"]
+        assert e5.find("FreeText") is not None and e5.find("FreeText").text == "Outro"
+        n5 = e5.find("Note")
+        assert n5 is not None and n5.find("Slide") is not None
+        flags5 = n5.find(".//Property[@name='Slide']/Flags")
+        assert flags5 is not None and flags5.text == "8"
+
+        # Check e6 (Ending, slide-out down: Flags=4)
+        e6 = event_map["e6"]
+        assert e6.find("FreeText") is not None and e6.find("FreeText").text == "Ending"
+        n6 = e6.find("Note")
+        assert n6 is not None and n6.find("Slide") is not None
+        flags6 = n6.find(".//Property[@name='Slide']/Flags")
+        assert flags6 is not None and flags6.text == "4"

@@ -186,6 +186,11 @@ def _event(parent: ET.Element, event: Event, hopo_dests: set[tuple[int, int, int
     if event.dynamic:
         _text(node, "Dynamic", event.dynamic.upper())
 
+    if event.text:
+        _text(node, "FreeText", event.text)
+        _text(node, "Direction", event.text)
+        _text(node, "Text", event.text)
+
     if event.timing.notated_duration is not None or event.timing.tuplet is not None:
         rhythm_node = ET.SubElement(node, "Rhythm")
         if event.timing.notated_duration is not None:
@@ -256,6 +261,7 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, hopo
         ET.SubElement(note_node, "PalmMute")
 
     has_slide = False
+    slide_flags = 2
     has_bend = False
     has_hopo_origin = False
     bend_semitones = 1.0
@@ -271,6 +277,28 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, hopo
         if technique.kind == "slide":
             has_slide = True
             ET.SubElement(note_node, "Slide")
+            style = getattr(technique, "style", "unknown")
+            direction = getattr(technique, "direction", "unknown")
+            if style == "shift":
+                slide_flags = 1
+            elif style == "legato":
+                slide_flags = 2
+            elif style == "slide-in":
+                if direction == "up":
+                    slide_flags = 16
+                elif direction == "down":
+                    slide_flags = 32
+                else:
+                    slide_flags = 16
+            elif style == "slide-out":
+                if direction == "up":
+                    slide_flags = 8
+                elif direction == "down":
+                    slide_flags = 4
+                else:
+                    slide_flags = 4
+            else:
+                slide_flags = 2
         if technique.kind == "bend":
             has_bend = True
             bend_semitones = technique.semitones if technique.semitones is not None else 1.0
@@ -298,7 +326,7 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, hopo
 
         if has_slide:
             slide_prop = ET.SubElement(properties_node, "Property", {"name": "Slide"})
-            _text(slide_prop, "Flags", 2)
+            _text(slide_prop, "Flags", slide_flags)
 
         if has_hopo_origin:
             hopo_prop = ET.SubElement(properties_node, "Property", {"name": "HopoOrigin"})
