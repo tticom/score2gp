@@ -5,8 +5,8 @@
 - **Current Branch**: `feature/convert-orchestration-v0.1`
 - **Base Branch**: `main`
 - **Current PR**: #74 (Draft PR: https://github.com/tticom/score2gp/pull/74)
-- **Latest Local Commit**: `112d733` ("Implement CLI convert orchestration command with stage warnings aggregation and E2E tests")
-- **Latest Pushed Commit**: `112d733` ("Implement CLI convert orchestration command with stage warnings aggregation and E2E tests")
+- **Latest Local Commit**: `fed1ceb` ("Document CLI convert orchestration in handoff and tasks")
+- **Latest Pushed Commit**: `fed1ceb` ("Document CLI convert orchestration in handoff and tasks")
 - **Working Tree Status**: Clean.
 
 - **GitHub Check Status**: N/A
