@@ -1865,6 +1865,17 @@
           "title": "Instrument",
           "type": "string"
         },
+        "layout_preferences": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TrackLayoutPreferences"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "midi_channel": {
           "anyOf": [
             {
@@ -1955,6 +1966,52 @@
         "tuning"
       ],
       "title": "Track",
+      "type": "object"
+    },
+    "TrackLayoutPreferences": {
+      "additionalProperties": false,
+      "properties": {
+        "line_sizing": {
+          "anyOf": [
+            {
+              "enum": [
+                "standard",
+                "small",
+                "large"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Line Sizing"
+        },
+        "stem_direction": {
+          "anyOf": [
+            {
+              "enum": [
+                "auto",
+                "up",
+                "down"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stem Direction"
+        },
+        "tab_only": {
+          "default": false,
+          "title": "Tab Only",
+          "type": "boolean"
+        }
+      },
+      "title": "TrackLayoutPreferences",
       "type": "object"
     },
     "TremoloBarPoint": {
