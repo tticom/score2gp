@@ -1,0 +1,199 @@
+{
+  "schema_version": "0.1.0",
+  "metadata": {
+    "title": "Text Directions and Slides GPIF Test",
+    "artist": "Generated Fixture",
+    "composer": "Generated Fixture",
+    "transcriber": "score2gp",
+    "copyright": "Public domain generated test fixture",
+    "source": "hand-authored synthetic fixture"
+  },
+  "conversion": {
+    "tool_name": "score2gp",
+    "tool_version": "0.1.0",
+    "conversion_timestamp": "2026-05-25T00:00:00Z",
+    "source_file_hash": "sha256:generated-fixture-text-slides",
+    "source_page_count": 1
+  },
+  "tempo": { "bpm": 120, "text": "Moderato" },
+  "tracks": [
+    {
+      "id": "gtr-1",
+      "name": "Guitar",
+      "instrument": "steel guitar",
+      "capo": 0,
+      "tablature_enabled": true,
+      "staff_count": 1,
+      "tuning": {
+        "name": "Open E",
+        "strings": [
+          { "number": 1, "pitch": 64, "name": "E4" },
+          { "number": 2, "pitch": 59, "name": "B3" },
+          { "number": 3, "pitch": 56, "name": "G#3" },
+          { "number": 4, "pitch": 52, "name": "E3" },
+          { "number": 5, "pitch": 47, "name": "B2" },
+          { "number": 6, "pitch": 40, "name": "E2" }
+        ]
+      }
+    }
+  ],
+  "bars": [
+    {
+      "index": 1,
+      "time_signature": { "numerator": 4, "denominator": 4 },
+      "events": [
+        {
+          "id": "e1",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 0,
+            "duration_ticks": 480,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "eighth", "dots": 0 }
+          },
+          "text": "Verse",
+          "notes": [
+            {
+              "string": 3,
+              "fret": 2,
+              "pitch": 58,
+              "confidence": 1.0,
+              "techniques": [
+                { "kind": "slide", "style": "shift", "direction": "unknown" }
+              ]
+            }
+          ],
+          "confidence": 1.0
+        },
+        {
+          "id": "e2",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 480,
+            "duration_ticks": 480,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "eighth", "dots": 0 }
+          },
+          "text": "Chorus",
+          "notes": [
+            {
+              "string": 3,
+              "fret": 4,
+              "pitch": 60,
+              "confidence": 1.0,
+              "techniques": [
+                { "kind": "slide", "style": "legato", "direction": "unknown" }
+              ]
+            }
+          ],
+          "confidence": 1.0
+        },
+        {
+          "id": "e3",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 960,
+            "duration_ticks": 480,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "eighth", "dots": 0 }
+          },
+          "text": "Solo",
+          "notes": [
+            {
+              "string": 3,
+              "fret": 5,
+              "pitch": 61,
+              "confidence": 1.0,
+              "techniques": [
+                { "kind": "slide", "style": "slide-in", "direction": "up" }
+              ]
+            }
+          ],
+          "confidence": 1.0
+        },
+        {
+          "id": "e4",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 1440,
+            "duration_ticks": 480,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "eighth", "dots": 0 }
+          },
+          "text": "Bridge",
+          "notes": [
+            {
+              "string": 3,
+              "fret": 7,
+              "pitch": 63,
+              "confidence": 1.0,
+              "techniques": [
+                { "kind": "slide", "style": "slide-in", "direction": "down" }
+              ]
+            }
+          ],
+          "confidence": 1.0
+        },
+        {
+          "id": "e5",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 1920,
+            "duration_ticks": 480,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "eighth", "dots": 0 }
+          },
+          "text": "Outro",
+          "notes": [
+            {
+              "string": 3,
+              "fret": 9,
+              "pitch": 65,
+              "confidence": 1.0,
+              "techniques": [
+                { "kind": "slide", "style": "slide-out", "direction": "up" }
+              ]
+            }
+          ],
+          "confidence": 1.0
+        },
+        {
+          "id": "e6",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 2400,
+            "duration_ticks": 480,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "eighth", "dots": 0 }
+          },
+          "text": "Ending",
+          "notes": [
+            {
+              "string": 3,
+              "fret": 11,
+              "pitch": 67,
+              "confidence": 1.0,
+              "techniques": [
+                { "kind": "slide", "style": "slide-out", "direction": "down" }
+              ]
+            }
+          ],
+          "confidence": 1.0
+        }
+      ]
+    }
+  ],
+  "warnings": []
+}

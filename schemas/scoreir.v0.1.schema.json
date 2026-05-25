@@ -327,6 +327,18 @@
           "title": "Techniques",
           "type": "array"
         },
+        "text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Text"
+        },
         "timing": {
           "$ref": "#/$defs/Timing"
         },
