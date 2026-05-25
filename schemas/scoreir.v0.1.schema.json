@@ -954,6 +954,65 @@
       "title": "Note",
       "type": "object"
     },
+    "PageMargins": {
+      "additionalProperties": false,
+      "properties": {
+        "bottom": {
+          "default": 15.0,
+          "minimum": 0.0,
+          "title": "Bottom",
+          "type": "number"
+        },
+        "left": {
+          "default": 15.0,
+          "minimum": 0.0,
+          "title": "Left",
+          "type": "number"
+        },
+        "right": {
+          "default": 15.0,
+          "minimum": 0.0,
+          "title": "Right",
+          "type": "number"
+        },
+        "top": {
+          "default": 15.0,
+          "minimum": 0.0,
+          "title": "Top",
+          "type": "number"
+        }
+      },
+      "title": "PageMargins",
+      "type": "object"
+    },
+    "PageSetup": {
+      "additionalProperties": false,
+      "properties": {
+        "height": {
+          "default": 297.0,
+          "exclusiveMinimum": 0.0,
+          "title": "Height",
+          "type": "number"
+        },
+        "margins": {
+          "$ref": "#/$defs/PageMargins"
+        },
+        "scale": {
+          "default": 1.0,
+          "exclusiveMinimum": 0.0,
+          "title": "Scale",
+          "type": "number"
+        },
+        "width": {
+          "default": 210.0,
+          "exclusiveMinimum": 0.0,
+          "title": "Width",
+          "type": "number"
+        }
+      },
+      "title": "PageSetup",
+      "type": "object"
+    },
     "PalmMuteTechnique": {
       "additionalProperties": false,
       "properties": {
@@ -1111,6 +1170,30 @@
         }
       },
       "title": "PullOffTechnique",
+      "type": "object"
+    },
+    "ScoreLayout": {
+      "additionalProperties": false,
+      "properties": {
+        "page_setup": {
+          "$ref": "#/$defs/PageSetup"
+        },
+        "score_systems_layout": {
+          "default": 4,
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Score Systems Layout",
+          "type": "integer"
+        },
+        "track_order": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Track Order",
+          "type": "array"
+        }
+      },
+      "title": "ScoreLayout",
       "type": "object"
     },
     "SlapTechnique": {
@@ -1478,6 +1561,20 @@
           "title": "Staff Count",
           "type": "integer"
         },
+        "systems_layout": {
+          "anyOf": [
+            {
+              "maximum": 3,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Systems Layout"
+        },
         "tablature_enabled": {
           "default": true,
           "title": "Tablature Enabled",
@@ -1818,6 +1915,9 @@
     },
     "conversion": {
       "$ref": "#/$defs/ConversionInfo"
+    },
+    "layout": {
+      "$ref": "#/$defs/ScoreLayout"
     },
     "metadata": {
       "$ref": "#/$defs/Metadata"

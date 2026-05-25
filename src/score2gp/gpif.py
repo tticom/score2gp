@@ -84,6 +84,24 @@ def _find_span_notes(score: ScoreIR) -> tuple[set[tuple[int, int, int]], set[tup
     return let_ring_notes, palm_mute_notes
 
 
+def _page_setup(parent: ET.Element, score: ScoreIR) -> None:
+    if getattr(score, "layout", None) is not None:
+        ps = ET.SubElement(parent, "PageSetup")
+        _text(ps, "Width", score.layout.page_setup.width)
+        _text(ps, "Height", score.layout.page_setup.height)
+        _text(ps, "MarginTop", score.layout.page_setup.margins.top)
+        _text(ps, "MarginBottom", score.layout.page_setup.margins.bottom)
+        _text(ps, "MarginLeft", score.layout.page_setup.margins.left)
+        _text(ps, "MarginRight", score.layout.page_setup.margins.right)
+        _text(ps, "Scale", score.layout.page_setup.scale)
+
+
+def _master_track(parent: ET.Element, score: ScoreIR) -> None:
+    if getattr(score, "layout", None) is not None and score.layout.track_order:
+        mt = ET.SubElement(parent, "MasterTrack")
+        _text(mt, "Tracks", " ".join(score.layout.track_order))
+
+
 def build_gpif(score: ScoreIR) -> bytes:
     root = ET.Element("GPIF", {"version": "7", "generator": "score2gp"})
     score_node = ET.SubElement(root, "Score")
@@ -107,6 +125,13 @@ def build_gpif(score: ScoreIR) -> bytes:
 
     _metadata(score_node, score)
     _tempo(score_node, score)
+
+    if getattr(score, "layout", None) is not None:
+        _page_setup(score_node, score)
+        _master_track(score_node, score)
+        _text(score_node, "ScoreSystemsDefaultLayout", score.layout.score_systems_layout)
+        _text(score_node, "ScoreSystemsLayout", score.layout.score_systems_layout)
+
     _tracks(score_node, score, track_cd_maps)
     _master_bars(score_node, score)
     _bars(score_node, score, hopo_dests, let_ring_notes, palm_mute_notes, track_cd_maps)
@@ -140,8 +165,11 @@ def _tracks(parent: ET.Element, score: ScoreIR, track_cd_maps: dict[str, dict[st
         if getattr(track, "color", None) is not None:
             _text(node, "Color", track.color)
 
-        layout_code = 3 if track.tablature_enabled else 1
+        layout_code = getattr(track, "systems_layout", None)
+        if layout_code is None:
+            layout_code = 3 if track.tablature_enabled else 1
         _text(node, "SystemsDefautLayout", layout_code)
+        _text(node, "SystemsLayout", layout_code)
 
         _text(node, "Instrument", track.instrument)
         _text(node, "Capo", track.capo)

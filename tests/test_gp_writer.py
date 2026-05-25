@@ -777,3 +777,51 @@ def test_gpif_annotations_and_layout_breaks(tmp_path) -> None:
         b2 = mb2.find("Break")
         assert b2 is not None
         assert b2.text == "Page"
+
+
+def test_gpif_notation_layout_formatting(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_notation_layout.ir.json")
+    out = tmp_path / "notation_layout.gp"
+    warnings = write_gp(score, out)
+    assert warnings == ["track 'piano-1' tablature_enabled=false is not represented in the minimal GPIF writer"]
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        # 1. Verify PageSetup Sizing, Margins and Scaling
+        ps = root.find(".//PageSetup")
+        assert ps is not None
+        assert ps.find("Width").text == "210.0"
+        assert ps.find("Height").text == "297.0"
+        assert ps.find("MarginTop").text == "15.0"
+        assert ps.find("MarginBottom").text == "15.0"
+        assert ps.find("MarginLeft").text == "15.0"
+        assert ps.find("MarginRight").text == "15.0"
+        assert ps.find("Scale").text == "1.25"
+
+        # 2. Verify Score Layout view defaults
+        s_layout = root.find(".//ScoreSystemsDefaultLayout")
+        assert s_layout is not None
+        assert s_layout.text == "4"
+
+        s_layout_val = root.find(".//ScoreSystemsLayout")
+        assert s_layout_val is not None
+        assert s_layout_val.text == "4"
+
+        # 3. Verify Multi-track MasterTrack Stack Ordering
+        mt = root.find(".//MasterTrack")
+        assert mt is not None
+        assert mt.find("Tracks").text == "gtr-1 piano-1"
+
+        # 4. Verify individual Track Systems Layout Overrides
+        t_gtr = root.find(".//Track[@id='gtr-1']")
+        assert t_gtr is not None
+        assert t_gtr.find("SystemsDefautLayout").text == "3"
+        assert t_gtr.find("SystemsLayout").text == "3"
+
+        t_pno = root.find(".//Track[@id='piano-1']")
+        assert t_pno is not None
+        assert t_pno.find("SystemsDefautLayout").text == "1"
+        assert t_pno.find("SystemsLayout").text == "1"
