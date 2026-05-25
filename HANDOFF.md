@@ -5,8 +5,8 @@
 - **Current Branch**: `feature/gpif-font-stylesheets-and-engraving-v0.1`
 - **Base Branch**: `main`
 - **Current PR**: PR #99 (https://github.com/tticom/score2gp/pull/99)
-- **Latest Local Commit**: `376a80a379de77eaba431e40344b15dcc725d1c4` ("feat: implement custom font stylesheets and music typographic symbol font settings in GPIF XML generation")
-- **Latest Pushed Commit**: `376a80a379de77eaba431e40344b15dcc725d1c4` ("feat: implement custom font stylesheets and music typographic symbol font settings in GPIF XML generation")
+- **Latest Local Commit**: `710f420c579e4fd3128aa24302b66ba7a9c0e267` ("docs: update tasks and handoff for custom font stylesheets and music typography")
+- **Latest Pushed Commit**: `710f420c579e4fd3128aa24302b66ba7a9c0e267` ("docs: update tasks and handoff for custom font stylesheets and music typography")
 
 - **Working Tree Status**: Clean (except untracked scratch files).
 
