@@ -5,8 +5,8 @@
 - **Current Branch**: `feature/gpif-style-collections-and-staff-properties-v0.1`
 - **Base Branch**: `main`
 - **Current PR**: PR #100 (https://github.com/tticom/score2gp/pull/100)
-- **Latest Local Commit**: `3f1efb6021a982b3524f478cb0c4458d521f3777` ("feat: implement centralized visual layout style collections and track-level dynamic staff rendering layout overrides in GPIF XML generation")
-- **Latest Pushed Commit**: `3f1efb6021a982b3524f478cb0c4458d521f3777` ("feat: implement centralized visual layout style collections and track-level dynamic staff rendering layout overrides in GPIF XML generation")
+- **Latest Local Commit**: `a2633b25d8f35f7537cb19a7d985bdec08e40731` ("docs: update tasks and handoff for style collections and staff properties")
+- **Latest Pushed Commit**: `a2633b25d8f35f7537cb19a7d985bdec08e40731` ("docs: update tasks and handoff for style collections and staff properties")
 
 - **Working Tree Status**: Clean (except untracked scratch files).
 
