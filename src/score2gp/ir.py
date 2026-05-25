@@ -167,6 +167,8 @@ class Track(BaseModel):
     midi_channel: int | None = Field(default=None, ge=1, le=16)
     mixer: Mixer | None = None
     color: str | None = None
+    systems_layout: int | None = Field(default=None, ge=1, le=3)
+
 
 
 class NotatedDuration(BaseModel):
@@ -528,6 +530,32 @@ class WarningItem(BaseModel):
     provenance: list[Provenance] = Field(default_factory=list)
 
 
+class PageMargins(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    top: float = Field(default=15.0, ge=0.0)
+    bottom: float = Field(default=15.0, ge=0.0)
+    left: float = Field(default=15.0, ge=0.0)
+    right: float = Field(default=15.0, ge=0.0)
+
+
+class PageSetup(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    width: float = Field(default=210.0, gt=0.0)
+    height: float = Field(default=297.0, gt=0.0)
+    margins: PageMargins = Field(default_factory=PageMargins)
+    scale: float = Field(default=1.0, gt=0.0)
+
+
+class ScoreLayout(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    page_setup: PageSetup = Field(default_factory=PageSetup)
+    track_order: list[str] = Field(default_factory=list)
+    score_systems_layout: int = Field(default=4, ge=1, le=4)
+
+
 class ScoreIR(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -538,6 +566,8 @@ class ScoreIR(BaseModel):
     tracks: list[Track] = Field(min_length=1)
     bars: list[Bar] = Field(default_factory=list)
     warnings: list[WarningItem] = Field(default_factory=list)
+    layout: ScoreLayout = Field(default_factory=ScoreLayout)
+
 
     @model_validator(mode="before")
     @classmethod
@@ -697,6 +727,7 @@ def semantic_scoreir_summary(score: ScoreIR) -> dict[str, Any]:
         "schema_version": score.schema_version,
         "metadata": score.metadata.model_dump(exclude_none=True),
         "tempo": score.tempo.model_dump(exclude_none=True),
+        "layout": score.layout.model_dump() if getattr(score, "layout", None) else None,
         "tracks": [
             {
                 "id": track.id,
@@ -710,6 +741,7 @@ def semantic_scoreir_summary(score: ScoreIR) -> dict[str, Any]:
                 "midi_channel": track.midi_channel,
                 "mixer": track.mixer.model_dump() if track.mixer else None,
                 "color": track.color,
+                "systems_layout": getattr(track, "systems_layout", None),
             }
             for track in score.tracks
         ],
