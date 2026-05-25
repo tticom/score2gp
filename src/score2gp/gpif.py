@@ -546,6 +546,7 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
 
     has_slide = False
     slide_flags = 2
+    has_glissando = False
     has_bend = False
     has_hopo_origin = False
     bend_semitones = 1.0
@@ -571,6 +572,10 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
             ET.SubElement(note_node, "Slide")
             style = getattr(technique, "style", "unknown")
             direction = getattr(technique, "direction", "unknown")
+            if style == "glissando" or getattr(technique, "glissando", False):
+                has_glissando = True
+                ET.SubElement(note_node, "Glissando")
+            
             if style == "shift":
                 slide_flags = 1
             elif style == "legato":
@@ -589,8 +594,15 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
                     slide_flags = 4
                 else:
                     slide_flags = 4
+            elif style == "glissando":
+                slide_flags = 64
+            elif style == "grace":
+                slide_flags = 128
             else:
                 slide_flags = 2
+
+            if getattr(technique, "flags", None) is not None:
+                slide_flags = technique.flags
         if technique.kind == "bend":
             has_bend = True
             bend_semitones = technique.semitones if technique.semitones is not None else 1.0
@@ -673,7 +685,7 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
             trill_interval = getattr(technique, "interval", None)
 
     has_articulation = bool(articulations)
-    if has_slide or has_bend or has_hopo_origin or is_hopo_dest or has_slap or has_pop or has_tapping or has_trill or has_tremolo_bar or has_articulation:
+    if has_slide or has_bend or has_hopo_origin or is_hopo_dest or has_slap or has_pop or has_tapping or has_trill or has_tremolo_bar or has_glissando or has_articulation:
         properties_node = ET.SubElement(note_node, "Properties")
 
         fret_prop = ET.SubElement(properties_node, "Property", {"name": "Fret"})
@@ -754,6 +766,10 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
         if has_tremolo_bar:
             trem_prop = ET.SubElement(properties_node, "Property", {"name": "TremoloBar"})
             ET.SubElement(trem_prop, "Enable")
+
+        if has_glissando:
+            gliss_prop = ET.SubElement(properties_node, "Property", {"name": "Glissando"})
+            ET.SubElement(gliss_prop, "Enable")
 
     if note.techniques:
         techniques = ET.SubElement(note_node, "Techniques")
