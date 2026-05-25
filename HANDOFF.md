@@ -4,9 +4,9 @@
 
 - **Current Branch**: `feature/gpif-text-directions-and-slides-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: N/A (draft PR will be created)
-- **Latest Local Commit**: `6f85215` ("Implement GPIF XML text directions and slide style variants")
-- **Latest Pushed Commit**: N/A (will be pushed)
+- **Current PR**: #76 (Draft PR: https://github.com/tticom/score2gp/pull/76)
+- **Latest Local Commit**: `22fb295` ("Document text directions and slides changes in handoff and tasks")
+- **Latest Pushed Commit**: `22fb295` ("Document text directions and slides changes in handoff and tasks")
 - **Working Tree Status**: Clean.
 
 - **GitHub Check Status**: N/A
