@@ -729,3 +729,51 @@ def test_gpif_tuning_and_formatting(tmp_path) -> None:
         assert tuning_prop is not None
         assert tuning_prop.find("Pitches").text == "38 45 50 55 59 64"
         assert tuning_prop.find("Instrument").text == "Guitar"
+
+
+def test_gpif_annotations_and_layout_breaks(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_annotations_breaks.ir.json")
+    out = tmp_path / "annotations_breaks.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        # 1. Verify Beat-level Text Annotations
+        events = root.findall(".//Event")
+        event_map = {e.get("id"): e for e in events}
+
+        e1 = event_map["e1"]
+        t1 = e1.find("Text")
+        assert t1 is not None
+        assert t1.text == "Intro"
+
+        ft1 = e1.find("FreeText")
+        assert ft1 is not None
+        assert ft1.text == "Intro"
+
+        dir1 = e1.find("Direction")
+        assert dir1 is not None
+        assert dir1.text == "Intro"
+
+        e3 = event_map["e3"]
+        t3 = e3.find("Text")
+        assert t3 is not None
+        assert t3.text == "Verse"
+
+        # 2. Verify MasterBar Breaks (Line/Page)
+        mb1 = root.find(".//MasterBar[@index='1']")
+        assert mb1 is not None
+        b1 = mb1.find("Break")
+        assert b1 is not None
+        assert b1.text == "Line"
+
+        mb2 = root.find(".//MasterBar[@index='2']")
+        assert mb2 is not None
+        b2 = mb2.find("Break")
+        assert b2 is not None
+        assert b2.text == "Page"

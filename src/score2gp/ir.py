@@ -508,6 +508,7 @@ class Bar(BaseModel):
     key_signature: KeySignature | None = None
     events: list[Event] = Field(default_factory=list)
     tempo: Tempo | None = None
+    layout_break: Literal["line", "page", "none"] | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -718,6 +719,7 @@ def semantic_scoreir_summary(score: ScoreIR) -> dict[str, Any]:
                 "time_signature": bar.time_signature.model_dump(),
                 "key_signature": bar.key_signature.model_dump() if bar.key_signature else None,
                 "tempo": bar.tempo.model_dump() if bar.tempo else None,
+                "layout_break": bar.layout_break,
                 "events": [
                     {
                         "id": event.id,

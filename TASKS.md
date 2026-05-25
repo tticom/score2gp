@@ -2,7 +2,11 @@
 
 ## Next
 
+- [ ] Support visual notation layout configurations and visual system/page formatting properties under a new feature branch `feature/gpif-notation-layout-formatting-v0.1` to enhance custom visual engraving.
+
 ## Done
+
+- [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for custom beat-level text annotations (arbitrary performance strings anchored to events) and visual layout breaks (explicit system/line breaks and page breaks) in the Guitar Pro writer (`src/score2gp/gpif.py`), verified with public synthetic fixtures and unit tests (`feature/gpif-annotations-and-layout-breaks-v0.1`).
 
 - [x] Implement defensive payload sanitization and structural validation preflight gates inside ScoreIR models (`src/score2gp/ir.py`) to clamp anomalous time/pitch/fret/string/voice values and raise targeted failures for malformed structural arrays (`feature/pipeline-defensive-sanitization-v0.1`).
 
