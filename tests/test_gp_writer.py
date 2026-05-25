@@ -1025,3 +1025,38 @@ def test_gpif_beat_symbols(tmp_path) -> None:
         assert f4 is not None
         assert f4.find("Type").text == "Short"
 
+
+def test_gpif_trills(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_trills.ir.json")
+    out = tmp_path / "trills.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        events = root.findall(".//Event")
+        event_map = {e.get("id"): e for e in events}
+
+        # Event e1 note: Trill with fret 7
+        e1 = event_map["e1"]
+        n1 = e1.find("Note")
+        assert n1.find("Trill") is not None
+
+        trill_prop1 = n1.find(".//Properties/Property[@name='Trill']")
+        assert trill_prop1 is not None
+        assert trill_prop1.find("Fret").text == "7"
+        assert trill_prop1.find("Interval") is None
+
+        # Event e2 note: Trill with interval 2
+        e2 = event_map["e2"]
+        n2 = e2.find("Note")
+        assert n2.find("Trill") is not None
+
+        trill_prop2 = n2.find(".//Properties/Property[@name='Trill']")
+        assert trill_prop2 is not None
+        assert trill_prop2.find("Interval").text == "2"
+        assert trill_prop2.find("Fret") is None

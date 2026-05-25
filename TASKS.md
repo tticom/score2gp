@@ -2,9 +2,11 @@
 
 ## Next
 
-- [ ] Support additional performance ornaments and visual notations—specifically trills, tapping variations, and custom slide destinations—in the GPIF XML generator to enrich notation rendering.
+- [ ] Support visual note-level pitch bend variations and tremolo bar curve configurations inside the GPIF XML generator to further complete the guitar techniques pipeline.
 
 ## Done
+
+- [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for note-level trill techniques (interval or auxiliary fret parameters) in the Guitar Pro writer (`src/score2gp/gpif.py`), verified with public synthetic fixtures and unit tests (`feature/gpif-trills-and-ornaments-v0.1`).
 
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for beat-level performance symbols—specifically fermatas, rolled arpeggios (up/down chord rollers), and brush directions (downstroke/upstroke indicators)—in the Guitar Pro writer (`src/score2gp/gpif.py`), verified with public synthetic fixtures and unit tests (`feature/gpif-beat-symbols-and-articulations-v0.1`).
 
