@@ -620,6 +620,29 @@ class ScorePrintSetup(BaseModel):
     print_multi_track: bool = False
 
 
+class SystemPageMargins(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    top: float = Field(default=10.0, ge=0.0)
+    bottom: float = Field(default=10.0, ge=0.0)
+    left: float = Field(default=10.0, ge=0.0)
+    right: float = Field(default=10.0, ge=0.0)
+
+
+class EngravingBoundaries(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    width: float = Field(default=180.0, gt=0.0)
+    height: float = Field(default=260.0, gt=0.0)
+
+
+class EnsembleBracket(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    track_ids: list[str] = Field(default_factory=list)
+    style: Literal["brace", "bracket", "line", "none"] = "bracket"
+
+
 class ScoreLayout(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -628,6 +651,9 @@ class ScoreLayout(BaseModel):
     score_systems_layout: int = Field(default=4, ge=1, le=4)
     view: ScoreViewConfig | None = None
     print_setup: ScorePrintSetup | None = None
+    system_page_margins: SystemPageMargins | None = None
+    engraving_boundaries: EngravingBoundaries | None = None
+    ensemble_brackets: list[EnsembleBracket] | None = None
 
 
 class ScoreIR(BaseModel):
