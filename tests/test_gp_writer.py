@@ -484,3 +484,91 @@ def test_gpif_dead_notes_and_tremolo(tmp_path) -> None:
         # Point 3: offset=100.000000, value=0.0
         assert float(points[2].get("offset")) == 100.0
         assert float(points[2].get("value")) == 0.0
+
+
+def test_gpif_chords_and_vibrato_curves(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_chords_vibrato_curves.ir.json")
+    out = tmp_path / "chords_vibrato.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        # Check Track Staff Properties DiagramCollection
+        diag_coll = root.find(".//Property[@name='DiagramCollection']")
+        assert diag_coll is not None
+
+        items = diag_coll.findall(".//Items/Item")
+        assert len(items) == 1
+        item = items[0]
+        assert item.get("id") == "1"
+        assert item.get("name") == "Ab"
+
+        diag = item.find("Diagram")
+        assert diag is not None
+        assert diag.get("stringCount") == "6"
+        assert diag.get("fretCount") == "5"
+        assert diag.get("baseFret") == "6"
+
+        fret = diag.find("Fret")
+        assert fret is not None
+        assert fret.get("string") == "5"
+        assert fret.get("fret") == "1"
+
+        pos = diag.find(".//Fingering/Position")
+        assert pos is not None
+        assert pos.get("finger") == "Index"
+        assert pos.get("fret") == "1"
+        assert pos.get("string") == "5"
+
+        key = item.find(".//Chord/KeyNote")
+        assert key is not None
+        assert key.get("step") == "A"
+        assert key.get("accidental") == "Flat"
+
+        # Check Events
+        events = root.findall(".//Event")
+        event_map = {e.get("id"): e for e in events}
+
+        # Event e1: has Chord referencing ID 1 and ChordDiagram block directly
+        e1 = event_map["e1"]
+        ch = e1.find("Chord")
+        assert ch is not None
+        assert ch.text == "1"
+
+        cd = e1.find("ChordDiagram")
+        assert cd is not None
+        assert cd.get("name") == "Ab"
+        assert cd.get("stringCount") == "6"
+        assert cd.get("fretCount") == "5"
+        assert cd.get("baseFret") == "6"
+
+        # Event e2: has VibratoCurve under Note
+        e2 = event_map["e2"]
+        n2 = e2.find("Note")
+        assert n2 is not None
+
+        vc = n2.find("VibratoCurve")
+        assert vc is not None
+
+        points = vc.findall("Point")
+        assert len(points) == 3
+
+        # Point 1: offset=0.0, value=20.0, speed=medium
+        assert float(points[0].get("offset")) == 0.0
+        assert float(points[0].get("value")) == 20.0
+        assert points[0].get("speed") == "medium"
+
+        # Point 2: offset=50.0, value=80.0, speed=fast
+        assert float(points[1].get("offset")) == 50.0
+        assert float(points[1].get("value")) == 80.0
+        assert points[1].get("speed") == "fast"
+
+        # Point 3: offset=100.0, value=100.0, speed=fast
+        assert float(points[2].get("offset")) == 100.0
+        assert float(points[2].get("value")) == 100.0
+        assert points[2].get("speed") == "fast"

@@ -211,12 +211,27 @@ class BendTechnique(BaseModel):
     text: str | None = None
 
 
+class VibratoCurvePoint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    offset: float = Field(ge=0.0, le=1.0)
+    value: float = Field(ge=0.0, le=1.0)
+    speed: Literal["slow", "medium", "fast", "unknown"] = "unknown"
+
+
+class VibratoCurve(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    points: list[VibratoCurvePoint] = Field(default_factory=list)
+
+
 class VibratoTechnique(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["vibrato"] = "vibrato"
     width: Literal["narrow", "wide", "unknown"] = "unknown"
     speed: Literal["slow", "medium", "fast", "unknown"] = "unknown"
+    curve: VibratoCurve | None = None
 
 
 class HammerOnTechnique(BaseModel):
@@ -323,6 +338,36 @@ class Note(BaseModel):
     provenance: list[Provenance] = Field(default_factory=list)
 
 
+class ChordFret(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    string: int = Field(ge=1, le=12)
+    fret: int = Field(ge=0, le=36)
+
+
+class ChordFinger(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    string: int = Field(ge=1, le=12)
+    fret: int = Field(ge=0, le=36)
+    finger: Literal["None", "Index", "Middle", "Ring", "Little", "Thumb"] = "None"
+
+
+class ChordDiagram(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    string_count: int = Field(default=6, ge=1, le=12)
+    fret_count: int = Field(default=5, ge=1, le=24)
+    base_fret: int = Field(default=0, ge=0, le=36)
+    frets: list[ChordFret] = Field(default_factory=list)
+    fingers: list[ChordFinger] = Field(default_factory=list)
+    key_note_step: str = "C"
+    key_note_accidental: str = "Natural"
+    bass_note_step: str = "C"
+    bass_note_accidental: str = "Natural"
+
+
 class Event(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -332,6 +377,7 @@ class Event(BaseModel):
     notes: list[Note] = Field(default_factory=list)
     is_rest: bool = False
     chord_symbol: str | None = None
+    chord_diagram: ChordDiagram | None = None
     dynamic: str | None = None
     text: str | None = None
     techniques: list[Technique] = Field(default_factory=list)
