@@ -674,3 +674,58 @@ def test_gpif_mixer_and_tempo(tmp_path) -> None:
         text = tempo.find("Text")
         assert text is not None
         assert text.text == "Allegro"
+
+
+def test_gpif_tuning_and_formatting(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_tuning_formatting.ir.json")
+    out = tmp_path / "tuning_formatting.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        # 1. Verify Track Visual Metadata
+        tracks = root.findall(".//Track[@id='gtr-1']")
+        assert len(tracks) == 1
+        track = tracks[0]
+
+        color = track.find("Color")
+        assert color is not None
+        assert color.text == "237 116 116"
+
+        layout = track.find("SystemsDefautLayout")
+        assert layout is not None
+        assert layout.text == "3"
+
+        # 2. Verify Staff Properties and Custom Tuning
+        staves = track.find("Staves")
+        assert staves is not None
+        staff = staves.find("Staff")
+        assert staff is not None
+        props = staff.find("Properties")
+        assert props is not None
+
+        # Verify CapoFret
+        capo_prop = props.find(".//Property[@name='CapoFret']")
+        assert capo_prop is not None
+        assert capo_prop.find("Fret").text == "0"
+
+        # Verify FretCount
+        fret_prop = props.find(".//Property[@name='FretCount']")
+        assert fret_prop is not None
+        assert fret_prop.find("Number").text == "24"
+
+        # Verify PartialCapoStringFlags
+        flags_prop = props.find(".//Property[@name='PartialCapoStringFlags']")
+        assert flags_prop is not None
+        assert flags_prop.find("Bitset").text == "000000"
+
+        # Verify Tuning Pitches and Instrument Type
+        tuning_prop = props.find(".//Property[@name='Tuning']")
+        assert tuning_prop is not None
+        assert tuning_prop.find("Pitches").text == "38 45 50 55 59 64"
+        assert tuning_prop.find("Instrument").text == "Guitar"
