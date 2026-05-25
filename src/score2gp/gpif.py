@@ -257,6 +257,10 @@ def _master_bars(parent: ET.Element, score: ScoreIR) -> None:
             if bar.tempo.text:
                 _text(tempo_node, "Text", bar.tempo.text)
 
+        if getattr(bar, "layout_break", None) is not None:
+            break_val = "Line" if bar.layout_break == "line" else ("Page" if bar.layout_break == "page" else "None")
+            _text(node, "Break", break_val)
+
 
 def _bars(parent: ET.Element, score: ScoreIR, hopo_dests: set[tuple[int, int, int]], let_ring_notes: set[tuple[int, int, int]], palm_mute_notes: set[tuple[int, int, int]], track_cd_maps: dict[str, dict[str, str]]) -> None:
     bars = ET.SubElement(parent, "Bars")
