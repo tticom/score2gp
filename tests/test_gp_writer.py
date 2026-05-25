@@ -868,3 +868,47 @@ def test_gpif_notation_layout_defaults(tmp_path) -> None:
         mt = root.find(".//MasterTrack")
         assert mt is not None
         assert mt.find("Tracks").text == "gtr-1 piano-1"
+
+
+def test_gpif_pickup_barlines(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_pickup_barlines.ir.json")
+    out = tmp_path / "pickup_barlines.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        # 1. Verify pickup measure (anacrusis properties) under Bar 1
+        b1 = root.find(".//Bars/Bar[@index='1']")
+        assert b1 is not None
+        anac_prop = b1.find(".//Property[@name='Anacrusis']/Enable")
+        assert anac_prop is not None
+
+        # 2. Verify Barline configurations under MasterBars
+        mb1 = root.find(".//MasterBar[@index='1']")
+        assert mb1 is not None
+        assert mb1.find("Barline") is None
+
+        mb2 = root.find(".//MasterBar[@index='2']")
+        assert mb2 is not None
+        assert mb2.find("Barline").text == "Double"
+
+        mb3 = root.find(".//MasterBar[@index='3']")
+        assert mb3 is not None
+        assert mb3.find("Barline").text == "RepeatStart"
+        assert mb3.find("RepeatStart") is not None
+
+        mb4 = root.find(".//MasterBar[@index='4']")
+        assert mb4 is not None
+        assert mb4.find("Barline").text == "RepeatEnd"
+        rep_end = mb4.find("Repeat")
+        assert rep_end is not None
+        assert rep_end.get("count") == "3"
+
+        mb5 = root.find(".//MasterBar[@index='5']")
+        assert mb5 is not None
+        assert mb5.find("Barline").text == "End"
