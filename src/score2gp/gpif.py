@@ -199,6 +199,28 @@ def build_gpif(score: ScoreIR) -> bytes:
                 bracket_node = ET.SubElement(ensemble_brackets_node, "Bracket", {"style": bracket.style})
                 _text(bracket_node, "Tracks", " ".join(bracket.track_ids))
 
+    # Score-level custom font stylesheets and music typography parameters
+    if getattr(score, "layout", None) is not None and score.layout.fonts is not None:
+        fonts_cfg = score.layout.fonts
+        _text(score_node, "MusicFont", fonts_cfg.music_font)
+        _text(score_node, "SymbolFont", fonts_cfg.symbol_font)
+        fonts_node = ET.SubElement(score_node, "Fonts")
+        categories = {
+            "Title": fonts_cfg.title,
+            "Header": fonts_cfg.header,
+            "Lyrics": fonts_cfg.lyrics,
+            "Tablature": fonts_cfg.tab_annotations,
+        }
+        for cat_id, font_def in categories.items():
+            if font_def is not None:
+                ET.SubElement(fonts_node, "Font", {
+                    "id": cat_id,
+                    "name": font_def.family,
+                    "size": str(font_def.size),
+                    "bold": "true" if font_def.bold else "false",
+                    "italic": "true" if font_def.italic else "false",
+                })
+
     event_map = {}
     for bar in score.bars:
         for event in bar.events:

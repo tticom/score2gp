@@ -643,6 +643,26 @@ class EnsembleBracket(BaseModel):
     style: Literal["brace", "bracket", "line", "none"] = "bracket"
 
 
+class FontDef(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    family: str
+    size: float
+    bold: bool = False
+    italic: bool = False
+
+
+class ScoreFonts(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: FontDef | None = None
+    header: FontDef | None = None
+    lyrics: FontDef | None = None
+    tab_annotations: FontDef | None = None
+    music_font: str = "Bravura"
+    symbol_font: str = "Bravura"
+
+
 class ScoreLayout(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -654,6 +674,7 @@ class ScoreLayout(BaseModel):
     system_page_margins: SystemPageMargins | None = None
     engraving_boundaries: EngravingBoundaries | None = None
     ensemble_brackets: list[EnsembleBracket] | None = None
+    fonts: ScoreFonts | None = None
 
 
 class ScoreIR(BaseModel):
