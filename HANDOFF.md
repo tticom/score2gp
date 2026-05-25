@@ -5,8 +5,8 @@
 - **Current Branch**: `feature/gpif-multi-voice-v0.1`
 - **Base Branch**: `main`
 - **Current PR**: #73 (Draft PR: https://github.com/tticom/score2gp/pull/73)
-- **Latest Local Commit**: `e6201ef` ("Implement GPIF XML serialization for multi-voice events")
-- **Latest Pushed Commit**: `e6201ef` ("Implement GPIF XML serialization for multi-voice events")
+- **Latest Local Commit**: `8fa11dd` ("Document multi-voice implementation in handoff and task list")
+- **Latest Pushed Commit**: `8fa11dd` ("Document multi-voice implementation in handoff and task list")
 - **Working Tree Status**: Clean (except untracked scratch script `scratch/inspect_voices.py`).
 
 - **GitHub Check Status**: N/A
