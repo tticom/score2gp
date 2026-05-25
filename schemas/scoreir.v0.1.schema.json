@@ -1582,6 +1582,71 @@
       "title": "SlurTechnique",
       "type": "object"
     },
+    "SoundConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "midi_channel": {
+          "anyOf": [
+            {
+              "maximum": 16,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Midi Channel"
+        },
+        "midi_port": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Midi Port",
+          "type": "integer"
+        },
+        "midi_program": {
+          "anyOf": [
+            {
+              "maximum": 127,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Midi Program"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Path"
+        }
+      },
+      "title": "SoundConfig",
+      "type": "object"
+    },
     "SourceStage": {
       "enum": [
         "musicxml",
@@ -1842,6 +1907,17 @@
         "name": {
           "title": "Name",
           "type": "string"
+        },
+        "sound": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SoundConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "staff_count": {
           "default": 1,
