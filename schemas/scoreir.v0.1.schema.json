@@ -418,11 +418,15 @@
                 "hammer-on": "#/$defs/HammerOnTechnique",
                 "let-ring": "#/$defs/LetRingTechnique",
                 "palm-mute": "#/$defs/PalmMuteTechnique",
+                "pop": "#/$defs/PopTechnique",
                 "pull-off": "#/$defs/PullOffTechnique",
+                "slap": "#/$defs/SlapTechnique",
                 "slide": "#/$defs/SlideTechnique",
                 "slur": "#/$defs/SlurTechnique",
+                "tapping": "#/$defs/TappingTechnique",
                 "tie": "#/$defs/TieTechnique",
                 "tremolo-bar": "#/$defs/TremoloBarTechnique",
+                "tremolo-picking": "#/$defs/TremoloPickingTechnique",
                 "unsupported": "#/$defs/UnsupportedTechnique",
                 "vibrato": "#/$defs/VibratoTechnique"
               },
@@ -461,6 +465,18 @@
               },
               {
                 "$ref": "#/$defs/TremoloBarTechnique"
+              },
+              {
+                "$ref": "#/$defs/TremoloPickingTechnique"
+              },
+              {
+                "$ref": "#/$defs/SlapTechnique"
+              },
+              {
+                "$ref": "#/$defs/PopTechnique"
+              },
+              {
+                "$ref": "#/$defs/TappingTechnique"
               },
               {
                 "$ref": "#/$defs/UnsupportedTechnique"
@@ -802,11 +818,15 @@
                 "hammer-on": "#/$defs/HammerOnTechnique",
                 "let-ring": "#/$defs/LetRingTechnique",
                 "palm-mute": "#/$defs/PalmMuteTechnique",
+                "pop": "#/$defs/PopTechnique",
                 "pull-off": "#/$defs/PullOffTechnique",
+                "slap": "#/$defs/SlapTechnique",
                 "slide": "#/$defs/SlideTechnique",
                 "slur": "#/$defs/SlurTechnique",
+                "tapping": "#/$defs/TappingTechnique",
                 "tie": "#/$defs/TieTechnique",
                 "tremolo-bar": "#/$defs/TremoloBarTechnique",
+                "tremolo-picking": "#/$defs/TremoloPickingTechnique",
                 "unsupported": "#/$defs/UnsupportedTechnique",
                 "vibrato": "#/$defs/VibratoTechnique"
               },
@@ -845,6 +865,18 @@
               },
               {
                 "$ref": "#/$defs/TremoloBarTechnique"
+              },
+              {
+                "$ref": "#/$defs/TremoloPickingTechnique"
+              },
+              {
+                "$ref": "#/$defs/SlapTechnique"
+              },
+              {
+                "$ref": "#/$defs/PopTechnique"
+              },
+              {
+                "$ref": "#/$defs/TappingTechnique"
               },
               {
                 "$ref": "#/$defs/UnsupportedTechnique"
@@ -886,6 +918,19 @@
         }
       },
       "title": "PalmMuteTechnique",
+      "type": "object"
+    },
+    "PopTechnique": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "pop",
+          "default": "pop",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "PopTechnique",
       "type": "object"
     },
     "Provenance": {
@@ -1009,6 +1054,19 @@
       "title": "PullOffTechnique",
       "type": "object"
     },
+    "SlapTechnique": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "slap",
+          "default": "slap",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "SlapTechnique",
+      "type": "object"
+    },
     "SlideTechnique": {
       "additionalProperties": false,
       "properties": {
@@ -1105,6 +1163,19 @@
       ],
       "title": "SourceStage",
       "type": "string"
+    },
+    "TappingTechnique": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "tapping",
+          "default": "tapping",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "TappingTechnique",
+      "type": "object"
     },
     "Tempo": {
       "additionalProperties": false,
@@ -1383,6 +1454,31 @@
         }
       },
       "title": "TremoloBarTechnique",
+      "type": "object"
+    },
+    "TremoloPickingTechnique": {
+      "additionalProperties": false,
+      "properties": {
+        "duration": {
+          "default": "16th",
+          "enum": [
+            "eighth",
+            "16th",
+            "32nd",
+            "64th",
+            "unknown"
+          ],
+          "title": "Duration",
+          "type": "string"
+        },
+        "kind": {
+          "const": "tremolo-picking",
+          "default": "tremolo-picking",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "TremoloPickingTechnique",
       "type": "object"
     },
     "Tuning": {
