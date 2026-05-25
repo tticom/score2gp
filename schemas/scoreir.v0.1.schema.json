@@ -410,6 +410,84 @@
     "Event": {
       "additionalProperties": false,
       "properties": {
+        "arpeggio": {
+          "anyOf": [
+            {
+              "enum": [
+                "up",
+                "down",
+                "none"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Arpeggio"
+        },
+        "arpeggio_duration": {
+          "anyOf": [
+            {
+              "enum": [
+                "whole",
+                "half",
+                "quarter",
+                "eighth",
+                "16th",
+                "32nd",
+                "64th",
+                "128th"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Arpeggio Duration"
+        },
+        "brush": {
+          "anyOf": [
+            {
+              "enum": [
+                "up",
+                "down",
+                "none"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Brush"
+        },
+        "brush_duration": {
+          "anyOf": [
+            {
+              "enum": [
+                "whole",
+                "half",
+                "quarter",
+                "eighth",
+                "16th",
+                "32nd",
+                "64th",
+                "128th"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Brush Duration"
+        },
         "chord_diagram": {
           "anyOf": [
             {
@@ -451,6 +529,24 @@
           ],
           "default": null,
           "title": "Dynamic"
+        },
+        "fermata": {
+          "anyOf": [
+            {
+              "enum": [
+                "standard",
+                "short",
+                "long",
+                "none"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fermata"
         },
         "hairpin": {
           "anyOf": [

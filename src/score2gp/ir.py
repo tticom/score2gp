@@ -480,6 +480,11 @@ class Event(BaseModel):
     chord_diagram: ChordDiagram | None = None
     dynamic: str | None = None
     hairpin: Literal["crescendo", "decrescendo", "diminuendo", "stop", "none"] | None = None
+    fermata: Literal["standard", "short", "long", "none"] | None = None
+    arpeggio: Literal["up", "down", "none"] | None = None
+    arpeggio_duration: Literal["whole", "half", "quarter", "eighth", "16th", "32nd", "64th", "128th"] | None = None
+    brush: Literal["up", "down", "none"] | None = None
+    brush_duration: Literal["whole", "half", "quarter", "eighth", "16th", "32nd", "64th", "128th"] | None = None
     text: str | None = None
     techniques: list[Technique] = Field(default_factory=list)
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
@@ -769,6 +774,11 @@ def semantic_scoreir_summary(score: ScoreIR) -> dict[str, Any]:
                         "chord_symbol": event.chord_symbol,
                         "dynamic": event.dynamic,
                         "hairpin": event.hairpin,
+                        "fermata": getattr(event, "fermata", None),
+                        "arpeggio": getattr(event, "arpeggio", None),
+                        "arpeggio_duration": getattr(event, "arpeggio_duration", None),
+                        "brush": getattr(event, "brush", None),
+                        "brush_duration": getattr(event, "brush_duration", None),
                         "text": event.text,
                         "notes": [note.model_dump(exclude_none=True, exclude={"provenance"}) for note in event.notes],
                         "techniques": [technique.model_dump(exclude_none=True) for technique in event.techniques],
