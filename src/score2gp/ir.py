@@ -171,6 +171,7 @@ class TrackLayoutPreferences(BaseModel):
     tab_only: bool = False
     stem_direction: Literal["auto", "up", "down"] | None = None
     line_sizing: Literal["standard", "small", "large"] | None = None
+    view_mode: Literal["page", "screen", "horizontal", "vertical"] | None = None
 
 
 class Track(BaseModel):
@@ -599,12 +600,34 @@ class PageSetup(BaseModel):
     scale: float = Field(default=1.0, gt=0.0)
 
 
+class ScoreViewConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["page", "screen", "horizontal", "vertical"] = "page"
+    scroll_speed: float | None = None
+
+
+class ScorePrintSetup(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    print_title: bool = True
+    print_subtitle: bool = True
+    print_artist: bool = True
+    print_composer: bool = True
+    print_transcriber: bool = True
+    print_copyright: bool = True
+    print_page_numbering: bool = True
+    print_multi_track: bool = False
+
+
 class ScoreLayout(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     page_setup: PageSetup = Field(default_factory=PageSetup)
     track_order: list[str] = Field(default_factory=list)
     score_systems_layout: int = Field(default=4, ge=1, le=4)
+    view: ScoreViewConfig | None = None
+    print_setup: ScorePrintSetup | None = None
 
 
 class ScoreIR(BaseModel):
