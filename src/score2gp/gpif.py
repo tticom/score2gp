@@ -192,12 +192,20 @@ def _tracks(parent: ET.Element, score: ScoreIR, track_cd_maps: dict[str, dict[st
 
         layout_code = getattr(track, "systems_layout", None)
         if layout_code is None:
-            layout_code = 3 if track.tablature_enabled else 1
+            if getattr(track, "layout_preferences", None) is not None and track.layout_preferences.tab_only:
+                layout_code = 2
+            else:
+                layout_code = 3 if track.tablature_enabled else 1
         _text(node, "SystemsDefautLayout", layout_code)
         _text(node, "SystemsLayout", layout_code)
 
         _text(node, "Instrument", track.instrument)
         _text(node, "Capo", track.capo)
+
+        if getattr(track, "layout_preferences", None) is not None:
+            if track.layout_preferences.tab_only:
+                tab_node = ET.SubElement(node, "Tablature")
+                _text(tab_node, "TabOnly", "true")
 
         if getattr(track, "mixer", None) is not None:
             mixer_node = ET.SubElement(node, "Mixer")
@@ -301,6 +309,24 @@ def _tracks(parent: ET.Element, score: ScoreIR, track_cd_maps: dict[str, dict[st
         if has_finetunes:
             finetunes_str = " ".join(str(s.fine_tune if s.fine_tune is not None else 0.0) for s in sorted_strings)
             _text(tuning_prop, "FineTuning", finetunes_str)
+
+        # Tablature layout preference
+        if track.tablature_enabled:
+            tab_prop = ET.SubElement(properties_node, "Property", {"name": "Tablature"})
+            _text(tab_prop, "Enable", "true")
+
+        # Stem direction layout preference
+        layout_prefs = getattr(track, "layout_preferences", None)
+        if layout_prefs is not None:
+            if layout_prefs.stem_direction:
+                stems_prop = ET.SubElement(properties_node, "Property", {"name": "Stems"})
+                _text(stems_prop, "Enable", "true" if layout_prefs.stem_direction != "auto" else "false")
+                _text(stems_prop, "Direction", layout_prefs.stem_direction.capitalize())
+
+            # Notation system line sizing constraints
+            if layout_prefs.line_sizing:
+                ls_prop = ET.SubElement(properties_node, "Property", {"name": "LineSizing"})
+                _text(ls_prop, "Size", layout_prefs.line_sizing.capitalize())
 
         # Collect chord diagrams for this track to construct staff properties
         tmap = track_cd_maps.get(track.id, {})

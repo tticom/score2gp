@@ -2,9 +2,11 @@
 
 ## Next
 
-- [ ] Support custom track-level layout preferences and visual staff customization settings in the GPIF XML generator.
+- [ ] Support track-level visual layout view styles and print layout overrides in the GPIF XML generator.
 
 ## Done
+
+- [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for track-level visual layout preferences—specifically forced tab-only display modes, stem direction styles, and notation system line sizing constraints—mapping these profiles into valid structural GP7-compatible XML blocks (`feature/gpif-track-layout-preferences-v0.1`).
 
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for string-level volume mixer offsets and fine-tuning frequencies under track tuning properties, mapping these profiles into valid structural GP7-compatible XML blocks (`feature/gpif-string-mixer-and-tuning-v0.1`).
 
