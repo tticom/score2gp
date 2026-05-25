@@ -371,6 +371,14 @@ class TappingTechnique(BaseModel):
     kind: Literal["tapping"] = "tapping"
 
 
+class TrillTechnique(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["trill"] = "trill"
+    fret: int | None = Field(default=None, ge=0, le=36)
+    interval: int | None = Field(default=None, ge=0, le=24)
+
+
 class UnsupportedTechnique(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -396,6 +404,7 @@ Technique = Annotated[
     | SlapTechnique
     | PopTechnique
     | TappingTechnique
+    | TrillTechnique
     | UnsupportedTechnique,
     Field(discriminator="kind"),
 ]

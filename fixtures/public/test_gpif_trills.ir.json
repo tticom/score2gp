@@ -1,0 +1,105 @@
+{
+  "schema_version": "0.1.0",
+  "metadata": {
+    "title": "Trills and Ornaments Test",
+    "artist": "Synthetic Fixture",
+    "composer": "Synthetic Fixture",
+    "transcriber": "score2gp",
+    "copyright": "Public Domain"
+  },
+  "conversion": {
+    "tool_name": "score2gp",
+    "tool_version": "0.1.0",
+    "conversion_timestamp": "2026-05-25T00:00:00Z",
+    "source_file_hash": "sha256:test-trills-ornaments",
+    "source_page_count": 1
+  },
+  "tempo": {
+    "bpm": 120,
+    "text": "Moderato"
+  },
+  "tracks": [
+    {
+      "id": "gtr-1",
+      "name": "Guitar",
+      "instrument": "steel guitar",
+      "capo": 0,
+      "tablature_enabled": true,
+      "staff_count": 1,
+      "tuning": {
+        "name": "Standard Guitar",
+        "strings": [
+          { "number": 1, "pitch": 64, "name": "E4" },
+          { "number": 2, "pitch": 59, "name": "B3" },
+          { "number": 3, "pitch": 55, "name": "G3" },
+          { "number": 4, "pitch": 50, "name": "D3" },
+          { "number": 5, "pitch": 45, "name": "A2" },
+          { "number": 6, "pitch": 40, "name": "E2" }
+        ]
+      }
+    }
+  ],
+  "bars": [
+    {
+      "index": 1,
+      "time_signature": { "numerator": 4, "denominator": 4 },
+      "events": [
+        {
+          "id": "e1",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 0,
+            "duration_ticks": 1920,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "half", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 3,
+              "fret": 5,
+              "pitch": 60,
+              "techniques": [
+                {
+                  "kind": "trill",
+                  "fret": 7
+                }
+              ],
+              "confidence": 1.0
+            }
+          ],
+          "confidence": 1.0
+        },
+        {
+          "id": "e2",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 1920,
+            "duration_ticks": 1920,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "half", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 3,
+              "fret": 5,
+              "pitch": 60,
+              "techniques": [
+                {
+                  "kind": "trill",
+                  "interval": 2
+                }
+              ],
+              "confidence": 1.0
+            }
+          ],
+          "confidence": 1.0
+        }
+      ]
+    }
+  ],
+  "warnings": []
+}
