@@ -2,9 +2,9 @@
 
 ## Next
 
-- [ ] Advance to Milestone 4 & 5 Expansion - support multi-voice events serialization in the GPIF writer.
-
 ## Done
+
+- [x] Implement GPIF XML generation for multi-voice events in the Guitar Pro writer (`src/score2gp/gpif.py`), correctly separating and nesting events inside `<Voice>` containers per measure/beat based on ScoreIR voice IDs (`feature/gpif-multi-voice-v0.1`).
 
 - [x] Implement ScoreIR support and GPIF XML generation for grace notes, let-ring spans, and palm-mute spans in the Guitar Pro writer (`src/score2gp/gpif.py`), mapping these properties from ScoreIR models into valid GP7-compatible XML tags (`feature/gpif-grace-and-spans-v0.1`).
 
