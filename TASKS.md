@@ -2,9 +2,11 @@
 
 ## Next
 
-- [ ] Support visual note-level hammer-on and pull-off technique variants and visual markers in the GPIF XML generator to enrich notation rendering.
+- [ ] Support visual note-level left-hand and right-hand fingering indicators and visual alignments inside the GPIF XML generator to enrich instructional tablature engraving.
 
 ## Done
+
+- [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for explicit hammer-on and pull-off visual variants (handling explicit slur formatting, legato flags, and direction context between subsequent notes) in the Guitar Pro writer (`src/score2gp/gpif.py`), verified with public synthetic fixtures and unit tests (`feature/gpif-hammer-on-pull-off-variants-v0.1`).
 
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for detailed visual slide configurations (curved glissando lines, grace slides, and explicit flag overrides) in the Guitar Pro writer (`src/score2gp/gpif.py`), verified with public synthetic fixtures and unit tests (`feature/gpif-slide-styling-and-destinations-v0.1`).
 

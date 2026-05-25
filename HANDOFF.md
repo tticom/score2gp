@@ -2,13 +2,13 @@
 
 ## Metadata
 
-- **Current Branch**: `feature/gpif-slide-styling-and-destinations-v0.1`
+- **Current Branch**: `feature/gpif-hammer-on-pull-off-variants-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: PR #91 (https://github.com/tticom/score2gp/pull/91)
-- **Latest Local Commit**: `9e8600d` ("docs: update HANDOFF.md and TASKS.md for slide styling implementation")
-- **Latest Pushed Commit**: `9e8600d` ("docs: update HANDOFF.md and TASKS.md for slide styling implementation")
+- **Current PR**: N/A (will be created shortly)
+- **Latest Local Commit**: `5be53c6` ("feat: implement visual hammer-on and pull-off technique variants and pitch direction context auto-inferences in GPIF XML generation with tests")
+- **Latest Pushed Commit**: N/A (will be pushed shortly)
 
-- **Working Tree Status**: Clean (except untracked scratch files).
+- **Working Tree Status**: Clean (except untracked scratch files and pending docs/tasks modifications).
 
 - **GitHub Check Status**: N/A
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or `work/` contents are tracked.
@@ -16,9 +16,9 @@
 
 ## Tests And Checks Run
 
-- `python -m pytest` -> 341 passed (100% success, including new visual slide configurations and styling unit tests).
-- `python -m score2gp.cli export-schema --out schemas` -> passed cleanly (updated schemas with new style, glissando, and flags fields in SlideTechnique).
-- `python -m score2gp.cli validate-ir fixtures/public/test_gpif_slide_styling.ir.json` -> valid.
+- `python -m pytest` -> 342 passed (100% success, including new visual hammer-on and pull-off technique and pitch direction auto-inference unit tests).
+- `python -m score2gp.cli export-schema --out schemas` -> passed cleanly (updated schemas with new style, flags, and legato fields in both HammerOnTechnique and PullOffTechnique).
+- `python -m score2gp.cli validate-ir fixtures/public/test_gpif_hammer_pull.ir.json` -> valid.
 - `git diff --check` -> passed cleanly.
 - `git diff -- schemas` -> passed cleanly (valid schema additions).
 - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep`.
@@ -27,17 +27,20 @@
 ## What Changed In This Task
 
 - **ScoreIR Schema & Parsing Expansion**:
-  - Expanded `SlideTechnique` model in `src/score2gp/ir.py` with `glissando` and `flags` attributes to support curved glissando lines, grace-slide entries, and explicit line styling overrides.
+  - Expanded `HammerOnTechnique` and `PullOffTechnique` models in `src/score2gp/ir.py` with `style`, `flags`, and `legato` attributes to support visual legato styles, flags, and slur properties.
   - Successfully re-exported `schemas/scoreir.v0.1.schema.json` via the CLI to reflect the updated schema.
 - **GPIF XML Generator Serialization**:
-  - Refactored `_note()` in `src/score2gp/gpif.py` to support glissando formatting and explicit slide flag overrides.
-  - Implemented glissando serialization by writing direct note-level `<Glissando />` tags under `<Note>` and `<Property name="Glissando"><Enable /></Property>` under the note's properties inside `_note()`.
-  - Allowed custom slide styles (`"glissando"`, `"grace"`) to map to correct native GP7 formatting flags (64, 128) and supported complete raw flag overrides via `technique.flags` parameter.
+  - Updated `_find_hopo_destinations()` to search for `slur` technique destinations alongside hammer-on/pull-offs.
+  - Updated `_bars()`, `_event()`, and `_note()` signatures to accept and propagate the unified `event_map` dictionary.
+  - Implemented visual hammer-on and pull-off serialization by mapping technique properties into explicit `<Property name="HammerOn">` and `<Property name="PullOff">` properties under the note's property block.
+  - Implemented note-level `<Property name="Legato">` and `<Property name="Slur">` blocks when visual legato styling or slur flags are active.
+  - Added support for pitch direction context auto-inference: generic slur techniques are analyzed against target same-string note pitches to automatically determine visual `<HO />` or `<PO />` elements and custom properties (ascending -> hammer-on, descending -> pull-off).
+  - Ensured visual slur terminations (`slur="stop"`) are written on target destination notes when bound by a Hopo transition.
 - **Synthetic Testing & Validation**:
-  - Authored a dedicated public synthetic fixture `fixtures/public/test_gpif_slide_styling.ir.json` modeling shifted/glissando slides.
-  - Wrote comprehensive unit tests in `tests/test_gp_writer.py` (`test_gpif_slide_styling`) verifying that glissandos, custom styles, and raw flag overrides serialize structurally correctly into GP7 GPIF XML.
+  - Authored a dedicated public synthetic fixture `fixtures/public/test_gpif_hammer_pull.ir.json` modeling ascending legato (hammer-on), descending legato (pull-off), explicit styles/flags, and directional slur auto-inferences.
+  - Wrote comprehensive unit tests in `tests/test_gp_writer.py` (`test_gpif_hammer_pull`) verifying all visual legato attributes and auto-inference mappings.
 - **E2E Private Smoke Test Results**:
-  - Ran E2E private smoke compiler against real private inputs to verify zero regressions or crashes with the new slide styling properties.
+  - Ran E2E private smoke compiler against real private inputs to verify zero regressions or crashes with the new legato visual properties.
 
 ## Known Limitations
 
@@ -49,7 +52,7 @@
 
 ## Next Recommended Task
 
-- **Support visual note-level hammer-on and pull-off technique variants and visual markers**: Support visual note-level hammer-on and pull-off technique variants and visual markers in the GPIF XML generator.
+- **Support visual note-level left-hand and right-hand fingering indicators**: Support visual note-level left-hand and right-hand fingering indicators and visual alignments inside the GPIF XML generator to enrich instructional tablature engraving.
 
 ## Explicit Scope Boundaries
 
