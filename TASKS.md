@@ -2,9 +2,11 @@
 
 ## Next
 
-- [ ] Support custom font stylesheets and notation visual engraving parameters in the GPIF XML generator.
+- [ ] Support visual stylesheet style collections and dynamic staff layout properties in the GPIF XML generator.
 
 ## Done
+
+- [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for custom font stylesheets (assigning explicit font family names, sizes, weights, and styles for titles, headers, lyrics, and tab annotations) and music typographic properties (selecting native music symbols fonts like Bravura, Gootsch, or Jazz), mapping these aesthetic preferences into valid structural GP7-compatible XML blocks (`feature/gpif-font-stylesheets-and-engraving-v0.1`).
 
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for advanced multi-staff layout templates—specifically dynamic system page margins, custom engraving height/width boundaries, and multi-staff ensemble bracket layouts—mapping these visual preferences into valid structural GP7-compatible XML blocks (`feature/gpif-multi-staff-templates-and-margins-v0.1`).
 
