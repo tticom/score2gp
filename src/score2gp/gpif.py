@@ -91,11 +91,25 @@ def build_gpif(score: ScoreIR) -> bytes:
     hopo_dests = _find_hopo_destinations(score)
     let_ring_notes, palm_mute_notes = _find_span_notes(score)
 
+    # Build unique chord diagrams map for each track to reference in Staves properties and Events
+    track_cd_maps = {}
+    for track in score.tracks:
+        track_cds = []
+        cd_seen = set()
+        for bar in score.bars:
+            for event in bar.events:
+                if event.track_id == track.id and getattr(event, "chord_diagram", None) is not None:
+                    dump = event.chord_diagram.model_dump_json()
+                    if dump not in cd_seen:
+                        cd_seen.add(dump)
+                        track_cds.append(dump)
+        track_cd_maps[track.id] = {dump: str(idx + 1) for idx, dump in enumerate(track_cds)}
+
     _metadata(score_node, score)
     _tempo(score_node, score)
-    _tracks(score_node, score)
+    _tracks(score_node, score, track_cd_maps)
     _master_bars(score_node, score)
-    _bars(score_node, score, hopo_dests, let_ring_notes, palm_mute_notes)
+    _bars(score_node, score, hopo_dests, let_ring_notes, palm_mute_notes, track_cd_maps)
 
     ET.indent(root, space="  ")
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)
@@ -118,7 +132,7 @@ def _tempo(parent: ET.Element, score: ScoreIR) -> None:
         _text(tempo, "Text", score.tempo.text)
 
 
-def _tracks(parent: ET.Element, score: ScoreIR) -> None:
+def _tracks(parent: ET.Element, score: ScoreIR, track_cd_maps: dict[str, dict[str, str]]) -> None:
     tracks = ET.SubElement(parent, "Tracks")
     for track in score.tracks:
         node = ET.SubElement(tracks, "Track", {"id": track.id})
@@ -137,6 +151,49 @@ def _tracks(parent: ET.Element, score: ScoreIR) -> None:
                 },
             )
 
+        # Collect chord diagrams for this track to construct staff properties
+        tmap = track_cd_maps.get(track.id, {})
+        if tmap:
+            staves_node = ET.SubElement(node, "Staves")
+            staff_node = ET.SubElement(staves_node, "Staff")
+            properties_node = ET.SubElement(staff_node, "Properties")
+            diag_coll_prop = ET.SubElement(properties_node, "Property", {"name": "DiagramCollection"})
+            items_node = ET.SubElement(diag_coll_prop, "Items")
+
+            # Reconstruct the diagrams in ID order
+            id_to_cd_dump = {v: k for k, v in tmap.items()}
+            for idx in range(len(tmap)):
+                cd_id = str(idx + 1)
+                dump = id_to_cd_dump[cd_id]
+                from .ir import ChordDiagram
+                cd = ChordDiagram.model_validate_json(dump)
+
+                item_node = ET.SubElement(items_node, "Item", {"id": cd_id, "name": cd.name})
+                diag_node = ET.SubElement(item_node, "Diagram", {
+                    "stringCount": str(cd.string_count),
+                    "fretCount": str(cd.fret_count),
+                    "baseFret": str(cd.base_fret),
+                    "barsStates": "1 1 1 1 1",
+                })
+                for f in cd.frets:
+                    ET.SubElement(diag_node, "Fret", {"string": str(f.string), "fret": str(f.fret)})
+
+                fing_node = ET.SubElement(diag_node, "Fingering")
+                for fg in cd.fingers:
+                    ET.SubElement(fing_node, "Position", {
+                        "finger": fg.finger,
+                        "fret": str(fg.fret),
+                        "string": str(fg.string),
+                    })
+
+                ET.SubElement(diag_node, "Property", {"name": "ShowName", "type": "bool", "value": "true"})
+                ET.SubElement(diag_node, "Property", {"name": "ShowDiagram", "type": "bool", "value": "false"})
+                ET.SubElement(diag_node, "Property", {"name": "ShowFingering", "type": "bool", "value": "false"})
+
+                chord_node = ET.SubElement(item_node, "Chord")
+                ET.SubElement(chord_node, "KeyNote", {"step": cd.key_note_step, "accidental": cd.key_note_accidental})
+                ET.SubElement(chord_node, "BassNote", {"step": cd.bass_note_step, "accidental": cd.bass_note_accidental})
+
 
 def _master_bars(parent: ET.Element, score: ScoreIR) -> None:
     master_bars = ET.SubElement(parent, "MasterBars")
@@ -153,7 +210,7 @@ def _master_bars(parent: ET.Element, score: ScoreIR) -> None:
             _text(key, "Mode", bar.key_signature.mode)
 
 
-def _bars(parent: ET.Element, score: ScoreIR, hopo_dests: set[tuple[int, int, int]], let_ring_notes: set[tuple[int, int, int]], palm_mute_notes: set[tuple[int, int, int]]) -> None:
+def _bars(parent: ET.Element, score: ScoreIR, hopo_dests: set[tuple[int, int, int]], let_ring_notes: set[tuple[int, int, int]], palm_mute_notes: set[tuple[int, int, int]], track_cd_maps: dict[str, dict[str, str]]) -> None:
     bars = ET.SubElement(parent, "Bars")
     for bar in score.bars:
         bar_node = ET.SubElement(bars, "Bar", {"index": str(bar.index)})
@@ -167,10 +224,10 @@ def _bars(parent: ET.Element, score: ScoreIR, hopo_dests: set[tuple[int, int, in
         for v_idx in sorted(events_by_voice.keys()):
             voice_node = ET.SubElement(voices_node, "Voice", {"id": str(v_idx)})
             for event in sorted(events_by_voice[v_idx], key=lambda item: item.timing.onset_ticks):
-                _event(voice_node, event, hopo_dests, let_ring_notes, palm_mute_notes)
+                _event(voice_node, event, hopo_dests, let_ring_notes, palm_mute_notes, track_cd_maps)
 
 
-def _event(parent: ET.Element, event: Event, hopo_dests: set[tuple[int, int, int]], let_ring_notes: set[tuple[int, int, int]], palm_mute_notes: set[tuple[int, int, int]]) -> None:
+def _event(parent: ET.Element, event: Event, hopo_dests: set[tuple[int, int, int]], let_ring_notes: set[tuple[int, int, int]], palm_mute_notes: set[tuple[int, int, int]], track_cd_maps: dict[str, dict[str, str]]) -> None:
     attrs = {
         "id": event.id,
         "track": event.track_id,
@@ -229,7 +286,33 @@ def _event(parent: ET.Element, event: Event, hopo_dests: set[tuple[int, int, int
         val = "OnBeat" if grace_timing.position == "on-beat" else "BeforeBeat"
         _text(node, "GraceNotes", val)
 
-    if event.chord_symbol:
+    if getattr(event, "chord_diagram", None) is not None:
+        tmap = track_cd_maps.get(event.track_id, {})
+        dump = event.chord_diagram.model_dump_json()
+        cd_id = tmap.get(dump)
+        if cd_id:
+            _text(node, "Chord", cd_id)
+
+        cd = event.chord_diagram
+        cd_node = ET.SubElement(node, "ChordDiagram", {
+            "name": cd.name,
+            "stringCount": str(cd.string_count),
+            "fretCount": str(cd.fret_count),
+            "baseFret": str(cd.base_fret),
+        })
+        for f in cd.frets:
+            ET.SubElement(cd_node, "Fret", {"string": str(f.string), "fret": str(f.fret)})
+        if cd.fingers:
+            fing_node = ET.SubElement(cd_node, "Fingering")
+            for fg in cd.fingers:
+                ET.SubElement(fing_node, "Position", {
+                    "finger": fg.finger,
+                    "fret": str(fg.fret),
+                    "string": str(fg.string),
+                })
+        ET.SubElement(cd_node, "KeyNote", {"step": cd.key_note_step, "accidental": cd.key_note_accidental})
+        ET.SubElement(cd_node, "BassNote", {"step": cd.bass_note_step, "accidental": cd.bass_note_accidental})
+    elif event.chord_symbol:
         _text(node, "Chord", event.chord_symbol)
     if event.techniques:
         techniques = ET.SubElement(node, "Techniques")
@@ -313,6 +396,19 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, hopo
             ET.SubElement(note_node, "PO")
         if technique.kind == "vibrato":
             _text(note_node, "Vibrato", "Wide" if getattr(technique, "width", "unknown") == "wide" else "Slight")
+            curve = getattr(technique, "curve", None)
+            if curve is not None:
+                curve_node = ET.SubElement(note_node, "VibratoCurve")
+                for pt in curve.points:
+                    ET.SubElement(
+                        curve_node,
+                        "Point",
+                        {
+                            "offset": f"{pt.offset * 100:.6f}",
+                            "value": f"{pt.value * 100:.6f}",
+                            "speed": pt.speed,
+                        }
+                    )
         if technique.kind == "tremolo-bar":
             tremolo_node = ET.SubElement(note_node, "TremoloBar")
             for pt in getattr(technique, "points", []):

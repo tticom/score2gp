@@ -140,6 +140,134 @@
       "title": "BoundingBox",
       "type": "object"
     },
+    "ChordDiagram": {
+      "additionalProperties": false,
+      "properties": {
+        "base_fret": {
+          "default": 0,
+          "maximum": 36,
+          "minimum": 0,
+          "title": "Base Fret",
+          "type": "integer"
+        },
+        "bass_note_accidental": {
+          "default": "Natural",
+          "title": "Bass Note Accidental",
+          "type": "string"
+        },
+        "bass_note_step": {
+          "default": "C",
+          "title": "Bass Note Step",
+          "type": "string"
+        },
+        "fingers": {
+          "items": {
+            "$ref": "#/$defs/ChordFinger"
+          },
+          "title": "Fingers",
+          "type": "array"
+        },
+        "fret_count": {
+          "default": 5,
+          "maximum": 24,
+          "minimum": 1,
+          "title": "Fret Count",
+          "type": "integer"
+        },
+        "frets": {
+          "items": {
+            "$ref": "#/$defs/ChordFret"
+          },
+          "title": "Frets",
+          "type": "array"
+        },
+        "key_note_accidental": {
+          "default": "Natural",
+          "title": "Key Note Accidental",
+          "type": "string"
+        },
+        "key_note_step": {
+          "default": "C",
+          "title": "Key Note Step",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "string_count": {
+          "default": 6,
+          "maximum": 12,
+          "minimum": 1,
+          "title": "String Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ChordDiagram",
+      "type": "object"
+    },
+    "ChordFinger": {
+      "additionalProperties": false,
+      "properties": {
+        "finger": {
+          "default": "None",
+          "enum": [
+            "None",
+            "Index",
+            "Middle",
+            "Ring",
+            "Little",
+            "Thumb"
+          ],
+          "title": "Finger",
+          "type": "string"
+        },
+        "fret": {
+          "maximum": 36,
+          "minimum": 0,
+          "title": "Fret",
+          "type": "integer"
+        },
+        "string": {
+          "maximum": 12,
+          "minimum": 1,
+          "title": "String",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "string",
+        "fret"
+      ],
+      "title": "ChordFinger",
+      "type": "object"
+    },
+    "ChordFret": {
+      "additionalProperties": false,
+      "properties": {
+        "fret": {
+          "maximum": 36,
+          "minimum": 0,
+          "title": "Fret",
+          "type": "integer"
+        },
+        "string": {
+          "maximum": 12,
+          "minimum": 1,
+          "title": "String",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "string",
+        "fret"
+      ],
+      "title": "ChordFret",
+      "type": "object"
+    },
     "ConversionInfo": {
       "additionalProperties": false,
       "properties": {
@@ -216,6 +344,17 @@
     "Event": {
       "additionalProperties": false,
       "properties": {
+        "chord_diagram": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChordDiagram"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "chord_symbol": {
           "anyOf": [
             {
@@ -1358,9 +1497,68 @@
       "title": "UnsupportedTechnique",
       "type": "object"
     },
+    "VibratoCurve": {
+      "additionalProperties": false,
+      "properties": {
+        "points": {
+          "items": {
+            "$ref": "#/$defs/VibratoCurvePoint"
+          },
+          "title": "Points",
+          "type": "array"
+        }
+      },
+      "title": "VibratoCurve",
+      "type": "object"
+    },
+    "VibratoCurvePoint": {
+      "additionalProperties": false,
+      "properties": {
+        "offset": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Offset",
+          "type": "number"
+        },
+        "speed": {
+          "default": "unknown",
+          "enum": [
+            "slow",
+            "medium",
+            "fast",
+            "unknown"
+          ],
+          "title": "Speed",
+          "type": "string"
+        },
+        "value": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Value",
+          "type": "number"
+        }
+      },
+      "required": [
+        "offset",
+        "value"
+      ],
+      "title": "VibratoCurvePoint",
+      "type": "object"
+    },
     "VibratoTechnique": {
       "additionalProperties": false,
       "properties": {
+        "curve": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VibratoCurve"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "kind": {
           "const": "vibrato",
           "default": "vibrato",
