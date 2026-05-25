@@ -2,9 +2,11 @@
 
 ## Next
 
-- [ ] Support visual notation layout configurations and visual system/page formatting properties under a new feature branch `feature/gpif-notation-layout-formatting-v0.1` to enhance custom visual engraving.
+- [ ] Support custom pickup measure durations and visual bar-line configurations under a new feature branch `feature/gpif-pickup-measures-and-barlines-v0.1` to enhance musical rhythm engraving.
 
 ## Done
+
+- [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for global page settings (page margins, page width, page height, layout scaling factors) and multi-track layout structures (stacked track order and visibility layouts) in the Guitar Pro writer (`src/score2gp/gpif.py`), verified with public synthetic fixtures and unit tests (`feature/gpif-notation-layout-formatting-v0.1`).
 
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for custom beat-level text annotations (arbitrary performance strings anchored to events) and visual layout breaks (explicit system/line breaks and page breaks) in the Guitar Pro writer (`src/score2gp/gpif.py`), verified with public synthetic fixtures and unit tests (`feature/gpif-annotations-and-layout-breaks-v0.1`).
 
