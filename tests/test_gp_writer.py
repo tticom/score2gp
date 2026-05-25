@@ -825,3 +825,46 @@ def test_gpif_notation_layout_formatting(tmp_path) -> None:
         assert t_pno is not None
         assert t_pno.find("SystemsDefautLayout").text == "1"
         assert t_pno.find("SystemsLayout").text == "1"
+
+
+def test_gpif_notation_layout_defaults(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_notation_layout.ir.json")
+
+    # 1. Test layout with empty track_order (should default to declare all tracks in original order)
+    score.layout.track_order = []
+
+    out1 = tmp_path / "notation_layout_empty_order.gp"
+    write_gp(score, out1)
+    assert zipfile.is_zipfile(out1)
+
+    with zipfile.ZipFile(out1) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+        mt = root.find(".//MasterTrack")
+        assert mt is not None
+        assert mt.find("Tracks").text == "gtr-1 piano-1"
+
+    # 2. Test layout being None (should cleanly default page setup settings)
+    data = score.model_dump(mode="json")
+    score_no_layout = ScoreIR.model_validate(data)
+    object.__setattr__(score_no_layout, "layout", None)
+
+    out2 = tmp_path / "notation_layout_none.gp"
+    write_gp(score_no_layout, out2)
+    assert zipfile.is_zipfile(out2)
+
+    with zipfile.ZipFile(out2) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        ps = root.find(".//PageSetup")
+        assert ps is not None
+        assert ps.find("Width").text == "210.0"
+        assert ps.find("Height").text == "297.0"
+        assert ps.find("MarginTop").text == "15.0"
+        assert ps.find("MarginBottom").text == "15.0"
+        assert ps.find("Scale").text == "1.0"
+
+        mt = root.find(".//MasterTrack")
+        assert mt is not None
+        assert mt.find("Tracks").text == "gtr-1 piano-1"
