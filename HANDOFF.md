@@ -2,10 +2,10 @@
 
 ## Metadata
 
-- **Current Branch**: `feature/gpif-chord-diagrams-and-vibrato-curves-v0.1`
+- **Current Branch**: `feature/gpif-tremolo-picking-and-percussive-articulations-v0.1`
 - **Base Branch**: `main`
 - **Current PR**: None (Opening Draft PR)
-- **Latest Local Commit**: `2f61f44` ("Implement chord diagrams and vibrato speed/depth curves")
+- **Latest Local Commit**: `703e2d0` ("Implement tremolo picking and percussive/tapping articulations in GPIF XML writer")
 - **Latest Pushed Commit**: None (to be pushed)
 - **Working Tree Status**: Clean.
 
@@ -15,9 +15,9 @@
 
 ## Tests And Checks Run
 
-- `python -m pytest` -> 327 passed (100% success, including new synthetic test `test_gpif_chords_and_vibrato_curves`).
+- `python -m pytest` -> 328 passed (100% success, including new synthetic test `test_gpif_tremolo_and_percussive`).
 - `python -m score2gp.cli export-schema --out schemas` -> passed cleanly.
-- `python -m score2gp.cli validate-ir fixtures/public/test_gpif_chords_vibrato_curves.ir.json` -> valid.
+- `python -m score2gp.cli validate-ir fixtures/public/test_gpif_tremolo_percussive.ir.json` -> valid.
 - `git diff --check` -> passed cleanly.
 - `git diff -- schemas` -> passed with updated schema.
 - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep`.
@@ -26,18 +26,16 @@
 ## What Changed In This Task
 
 - **ScoreIR Schema Integration**:
-  - Defined `ChordFret`, `ChordFinger`, and `ChordDiagram` Pydantic models in `src/score2gp/ir.py`, and added optional `chord_diagram: ChordDiagram | None = None` on `Event`.
-  - Defined `VibratoCurvePoint` and `VibratoCurve` Pydantic models in `src/score2gp/ir.py`, and added optional `curve: VibratoCurve | None = None` to `VibratoTechnique`.
+  - Defined `TremoloPickingTechnique`, `SlapTechnique`, `PopTechnique`, and `TappingTechnique` Pydantic models in `src/score2gp/ir.py`, registering them in the `Technique` type union.
   - Re-exported the JSON schema cleanly to `schemas/scoreir.v0.1.schema.json`.
-- **GPIF Chord Diagram Collection Serialization**:
-  - Updated `_tracks()` and `build_gpif()` in `src/score2gp/gpif.py` to automatically detect unique chord diagrams used in each track, and serialize them inside a track's `<Staves><Staff><Properties><Property name="DiagramCollection">` block.
-- **GPIF Chord Diagrams Timeline Serialization**:
-  - Updated `_event()` to serialize chord references via `<Chord>id</Chord>` referencing the staff's `DiagramCollection` properties, and output `<ChordDiagram>` directly under the `<Event>` containing the name, fret, fingering, key note, and bass note definitions.
-- **GPIF Vibrato curves Timeline Serialization**:
-  - Refined `_note` under the `"vibrato"` technique block to write a `<VibratoCurve>` tag with its modulation `<Point>` list (scaling offset to percentage, value to percentage, and speed to its literal) if a curve is defined.
+- **GPIF Tremolo Picking Serialization**:
+  - Registered `"tremolo-picking"` in `SUPPORTED_MINIMAL_TECHNIQUES` and mapped it to the `<TremoloPicking>` tag with standard subdivision attributes (e.g. `ThirtySecond`, `Sixteenth`, `Eighth`).
+- **GPIF Percussive/Tapping Articulations Serialization**:
+  - Registered `"slap"`, `"pop"`, and `"tapping"` in `SUPPORTED_MINIMAL_TECHNIQUES`.
+  - Serialized slap, pop, and tapping both as direct tags under `<Note>` (`<Slapped />`, `<Popped />`, `<Tapped />`) and as `<Property>` entries inside the note's `<Properties>` block (`Slapped`, `Popped`, `Tapped` properties with `<Enable />`).
 - **Synthetic Testing & Validation**:
-  - Authored a dedicated public synthetic fixture `fixtures/public/test_gpif_chords_vibrato_curves.ir.json` modeling both a complex chord diagram and a multi-point vibrato depth/speed curve.
-  - Wrote comprehensive unit tests in `tests/test_gp_writer.py` verifying that `<DiagramCollection>` properties, `<ChordDiagram>` tags, and `<VibratoCurve>` points are correctly structured and parsed in the generated GPIF XML.
+  - Authored a dedicated public synthetic fixture `fixtures/public/test_gpif_tremolo_percussive.ir.json` modeling tremolo-picked notes alongside tapping, slaps, and pops.
+  - Wrote comprehensive unit tests in `tests/test_gp_writer.py` verifying that `<TremoloPicking>`, `<Slapped>`, `<Popped>`, `<Tapped>` elements and their properties are correctly structured and parsed in the generated GPIF XML.
 - **E2E Private Smoke Test Results**:
   - Ran the smoke compiler against real private inputs (including `Derek Trucks BB King.pdf`) to verify zero regressions or crashes. `private_input_1` compiled successfully with both ScoreIR and valid GP packages generated with no errors or builder issues.
 
@@ -51,7 +49,7 @@
 
 ## Next Recommended Task
 
-- **Auditory ornament improvements (Milestone 5)**: Expand coverage for further expressive/ornament tags (such as tremolo picking, tapping, slaps, pops, or dead note string calibrations).
+- **Auditory playback calibrations (Milestone 6)**: Expand coverage for tremolo picking speed adjustments or other playability calibrations.
 
 ## Explicit Scope Boundaries
 

@@ -5,7 +5,7 @@ from xml.etree import ElementTree as ET
 
 from .ir import Event, Note, ScoreIR, Technique
 
-SUPPORTED_MINIMAL_TECHNIQUES = {"slide", "vibrato", "hammer-on", "pull-off", "tie", "slur", "bend", "let-ring", "palm-mute", "grace", "dead-note", "tremolo-bar"}
+SUPPORTED_MINIMAL_TECHNIQUES = {"slide", "vibrato", "hammer-on", "pull-off", "tie", "slur", "bend", "let-ring", "palm-mute", "grace", "dead-note", "tremolo-bar", "tremolo-picking", "slap", "pop", "tapping"}
 
 
 def _text(parent: ET.Element, tag: str, value: object | None) -> ET.Element:
@@ -350,6 +350,9 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, hopo
     has_bend = False
     has_hopo_origin = False
     bend_semitones = 1.0
+    has_slap = False
+    has_pop = False
+    has_tapping = False
 
     for technique in note.techniques:
         if technique.kind == "tie":
@@ -420,8 +423,26 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, hopo
                         "value": f"{pt.value * 50:.6f}",
                     }
                 )
+        if technique.kind == "tremolo-picking":
+            duration_map = {
+                "eighth": "Eighth",
+                "16th": "Sixteenth",
+                "32nd": "ThirtySecond",
+                "64th": "SixtyFourth",
+            }
+            dur_val = duration_map.get(getattr(technique, "duration", "16th"), "Sixteenth")
+            ET.SubElement(note_node, "TremoloPicking", {"duration": dur_val})
+        if technique.kind == "slap":
+            has_slap = True
+            ET.SubElement(note_node, "Slapped")
+        if technique.kind == "pop":
+            has_pop = True
+            ET.SubElement(note_node, "Popped")
+        if technique.kind == "tapping":
+            has_tapping = True
+            ET.SubElement(note_node, "Tapped")
 
-    if has_slide or has_bend or has_hopo_origin or is_hopo_dest:
+    if has_slide or has_bend or has_hopo_origin or is_hopo_dest or has_slap or has_pop or has_tapping:
         properties_node = ET.SubElement(note_node, "Properties")
 
         fret_prop = ET.SubElement(properties_node, "Property", {"name": "Fret"})
@@ -469,6 +490,18 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, hopo
 
             orig_val = ET.SubElement(properties_node, "Property", {"name": "BendOriginValue"})
             _text(orig_val, "Float", "0.000000")
+
+        if has_slap:
+            slap_prop = ET.SubElement(properties_node, "Property", {"name": "Slapped"})
+            ET.SubElement(slap_prop, "Enable")
+
+        if has_pop:
+            pop_prop = ET.SubElement(properties_node, "Property", {"name": "Popped"})
+            ET.SubElement(pop_prop, "Enable")
+
+        if has_tapping:
+            tapping_prop = ET.SubElement(properties_node, "Property", {"name": "Tapped"})
+            ET.SubElement(tapping_prop, "Enable")
 
     if note.techniques:
         techniques = ET.SubElement(note_node, "Techniques")

@@ -572,3 +572,51 @@ def test_gpif_chords_and_vibrato_curves(tmp_path) -> None:
         assert float(points[2].get("offset")) == 100.0
         assert float(points[2].get("value")) == 100.0
         assert points[2].get("speed") == "fast"
+
+
+def test_gpif_tremolo_and_percussive(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_tremolo_percussive.ir.json")
+    out = tmp_path / "tremolo_percussive.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        events = root.findall(".//Event")
+        event_map = {e.get("id"): e for e in events}
+
+        # Event e1: tremolo-picking
+        e1 = event_map["e1"]
+        n1 = e1.find("Note")
+        assert n1 is not None
+        tp = n1.find("TremoloPicking")
+        assert tp is not None
+        assert tp.get("duration") == "ThirtySecond"
+
+        # Event e2: slap
+        e2 = event_map["e2"]
+        n2 = e2.find("Note")
+        assert n2 is not None
+        assert n2.find("Slapped") is not None
+        slap_enable = n2.find(".//Property[@name='Slapped']/Enable")
+        assert slap_enable is not None
+
+        # Event e3: pop
+        e3 = event_map["e3"]
+        n3 = e3.find("Note")
+        assert n3 is not None
+        assert n3.find("Popped") is not None
+        pop_enable = n3.find(".//Property[@name='Popped']/Enable")
+        assert pop_enable is not None
+
+        # Event e4: tapping
+        e4 = event_map["e4"]
+        n4 = e4.find("Note")
+        assert n4 is not None
+        assert n4.find("Tapped") is not None
+        tapped_enable = n4.find(".//Property[@name='Tapped']/Enable")
+        assert tapped_enable is not None
