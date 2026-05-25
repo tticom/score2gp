@@ -5,9 +5,9 @@
 - **Current Branch**: `feature/gpif-multi-voice-v0.1`
 - **Base Branch**: `main`
 - **Current PR**: #73 (Draft PR: https://github.com/tticom/score2gp/pull/73)
-- **Latest Local Commit**: `8fa11dd` ("Document multi-voice implementation in handoff and task list")
-- **Latest Pushed Commit**: `8fa11dd` ("Document multi-voice implementation in handoff and task list")
-- **Working Tree Status**: Clean (except untracked scratch script `scratch/inspect_voices.py`).
+- **Latest Local Commit**: `be4aa8b` ("feat: add script to inspect GPX file structure and element hierarchy")
+- **Latest Pushed Commit**: `be4aa8b` ("feat: add script to inspect GPX file structure and element hierarchy")
+- **Working Tree Status**: Clean.
 
 - **GitHub Check Status**: N/A
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or `work/` contents are tracked.
