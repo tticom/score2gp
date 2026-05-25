@@ -427,6 +427,8 @@ class Note(BaseModel):
     is_dead: bool = False
     articulations: list[Literal["staccato", "accent", "marcato", "tenuto"]] = Field(default_factory=list)
     techniques: list[Technique] = Field(default_factory=list)
+    left_hand_fingering: str | None = None
+    right_hand_fingering: str | None = None
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     provenance: list[Provenance] = Field(default_factory=list)
 

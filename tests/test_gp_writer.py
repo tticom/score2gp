@@ -1237,6 +1237,201 @@ def test_gpif_hammer_pull(tmp_path) -> None:
         # Event e5 (slur start, ascending pitch 60 -> 62) => inferred HammerOn!
         e5 = event_map["e5"]
         n5 = e5.find("Note")
+        e1 = event_map["e1"]
+        n1 = e1.find("Note")
+        assert n1.find("Trill") is not None
+
+        trill_prop1 = n1.find(".//Properties/Property[@name='Trill']")
+        assert trill_prop1 is not None
+        assert trill_prop1.find("Fret").text == "7"
+        assert trill_prop1.find("Interval") is None
+
+        # Event e2 note: Trill with interval 2
+        e2 = event_map["e2"]
+        n2 = e2.find("Note")
+        assert n2.find("Trill") is not None
+
+        trill_prop2 = n2.find(".//Properties/Property[@name='Trill']")
+        assert trill_prop2 is not None
+        assert trill_prop2.find("Interval").text == "2"
+        assert trill_prop2.find("Fret") is None
+
+
+def test_gpif_microtonal_bends(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_microtonal_bends.ir.json")
+    out = tmp_path / "microtonal_bends.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        events = root.findall(".//Event")
+        event_map = {e.get("id"): e for e in events}
+
+        # Event e1 note: multi-point microtonal bend
+        e1 = event_map["e1"]
+        n1 = e1.find("Note")
+        bend1 = n1.find("Bend")
+        assert bend1 is not None
+
+        points = bend1.findall("Point")
+        assert len(points) == 4
+        # Point 1: offset=0.000000, value=0.000000
+        assert float(points[0].get("offset")) == 0.0
+        assert float(points[0].get("value")) == 0.0
+        # Point 2: offset=25.000000, value=25.000000 (quarter-tone)
+        assert float(points[1].get("offset")) == 25.0
+        assert float(points[1].get("value")) == 25.0
+        # Point 3: offset=50.000000, value=50.000000 (half-step)
+        assert float(points[2].get("offset")) == 50.0
+        assert float(points[2].get("value")) == 50.0
+        # Point 4: offset=100.000000, value=0.000000 (release)
+        assert float(points[3].get("offset")) == 100.0
+        assert float(points[3].get("value")) == 0.0
+
+        # Verify Bended property inside Properties block
+        bended_prop = n1.find(".//Properties/Property[@name='Bended']")
+        assert bended_prop is not None
+
+        dest_val = n1.find(".//Properties/Property[@name='BendDestinationValue']/Float")
+        assert float(dest_val.text) == 50.0 # max semitones (1.0) * 50 = 50.0
+
+        # Event e2 note: advanced tremolo-bar curve
+        e2 = event_map["e2"]
+        n2 = e2.find("Note")
+        tb = n2.find("TremoloBar")
+        assert tb is not None
+
+        tb_points = tb.findall("Point")
+        assert len(tb_points) == 3
+        # Point 1: offset=0.000000, value=0.000000
+        assert float(tb_points[0].get("offset")) == 0.0
+        assert float(tb_points[0].get("value")) == 0.0
+        # Point 2: offset=50.000000, value=-100.000000 (dive 2 semitones)
+        assert float(tb_points[1].get("offset")) == 50.0
+        assert float(tb_points[1].get("value")) == -100.0
+        # Point 3: offset=100.000000, value=0.000000 (release)
+        assert float(tb_points[2].get("offset")) == 100.0
+        assert float(tb_points[2].get("value")) == 0.0
+
+        # Verify TremoloBar property inside Properties block
+        tb_prop = n2.find(".//Properties/Property[@name='TremoloBar']")
+        assert tb_prop is not None
+        assert tb_prop.find("Enable") is not None
+
+
+def test_gpif_slide_styling(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_slide_styling.ir.json")
+
+    # Let's also dynamically test the flag override on a manual edit
+    score.bars[0].events[0].notes[0].techniques[0].flags = 256
+
+    out = tmp_path / "slide_styling.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        events = root.findall(".//Event")
+        event_map = {e.get("id"): e for e in events}
+
+        # Event e1 note: Shift slide with override flags = 256
+        e1 = event_map["e1"]
+        n1 = e1.find("Note")
+        assert n1.find("Slide") is not None
+        slide_prop1 = n1.find(".//Properties/Property[@name='Slide']/Flags")
+        assert slide_prop1.text == "256"
+
+        # Event e3 note: Glissando slide (style = "glissando")
+        e3 = event_map["e3"]
+        n3 = e3.find("Note")
+        assert n3.find("Slide") is not None
+        assert n3.find("Glissando") is not None
+
+        slide_prop3 = n3.find(".//Properties/Property[@name='Slide']/Flags")
+        assert slide_prop3.text == "64" # glissando flag
+
+        gliss_prop = n3.find(".//Glissando")
+        if gliss_prop is None:
+            # check inside property block
+            gliss_prop = n3.find(".//Properties/Property[@name='Glissando']")
+        assert gliss_prop is not None
+
+
+def test_gpif_hammer_pull(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_hammer_pull.ir.json")
+    out = tmp_path / "hammer_pull.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        events = root.findall(".//Event")
+        event_map = {e.get("id"): e for e in events}
+
+        # 1. Bar 1: Explicit hammer-on and pull-off properties
+        # Event e1: HammerOn with style="slur", flags=4, legato=true
+        e1 = event_map["e1"]
+        n1 = e1.find("Note")
+        assert n1.find("HO") is not None
+        ho_prop = n1.find(".//Properties/Property[@name='HammerOn']")
+        assert ho_prop is not None
+        assert ho_prop.find("Enable") is not None
+        assert ho_prop.find("Style").text == "slur"
+        assert ho_prop.find("Flags").text == "4"
+        assert ho_prop.find("Legato").text == "true"
+
+        leg_prop1 = n1.find(".//Properties/Property[@name='Legato']")
+        assert leg_prop1 is not None
+        assert leg_prop1.find("Flags").text == "4"
+        assert leg_prop1.find("Legato").text == "true"
+
+        # Event e2: HopoDestination & slur stop
+        e2 = event_map["e2"]
+        n2 = e2.find("Note")
+        assert n2.get("slur") == "stop"
+        hopo_dst = n2.find(".//Properties/Property[@name='HopoDestination']")
+        assert hopo_dst is not None
+
+        # Event e3: PullOff with style="legato", flags=8, legato=false
+        e3 = event_map["e3"]
+        n3 = e3.find("Note")
+        assert n3.find("PO") is not None
+        po_prop = n3.find(".//Properties/Property[@name='PullOff']")
+        assert po_prop is not None
+        assert po_prop.find("Enable") is not None
+        assert po_prop.find("Style").text == "legato"
+        assert po_prop.find("Flags").text == "8"
+        assert po_prop.find("Legato").text == "false"
+
+        leg_prop3 = n3.find(".//Properties/Property[@name='Legato']")
+        assert leg_prop3 is not None
+        assert leg_prop3.find("Flags").text == "8"
+        assert leg_prop3.find("Legato").text == "false"
+
+        # Event e4: HopoDestination & slur stop
+        e4 = event_map["e4"]
+        n4 = e4.find("Note")
+        assert n4.get("slur") == "stop"
+        hopo_dst4 = n4.find(".//Properties/Property[@name='HopoDestination']")
+        assert hopo_dst4 is not None
+
+        # 2. Bar 2: Inferred hammer-on and pull-off from slurs via pitch direction context
+        # Event e5 (slur start, ascending pitch 60 -> 62) => inferred HammerOn!
+        e5 = event_map["e5"]
+        n5 = e5.find("Note")
         assert n5.find("HO") is not None
         assert n5.find("PO") is None
         assert n5.find(".//Properties/Property[@name='HammerOn']") is not None
@@ -1249,3 +1444,51 @@ def test_gpif_hammer_pull(tmp_path) -> None:
         assert n7.find("HO") is None
         assert n7.find(".//Properties/Property[@name='PullOff']") is not None
         assert n7.find(".//Properties/Property[@name='HammerOn']") is None
+
+
+def test_gpif_fingering(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_fingering.ir.json")
+    out = tmp_path / "fingering.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        events = root.findall(".//Event")
+        event_map = {e.get("id"): e for e in events}
+
+        # 1. Event e1: LeftHandFingering = Index (1), RightHandFingering = Index (i)
+        e1 = event_map["e1"]
+        n1 = e1.find("Note")
+        lh1 = n1.find(".//Properties/Property[@name='LeftHandFingering']/Fingering")
+        assert lh1 is not None and lh1.text == "Index"
+        rh1 = n1.find(".//Properties/Property[@name='RightHandFingering']/Fingering")
+        assert rh1 is not None and rh1.text == "Index"
+
+        # 2. Event e2: LeftHandFingering = Ring (3), RightHandFingering = Middle (m)
+        e2 = event_map["e2"]
+        n2 = e2.find("Note")
+        lh2 = n2.find(".//Properties/Property[@name='LeftHandFingering']/Fingering")
+        assert lh2 is not None and lh2.text == "Ring"
+        rh2 = n2.find(".//Properties/Property[@name='RightHandFingering']/Fingering")
+        assert rh2 is not None and rh2.text == "Middle"
+
+        # 3. Event e3: LeftHandFingering = Open (0), RightHandFingering = Thumb (p)
+        e3 = event_map["e3"]
+        n3 = e3.find("Note")
+        lh3 = n3.find(".//Properties/Property[@name='LeftHandFingering']/Fingering")
+        assert lh3 is not None and lh3.text == "Open"
+        rh3 = n3.find(".//Properties/Property[@name='RightHandFingering']/Fingering")
+        assert rh3 is not None and rh3.text == "Thumb"
+
+        # 4. Event e4: LeftHandFingering = Middle (2), RightHandFingering = Ring (a)
+        e4 = event_map["e4"]
+        n4 = e4.find("Note")
+        lh4 = n4.find(".//Properties/Property[@name='LeftHandFingering']/Fingering")
+        assert lh4 is not None and lh4.text == "Middle"
+        rh4 = n4.find(".//Properties/Property[@name='RightHandFingering']/Fingering")
+        assert rh4 is not None and rh4.text == "Ring"
