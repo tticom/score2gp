@@ -97,9 +97,15 @@ def _page_setup(parent: ET.Element, score: ScoreIR) -> None:
 
 
 def _master_track(parent: ET.Element, score: ScoreIR) -> None:
+    track_order = []
     if getattr(score, "layout", None) is not None and score.layout.track_order:
+        track_order = score.layout.track_order
+    else:
+        track_order = [t.id for t in score.tracks]
+
+    if track_order:
         mt = ET.SubElement(parent, "MasterTrack")
-        _text(mt, "Tracks", " ".join(score.layout.track_order))
+        _text(mt, "Tracks", " ".join(track_order))
 
 
 def build_gpif(score: ScoreIR) -> bytes:
@@ -126,11 +132,25 @@ def build_gpif(score: ScoreIR) -> bytes:
     _metadata(score_node, score)
     _tempo(score_node, score)
 
+    layout_systems = 4
     if getattr(score, "layout", None) is not None:
         _page_setup(score_node, score)
         _master_track(score_node, score)
-        _text(score_node, "ScoreSystemsDefaultLayout", score.layout.score_systems_layout)
-        _text(score_node, "ScoreSystemsLayout", score.layout.score_systems_layout)
+        layout_systems = score.layout.score_systems_layout
+    else:
+        # Fallback if layout is None: write default PageSetup and MasterTrack
+        ps = ET.SubElement(score_node, "PageSetup")
+        _text(ps, "Width", 210.0)
+        _text(ps, "Height", 297.0)
+        _text(ps, "MarginTop", 15.0)
+        _text(ps, "MarginBottom", 15.0)
+        _text(ps, "MarginLeft", 15.0)
+        _text(ps, "MarginRight", 15.0)
+        _text(ps, "Scale", 1.0)
+        _master_track(score_node, score)
+
+    _text(score_node, "ScoreSystemsDefaultLayout", layout_systems)
+    _text(score_node, "ScoreSystemsLayout", layout_systems)
 
     _tracks(score_node, score, track_cd_maps)
     _master_bars(score_node, score)
