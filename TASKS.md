@@ -4,6 +4,8 @@
 
 ## Done
 
+- [x] Implement ScoreIR support and GPIF XML generation for custom string counts/tunings (pitches per string) and track-level visual customisations (color tags and layout views) in the Guitar Pro writer (`src/score2gp/gpif.py`) and ScoreIR (`feature/gpif-tuning-and-track-formatting-v0.1`).
+
 - [x] Implement ScoreIR support and GPIF XML generation for track-level mixer controls (volume, pan, mute, solo) and master tempo changes/automation across the timeline in the Guitar Pro writer (`src/score2gp/gpif.py`) and ScoreIR (`feature/gpif-mixer-and-tempo-automation-v0.1`).
 
 - [x] Implement ScoreIR support and GPIF XML generation for tremolo picking and percussive/tapping articulations in the Guitar Pro writer (`src/score2gp/gpif.py`), mapping these properties from ScoreIR models into valid GP7-compatible XML tags and property structures (`feature/gpif-tremolo-picking-and-percussive-articulations-v0.1`).
