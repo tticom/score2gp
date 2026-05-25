@@ -5,8 +5,8 @@
 - **Current Branch**: `feature/gpif-multi-voice-v0.1`
 - **Base Branch**: `main`
 - **Current PR**: #73 (Draft PR: https://github.com/tticom/score2gp/pull/73)
-- **Latest Local Commit**: `be4aa8b` ("feat: add script to inspect GPX file structure and element hierarchy")
-- **Latest Pushed Commit**: `be4aa8b` ("feat: add script to inspect GPX file structure and element hierarchy")
+- **Latest Local Commit**: `1cbaed4` ("Update HANDOFF.md latest commit metadata")
+- **Latest Pushed Commit**: `1cbaed4` ("Update HANDOFF.md latest commit metadata")
 - **Working Tree Status**: Clean.
 
 - **GitHub Check Status**: N/A
