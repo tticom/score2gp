@@ -300,6 +300,31 @@ class TremoloBarTechnique(BaseModel):
     points: list[TremoloBarPoint] = Field(default_factory=list)
 
 
+class TremoloPickingTechnique(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["tremolo-picking"] = "tremolo-picking"
+    duration: Literal["eighth", "16th", "32nd", "64th", "unknown"] = "16th"
+
+
+class SlapTechnique(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["slap"] = "slap"
+
+
+class PopTechnique(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["pop"] = "pop"
+
+
+class TappingTechnique(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["tapping"] = "tapping"
+
+
 class UnsupportedTechnique(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -321,6 +346,10 @@ Technique = Annotated[
     | PalmMuteTechnique
     | GraceTechnique
     | TremoloBarTechnique
+    | TremoloPickingTechnique
+    | SlapTechnique
+    | PopTechnique
+    | TappingTechnique
     | UnsupportedTechnique,
     Field(discriminator="kind"),
 ]
