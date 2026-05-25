@@ -137,6 +137,12 @@ def _tracks(parent: ET.Element, score: ScoreIR, track_cd_maps: dict[str, dict[st
     for track in score.tracks:
         node = ET.SubElement(tracks, "Track", {"id": track.id})
         _text(node, "Name", track.name)
+        if getattr(track, "color", None) is not None:
+            _text(node, "Color", track.color)
+
+        layout_code = 3 if track.tablature_enabled else 1
+        _text(node, "SystemsDefautLayout", layout_code)
+
         _text(node, "Instrument", track.instrument)
         _text(node, "Capo", track.capo)
 
@@ -159,12 +165,39 @@ def _tracks(parent: ET.Element, score: ScoreIR, track_cd_maps: dict[str, dict[st
                 },
             )
 
+        # Staves, Staff and Properties (Tuning, FretCount, Capo, etc.)
+        staves_node = ET.SubElement(node, "Staves")
+        staff_node = ET.SubElement(staves_node, "Staff")
+        properties_node = ET.SubElement(staff_node, "Properties")
+
+        # 1. CapoFret
+        capo_prop = ET.SubElement(properties_node, "Property", {"name": "CapoFret"})
+        _text(capo_prop, "Fret", track.capo)
+
+        # 2. FretCount
+        fret_prop = ET.SubElement(properties_node, "Property", {"name": "FretCount"})
+        _text(fret_prop, "Number", 24)
+
+        # 3. PartialCapoFret
+        pcapo_prop = ET.SubElement(properties_node, "Property", {"name": "PartialCapoFret"})
+        _text(pcapo_prop, "Fret", 0)
+
+        # 4. PartialCapoStringFlags
+        flags_prop = ET.SubElement(properties_node, "Property", {"name": "PartialCapoStringFlags"})
+        _text(flags_prop, "Bitset", "0" * len(track.tuning.strings))
+
+        # 5. Tuning
+        tuning_prop = ET.SubElement(properties_node, "Property", {"name": "Tuning"})
+        pitches_str = " ".join(str(string.pitch) for string in sorted(track.tuning.strings, key=lambda s: s.number, reverse=True))
+        _text(tuning_prop, "Pitches", pitches_str)
+        inst_type = "Bass" if track.instrument.lower() == "bass" else "Guitar"
+        _text(tuning_prop, "Instrument", inst_type)
+        _text(tuning_prop, "Label", "None")
+        _text(tuning_prop, "LabelVisible", "true")
+
         # Collect chord diagrams for this track to construct staff properties
         tmap = track_cd_maps.get(track.id, {})
         if tmap:
-            staves_node = ET.SubElement(node, "Staves")
-            staff_node = ET.SubElement(staves_node, "Staff")
-            properties_node = ET.SubElement(staff_node, "Properties")
             diag_coll_prop = ET.SubElement(properties_node, "Property", {"name": "DiagramCollection"})
             items_node = ET.SubElement(diag_coll_prop, "Items")
 
@@ -201,6 +234,7 @@ def _tracks(parent: ET.Element, score: ScoreIR, track_cd_maps: dict[str, dict[st
                 chord_node = ET.SubElement(item_node, "Chord")
                 ET.SubElement(chord_node, "KeyNote", {"step": cd.key_note_step, "accidental": cd.key_note_accidental})
                 ET.SubElement(chord_node, "BassNote", {"step": cd.bass_note_step, "accidental": cd.bass_note_accidental})
+
 
 
 def _master_bars(parent: ET.Element, score: ScoreIR) -> None:

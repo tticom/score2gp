@@ -2,11 +2,11 @@
 
 ## Metadata
 
-- **Current Branch**: `feature/gpif-mixer-and-tempo-automation-v0.1`
+- **Current Branch**: `feature/gpif-tuning-and-track-formatting-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: PR #80 (https://github.com/tticom/score2gp/pull/80)
-- **Latest Local Commit**: `cc13179` ("Update HANDOFF.md and TASKS.md")
-- **Latest Pushed Commit**: `cc13179` ("Update HANDOFF.md and TASKS.md")
+- **Current PR**: PR #81 (https://github.com/tticom/score2gp/pull/81)
+- **Latest Local Commit**: `3c11202` ("Update HANDOFF.md and TASKS.md")
+- **Latest Pushed Commit**: `3c11202` ("Update HANDOFF.md and TASKS.md")
 - **Working Tree Status**: Clean (except untracked scratch files).
 
 - **GitHub Check Status**: N/A
@@ -15,9 +15,9 @@
 
 ## Tests And Checks Run
 
-- `python -m pytest` -> 329 passed (100% success, including new synthetic test `test_gpif_mixer_and_tempo`).
+- `python -m pytest` -> 330 passed (100% success, including new synthetic test `test_gpif_tuning_and_formatting`).
 - `python -m score2gp.cli export-schema --out schemas` -> passed cleanly.
-- `python -m score2gp.cli validate-ir fixtures/public/test_gpif_mixer_tempo.ir.json` -> valid.
+- `python -m score2gp.cli validate-ir fixtures/public/test_gpif_tuning_formatting.ir.json` -> valid.
 - `git diff --check` -> passed cleanly.
 - `git diff -- schemas` -> passed with updated schema.
 - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep`.
@@ -26,20 +26,26 @@
 ## What Changed In This Task
 
 - **ScoreIR Schema Integration**:
-  - Defined the `Mixer` Pydantic model in `src/score2gp/ir.py`.
-  - Added optional `mixer: Mixer | None = None` to the `Track` model to support track-level mixer calibration (volume, pan, mute, solo states).
-  - Added optional `tempo: Tempo | None = None` to the `Bar` model to represent bar-level/timeline tempo changes.
-  - Updated `semantic_scoreir_summary(score: ScoreIR)` to serialize track `mixer` and bar `tempo` properties correctly.
+  - Added optional `color: str | None = None` to the `Track` model to support custom visual coloring.
+  - Updated `semantic_scoreir_summary(score: ScoreIR)` to serialize track `color` properties correctly.
   - Re-exported the updated JSON schema to `schemas/scoreir.v0.1.schema.json`.
-- **GPIF Mixer Serialization**:
-  - Configured track property generation to serialize `<Mixer>` with `<Volume>`, `<Pan>`, `<Mute>`, and `<Solo>` values when present inside `<Track>` XML blocks. Volume scales from 0.0-1.0 to 0-100, and Pan balance scales from -1.0-1.0 to 0-100.
-- **GPIF Master Tempo Automation Serialization**:
-  - Configured the measure timeline generator to serialize `<Tempo>` with `<Value>` and optional `<Text>` tags under the respective `<MasterBar>` blocks when bar `tempo` changes are defined.
+- **Guitar Pro Writer (GPIF) Serialization**:
+  - **Track Colors**: Added `<Color>` element directly under `<Track>` which captures three RGB values space-separated (e.g. `237 116 116`).
+  - **Layout Views**: Added `<SystemsDefautLayout>` (using GP's custom spelling "Defaut") indicating track visual layout modes based on Pydantic `track.tablature_enabled` (e.g. `3` for standard notation + tablature, or `1` for standard only).
+  - **Custom Tunings**: Restructured `<Staves>` property generation to always generate the staff properties (`Properties`) for every track, including:
+    - `<Property name="CapoFret">`
+    - `<Property name="FretCount">`
+    - `<Property name="PartialCapoFret">`
+    - `<Property name="PartialCapoStringFlags">`
+    - `<Property name="Tuning>` containing `<Pitches>` with space-separated pitch values in reverse string order (low string to high string), `<Instrument>` type, and other label configurations.
+  - Integrated existing `<DiagramCollection>` chord diagram properties inside the same unified `<Properties>` staff node.
+- **GPIF Parser/Inspection Support**:
+  - Fixed a string duplication/accumulation bug in `_summarize_gpif` in `src/score2gp/gp_package.py` when both track-level `String` elements and staff-level `Tuning/Pitches` exist, resolving test verification issues and ensuring accurate string pitch mapping.
 - **Synthetic Testing & Validation**:
-  - Authored a dedicated public synthetic fixture `fixtures/public/test_gpif_mixer_tempo.ir.json` modeling track-level mixer configurations alongside timeline tempo automation changes.
-  - Wrote comprehensive unit tests in `tests/test_gp_writer.py` verifying that `<Mixer>` and `<Tempo>` elements are correctly structured and parsed in the generated GPIF XML.
+  - Authored a dedicated public synthetic fixture `fixtures/public/test_gpif_tuning_formatting.ir.json` modeling Drop D tuning alongside visual track color metadata and tablature options.
+  - Wrote comprehensive unit tests in `tests/test_gp_writer.py` verifying that `<Color>`, `<SystemsDefautLayout>`, and staff `<Properties>` (specifically Pitches, CapoFret, and FretCount) are correctly serialized and structured.
 - **E2E Private Smoke Test Results**:
-  - Ran the smoke compiler against real private inputs (including `Derek Trucks BB King.pdf`) to verify zero regressions or crashes. All private inputs compiled successfully with valid GP packages generated with no errors or builder issues.
+  - Ran the smoke compiler against real private inputs to verify zero regressions or crashes. All private inputs compiled successfully with valid GP packages generated with no errors or builder issues.
 
 ## Known Limitations
 
@@ -51,7 +57,7 @@
 
 ## Next Recommended Task
 
-- **Auditory playback calibrations / formatting enhancements (Milestone 6)**: Proceed to standard layout settings, track color designations, or alternate tuning calibrations.
+- **Auditory playback calibrations / formatting enhancements (Milestone 6)**: Expand visual or aesthetic formatting properties (such as per-note layouts or playability settings).
 
 ## Explicit Scope Boundaries
 

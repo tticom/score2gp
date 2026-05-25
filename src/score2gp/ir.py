@@ -153,6 +153,7 @@ class Track(BaseModel):
     midi_program: int | None = Field(default=None, ge=0, le=127)
     midi_channel: int | None = Field(default=None, ge=1, le=16)
     mixer: Mixer | None = None
+    color: str | None = None
 
 
 class NotatedDuration(BaseModel):
@@ -620,6 +621,7 @@ def semantic_scoreir_summary(score: ScoreIR) -> dict[str, Any]:
                 "midi_program": track.midi_program,
                 "midi_channel": track.midi_channel,
                 "mixer": track.mixer.model_dump() if track.mixer else None,
+                "color": track.color,
             }
             for track in score.tracks
         ],
