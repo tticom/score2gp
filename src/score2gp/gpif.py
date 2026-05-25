@@ -87,6 +87,9 @@ def _find_span_notes(score: ScoreIR) -> tuple[set[tuple[int, int, int]], set[tup
 def _page_setup(parent: ET.Element, score: ScoreIR) -> None:
     if getattr(score, "layout", None) is not None:
         ps = ET.SubElement(parent, "PageSetup")
+        if score.layout.engraving_boundaries is not None:
+            ps.set("engravingWidth", str(score.layout.engraving_boundaries.width))
+            ps.set("engravingHeight", str(score.layout.engraving_boundaries.height))
         _text(ps, "Width", score.layout.page_setup.width)
         _text(ps, "Height", score.layout.page_setup.height)
         _text(ps, "MarginTop", score.layout.page_setup.margins.top)
@@ -94,6 +97,10 @@ def _page_setup(parent: ET.Element, score: ScoreIR) -> None:
         _text(ps, "MarginLeft", score.layout.page_setup.margins.left)
         _text(ps, "MarginRight", score.layout.page_setup.margins.right)
         _text(ps, "Scale", score.layout.page_setup.scale)
+        if score.layout.engraving_boundaries is not None:
+            eb = ET.SubElement(ps, "EngravingBoundaries")
+            _text(eb, "Width", score.layout.engraving_boundaries.width)
+            _text(eb, "Height", score.layout.engraving_boundaries.height)
 
 
 def _master_track(parent: ET.Element, score: ScoreIR) -> None:
@@ -171,6 +178,26 @@ def build_gpif(score: ScoreIR) -> bytes:
         _text(print_node, "Copyright", "true" if ps_cfg.print_copyright else "false")
         _text(print_node, "PageNumbering", "true" if ps_cfg.print_page_numbering else "false")
         _text(print_node, "MultiTrack", "true" if ps_cfg.print_multi_track else "false")
+
+    # Score-level advanced Layout templates, margins, and bracing/bracket properties
+    if getattr(score, "layout", None) is not None and (
+        score.layout.system_page_margins is not None or score.layout.ensemble_brackets is not None
+    ):
+        layout_node = ET.SubElement(score_node, "Layout")
+        if score.layout.system_page_margins is not None:
+            spm = ET.SubElement(layout_node, "SystemPageMargins")
+            _text(spm, "Top", score.layout.system_page_margins.top)
+            _text(spm, "Bottom", score.layout.system_page_margins.bottom)
+            _text(spm, "Left", score.layout.system_page_margins.left)
+            _text(spm, "Right", score.layout.system_page_margins.right)
+        if score.layout.ensemble_brackets is not None:
+            bracing_node = ET.SubElement(layout_node, "Bracing")
+            ensemble_brackets_node = ET.SubElement(layout_node, "EnsembleBrackets")
+            for bracket in score.layout.ensemble_brackets:
+                brace_node = ET.SubElement(bracing_node, "Brace", {"style": bracket.style})
+                _text(brace_node, "Tracks", " ".join(bracket.track_ids))
+                bracket_node = ET.SubElement(ensemble_brackets_node, "Bracket", {"style": bracket.style})
+                _text(bracket_node, "Tracks", " ".join(bracket.track_ids))
 
     event_map = {}
     for bar in score.bars:

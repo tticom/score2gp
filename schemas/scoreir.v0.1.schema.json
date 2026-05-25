@@ -407,6 +407,50 @@
       "title": "ConversionInfo",
       "type": "object"
     },
+    "EngravingBoundaries": {
+      "additionalProperties": false,
+      "properties": {
+        "height": {
+          "default": 260.0,
+          "exclusiveMinimum": 0.0,
+          "title": "Height",
+          "type": "number"
+        },
+        "width": {
+          "default": 180.0,
+          "exclusiveMinimum": 0.0,
+          "title": "Width",
+          "type": "number"
+        }
+      },
+      "title": "EngravingBoundaries",
+      "type": "object"
+    },
+    "EnsembleBracket": {
+      "additionalProperties": false,
+      "properties": {
+        "style": {
+          "default": "bracket",
+          "enum": [
+            "brace",
+            "bracket",
+            "line",
+            "none"
+          ],
+          "title": "Style",
+          "type": "string"
+        },
+        "track_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Track Ids",
+          "type": "array"
+        }
+      },
+      "title": "EnsembleBracket",
+      "type": "object"
+    },
     "Event": {
       "additionalProperties": false,
       "properties": {
@@ -1445,6 +1489,32 @@
     "ScoreLayout": {
       "additionalProperties": false,
       "properties": {
+        "engraving_boundaries": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EngravingBoundaries"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "ensemble_brackets": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/EnsembleBracket"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ensemble Brackets"
+        },
         "page_setup": {
           "$ref": "#/$defs/PageSetup"
         },
@@ -1465,6 +1535,17 @@
           "minimum": 1,
           "title": "Score Systems Layout",
           "type": "integer"
+        },
+        "system_page_margins": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SystemPageMargins"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "track_order": {
           "items": {
@@ -1758,6 +1839,37 @@
       ],
       "title": "SourceStage",
       "type": "string"
+    },
+    "SystemPageMargins": {
+      "additionalProperties": false,
+      "properties": {
+        "bottom": {
+          "default": 10.0,
+          "minimum": 0.0,
+          "title": "Bottom",
+          "type": "number"
+        },
+        "left": {
+          "default": 10.0,
+          "minimum": 0.0,
+          "title": "Left",
+          "type": "number"
+        },
+        "right": {
+          "default": 10.0,
+          "minimum": 0.0,
+          "title": "Right",
+          "type": "number"
+        },
+        "top": {
+          "default": 10.0,
+          "minimum": 0.0,
+          "title": "Top",
+          "type": "number"
+        }
+      },
+      "title": "SystemPageMargins",
+      "type": "object"
     },
     "TappingTechnique": {
       "additionalProperties": false,
