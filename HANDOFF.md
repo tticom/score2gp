@@ -4,13 +4,13 @@
 
 - **Current Branch**: `feature/gpif-beat-symbols-and-articulations-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: PR #88 (Draft created during this task)
-- **Latest Local Commit**: `794c9d3` ("Implement beat-level fermatas, rolled arpeggios, and brush directions in GPIF XML generation with schema expansion and test coverage")
-- **Latest Pushed Commit**: N/A (will be pushed shortly)
+- **Current PR**: PR #88 (https://github.com/tticom/score2gp/pull/88)
+- **Latest Local Commit**: `93d8661` ("Update HANDOFF.md and TASKS.md for beat symbols implementation")
+- **Latest Pushed Commit**: `93d8661` ("Update HANDOFF.md and TASKS.md for beat symbols implementation")
 
 - **Working Tree Status**: Clean (except untracked scratch files).
 
-- **GitHub Check Status**: N/A
+- **GitHub Check Status**: Pending (Actions running)
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or `work/` contents are tracked.
 - **Root Generated-Artifact Audit**: Clean. No root generated artifacts tracked.
 
