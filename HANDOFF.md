@@ -5,8 +5,8 @@
 - **Current Branch**: `feature/gpif-font-stylesheets-and-engraving-v0.1`
 - **Base Branch**: `main`
 - **Current PR**: PR #99 (https://github.com/tticom/score2gp/pull/99)
-- **Latest Local Commit**: `710f420c579e4fd3128aa24302b66ba7a9c0e267` ("docs: update tasks and handoff for custom font stylesheets and music typography")
-- **Latest Pushed Commit**: `710f420c579e4fd3128aa24302b66ba7a9c0e267` ("docs: update tasks and handoff for custom font stylesheets and music typography")
+- **Latest Local Commit**: `2189dc3ef78ddfcd2d3ef16c2bc1929e6df2589d` ("docs: align HANDOFF.md commit hashes")
+- **Latest Pushed Commit**: `2189dc3ef78ddfcd2d3ef16c2bc1929e6df2589d` ("docs: align HANDOFF.md commit hashes")
 
 - **Working Tree Status**: Clean (except untracked scratch files).
 
