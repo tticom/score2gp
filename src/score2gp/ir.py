@@ -153,6 +153,16 @@ class Mixer(BaseModel):
     solo: bool = False
 
 
+class SoundConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = None
+    path: str | None = None
+    midi_port: int = Field(default=1, ge=1)
+    midi_channel: int | None = Field(default=None, ge=1, le=16)
+    midi_program: int | None = Field(default=None, ge=0, le=127)
+
+
 class Track(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -168,6 +178,7 @@ class Track(BaseModel):
     mixer: Mixer | None = None
     color: str | None = None
     systems_layout: int | None = Field(default=None, ge=1, le=3)
+    sound: SoundConfig | None = None
 
 
 

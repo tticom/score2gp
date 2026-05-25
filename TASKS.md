@@ -2,9 +2,11 @@
 
 ## Next
 
-- [ ] Support custom playback sound configurations, playback bank presets, and track-level sound path properties in the GPIF XML generator to ensure premium playback quality.
+- [ ] Support track-level custom instrument tuning definitions and string volume levels in the mixer.
 
 ## Done
+
+- [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for track-level sound configurations—specifically midi patches, instrument soundbank presets, and playback paths—mapping these profiles into valid structural GP7-compatible XML blocks (`feature/gpif-sound-configurations-v0.1`).
 
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for explicit left-hand and right-hand fingering indicators on notes in `src/score2gp/gpif.py`, mapping these configurations into valid, structural GP7-compatible XML blocks (`feature/gpif-fingering-indicators-v0.1`).
 
