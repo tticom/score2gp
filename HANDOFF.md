@@ -4,9 +4,9 @@
 
 - **Current Branch**: `feature/gpif-dynamics-and-vibrato-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: N/A (draft PR will be created)
-- **Latest Local Commit**: `b75d739` ("Implement GPIF XML generation for dynamics and vibrato")
-- **Latest Pushed Commit**: N/A (will be pushed)
+- **Current PR**: #75 (Draft PR: https://github.com/tticom/score2gp/pull/75)
+- **Latest Local Commit**: `40cd891` ("Document dynamics and vibrato changes in handoff and tasks")
+- **Latest Pushed Commit**: `40cd891` ("Document dynamics and vibrato changes in handoff and tasks")
 - **Working Tree Status**: Clean.
 
 - **GitHub Check Status**: N/A
