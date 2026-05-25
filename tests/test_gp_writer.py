@@ -1540,3 +1540,27 @@ def test_gpif_sound_configurations(tmp_path) -> None:
         assert midi_conn_2.find("Port").text == "1"
         assert midi_conn_2.find("Channel").text == "4"
         assert midi_conn_2.find("Instrument").text == "25"
+
+
+def test_gpif_string_mixer_and_tuning(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_string_mixer.ir.json")
+    out = tmp_path / "string_mixer.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        tracks = root.findall(".//Track")
+        track_map = {t.get("id"): t for t in tracks}
+        t1 = track_map["gtr-1"]
+
+        tuning_prop = t1.find(".//Properties/Property[@name='Tuning']")
+        assert tuning_prop is not None
+
+        assert tuning_prop.find("Pitches").text == "40 45 50 55 59 64"
+        assert tuning_prop.find("Balance").text == "3.0 2.0 1.0 0.0 -1.0 -2.0"
+        assert tuning_prop.find("FineTuning").text == "-10.0 0.0 1.0 -2.3 0.0 5.5"
