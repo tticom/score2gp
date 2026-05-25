@@ -332,3 +332,44 @@ def test_gpif_multi_voice(tmp_path) -> None:
         for e in v1_events:
             assert e.get("voice") == "1"
         assert [e.get("id") for e in v1_events] == ["e5", "e6"]
+
+
+def test_gpif_dynamics_and_vibrato(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_dynamics_vibrato.ir.json")
+    out = tmp_path / "dynamics_vibrato.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        # Retrieve events
+        events = root.findall(".//Event")
+        event_map = {e.get("id"): e for e in events}
+
+        # Check Event e1: dynamic is MF, and its note has Vibrato: Slight
+        e1 = event_map["e1"]
+        dyn1 = e1.find("Dynamic")
+        assert dyn1 is not None
+        assert dyn1.text == "MF"
+
+        n1 = e1.find("Note")
+        assert n1 is not None
+        vib1 = n1.find("Vibrato")
+        assert vib1 is not None
+        assert vib1.text == "Slight"
+
+        # Check Event e2: dynamic is F, and its note has Vibrato: Wide
+        e2 = event_map["e2"]
+        dyn2 = e2.find("Dynamic")
+        assert dyn2 is not None
+        assert dyn2.text == "F"
+
+        n2 = e2.find("Note")
+        assert n2 is not None
+        vib2 = n2.find("Vibrato")
+        assert vib2 is not None
+        assert vib2.text == "Wide"

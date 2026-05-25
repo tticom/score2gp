@@ -316,6 +316,7 @@ class Event(BaseModel):
     notes: list[Note] = Field(default_factory=list)
     is_rest: bool = False
     chord_symbol: str | None = None
+    dynamic: str | None = None
     techniques: list[Technique] = Field(default_factory=list)
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     provenance: list[Provenance] = Field(default_factory=list)
@@ -530,6 +531,7 @@ def semantic_scoreir_summary(score: ScoreIR) -> dict[str, Any]:
                         "timing": event.timing.model_dump(exclude_none=True),
                         "is_rest": event.is_rest,
                         "chord_symbol": event.chord_symbol,
+                        "dynamic": event.dynamic,
                         "notes": [note.model_dump(exclude_none=True, exclude={"provenance"}) for note in event.notes],
                         "techniques": [technique.model_dump(exclude_none=True) for technique in event.techniques],
                     }
