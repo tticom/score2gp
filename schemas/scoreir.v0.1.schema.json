@@ -26,6 +26,17 @@
           ],
           "default": null
         },
+        "tempo": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tempo"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "time_signature": {
           "$ref": "#/$defs/TimeSignature"
         }
@@ -738,6 +749,37 @@
       "title": "Metadata",
       "type": "object"
     },
+    "Mixer": {
+      "additionalProperties": false,
+      "properties": {
+        "mute": {
+          "default": false,
+          "title": "Mute",
+          "type": "boolean"
+        },
+        "pan": {
+          "default": 0.0,
+          "maximum": 1.0,
+          "minimum": -1.0,
+          "title": "Pan",
+          "type": "number"
+        },
+        "solo": {
+          "default": false,
+          "title": "Solo",
+          "type": "boolean"
+        },
+        "volume": {
+          "default": 1.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Volume",
+          "type": "number"
+        }
+      },
+      "title": "Mixer",
+      "type": "object"
+    },
     "NotatedDuration": {
       "additionalProperties": false,
       "properties": {
@@ -1384,6 +1426,17 @@
           ],
           "default": null,
           "title": "Midi Program"
+        },
+        "mixer": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Mixer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "name": {
           "title": "Name",

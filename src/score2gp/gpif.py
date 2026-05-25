@@ -139,6 +139,14 @@ def _tracks(parent: ET.Element, score: ScoreIR, track_cd_maps: dict[str, dict[st
         _text(node, "Name", track.name)
         _text(node, "Instrument", track.instrument)
         _text(node, "Capo", track.capo)
+
+        if getattr(track, "mixer", None) is not None:
+            mixer_node = ET.SubElement(node, "Mixer")
+            _text(mixer_node, "Volume", int(track.mixer.volume * 100))
+            _text(mixer_node, "Pan", int((track.mixer.pan + 1) * 50))
+            _text(mixer_node, "Mute", str(track.mixer.mute).lower())
+            _text(mixer_node, "Solo", str(track.mixer.solo).lower())
+
         tuning = ET.SubElement(node, "Tuning", {"name": track.tuning.name})
         for string in sorted(track.tuning.strings, key=lambda item: item.number):
             ET.SubElement(
@@ -208,6 +216,12 @@ def _master_bars(parent: ET.Element, score: ScoreIR) -> None:
             key = ET.SubElement(node, "Key")
             _text(key, "Fifths", bar.key_signature.fifths)
             _text(key, "Mode", bar.key_signature.mode)
+
+        if getattr(bar, "tempo", None) is not None:
+            tempo_node = ET.SubElement(node, "Tempo")
+            _text(tempo_node, "Value", bar.tempo.bpm)
+            if bar.tempo.text:
+                _text(tempo_node, "Text", bar.tempo.text)
 
 
 def _bars(parent: ET.Element, score: ScoreIR, hopo_dests: set[tuple[int, int, int]], let_ring_notes: set[tuple[int, int, int]], palm_mute_notes: set[tuple[int, int, int]], track_cd_maps: dict[str, dict[str, str]]) -> None:
