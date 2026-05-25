@@ -4,9 +4,9 @@
 
 - **Current Branch**: `feature/gpif-hammer-on-pull-off-variants-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: N/A (will be created shortly)
-- **Latest Local Commit**: `5be53c6` ("feat: implement visual hammer-on and pull-off technique variants and pitch direction context auto-inferences in GPIF XML generation with tests")
-- **Latest Pushed Commit**: N/A (will be pushed shortly)
+- **Current PR**: PR #92 (https://github.com/tticom/score2gp/pull/92)
+- **Latest Local Commit**: `9e7e316` ("docs: update HANDOFF.md and TASKS.md for visual hammer-on and pull-off task completion")
+- **Latest Pushed Commit**: `9e7e316` ("docs: update HANDOFF.md and TASKS.md for visual hammer-on and pull-off task completion")
 
 - **Working Tree Status**: Clean (except untracked scratch files and pending docs/tasks modifications).
 
