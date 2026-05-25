@@ -4,13 +4,13 @@
 
 - **Current Branch**: `feature/gpif-trills-and-ornaments-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: PR #89 (Draft created during this task)
-- **Latest Local Commit**: `7c0a4ef` ("Implement note-level trill techniques in GPIF XML generation with expanded Technique union and tests")
-- **Latest Pushed Commit**: N/A (will be pushed shortly)
+- **Current PR**: PR #89 (https://github.com/tticom/score2gp/pull/89)
+- **Latest Local Commit**: `f7d1e77` ("Update HANDOFF.md and TASKS.md for trill ornaments implementation")
+- **Latest Pushed Commit**: `f7d1e77` ("Update HANDOFF.md and TASKS.md for trill ornaments implementation")
 
 - **Working Tree Status**: Clean (except untracked scratch files).
 
-- **GitHub Check Status**: N/A
+- **GitHub Check Status**: Pending (Actions running)
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or `work/` contents are tracked.
 - **Root Generated-Artifact Audit**: Clean. No root generated artifacts tracked.
 
