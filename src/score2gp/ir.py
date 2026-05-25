@@ -122,6 +122,8 @@ class TuningString(BaseModel):
     number: int = Field(ge=1, le=12)
     pitch: int = Field(ge=0, le=127)
     name: str
+    volume_offset: float | None = None
+    fine_tune: float | None = None
 
 
 class Tuning(BaseModel):

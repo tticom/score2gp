@@ -2,9 +2,11 @@
 
 ## Next
 
-- [ ] Support track-level custom instrument tuning definitions and string volume levels in the mixer.
+- [ ] Support custom track-level layout preferences and visual staff customization settings in the GPIF XML generator.
 
 ## Done
+
+- [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for string-level volume mixer offsets and fine-tuning frequencies under track tuning properties, mapping these profiles into valid structural GP7-compatible XML blocks (`feature/gpif-string-mixer-and-tuning-v0.1`).
 
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for track-level sound configurations—specifically midi patches, instrument soundbank presets, and playback paths—mapping these profiles into valid structural GP7-compatible XML blocks (`feature/gpif-sound-configurations-v0.1`).
 
