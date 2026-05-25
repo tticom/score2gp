@@ -287,6 +287,9 @@ class HammerOnTechnique(BaseModel):
 
     kind: Literal["hammer-on"] = "hammer-on"
     target_event_id: str | None = None
+    style: str | None = None
+    flags: int | None = None
+    legato: bool | None = None
 
 
 class PullOffTechnique(BaseModel):
@@ -294,6 +297,9 @@ class PullOffTechnique(BaseModel):
 
     kind: Literal["pull-off"] = "pull-off"
     target_event_id: str | None = None
+    style: str | None = None
+    flags: int | None = None
+    legato: bool | None = None
 
 
 class TieTechnique(BaseModel):
