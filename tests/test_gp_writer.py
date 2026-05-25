@@ -1060,3 +1060,71 @@ def test_gpif_trills(tmp_path) -> None:
         assert trill_prop2 is not None
         assert trill_prop2.find("Interval").text == "2"
         assert trill_prop2.find("Fret") is None
+
+
+def test_gpif_microtonal_bends(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_microtonal_bends.ir.json")
+    out = tmp_path / "microtonal_bends.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        events = root.findall(".//Event")
+        event_map = {e.get("id"): e for e in events}
+
+        # Event e1 note: multi-point microtonal bend
+        e1 = event_map["e1"]
+        n1 = e1.find("Note")
+        bend1 = n1.find("Bend")
+        assert bend1 is not None
+
+        points = bend1.findall("Point")
+        assert len(points) == 4
+        # Point 1: offset=0.000000, value=0.000000
+        assert float(points[0].get("offset")) == 0.0
+        assert float(points[0].get("value")) == 0.0
+        # Point 2: offset=25.000000, value=25.000000 (quarter-tone)
+        assert float(points[1].get("offset")) == 25.0
+        assert float(points[1].get("value")) == 25.0
+        # Point 3: offset=50.000000, value=50.000000 (half-step)
+        assert float(points[2].get("offset")) == 50.0
+        assert float(points[2].get("value")) == 50.0
+        # Point 4: offset=100.000000, value=0.000000 (release)
+        assert float(points[3].get("offset")) == 100.0
+        assert float(points[3].get("value")) == 0.0
+
+        # Verify Bended property inside Properties block
+        bended_prop = n1.find(".//Properties/Property[@name='Bended']")
+        assert bended_prop is not None
+
+        dest_val = n1.find(".//Properties/Property[@name='BendDestinationValue']/Float")
+        assert float(dest_val.text) == 50.0 # max semitones (1.0) * 50 = 50.0
+
+        # Event e2 note: advanced tremolo-bar curve
+        e2 = event_map["e2"]
+        n2 = e2.find("Note")
+        tb = n2.find("TremoloBar")
+        assert tb is not None
+
+        tb_points = tb.findall("Point")
+        assert len(tb_points) == 3
+        # Point 1: offset=0.000000, value=0.000000
+        assert float(tb_points[0].get("offset")) == 0.0
+        assert float(tb_points[0].get("value")) == 0.0
+        # Point 2: offset=50.000000, value=-100.000000 (dive 2 semitones)
+        assert float(tb_points[1].get("offset")) == 50.0
+        assert float(tb_points[1].get("value")) == -100.0
+        # Point 3: offset=100.000000, value=0.000000 (release)
+        assert float(tb_points[2].get("offset")) == 100.0
+        assert float(tb_points[2].get("value")) == 0.0
+
+        # Verify TremoloBar property inside Properties block
+        tb_prop = n2.find(".//Properties/Property[@name='TremoloBar']")
+        assert tb_prop is not None
+        assert tb_prop.find("Enable") is not None
+
