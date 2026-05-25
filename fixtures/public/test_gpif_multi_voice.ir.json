@@ -1,0 +1,307 @@
+{
+  "schema_version": "0.1.0",
+  "metadata": {
+    "title": "Multi-Voice Test",
+    "artist": "Generated Fixture",
+    "composer": "Generated Fixture",
+    "transcriber": "score2gp",
+    "copyright": "Public domain generated test fixture",
+    "source": "hand-authored synthetic fixture"
+  },
+  "conversion": {
+    "tool_name": "score2gp",
+    "tool_version": "0.1.0",
+    "conversion_timestamp": "2026-05-25T00:00:00Z",
+    "source_file_hash": "sha256:multi-voice-fixture",
+    "source_page_count": 1
+  },
+  "tempo": { "bpm": 120, "text": "Moderato" },
+  "tracks": [
+    {
+      "id": "gtr-1",
+      "name": "Guitar",
+      "instrument": "steel guitar",
+      "capo": 0,
+      "tablature_enabled": true,
+      "staff_count": 1,
+      "tuning": {
+        "name": "Standard",
+        "strings": [
+          { "number": 1, "pitch": 64, "name": "E4" },
+          { "number": 2, "pitch": 59, "name": "B3" },
+          { "number": 3, "pitch": 55, "name": "G3" },
+          { "number": 4, "pitch": 50, "name": "D3" },
+          { "number": 5, "pitch": 45, "name": "A2" },
+          { "number": 6, "pitch": 40, "name": "E2" }
+        ]
+      }
+    }
+  ],
+  "bars": [
+    {
+      "index": 1,
+      "time_signature": { "numerator": 4, "denominator": 4 },
+      "events": [
+        {
+          "id": "e1",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 0,
+            "duration_ticks": 960,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "quarter", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 1,
+              "fret": 0,
+              "pitch": 64,
+              "confidence": 1.0,
+              "provenance": [
+                {
+                  "source_stage": "manual",
+                  "page": 1,
+                  "system_id": "sys-1",
+                  "staff_id": "tab-1",
+                  "bar_index": 1,
+                  "bbox": { "page": 1, "x0": 10, "y0": 20, "x1": 20, "y1": 30 },
+                  "raw_token_id": "note-1",
+                  "confidence": 1.0
+                }
+              ]
+            }
+          ],
+          "confidence": 1.0,
+          "provenance": [
+            {
+              "source_stage": "manual",
+              "page": 1,
+              "system_id": "sys-1",
+              "staff_id": "tab-1",
+              "bar_index": 1,
+              "confidence": 1.0
+            }
+          ]
+        },
+        {
+          "id": "e2",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 960,
+            "duration_ticks": 960,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "quarter", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 1,
+              "fret": 2,
+              "pitch": 66,
+              "confidence": 1.0,
+              "provenance": [
+                {
+                  "source_stage": "manual",
+                  "page": 1,
+                  "system_id": "sys-1",
+                  "staff_id": "tab-1",
+                  "bar_index": 1,
+                  "bbox": { "page": 1, "x0": 30, "y0": 20, "x1": 40, "y1": 30 },
+                  "raw_token_id": "note-2",
+                  "confidence": 1.0
+                }
+              ]
+            }
+          ],
+          "confidence": 1.0,
+          "provenance": [
+            {
+              "source_stage": "manual",
+              "page": 1,
+              "system_id": "sys-1",
+              "staff_id": "tab-1",
+              "bar_index": 1,
+              "confidence": 1.0
+            }
+          ]
+        },
+        {
+          "id": "e3",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 1920,
+            "duration_ticks": 960,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "quarter", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 1,
+              "fret": 3,
+              "pitch": 67,
+              "confidence": 1.0,
+              "provenance": [
+                {
+                  "source_stage": "manual",
+                  "page": 1,
+                  "system_id": "sys-1",
+                  "staff_id": "tab-1",
+                  "bar_index": 1,
+                  "bbox": { "page": 1, "x0": 50, "y0": 20, "x1": 60, "y1": 30 },
+                  "raw_token_id": "note-3",
+                  "confidence": 1.0
+                }
+              ]
+            }
+          ],
+          "confidence": 1.0,
+          "provenance": [
+            {
+              "source_stage": "manual",
+              "page": 1,
+              "system_id": "sys-1",
+              "staff_id": "tab-1",
+              "bar_index": 1,
+              "confidence": 1.0
+            }
+          ]
+        },
+        {
+          "id": "e4",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 2880,
+            "duration_ticks": 960,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "quarter", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 1,
+              "fret": 5,
+              "pitch": 69,
+              "confidence": 1.0,
+              "provenance": [
+                {
+                  "source_stage": "manual",
+                  "page": 1,
+                  "system_id": "sys-1",
+                  "staff_id": "tab-1",
+                  "bar_index": 1,
+                  "bbox": { "page": 1, "x0": 70, "y0": 20, "x1": 80, "y1": 30 },
+                  "raw_token_id": "note-4",
+                  "confidence": 1.0
+                }
+              ]
+            }
+          ],
+          "confidence": 1.0,
+          "provenance": [
+            {
+              "source_stage": "manual",
+              "page": 1,
+              "system_id": "sys-1",
+              "staff_id": "tab-1",
+              "bar_index": 1,
+              "confidence": 1.0
+            }
+          ]
+        },
+        {
+          "id": "e5",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 0,
+            "duration_ticks": 1920,
+            "ticks_per_quarter": 960,
+            "voice": 2,
+            "notated_duration": { "value": "half", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 6,
+              "fret": 0,
+              "pitch": 40,
+              "confidence": 1.0,
+              "provenance": [
+                {
+                  "source_stage": "manual",
+                  "page": 1,
+                  "system_id": "sys-1",
+                  "staff_id": "tab-1",
+                  "bar_index": 1,
+                  "bbox": { "page": 1, "x0": 10, "y0": 50, "x1": 20, "y1": 60 },
+                  "raw_token_id": "note-5",
+                  "confidence": 1.0
+                }
+              ]
+            }
+          ],
+          "confidence": 1.0,
+          "provenance": [
+            {
+              "source_stage": "manual",
+              "page": 1,
+              "system_id": "sys-1",
+              "staff_id": "tab-1",
+              "bar_index": 1,
+              "confidence": 1.0
+            }
+          ]
+        },
+        {
+          "id": "e6",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 1920,
+            "duration_ticks": 1920,
+            "ticks_per_quarter": 960,
+            "voice": 2,
+            "notated_duration": { "value": "half", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 6,
+              "fret": 3,
+              "pitch": 43,
+              "confidence": 1.0,
+              "provenance": [
+                {
+                  "source_stage": "manual",
+                  "page": 1,
+                  "system_id": "sys-1",
+                  "staff_id": "tab-1",
+                  "bar_index": 1,
+                  "bbox": { "page": 1, "x0": 50, "y0": 50, "x1": 60, "y1": 60 },
+                  "raw_token_id": "note-6",
+                  "confidence": 1.0
+                }
+              ]
+            }
+          ],
+          "confidence": 1.0,
+          "provenance": [
+            {
+              "source_stage": "manual",
+              "page": 1,
+              "system_id": "sys-1",
+              "staff_id": "tab-1",
+              "bar_index": 1,
+              "confidence": 1.0
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "warnings": []
+}
