@@ -970,3 +970,58 @@ def test_gpif_dynamics_articulations(tmp_path) -> None:
         assert n4.find("Tenuto") is not None
         tenuto_prop = n4.find(".//Property[@name='Accentuation']/Value")
         assert tenuto_prop.text == "Tenuto"
+
+
+def test_gpif_beat_symbols(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_beat_symbols.ir.json")
+    out = tmp_path / "beat_symbols.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        events = root.findall(".//Event")
+        event_map = {e.get("id"): e for e in events}
+
+        # Event e1: Fermata standard
+        e1 = event_map["e1"]
+        f1 = e1.find("Fermata")
+        assert f1 is not None
+        assert f1.find("Type").text == "Standard"
+
+        # Event e2: Arpeggio up
+        e2 = event_map["e2"]
+        arp2 = e2.find("Arpeggio")
+        assert arp2 is not None
+        assert arp2.get("direction") == "Up"
+        assert arp2.get("duration") == "Eighth"
+
+        # Arpeggio property inside Properties
+        arp_prop = e2.find(".//Properties/Property[@name='Arpeggio']")
+        assert arp_prop is not None
+        assert arp_prop.find("Direction").text == "Up"
+        assert arp_prop.find("Duration").text == "Eighth"
+
+        # Event e3: Brush down
+        e3 = event_map["e3"]
+        brush3 = e3.find("Brush")
+        assert brush3 is not None
+        assert brush3.get("direction") == "Down"
+        assert brush3.get("duration") == "Sixteenth"
+
+        # Brush property inside Properties
+        brush_prop = e3.find(".//Properties/Property[@name='Brush']")
+        assert brush_prop is not None
+        assert brush_prop.find("Direction").text == "Down"
+        assert brush_prop.find("Duration").text == "Sixteenth"
+
+        # Event e4: Fermata short
+        e4 = event_map["e4"]
+        f4 = e4.find("Fermata")
+        assert f4 is not None
+        assert f4.find("Type").text == "Short"
+

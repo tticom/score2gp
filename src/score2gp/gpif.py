@@ -449,6 +449,59 @@ def _event(parent: ET.Element, event: Event, hopo_dests: set[tuple[int, int, int
         ET.SubElement(cd_node, "BassNote", {"step": cd.bass_note_step, "accidental": cd.bass_note_accidental})
     elif event.chord_symbol:
         _text(node, "Chord", event.chord_symbol)
+
+    # Fermata representation
+    fermata_val = getattr(event, "fermata", None)
+    if fermata_val is True:
+        fermata_val = "standard"
+    if fermata_val and fermata_val != "none":
+        type_val = "Standard"
+        if fermata_val == "short":
+            type_val = "Short"
+        elif fermata_val == "long":
+            type_val = "Long"
+        ferm_node = ET.SubElement(node, "Fermata")
+        _text(ferm_node, "Type", type_val)
+
+    # Brush & Arpeggio representation
+    duration_map = {
+        "whole": "Whole",
+        "half": "Half",
+        "quarter": "Quarter",
+        "eighth": "Eighth",
+        "16th": "Sixteenth",
+        "32nd": "ThirtySecond",
+        "64th": "SixtyFourth",
+        "128th": "HundredTwentyEighth",
+    }
+
+    if getattr(event, "brush", None) in ("up", "down"):
+        brush_dir = "Up" if event.brush == "up" else "Down"
+        brush_dur = duration_map.get(getattr(event, "brush_duration", None) or "eighth", "Eighth")
+        ET.SubElement(node, "Brush", {"direction": brush_dir, "duration": brush_dur})
+
+    if getattr(event, "arpeggio", None) in ("up", "down"):
+        arp_dir = "Up" if event.arpeggio == "up" else "Down"
+        arp_dur = duration_map.get(getattr(event, "arpeggio_duration", None) or "eighth", "Eighth")
+        ET.SubElement(node, "Arpeggio", {"direction": arp_dir, "duration": arp_dur})
+
+    has_brush = getattr(event, "brush", None) in ("up", "down")
+    has_arpeggio = getattr(event, "arpeggio", None) in ("up", "down")
+    if has_brush or has_arpeggio:
+        props_node = ET.SubElement(node, "Properties")
+        if has_brush:
+            brush_dir = "Up" if event.brush == "up" else "Down"
+            brush_dur = duration_map.get(getattr(event, "brush_duration", None) or "eighth", "Eighth")
+            prop_brush = ET.SubElement(props_node, "Property", {"name": "Brush"})
+            _text(prop_brush, "Direction", brush_dir)
+            _text(prop_brush, "Duration", brush_dur)
+        if has_arpeggio:
+            arp_dir = "Up" if event.arpeggio == "up" else "Down"
+            arp_dur = duration_map.get(getattr(event, "arpeggio_duration", None) or "eighth", "Eighth")
+            prop_arp = ET.SubElement(props_node, "Property", {"name": "Arpeggio"})
+            _text(prop_arp, "Direction", arp_dir)
+            _text(prop_arp, "Duration", arp_dur)
+
     if event.techniques:
         techniques = ET.SubElement(node, "Techniques")
         for technique in event.techniques:
