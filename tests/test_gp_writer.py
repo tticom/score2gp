@@ -620,3 +620,57 @@ def test_gpif_tremolo_and_percussive(tmp_path) -> None:
         assert n4.find("Tapped") is not None
         tapped_enable = n4.find(".//Property[@name='Tapped']/Enable")
         assert tapped_enable is not None
+
+
+def test_gpif_mixer_and_tempo(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_mixer_tempo.ir.json")
+    out = tmp_path / "mixer_tempo.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        # 1. Verify Track Mixer settings
+        tracks = root.findall(".//Track[@id='gtr-1']")
+        assert len(tracks) == 1
+        track = tracks[0]
+        mixer = track.find("Mixer")
+        assert mixer is not None
+
+        volume = mixer.find("Volume")
+        assert volume is not None
+        assert volume.text == "85"
+
+        pan = mixer.find("Pan")
+        assert pan is not None
+        assert pan.text == "25"
+
+        mute = mixer.find("Mute")
+        assert mute is not None
+        assert mute.text == "false"
+
+        solo = mixer.find("Solo")
+        assert solo is not None
+        assert solo.text == "true"
+
+        # 2. Verify Bar-level Tempo overrides
+        mb1 = root.find(".//MasterBar[@index='1']")
+        assert mb1 is not None
+        assert mb1.find("Tempo") is None
+
+        mb2 = root.find(".//MasterBar[@index='2']")
+        assert mb2 is not None
+        tempo = mb2.find("Tempo")
+        assert tempo is not None
+
+        val = tempo.find("Value")
+        assert val is not None
+        assert val.text == "140"
+
+        text = tempo.find("Text")
+        assert text is not None
+        assert text.text == "Allegro"

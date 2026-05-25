@@ -131,6 +131,15 @@ class Tuning(BaseModel):
         return None
 
 
+class Mixer(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    volume: float = Field(default=1.0, ge=0.0, le=1.0)
+    pan: float = Field(default=0.0, ge=-1.0, le=1.0)
+    mute: bool = False
+    solo: bool = False
+
+
 class Track(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -143,6 +152,7 @@ class Track(BaseModel):
     staff_count: int = Field(default=1, ge=1, le=4)
     midi_program: int | None = Field(default=None, ge=0, le=127)
     midi_channel: int | None = Field(default=None, ge=1, le=16)
+    mixer: Mixer | None = None
 
 
 class NotatedDuration(BaseModel):
@@ -429,6 +439,7 @@ class Bar(BaseModel):
     time_signature: TimeSignature
     key_signature: KeySignature | None = None
     events: list[Event] = Field(default_factory=list)
+    tempo: Tempo | None = None
 
 
 class WarningItem(BaseModel):
@@ -608,6 +619,7 @@ def semantic_scoreir_summary(score: ScoreIR) -> dict[str, Any]:
                 "staff_count": track.staff_count,
                 "midi_program": track.midi_program,
                 "midi_channel": track.midi_channel,
+                "mixer": track.mixer.model_dump() if track.mixer else None,
             }
             for track in score.tracks
         ],
@@ -616,6 +628,7 @@ def semantic_scoreir_summary(score: ScoreIR) -> dict[str, Any]:
                 "index": bar.index,
                 "time_signature": bar.time_signature.model_dump(),
                 "key_signature": bar.key_signature.model_dump() if bar.key_signature else None,
+                "tempo": bar.tempo.model_dump() if bar.tempo else None,
                 "events": [
                     {
                         "id": event.id,
