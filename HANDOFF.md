@@ -4,11 +4,11 @@
 
 - **Current Branch**: `feature/gpif-notation-layout-formatting-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: PR #84 (https://github.com/tticom/score2gp/pull/84)
-- **Latest Local Commit**: `b529451` ("Update HANDOFF.md and TASKS.md")
-- **Latest Pushed Commit**: `b529451` ("Update HANDOFF.md and TASKS.md")
+- **Current PR**: PR #85 (https://github.com/tticom/score2gp/pull/85)
+- **Latest Local Commit**: `8daa3b4` ("Implement defensive fallbacks for layout formatting and add default/fallback tests")
+- **Latest Pushed Commit**: `8daa3b4` ("Implement defensive fallbacks for layout formatting and add default/fallback tests")
 
-- **Working Tree Status**: Clean (except untracked scratch files).
+- **Working Tree Status**: Clean.
 
 - **GitHub Check Status**: N/A
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or `work/` contents are tracked.
@@ -16,11 +16,11 @@
 
 ## Tests And Checks Run
 
-- `python -m pytest` -> 334 passed (100% success, including new visual notation layout formatting unit tests).
+- `python -m pytest` -> 335 passed (100% success, including new visual notation layout formatting unit tests and fallback defaults).
 - `python -m score2gp.cli export-schema --out schemas` -> passed cleanly.
 - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid.
 - `git diff --check` -> passed cleanly.
-- `git diff -- schemas` -> passed with valid schema changes (adds page margins, setup, scaling, track layout).
+- `git diff -- schemas` -> passed cleanly (no changes required).
 - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep`.
 - `python scripts/private_e2e_smoke.py` -> passed cleanly against all private PDF inputs with zero regressions.
 
@@ -36,9 +36,12 @@
   - Handled global score-level layout defaults (`ScoreSystemsDefaultLayout` and `ScoreSystemsLayout`) inside `<Score>`.
   - Serialized stacked multi-track ordering layouts inside `<MasterTrack><Tracks>gtr-1 piano-1 ...</Tracks></MasterTrack>` inside `_master_track()` inside `src/score2gp/gpif.py`.
   - Handled individual track systems layouts (`SystemsDefautLayout` and `SystemsLayout`) inside `<Track>` tags.
+- **Defensive Fallback & Defaults**:
+  - Enhanced `_master_track()` in `src/score2gp/gpif.py` to automatically fall back to all track IDs in their declared order when the input `track_order` list is empty.
+  - Enhanced `build_gpif()` in `src/score2gp/gpif.py` to cleanly serialize default page settings (210x297mm page setup, 15mm margins, and 1.0 scaling factor) and a default master track structure if `score.layout` is `None` or omitted.
 - **Synthetic Testing & Validation**:
   - Authored a dedicated public synthetic fixture `fixtures/public/test_gpif_notation_layout.ir.json` modeling custom margins, dimensions, page scaling, track order, and track systems layouts.
-  - Wrote comprehensive unit tests in `tests/test_gp_writer.py` verifying that all page setup, score/track layout modes, and master track stacks generate structurally valid visual XML tags.
+  - Wrote comprehensive unit tests in `tests/test_gp_writer.py` (including `test_gpif_notation_layout_formatting` and `test_gpif_notation_layout_defaults`) verifying that all page setup, score/track layout modes, master track stacks, and fallback behaviors generate structurally valid visual XML tags.
 - **E2E Private Smoke Test Results**:
   - Ran E2E private smoke compiler against real private inputs to verify zero regressions or crashes with the new visual formatting properties.
 
