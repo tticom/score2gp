@@ -2,11 +2,11 @@
 
 ## Metadata
 
-- **Current Branch**: `feature/gpif-string-mixer-and-tuning-v0.1`
+- **Current Branch**: `feature/gpif-track-layout-preferences-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: PR #95 (https://github.com/tticom/score2gp/pull/95)
-- **Latest Local Commit**: `a1f522a43952fb8d9e4ca2c4ea4e798aa9054e2b` ("feat: implement string-level volume offsets and fine-tuning configurations")
-- **Latest Pushed Commit**: `a1f522a43952fb8d9e4ca2c4ea4e798aa9054e2b` ("feat: implement string-level volume offsets and fine-tuning configurations")
+- **Current PR**: PR #96 (https://github.com/tticom/score2gp/pull/96)
+- **Latest Local Commit**: `f643a2f054d3e85620c54aa71ffc12785bffa8bd` ("feat: implement track visual layout preferences and staff customizations")
+- **Latest Pushed Commit**: `f643a2f054d3e85620c54aa71ffc12785bffa8bd` ("feat: implement track visual layout preferences and staff customizations")
 
 - **Working Tree Status**: Clean (except untracked scratch files).
 
@@ -16,9 +16,9 @@
 
 ## Tests And Checks Run
 
-- `python -m pytest` -> 345 passed (100% success, including the new GP7 string relative volume mixer and fine-tuning unit tests).
-- `python -m score2gp.cli export-schema --out schemas` -> passed cleanly (updated schemas with new `TuningString` volume offset and fine tune parameters).
-- `python -m score2gp.cli validate-ir fixtures/public/test_gpif_string_mixer.ir.json` -> valid.
+- `python -m pytest` -> 346 passed (100% success, including the new GP7 track layout and staff customization unit tests).
+- `python -m score2gp.cli export-schema --out schemas` -> passed cleanly (updated schemas with new `TrackLayoutPreferences` parameters).
+- `python -m score2gp.cli validate-ir fixtures/public/test_gpif_track_preferences.ir.json` -> valid.
 - `git diff --check` -> passed cleanly (zero trailing whitespace or EOF blank line violations).
 - `git diff -- schemas` -> passed cleanly (valid schema additions).
 - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep`.
@@ -27,19 +27,21 @@
 ## What Changed In This Task
 
 - **ScoreIR Schema & Model Expansion**:
-  - Expanded `TuningString` model in `src/score2gp/ir.py` with optional `volume_offset: float | None = None` (relative string balance offset) and `fine_tune: float | None = None` (string fine-tuning frequency adjustments) parameters.
+  - Created a robust `TrackLayoutPreferences` model in `src/score2gp/ir.py` specifying `tab_only`, `stem_direction`, and `line_sizing` visual preference parameters.
+  - Expanded `Track` model in `src/score2gp/ir.py` with an optional `layout_preferences: TrackLayoutPreferences | None = None` attribute.
   - Successfully re-exported `schemas/scoreir.v0.1.schema.json` via the CLI to reflect the updated schema.
 - **GPIF XML Generator Serialization**:
-  - Updated the `<Property name="Tuning">` serialization block in `_tracks()` in `src/score2gp/gpif.py` to write granular string relative volume balances and localized fine-tuning frequencies.
-  - Serialized the per-string balances using a space-separated string under a `<Balance>` array element.
-  - Serialized the per-string fine-tuning offsets using a space-separated string under a `<FineTuning>` element.
-  - Ensured string sorting strictly matches the `<Pitches>` order (descending string numbers, from string 6 to 1).
-  - Used explicit `None` checks instead of falsy `or` logic to preserve valid `0.0` default values and prevent rendering bugs.
+  - Updated track `_tracks()` in `src/score2gp/gpif.py` to write track-level and staff-level visual layout XML blocks.
+  - Mapped `layout_preferences.tab_only` to automatically override and set track `SystemsLayout` and `SystemsDefaultLayout` elements to `2` (Tablature Only).
+  - Serialized a `<Tablature><TabOnly>true</TabOnly></Tablature>` block directly under `<Track>` for tab-only tracks.
+  - Serialized a `<Property name="Tablature"><Enable>true</Enable></Property>` block under Staff properties if tablature rendering is enabled.
+  - Serialized a `<Property name="Stems">` block with sub-elements `<Enable>true/false</Enable>` (true if not auto) and `<Direction>Up/Down/Auto</Direction>` if stem directions are configured.
+  - Serialized a `<Property name="LineSizing">` block with sub-element `<Size>Standard/Small/Large</Size>` if line sizing constraints are configured.
 - **Synthetic Testing & Validation**:
-  - Authored a dedicated public synthetic fixture `fixtures/public/test_gpif_string_mixer.ir.json` modeling individual string volume offsets and cents tuning adjustments.
-  - Wrote comprehensive unit tests in `tests/test_gp_writer.py` (`test_gpif_string_mixer_and_tuning`) verifying the exact `<Balance>` and `<FineTuning>` array tag mappings and ordering inside the zipped GPIF XML.
+  - Authored a dedicated public synthetic fixture `fixtures/public/test_gpif_track_preferences.ir.json` modeling various layout preference tracks.
+  - Wrote comprehensive unit tests in `tests/test_gp_writer.py` (`test_gpif_track_preferences`) verifying all systems layouts, track elements, and staff properties are mapped correctly inside the zipped GPIF XML.
 - **E2E Private Smoke Test Results**:
-  - Ran E2E private smoke compiler against real private inputs to verify zero regressions or crashes with the new granular string balances.
+  - Ran E2E private smoke compiler against real private inputs to verify zero regressions or crashes with the new track preferences.
 
 ## Known Limitations
 
@@ -51,7 +53,7 @@
 
 ## Next Recommended Task
 
-- **Support custom track-level layout preferences and visual staff customization settings**: Support custom track-level formatting preferences and staff system configurations in the GPIF writer.
+- **Support track-level visual layout view styles and print layout overrides**: Implement custom visual views (such as screen vs. page mode) and printing layout options inside the GPIF XML generator.
 
 ## Explicit Scope Boundaries
 
