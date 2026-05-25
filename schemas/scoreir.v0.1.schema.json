@@ -743,6 +743,35 @@
       "title": "Event",
       "type": "object"
     },
+    "FontDef": {
+      "additionalProperties": false,
+      "properties": {
+        "bold": {
+          "default": false,
+          "title": "Bold",
+          "type": "boolean"
+        },
+        "family": {
+          "title": "Family",
+          "type": "string"
+        },
+        "italic": {
+          "default": false,
+          "title": "Italic",
+          "type": "boolean"
+        },
+        "size": {
+          "title": "Size",
+          "type": "number"
+        }
+      },
+      "required": [
+        "family",
+        "size"
+      ],
+      "title": "FontDef",
+      "type": "object"
+    },
     "GraceTechnique": {
       "additionalProperties": false,
       "properties": {
@@ -1486,6 +1515,67 @@
       "title": "PullOffTechnique",
       "type": "object"
     },
+    "ScoreFonts": {
+      "additionalProperties": false,
+      "properties": {
+        "header": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FontDef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "lyrics": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FontDef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "music_font": {
+          "default": "Bravura",
+          "title": "Music Font",
+          "type": "string"
+        },
+        "symbol_font": {
+          "default": "Bravura",
+          "title": "Symbol Font",
+          "type": "string"
+        },
+        "tab_annotations": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FontDef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "title": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FontDef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "ScoreFonts",
+      "type": "object"
+    },
     "ScoreLayout": {
       "additionalProperties": false,
       "properties": {
@@ -1514,6 +1604,17 @@
           ],
           "default": null,
           "title": "Ensemble Brackets"
+        },
+        "fonts": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScoreFonts"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "page_setup": {
           "$ref": "#/$defs/PageSetup"
