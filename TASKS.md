@@ -2,9 +2,11 @@
 
 ## Next
 
-- [ ] Support visual stylesheet style collections and dynamic staff layout properties in the GPIF XML generator.
+- [ ] Support visual stylesheet styles formatting overrides and dynamic measures layout preferences in the GPIF XML generator.
 
 ## Done
+
+- [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for centralized visual layout style collections and track-level dynamic staff rendering layout overrides (specifically staff brackets, system stem visibility, and line sizing constraints per system), mapping these visual preferences into valid structural GP7-compatible XML blocks (`feature/gpif-style-collections-and-staff-properties-v0.1`).
 
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for custom font stylesheets (assigning explicit font family names, sizes, weights, and styles for titles, headers, lyrics, and tab annotations) and music typographic properties (selecting native music symbols fonts like Bravura, Gootsch, or Jazz), mapping these aesthetic preferences into valid structural GP7-compatible XML blocks (`feature/gpif-font-stylesheets-and-engraving-v0.1`).
 
