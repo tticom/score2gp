@@ -693,6 +693,17 @@ def _event(parent: ET.Element, event: Event, hopo_dests: set[tuple[int, int, int
         attrs["rest"] = "true"
     node = ET.SubElement(parent, "Event", attrs)
 
+    if getattr(event, "expression_controller", None) is not None:
+        ec = event.expression_controller
+        ec_node = ET.SubElement(node, "ExpressionController", {"type": ec.type})
+        if ec.duration_ticks is not None:
+            _text(ec_node, "Duration", ec.duration_ticks)
+        for pt in ec.points:
+            ET.SubElement(ec_node, "Point", {
+                "offset": str(pt.offset_ticks),
+                "value": f"{pt.value:.6f}"
+            })
+
     if event.dynamic:
         _text(node, "Dynamic", event.dynamic.upper())
 
@@ -852,6 +863,17 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
         },
     )
 
+    if getattr(note, "expression_controller", None) is not None:
+        ec = note.expression_controller
+        ec_node = ET.SubElement(note_node, "ExpressionController", {"type": ec.type})
+        if ec.duration_ticks is not None:
+            _text(ec_node, "Duration", ec.duration_ticks)
+        for pt in ec.points:
+            ET.SubElement(ec_node, "Point", {
+                "offset": str(pt.offset_ticks),
+                "value": f"{pt.value:.6f}"
+            })
+
     is_hopo_dest = (bar_index, onset_ticks, note.string) in hopo_dests
     is_let_ring = (bar_index, onset_ticks, note.string) in let_ring_notes
     is_palm_mute = (bar_index, onset_ticks, note.string) in palm_mute_notes
@@ -878,6 +900,8 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
     slide_flags = 2
     has_glissando = False
     has_bend = False
+    custom_dest_val = None
+    custom_graphic_dur = None
     has_hopo_origin = False
     bend_semitones = 1.0
     max_bend_semitones = 1.0
@@ -963,20 +987,32 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
             max_bend_semitones = bend_semitones
             if getattr(technique, "points", None):
                 max_bend_semitones = max(pt.semitones for pt in technique.points)
+            if getattr(technique, "destination_value", None) is not None:
+                custom_dest_val = technique.destination_value
+            if getattr(technique, "graphic_duration", None) is not None:
+                custom_graphic_dur = technique.graphic_duration
 
             bend_node = ET.SubElement(note_node, "Bend")
+            if getattr(technique, "bend_type", None) is not None:
+                bend_node.set("type", technique.bend_type)
+            if getattr(technique, "destination_value", None) is not None:
+                _text(bend_node, "DestinationValue", technique.destination_value)
+            if getattr(technique, "graphic_duration", None) is not None:
+                _text(bend_node, "GraphicDuration", technique.graphic_duration)
+
             if getattr(technique, "points", None):
                 for pt in technique.points:
                     off_pct = (pt.offset_ticks / max(1, duration_ticks)) * 100.0
                     val_gp = pt.semitones * 50.0
-                    ET.SubElement(
-                        bend_node,
-                        "Point",
-                        {
-                            "offset": f"{off_pct:.6f}",
-                            "value": f"{val_gp:.6f}",
-                        }
-                    )
+                    attrs = {
+                        "offset": f"{off_pct:.6f}",
+                        "value": f"{val_gp:.6f}",
+                    }
+                    if getattr(pt, "v_x", None) is not None:
+                        attrs["v_x"] = f"{pt.v_x:.6f}"
+                    if getattr(pt, "v_y", None) is not None:
+                        attrs["v_y"] = f"{pt.v_y:.6f}"
+                    ET.SubElement(bend_node, "Point", attrs)
             else:
                 ET.SubElement(bend_node, "Point", {"offset": "0.000000", "value": "0.000000"})
                 ET.SubElement(bend_node, "Point", {"offset": "50.000000", "value": f"{bend_semitones * 50.0:.6f}"})
@@ -1180,7 +1216,8 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
             _text(dest_offset, "Float", "100.000000")
 
             dest_val = ET.SubElement(properties_node, "Property", {"name": "BendDestinationValue"})
-            _text(dest_val, "Float", f"{max_bend_semitones * 50.0:.6f}")
+            final_dest_val = custom_dest_val if custom_dest_val is not None else (max_bend_semitones * 50.0)
+            _text(dest_val, "Float", f"{final_dest_val:.6f}")
 
             mid_off1 = ET.SubElement(properties_node, "Property", {"name": "BendMiddleOffset1"})
             _text(mid_off1, "Float", "12.000000")
@@ -1196,6 +1233,10 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
 
             orig_val = ET.SubElement(properties_node, "Property", {"name": "BendOriginValue"})
             _text(orig_val, "Float", "0.000000")
+
+            if custom_graphic_dur is not None:
+                gd_prop = ET.SubElement(properties_node, "Property", {"name": "BendGraphicDuration"})
+                _text(gd_prop, "Float", f"{custom_graphic_dur:.6f}")
 
         if has_slap:
             slap_prop = ET.SubElement(properties_node, "Property", {"name": "Slapped"})

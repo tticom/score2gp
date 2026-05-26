@@ -1,0 +1,120 @@
+{
+  "schema_version": "0.1.0",
+  "metadata": {
+    "title": "Expressive Guitar Solo",
+    "artist": "Synthetic Virtuoso",
+    "composer": "Synthetic Virtuoso",
+    "transcriber": "score2gp",
+    "copyright": "Creative Commons"
+  },
+  "conversion": {
+    "tool_name": "score2gp",
+    "tool_version": "0.1.0",
+    "source_page_count": 1
+  },
+  "tempo": {
+    "bpm": 120,
+    "text": "Expressive"
+  },
+  "tracks": [
+    {
+      "id": "gtr-1",
+      "name": "Guitar",
+      "instrument": "steel guitar",
+      "tuning": {
+        "name": "Standard Guitar",
+        "strings": [
+          { "number": 1, "pitch": 64, "name": "E4" },
+          { "number": 2, "pitch": 59, "name": "B3" },
+          { "number": 3, "pitch": 55, "name": "G3" },
+          { "number": 4, "pitch": 50, "name": "D3" },
+          { "number": 5, "pitch": 45, "name": "A2" },
+          { "number": 6, "pitch": 40, "name": "E2" }
+        ]
+      }
+    }
+  ],
+  "bars": [
+    {
+      "index": 1,
+      "time_signature": {
+        "numerator": 4,
+        "denominator": 4
+      },
+      "events": [
+        {
+          "id": "e1",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 0,
+            "duration_ticks": 1920,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "half", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 3,
+              "fret": 2,
+              "pitch": 57,
+              "confidence": 1.0,
+              "expression_controller": {
+                "type": "Expression",
+                "duration_ticks": 1920,
+                "points": [
+                  { "offset_ticks": 0, "value": 40.0 },
+                  { "offset_ticks": 960, "value": 70.0 },
+                  { "offset_ticks": 1920, "value": 100.0 }
+                ]
+              },
+              "techniques": [
+                {
+                  "kind": "bend",
+                  "bend_type": "bend-release",
+                  "destination_value": 75.0,
+                  "graphic_duration": 960,
+                  "points": [
+                    { "offset_ticks": 0, "semitones": 0.0, "v_x": 0.0, "v_y": 0.0 },
+                    { "offset_ticks": 480, "semitones": 1.0, "v_x": 0.25, "v_y": 0.5 },
+                    { "offset_ticks": 960, "semitones": 0.0, "v_x": 0.75, "v_y": 0.25 }
+                  ]
+                }
+              ]
+            }
+          ],
+          "confidence": 1.0
+        },
+        {
+          "id": "e2",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 1920,
+            "duration_ticks": 1920,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "half", "dots": 0 }
+          },
+          "expression_controller": {
+            "type": "Volume",
+            "duration_ticks": 1920,
+            "points": [
+              { "offset_ticks": 0, "value": 50.0 },
+              { "offset_ticks": 1920, "value": 90.0 }
+            ]
+          },
+          "notes": [
+            {
+              "string": 3,
+              "fret": 0,
+              "pitch": 55,
+              "confidence": 1.0
+            }
+          ],
+          "confidence": 1.0
+        }
+      ]
+    }
+  ]
+}
