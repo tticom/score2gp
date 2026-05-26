@@ -3,9 +3,9 @@
 ## Metadata
 - **Current Branch**: `feature/pdf-confidence-ambiguity-public-fixtures-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: Open draft PR
-- **Latest Local Commit**: `cd08eea73a7d304e76ee62eaeb547e6b0bbd6676` ("test: add public synthetic fixtures for pdf confidence and ambiguity blockers")
-- **Latest Pushed Commit**: `cd08eea73a7d304e76ee62eaeb547e6b0bbd6676` ("test: add public synthetic fixtures for pdf confidence and ambiguity blockers")
+- **Current PR**: #134 (https://github.com/tticom/score2gp/pull/134)
+- **Latest Local Commit**: `840688049df3b680fe0cf9e34e56598c92bdfdb9` ("docs: update HANDOFF.md with latest commit metadata for ambiguity feature branch")
+- **Latest Pushed Commit**: `840688049df3b680fe0cf9e34e56598c92bdfdb9` ("docs: update HANDOFF.md with latest commit metadata for ambiguity feature branch")
 - **Working Tree Status**: Clean.
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked.
 
