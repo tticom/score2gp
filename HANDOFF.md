@@ -4,8 +4,8 @@
 - **Current Branch**: `bugfix/pipeline-horizontal-boundary-cushion`
 - **Base Branch**: `main`
 - **Current PR**: #131 (https://github.com/tticom/score2gp/pull/131)
-- **Latest Local Commit**: `a1a4285daa5da08773ce1b365ca9814ef5f785af` ("feat: implement configurable horizontal boundary cushions for measure box snapping")
-- **Latest Pushed Commit**: `a1a4285daa5da08773ce1b365ca9814ef5f785af` ("feat: implement configurable horizontal boundary cushions for measure box snapping")
+- **Latest Local Commit**: `5b8d13cae6a8e8774cade2a2672dad0a2f72ad45` ("docs: update HANDOFF.md with horizontal bar cushion feature details")
+- **Latest Pushed Commit**: `5b8d13cae6a8e8774cade2a2672dad0a2f72ad45` ("docs: update HANDOFF.md with horizontal bar cushion feature details")
 - **Working Tree Status**: Clean and synchronized with origin.
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked.
 
