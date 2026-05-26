@@ -4,11 +4,11 @@
 
 - **Current Branch**: `feature/build-ir-fret-snapping-optimization-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: Draft PR (created via `gh pr create --draft --fill`)
-- **Latest Local Commit**: `9e5ed5d4a13d7ca02213795d1170d1e573a6a165` ("feat: implement fret-snapping cost optimization and shift penalization gate in tablature voicing solver")
-- **Latest Pushed Commit**: N/A (not pushed yet)
+- **Current PR**: [PR #114](https://github.com/tticom/score2gp/pull/114) (Draft)
+- **Latest Local Commit**: `cc51d8099daec191f3619977eaeb2b123cf2dc37` ("docs: update HANDOFF.md and TASKS.md with fret snapping cost optimization details")
+- **Latest Pushed Commit**: `cc51d8099daec191f3619977eaeb2b123cf2dc37` ("docs: update HANDOFF.md and TASKS.md with fret snapping cost optimization details")
 
-- **Working Tree Status**: Clean (after committing TASKS.md and HANDOFF.md).
+- **Working Tree Status**: Clean.
 
 - **GitHub Check Status**: N/A
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or `work/` contents are tracked.
