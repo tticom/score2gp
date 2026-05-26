@@ -4,9 +4,9 @@
 - **Current Branch**: `bugfix/pdf-left-bracket-barline-alignment`
 - **Base Branch**: `main`
 - **Current PR**: #129 (https://github.com/tticom/score2gp/pull/129)
-- **Latest Local Commit**: `fc41908` ("bugfix: accept left-edge overarching system bracket barlines in layout compiler")
-- **Latest Pushed Commit**: `fc41908` ("bugfix: accept left-edge overarching system bracket barlines in layout compiler")
-- **Working Tree Status**: Modified `TASKS.md` and `HANDOFF.md` are uncommitted.
+- **Latest Local Commit**: `bea422f` ("docs: update HANDOFF.md and TASKS.md with PR details and commit hashes")
+- **Latest Pushed Commit**: `bea422f` ("docs: update HANDOFF.md and TASKS.md with PR details and commit hashes")
+- **Working Tree Status**: Clean and synchronized with origin.
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked.
 
 ## Tests and Checks Run
