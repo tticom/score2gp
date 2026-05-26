@@ -674,7 +674,9 @@ def validate_roundtrip(path: str | Path, original: ScoreIR) -> dict[str, Any]:
                     if orig_val != rec_val:
                         errors.append(f"track '{tid}'.layout_preferences.{field} mismatch: original={orig_val}, recovered={rec_val}")
 
-    if original.layout.track_order != recovered.layout.track_order:
+    orig_order = original.layout.track_order if original.layout.track_order else [t.id for t in original.tracks]
+    rec_order = recovered.layout.track_order if recovered.layout.track_order else [t.id for t in recovered.tracks]
+    if orig_order != rec_order:
         errors.append(f"layout.track_order mismatch: original={original.layout.track_order}, recovered={recovered.layout.track_order}")
 
     orig_mm = original.layout.master_mixer
