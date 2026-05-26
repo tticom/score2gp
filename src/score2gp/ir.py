@@ -579,6 +579,14 @@ class MeasureLayout(BaseModel):
     spacing: float | None = None
 
 
+class BarNumberingOverride(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    prefix: str | None = None
+    offset: int | None = None
+    show: bool | None = None
+
+
 class Bar(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -592,6 +600,7 @@ class Bar(BaseModel):
     barline: Literal["regular", "double", "end", "section", "repeat-start", "repeat-end"] | None = None
     repeat_count: int | None = Field(default=None, ge=1)
     measure_layout: MeasureLayout | None = None
+    bar_numbering: BarNumberingOverride | None = None
 
 
     @model_validator(mode="before")
@@ -873,6 +882,16 @@ class BookletPagination(BaseModel):
     continuous: bool = True
 
 
+class BookletCoverPage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    title_alignment: Literal["left", "center", "right"] = "center"
+    margin_offset: float = 20.0
+    separator_style: Literal["none", "line", "double_line", "decorative"] = "line"
+    intro_text: str | None = None
+
+
 class ScoreBooklet(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -881,6 +900,7 @@ class ScoreBooklet(BaseModel):
     metadata: Metadata = Field(default_factory=Metadata)
     scores: list[ScoreIR] = Field(min_length=1)
     pagination: BookletPagination | None = None
+    cover_page: BookletCoverPage | None = None
 
     @classmethod
     def from_json_file(cls, path: str | Path) -> "ScoreBooklet":
@@ -993,6 +1013,7 @@ def semantic_scoreir_summary(score: ScoreIR) -> dict[str, Any]:
                 "barline": bar.barline,
                 "repeat_count": bar.repeat_count,
                 "measure_layout": bar.measure_layout.model_dump() if bar.measure_layout else None,
+                "bar_numbering": bar.bar_numbering.model_dump(exclude_none=True) if bar.bar_numbering else None,
                 "events": [
                     {
                         "id": event.id,

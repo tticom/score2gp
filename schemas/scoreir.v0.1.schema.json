@@ -8,6 +8,17 @@
           "title": "Anacrusis",
           "type": "boolean"
         },
+        "bar_numbering": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BarNumberingOverride"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "barline": {
           "anyOf": [
             {
@@ -114,6 +125,49 @@
       "title": "Bar",
       "type": "object"
     },
+    "BarNumberingOverride": {
+      "additionalProperties": false,
+      "properties": {
+        "offset": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Offset"
+        },
+        "prefix": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prefix"
+        },
+        "show": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Show"
+        }
+      },
+      "title": "BarNumberingOverride",
+      "type": "object"
+    },
     "BendPoint": {
       "additionalProperties": false,
       "properties": {
@@ -180,6 +234,56 @@
         }
       },
       "title": "BendTechnique",
+      "type": "object"
+    },
+    "BookletCoverPage": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "intro_text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Intro Text"
+        },
+        "margin_offset": {
+          "default": 20.0,
+          "title": "Margin Offset",
+          "type": "number"
+        },
+        "separator_style": {
+          "default": "line",
+          "enum": [
+            "none",
+            "line",
+            "double_line",
+            "decorative"
+          ],
+          "title": "Separator Style",
+          "type": "string"
+        },
+        "title_alignment": {
+          "default": "center",
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ],
+          "title": "Title Alignment",
+          "type": "string"
+        }
+      },
+      "title": "BookletCoverPage",
       "type": "object"
     },
     "BookletPagination": {
@@ -1690,6 +1794,17 @@
           "default": "Untitled Booklet",
           "title": "Booklet Title",
           "type": "string"
+        },
+        "cover_page": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BookletCoverPage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "metadata": {
           "$ref": "#/$defs/Metadata"
