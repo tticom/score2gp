@@ -2478,6 +2478,21 @@
     "Track": {
       "additionalProperties": false,
       "properties": {
+        "automations": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/TrackAutomation"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Automations"
+        },
         "capo": {
           "default": 0,
           "maximum": 24,
@@ -2622,6 +2637,35 @@
         "tuning"
       ],
       "title": "Track",
+      "type": "object"
+    },
+    "TrackAutomation": {
+      "additionalProperties": false,
+      "properties": {
+        "bar_index": {
+          "minimum": 1,
+          "title": "Bar Index",
+          "type": "integer"
+        },
+        "type": {
+          "enum": [
+            "Volume",
+            "Pan"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "number"
+        }
+      },
+      "required": [
+        "type",
+        "bar_index",
+        "value"
+      ],
+      "title": "TrackAutomation",
       "type": "object"
     },
     "TrackExpression": {

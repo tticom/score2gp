@@ -4,6 +4,8 @@
 
 ## Done
 
+- [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for track-level playback automation envelopes (timeline volume and stereo panning balance changes shifting at specific measures) in the Guitar Pro writer (`src/score2gp/gpif.py`), verified with public synthetic fixtures and unit tests (`feature/gpif-track-automations-v0.1`).
+
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for track-level performance expressions (such as "pizzicato", "arco", or "con sordino" timeline strings) and visual part-separation configuration templates (isolating tracks into standalone instrumental parts within a booklet) in the Guitar Pro writer (`src/score2gp/gpif.py`), verified with public synthetic fixtures and unit tests (`feature/gpif-track-expressions-and-part-separation-v0.1`).
 
 - [x] Implement ScoreIR parsing/schema expansion and packing/packaging entry points for multi-score Booklets (enabling a sequence of distinct internal ScoreIR entities to be managed collectively within a single structural wrapper) in the Guitar Pro writer (`src/score2gp/gpif.py`), verified with public synthetic fixtures and unit tests (`feature/gpif-score-booklets-and-collections-v0.1`).
