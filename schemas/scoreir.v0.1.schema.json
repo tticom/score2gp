@@ -156,6 +156,19 @@
           ],
           "default": null
         },
+        "multi_measure_rest_count": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Multi Measure Rest Count"
+        },
         "repeat_count": {
           "anyOf": [
             {
@@ -168,6 +181,17 @@
           ],
           "default": null,
           "title": "Repeat Count"
+        },
+        "repeat_count_overlay": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RepeatCountOverlay"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "tempo": {
           "anyOf": [
@@ -2152,6 +2176,52 @@
         }
       },
       "title": "RasgueadoTechnique",
+      "type": "object"
+    },
+    "RepeatCountOverlay": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "minimum": 1,
+          "title": "Count",
+          "type": "integer"
+        },
+        "span": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Span"
+        },
+        "style": {
+          "anyOf": [
+            {
+              "enum": [
+                "standard",
+                "percent",
+                "numbered",
+                "default"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "default",
+          "title": "Style"
+        }
+      },
+      "required": [
+        "count"
+      ],
+      "title": "RepeatCountOverlay",
       "type": "object"
     },
     "ScoreBooklet": {
