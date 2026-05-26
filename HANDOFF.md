@@ -4,9 +4,9 @@
 
 - **Current Branch**: `feature/gpif-track-expressions-and-part-separation-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: `Draft PR to be created`
-- **Latest Local Commit**: `3d407da9c88bd004bae0ca4d07c515765b561498` ("feat: implement track-level expression annotations and visual part separation overrides")
-- **Latest Pushed Commit**: `N/A`
+- **Current PR**: PR #103 (https://github.com/tticom/score2gp/pull/103)
+- **Latest Local Commit**: `477ee8246033de1f0bfa86c79a5865e858ec3060` ("docs: update TASKS.md and HANDOFF.md with track expressions progress")
+- **Latest Pushed Commit**: `477ee8246033de1f0bfa86c79a5865e858ec3060` ("docs: update TASKS.md and HANDOFF.md with track expressions progress")
 
 - **Working Tree Status**: Clean (except doc/tasks updates).
 
