@@ -339,6 +339,19 @@ def _tracks(parent: ET.Element, score: ScoreIR, track_cd_maps: dict[str, dict[st
                 expr_node = ET.SubElement(et_node, "ExpressionText", {"measure": str(expr.bar_index)})
                 expr_node.text = expr.text
 
+        if getattr(track, "automations", None) is not None and track.automations:
+            automations_node = ET.SubElement(node, "Automations")
+            by_type = {}
+            for auto in track.automations:
+                by_type.setdefault(auto.type, []).append(auto)
+            for auto_type in sorted(by_type.keys()):
+                auto_node = ET.SubElement(automations_node, "Automation", {"type": auto_type})
+                for auto in sorted(by_type[auto_type], key=lambda a: a.bar_index):
+                    ET.SubElement(auto_node, "Point", {
+                        "measure": str(auto.bar_index),
+                        "value": str(auto.value)
+                    })
+
         if getattr(track, "layout_preferences", None) is not None:
             if track.layout_preferences.tab_only:
                 tab_node = ET.SubElement(node, "Tablature")

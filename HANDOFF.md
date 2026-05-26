@@ -2,11 +2,11 @@
 
 ## Metadata
 
-- **Current Branch**: `feature/gpif-track-expressions-and-part-separation-v0.1`
+- **Current Branch**: `feature/gpif-track-automations-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: PR #103 (https://github.com/tticom/score2gp/pull/103)
-- **Latest Local Commit**: `cc2631aa1be21b4a0242735ce283a178071eaa72` ("docs: finalize HANDOFF.md with PR 103 details")
-- **Latest Pushed Commit**: `cc2631aa1be21b4a0242735ce283a178071eaa72` ("docs: finalize HANDOFF.md with PR 103 details")
+- **Current PR**: PR #104 (https://github.com/tticom/score2gp/pull/104)
+- **Latest Local Commit**: `bd457ca4de540f3d0c30a0d000977f7c20041752` ("docs: finalize HANDOFF.md with PR 104 details")
+- **Latest Pushed Commit**: `bd457ca4de540f3d0c30a0d000977f7c20041752` ("docs: finalize HANDOFF.md with PR 104 details")
 
 - **Working Tree Status**: Clean (except doc/tasks updates).
 
@@ -16,9 +16,9 @@
 
 ## Tests And Checks Run
 
-- `python -m pytest` -> 353 passed (100% success, including the new track performance expressions and part-separation layout template unit tests).
-- `python -m score2gp.cli export-schema --out schemas` -> passed cleanly (updated schemas with `TrackExpression` and `PartSeparationRule` models).
-- `python -m score2gp.cli validate-ir fixtures/public/test_gpif_track_expressions.ir.json` -> valid.
+- `python -m pytest` -> 354 passed (100% success, including the new track volume and panning playback automation envelope unit tests).
+- `python -m score2gp.cli export-schema --out schemas` -> passed cleanly (updated schemas with `TrackAutomation` model).
+- `python -m score2gp.cli validate-ir fixtures/public/test_gpif_track_automations.ir.json` -> valid.
 - `git diff --check` -> passed cleanly (zero trailing whitespace or EOF blank line violations).
 - `git diff -- schemas` -> passed cleanly (valid schema additions).
 - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep`.
@@ -27,20 +27,17 @@
 ## What Changed In This Task
 
 - **ScoreIR Schema & Model Expansion**:
-  - Created `TrackExpression` model under `src/score2gp/ir.py` specifying `bar_index` (minimum 1) and performance `text` (e.g., "pizzicato", "arco", "con sordino").
-  - Created `PartSeparationRule` model under `src/score2gp/ir.py` specifying `part_id`, `track_ids` array, `layout_mode` (default "page"), and `visible` boolean (default true).
-  - Updated `Track` model in `src/score2gp/ir.py` to support `expressions` as an optional list of `TrackExpression` items.
-  - Updated `ScoreLayout` model in `src/score2gp/ir.py` to support `part_separation` as an optional list of `PartSeparationRule` items.
-  - Expanded semantic summary generation `semantic_scoreir_summary()` to capture track expressions.
+  - Created `TrackAutomation` model under `src/score2gp/ir.py` specifying `type` (Literal "Volume" or "Pan"), `bar_index` (minimum 1), and float `value`.
+  - Updated `Track` model in `src/score2gp/ir.py` to support `automations` as an optional list of `TrackAutomation` items.
+  - Expanded semantic summary generation `semantic_scoreir_summary()` in `src/score2gp/ir.py` to serialize track automations.
   - Successfully re-exported updated JSON schema version via CLI.
 - **GPIF XML Generator Serialization**:
-  - Serialized track performance expressions into standard track-level properties: `<Track id="..."><ExpressionTexts><ExpressionText measure="X">Text</ExpressionText></ExpressionTexts></Track>` inside `_tracks` in `src/score2gp/gpif.py`.
-  - Serialized part-separation layout configurations under: `<Layout><PartSeparation><Part id="..." layoutMode="..." visible="..."><Tracks>ids...</Tracks></Part></PartSeparation></Layout>` inside `build_gpif` in `src/score2gp/gpif.py`.
+  - Serialized track performance automations under standard track properties: `<Track id="..."><Automations><Automation type="Volume"><Point measure="1" value="0.8"/></Automation></Automations></Track>` inside `_tracks` in `src/score2gp/gpif.py`.
 - **Synthetic Testing & Validation**:
-  - Created public synthetic fixture `fixtures/public/test_gpif_track_expressions.ir.json` containing track expressions and part-separation templates.
-  - Authored comprehensive unit tests `test_gpif_track_expressions_and_part_separation` in `tests/test_gp_writer.py` asserting XML structures, timeline expressions, layout mode tags, and warning boundary rules.
+  - Created public synthetic fixture `fixtures/public/test_gpif_track_automations.ir.json` containing track volume and pan automations.
+  - Authored comprehensive unit tests `test_gpif_track_automations` in `tests/test_gp_writer.py` asserting XML structures, automation points, and value attributes.
 - **E2E Private Smoke Test Results**:
-  - Ran E2E private smoke compiler against real private inputs to verify zero regressions or crashes with the new track expression and part-separation template configurations.
+  - Ran E2E private smoke compiler against real private inputs to verify zero regressions or crashes with the new track playback automation structures.
 
 ## Known Limitations
 
