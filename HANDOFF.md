@@ -2,11 +2,11 @@
 
 ## Metadata
 
-- **Current Branch**: `feature/build-ir-coda-segno-markers-v0.1`
+- **Current Branch**: `feature/build-ir-timeline-repeats-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: [PR #117](https://github.com/tticom/score2gp/pull/117) (Draft)
-- **Latest Local Commit**: `65d4da90632b505ba7bc89d479c7b91d24ea2a1a` ("docs: update HANDOFF.md and TASKS.md with repeating markers and roadmap details")
-- **Latest Pushed Commit**: `65d4da90632b505ba7bc89d479c7b91d24ea2a1a` ("docs: update HANDOFF.md and TASKS.md with repeating markers and roadmap details")
+- **Current PR**: Draft (To be created)
+- **Latest Local Commit**: `9e47f93539bc7aef40a6b8a733cd1a18da9e0da1` ("feat: parse and serialize timeline repeats and alternative endings")
+- **Latest Pushed Commit**: N/A (To be pushed)
 
 - **Working Tree Status**: Clean (except TASKS.md and HANDOFF.md, which will be committed in the next step).
 
@@ -16,9 +16,9 @@
 
 ## Tests And Checks Run
 
-- `python -m pytest` -> 377 passed (100% success, including the new `test_coda_segno_markers_xml` verifying the `<Marker>` and `<Directions>` tags and values inside `<MasterBar>`).
+- `python -m pytest` -> 378 passed (100% success, including the new `test_timeline_repeats_xml` verifying the `<AlternateEndings>` and `<AlternativeEnding>` tags and values inside `<MasterBar>` and `<Bar>`).
 - `python -m score2gp.cli export-schema --out schemas` -> passed cleanly and updated Intermediate schemas.
-- `python -m score2gp.cli validate-ir fixtures/public/test_coda_segno_markers.ir.json` -> valid and fully compliant.
+- `python -m score2gp.cli validate-ir fixtures/public/test_timeline_repeats.ir.json` -> valid and fully compliant.
 - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid.
 - `git diff --check` -> passed cleanly.
 - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep`.
@@ -27,15 +27,14 @@
 ## What Changed In This Task
 
 - **Model & Schema Expansion (`src/score2gp/ir.py`)**:
-  - Defined the `BarDirection` Pydantic model representing roadmap navigation elements with type and optional target bar index.
-  - Expanded `Bar` model with optional `directions` list, `marker` section label string, and `marker_color` hex string.
+  - Expanded `Bar` Pydantic model with optional `alternate_ending_passes` integer list (the passes this volta applies to) and `alternate_ending_is_stop` boolean.
   - Re-exported the schema via the CLI schema exporter.
-- **GPIF Repeat Markers & Directions Mappings (`src/score2gp/gpif.py`)**:
-  - Implemented visual section `<Marker>` XML generation inside `<MasterBar>` detailing optional visual label text and hex colors.
-  - Implemented `<Directions>` block pointers detailing Segnos, Codas, Double Codas, Fine visual anchor glyphs, and To Coda / Dal Segno al Coda repeating roadmap jump indicators.
+- **GPIF Repeat voltas & Brackets Mappings (`src/score2gp/gpif.py`)**:
+  - Implemented visual alternative endings `<AlternateEndings>` bitmask element inside `<MasterBar>` detailing pass numbers.
+  - Implemented visual alternative endings `<AlternateEndings>` and `<AlternativeEnding>` elements inside `<Bar>` detailing explicit target pass-masks.
 - **Public Fixtures & Tests**:
-  - Created `fixtures/public/test_coda_segno_markers.ir.json` modeling a complete repeating bar roadmap structure.
-  - Created unit test suite `tests/test_coda_segno_markers.py` verifying accurate structural GP7-compatible XML tag output.
+  - Created `fixtures/public/test_timeline_repeats.ir.json` modeling 1st and 2nd alternative endings with loop limits.
+  - Created unit test suite `tests/test_timeline_repeats.py` verifying accurate structural GP7-compatible XML tag output.
 
 ## Known Limitations
 
@@ -47,8 +46,8 @@
 
 ## Next Recommended Task
 
-- Next branch: `feature/build-ir-timeline-repeats-v0.1`
-- Goal: Implement timeline measure visual alignments and structural repeating brackets overrides.
+- Next branch: `feature/build-ir-timeline-measure-ranges-v0.1`
+- Goal: Implement timeline multi-measure rest alignments and visual repeat count overlays.
 
 ## Explicit Scope Boundaries
 
