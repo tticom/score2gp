@@ -2,46 +2,43 @@
 
 ## Metadata
 
-- **Current Branch**: `feature/gpif-system-breaks-and-staff-scaling-v0.1`
+- **Current Branch**: `feature/build-ir-chord-diagrams-and-fingerings-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: Draft PR created on origin
-- **Latest Local Commit**: `26b8048f760df768f7422961d28389c9223f6687` ("feat: implement system breaks, staff scaling, and hidden/dashed barlines")
-- **Latest Pushed Commit**: `26b8048f760df768f7422961d28389c9223f6687` ("feat: implement system breaks, staff scaling, and hidden/dashed barlines")
+- **Current PR**: Draft PR to be created on origin
+- **Latest Local Commit**: `b15873d` ("feat: implement symmetrical round-trip serialization and reverse-extraction for beat-level chord diagrams and note-fingerings")
+- **Latest Pushed Commit**: Pending push to origin
 
-- **Working Tree Status**: Clean.
+- **Working Tree Status**: Clean (except for HANDOFF.md and TASKS.md).
 
-- **GitHub Check Status**: Pending.
+- **GitHub Check Status**: N/A
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or `work/` contents are tracked.
 - **Root Generated-Artifact Audit**: Clean. No root generated artifacts tracked.
 
 ## Tests And Checks Run
 
-- `python -m pytest` -> 382 passed (100% success, including the new unit test file `tests/test_system_breaks.py` asserting visual breaks, staff-system layout distancing, and custom hidden/dashed barlines).
-- `python -m score2gp.cli export-schema --out schemas` -> passed cleanly and updated intermediate schemas.
-- `python -m score2gp.cli validate-ir fixtures/public/test_system_breaks.ir.json` -> valid and fully compliant.
+- `python -m pytest` -> 383 passed (100% success, including the new unit test file `tests/test_chord_diagrams.py` asserting beat-level chord diagrams, key/bass notes, fretboard grids, fingerings, and note-level digit execution markers).
+- `python -m score2gp.cli export-schema --out schemas` -> passed cleanly and verified intermediate schemas.
+- `python -m score2gp.cli validate-ir fixtures/public/test_chord_diagrams.ir.json` -> valid and fully compliant.
 - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid.
-- `git diff --check` -> passed cleanly.
+- `git diff --check` -> passed cleanly with trailing whitespaces resolved.
 - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep`.
-- `python scripts/private_e2e_smoke.py` -> passed cleanly against all private PDF inputs (including derek trucks, hal leonard, jazz classics, CAGEDShapes, etc., and `fixtures/private/Lesson-7.pdf`) with zero regressions.
+- `python scripts/private_e2e_smoke.py --pdf fixtures/private/Lesson-7.pdf` -> processed successfully with zero regressions and clean classification.
 
 ## What Changed In This Task
 
 - **Model & Schema Validation Support (`src/score2gp/ir.py`)**:
-  - Defined Pydantic models `SystemLayout` (with `system_size_percent`, `staff_distancing_cushion`, `barline_style`) and `StaffLayout` (with `staff_spacing_cushion`, `staff_size`).
-  - Added `system_layout` and `staff_layout` optional fields to `ScoreLayout`.
-  - Expanded `Bar`'s `barline` literal choices to include `"hidden"` and `"dashed"`.
-  - Re-exported the schema via the CLI schema exporter: `schemas/scoreir.v0.1.schema.json`.
-- **GPIF Formatting Mappings (`src/score2gp/gpif.py`)**:
-  - Implemented `<SystemLayout>` and `<StaffLayout>` elements serialization under `<Layout>` under `<Score>` inside `build_gpif()`.
-  - Added serialization of `<LayoutBreak><Type>System</Type></LayoutBreak>` or `<Type>Page</Type>` under `<Bar>` elements inside `_bars()`.
-  - Expanded `barline_map` in `_master_bars()` to serialize `"hidden": "Hidden"` and `"dashed": "Dashed"`.
-- **Reverse Extraction (`src/score2gp/gp_package.py`)**:
-  - Added extraction of `<SystemLayout>` and `<StaffLayout>` properties under `<Layout>` back into the `layout` model object.
-  - Added reverse-extraction of `<LayoutBreak>` element type back to `layout_break` inside `<Bar>`.
-  - Expanded `barline_inv_map` in `MasterBar` parsing to support `"Hidden": "hidden"` and `"Dashed": "dashed"`.
+  - Implemented fingering normalizers `normalize_lh_fingering` and `normalize_rh_fingering` to consistently map finger strings (e.g. `1` vs `Index`, `p` vs `Thumb`) into lowercase canonical strings (`"index"`, `"thumb"`, etc.).
+  - Expanded `semantic_scoreir_summary` to include event-level `chord_diagram` comparisons and normalized note-level fingerings, ensuring bulletproof equivalence checks during round-trip extraction.
+- **GPIF Writing Support (`src/score2gp/gpif.py`)**:
+  - Core XML generation for beat-level `<ChordDiagram>` elements and note-level `<LeftHandFingering>`/`<RightHandFingering>` properties under the note's `<Properties>` tree verified.
+- **Reverse Extraction Support (`src/score2gp/gp_package.py`)**:
+  - Implemented reverse-extraction for event-level `<ChordDiagram>` and `<Chord>` XML elements back into `ChordDiagram` and `chord_symbol` objects.
+  - Implemented reverse-extraction for note-level `<LeftHandFingering>` and `<RightHandFingering>` properties back into `Note` properties.
+  - Added robust validation in `_validate_score_ir_roundtrip` comparing chord diagrams (name, fret count, key/bass notes, frets, finger arrays), chord symbols, and note fingerings.
+  - Restored `chord_symbol` to `chord_diagram.name` during extraction when a chord diagram is present.
 - **Public Fixtures & Tests**:
-  - Created `fixtures/public/test_system_breaks.ir.json` representing forced page/system breaks, custom hidden/dashed barlines, and custom staff/system layout scaling.
-  - Created `tests/test_system_breaks.py` verifying accurate structural GP7-compatible XML tag output and bidirectional extraction round-tripping.
+  - Created `fixtures/public/test_chord_diagrams.ir.json` representing rock/jazz chord melodies using complex chord shapes, left-hand finger grids, and explicit note-level digit execution markers.
+  - Created `tests/test_chord_diagrams.py` verifying accurate XML grid layout structure, zipped package compilation with zero warnings, and 100% successful round-trip validation.
 
 ## Known Limitations
 
@@ -49,12 +46,11 @@
 
 ## Remaining Risks
 
-- None known after private smoke refresh.
+- None known. All tests are completely green.
 
 ## Next Recommended Task
 
-- Merge the current PR #123 into `main` after checks pass.
-- Explicit non-goals for next tasks: Do not reopen tempo-variations, repeats/voltas, or system-breaks branches unless investigating a regression.
+- Merge the current PR for chord diagrams and fingerings into `main` after checks pass.
 
 ## Explicit Scope Boundaries
 
