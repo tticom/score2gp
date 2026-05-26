@@ -662,6 +662,35 @@ def _master_bars(parent: ET.Element, score: ScoreIR) -> None:
             if bar.measure_layout.spacing is not None:
                 _text(ml_node, "Spacing", bar.measure_layout.spacing)
 
+        if getattr(bar, "marker", None) is not None:
+            marker_node = ET.SubElement(node, "Marker")
+            _text(marker_node, "Text", bar.marker)
+            if getattr(bar, "marker_color", None) is not None:
+                _text(marker_node, "Color", bar.marker_color)
+
+        if getattr(bar, "directions", None):
+            directions_node = ET.SubElement(node, "Directions")
+            direction_tag_map = {
+                "segno": "Segno",
+                "coda": "Coda",
+                "double-coda": "DoubleCoda",
+                "fine": "Fine",
+                "to-coda": "ToCoda",
+                "da-capo": "DaCapo",
+                "da-capo-al-coda": "DaCapoAlCoda",
+                "da-capo-al-fine": "DaCapoAlFine",
+                "dal-segno": "DalSegno",
+                "dal-segno-al-coda": "DalSegnoAlCoda",
+                "dal-segno-al-fine": "DalSegnoAlFine",
+                "dal-double-segno": "DalDoubleSegno",
+            }
+            for d in bar.directions:
+                tag_name = direction_tag_map.get(d.type)
+                if tag_name:
+                    d_node = ET.SubElement(directions_node, tag_name)
+                    if d.target_bar_index is not None:
+                        _text(d_node, "TargetBarIndex", d.target_bar_index)
+
 
 
 def _bars(parent: ET.Element, score: ScoreIR, hopo_dests: set[tuple[int, int, int]], let_ring_notes: set[tuple[int, int, int]], palm_mute_notes: set[tuple[int, int, int]], track_cd_maps: dict[str, dict[str, str]], event_map: dict[str, Event]) -> None:
