@@ -2532,7 +2532,15 @@ def _tabraw_grouping_risk(tabraw: TabRaw) -> dict[str, object] | None:
         candidate
         for candidate in tabraw.candidates
         if candidate.parsed_fret is not None
-        and not (isinstance(candidate.raw, dict) and candidate.raw.get("refusal_reason"))
+        and not (
+            isinstance(candidate.raw, dict)
+            and candidate.raw.get("refusal_reason")
+            in {
+                "pdf_fret_page_or_legend_number_excluded",
+                "pdf_fret_chord_text_digit_excluded",
+                "pdf_non_playable_text_not_string_assigned",
+            }
+        )
     ]
     unsafe_codes = _tabraw_unsafe_grouping_warning_codes(tabraw)
     if not playable and not unsafe_codes:
