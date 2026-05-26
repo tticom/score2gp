@@ -16,7 +16,7 @@ from .ir import (
     BoundingBox, Provenance, ConversionInfo, MasterMixer, PipelinePresetCascade,
     BookletCoverPage, BarNumberingOverride, BookletPagination,
     ExpressionController, ExpressionControllerPoint, BendPoint, BendTechnique,
-    RepeatCountOverlay
+    RepeatCountOverlay, TempoAutomation
 )
 
 REQUIRED_MEMBERS = {"VERSION", "Content/score.gpif"}
@@ -559,6 +559,16 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
             if tab_prop is not None:
                 tab_enabled = _first_text(tab_prop, ["Enable"]) == "true"
 
+        text_annotations = None
+        if staff_node is not None:
+            texts_node = staff_node.find("Texts")
+            if texts_node is not None:
+                text_annotations = []
+                for t_node in texts_node.findall("Text"):
+                    t_val = _first_text(t_node, ["Value"]) or t_node.text
+                    if t_val:
+                        text_annotations.append(t_val)
+
         tracks.append(
             Track(
                 id=track_id,
@@ -571,7 +581,8 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
                 color=color,
                 layout_preferences=layout_preferences,
                 expressions=expressions,
-                automations=automations
+                automations=automations,
+                text_annotations=text_annotations
             )
         )
 
@@ -642,13 +653,26 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
                 fifths = int(_first_text(key_node, ["Fifths"]) or 0)
                 mode = _first_text(key_node, ["Mode"]) or "major"
                 key_sig = KeySignature(fifths=fifths, mode=mode)
-            mb_map[idx] = (num, den, key_sig)
+
+            tempo_automation = None
+            ta_node = mb_node.find("TempoAutomation")
+            if ta_node is not None:
+                ta_type = _first_text(ta_node, ["Type"])
+                ta_style = _first_text(ta_node, ["Style"])
+                ta_val = _first_text(ta_node, ["TargetBPM"])
+                if ta_type is not None and ta_val is not None:
+                    tempo_automation = TempoAutomation(
+                        type=ta_type.lower(),
+                        style=ta_style.lower() if ta_style else "default",
+                        target_bpm=float(ta_val)
+                    )
+            mb_map[idx] = (num, den, key_sig, tempo_automation)
 
     bars_node = root.find(".//Bars")
     if bars_node is not None:
         for bar_node in bars_node.findall("Bar"):
             idx = int(bar_node.get("index") or 1)
-            num, den, key_sig = mb_map.get(idx, (4, 4, None))
+            num, den, key_sig, tempo_automation = mb_map.get(idx, (4, 4, None, None))
             events: list[Event] = []
             for ev_node in bar_node.findall(".//Event"):
                 ev_id = ev_node.get("id") or "e"
@@ -784,7 +808,8 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
                     events=events,
                     bar_numbering=bar_numbering,
                     multi_measure_rest_count=multi_measure_rest_count,
-                    repeat_count_overlay=repeat_count_overlay
+                    repeat_count_overlay=repeat_count_overlay,
+                    tempo_automation=tempo_automation
                 )
             )
 
