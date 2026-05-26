@@ -181,6 +181,30 @@
           "minimum": -12.0,
           "title": "Semitones",
           "type": "number"
+        },
+        "v_x": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "V X"
+        },
+        "v_y": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "V Y"
         }
       },
       "required": [
@@ -193,6 +217,42 @@
     "BendTechnique": {
       "additionalProperties": false,
       "properties": {
+        "bend_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bend Type"
+        },
+        "destination_value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Destination Value"
+        },
+        "graphic_duration": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Graphic Duration"
+        },
         "kind": {
           "const": "bend",
           "default": "bend",
@@ -712,6 +772,17 @@
           "default": null,
           "title": "Dynamic"
         },
+        "expression_controller": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExpressionController"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "fermata": {
           "anyOf": [
             {
@@ -879,6 +950,66 @@
         "timing"
       ],
       "title": "Event",
+      "type": "object"
+    },
+    "ExpressionController": {
+      "additionalProperties": false,
+      "properties": {
+        "duration_ticks": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Duration Ticks"
+        },
+        "points": {
+          "items": {
+            "$ref": "#/$defs/ExpressionControllerPoint"
+          },
+          "title": "Points",
+          "type": "array"
+        },
+        "type": {
+          "default": "Expression",
+          "enum": [
+            "Dynamic",
+            "Volume",
+            "Balance",
+            "Pitch",
+            "Expression"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "title": "ExpressionController",
+      "type": "object"
+    },
+    "ExpressionControllerPoint": {
+      "additionalProperties": false,
+      "properties": {
+        "offset_ticks": {
+          "minimum": 0,
+          "title": "Offset Ticks",
+          "type": "integer"
+        },
+        "value": {
+          "maximum": 100.0,
+          "minimum": 0.0,
+          "title": "Value",
+          "type": "number"
+        }
+      },
+      "required": [
+        "offset_ticks",
+        "value"
+      ],
+      "title": "ExpressionControllerPoint",
       "type": "object"
     },
     "FontDef": {
@@ -1332,6 +1463,17 @@
           "minimum": 0.0,
           "title": "Confidence",
           "type": "number"
+        },
+        "expression_controller": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExpressionController"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "fret": {
           "maximum": 36,

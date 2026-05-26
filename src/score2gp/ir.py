@@ -286,11 +286,26 @@ class SlideTechnique(BaseModel):
     flags: int | None = None
 
 
+class ExpressionControllerPoint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    offset_ticks: int = Field(ge=0)
+    value: float = Field(ge=0.0, le=100.0)
+
+
+class ExpressionController(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["Dynamic", "Volume", "Balance", "Pitch", "Expression"] = "Expression"
+    points: list[ExpressionControllerPoint] = Field(default_factory=list)
+    duration_ticks: int | None = None
+
+
 class BendPoint(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     offset_ticks: int = Field(ge=0)
     semitones: float = Field(ge=-12.0, le=12.0)
+    v_x: float | None = None
+    v_y: float | None = None
 
 
 class BendTechnique(BaseModel):
@@ -300,6 +315,9 @@ class BendTechnique(BaseModel):
     semitones: float | None = Field(default=None, ge=-12.0, le=12.0)
     points: list[BendPoint] = Field(default_factory=list)
     text: str | None = None
+    bend_type: str | None = None
+    destination_value: float | None = None
+    graphic_duration: int | None = None
 
 
 class VibratoCurvePoint(BaseModel):
@@ -474,6 +492,7 @@ class Note(BaseModel):
     right_hand_fingering: str | None = None
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     provenance: list[Provenance] = Field(default_factory=list)
+    expression_controller: ExpressionController | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -551,6 +570,7 @@ class Event(BaseModel):
     techniques: list[Technique] = Field(default_factory=list)
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     provenance: list[Provenance] = Field(default_factory=list)
+    expression_controller: ExpressionController | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -1029,8 +1049,9 @@ def semantic_scoreir_summary(score: ScoreIR) -> dict[str, Any]:
                         "brush": getattr(event, "brush", None),
                         "brush_duration": getattr(event, "brush_duration", None),
                         "text": event.text,
-                        "notes": [note.model_dump(exclude_none=True, exclude={"provenance"}) for note in event.notes],
+                        "notes": [{**note.model_dump(exclude_none=True, exclude={"provenance", "expression_controller"}), "expression_controller": note.expression_controller.model_dump(exclude_none=True) if getattr(note, "expression_controller", None) else None} for note in event.notes],
                         "techniques": [technique.model_dump(exclude_none=True) for technique in event.techniques],
+                        "expression_controller": event.expression_controller.model_dump(exclude_none=True) if getattr(event, "expression_controller", None) else None,
                     }
                     for event in sorted(bar.events, key=lambda item: (item.timing.onset_ticks, item.id))
                 ],

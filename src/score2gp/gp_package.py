@@ -14,7 +14,8 @@ from .ir import (
     TrackLayoutPreferences, TrackExpression, TrackAutomation, ScoreLayout,
     Metadata, Tempo, TimeSignature, KeySignature, Bar, Event, Note,
     BoundingBox, Provenance, ConversionInfo, MasterMixer, PipelinePresetCascade,
-    BookletCoverPage, BarNumberingOverride, BookletPagination
+    BookletCoverPage, BarNumberingOverride, BookletPagination,
+    ExpressionController, ExpressionControllerPoint, BendPoint, BendTechnique
 )
 
 REQUIRED_MEMBERS = {"VERSION", "Content/score.gpif"}
@@ -611,13 +612,88 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
 
                 from .ir import Timing
                 timing = Timing(bar_index=idx, onset_ticks=pos, duration_ticks=dur, voice=voice)
+
+                expression_controller = None
+                ec_node = ev_node.find("ExpressionController")
+                if ec_node is not None:
+                    ec_type = ec_node.get("type") or "Expression"
+                    dur_str = _first_text(ec_node, ["Duration"])
+                    dur_ticks = int(dur_str) if dur_str is not None else None
+                    points = []
+                    for pt_node in ec_node.findall("Point"):
+                        off_ticks = int(pt_node.get("offset") or 0)
+                        val_float = float(pt_node.get("value") or 0.0)
+                        points.append(ExpressionControllerPoint(offset_ticks=off_ticks, value=val_float))
+                    expression_controller = ExpressionController(type=ec_type, duration_ticks=dur_ticks, points=points)
+
                 notes: list[Note] = []
                 for n_node in ev_node.findall(".//Note"):
                     string = int(n_node.get("string") or 1)
                     fret = int(n_node.get("fret") or 0)
                     pitch = int(n_node.get("pitch") or 0)
-                    notes.append(Note(string=string, fret=fret, pitch=pitch))
-                events.append(Event(id=ev_id, track_id=tr_id, timing=timing, notes=notes, is_rest=rest))
+
+                    # Parse techniques (Bend)
+                    techniques = []
+                    bend_node = n_node.find("Bend")
+                    if bend_node is not None:
+                        pts = []
+                        for pt_node in bend_node.findall("Point"):
+                            off_pct = float(pt_node.get("offset") or 0.0)
+                            off_ticks = int(round((off_pct / 100.0) * dur))
+                            val_gp = float(pt_node.get("value") or 0.0)
+                            semitones = val_gp / 50.0
+
+                            v_x = pt_node.get("v_x")
+                            v_y = pt_node.get("v_y")
+                            pts.append(BendPoint(
+                                offset_ticks=off_ticks,
+                                semitones=semitones,
+                                v_x=float(v_x) if v_x is not None else None,
+                                v_y=float(v_y) if v_y is not None else None
+                            ))
+                        dest_val_str = _first_text(bend_node, ["DestinationValue"])
+                        dest_val = float(dest_val_str) if dest_val_str is not None else None
+                        gd_str = _first_text(bend_node, ["GraphicDuration"])
+                        gd = int(gd_str) if gd_str is not None else None
+                        b_type = bend_node.get("type")
+
+                        techniques.append(BendTechnique(
+                            kind="bend",
+                            points=pts,
+                            destination_value=dest_val,
+                            graphic_duration=gd,
+                            bend_type=b_type
+                        ))
+
+                    # Parse Note ExpressionController
+                    note_ec = None
+                    n_ec_node = n_node.find("ExpressionController")
+                    if n_ec_node is not None:
+                        ec_type = n_ec_node.get("type") or "Expression"
+                        dur_str = _first_text(n_ec_node, ["Duration"])
+                        dur_ticks = int(dur_str) if dur_str is not None else None
+                        points = []
+                        for pt_node in n_ec_node.findall("Point"):
+                            off_ticks = int(pt_node.get("offset") or 0)
+                            val_float = float(pt_node.get("value") or 0.0)
+                            points.append(ExpressionControllerPoint(offset_ticks=off_ticks, value=val_float))
+                        note_ec = ExpressionController(type=ec_type, duration_ticks=dur_ticks, points=points)
+
+                    notes.append(Note(
+                        string=string,
+                        fret=fret,
+                        pitch=pitch,
+                        techniques=techniques,
+                        expression_controller=note_ec
+                    ))
+                events.append(Event(
+                    id=ev_id,
+                    track_id=tr_id,
+                    timing=timing,
+                    notes=notes,
+                    is_rest=rest,
+                    expression_controller=expression_controller
+                ))
 
             bar_numbering = None
             bn_node = bar_node.find("BarNumbering")
@@ -866,5 +942,71 @@ def _validate_score_ir_roundtrip(original: ScoreIR, recovered: ScoreIR) -> list[
                 errors.append(f"bar {idx} bar_numbering.offset mismatch: original={ob.bar_numbering.offset}, recovered={rb.bar_numbering.offset}")
             if ob.bar_numbering.show != rb.bar_numbering.show:
                 errors.append(f"bar {idx} bar_numbering.show mismatch: original={ob.bar_numbering.show}, recovered={rb.bar_numbering.show}")
+
+        # Compare events
+        orig_events = {e.id: e for e in ob.events}
+        rec_events = {e.id: e for e in rb.events}
+        for ev_id, oe in orig_events.items():
+            if ev_id not in rec_events:
+                continue
+            re = rec_events[ev_id]
+
+            # Compare event expression controller
+            if (oe.expression_controller is None) != (re.expression_controller is None):
+                errors.append(f"event '{ev_id}' expression_controller presence mismatch")
+            elif oe.expression_controller is not None:
+                oec = oe.expression_controller
+                rec_c = re.expression_controller
+                if oec.type != rec_c.type or oec.duration_ticks != rec_c.duration_ticks:
+                    errors.append(f"event '{ev_id}' expression_controller type/duration mismatch: original={oec.type}/{oec.duration_ticks}, recovered={rec_c.type}/{rec_c.duration_ticks}")
+                if len(oec.points) != len(rec_c.points):
+                    errors.append(f"event '{ev_id}' expression_controller points count mismatch")
+                else:
+                    for p_idx, (op, rp) in enumerate(zip(oec.points, rec_c.points)):
+                        if op.offset_ticks != rp.offset_ticks or abs(op.value - rp.value) > 1e-4:
+                            errors.append(f"event '{ev_id}' expression_controller point {p_idx} mismatch")
+
+            # Compare notes
+            orig_notes = {n.string: n for n in oe.notes}
+            rec_notes = {n.string: n for n in re.notes}
+            for string_num, on in orig_notes.items():
+                if string_num not in rec_notes:
+                    continue
+                rn = rec_notes[string_num]
+
+                # Note expression controller
+                if (on.expression_controller is None) != (rn.expression_controller is None):
+                    errors.append(f"event '{ev_id}' note string {string_num} expression_controller presence mismatch")
+                elif on.expression_controller is not None:
+                    onec = on.expression_controller
+                    rnec = rn.expression_controller
+                    if onec.type != rnec.type or onec.duration_ticks != rnec.duration_ticks:
+                        errors.append(f"event '{ev_id}' note string {string_num} expression_controller type/duration mismatch")
+                    if len(onec.points) != len(rnec.points):
+                        errors.append(f"event '{ev_id}' note string {string_num} expression_controller points count mismatch")
+                    else:
+                        for p_idx, (op, rp) in enumerate(zip(onec.points, rnec.points)):
+                            if op.offset_ticks != rp.offset_ticks or abs(op.value - rp.value) > 1e-4:
+                                errors.append(f"event '{ev_id}' note string {string_num} expression_controller point {p_idx} mismatch")
+
+                # Note Bend technique
+                on_bend = next((t for t in on.techniques if t.kind == "bend"), None)
+                rn_bend = next((t for t in rn.techniques if t.kind == "bend"), None)
+                if (on_bend is None) != (rn_bend is None):
+                    errors.append(f"event '{ev_id}' note string {string_num} bend technique presence mismatch")
+                elif on_bend is not None:
+                    if on_bend.destination_value != rn_bend.destination_value:
+                        errors.append(f"event '{ev_id}' note string {string_num} bend destination_value mismatch: original={on_bend.destination_value}, recovered={rn_bend.destination_value}")
+                    if on_bend.graphic_duration != rn_bend.graphic_duration:
+                        errors.append(f"event '{ev_id}' note string {string_num} bend graphic_duration mismatch: original={on_bend.graphic_duration}, recovered={rn_bend.graphic_duration}")
+                    if len(on_bend.points) != len(rn_bend.points):
+                        errors.append(f"event '{ev_id}' note string {string_num} bend points count mismatch: original={len(on_bend.points)}, recovered={len(rn_bend.points)}")
+                    else:
+                        for p_idx, (op, rp) in enumerate(zip(on_bend.points, rn_bend.points)):
+                            # We tolerate slight tick rounding differences because GP represents offsets as float percentage of duration
+                            if abs(op.offset_ticks - rp.offset_ticks) > 2 or abs(op.semitones - rp.semitones) > 1e-4:
+                                errors.append(f"event '{ev_id}' note string {string_num} bend point {p_idx} offset/semitones mismatch: original=({op.offset_ticks}, {op.semitones}), recovered=({rp.offset_ticks}, {rp.semitones})")
+                            if op.v_x != rp.v_x or op.v_y != rp.v_y:
+                                errors.append(f"event '{ev_id}' note string {string_num} bend point {p_idx} vector coordinates mismatch: original=({op.v_x}, {op.v_y}), recovered=({rp.v_x}, {rp.v_y})")
 
     return errors
