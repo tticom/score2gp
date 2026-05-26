@@ -1,25 +1,28 @@
 # HANDOFF
 
 ## Metadata
-- **Current Branch**: `bugfix/pdf-left-bracket-barline-alignment`
+- **Current Branch**: `feature/pipeline-clustering-tolerances-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: #129 (https://github.com/tticom/score2gp/pull/129)
-- **Latest Local Commit**: `bea422f` ("docs: update HANDOFF.md and TASKS.md with PR details and commit hashes")
-- **Latest Pushed Commit**: `bea422f` ("docs: update HANDOFF.md and TASKS.md with PR details and commit hashes")
-- **Working Tree Status**: Clean and synchronized with origin.
+- **Current PR**: Draft PR (pending creation via GitHub CLI)
+- **Latest Local Commit**: `b1e8cbf` ("docs: update HANDOFF.md with feature implementation and validation details")
+- **Latest Pushed Commit**: Pending push to origin
+- **Working Tree Status**: Clean and synchronized locally.
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked.
 
 ## Tests and Checks Run
-- `python -m pytest` -> All 387 tests passed successfully (100% success rate, including the new regression test `test_left_bracket_barline_alignment_acceptance` proving acceptance of the overarching left-edge system bracket).
-- `python -m score2gp.cli export-schema --out schemas` -> schemas exported cleanly.
-- `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid and compliant.
+- `python -m pytest` -> All 389 tests passed successfully (100% success rate), including the new regression tests `test_string_for_y_ambiguity_resolver` and `test_string_for_y_ambiguity_closer_snapping` in `tests/test_pdf_parsing.py`.
+- `python -m score2gp.cli export-schema --out schemas` -> schemas exported cleanly (`schemas/scoreir.v0.1.schema.json`).
 - `git diff --check` -> passed cleanly with zero whitespace errors.
-- `git diff -- schemas` -> in sync, no diff.
 - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep` is tracked under private/work paths.
 
 ## What Changed in the Task
-- **Left-Edge Bracket Barline Acceptance (`src/score2gp/pdf.py`)**: Refactored the vertical line classification loops in `_detect_tab_systems` to explicitly accept left-edge vertical brackets that align horizontally with the system start (`x_val` matching `x0` within 6.0 pt) and vertically with the bottom baseline of the TAB staff (`y_max` matching `y1` within 4.0 pt). If these criteria are met, the candidate bypasses the strict height/relative staff-crossing checks and is marked as an accepted structural left boundary.
-- **Regression Test (`tests/test_left_bracket_alignment.py`)**: Implemented a geometric unit test modeling a TAB staff from `Y: 624.102` to `655.992` and a vertical line at `X: 28.346` with a height of `82.833` (whose bottom matches `y1` and top spans upward above the notation staff). Verified that this overarching bracket is successfully accepted as a valid barline boundary with zero rejections.
+- **CLI Tolerances Options (`src/score2gp/cli.py`)**: Added three new options `--max-digit-gap` (float, default `2.0`), `--string-snap-tolerance` (float, default `1.5`), and `--strip-technique-text` (bool, default `False`) to both the `convert` and `build-ir` Typer command hooks, passing them natively through compiler layers down to the layout extraction engine.
+- **Compiler Core Plumb (`src/score2gp/build_ir.py`)**: Updated entry points `build_ir_from_files` and `build_ir_with_diagnostics_from_files` to accept the new configuration parameters.
+- **Digit Merging and Spacing (`src/score2gp/pdf.py`)**: Refactored the adjacent horizontal digit merge check to use `max_digit_gap` (which defaults to `5.0` in the library signatures to maintain perfect backwards compatibility with existing tests).
+- **Technique Stripping Filter (`src/score2gp/pdf.py`)**: Pre-filters out known non-musical technique string literals (`{"full", "b", "r", "sl", "vibrato"}` case-insensitively) if `strip_technique_text` is `True` before performing playable digit overlap checks.
+- **Staff Ambiguity Snapping Resolver (`src/score2gp/pdf.py`)**: Refactored `string_for_y` to use `string_snap_tolerance` cushion. When a note falls within multiple string cushions simultaneously, absolute vertical midpoint distances are sorted, snapping cleanly to the single closest string instead of throwing an ambiguity warning or returning `None`.
+- **Synthetic Test Fixture (`fixtures/public/test_clustering_tolerances.ir.json`)**: Created synthetic ScoreIR fixture representing kerned digits and tightly packed staff lines.
+- **Automated Unit Tests (`tests/test_pdf_parsing.py`)**: Created unit tests verifying symmetric snapping and ambiguity resolution behavior under custom snap tolerances.
 
 ## Known Limitations
 - None.
@@ -28,7 +31,7 @@
 - None.
 
 ## Next Recommended Task
-- Merge `bugfix/pdf-left-bracket-barline-alignment` into `main` after checks pass.
+- Push the branch, create the draft PR, and merge into `main` after checks pass.
 
 ## Explicit Scope Boundaries
 - **No OCR, scanned-PDF, or ML layout recognition** used.
