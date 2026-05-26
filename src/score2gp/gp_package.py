@@ -866,19 +866,111 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
                             points.append(ExpressionControllerPoint(offset_ticks=off_ticks, value=val_float))
                         note_ec = ExpressionController(type=ec_type, duration_ticks=dur_ticks, points=points)
 
+                    lh_fingering = None
+                    rh_fingering = None
+                    props_node = n_node.find("Properties")
+                    if props_node is not None:
+                        for prop in props_node.findall("Property"):
+                            name = prop.get("name")
+                            if name == "LeftHandFingering":
+                                fing = _first_text(prop, ["Fingering"])
+                                if fing:
+                                    lh_inv = {
+                                        "Open": "open",
+                                        "Thumb": "thumb",
+                                        "Index": "index",
+                                        "Middle": "middle",
+                                        "Ring": "ring",
+                                        "Little": "little"
+                                    }
+                                    lh_fingering = lh_inv.get(fing, fing)
+                            elif name == "RightHandFingering":
+                                fing = _first_text(prop, ["Fingering"])
+                                if fing:
+                                    rh_inv = {
+                                        "Thumb": "thumb",
+                                        "Index": "index",
+                                        "Middle": "middle",
+                                        "Ring": "ring",
+                                        "Little": "little"
+                                    }
+                                    rh_fingering = rh_inv.get(fing, fing)
+
                     notes.append(Note(
                         string=string,
                         fret=fret,
                         pitch=pitch,
                         techniques=techniques,
-                        expression_controller=note_ec
+                        expression_controller=note_ec,
+                        left_hand_fingering=lh_fingering,
+                        right_hand_fingering=rh_fingering
                     ))
+
+                chord_diagram = None
+                cd_node = ev_node.find("ChordDiagram")
+                if cd_node is not None:
+                    name = cd_node.get("name") or "Unnamed"
+                    string_count = int(cd_node.get("stringCount") or 6)
+                    fret_count = int(cd_node.get("fretCount") or 5)
+                    base_fret = int(cd_node.get("baseFret") or 0)
+
+                    frets = []
+                    for f_node in cd_node.findall("Fret"):
+                        f_string = int(f_node.get("string") or 1)
+                        f_fret = int(f_node.get("fret") or 0)
+                        from .ir import ChordFret
+                        frets.append(ChordFret(string=f_string, fret=f_fret))
+
+                    fingers = []
+                    fing_node = cd_node.find("Fingering")
+                    if fing_node is not None:
+                        for pos in fing_node.findall("Position"):
+                            finger_val = pos.get("finger") or "None"
+                            fg_fret = int(pos.get("fret") or 0)
+                            fg_string = int(pos.get("string") or 1)
+                            from .ir import ChordFinger
+                            fingers.append(ChordFinger(string=fg_string, fret=fg_fret, finger=finger_val))
+
+                    kn_node = cd_node.find("KeyNote")
+                    key_note_step = "C"
+                    key_note_accidental = "Natural"
+                    if kn_node is not None:
+                        key_note_step = kn_node.get("step") or "C"
+                        key_note_accidental = kn_node.get("accidental") or "Natural"
+
+                    bn_node = cd_node.find("BassNote")
+                    bass_note_step = "C"
+                    bass_note_accidental = "Natural"
+                    if bn_node is not None:
+                        bass_note_step = bn_node.get("step") or "C"
+                        bass_note_accidental = bn_node.get("accidental") or "Natural"
+
+                    from .ir import ChordDiagram
+                    chord_diagram = ChordDiagram(
+                        name=name,
+                        string_count=string_count,
+                        fret_count=fret_count,
+                        base_fret=base_fret,
+                        frets=frets,
+                        fingers=fingers,
+                        key_note_step=key_note_step,
+                        key_note_accidental=key_note_accidental,
+                        bass_note_step=bass_note_step,
+                        bass_note_accidental=bass_note_accidental
+                    )
+
+                chord_symbol = _first_text(ev_node, ["Chord"])
+                if chord_diagram is not None:
+                    chord_symbol = chord_diagram.name
+
                 events.append(Event(
                     id=ev_id,
                     track_id=tr_id,
                     timing=timing,
                     notes=notes,
                     is_rest=rest,
+                    chord_symbol=chord_symbol,
+                    chord_diagram=chord_diagram,
                     expression_controller=expression_controller
                 ))
 
@@ -1039,6 +1131,7 @@ def validate_roundtrip(path: str | Path, original: ScoreIR | ScoreBooklet) -> di
 
 
 def _validate_score_ir_roundtrip(original: ScoreIR, recovered: ScoreIR) -> list[str]:
+    from .ir import normalize_lh_fingering, normalize_rh_fingering
     errors = []
 
     for k in ["title", "artist", "composer", "album", "transcriber", "copyright"]:
@@ -1182,6 +1275,45 @@ def _validate_score_ir_roundtrip(original: ScoreIR, recovered: ScoreIR) -> list[
                 continue
             re = rec_events[ev_id]
 
+            if oe.chord_symbol != re.chord_symbol:
+                errors.append(f"event '{ev_id}' chord_symbol mismatch: original={oe.chord_symbol}, recovered={re.chord_symbol}")
+
+            if (oe.chord_diagram is None) != (re.chord_diagram is None):
+                errors.append(f"event '{ev_id}' chord_diagram presence mismatch: original={oe.chord_diagram is not None}, recovered={re.chord_diagram is not None}")
+            elif oe.chord_diagram is not None:
+                ocd = oe.chord_diagram
+                rcd = re.chord_diagram
+                if ocd.name != rcd.name:
+                    errors.append(f"event '{ev_id}' chord_diagram.name mismatch: original={ocd.name}, recovered={rcd.name}")
+                if ocd.string_count != rcd.string_count:
+                    errors.append(f"event '{ev_id}' chord_diagram.string_count mismatch: original={ocd.string_count}, recovered={rcd.string_count}")
+                if ocd.fret_count != rcd.fret_count:
+                    errors.append(f"event '{ev_id}' chord_diagram.fret_count mismatch: original={ocd.fret_count}, recovered={rcd.fret_count}")
+                if ocd.base_fret != rcd.base_fret:
+                    errors.append(f"event '{ev_id}' chord_diagram.base_fret mismatch: original={ocd.base_fret}, recovered={rcd.base_fret}")
+                if ocd.key_note_step != rcd.key_note_step or ocd.key_note_accidental != rcd.key_note_accidental:
+                    errors.append(f"event '{ev_id}' chord_diagram key note mismatch")
+                if ocd.bass_note_step != rcd.bass_note_step or ocd.bass_note_accidental != rcd.bass_note_accidental:
+                    errors.append(f"event '{ev_id}' chord_diagram bass note mismatch")
+
+                o_frets = sorted(ocd.frets, key=lambda f: (f.string, f.fret))
+                r_frets = sorted(rcd.frets, key=lambda f: (f.string, f.fret))
+                if len(o_frets) != len(r_frets):
+                    errors.append(f"event '{ev_id}' chord_diagram frets count mismatch")
+                else:
+                    for f_idx, (of, rf) in enumerate(zip(o_frets, r_frets)):
+                        if of.string != rf.string or of.fret != rf.fret:
+                            errors.append(f"event '{ev_id}' chord_diagram fret {f_idx} mismatch")
+
+                o_fingers = sorted(ocd.fingers, key=lambda f: (f.string, f.fret))
+                r_fingers = sorted(rcd.fingers, key=lambda f: (f.string, f.fret))
+                if len(o_fingers) != len(r_fingers):
+                    errors.append(f"event '{ev_id}' chord_diagram fingers count mismatch")
+                else:
+                    for f_idx, (of, rf) in enumerate(zip(o_fingers, r_fingers)):
+                        if of.string != rf.string or of.fret != rf.fret or of.finger != rf.finger:
+                            errors.append(f"event '{ev_id}' chord_diagram finger {f_idx} mismatch")
+
             # Compare event expression controller
             if (oe.expression_controller is None) != (re.expression_controller is None):
                 errors.append(f"event '{ev_id}' expression_controller presence mismatch")
@@ -1204,6 +1336,11 @@ def _validate_score_ir_roundtrip(original: ScoreIR, recovered: ScoreIR) -> list[
                 if string_num not in rec_notes:
                     continue
                 rn = rec_notes[string_num]
+
+                if normalize_lh_fingering(on.left_hand_fingering) != normalize_lh_fingering(rn.left_hand_fingering):
+                    errors.append(f"event '{ev_id}' note string {string_num} left_hand_fingering mismatch: original={on.left_hand_fingering}, recovered={rn.left_hand_fingering}")
+                if normalize_rh_fingering(on.right_hand_fingering) != normalize_rh_fingering(rn.right_hand_fingering):
+                    errors.append(f"event '{ev_id}' note string {string_num} right_hand_fingering mismatch: original={on.right_hand_fingering}, recovered={rn.right_hand_fingering}")
 
                 # Note expression controller
                 if (on.expression_controller is None) != (rn.expression_controller is None):
