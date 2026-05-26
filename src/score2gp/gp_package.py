@@ -15,7 +15,8 @@ from .ir import (
     Metadata, Tempo, TimeSignature, KeySignature, Bar, Event, Note,
     BoundingBox, Provenance, ConversionInfo, MasterMixer, PipelinePresetCascade,
     BookletCoverPage, BarNumberingOverride, BookletPagination,
-    ExpressionController, ExpressionControllerPoint, BendPoint, BendTechnique
+    ExpressionController, ExpressionControllerPoint, BendPoint, BendTechnique,
+    RepeatCountOverlay
 )
 
 REQUIRED_MEMBERS = {"VERSION", "Content/score.gpif"}
@@ -755,13 +756,35 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
                 show = (show_str == "true") if show_str is not None else None
                 bar_numbering = BarNumberingOverride(prefix=prefix, offset=offset, show=show)
 
+            multi_measure_rest_count = None
+            mmr_node = bar_node.find("MultiMeasureRest")
+            if mmr_node is not None:
+                mmr_val = _first_text(mmr_node, ["BarCount"])
+                if mmr_val is not None:
+                    multi_measure_rest_count = int(mmr_val)
+
+            repeat_count_overlay = None
+            rc_node = bar_node.find("RepeatCount")
+            if rc_node is not None:
+                rc_count = _first_text(rc_node, ["Count"])
+                if rc_count is not None:
+                    rc_span = _first_text(rc_node, ["Span"])
+                    rc_style = _first_text(rc_node, ["Style"])
+                    repeat_count_overlay = RepeatCountOverlay(
+                        count=int(rc_count),
+                        span=int(rc_span) if rc_span is not None else None,
+                        style=rc_style.lower() if rc_style is not None else "default"
+                    )
+
             bars.append(
                 Bar(
                     index=idx,
                     time_signature=TimeSignature(numerator=num, denominator=den),
                     key_signature=key_sig,
                     events=events,
-                    bar_numbering=bar_numbering
+                    bar_numbering=bar_numbering,
+                    multi_measure_rest_count=multi_measure_rest_count,
+                    repeat_count_overlay=repeat_count_overlay
                 )
             )
 
