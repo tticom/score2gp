@@ -3,10 +3,10 @@
 ## Metadata
 - **Current Branch**: `feature/pipeline-production-telemetry-and-profiling-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: Draft PR to be created
-- **Latest Local Commit**: `543f838` ("feat: implement thread-safe pipeline performance profiler and diagnostic execution logging module")
-- **Latest Pushed Commit**: Pending push to origin
-- **Working Tree Status**: Modified `HANDOFF.md` (uncommitted)
+- **Current PR**: #128 (https://github.com/tticom/score2gp/pull/128)
+- **Latest Local Commit**: `2f3f208` ("docs: update HANDOFF.md with latest commit details")
+- **Latest Pushed Commit**: `2f3f208` ("docs: update HANDOFF.md with latest commit details")
+- **Working Tree Status**: Clean and synchronized with origin.
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked.
 
 ## Tests and Checks Run
