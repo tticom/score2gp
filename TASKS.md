@@ -4,6 +4,8 @@
 
 ## Done
 
+- [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for bar-level gradual tempo variations (accelerando and ritardando expressive curves specifying linear/exponential velocity changes and final target BPM values) and free-text staff informational annotations in `src/score2gp/gpif.py`, verified with public synthetic manifests and unit tests (`feature/build-ir-expressing-tempo-variations-v0.1`).
+
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for multi-measure rests (compressing multiple consecutive empty bars into a single visual block specifying a start/stop measure range and a center-aligned rest count number) and numbered repeat count overlays (such as measure-span repeats, part-quantities, or bar % placeholders) in `src/score2gp/gpif.py`, verified with public synthetic manifests and unit tests (`feature/build-ir-timeline-measure-ranges-v0.1`).
 
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for bar-level and masterbar-level alternative endings (volta brackets, pass-masks, and loop endings), mapping alternative endings into native AlternateEndings masterbar XML elements and bar-level AlternativeEnding property nodes, verified with public synthetic manifests and unit tests (`feature/build-ir-timeline-repeats-v0.1`).
