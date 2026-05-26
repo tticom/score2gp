@@ -4,9 +4,9 @@
 
 - **Current Branch**: `feature/gpif-track-automations-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: `Draft PR to be created`
-- **Latest Local Commit**: `1710d54a355c809b3966475f8cc2a4471ddb7c62` ("feat: implement track-level playback automation envelopes for volume and pan")
-- **Latest Pushed Commit**: `N/A`
+- **Current PR**: PR #104 (https://github.com/tticom/score2gp/pull/104)
+- **Latest Local Commit**: `e8fd150a1c925187cd191569e3ad7218f4ff10d5` ("docs: update TASKS.md and HANDOFF.md with track automations progress")
+- **Latest Pushed Commit**: `e8fd150a1c925187cd191569e3ad7218f4ff10d5` ("docs: update TASKS.md and HANDOFF.md with track automations progress")
 
 - **Working Tree Status**: Clean (except doc/tasks updates).
 
