@@ -1,0 +1,20 @@
+[
+  {
+    "id": "stress_gp6_rests",
+    "musicxml": "tests/fixtures/musicxml/tiny_rests_voices.musicxml",
+    "tabraw": "tests/fixtures/tabraw/tiny_rests_voices_tabraw.json",
+    "target_version": "GP6"
+  },
+  {
+    "id": "stress_gp7_two_voice",
+    "musicxml": "tests/fixtures/musicxml/tiny_two_voice.musicxml",
+    "tabraw": "tests/fixtures/tabraw/tiny_rests_voices_tabraw.json",
+    "target_version": "GP7"
+  },
+  {
+    "id": "stress_gp8_single_bar",
+    "musicxml": "tests/fixtures/musicxml/tiny_single_bar.musicxml",
+    "tabraw": "tests/fixtures/tabraw/tiny_single_bar_tabraw.json",
+    "target_version": "GP8"
+  }
+]
