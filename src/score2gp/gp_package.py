@@ -13,7 +13,8 @@ from .ir import (
     ScoreIR, ScoreBooklet, Track, Tuning, TuningString, Mixer, SoundConfig,
     TrackLayoutPreferences, TrackExpression, TrackAutomation, ScoreLayout,
     Metadata, Tempo, TimeSignature, KeySignature, Bar, Event, Note,
-    BoundingBox, Provenance, ConversionInfo, MasterMixer, PipelinePresetCascade
+    BoundingBox, Provenance, ConversionInfo, MasterMixer, PipelinePresetCascade,
+    BookletCoverPage, BarNumberingOverride, BookletPagination
 )
 
 REQUIRED_MEMBERS = {"VERSION", "Content/score.gpif"}
@@ -76,6 +77,7 @@ def write_gp(
             "booklet_title": score.booklet_title,
             "metadata": score.metadata.model_dump(exclude_none=True),
             "pagination": score.pagination.model_dump(exclude_none=True) if score.pagination else None,
+            "cover_page": score.cover_page.model_dump(exclude_none=True) if score.cover_page else None,
             "movements": movements_list
         }
         copied["Content/booklet_index.json"] = json.dumps(booklet_index, indent=2).encode("utf-8")
@@ -289,12 +291,66 @@ def dumps_summary(summary: dict[str, Any]) -> str:
     return json.dumps(summary, indent=2, sort_keys=True)
 
 
-def extract_score_ir_from_gp(path: str | Path) -> ScoreIR:
+def extract_score_ir_from_gp(path: str | Path) -> ScoreIR | ScoreBooklet:
     gp_path = Path(path)
     with zipfile.ZipFile(gp_path, "r") as zf:
-        xml_content = zf.read("Content/score.gpif")
-        root = ET.fromstring(xml_content)
+        if "Content/booklet_index.json" in zf.namelist():
+            index_data = json.loads(zf.read("Content/booklet_index.json").decode("utf-8"))
+            booklet_title = index_data.get("booklet_title", "Untitled Booklet")
+            metadata = Metadata(**index_data.get("metadata", {}))
+            pagination = BookletPagination(**index_data.get("pagination", {})) if index_data.get("pagination") else None
 
+            # Read booklet cover_page if present
+            cover_page = None
+            if "cover_page" in index_data and index_data["cover_page"] is not None:
+                cover_page = BookletCoverPage(**index_data["cover_page"])
+            else:
+                # Or try to parse from primary score.gpif
+                try:
+                    primary_xml = zf.read("Content/score.gpif")
+                    primary_root = ET.fromstring(primary_xml)
+                    bk_node = primary_root.find(".//Score/Booklet")
+                    if bk_node is not None:
+                        cp_node = bk_node.find("CoverPage")
+                        if cp_node is not None:
+                            enabled = cp_node.get("enabled") == "true"
+                            title_align = _first_text(cp_node, ["TitleAlignment"]) or "center"
+                            margin_offset = float(_first_text(cp_node, ["MarginOffset"]) or 20.0)
+                            sep_style = _first_text(cp_node, ["SeparatorStyle"]) or "line"
+                            intro_text = _first_text(cp_node, ["IntroText"])
+                            cover_page = BookletCoverPage(
+                                enabled=enabled,
+                                title_alignment=title_align,
+                                margin_offset=margin_offset,
+                                separator_style=sep_style,
+                                intro_text=intro_text,
+                            )
+                except Exception:
+                    pass
+
+            scores = []
+            for mov in index_data.get("movements", []):
+                mov_file = mov["file"]
+                mov_xml = zf.read(mov_file)
+                mov_root = ET.fromstring(mov_xml)
+                s = _extract_score_ir_from_gpif_root(mov_root)
+                scores.append(s)
+
+            return ScoreBooklet(
+                schema_version="0.1.0",
+                booklet_title=booklet_title,
+                metadata=metadata,
+                pagination=pagination,
+                cover_page=cover_page,
+                scores=scores
+            )
+        else:
+            xml_content = zf.read("Content/score.gpif")
+            root = ET.fromstring(xml_content)
+            return _extract_score_ir_from_gpif_root(root)
+
+
+def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
     # 1. Parse Metadata
     meta_node = root.find(".//Metadata")
     metadata = Metadata()
@@ -563,12 +619,23 @@ def extract_score_ir_from_gp(path: str | Path) -> ScoreIR:
                     notes.append(Note(string=string, fret=fret, pitch=pitch))
                 events.append(Event(id=ev_id, track_id=tr_id, timing=timing, notes=notes, is_rest=rest))
 
+            bar_numbering = None
+            bn_node = bar_node.find("BarNumbering")
+            if bn_node is not None:
+                prefix = _first_text(bn_node, ["Prefix"])
+                offset_str = _first_text(bn_node, ["Offset"])
+                offset = int(offset_str) if offset_str is not None else None
+                show_str = _first_text(bn_node, ["Show"])
+                show = (show_str == "true") if show_str is not None else None
+                bar_numbering = BarNumberingOverride(prefix=prefix, offset=offset, show=show)
+
             bars.append(
                 Bar(
                     index=idx,
                     time_signature=TimeSignature(numerator=num, denominator=den),
                     key_signature=key_sig,
-                    events=events
+                    events=events,
+                    bar_numbering=bar_numbering
                 )
             )
 
@@ -582,12 +649,89 @@ def extract_score_ir_from_gp(path: str | Path) -> ScoreIR:
     )
 
 
-def validate_roundtrip(path: str | Path, original: ScoreIR) -> dict[str, Any]:
+def validate_roundtrip(path: str | Path, original: ScoreIR | ScoreBooklet) -> dict[str, Any]:
     recovered = extract_score_ir_from_gp(path)
     from .ir import semantic_scoreir_summary
-    original_sum = semantic_scoreir_summary(original)
-    recovered_sum = semantic_scoreir_summary(recovered)
 
+    if isinstance(original, ScoreBooklet):
+        if not isinstance(recovered, ScoreBooklet):
+            return {
+                "valid": False,
+                "errors": [f"type mismatch: original is ScoreBooklet, recovered is {type(recovered).__name__}"],
+                "original_summary": {},
+                "recovered_summary": {}
+            }
+        errors = []
+        if original.booklet_title != recovered.booklet_title:
+            errors.append(f"booklet_title mismatch: original={original.booklet_title}, recovered={recovered.booklet_title}")
+
+        for k in ["title", "artist", "composer", "album", "transcriber", "copyright"]:
+            orig_val = getattr(original.metadata, k, None)
+            rec_val = getattr(recovered.metadata, k, None)
+            if orig_val != rec_val:
+                errors.append(f"booklet metadata.{k} mismatch: original={orig_val}, recovered={rec_val}")
+
+        if (original.pagination is None) != (recovered.pagination is None):
+            errors.append(f"booklet pagination presence mismatch: original={original.pagination is not None}, recovered={recovered.pagination is not None}")
+        elif original.pagination is not None:
+            if original.pagination.start_page != recovered.pagination.start_page:
+                errors.append(f"booklet pagination.start_page mismatch: original={original.pagination.start_page}, recovered={recovered.pagination.start_page}")
+            if original.pagination.running_headers != recovered.pagination.running_headers:
+                errors.append(f"booklet pagination.running_headers mismatch: original={original.pagination.running_headers}, recovered={recovered.pagination.running_headers}")
+            if original.pagination.continuous != recovered.pagination.continuous:
+                errors.append(f"booklet pagination.continuous mismatch: original={original.pagination.continuous}, recovered={recovered.pagination.continuous}")
+
+        if (original.cover_page is None) != (recovered.cover_page is None):
+            errors.append(f"booklet cover_page presence mismatch: original={original.cover_page is not None}, recovered={recovered.cover_page is not None}")
+        elif original.cover_page is not None:
+            oc = original.cover_page
+            rc = recovered.cover_page
+            if oc.enabled != rc.enabled:
+                errors.append(f"booklet cover_page.enabled mismatch: original={oc.enabled}, recovered={rc.enabled}")
+            if oc.title_alignment != rc.title_alignment:
+                errors.append(f"booklet cover_page.title_alignment mismatch: original={oc.title_alignment}, recovered={rc.title_alignment}")
+            if oc.margin_offset != rc.margin_offset:
+                errors.append(f"booklet cover_page.margin_offset mismatch: original={oc.margin_offset}, recovered={rc.margin_offset}")
+            if oc.separator_style != rc.separator_style:
+                errors.append(f"booklet cover_page.separator_style mismatch: original={oc.separator_style}, recovered={rc.separator_style}")
+            if oc.intro_text != rc.intro_text:
+                errors.append(f"booklet cover_page.intro_text mismatch: original={oc.intro_text}, recovered={rc.intro_text}")
+
+        if len(original.scores) != len(recovered.scores):
+            errors.append(f"booklet scores count mismatch: original={len(original.scores)}, recovered={len(recovered.scores)}")
+        else:
+            for idx, (orig_s, rec_s) in enumerate(zip(original.scores, recovered.scores)):
+                sub_res = _validate_score_ir_roundtrip(orig_s, rec_s)
+                for err in sub_res:
+                    errors.append(f"score {idx}: {err}")
+
+        return {
+            "valid": len(errors) == 0,
+            "errors": errors,
+            "original_summary": {},
+            "recovered_summary": {}
+        }
+
+    else:
+        if isinstance(recovered, ScoreBooklet):
+            return {
+                "valid": False,
+                "errors": [f"type mismatch: original is ScoreIR, recovered is ScoreBooklet"],
+                "original_summary": {},
+                "recovered_summary": {}
+            }
+        original_sum = semantic_scoreir_summary(original)
+        recovered_sum = semantic_scoreir_summary(recovered)
+        errors = _validate_score_ir_roundtrip(original, recovered)
+        return {
+            "valid": len(errors) == 0,
+            "errors": errors,
+            "original_summary": original_sum,
+            "recovered_summary": recovered_sum
+        }
+
+
+def _validate_score_ir_roundtrip(original: ScoreIR, recovered: ScoreIR) -> list[str]:
     errors = []
 
     for k in ["title", "artist", "composer", "album", "transcriber", "copyright"]:
@@ -705,9 +849,22 @@ def validate_roundtrip(path: str | Path, original: ScoreIR) -> dict[str, Any]:
         if orig_pc.options != rec_pc.options:
             errors.append(f"layout.preset_cascade.options mismatch: original={orig_pc.options}, recovered={rec_pc.options}")
 
-    return {
-        "valid": len(errors) == 0,
-        "errors": errors,
-        "original_summary": original_sum,
-        "recovered_summary": recovered_sum
-    }
+    # Verify bar_numbering overrides
+    orig_bars_map = {b.index: b for b in original.bars}
+    rec_bars_map = {b.index: b for b in recovered.bars}
+    for idx in sorted(orig_bars_map.keys()):
+        if idx not in rec_bars_map:
+            continue
+        ob = orig_bars_map[idx]
+        rb = rec_bars_map[idx]
+        if (ob.bar_numbering is None) != (rb.bar_numbering is None):
+            errors.append(f"bar {idx} bar_numbering presence mismatch: original={ob.bar_numbering is not None}, recovered={rb.bar_numbering is not None}")
+        elif ob.bar_numbering is not None:
+            if ob.bar_numbering.prefix != rb.bar_numbering.prefix:
+                errors.append(f"bar {idx} bar_numbering.prefix mismatch: original={ob.bar_numbering.prefix}, recovered={rb.bar_numbering.prefix}")
+            if ob.bar_numbering.offset != rb.bar_numbering.offset:
+                errors.append(f"bar {idx} bar_numbering.offset mismatch: original={ob.bar_numbering.offset}, recovered={rb.bar_numbering.offset}")
+            if ob.bar_numbering.show != rb.bar_numbering.show:
+                errors.append(f"bar {idx} bar_numbering.show mismatch: original={ob.bar_numbering.show}, recovered={rb.bar_numbering.show}")
+
+    return errors

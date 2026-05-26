@@ -290,6 +290,14 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
                 "runningHeaders": "true" if booklet.pagination.running_headers else "false",
                 "continuous": "true" if booklet.pagination.continuous else "false",
             })
+        if getattr(booklet, "cover_page", None) is not None:
+            cp = booklet.cover_page
+            cp_node = ET.SubElement(bk_node, "CoverPage", {"enabled": "true" if cp.enabled else "false"})
+            _text(cp_node, "TitleAlignment", cp.title_alignment)
+            _text(cp_node, "MarginOffset", cp.margin_offset)
+            _text(cp_node, "SeparatorStyle", cp.separator_style)
+            if cp.intro_text is not None:
+                _text(cp_node, "IntroText", cp.intro_text)
         mvs_node = ET.SubElement(bk_node, "Movements")
         start_page = booklet.pagination.start_page if booklet.pagination else 1
         for idx, s in enumerate(booklet.scores):
@@ -636,6 +644,16 @@ def _bars(parent: ET.Element, score: ScoreIR, hopo_dests: set[tuple[int, int, in
     for bar in score.bars:
         bar_node = ET.SubElement(bars, "Bar", {"index": str(bar.index)})
 
+        if getattr(bar, "bar_numbering", None) is not None:
+            bn = bar.bar_numbering
+            bn_node = ET.SubElement(bar_node, "BarNumbering")
+            if bn.prefix is not None:
+                _text(bn_node, "Prefix", bn.prefix)
+            if bn.offset is not None:
+                _text(bn_node, "Offset", bn.offset)
+            if bn.show is not None:
+                _text(bn_node, "Show", "true" if bn.show else "false")
+
         if getattr(bar, "measure_layout", None) is not None:
             ml_node = ET.SubElement(bar_node, "MeasureLayout")
             if bar.measure_layout.width is not None:
@@ -911,7 +929,7 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
             if style == "glissando" or getattr(technique, "glissando", False):
                 has_glissando = True
                 ET.SubElement(note_node, "Glissando")
-            
+
             if style == "shift":
                 slide_flags = 1
             elif style == "legato":
@@ -945,7 +963,7 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
             max_bend_semitones = bend_semitones
             if getattr(technique, "points", None):
                 max_bend_semitones = max(pt.semitones for pt in technique.points)
-            
+
             bend_node = ET.SubElement(note_node, "Bend")
             if getattr(technique, "points", None):
                 for pt in technique.points:
