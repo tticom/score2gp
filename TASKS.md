@@ -4,6 +4,8 @@
 
 ## Done
 
+- [x] Implement ScoreIR parsing/schema expansion and packing/packaging entry points for multi-score Booklets (enabling a sequence of distinct internal ScoreIR entities to be managed collectively within a single structural wrapper) in the Guitar Pro writer (`src/score2gp/gpif.py`), verified with public synthetic fixtures and unit tests (`feature/gpif-score-booklets-and-collections-v0.1`).
+
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for visual stylesheet styles formatting overrides (defining line widths, item spacing cushions, or custom color elements per visual category) and dynamic measure-level layout settings (such as explicit measure widths, bar stretch factors, or custom visual spacing properties per measure) in the Guitar Pro writer (`src/score2gp/gpif.py`), verified with public synthetic fixtures and unit tests (`feature/gpif-styles-formatting-and-measure-layout-v0.1`).
 
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for centralized visual layout style collections and track-level dynamic staff rendering layout overrides (specifically staff brackets, system stem visibility, and line sizing constraints per system), mapping these visual preferences into valid structural GP7-compatible XML blocks (`feature/gpif-style-collections-and-staff-properties-v0.1`).

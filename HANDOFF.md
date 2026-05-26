@@ -2,11 +2,11 @@
 
 ## Metadata
 
-- **Current Branch**: `feature/gpif-styles-formatting-and-measure-layout-v0.1`
+- **Current Branch**: `feature/gpif-score-booklets-and-collections-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: PR #101 (https://github.com/tticom/score2gp/pull/101)
-- **Latest Local Commit**: `2becde0c38645cb6c2ae965da9d60f0e3c3102a0` ("docs: finalize HANDOFF.md metadata before push")
-- **Latest Pushed Commit**: `2becde0c38645cb6c2ae965da9d60f0e3c3102a0` ("docs: finalize HANDOFF.md metadata before push")
+- **Current PR**: Draft PR to be created
+- **Latest Local Commit**: `05890ad507ab59fed2d305022cb954a6aab7f0af` ("feat: implement multi-score booklet packaging architecture and multi-movement compilation routines")
+- **Latest Pushed Commit**: N/A (to be pushed)
 
 - **Working Tree Status**: Clean (except untracked scratch files).
 
@@ -16,9 +16,9 @@
 
 ## Tests And Checks Run
 
-- `python -m pytest` -> 351 passed (100% success, including the new GP7 visual styles formatting overrides and dynamic measure layout unit tests).
-- `python -m score2gp.cli export-schema --out schemas` -> passed cleanly (updated schemas with new `StyleProperty` model under `ScoreLayout`, and `MeasureLayout` model under `Bar` parameters).
-- `python -m score2gp.cli validate-ir fixtures/public/test_gpif_styles_formatting.ir.json` -> valid.
+- `python -m pytest` -> 352 passed (100% success, including the new GP7 multi-score booklet packaging unit tests).
+- `python -m score2gp.cli export-schema --out schemas` -> passed cleanly (updated schemas with new `ScoreBooklet` and `BookletPagination` models).
+- `python -m score2gp.cli validate-ir fixtures/public/test_gpif_score_booklets.ir.json` -> valid.
 - `git diff --check` -> passed cleanly (zero trailing whitespace or EOF blank line violations).
 - `git diff -- schemas` -> passed cleanly (valid schema additions).
 - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep`.
@@ -27,20 +27,24 @@
 ## What Changed In This Task
 
 - **ScoreIR Schema & Model Expansion**:
-  - Created `StyleProperty` model under `src/score2gp/ir.py` specifying `category`, `line_width`, `spacing_cushion`, and `color` parameters.
-  - Expanded `ScoreLayout` with `styles` property list.
-  - Created `MeasureLayout` model under `src/score2gp/ir.py` specifying `width`, `stretch_factor`, and `spacing` parameters.
-  - Expanded `Bar` with `measure_layout` property.
-  - Updated `semantic_scoreir_summary` in `src/score2gp/ir.py` to properly serialize `measure_layout` of bars.
+  - Created `BookletPagination` model under `src/score2gp/ir.py` specifying `start_page`, `running_headers`, and `continuous`.
+  - Created `ScoreBooklet` model under `src/score2gp/ir.py` specifying `booklet_title`, `metadata`, `scores`, and `pagination` parameters.
+  - Defined unified `ScoreIRRoot` union `RootModel[ScoreIR | ScoreBooklet]` to support both single-score and multi-score booklet contracts transparently.
+  - Updated `validate_score_ir_file` to support automatic type detection and parse either single-score payloads or multi-score booklets.
+  - Expanded `compare_score_ir` to cleanly compare booklet metadata, pagination, and inner score movements.
   - Successfully re-exported updated JSON schema version via CLI.
 - **GPIF XML Generator Serialization**:
-  - Handled XML generation for centralized score-level stylesheet `<Styles>` properties containing `<Property name="Style">` sub-elements (mapping `category`, `line_width`, `spacing_cushion`, and `color`).
-  - Serialized measure/master-bar level `<MeasureLayout>` property nodes inside both `_master_bars` and `_bars` to ensure specific bar presentations and styling layout constraints match design preferences.
+  - Handled `<Booklet>` and movement list elements inside `build_gpif` under `<Score>` in `src/score2gp/gpif.py`.
+  - Nested `<Pagination>` and `<Movements>` with continuous page number calculations.
+- **Unified Booklet ZIP Packaging**:
+  - Programmed multi-movement ZIP packaging routines in `src/score2gp/gp_package.py`.
+  - Generated continuous start page mapping and structured `Content/booklet_index.json` containing metadata, pagination parameters, and sequential movement references.
+  - Populated distinct `.gpif` files per movement inside the package (`Content/movement_1.gpif`, `Content/movement_2.gpif`, etc.) alongside primary `Content/score.gpif`.
 - **Synthetic Testing & Validation**:
-  - Authored a dedicated public synthetic fixture `fixtures/public/test_gpif_styles_formatting.ir.json` modeling style formatting overrides and dynamic measure layouts.
-  - Wrote comprehensive unit tests in `tests/test_gp_writer.py` (`test_gpif_styles_formatting_and_measure_layout`) verifying visual stylesheet formatting overrides and measure layout settings inside the zipped GPIF XML.
+  - Authored a dedicated public synthetic fixture `fixtures/public/test_gpif_score_booklets.ir.json` modeling a multi-score booklet layout.
+  - Wrote comprehensive unit tests in `tests/test_gp_writer.py` (`test_gpif_score_booklets`) verifying index generation, movements paths, start pages, and zip integrity.
 - **E2E Private Smoke Test Results**:
-  - Ran E2E private smoke compiler against real private inputs to verify zero regressions or crashes with the new styles and measure layouts.
+  - Ran E2E private smoke compiler against real private inputs to verify zero regressions or crashes with the new booklet structures.
 
 ## Known Limitations
 
