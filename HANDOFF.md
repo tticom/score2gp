@@ -2,34 +2,23 @@
 
 ## Metadata
 
-- **Current Branch**: `feature/build-ir-dynamics-and-hairpins-v0.1`
+- **Current Branch**: `feature/build-ir-coda-segno-markers-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: [PR #116](https://github.com/tticom/score2gp/pull/116) (Draft)
-- **Latest Local Commit**: `f6bf999b0c2a2e4a428236d6545b73645b7cd6ad` ("docs: finalize HANDOFF.md with PR details and commit hashes")
-- **Latest Pushed Commit**: `f6bf999b0c2a2e4a428236d6545b73645b7cd6ad` ("docs: finalize HANDOFF.md with PR details and commit hashes")
+- **Current PR**: Draft (To be created)
+- **Latest Local Commit**: `273b1a0eef6b5dfa40ab68a733cd1a18da9e0da1` ("feat: parse and serialize master-bar level timeline markers and visual navigation jump directions")
+- **Latest Pushed Commit**: N/A (To be pushed)
 
-- **Working Tree Status**: Clean (except HANDOFF.md which is being committed now).
+- **Working Tree Status**: Clean (except TASKS.md and HANDOFF.md, which will be committed in the next step).
 
-- **GitHub Check Status**: Failed (Blocked by remote checkout error 403/Forbidden due to GitHub account suspension).
+- **GitHub Check Status**: N/A
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or `work/` contents are tracked.
 - **Root Generated-Artifact Audit**: Clean. No root generated artifacts tracked.
 
-## Early Stoppage Details
-
-- **Where it Stopped**: The GitHub Actions runner failed immediately on the initial checkout step (`actions/checkout@v4`) due to remote access restrictions.
-- **Exact Failing/Pending Command or Condition**: The `git fetch` operation in GitHub Actions failed with:
-  `remote: Your account is suspended. Please visit https://support.github.com for more information.`
-  `##[error]fatal: unable to access 'https://github.com/tticom/score2gp/': The requested URL returned error: 403`
-- **Files Involved**: None. All local repository files, schemas, and tests are perfectly healthy, compile-safe, and fully operational.
-- **What was Already Committed**: `f6bf999b0c2a2e4a428236d6545b73645b7cd6ad` ("docs: finalize HANDOFF.md with PR details and commit hashes").
-- **What was Already Pushed**: Yes, the entire feature branch is successfully pushed to `origin/feature/build-ir-dynamics-and-hairpins-v0.1`.
-- **Safest Next Action**: Contact GitHub Support to resolve the remote account suspension for the `tticom` account, then trigger a rerun of the Actions or re-evaluate the PR status once unsuspended.
-
 ## Tests And Checks Run
 
-- `python -m pytest` -> 376 passed (100% success, including the new `test_dynamics_hairpins_xml` verifying the `<Hairpin>` wedge nodes and `<Property name="Accentuation">` staccatissimo note properties).
+- `python -m pytest` -> 377 passed (100% success, including the new `test_coda_segno_markers_xml` verifying the `<Marker>` and `<Directions>` tags and values inside `<MasterBar>`).
 - `python -m score2gp.cli export-schema --out schemas` -> passed cleanly and updated Intermediate schemas.
-- `python -m score2gp.cli validate-ir fixtures/public/test_dynamics_hairpins.ir.json` -> valid and fully compliant.
+- `python -m score2gp.cli validate-ir fixtures/public/test_coda_segno_markers.ir.json` -> valid and fully compliant.
 - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid.
 - `git diff --check` -> passed cleanly.
 - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep`.
@@ -38,17 +27,15 @@
 ## What Changed In This Task
 
 - **Model & Schema Expansion (`src/score2gp/ir.py`)**:
-  - Defined the `Hairpin` Pydantic model representing visual hairpins with type, start/stop beat anchors, thickness, and continuous value path coordinates.
-  - Expanded `Event.hairpin` to support either simple legacyliterals or the new `Hairpin` object model.
-  - Expanded `Note.articulations` enum list to support `staccatissimo` note markings.
+  - Defined the `BarDirection` Pydantic model representing roadmap navigation elements with type and optional target bar index.
+  - Expanded `Bar` model with optional `directions` list, `marker` section label string, and `marker_color` hex string.
   - Re-exported the schema via the CLI schema exporter.
-- **GPIF Hairpins & Accents Mappings (`src/score2gp/gpif.py`)**:
-  - Implemented event-level visual `<Hairpin>` wedging XML generation detailing thickness, start/stop beats, and continuous `<ValuePath>` nodes.
-  - Implemented note-level `<Staccatissimo/>` child tag serialization.
-  - Mapped note-level `staccato` and `staccatissimo` values under `<Property name="Accentuation"><Value>...</Value></Property>` nested nodes under the `<Properties>` block.
+- **GPIF Repeat Markers & Directions Mappings (`src/score2gp/gpif.py`)**:
+  - Implemented visual section `<Marker>` XML generation inside `<MasterBar>` detailing optional visual label text and hex colors.
+  - Implemented `<Directions>` block pointers detailing Segnos, Codas, Double Codas, Fine visual anchor glyphs, and To Coda / Dal Segno al Coda repeating roadmap jump indicators.
 - **Public Fixtures & Tests**:
-  - Created `fixtures/public/test_dynamics_hairpins.ir.json` modeling volume crescendo/decrescendo sweeps and sharp note accents.
-  - Created unit test suite `tests/test_dynamics_hairpins.py` verifying accurate GP7-compatible XML structures.
+  - Created `fixtures/public/test_coda_segno_markers.ir.json` modeling a complete repeating bar roadmap structure.
+  - Created unit test suite `tests/test_coda_segno_markers.py` verifying accurate structural GP7-compatible XML tag output.
 
 ## Known Limitations
 
@@ -60,8 +47,8 @@
 
 ## Next Recommended Task
 
-- Next branch: `feature/build-ir-coda-segno-markers-v0.1`
-- Goal: Implement ScoreIR parsing and GPIF XML generation for timeline navigation markers (Coda, Segno, Fine, and Dal Segno repeats).
+- Next branch: `feature/build-ir-timeline-repeats-v0.1`
+- Goal: Implement timeline measure visual alignments and structural repeating brackets overrides.
 
 ## Explicit Scope Boundaries
 
