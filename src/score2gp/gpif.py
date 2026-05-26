@@ -568,6 +568,12 @@ def _tracks(parent: ET.Element, score: ScoreIR, track_cd_maps: dict[str, dict[st
                     lsps_prop = ET.SubElement(p_node, "Property", {"name": "LineSizingPerSystem"})
                     _text(lsps_prop, "Size", layout_prefs.line_sizing_per_system.capitalize())
 
+        if getattr(track, "text_annotations", None) is not None:
+            texts_node = ET.SubElement(staff_node, "Texts")
+            for text_val in track.text_annotations:
+                text_item = ET.SubElement(texts_node, "Text")
+                _text(text_item, "Value", text_val)
+
         # Collect chord diagrams for this track to construct staff properties
         tmap = track_cd_maps.get(track.id, {})
         if tmap:
@@ -630,6 +636,15 @@ def _master_bars(parent: ET.Element, score: ScoreIR) -> None:
             _text(tempo_node, "Value", bar.tempo.bpm)
             if bar.tempo.text:
                 _text(tempo_node, "Text", bar.tempo.text)
+
+        if getattr(bar, "tempo_automation", None) is not None:
+            ta = ET.SubElement(node, "TempoAutomation")
+            type_val = bar.tempo_automation.type.capitalize()
+            _text(ta, "Type", type_val)
+            if bar.tempo_automation.style is not None:
+                style_val = bar.tempo_automation.style.capitalize()
+                _text(ta, "Style", style_val)
+            _text(ta, "TargetBPM", bar.tempo_automation.target_bpm)
 
         if getattr(bar, "alternate_ending_passes", None):
             mask = sum(1 << (p - 1) for p in bar.alternate_ending_passes)
