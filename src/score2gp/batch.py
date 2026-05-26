@@ -41,6 +41,7 @@ def run_single_payload(
     allow_remediation = payload.get("allow_remediation", False)
     allow_skip_unboxed = payload.get("allow_skip_unboxed", False)
     template = payload.get("template")
+    target_version = payload.get("target_version", "GP7")
 
     status = "failed"
     error = None
@@ -87,7 +88,7 @@ def run_single_payload(
         )
 
         # 2. Write GP Package
-        write_gp(score, out_path, template=Path(template) if template else None)
+        write_gp(score, out_path, template=Path(template) if template else None, target_version=target_version)
         status = "success"
 
         # Cache the successfully generated artifact
