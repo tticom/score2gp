@@ -4,6 +4,8 @@
 
 ## Done
 
+- [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for track-level continuous performance expression controllers (Volume/Expression envelopes) and note-level multi-point visual pitch bend curves (custom bezier vectors, absolute destination values, and graphic durations), verified with public synthetic manifests and extensive unit tests (`feature/gpif-expression-controllers-and-bend-curves-v0.1`).
+
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for Booklet Cover Page layout geometric templates (alignment, margins, separator styling, introductory text) and measure-level BarNumbering overrides (alphanumeric prefixes and measure index offsets), verified with public synthetic manifests and extensive unit tests (`feature/gpif-booklet-formatting-and-cover-templates-v0.1`).
 
 - [x] Implement a unified end-to-end pipeline verification gate, high-throughput execution diagnostic runner, and process resident memory monitoring engine in `src/score2gp/diagnostics.py` to run parallelized score generation streams using full caching paths, perform strict bidirectional round-trip checks on every compiled artifact, and output a structured operational footprint report dictionary, exposed via a new `diagnose` CLI command (`feature/pipeline-system-integration-and-verification-v0.1`).

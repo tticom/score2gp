@@ -2,11 +2,11 @@
 
 ## Metadata
 
-- **Current Branch**: `feature/gpif-booklet-formatting-and-cover-templates-v0.1`
+- **Current Branch**: `feature/gpif-expression-controllers-and-bend-curves-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: PR #111 (https://github.com/tticom/score2gp/pull/111)
-- **Latest Local Commit**: `bea46395b0fa2eebdaffc1ea99cb51a99efcc62a` ("docs: update HANDOFF.md and TASKS.md with Booklet cover templates and bar numbering achievements")
-- **Latest Pushed Commit**: `bea46395b0fa2eebdaffc1ea99cb51a99efcc62a` ("docs: update HANDOFF.md and TASKS.md with Booklet cover templates and bar numbering achievements")
+- **Current PR**: Draft PR (created via `gh pr create --draft --fill`)
+- **Latest Local Commit**: `9daaf0aa23687a8eb46e9543402ea6e155fa1f25` ("docs: update HANDOFF.md and TASKS.md with performance expression controllers and bend curves achievements")
+- **Latest Pushed Commit**: `9daaf0aa23687a8eb46e9543402ea6e155fa1f25` ("docs: update HANDOFF.md and TASKS.md with performance expression controllers and bend curves achievements")
 
 - **Working Tree Status**: Clean.
 
@@ -16,7 +16,7 @@
 
 ## Tests And Checks Run
 
-- `python -m pytest` -> 368 passed (100% success, including the new booklet cover page templates and bar numbering overrides unit tests).
+- `python -m pytest` -> 369 passed (100% success, including the new continuous expression controllers and multi-point visual pitch bends unit tests).
 - `python -m score2gp.cli export-schema --out schemas` -> passed cleanly.
 - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid.
 - `git diff --check` -> passed cleanly (zero trailing whitespace or EOF blank line violations).
@@ -26,18 +26,20 @@
 
 ## What Changed In This Task
 
-- **Booklet Cover Page Geometric Templates**:
-  - Implemented the `BookletCoverPage` model under `src/score2gp/ir.py` specifying `enabled`, `title_alignment`, `margin_offset`, `separator_style`, and `intro_text`.
-  - Serialized the options into a custom booklet-level `<CoverPage>` XML node inside `src/score2gp/gpif.py`.
-- **Movement-Level BarNumbering Overrides**:
-  - Implemented the `BarNumberingOverride` model under `src/score2gp/ir.py` specifying `prefix`, `offset`, and `show`.
-  - Serialized the overrides into measure-level `<BarNumbering>` XML elements inside `src/score2gp/gpif.py`.
+- **Continuous Performance Expression Controllers**:
+  - Implemented the `ExpressionController` and `ExpressionControllerPoint` Pydantic models in `src/score2gp/ir.py` specifying controller type, duration ticks, and value points (0.0 to 100.0).
+  - Integrated `expression_controller` on both Event (beat-level) and Note (note-level) models.
+  - Serialized them into `<ExpressionController>` XML blocks inside `src/score2gp/gpif.py` under `<Event>` and `<Note>` nodes.
+- **Note-Level Multi-Point Visual Pitch Bends**:
+  - Extended `BendPoint` in `src/score2gp/ir.py` with X/Y bezier vector coordinates (`v_x`, `v_y`).
+  - Extended `BendTechnique` with `bend_type`, `destination_value`, and `graphic_duration` properties.
+  - Serialized these custom parameters into note-level `<Bend>` XML tags and child nodes under `<Note>` in `src/score2gp/gpif.py`, as well as visual Properties blocks (`Bended`, `BendDestinationValue`, `BendGraphicDuration`).
 - **Symmetric Zip Extraction and Round-Trip Validation**:
-  - Updated `src/score2gp/gp_package.py` to extract `BookletCoverPage` and `BarNumberingOverride` properties from zipped GP packages and booklet indexes back symmetrically into models.
-  - Authored comprehensive validation checks for both models inside `validate_roundtrip` and `semantic_scoreir_summary`.
+  - Expanded `extract_score_ir_from_gp` in `src/score2gp/gp_package.py` to parse beat-level/note-level `<ExpressionController>` and advanced custom `<Bend>` attributes back symmetrically from zipped GP packages.
+  - Wrote comprehensive validations inside `validate_roundtrip` (`_validate_score_ir_roundtrip`) to assert exact round-trip congruence of these features.
 - **Public Fixtures & Extensive Tests**:
-  - Created a new public synthetic booklet cover templates fixture `fixtures/public/test_booklet_cover_templates.ir.json` modeling these properties.
-  - Created a new unit test suite `tests/test_booklet_cover_templates.py` asserting correct XML tag structure, booklet zip serialization, and robust round-trip validation.
+  - Created a new public synthetic ScoreIR solo fixture `fixtures/public/test_gpif_expression_controllers.ir.json` modeling these properties.
+  - Created a new unit test suite `tests/test_gpif_expression_controllers.py` asserting correct XML tag structure, ZIP packaging, deserialization, and robust round-trip validation.
 
 ## Known Limitations
 
@@ -49,7 +51,7 @@
 
 ## Next Recommended Task
 
-- Proceed with advanced visual styling enhancements or timeline expression controllers.
+- Proceed with advanced visual ornamentations or fret snapping refinements.
 
 ## Explicit Scope Boundaries
 
