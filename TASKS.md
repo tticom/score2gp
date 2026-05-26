@@ -4,6 +4,8 @@
 
 ## Done
 
+- [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for Booklet Cover Page layout geometric templates (alignment, margins, separator styling, introductory text) and measure-level BarNumbering overrides (alphanumeric prefixes and measure index offsets), verified with public synthetic manifests and extensive unit tests (`feature/gpif-booklet-formatting-and-cover-templates-v0.1`).
+
 - [x] Implement a unified end-to-end pipeline verification gate, high-throughput execution diagnostic runner, and process resident memory monitoring engine in `src/score2gp/diagnostics.py` to run parallelized score generation streams using full caching paths, perform strict bidirectional round-trip checks on every compiled artifact, and output a structured operational footprint report dictionary, exposed via a new `diagnose` CLI command (`feature/pipeline-system-integration-and-verification-v0.1`).
 
 - [x] Implement a version-gated generation architecture and compilation target adapter layer in `src/score2gp/version_adapter.py` to support explicit target specifications (GP6, GP7, GP8), apply version-specific XML transformations (strip legacy properties like style collections, inject modern metadata blocks), and override package VERSION files, integrated with CLI and batch pipeline runs (`feature/gpif-target-version-adapters-v0.1`).
