@@ -1144,6 +1144,14 @@ def build_ir_with_diagnostics_from_imports(
                     continue
                 filtered_warnings.append(w)
         tabraw.warnings = filtered_warnings
+
+        # Dynamically prune/window the incoming MusicXML track measures to match that specific length precisely
+        bar_indices = {c.bar_index for c in tabraw.candidates if c.bar_index is not None}
+        if bar_indices:
+            target_measure_count = max(bar_indices)
+            for part in musicxml.parts:
+                part.measures = part.measures[:target_measure_count]
+
     if allow_skip_unboxed:
         unboxed_systems = set()
         skipped_systems = set()

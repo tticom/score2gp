@@ -19,14 +19,42 @@
     {
       "id": "c2",
       "kind": "fret",
+      "page_index": 1,
+      "system_index": 2,
+      "bar_index": 2,
+      "string": 1,
+      "raw_text": "2",
+      "parsed_fret": 2,
+      "x": 100.0,
+      "y": 400.0,
+      "confidence": 0.95,
+      "raw": {}
+    },
+    {
+      "id": "c3",
+      "kind": "fret",
       "page_index": 2,
       "system_index": 1,
-      "bar_index": 2,
+      "bar_index": 3,
       "string": 1,
       "raw_text": "3",
       "parsed_fret": 3,
       "x": 100.0,
       "y": 300.0,
+      "confidence": 0.95,
+      "raw": {}
+    },
+    {
+      "id": "c4",
+      "kind": "fret",
+      "page_index": 2,
+      "system_index": 2,
+      "bar_index": 4,
+      "string": 1,
+      "raw_text": "5",
+      "parsed_fret": 5,
+      "x": 100.0,
+      "y": 200.0,
       "confidence": 0.95,
       "raw": {}
     }
@@ -38,6 +66,13 @@
       "severity": "warning",
       "page_index": 2,
       "system_index": 1
+    },
+    {
+      "code": "pdf_barlines_not_detected_in_system",
+      "message": "Barlines not detected on page 2 system 2.",
+      "severity": "warning",
+      "page_index": 2,
+      "system_index": 2
     }
   ]
 }

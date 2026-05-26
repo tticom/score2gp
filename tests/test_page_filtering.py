@@ -25,17 +25,21 @@ def test_page_filtering_remediation(tmp_path) -> None:
         page_range=(1, 1),
     )
     assert isinstance(score, ScoreIR)
+
+    # The sync/windowing logic dynamic pruning trims measures 3 and 4, keeping exactly 2 bars!
     assert len(score.bars) == 2
     
-    # Check that page 1 candidate (parsed_fret 0, string 1) was placed in bar 1
+    # Check that page 1 candidate c1 (parsed_fret 0, string 1) was placed in bar 1
     bar1_events = score.bars[0].events
     assert len(bar1_events) == 1
     assert bar1_events[0].notes[0].fret == 0
     assert bar1_events[0].notes[0].string == 1
     
-    # Check that bar 2 has no events (is a rest) because page 2 candidates were filtered out!
+    # Check that page 1 candidate c2 (parsed_fret 2, string 1) was placed in bar 2
     bar2_events = score.bars[1].events
-    assert len(bar2_events) == 0
+    assert len(bar2_events) == 1
+    assert bar2_events[0].notes[0].fret == 2
+    assert bar2_events[0].notes[0].string == 1
     
     # 3. Write GP7 package and verify roundtrip validation is 100% successful
     out_gp = tmp_path / "test_page_filtering.gp"
