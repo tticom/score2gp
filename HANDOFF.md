@@ -2,11 +2,11 @@
 
 ## Metadata
 
-- **Current Branch**: `feature/gpif-package-binary-hardening-v0.1`
+- **Current Branch**: `feature/build-ir-fret-snapping-optimization-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: Draft PR (created via `gh pr create --draft --fill`)
-- **Latest Local Commit**: `93e85e6e0246fc3742b890eab97c34f72bad2da1` ("docs: update HANDOFF.md and TASKS.md with element sequencing and dynamic companion files hardening achievements")
-- **Latest Pushed Commit**: `93e85e6e0246fc3742b890eab97c34f72bad2da1` ("docs: update HANDOFF.md and TASKS.md with element sequencing and dynamic companion files hardening achievements")
+- **Current PR**: [PR #114](https://github.com/tticom/score2gp/pull/114) (Draft)
+- **Latest Local Commit**: `cc51d8099daec191f3619977eaeb2b123cf2dc37` ("docs: update HANDOFF.md and TASKS.md with fret snapping cost optimization details")
+- **Latest Pushed Commit**: `cc51d8099daec191f3619977eaeb2b123cf2dc37` ("docs: update HANDOFF.md and TASKS.md with fret snapping cost optimization details")
 
 - **Working Tree Status**: Clean.
 
@@ -16,7 +16,7 @@
 
 ## Tests And Checks Run
 
-- `python -m pytest` -> 371 passed (100% success, including the new GPIF element sequencing and binary package companion files hardening unit tests).
+- `python -m pytest` -> 374 passed (100% success, including the new fret snapping cost optimization unit tests and E2E compiler integration tests).
 - `python -m score2gp.cli export-schema --out schemas` -> passed cleanly.
 - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid.
 - `git diff --check` -> passed cleanly (zero trailing whitespace or EOF blank line violations).
@@ -26,15 +26,20 @@
 
 ## What Changed In This Task
 
-- **Strict XML Element Sequencing Constraints under `<Score>`**:
-  - Defined a strict sequence mapping for all `<Score>` children under a standardized schema sequencing array in `src/score2gp/gpif.py` and `src/score2gp/version_adapter.py`.
-  - Applied a stable key sorting transformation at the end of both `build_gpif()` and `adapt_gpif()` to guarantee that the compiled GPIF document perfectly matches native Guitar Pro unmarshalling sequence constraints.
-- **Dynamic Companion Files Generation**:
-  - Implemented robust, dynamic generation of `Content/Preferences.json` in `src/score2gp/gp_package.py` mapping page size, scaling, orientation, view mode, and margins.
-  - Implemented dynamic generation of `Content/LayoutConfiguration` in `src/score2gp/gp_package.py` containing XML metadata tags (`<ActiveLayout>`, `<SystemLayout>`, `<SystemPageMargins>`) matching active layout styles.
+- **Fret-Snapping Cost Optimization & Shift Penalization Solver**:
+  - Implemented `optimize_fret_snapping(score: ScoreIR)` in `src/score2gp/build_ir.py` using a localized Viterbi-like dynamic programming costing solver.
+  - Enforced ergonomic centroid boundaries, penalizing notes $> 4$ frets away from the active hand position centroid.
+  - Clamped all valid pitch selections within localised structural safety cushions (frets `0` to `24`).
+  - Penalized radical horizontal jumps $> 4$ frets between adjacent events.
+  - Implemented biomechanical stretch limits, filtering out unplayable finger spans exceeding `5` frets.
+  - Applied a minor mismatch cost to prefer original `TabCandidate` suggestions when they are ergonomic and biomechanically safe.
+- **Opt-in Compiler & CLI Integration**:
+  - Exposed keyword-only parameter `optimize_fret_snapping: bool = False` to `build_ir_from_files`, `build_ir_with_diagnostics_from_files`, `build_ir_from_imports`, and `build_ir_with_diagnostics_from_imports`.
+  - Resolved Python variable shadowing issues cleanly by referencing the global optimizer namespace.
+  - Added the `--optimize-fret-snapping` / `--no-optimize-fret-snapping` command-line option to both `build-ir` and `convert` command entry points inside `src/score2gp/cli.py` (defaulting to `False` to maintain full visual coordinate fidelity for legacy tests).
 - **Public Fixtures & Verification Tests**:
-  - Created `fixtures/public/test_gpif_binary_hardening.ir.json` modeling page layouts, custom fonts, style collections, and active expression controllers to act as our structural sequencing baseline.
-  - Created `tests/test_gpif_binary_hardening.py` asserting strict element sequencing compliant with sequence rules, companion file content generation correctness, and E2E roundtrip packaging.
+  - Created `fixtures/public/test_fret_snapping_optimization.ir.json` modeling wide intervals and shifting melodic passages.
+  - Created `tests/test_fret_snapping_optimization.py` containing 3 thorough unit/integration tests confirming dynamic programming costing accuracy, unplayable span exclusions, and clean pipeline invocation.
 
 ## Known Limitations
 
@@ -46,7 +51,8 @@
 
 ## Next Recommended Task
 
-- Proceed with advanced visual ornamentations or fret snapping refinements.
+- Next branch: `feature/build-ir-advanced-ornaments-v0.1`
+- Goal: Implement advanced ornamentation parsing and visual formatting.
 
 ## Explicit Scope Boundaries
 

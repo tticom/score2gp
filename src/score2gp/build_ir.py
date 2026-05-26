@@ -539,6 +539,7 @@ def build_ir_from_files(
     *,
     allow_remediation: bool = False,
     allow_skip_unboxed: bool = False,
+    optimize_fret_snapping: bool = False,
 ) -> ScoreIR:
     try:
         score, diagnostics = build_ir_with_diagnostics_from_files(
@@ -548,6 +549,7 @@ def build_ir_from_files(
             ascii_alignment_path=ascii_alignment_path,
             allow_remediation=allow_remediation,
             allow_skip_unboxed=allow_skip_unboxed,
+            optimize_fret_snapping=optimize_fret_snapping,
         )
         if diagnostics_out_path is not None:
             diagnostics.to_json_file(diagnostics_out_path)
@@ -610,6 +612,7 @@ def build_ir_with_diagnostics_from_files(
     *,
     allow_remediation: bool = False,
     allow_skip_unboxed: bool = False,
+    optimize_fret_snapping: bool = False,
 ) -> tuple[ScoreIR, BuildIrDiagnostics]:
     musicxml = parse_musicxml(musicxml_path, allow_remediation=allow_remediation)
     tabraw = TabRaw.from_json_file(tabraw_path)
@@ -641,6 +644,7 @@ def build_ir_with_diagnostics_from_files(
         tabraw,
         ascii_gate_details=ascii_gate_details,
         allow_skip_unboxed=allow_skip_unboxed,
+        optimize_fret_snapping=optimize_fret_snapping,
     )
     if out_path is not None:
         out = Path(out_path)
@@ -1056,8 +1060,15 @@ def _pdf_timing_refinement_classification(
     return "partial", ["pdf_timing_refinement_partial_layout_evidence"]
 
 
-def build_ir_from_imports(musicxml: MusicXmlImport, tabraw: TabRaw) -> ScoreIR:
-    score, _ = build_ir_with_diagnostics_from_imports(musicxml, tabraw)
+def build_ir_from_imports(
+    musicxml: MusicXmlImport,
+    tabraw: TabRaw,
+    *,
+    optimize_fret_snapping: bool = False,
+) -> ScoreIR:
+    score, _ = build_ir_with_diagnostics_from_imports(
+        musicxml, tabraw, optimize_fret_snapping=optimize_fret_snapping
+    )
     return score
 
 
@@ -1067,6 +1078,7 @@ def build_ir_with_diagnostics_from_imports(
     *,
     ascii_gate_details: dict[str, object] | None = None,
     allow_skip_unboxed: bool = False,
+    optimize_fret_snapping: bool = False,
 ) -> tuple[ScoreIR, BuildIrDiagnostics]:
     if allow_skip_unboxed:
         unboxed_systems = set()
@@ -1385,6 +1397,8 @@ def build_ir_with_diagnostics_from_imports(
         warnings=warnings,
     )
     _attach_symbols_and_techniques(score, tabraw)
+    if optimize_fret_snapping:
+        globals()["optimize_fret_snapping"](score)
     diagnostics = _build_diagnostics(musicxml, tabraw, score, candidate_pools, ascii_gate_details=ascii_gate_details)
     if diagnostics.pdf_timing_mapping:
         mapping = diagnostics.pdf_timing_mapping
@@ -3322,3 +3336,171 @@ def _attach_symbols_and_techniques(score: ScoreIR, tabraw: TabRaw) -> None:
                 target_note.techniques.append(tech)
                 target_note.provenance.append(candidate.to_provenance())
                 _remove_not_aligned_warning(score, candidate)
+
+
+def optimize_fret_snapping(score: ScoreIR) -> None:
+    """
+    Optimizes left-hand fingering execution positions using a localized dynamic programming costing solver.
+    Filters out spans that breach biomechanical boundaries, clamps unplayable fret combinations,
+    penalizes shifts and radical jumps, and prefers original candidates if ergonomic.
+    """
+    import itertools
+
+    for track in score.tracks:
+        events_to_optimize = []
+        for bar in score.bars:
+            for event in bar.events:
+                if event.track_id == track.id and not event.is_rest and event.notes:
+                    events_to_optimize.append(event)
+
+        if not events_to_optimize:
+            continue
+
+        tuning = track.tuning
+
+        # Step 1: Pre-generate valid states for each event
+        event_states = []
+        for event in events_to_optimize:
+            pitches = [note.pitch for note in event.notes]
+            suggestions = [(note.string, note.fret) for note in event.notes]
+
+            # Generate valid states for these pitches
+            valid_states = []
+            possibilities = []
+            for pitch in pitches:
+                opts = []
+                for string in tuning.strings:
+                    fret = pitch - string.pitch
+                    if 0 <= fret <= 24:
+                        opts.append((string.number, fret))
+                possibilities.append(opts)
+
+            for state in itertools.product(*possibilities):
+                strings = [s for s, f in state]
+                if len(strings) != len(set(strings)):
+                    continue
+
+                non_open = [f for s, f in state if f > 0]
+                if non_open:
+                    span = max(non_open) - min(non_open)
+                    if span > 5:  # Breach absolute biomechanical boundary
+                        continue
+
+                valid_states.append(list(state))
+
+            if not valid_states:
+                # Fallback to the original suggestion
+                valid_states = [suggestions]
+
+            event_states.append((event, valid_states, suggestions))
+
+        # Step 2: Run dynamic programming cost minimization
+        # dp[i] will store list of (min_total_cost, centroid_value, path_state_indexes) for each state at step i
+        dp = []
+
+        # Step 0 initialization
+        step_0_states = event_states[0][1]
+        step_0_suggestions = event_states[0][2]
+        step_0_dp = []
+        for j, state in enumerate(step_0_states):
+            non_open = [f for s, f in state if f > 0]
+            centroid = sum(non_open) / len(non_open) if non_open else 5.0
+
+            cost = 0.0
+            if non_open:
+                # stretch
+                span = max(non_open) - min(non_open)
+                if span > 4:
+                    cost += 15.0
+                for f in non_open:
+                    dist = abs(f - centroid)
+                    if dist <= 4:
+                        cost += 1.0 * dist
+                    else:
+                        cost += 4.0 + 20.0 * (dist - 4.0)
+
+            if step_0_suggestions:
+                for idx, (s, f) in enumerate(state):
+                    if idx < len(step_0_suggestions):
+                        s_sug, f_sug = step_0_suggestions[idx]
+                        if s != s_sug or f != f_sug:
+                            cost += 5.0
+
+            step_0_dp.append((cost, centroid, [j]))
+        dp.append(step_0_dp)
+
+        # Loop for remaining events
+        for i in range(1, len(event_states)):
+            curr_states = event_states[i][1]
+            curr_suggestions = event_states[i][2]
+            prev_dp = dp[-1]
+
+            curr_dp = []
+            for j, state in enumerate(curr_states):
+                non_open = [f for s, f in state if f > 0]
+                has_non_open = len(non_open) > 0
+                state_centroid = sum(non_open) / len(non_open) if has_non_open else None
+
+                best_cost = float("inf")
+                best_centroid = 5.0
+                best_path = []
+
+                for prev_cost, prev_centroid, prev_path in prev_dp:
+                    curr_centroid = state_centroid if has_non_open else prev_centroid
+
+                    state_cost = 0.0
+                    if has_non_open:
+                        span = max(non_open) - min(non_open)
+                        if span > 4:
+                            state_cost += 15.0
+                        for f in non_open:
+                            dist = abs(f - curr_centroid)
+                            if dist <= 4:
+                                state_cost += 1.0 * dist
+                            else:
+                                state_cost += 4.0 + 20.0 * (dist - 4.0)
+
+                    if curr_suggestions:
+                        for idx, (s, f) in enumerate(state):
+                            if idx < len(curr_suggestions):
+                                s_sug, f_sug = curr_suggestions[idx]
+                                if s != s_sug or f != f_sug:
+                                    state_cost += 5.0
+
+                    # transition cost
+                    dist = abs(curr_centroid - prev_centroid)
+                    trans_cost = 2.0 * dist
+                    if dist > 4:
+                        trans_cost += 50.0
+
+                    total_cost = prev_cost + trans_cost + state_cost
+                    if total_cost < best_cost:
+                        best_cost = total_cost
+                        best_centroid = curr_centroid
+                        best_path = prev_path + [j]
+
+                curr_dp.append((best_cost, best_centroid, best_path))
+            dp.append(curr_dp)
+
+        # Step 3: Backtrack and update score objects in place
+        final_dp = dp[-1]
+        best_idx = 0
+        min_final_cost = float("inf")
+        for j, (cost, _, _) in enumerate(final_dp):
+            if cost < min_final_cost:
+                min_final_cost = cost
+                best_idx = j
+
+        optimal_path = final_dp[best_idx][2]
+
+        for i, (event, states, _) in enumerate(event_states):
+            opt_state = states[optimal_path[i]]
+            for idx, note in enumerate(event.notes):
+                if idx < len(opt_state):
+                    s, f = opt_state[idx]
+                    note.string = s
+                    note.fret = f
+                    # Update pitch to match optimized string and fret
+                    open_pitch = tuning.pitch_for_string(s)
+                    if open_pitch is not None:
+                        note.pitch = open_pitch + f
