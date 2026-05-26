@@ -108,9 +108,14 @@ def validate_roundtrip_command(ir_json: Path, gp_package: Path) -> None:
 
 
 @app.command("batch")
-def batch_command(manifest: Path, workdir: Path, workers: int = 4) -> None:
+def batch_command(
+    manifest: Path,
+    workdir: Path,
+    workers: int = 4,
+    cache: bool = typer.Option(True, "--cache/--no-cache", help="Enable or disable incremental build caching"),
+) -> None:
     """Execute concurrent batch pipeline processing on multiple score payloads."""
-    result = run_batch_pipeline(manifest, workdir, max_workers=workers)
+    result = run_batch_pipeline(manifest, workdir, max_workers=workers, use_cache=cache)
     typer.echo(json.dumps(result, indent=2, sort_keys=True))
     if result["failure_count"] > 0:
         raise typer.Exit(1)
