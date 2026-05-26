@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import json
 import zipfile
 from xml.etree import ElementTree as ET
 
 from score2gp.gp_package import compare_gp, inspect_gp, validate_gp, write_gp
-from score2gp.ir import ScoreIR
+from score2gp.ir import ScoreIR, ScoreBooklet
 
 
 def test_write_gp_creates_valid_zip(tmp_path) -> None:
@@ -1899,3 +1900,64 @@ def test_gpif_styles_formatting_and_measure_layout(tmp_path) -> None:
         assert float(bar_ml.find("Width").text) == 120.0
         assert float(bar_ml.find("StretchFactor").text) == 1.5
         assert float(bar_ml.find("Spacing").text) == 2.0
+
+
+def test_gpif_score_booklets(tmp_path) -> None:
+    score = ScoreBooklet.from_json_file("fixtures/public/test_gpif_score_booklets.ir.json")
+    out = tmp_path / "sonata_booklet.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        members = zf.namelist()
+        assert "VERSION" in members
+        assert "Content/score.gpif" in members
+        assert "Content/movement_1.gpif" in members
+        assert "Content/movement_2.gpif" in members
+        assert "Content/booklet_index.json" in members
+
+        # 1. Verify booklet_index.json
+        index_data = json.loads(zf.read("Content/booklet_index.json").decode("utf-8"))
+        assert index_data["booklet_title"] == "Synthetic Multi-Movement Sonata Booklet"
+        assert index_data["pagination"]["start_page"] == 1
+        assert index_data["pagination"]["continuous"] is True
+        assert index_data["pagination"]["running_headers"] is True
+
+        movements = index_data["movements"]
+        assert len(movements) == 2
+        assert movements[0]["title"] == "Movement I - Allegro"
+        assert movements[0]["file"] == "Content/movement_1.gpif"
+        assert movements[0]["start_page"] == 1
+
+        assert movements[1]["title"] == "Movement II - Adagio"
+        assert movements[1]["file"] == "Content/movement_2.gpif"
+        assert movements[1]["start_page"] == 3
+
+        # 2. Verify structural <Booklet> element in primary score XML (score.gpif)
+        primary_xml = zf.read("Content/score.gpif")
+        root = ET.fromstring(primary_xml)
+
+        score_node = root.find("Score")
+        assert score_node is not None
+
+        bk_node = score_node.find("Booklet")
+        assert bk_node is not None
+        assert bk_node.get("title") == "Synthetic Multi-Movement Sonata Booklet"
+
+        pagination = bk_node.find("Pagination")
+        assert pagination is not None
+        assert pagination.get("startPage") == "1"
+        assert pagination.get("runningHeaders") == "true"
+        assert pagination.get("continuous") == "true"
+
+        mvs = bk_node.findall(".//Movements/Movement")
+        assert len(mvs) == 2
+        assert mvs[0].get("title") == "Movement I - Allegro"
+        assert mvs[0].get("file") == "Content/movement_1.gpif"
+        assert mvs[0].get("startPage") == "1"
+
+        assert mvs[1].get("title") == "Movement II - Adagio"
+        assert mvs[1].get("file") == "Content/movement_2.gpif"
+        assert mvs[1].get("startPage") == "3"

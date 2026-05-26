@@ -3,7 +3,7 @@ from __future__ import annotations
 from fractions import Fraction
 from xml.etree import ElementTree as ET
 
-from .ir import Event, Note, ScoreIR, Technique
+from .ir import Event, Note, ScoreIR, Technique, ScoreBooklet
 
 SUPPORTED_MINIMAL_TECHNIQUES = {"slide", "vibrato", "hammer-on", "pull-off", "tie", "slur", "bend", "let-ring", "palm-mute", "grace", "dead-note", "tremolo-bar", "tremolo-picking", "slap", "pop", "tapping", "trill"}
 
@@ -115,7 +115,10 @@ def _master_track(parent: ET.Element, score: ScoreIR) -> None:
         _text(mt, "Tracks", " ".join(track_order))
 
 
-def build_gpif(score: ScoreIR) -> bytes:
+def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = None) -> bytes:
+    if isinstance(score, ScoreBooklet):
+        return build_gpif(score.scores[0], booklet=score)
+
     root = ET.Element("GPIF", {"version": "7", "generator": "score2gp"})
     score_node = ET.SubElement(root, "Score")
 
@@ -244,6 +247,27 @@ def build_gpif(score: ScoreIR) -> bytes:
                 _text(style_prop, "SpacingCushion", style.spacing_cushion)
             if style.color is not None:
                 _text(style_prop, "Color", style.color)
+
+    # Score-level Booklet structural collections metadata
+    if booklet is not None:
+        bk_node = ET.SubElement(score_node, "Booklet", {"title": booklet.booklet_title})
+        if booklet.pagination is not None:
+            ET.SubElement(bk_node, "Pagination", {
+                "startPage": str(booklet.pagination.start_page),
+                "runningHeaders": "true" if booklet.pagination.running_headers else "false",
+                "continuous": "true" if booklet.pagination.continuous else "false",
+            })
+        mvs_node = ET.SubElement(bk_node, "Movements")
+        start_page = booklet.pagination.start_page if booklet.pagination else 1
+        for idx, s in enumerate(booklet.scores):
+            ET.SubElement(mvs_node, "Movement", {
+                "index": str(idx + 1),
+                "title": s.metadata.title,
+                "file": f"Content/movement_{idx + 1}.gpif",
+                "startPage": str(start_page),
+            })
+            pg_count = s.conversion.source_page_count if s.conversion.source_page_count is not None else 1
+            start_page += pg_count
 
     event_map = {}
     for bar in score.bars:
@@ -1140,7 +1164,15 @@ def _ticks_to_fraction(ticks: int, ticks_per_quarter: int) -> str:
     return str(Fraction(ticks, ticks_per_quarter * 4))
 
 
-def gpif_warnings(score: ScoreIR) -> list[str]:
+def gpif_warnings(score: ScoreIR | ScoreBooklet) -> list[str]:
+    if isinstance(score, ScoreBooklet):
+        warnings: list[str] = []
+        for idx, s in enumerate(score.scores):
+            movement_warnings = gpif_warnings(s)
+            for mw in movement_warnings:
+                warnings.append(f"[movement {idx + 1}] {mw}")
+        return warnings
+
     warnings: list[str] = []
     for track in score.tracks:
         if not track.tablature_enabled:

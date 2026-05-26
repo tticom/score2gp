@@ -5,7 +5,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, RootModel, field_validator, model_validator
 
 SCHEMA_VERSION = "0.1.0"
 DEFAULT_TICKS_PER_QUARTER = 960
@@ -819,6 +819,36 @@ class ScoreIR(BaseModel):
         return errors
 
 
+class BookletPagination(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    start_page: int = Field(default=1, ge=1)
+    running_headers: bool = True
+    continuous: bool = True
+
+
+class ScoreBooklet(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["0.1.0"] = SCHEMA_VERSION
+    booklet_title: str = "Untitled Booklet"
+    metadata: Metadata = Field(default_factory=Metadata)
+    scores: list[ScoreIR] = Field(min_length=1)
+    pagination: BookletPagination | None = None
+
+    @classmethod
+    def from_json_file(cls, path: str | Path) -> "ScoreBooklet":
+        return cls.model_validate_json(Path(path).read_text(encoding="utf-8"))
+
+    def to_json_file(self, path: str | Path) -> None:
+        Path(path).write_text(self.model_dump_json(indent=2), encoding="utf-8")
+
+
+class ScoreIRRoot(RootModel[ScoreIR | ScoreBooklet]):
+    pass
+
+
+
 def _bar_length_ticks(time_signature: TimeSignature, ticks_per_quarter: int) -> int:
     return int(time_signature.numerator * ticks_per_quarter * 4 / time_signature.denominator)
 
@@ -849,9 +879,14 @@ def format_validation_errors(exc: ValidationError) -> list[str]:
     return messages
 
 
-def validate_score_ir_file(path: str | Path) -> tuple[ScoreIR | None, list[str]]:
+def validate_score_ir_file(path: str | Path) -> tuple[ScoreIR | ScoreBooklet | None, list[str]]:
     try:
-        return ScoreIR.from_json_file(path), []
+        content = Path(path).read_text(encoding="utf-8")
+        data = json.loads(content)
+        if isinstance(data, dict) and "scores" in data:
+            return ScoreBooklet.model_validate(data), []
+        else:
+            return ScoreIR.model_validate(data), []
     except ValidationError as exc:
         return None, format_validation_errors(exc)
     except json.JSONDecodeError as exc:
@@ -861,7 +896,7 @@ def validate_score_ir_file(path: str | Path) -> tuple[ScoreIR | None, list[str]]
 
 
 def scoreir_schema() -> dict[str, Any]:
-    schema = ScoreIR.model_json_schema()
+    schema = ScoreIRRoot.model_json_schema()
     schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
     schema["$id"] = "https://github.com/tticom/score2gp/schemas/scoreir.v0.1.schema.json"
     schema["title"] = "ScoreIR v0.1"
@@ -950,6 +985,44 @@ def compare_score_ir(expected: str | Path, actual: str | Path) -> dict[str, Any]
 
     assert expected_score is not None
     assert actual_score is not None
+
+    if isinstance(expected_score, ScoreBooklet) or isinstance(actual_score, ScoreBooklet):
+        if not (isinstance(expected_score, ScoreBooklet) and isinstance(actual_score, ScoreBooklet)):
+            return {
+                "expected": str(expected),
+                "actual": str(actual),
+                "matches": False,
+                "errors": {},
+                "differences": {"type_mismatch": {"expected": type(expected_score).__name__, "actual": type(actual_score).__name__}},
+            }
+        diffs = {}
+        if expected_score.booklet_title != actual_score.booklet_title:
+            diffs["booklet_title"] = {"expected": expected_score.booklet_title, "actual": actual_score.booklet_title}
+        expected_meta = expected_score.metadata.model_dump(exclude_none=True)
+        actual_meta = actual_score.metadata.model_dump(exclude_none=True)
+        if expected_meta != actual_meta:
+            diffs["booklet_metadata"] = {"expected": expected_meta, "actual": actual_meta}
+        expected_pag = expected_score.pagination.model_dump(exclude_none=True) if expected_score.pagination else None
+        actual_pag = actual_score.pagination.model_dump(exclude_none=True) if actual_score.pagination else None
+        if expected_pag != actual_pag:
+            diffs["booklet_pagination"] = {"expected": expected_pag, "actual": actual_pag}
+
+        if len(expected_score.scores) != len(actual_score.scores):
+            diffs["scores_count"] = {"expected": len(expected_score.scores), "actual": len(actual_score.scores)}
+        else:
+            for idx, (s1, s2) in enumerate(zip(expected_score.scores, actual_score.scores)):
+                summary1 = semantic_scoreir_summary(s1)
+                summary2 = semantic_scoreir_summary(s2)
+                if summary1 != summary2:
+                    diffs[f"score_{idx}"] = {"expected": summary1, "actual": summary2}
+        return {
+            "expected": str(expected),
+            "actual": str(actual),
+            "matches": not diffs,
+            "errors": {},
+            "differences": diffs,
+        }
+
     expected_summary = semantic_scoreir_summary(expected_score)
     actual_summary = semantic_scoreir_summary(actual_score)
     differences = {

@@ -7,16 +7,15 @@ from typing import Any
 from xml.etree import ElementTree as ET
 
 from .gpif import build_gpif, gpif_warnings
-from .ir import ScoreIR
+from .ir import ScoreIR, ScoreBooklet
 
 REQUIRED_MEMBERS = {"VERSION", "Content/score.gpif"}
 
 
-def write_gp(score: ScoreIR, out_path: str | Path, template: str | Path | None = None) -> list[str]:
+def write_gp(score: ScoreIR | ScoreBooklet, out_path: str | Path, template: str | Path | None = None) -> list[str]:
     warnings: list[str] = gpif_warnings(score)
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
-    gpif = build_gpif(score)
 
     copied: dict[str, bytes] = {}
     if template:
@@ -36,6 +35,40 @@ def write_gp(score: ScoreIR, out_path: str | Path, template: str | Path | None =
     copied.setdefault("Content/PartConfiguration", b"")
     copied.setdefault("Content/BinaryStylesheet", b"")
 
+    if isinstance(score, ScoreBooklet):
+        # Build main/primary score GPIF with Booklet index embedded
+        gpif = build_gpif(score)
+        copied["Content/score.gpif"] = gpif
+
+        # Compile sequential movements and page indexing
+        start_page = score.pagination.start_page if score.pagination else 1
+        movements_list = []
+        for idx, s in enumerate(score.scores):
+            mov_gpif = build_gpif(s, booklet=score)
+            mov_path = f"Content/movement_{idx + 1}.gpif"
+            copied[mov_path] = mov_gpif
+
+            movements_list.append({
+                "index": idx + 1,
+                "title": s.metadata.title,
+                "file": mov_path,
+                "start_page": start_page
+            })
+            pg_count = s.conversion.source_page_count if s.conversion.source_page_count is not None else 1
+            start_page += pg_count
+
+        # Write the Booklet index JSON
+        booklet_index = {
+            "booklet_title": score.booklet_title,
+            "metadata": score.metadata.model_dump(exclude_none=True),
+            "pagination": score.pagination.model_dump(exclude_none=True) if score.pagination else None,
+            "movements": movements_list
+        }
+        copied["Content/booklet_index.json"] = json.dumps(booklet_index, indent=2).encode("utf-8")
+    else:
+        gpif = build_gpif(score)
+        copied["Content/score.gpif"] = gpif
+
     with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as zout:
         directories = {"Content/"}
         for directory in sorted(directories):
@@ -43,7 +76,6 @@ def write_gp(score: ScoreIR, out_path: str | Path, template: str | Path | None =
         for name, data in copied.items():
             if not name.endswith("/"):
                 zout.writestr(name, data)
-        zout.writestr("Content/score.gpif", gpif)
 
     return warnings
 
