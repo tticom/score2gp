@@ -5,8 +5,8 @@
 - **Current Branch**: `feature/gpif-track-expressions-and-part-separation-v0.1`
 - **Base Branch**: `main`
 - **Current PR**: PR #103 (https://github.com/tticom/score2gp/pull/103)
-- **Latest Local Commit**: `477ee8246033de1f0bfa86c79a5865e858ec3060` ("docs: update TASKS.md and HANDOFF.md with track expressions progress")
-- **Latest Pushed Commit**: `477ee8246033de1f0bfa86c79a5865e858ec3060` ("docs: update TASKS.md and HANDOFF.md with track expressions progress")
+- **Latest Local Commit**: `cc2631aa1be21b4a0242735ce283a178071eaa72` ("docs: finalize HANDOFF.md with PR 103 details")
+- **Latest Pushed Commit**: `cc2631aa1be21b4a0242735ce283a178071eaa72` ("docs: finalize HANDOFF.md with PR 103 details")
 
 - **Working Tree Status**: Clean (except doc/tasks updates).
 
