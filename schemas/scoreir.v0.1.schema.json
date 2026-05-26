@@ -204,6 +204,17 @@
           ],
           "default": null
         },
+        "tempo_automation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TempoAutomation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "time_signature": {
           "$ref": "#/$defs/TimeSignature"
         }
@@ -2975,6 +2986,49 @@
       "title": "Tempo",
       "type": "object"
     },
+    "TempoAutomation": {
+      "additionalProperties": false,
+      "properties": {
+        "style": {
+          "anyOf": [
+            {
+              "enum": [
+                "linear",
+                "exponential",
+                "instant",
+                "default"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "default",
+          "title": "Style"
+        },
+        "target_bpm": {
+          "minimum": 1.0,
+          "title": "Target Bpm",
+          "type": "number"
+        },
+        "type": {
+          "default": "none",
+          "enum": [
+            "accelerando",
+            "ritardando",
+            "none"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target_bpm"
+      ],
+      "title": "TempoAutomation",
+      "type": "object"
+    },
     "TieTechnique": {
       "additionalProperties": false,
       "properties": {
@@ -3259,6 +3313,21 @@
           "default": true,
           "title": "Tablature Enabled",
           "type": "boolean"
+        },
+        "text_annotations": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Text Annotations"
         },
         "tuning": {
           "$ref": "#/$defs/Tuning"

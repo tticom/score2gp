@@ -211,6 +211,7 @@ class Track(BaseModel):
     layout_preferences: TrackLayoutPreferences | None = None
     expressions: list[TrackExpression] | None = None
     automations: list[TrackAutomation] | None = None
+    text_annotations: list[str] | None = None
 
 
 
@@ -656,6 +657,14 @@ class RepeatCountOverlay(BaseModel):
     style: Literal["standard", "percent", "numbered", "default"] | None = "default"
 
 
+class TempoAutomation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["accelerando", "ritardando", "none"] = "none"
+    style: Literal["linear", "exponential", "instant", "default"] | None = "default"
+    target_bpm: float = Field(ge=1.0)
+
+
 class Bar(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -677,6 +686,7 @@ class Bar(BaseModel):
     alternate_ending_is_stop: bool | None = None
     multi_measure_rest_count: int | None = Field(default=None, ge=1)
     repeat_count_overlay: RepeatCountOverlay | None = None
+    tempo_automation: TempoAutomation | None = None
 
 
 
