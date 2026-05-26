@@ -4,6 +4,8 @@
 
 ## Done
 
+- [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for track-level performance expressions (such as "pizzicato", "arco", or "con sordino" timeline strings) and visual part-separation configuration templates (isolating tracks into standalone instrumental parts within a booklet) in the Guitar Pro writer (`src/score2gp/gpif.py`), verified with public synthetic fixtures and unit tests (`feature/gpif-track-expressions-and-part-separation-v0.1`).
+
 - [x] Implement ScoreIR parsing/schema expansion and packing/packaging entry points for multi-score Booklets (enabling a sequence of distinct internal ScoreIR entities to be managed collectively within a single structural wrapper) in the Guitar Pro writer (`src/score2gp/gpif.py`), verified with public synthetic fixtures and unit tests (`feature/gpif-score-booklets-and-collections-v0.1`).
 
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for visual stylesheet styles formatting overrides (defining line widths, item spacing cushions, or custom color elements per visual category) and dynamic measure-level layout settings (such as explicit measure widths, bar stretch factors, or custom visual spacing properties per measure) in the Guitar Pro writer (`src/score2gp/gpif.py`), verified with public synthetic fixtures and unit tests (`feature/gpif-styles-formatting-and-measure-layout-v0.1`).

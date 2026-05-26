@@ -2,13 +2,13 @@
 
 ## Metadata
 
-- **Current Branch**: `feature/gpif-score-booklets-and-collections-v0.1`
+- **Current Branch**: `feature/gpif-track-expressions-and-part-separation-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: PR #102 (https://github.com/tticom/score2gp/pull/102)
-- **Latest Local Commit**: `0223e5fbed8e8f22349531d0955ac8d8afe0d70e` ("docs: finalize HANDOFF.md metadata before push")
-- **Latest Pushed Commit**: `0223e5fbed8e8f22349531d0955ac8d8afe0d70e` ("docs: finalize HANDOFF.md metadata before push")
+- **Current PR**: `Draft PR to be created`
+- **Latest Local Commit**: `3d407da9c88bd004bae0ca4d07c515765b561498` ("feat: implement track-level expression annotations and visual part separation overrides")
+- **Latest Pushed Commit**: `N/A`
 
-- **Working Tree Status**: Clean (except untracked scratch files).
+- **Working Tree Status**: Clean (except doc/tasks updates).
 
 - **GitHub Check Status**: N/A
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or `work/` contents are tracked.
@@ -16,9 +16,9 @@
 
 ## Tests And Checks Run
 
-- `python -m pytest` -> 352 passed (100% success, including the new GP7 multi-score booklet packaging unit tests).
-- `python -m score2gp.cli export-schema --out schemas` -> passed cleanly (updated schemas with new `ScoreBooklet` and `BookletPagination` models).
-- `python -m score2gp.cli validate-ir fixtures/public/test_gpif_score_booklets.ir.json` -> valid.
+- `python -m pytest` -> 353 passed (100% success, including the new track performance expressions and part-separation layout template unit tests).
+- `python -m score2gp.cli export-schema --out schemas` -> passed cleanly (updated schemas with `TrackExpression` and `PartSeparationRule` models).
+- `python -m score2gp.cli validate-ir fixtures/public/test_gpif_track_expressions.ir.json` -> valid.
 - `git diff --check` -> passed cleanly (zero trailing whitespace or EOF blank line violations).
 - `git diff -- schemas` -> passed cleanly (valid schema additions).
 - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep`.
@@ -27,24 +27,20 @@
 ## What Changed In This Task
 
 - **ScoreIR Schema & Model Expansion**:
-  - Created `BookletPagination` model under `src/score2gp/ir.py` specifying `start_page`, `running_headers`, and `continuous`.
-  - Created `ScoreBooklet` model under `src/score2gp/ir.py` specifying `booklet_title`, `metadata`, `scores`, and `pagination` parameters.
-  - Defined unified `ScoreIRRoot` union `RootModel[ScoreIR | ScoreBooklet]` to support both single-score and multi-score booklet contracts transparently.
-  - Updated `validate_score_ir_file` to support automatic type detection and parse either single-score payloads or multi-score booklets.
-  - Expanded `compare_score_ir` to cleanly compare booklet metadata, pagination, and inner score movements.
+  - Created `TrackExpression` model under `src/score2gp/ir.py` specifying `bar_index` (minimum 1) and performance `text` (e.g., "pizzicato", "arco", "con sordino").
+  - Created `PartSeparationRule` model under `src/score2gp/ir.py` specifying `part_id`, `track_ids` array, `layout_mode` (default "page"), and `visible` boolean (default true).
+  - Updated `Track` model in `src/score2gp/ir.py` to support `expressions` as an optional list of `TrackExpression` items.
+  - Updated `ScoreLayout` model in `src/score2gp/ir.py` to support `part_separation` as an optional list of `PartSeparationRule` items.
+  - Expanded semantic summary generation `semantic_scoreir_summary()` to capture track expressions.
   - Successfully re-exported updated JSON schema version via CLI.
 - **GPIF XML Generator Serialization**:
-  - Handled `<Booklet>` and movement list elements inside `build_gpif` under `<Score>` in `src/score2gp/gpif.py`.
-  - Nested `<Pagination>` and `<Movements>` with continuous page number calculations.
-- **Unified Booklet ZIP Packaging**:
-  - Programmed multi-movement ZIP packaging routines in `src/score2gp/gp_package.py`.
-  - Generated continuous start page mapping and structured `Content/booklet_index.json` containing metadata, pagination parameters, and sequential movement references.
-  - Populated distinct `.gpif` files per movement inside the package (`Content/movement_1.gpif`, `Content/movement_2.gpif`, etc.) alongside primary `Content/score.gpif`.
+  - Serialized track performance expressions into standard track-level properties: `<Track id="..."><ExpressionTexts><ExpressionText measure="X">Text</ExpressionText></ExpressionTexts></Track>` inside `_tracks` in `src/score2gp/gpif.py`.
+  - Serialized part-separation layout configurations under: `<Layout><PartSeparation><Part id="..." layoutMode="..." visible="..."><Tracks>ids...</Tracks></Part></PartSeparation></Layout>` inside `build_gpif` in `src/score2gp/gpif.py`.
 - **Synthetic Testing & Validation**:
-  - Authored a dedicated public synthetic fixture `fixtures/public/test_gpif_score_booklets.ir.json` modeling a multi-score booklet layout.
-  - Wrote comprehensive unit tests in `tests/test_gp_writer.py` (`test_gpif_score_booklets`) verifying index generation, movements paths, start pages, and zip integrity.
+  - Created public synthetic fixture `fixtures/public/test_gpif_track_expressions.ir.json` containing track expressions and part-separation templates.
+  - Authored comprehensive unit tests `test_gpif_track_expressions_and_part_separation` in `tests/test_gp_writer.py` asserting XML structures, timeline expressions, layout mode tags, and warning boundary rules.
 - **E2E Private Smoke Test Results**:
-  - Ran E2E private smoke compiler against real private inputs to verify zero regressions or crashes with the new booklet structures.
+  - Ran E2E private smoke compiler against real private inputs to verify zero regressions or crashes with the new track expression and part-separation template configurations.
 
 ## Known Limitations
 
