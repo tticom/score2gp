@@ -719,6 +719,23 @@ class PartSeparationRule(BaseModel):
     visible: bool = True
 
 
+class MasterMixer(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    volume: float = Field(default=1.0, ge=0.0, le=1.0)
+    pan: float = Field(default=0.0, ge=-1.0, le=1.0)
+    reverb: float = Field(default=0.0, ge=0.0, le=100.0)
+    chorus: float = Field(default=0.0, ge=0.0, le=100.0)
+
+
+class PipelinePresetCascade(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    preset_name: str
+    target_engine: str = "gp7"
+    options: dict[str, Any] = Field(default_factory=dict)
+
+
 class ScoreLayout(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -734,6 +751,8 @@ class ScoreLayout(BaseModel):
     style_collections: list[StyleCollection] | None = None
     styles: list[StyleProperty] | None = None
     part_separation: list[PartSeparationRule] | None = None
+    master_mixer: MasterMixer | None = None
+    preset_cascade: PipelinePresetCascade | None = None
 
 
 
