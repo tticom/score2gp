@@ -4,9 +4,9 @@
 
 - **Current Branch**: `feature/build-ir-advanced-ornaments-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: Draft (To be created)
-- **Latest Local Commit**: `69b60eafad4b4e54823126fddfca3bc94709d0cb` ("feat: parse and serialize advanced performance ornaments and grace note properties")
-- **Latest Pushed Commit**: N/A (To be pushed)
+- **Current PR**: [PR #115](https://github.com/tticom/score2gp/pull/115) (Draft)
+- **Latest Local Commit**: `d7ec425907c8e4b1b6f72ddac6122f7b78f70e3d` ("docs: update HANDOFF.md and TASKS.md with advanced ornaments details")
+- **Latest Pushed Commit**: `d7ec425907c8e4b1b6f72ddac6122f7b78f70e3d` ("docs: update HANDOFF.md and TASKS.md with advanced ornaments details")
 
 - **Working Tree Status**: Clean (except TASKS.md and HANDOFF.md, which will be committed in the next step).
 
