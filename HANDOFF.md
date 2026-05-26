@@ -4,9 +4,9 @@
 - **Current Branch**: `feature/gpif-presentation-layout-polishing-v0.1`
 - **Base Branch**: `main`
 - **Current PR**: Draft PR to be created
-- **Latest Local Commit**: Pending commit of implementation changes
+- **Latest Local Commit**: `5f58a53` ("feat: implement score-level print setup headers and bar-level width mapping in GPIF XML generation")
 - **Latest Pushed Commit**: Pending push to origin
-- **Working Tree Status**: Uncommitted changes in `src/score2gp/gpif.py`, `tests/test_gp_writer.py`, `TASKS.md`, `HANDOFF.md`, and `fixtures/public/test_presentation_polishing.ir.json`.
+- **Working Tree Status**: Modified `HANDOFF.md` (uncommitted)
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked.
 
 ## Tests and Checks Run
