@@ -4,6 +4,8 @@
 
 ## Done
 
+- [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for project-wide global master configuration profiles (master mixer volume coefficients, stereo pan alignment, reverb/chorus parameters, and pipeline preset cascades) in the Guitar Pro writer (`src/score2gp/gpif.py`), verified with public synthetic fixtures and unit tests (`feature/gpif-master-mixer-and-config-cascades-v0.1`).
+
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for track-level playback automation envelopes (timeline volume and stereo panning balance changes shifting at specific measures) in the Guitar Pro writer (`src/score2gp/gpif.py`), verified with public synthetic fixtures and unit tests (`feature/gpif-track-automations-v0.1`).
 
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for track-level performance expressions (such as "pizzicato", "arco", or "con sordino" timeline strings) and visual part-separation configuration templates (isolating tracks into standalone instrumental parts within a booklet) in the Guitar Pro writer (`src/score2gp/gpif.py`), verified with public synthetic fixtures and unit tests (`feature/gpif-track-expressions-and-part-separation-v0.1`).
