@@ -202,6 +202,20 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
                 bracket_node = ET.SubElement(ensemble_brackets_node, "Bracket", {"style": bracket.style})
                 _text(bracket_node, "Tracks", " ".join(bracket.track_ids))
 
+    # Score-level custom visual part-separation configurations
+    if getattr(score, "layout", None) is not None and score.layout.part_separation is not None:
+        layout_node = score_node.find("Layout")
+        if layout_node is None:
+            layout_node = ET.SubElement(score_node, "Layout")
+        ps_node = ET.SubElement(layout_node, "PartSeparation")
+        for rule in score.layout.part_separation:
+            part_node = ET.SubElement(ps_node, "Part", {
+                "id": rule.part_id,
+                "layoutMode": rule.layout_mode,
+                "visible": "true" if rule.visible else "false",
+            })
+            _text(part_node, "Tracks", " ".join(rule.track_ids))
+
     # Score-level custom font stylesheets and music typography parameters
     if getattr(score, "layout", None) is not None and score.layout.fonts is not None:
         fonts_cfg = score.layout.fonts
@@ -318,6 +332,12 @@ def _tracks(parent: ET.Element, score: ScoreIR, track_cd_maps: dict[str, dict[st
 
         _text(node, "Instrument", track.instrument)
         _text(node, "Capo", track.capo)
+
+        if getattr(track, "expressions", None) is not None:
+            et_node = ET.SubElement(node, "ExpressionTexts")
+            for expr in track.expressions:
+                expr_node = ET.SubElement(et_node, "ExpressionText", {"measure": str(expr.bar_index)})
+                expr_node.text = expr.text
 
         if getattr(track, "layout_preferences", None) is not None:
             if track.layout_preferences.tab_only:
