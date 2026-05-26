@@ -3352,12 +3352,22 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
             overlap_height = max(0.0, overlap_y_max - overlap_y_min)
             coverage_ratio = overlap_height / staff_height if staff_height > 0 else 0.0
 
+            is_left_edge_bracket = (
+                abs(x_val - x0) < 6.0 and
+                abs(y_max - y1) < 4.0
+            )
+
             crosses_entire_staff = (y_min <= y0 + 4.0 and y_max >= y1 - 4.0) or (gaps_crossed >= len(ys) - 1)
+            if is_left_edge_bracket:
+                crosses_entire_staff = True
 
             absolute_height_ok = (height >= 40.0)
             relative_height_ok = crosses_entire_staff
             is_accepted_relative = (height >= 20.0 and relative_height_ok)
             is_accepted = (absolute_height_ok or is_accepted_relative) and relative_height_ok
+
+            if is_left_edge_bracket:
+                is_accepted = True
 
             rejection_reason = None
             if not relative_height_ok:
