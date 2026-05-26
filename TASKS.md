@@ -4,6 +4,8 @@
 
 ## Done
 
+- [x] Implement a unified end-to-end pipeline verification gate, high-throughput execution diagnostic runner, and process resident memory monitoring engine in `src/score2gp/diagnostics.py` to run parallelized score generation streams using full caching paths, perform strict bidirectional round-trip checks on every compiled artifact, and output a structured operational footprint report dictionary, exposed via a new `diagnose` CLI command (`feature/pipeline-system-integration-and-verification-v0.1`).
+
 - [x] Implement a version-gated generation architecture and compilation target adapter layer in `src/score2gp/version_adapter.py` to support explicit target specifications (GP6, GP7, GP8), apply version-specific XML transformations (strip legacy properties like style collections, inject modern metadata blocks), and override package VERSION files, integrated with CLI and batch pipeline runs (`feature/gpif-target-version-adapters-v0.1`).
 
 - [x] Implement a thread-safe, self-invalidating incremental build cache registry and asset hash validation layer in `src/score2gp/cache.py` to calculate unique SHA-256 content hashes, cache generated GP7 packages under `work/cache_artifacts/`, bypass compile loops on cache hits, and track cache-status metrics, integrated with both batch and CLI run entry points (`feature/pipeline-incremental-build-cache-v0.1`).
