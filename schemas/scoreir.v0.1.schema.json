@@ -182,6 +182,29 @@
       "title": "BendTechnique",
       "type": "object"
     },
+    "BookletPagination": {
+      "additionalProperties": false,
+      "properties": {
+        "continuous": {
+          "default": true,
+          "title": "Continuous",
+          "type": "boolean"
+        },
+        "running_headers": {
+          "default": true,
+          "title": "Running Headers",
+          "type": "boolean"
+        },
+        "start_page": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Start Page",
+          "type": "integer"
+        }
+      },
+      "title": "BookletPagination",
+      "type": "object"
+    },
     "BoundingBox": {
       "additionalProperties": false,
       "properties": {
@@ -1569,6 +1592,49 @@
       "title": "PullOffTechnique",
       "type": "object"
     },
+    "ScoreBooklet": {
+      "additionalProperties": false,
+      "properties": {
+        "booklet_title": {
+          "default": "Untitled Booklet",
+          "title": "Booklet Title",
+          "type": "string"
+        },
+        "metadata": {
+          "$ref": "#/$defs/Metadata"
+        },
+        "pagination": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BookletPagination"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "schema_version": {
+          "const": "0.1.0",
+          "default": "0.1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "scores": {
+          "items": {
+            "$ref": "#/$defs/ScoreIR"
+          },
+          "minItems": 1,
+          "title": "Scores",
+          "type": "array"
+        }
+      },
+      "required": [
+        "scores"
+      ],
+      "title": "ScoreBooklet",
+      "type": "object"
+    },
     "ScoreFonts": {
       "additionalProperties": false,
       "properties": {
@@ -1628,6 +1694,57 @@
         }
       },
       "title": "ScoreFonts",
+      "type": "object"
+    },
+    "ScoreIR": {
+      "additionalProperties": false,
+      "properties": {
+        "bars": {
+          "items": {
+            "$ref": "#/$defs/Bar"
+          },
+          "title": "Bars",
+          "type": "array"
+        },
+        "conversion": {
+          "$ref": "#/$defs/ConversionInfo"
+        },
+        "layout": {
+          "$ref": "#/$defs/ScoreLayout"
+        },
+        "metadata": {
+          "$ref": "#/$defs/Metadata"
+        },
+        "schema_version": {
+          "const": "0.1.0",
+          "default": "0.1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "tempo": {
+          "$ref": "#/$defs/Tempo"
+        },
+        "tracks": {
+          "items": {
+            "$ref": "#/$defs/Track"
+          },
+          "minItems": 1,
+          "title": "Tracks",
+          "type": "array"
+        },
+        "warnings": {
+          "items": {
+            "$ref": "#/$defs/WarningItem"
+          },
+          "title": "Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "tempo",
+        "tracks"
+      ],
+      "title": "ScoreIR",
       "type": "object"
     },
     "ScoreLayout": {
@@ -2927,53 +3044,13 @@
   },
   "$id": "https://github.com/tticom/score2gp/schemas/scoreir.v0.1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": false,
-  "properties": {
-    "bars": {
-      "items": {
-        "$ref": "#/$defs/Bar"
-      },
-      "title": "Bars",
-      "type": "array"
+  "anyOf": [
+    {
+      "$ref": "#/$defs/ScoreIR"
     },
-    "conversion": {
-      "$ref": "#/$defs/ConversionInfo"
-    },
-    "layout": {
-      "$ref": "#/$defs/ScoreLayout"
-    },
-    "metadata": {
-      "$ref": "#/$defs/Metadata"
-    },
-    "schema_version": {
-      "const": "0.1.0",
-      "default": "0.1.0",
-      "title": "Schema Version",
-      "type": "string"
-    },
-    "tempo": {
-      "$ref": "#/$defs/Tempo"
-    },
-    "tracks": {
-      "items": {
-        "$ref": "#/$defs/Track"
-      },
-      "minItems": 1,
-      "title": "Tracks",
-      "type": "array"
-    },
-    "warnings": {
-      "items": {
-        "$ref": "#/$defs/WarningItem"
-      },
-      "title": "Warnings",
-      "type": "array"
+    {
+      "$ref": "#/$defs/ScoreBooklet"
     }
-  },
-  "required": [
-    "tempo",
-    "tracks"
   ],
-  "title": "ScoreIR v0.1",
-  "type": "object"
+  "title": "ScoreIR v0.1"
 }
