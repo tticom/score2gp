@@ -4,6 +4,8 @@
 
 ## Done
 
+- [x] Implement package extraction recovery loops and reverse inspection gates in the Guitar Pro package parsing pathway (`src/score2gp/gp_package.py`) to extract zipped GP7 native elements and map them back symmetrically into ScoreIR properties, establishing an explicit round-trip gate (`validate-roundtrip`) (`feature/gpif-bidirectional-roundtrip-gates-v0.1`).
+
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for project-wide global master configuration profiles (master mixer volume coefficients, stereo pan alignment, reverb/chorus parameters, and pipeline preset cascades) in the Guitar Pro writer (`src/score2gp/gpif.py`), verified with public synthetic fixtures and unit tests (`feature/gpif-master-mixer-and-config-cascades-v0.1`).
 
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for track-level playback automation envelopes (timeline volume and stereo panning balance changes shifting at specific measures) in the Guitar Pro writer (`src/score2gp/gpif.py`), verified with public synthetic fixtures and unit tests (`feature/gpif-track-automations-v0.1`).
