@@ -39,6 +39,21 @@
           "default": null,
           "title": "Barline"
         },
+        "directions": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/BarDirection"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Directions"
+        },
         "events": {
           "items": {
             "$ref": "#/$defs/Event"
@@ -78,6 +93,30 @@
           ],
           "default": null,
           "title": "Layout Break"
+        },
+        "marker": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Marker"
+        },
+        "marker_color": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Marker Color"
         },
         "measure_layout": {
           "anyOf": [
@@ -123,6 +162,46 @@
         "time_signature"
       ],
       "title": "Bar",
+      "type": "object"
+    },
+    "BarDirection": {
+      "additionalProperties": false,
+      "properties": {
+        "target_bar_index": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Bar Index"
+        },
+        "type": {
+          "enum": [
+            "segno",
+            "coda",
+            "double-coda",
+            "fine",
+            "to-coda",
+            "da-capo",
+            "da-capo-al-coda",
+            "da-capo-al-fine",
+            "dal-segno",
+            "dal-segno-al-coda",
+            "dal-segno-al-fine",
+            "dal-double-segno"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "BarDirection",
       "type": "object"
     },
     "BarNumberingOverride": {
