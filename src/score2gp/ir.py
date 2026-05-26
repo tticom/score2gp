@@ -177,6 +177,13 @@ class TrackLayoutPreferences(BaseModel):
     line_sizing_per_system: Literal["standard", "small", "large"] | None = None
 
 
+class TrackExpression(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    bar_index: int = Field(ge=1)
+    text: str
+
+
 class Track(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -194,6 +201,7 @@ class Track(BaseModel):
     systems_layout: int | None = Field(default=None, ge=1, le=3)
     sound: SoundConfig | None = None
     layout_preferences: TrackLayoutPreferences | None = None
+    expressions: list[TrackExpression] | None = None
 
 
 
@@ -693,6 +701,15 @@ class StyleProperty(BaseModel):
     color: str | None = None
 
 
+class PartSeparationRule(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    part_id: str
+    track_ids: list[str]
+    layout_mode: str = "page"
+    visible: bool = True
+
+
 class ScoreLayout(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -707,6 +724,7 @@ class ScoreLayout(BaseModel):
     fonts: ScoreFonts | None = None
     style_collections: list[StyleCollection] | None = None
     styles: list[StyleProperty] | None = None
+    part_separation: list[PartSeparationRule] | None = None
 
 
 
@@ -931,6 +949,7 @@ def semantic_scoreir_summary(score: ScoreIR) -> dict[str, Any]:
                 "mixer": track.mixer.model_dump() if track.mixer else None,
                 "color": track.color,
                 "systems_layout": getattr(track, "systems_layout", None),
+                "expressions": [expr.model_dump() for expr in track.expressions] if getattr(track, "expressions", None) else None,
             }
             for track in score.tracks
         ],

@@ -1422,6 +1422,38 @@
       "title": "PalmMuteTechnique",
       "type": "object"
     },
+    "PartSeparationRule": {
+      "additionalProperties": false,
+      "properties": {
+        "layout_mode": {
+          "default": "page",
+          "title": "Layout Mode",
+          "type": "string"
+        },
+        "part_id": {
+          "title": "Part Id",
+          "type": "string"
+        },
+        "track_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Track Ids",
+          "type": "array"
+        },
+        "visible": {
+          "default": true,
+          "title": "Visible",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "part_id",
+        "track_ids"
+      ],
+      "title": "PartSeparationRule",
+      "type": "object"
+    },
     "PopTechnique": {
       "additionalProperties": false,
       "properties": {
@@ -1789,6 +1821,21 @@
         },
         "page_setup": {
           "$ref": "#/$defs/PageSetup"
+        },
+        "part_separation": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/PartSeparationRule"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Part Separation"
         },
         "print_setup": {
           "anyOf": [
@@ -2450,6 +2497,21 @@
           "default": null,
           "title": "Color"
         },
+        "expressions": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/TrackExpression"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expressions"
+        },
         "id": {
           "title": "Id",
           "type": "string"
@@ -2560,6 +2622,26 @@
         "tuning"
       ],
       "title": "Track",
+      "type": "object"
+    },
+    "TrackExpression": {
+      "additionalProperties": false,
+      "properties": {
+        "bar_index": {
+          "minimum": 1,
+          "title": "Bar Index",
+          "type": "integer"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "bar_index",
+        "text"
+      ],
+      "title": "TrackExpression",
       "type": "object"
     },
     "TrackLayoutPreferences": {
