@@ -5,8 +5,8 @@
 - **Current Branch**: `feature/gpif-master-mixer-and-config-cascades-v0.1`
 - **Base Branch**: `main`
 - **Current PR**: PR #105 (https://github.com/tticom/score2gp/pull/105)
-- **Latest Local Commit**: `4c901484cf22f25c760e2666d492f01fde24b29d` ("docs: update TASKS.md and HANDOFF.md with master mixer progress")
-- **Latest Pushed Commit**: `4c901484cf22f25c760e2666d492f01fde24b29d` ("docs: update TASKS.md and HANDOFF.md with master mixer progress")
+- **Latest Local Commit**: `a73a96a739032bb1f97247e16291bf9238b435eb` ("docs: finalize HANDOFF.md with PR 105 details")
+- **Latest Pushed Commit**: `a73a96a739032bb1f97247e16291bf9238b435eb` ("docs: finalize HANDOFF.md with PR 105 details")
 
 - **Working Tree Status**: Clean (except doc/tasks updates).
 
