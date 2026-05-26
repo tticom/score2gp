@@ -970,6 +970,41 @@
       "title": "LetRingTechnique",
       "type": "object"
     },
+    "MasterMixer": {
+      "additionalProperties": false,
+      "properties": {
+        "chorus": {
+          "default": 0.0,
+          "maximum": 100.0,
+          "minimum": 0.0,
+          "title": "Chorus",
+          "type": "number"
+        },
+        "pan": {
+          "default": 0.0,
+          "maximum": 1.0,
+          "minimum": -1.0,
+          "title": "Pan",
+          "type": "number"
+        },
+        "reverb": {
+          "default": 0.0,
+          "maximum": 100.0,
+          "minimum": 0.0,
+          "title": "Reverb",
+          "type": "number"
+        },
+        "volume": {
+          "default": 1.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Volume",
+          "type": "number"
+        }
+      },
+      "title": "MasterMixer",
+      "type": "object"
+    },
     "MeasureLayout": {
       "additionalProperties": false,
       "properties": {
@@ -1454,6 +1489,30 @@
       "title": "PartSeparationRule",
       "type": "object"
     },
+    "PipelinePresetCascade": {
+      "additionalProperties": false,
+      "properties": {
+        "options": {
+          "additionalProperties": true,
+          "title": "Options",
+          "type": "object"
+        },
+        "preset_name": {
+          "title": "Preset Name",
+          "type": "string"
+        },
+        "target_engine": {
+          "default": "gp7",
+          "title": "Target Engine",
+          "type": "string"
+        }
+      },
+      "required": [
+        "preset_name"
+      ],
+      "title": "PipelinePresetCascade",
+      "type": "object"
+    },
     "PopTechnique": {
       "additionalProperties": false,
       "properties": {
@@ -1819,6 +1878,17 @@
           ],
           "default": null
         },
+        "master_mixer": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MasterMixer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "page_setup": {
           "$ref": "#/$defs/PageSetup"
         },
@@ -1836,6 +1906,17 @@
           ],
           "default": null,
           "title": "Part Separation"
+        },
+        "preset_cascade": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PipelinePresetCascade"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "print_setup": {
           "anyOf": [
