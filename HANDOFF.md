@@ -2,11 +2,11 @@
 
 ## Metadata
 
-- **Current Branch**: `feature/build-ir-timeline-repeats-and-volta-refinements-v0.1`
+- **Current Branch**: `feature/gpif-system-breaks-and-staff-scaling-v0.1`
 - **Base Branch**: `main`
 - **Current PR**: Draft PR created on origin
-- **Latest Local Commit**: `46952fd7868afc1fe14f2e519e48c772e42ef998` ("feat: implement timeline repeat refinements and alternative endings bidirectional extraction")
-- **Latest Pushed Commit**: `46952fd7868afc1fe14f2e519e48c772e42ef998` ("feat: implement timeline repeat refinements and alternative endings bidirectional extraction")
+- **Latest Local Commit**: `26b8048f760df768f7422961d28389c9223f6687` ("feat: implement system breaks, staff scaling, and hidden/dashed barlines")
+- **Latest Pushed Commit**: `26b8048f760df768f7422961d28389c9223f6687` ("feat: implement system breaks, staff scaling, and hidden/dashed barlines")
 
 - **Working Tree Status**: Clean.
 
@@ -16,9 +16,9 @@
 
 ## Tests And Checks Run
 
-- `python -m pytest` -> 381 passed (100% success, including the new unit test file `tests/test_timeline_refinements.py` asserting nested repeat structures, barlines, and non-consecutive voltas, plus bidirectional round-trip extraction).
-- `python -m score2gp.cli export-schema --out schemas` -> passed cleanly.
-- `python -m score2gp.cli validate-ir fixtures/public/test_timeline_refinements.ir.json` -> valid and fully compliant.
+- `python -m pytest` -> 382 passed (100% success, including the new unit test file `tests/test_system_breaks.py` asserting visual breaks, staff-system layout distancing, and custom hidden/dashed barlines).
+- `python -m score2gp.cli export-schema --out schemas` -> passed cleanly and updated intermediate schemas.
+- `python -m score2gp.cli validate-ir fixtures/public/test_system_breaks.ir.json` -> valid and fully compliant.
 - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid.
 - `git diff --check` -> passed cleanly.
 - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep`.
@@ -27,14 +27,21 @@
 ## What Changed In This Task
 
 - **Model & Schema Validation Support (`src/score2gp/ir.py`)**:
-  - Expanded `semantic_scoreir_summary` to include `"barline"`, `"repeat_count"`, and `"alternate_ending_passes"` comparison. Normalizes default states (like `None` vs `"regular"` barlines and default `repeat_count=2`) so they round-trip cleanly and are verified accurately.
+  - Defined Pydantic models `SystemLayout` (with `system_size_percent`, `staff_distancing_cushion`, `barline_style`) and `StaffLayout` (with `staff_spacing_cushion`, `staff_size`).
+  - Added `system_layout` and `staff_layout` optional fields to `ScoreLayout`.
+  - Expanded `Bar`'s `barline` literal choices to include `"hidden"` and `"dashed"`.
+  - Re-exported the schema via the CLI schema exporter: `schemas/scoreir.v0.1.schema.json`.
+- **GPIF Formatting Mappings (`src/score2gp/gpif.py`)**:
+  - Implemented `<SystemLayout>` and `<StaffLayout>` elements serialization under `<Layout>` under `<Score>` inside `build_gpif()`.
+  - Added serialization of `<LayoutBreak><Type>System</Type></LayoutBreak>` or `<Type>Page</Type>` under `<Bar>` elements inside `_bars()`.
+  - Expanded `barline_map` in `_master_bars()` to serialize `"hidden": "Hidden"` and `"dashed": "Dashed"`.
 - **Reverse Extraction (`src/score2gp/gp_package.py`)**:
-  - Added extraction of `barline` (Simple, Double, End, Section, RepeatStart, RepeatEnd), `repeat_count`, `alternate_ending_passes`, and `layout_break` from `<MasterBar>` and `<Bar>` tags back into the `Bar` model instantiation during round-tripping.
-  - Automatically reconstructs consecutive and non-consecutive `alternate_ending_passes` from the integer bitmask.
+  - Added extraction of `<SystemLayout>` and `<StaffLayout>` properties under `<Layout>` back into the `layout` model object.
+  - Added reverse-extraction of `<LayoutBreak>` element type back to `layout_break` inside `<Bar>`.
+  - Expanded `barline_inv_map` in `MasterBar` parsing to support `"Hidden": "hidden"` and `"Dashed": "dashed"`.
 - **Public Fixtures & Tests**:
-  - Created `fixtures/public/test_timeline_refinements.ir.json` representing multiple nested repeats and non-consecutive alternative endings (`[1, 3]` and `[2, 4]`).
-  - Created `tests/test_timeline_refinements.py` verifying accurate structural GP7-compatible XML tag output and bidirectional extraction round-tripping.
-  - Upgraded `tests/test_timeline_repeats.py` to also assert 100% successful round-trip validation using `validate_roundtrip()`.
+  - Created `fixtures/public/test_system_breaks.ir.json` representing forced page/system breaks, custom hidden/dashed barlines, and custom staff/system layout scaling.
+  - Created `tests/test_system_breaks.py` verifying accurate structural GP7-compatible XML tag output and bidirectional extraction round-tripping.
 
 ## Known Limitations
 
@@ -46,8 +53,8 @@
 
 ## Next Recommended Task
 
-- Merge the current PR #122 into `main` after checks pass.
-- Explicit non-goals for next tasks: Do not reopen tempo-variations or repeats/voltas branches unless investigating a regression.
+- Merge the current PR #123 into `main` after checks pass.
+- Explicit non-goals for next tasks: Do not reopen tempo-variations, repeats/voltas, or system-breaks branches unless investigating a regression.
 
 ## Explicit Scope Boundaries
 
