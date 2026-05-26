@@ -554,6 +554,14 @@ class Event(BaseModel):
         return self
 
 
+class MeasureLayout(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    width: float | None = None
+    stretch_factor: float | None = None
+    spacing: float | None = None
+
+
 class Bar(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -566,6 +574,8 @@ class Bar(BaseModel):
     anacrusis: bool = False
     barline: Literal["regular", "double", "end", "section", "repeat-start", "repeat-end"] | None = None
     repeat_count: int | None = Field(default=None, ge=1)
+    measure_layout: MeasureLayout | None = None
+
 
     @model_validator(mode="before")
     @classmethod
@@ -674,6 +684,15 @@ class StyleCollection(BaseModel):
     description: str | None = None
 
 
+class StyleProperty(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    category: str
+    line_width: float | None = None
+    spacing_cushion: float | None = None
+    color: str | None = None
+
+
 class ScoreLayout(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -687,6 +706,8 @@ class ScoreLayout(BaseModel):
     ensemble_brackets: list[EnsembleBracket] | None = None
     fonts: ScoreFonts | None = None
     style_collections: list[StyleCollection] | None = None
+    styles: list[StyleProperty] | None = None
+
 
 
 class ScoreIR(BaseModel):
@@ -888,6 +909,7 @@ def semantic_scoreir_summary(score: ScoreIR) -> dict[str, Any]:
                 "anacrusis": bar.anacrusis,
                 "barline": bar.barline,
                 "repeat_count": bar.repeat_count,
+                "measure_layout": bar.measure_layout.model_dump() if bar.measure_layout else None,
                 "events": [
                     {
                         "id": event.id,
