@@ -52,3 +52,8 @@ def test_timeline_repeats_xml(tmp_path) -> None:
         b4 = b_map[4]
         assert b4.find("AlternateEndings").text == "2"
         assert b4.find(".//AlternativeEnding/AlternateEndings").text == "2"
+
+    # 4. Validate round-trip extraction
+    from score2gp.gp_package import validate_roundtrip
+    res = validate_roundtrip(out_gp, score)
+    assert res["valid"], f"Round-trip validation failed: {res['errors']}"
