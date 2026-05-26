@@ -1,6 +1,5 @@
 import pytest
-# Assuming internal imports based on previous pipeline architecture
-from score2gp.pdf import process_pdf_text_grouping, TabRawCandidate
+from score2gp.pdf import extract_tab, process_pdf_text_grouping, TabRawCandidate
 
 def create_mock_system_and_bar():
     # Helper to mock a standard 6-string tab staff and a single bar box

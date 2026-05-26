@@ -3900,3 +3900,92 @@ def _system_relation(system: _TabSystem | None, string: int | None) -> str | Non
     if string is not None:
         return "on-tab-line"
     return "near-tab-system"
+
+
+@dataclass
+class TabRawCandidate:
+    text: str
+    x0: float
+    x1: float
+    y_min: float
+    y_max: float
+
+
+class _GroupingWarning:
+    def __init__(self, code: str):
+        self.code = code
+
+    def __repr__(self) -> str:
+        return f"_GroupingWarning({self.code})"
+
+
+class _GroupingResult:
+    def __init__(self, grouping_status: str):
+        self.grouping_status = grouping_status
+
+
+def process_pdf_text_grouping(
+    candidates: list[TabRawCandidate],
+    string_lines: list[float],
+    bars: list[dict[str, float]],
+    strip_technique_text: bool = False,
+    max_digit_gap: float = 4.5,
+    string_snap_tolerance: float = 1.5,
+    bar_cushion: float = 0.0,
+) -> tuple[_GroupingResult, list[_GroupingWarning]]:
+    warnings = []
+
+    # 1. Aspect Ratio / optical bounds check
+    for c in candidates:
+        width = c.x1 - c.x0
+        height = c.y_max - c.y_min
+        if width >= 40.0 or height >= 40.0:
+            warnings.append(_GroupingWarning("pdf_fret_optical_bounds_confidence_below_threshold"))
+
+    # 2. String snapping checks
+    for c in candidates:
+        y_center = (c.y_min + c.y_max) / 2
+        # Find distance to closest string
+        dists = [abs(y_center - s_y) for s_y in string_lines]
+        min_dist = min(dists)
+        if min_dist > string_snap_tolerance:
+            # Sits between lines
+            warnings.append(_GroupingWarning("pdf_string_assignment_compact_staff_ambiguous"))
+
+    # 3. Merging / Digits gap check
+    # Find digit candidates
+    digits = [c for c in candidates if any(char.isdigit() for char in c.text)]
+    if len(digits) >= 2:
+        digits_sorted = sorted(digits, key=lambda d: d.x0)
+        for i in range(len(digits_sorted) - 1):
+            d1 = digits_sorted[i]
+            d2 = digits_sorted[i+1]
+            gap = d2.x0 - d1.x1
+            if gap > max_digit_gap and gap <= 12.0:
+                warnings.append(_GroupingWarning("pdf_fret_digits_not_merged_gap_too_large"))
+
+    # 4. Overlap checks
+    for c in candidates:
+        if any(char.isdigit() for char in c.text):
+            # Check overlap with any technique candidates (non-digits)
+            for other in candidates:
+                if other is c:
+                    continue
+                if not any(char.isdigit() for char in other.text):
+                    # It's a technique symbol candidate
+                    if strip_technique_text and other.text.strip().lower() in {"full", "b", "r", "sl", "vibrato"}:
+                        continue
+                    overlap = min(c.x1, other.x1) - max(c.x0, other.x0)
+                    c_y = (c.y_min + c.y_max) / 2
+                    other_y = (other.y_min + other.y_max) / 2
+                    dy = abs(c_y - other_y)
+                    if overlap > 1.5 and dy <= 6.0:
+                        warnings.append(_GroupingWarning("pdf_fret_digit_symbol_overlap_ambiguous"))
+
+    # Set status
+    if warnings:
+        status = "partial"
+    else:
+        status = "grouped"
+
+    return _GroupingResult(status), warnings
