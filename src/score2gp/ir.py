@@ -1081,6 +1081,35 @@ def export_scoreir_schema(out_dir: str | Path) -> Path:
     return path
 
 
+def normalize_lh_fingering(val: str | None) -> str | None:
+    if val is None:
+        return None
+    v = str(val).lower()
+    lh_map = {
+        "0": "open", "open": "open",
+        "t": "thumb", "thumb": "thumb",
+        "1": "index", "index": "index",
+        "2": "middle", "middle": "middle",
+        "3": "ring", "ring": "ring",
+        "4": "little", "little": "little"
+    }
+    return lh_map.get(v, v)
+
+
+def normalize_rh_fingering(val: str | None) -> str | None:
+    if val is None:
+        return None
+    v = str(val).lower()
+    rh_map = {
+        "p": "thumb", "thumb": "thumb",
+        "i": "index", "index": "index",
+        "m": "middle", "middle": "middle",
+        "a": "ring", "ring": "ring",
+        "c": "little", "little": "little"
+    }
+    return rh_map.get(v, v)
+
+
 def semantic_scoreir_summary(score: ScoreIR) -> dict[str, Any]:
     return {
         "schema_version": score.schema_version,
@@ -1127,6 +1156,7 @@ def semantic_scoreir_summary(score: ScoreIR) -> dict[str, Any]:
                         "timing": event.timing.model_dump(exclude_none=True),
                         "is_rest": event.is_rest,
                         "chord_symbol": event.chord_symbol,
+                        "chord_diagram": event.chord_diagram.model_dump(exclude_none=True) if event.chord_diagram else None,
                         "dynamic": event.dynamic,
                         "hairpin": event.hairpin,
                         "fermata": getattr(event, "fermata", None),
@@ -1135,7 +1165,15 @@ def semantic_scoreir_summary(score: ScoreIR) -> dict[str, Any]:
                         "brush": getattr(event, "brush", None),
                         "brush_duration": getattr(event, "brush_duration", None),
                         "text": event.text,
-                        "notes": [{**note.model_dump(exclude_none=True, exclude={"provenance", "expression_controller"}), "expression_controller": note.expression_controller.model_dump(exclude_none=True) if getattr(note, "expression_controller", None) else None} for note in event.notes],
+                        "notes": [
+                            {
+                                **note.model_dump(exclude_none=True, exclude={"provenance", "expression_controller"}),
+                                **({"left_hand_fingering": normalize_lh_fingering(note.left_hand_fingering)} if note.left_hand_fingering else {}),
+                                **({"right_hand_fingering": normalize_rh_fingering(note.right_hand_fingering)} if note.right_hand_fingering else {}),
+                                "expression_controller": note.expression_controller.model_dump(exclude_none=True) if getattr(note, "expression_controller", None) else None
+                            }
+                            for note in event.notes
+                        ],
                         "techniques": [technique.model_dump(exclude_none=True) for technique in event.techniques],
                         "expression_controller": event.expression_controller.model_dump(exclude_none=True) if getattr(event, "expression_controller", None) else None,
                     }

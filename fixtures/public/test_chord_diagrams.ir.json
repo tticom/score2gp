@@ -1,0 +1,216 @@
+{
+  "schema_version": "0.1.0",
+  "metadata": {
+    "title": "Chord Diagrams and Fingerings Visual Test",
+    "artist": "Synthetic Fixture",
+    "composer": "Synthetic Fixture",
+    "transcriber": "score2gp",
+    "copyright": "Public Domain"
+  },
+  "conversion": {
+    "tool_name": "score2gp",
+    "tool_version": "0.1.0",
+    "conversion_timestamp": "2026-05-26T00:00:00Z",
+    "source_file_hash": "sha256:test-chord-diagrams",
+    "source_page_count": 1
+  },
+  "tempo": {
+    "bpm": 120,
+    "text": "Moderato"
+  },
+  "tracks": [
+    {
+      "id": "gtr-1",
+      "name": "Guitar",
+      "instrument": "steel guitar",
+      "capo": 0,
+      "tablature_enabled": true,
+      "staff_count": 1,
+      "tuning": {
+        "name": "Standard Guitar",
+        "strings": [
+          { "number": 1, "pitch": 64, "name": "E4" },
+          { "number": 2, "pitch": 59, "name": "B3" },
+          { "number": 3, "pitch": 55, "name": "G3" },
+          { "number": 4, "pitch": 50, "name": "D3" },
+          { "number": 5, "pitch": 45, "name": "A2" },
+          { "number": 6, "pitch": 40, "name": "E2" }
+        ]
+      }
+    }
+  ],
+  "bars": [
+    {
+      "index": 1,
+      "time_signature": { "numerator": 4, "denominator": 4 },
+      "events": [
+        {
+          "id": "e1",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 0,
+            "duration_ticks": 960,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "quarter", "dots": 0 }
+          },
+          "chord_symbol": "Cmaj7",
+          "chord_diagram": {
+            "name": "Cmaj7",
+            "string_count": 6,
+            "fret_count": 5,
+            "base_fret": 1,
+            "frets": [
+              { "string": 5, "fret": 3 },
+              { "string": 4, "fret": 2 },
+              { "string": 3, "fret": 0 },
+              { "string": 2, "fret": 0 },
+              { "string": 1, "fret": 0 }
+            ],
+            "fingers": [
+              { "string": 5, "fret": 3, "finger": "Ring" },
+              { "string": 4, "fret": 2, "finger": "Middle" }
+            ],
+            "key_note_step": "C",
+            "key_note_accidental": "Natural",
+            "bass_note_step": "C",
+            "bass_note_accidental": "Natural"
+          },
+          "notes": [
+            {
+              "string": 5,
+              "fret": 3,
+              "pitch": 48,
+              "left_hand_fingering": "3",
+              "right_hand_fingering": "p",
+              "confidence": 1.0
+            },
+            {
+              "string": 4,
+              "fret": 2,
+              "pitch": 52,
+              "left_hand_fingering": "2",
+              "right_hand_fingering": "i",
+              "confidence": 1.0
+            },
+            {
+              "string": 3,
+              "fret": 0,
+              "pitch": 55,
+              "left_hand_fingering": "0",
+              "right_hand_fingering": "m",
+              "confidence": 1.0
+            }
+          ],
+          "confidence": 1.0
+        },
+        {
+          "id": "e2",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 960,
+            "duration_ticks": 960,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "quarter", "dots": 0 }
+          },
+          "chord_symbol": "G7",
+          "chord_diagram": {
+            "name": "G7",
+            "string_count": 6,
+            "fret_count": 5,
+            "base_fret": 3,
+            "frets": [
+              { "string": 6, "fret": 1 },
+              { "string": 4, "fret": 1 },
+              { "string": 3, "fret": 2 },
+              { "string": 2, "fret": 1 }
+            ],
+            "fingers": [
+              { "string": 6, "fret": 1, "finger": "Thumb" },
+              { "string": 4, "fret": 1, "finger": "Index" },
+              { "string": 3, "fret": 2, "finger": "Ring" },
+              { "string": 2, "fret": 1, "finger": "Middle" }
+            ],
+            "key_note_step": "G",
+            "key_note_accidental": "Natural",
+            "bass_note_step": "G",
+            "bass_note_accidental": "Natural"
+          },
+          "notes": [
+            {
+              "string": 6,
+              "fret": 3,
+              "pitch": 43,
+              "left_hand_fingering": "t",
+              "right_hand_fingering": "p",
+              "confidence": 1.0
+            },
+            {
+              "string": 4,
+              "fret": 3,
+              "pitch": 53,
+              "left_hand_fingering": "1",
+              "right_hand_fingering": "i",
+              "confidence": 1.0
+            },
+            {
+              "string": 3,
+              "fret": 4,
+              "pitch": 59,
+              "left_hand_fingering": "3",
+              "right_hand_fingering": "m",
+              "confidence": 1.0
+            },
+            {
+              "string": 2,
+              "fret": 3,
+              "pitch": 62,
+              "left_hand_fingering": "2",
+              "right_hand_fingering": "a",
+              "confidence": 1.0
+            }
+          ],
+          "confidence": 1.0
+        },
+        {
+          "id": "e3",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 1920,
+            "duration_ticks": 960,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "quarter", "dots": 0 }
+          },
+          "chord_symbol": "Dm7",
+          "notes": [
+            {
+              "string": 4,
+              "fret": 0,
+              "pitch": 50,
+              "confidence": 1.0
+            },
+            {
+              "string": 3,
+              "fret": 2,
+              "pitch": 57,
+              "confidence": 1.0
+            },
+            {
+              "string": 2,
+              "fret": 1,
+              "pitch": 60,
+              "confidence": 1.0
+            }
+          ],
+          "confidence": 1.0
+        }
+      ]
+    }
+  ],
+  "warnings": []
+}
