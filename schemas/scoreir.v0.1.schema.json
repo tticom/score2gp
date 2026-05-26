@@ -854,6 +854,7 @@
                 "palm-mute": "#/$defs/PalmMuteTechnique",
                 "pop": "#/$defs/PopTechnique",
                 "pull-off": "#/$defs/PullOffTechnique",
+                "rasgueado": "#/$defs/RasgueadoTechnique",
                 "slap": "#/$defs/SlapTechnique",
                 "slide": "#/$defs/SlideTechnique",
                 "slur": "#/$defs/SlurTechnique",
@@ -915,6 +916,9 @@
               },
               {
                 "$ref": "#/$defs/TrillTechnique"
+              },
+              {
+                "$ref": "#/$defs/RasgueadoTechnique"
               },
               {
                 "$ref": "#/$defs/UnsupportedTechnique"
@@ -1073,6 +1077,18 @@
     "GraceTiming": {
       "additionalProperties": false,
       "properties": {
+        "duration": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Duration"
+        },
         "duration_ticks": {
           "default": 0,
           "minimum": 0,
@@ -1540,6 +1556,7 @@
                 "palm-mute": "#/$defs/PalmMuteTechnique",
                 "pop": "#/$defs/PopTechnique",
                 "pull-off": "#/$defs/PullOffTechnique",
+                "rasgueado": "#/$defs/RasgueadoTechnique",
                 "slap": "#/$defs/SlapTechnique",
                 "slide": "#/$defs/SlideTechnique",
                 "slur": "#/$defs/SlurTechnique",
@@ -1601,6 +1618,9 @@
               },
               {
                 "$ref": "#/$defs/TrillTechnique"
+              },
+              {
+                "$ref": "#/$defs/RasgueadoTechnique"
               },
               {
                 "$ref": "#/$defs/UnsupportedTechnique"
@@ -1927,6 +1947,29 @@
         }
       },
       "title": "PullOffTechnique",
+      "type": "object"
+    },
+    "RasgueadoTechnique": {
+      "additionalProperties": false,
+      "properties": {
+        "direction": {
+          "default": "none",
+          "enum": [
+            "up",
+            "down",
+            "none"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "kind": {
+          "const": "rasgueado",
+          "default": "rasgueado",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "RasgueadoTechnique",
       "type": "object"
     },
     "ScoreBooklet": {
@@ -3194,6 +3237,18 @@
           "default": "tremolo-picking",
           "title": "Kind",
           "type": "string"
+        },
+        "speed": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Speed"
         }
       },
       "title": "TremoloPickingTechnique",
@@ -3202,6 +3257,19 @@
     "TrillTechnique": {
       "additionalProperties": false,
       "properties": {
+        "frequency": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frequency"
+        },
         "fret": {
           "anyOf": [
             {

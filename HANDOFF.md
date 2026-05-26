@@ -2,13 +2,13 @@
 
 ## Metadata
 
-- **Current Branch**: `feature/build-ir-fret-snapping-optimization-v0.1`
+- **Current Branch**: `feature/build-ir-advanced-ornaments-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: [PR #114](https://github.com/tticom/score2gp/pull/114) (Draft)
-- **Latest Local Commit**: `cc51d8099daec191f3619977eaeb2b123cf2dc37` ("docs: update HANDOFF.md and TASKS.md with fret snapping cost optimization details")
-- **Latest Pushed Commit**: `cc51d8099daec191f3619977eaeb2b123cf2dc37` ("docs: update HANDOFF.md and TASKS.md with fret snapping cost optimization details")
+- **Current PR**: [PR #115](https://github.com/tticom/score2gp/pull/115) (Draft)
+- **Latest Local Commit**: `c928fa2202e85ebea718d4aa70cea13864e0dad1` ("docs: finalize HANDOFF.md with draft PR URL")
+- **Latest Pushed Commit**: `c928fa2202e85ebea718d4aa70cea13864e0dad1` ("docs: finalize HANDOFF.md with draft PR URL")
 
-- **Working Tree Status**: Clean.
+- **Working Tree Status**: Clean (except TASKS.md and HANDOFF.md, which will be committed in the next step).
 
 - **GitHub Check Status**: N/A
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or `work/` contents are tracked.
@@ -16,30 +16,32 @@
 
 ## Tests And Checks Run
 
-- `python -m pytest` -> 374 passed (100% success, including the new fret snapping cost optimization unit tests and E2E compiler integration tests).
-- `python -m score2gp.cli export-schema --out schemas` -> passed cleanly.
-- `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid.
-- `git diff --check` -> passed cleanly (zero trailing whitespace or EOF blank line violations).
-- `git diff -- schemas` -> passed cleanly.
+- `python -m pytest` -> 375 passed (100% success, including the new `test_advanced_ornaments_xml` test verifying GPIF output properties).
+- `python -m score2gp.cli export-schema --out schemas` -> passed cleanly and updated committed schema with new models.
+- `python -m score2gp.cli validate-ir fixtures/public/test_advanced_ornaments.ir.json` -> valid and fully compliant.
+- `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid and fully compliant.
+- `git diff --check` -> passed cleanly.
 - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep`.
 - `python scripts/private_e2e_smoke.py` -> passed cleanly against all private PDF inputs with zero regressions.
 
 ## What Changed In This Task
 
-- **Fret-Snapping Cost Optimization & Shift Penalization Solver**:
-  - Implemented `optimize_fret_snapping(score: ScoreIR)` in `src/score2gp/build_ir.py` using a localized Viterbi-like dynamic programming costing solver.
-  - Enforced ergonomic centroid boundaries, penalizing notes $> 4$ frets away from the active hand position centroid.
-  - Clamped all valid pitch selections within localised structural safety cushions (frets `0` to `24`).
-  - Penalized radical horizontal jumps $> 4$ frets between adjacent events.
-  - Implemented biomechanical stretch limits, filtering out unplayable finger spans exceeding `5` frets.
-  - Applied a minor mismatch cost to prefer original `TabCandidate` suggestions when they are ergonomic and biomechanically safe.
-- **Opt-in Compiler & CLI Integration**:
-  - Exposed keyword-only parameter `optimize_fret_snapping: bool = False` to `build_ir_from_files`, `build_ir_with_diagnostics_from_files`, `build_ir_from_imports`, and `build_ir_with_diagnostics_from_imports`.
-  - Resolved Python variable shadowing issues cleanly by referencing the global optimizer namespace.
-  - Added the `--optimize-fret-snapping` / `--no-optimize-fret-snapping` command-line option to both `build-ir` and `convert` command entry points inside `src/score2gp/cli.py` (defaulting to `False` to maintain full visual coordinate fidelity for legacy tests).
-- **Public Fixtures & Verification Tests**:
-  - Created `fixtures/public/test_fret_snapping_optimization.ir.json` modeling wide intervals and shifting melodic passages.
-  - Created `tests/test_fret_snapping_optimization.py` containing 3 thorough unit/integration tests confirming dynamic programming costing accuracy, unplayable span exclusions, and clean pipeline invocation.
+- **Model & Schema Expansion (`src/score2gp/ir.py`)**:
+  - Expanded `GraceTiming` with an optional `duration` string field.
+  - Expanded `TremoloPickingTechnique` with an optional `speed` string field.
+  - Expanded `TrillTechnique` with an optional `frequency` float field.
+  - Added the `RasgueadoTechnique` representing rasgueado strumming with a `direction` field (up/down/none).
+  - Re-exported Intermediate JSON schema via CLI schema exporter.
+- **GPIF Performance Ornaments & Grace Mappings (`src/score2gp/gpif.py`)**:
+  - Added support for the `rasgueado` technique inside the note serialization loops.
+  - Serialized native `<Ornament><Rasgueado><Direction>...</Direction></Rasgueado></Ornament>` elements for rasgueado strum directions.
+  - Formatted note-level `<Vibrato>` and wave-size under `<Property name="Vibrato"><WaveSize>...</WaveSize></Property>`.
+  - Serialized grace note configurations (`Slash`, `Duration`, `Position`) under `<Property name="Grace">` nested property nodes.
+  - Mapped tremolo-picking speed parameters under `<Property name="TremoloPicking"><Speed>...</Speed></Property>`.
+  - Added auxiliary trill frequencies under `<Property name="Trill"><Frequency>...</Frequency></Property>`.
+- **Public Fixtures & Tests**:
+  - Created `fixtures/public/test_advanced_ornaments.ir.json` to model detailed classical/fingerstyle ornaments.
+  - Created modular test suite `tests/test_advanced_ornaments.py` verifying accurate GP7-compatible XML tag structure and property nested nodes.
 
 ## Known Limitations
 
@@ -51,8 +53,8 @@
 
 ## Next Recommended Task
 
-- Next branch: `feature/build-ir-advanced-ornaments-v0.1`
-- Goal: Implement advanced ornamentation parsing and visual formatting.
+- Next branch: `feature/build-ir-dynamics-and-hairpins-v0.1`
+- Goal: Implement dynamic expression hairpins and crescendo/decrescendo visual controllers.
 
 ## Explicit Scope Boundaries
 
