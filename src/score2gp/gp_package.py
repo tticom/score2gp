@@ -8,6 +8,7 @@ from typing import Any
 from xml.etree import ElementTree as ET
 
 from .gpif import build_gpif, gpif_warnings
+from .version_adapter import adapt_gpif, get_version_file_content
 from .ir import (
     ScoreIR, ScoreBooklet, Track, Tuning, TuningString, Mixer, SoundConfig,
     TrackLayoutPreferences, TrackExpression, TrackAutomation, ScoreLayout,
@@ -18,7 +19,12 @@ from .ir import (
 REQUIRED_MEMBERS = {"VERSION", "Content/score.gpif"}
 
 
-def write_gp(score: ScoreIR | ScoreBooklet, out_path: str | Path, template: str | Path | None = None) -> list[str]:
+def write_gp(
+    score: ScoreIR | ScoreBooklet,
+    out_path: str | Path,
+    template: str | Path | None = None,
+    target_version: str = "GP7"
+) -> list[str]:
     warnings: list[str] = gpif_warnings(score)
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -35,7 +41,7 @@ def write_gp(score: ScoreIR | ScoreBooklet, out_path: str | Path, template: str 
         else:
             warnings.append(f"template does not exist: {template_path}")
 
-    copied.setdefault("VERSION", b"7.0\n")
+    copied["VERSION"] = get_version_file_content(target_version)
     copied.setdefault("Content/Preferences.json", b"{}\n")
     copied.setdefault("Content/LayoutConfiguration", b"")
     copied.setdefault("Content/PartConfiguration", b"")
@@ -44,6 +50,7 @@ def write_gp(score: ScoreIR | ScoreBooklet, out_path: str | Path, template: str 
     if isinstance(score, ScoreBooklet):
         # Build main/primary score GPIF with Booklet index embedded
         gpif = build_gpif(score)
+        gpif = adapt_gpif(gpif, target_version)
         copied["Content/score.gpif"] = gpif
 
         # Compile sequential movements and page indexing
@@ -51,6 +58,7 @@ def write_gp(score: ScoreIR | ScoreBooklet, out_path: str | Path, template: str 
         movements_list = []
         for idx, s in enumerate(score.scores):
             mov_gpif = build_gpif(s, booklet=score)
+            mov_gpif = adapt_gpif(mov_gpif, target_version)
             mov_path = f"Content/movement_{idx + 1}.gpif"
             copied[mov_path] = mov_gpif
 
@@ -73,6 +81,7 @@ def write_gp(score: ScoreIR | ScoreBooklet, out_path: str | Path, template: str 
         copied["Content/booklet_index.json"] = json.dumps(booklet_index, indent=2).encode("utf-8")
     else:
         gpif = build_gpif(score)
+        gpif = adapt_gpif(gpif, target_version)
         copied["Content/score.gpif"] = gpif
 
     with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as zout:

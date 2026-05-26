@@ -2,11 +2,11 @@
 
 ## Metadata
 
-- **Current Branch**: `feature/pipeline-incremental-build-cache-v0.1`
+- **Current Branch**: `feature/gpif-target-version-adapters-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: PR #108 (https://github.com/tticom/score2gp/pull/108)
-- **Latest Local Commit**: `5cf2832e4dda4dfe4eabf75a270c956d9931a285` ("feat: implement thread-safe incremental build cache and content-based hashing")
-- **Latest Pushed Commit**: `5cf2832e4dda4dfe4eabf75a270c956d9931a285` ("feat: implement thread-safe incremental build cache and content-based hashing")
+- **Current PR**: PR #109 (https://github.com/tticom/score2gp/pull/109)
+- **Latest Local Commit**: `5ec3129a7bfd737219c35090813597b4c7af4969` ("feat: implement target version-gate adapters for legacy and modern formats")
+- **Latest Pushed Commit**: `5ec3129a7bfd737219c35090813597b4c7af4969` ("feat: implement target version-gate adapters for legacy and modern formats")
 
 - **Working Tree Status**: Clean (except doc/tasks updates).
 
@@ -16,7 +16,7 @@
 
 ## Tests And Checks Run
 
-- `python -m pytest` -> 363 passed (100% success, including the new pipeline incremental build cache hit/miss/invalidation unit tests).
+- `python -m pytest` -> 365 passed (100% success, including the new version-gated adapters down-conversion/up-conversion unit tests).
 - `python -m score2gp.cli export-schema --out schemas` -> passed cleanly.
 - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid.
 - `git diff --check` -> passed cleanly (zero trailing whitespace or EOF blank line violations).
@@ -26,16 +26,18 @@
 
 ## What Changed In This Task
 
-- **Thread-Safe, Self-Invalidating Incremental Build Cache**:
-  - Created `src/score2gp/cache.py` containing `PipelineCacheManager` (using a threading Lock for concurrency safety) and `compute_payload_hash`.
-- **Content-Based SHA-256 Payload Hashing**:
-  - Computed unique hashes based on both structural payload scalar parameters (excluding ID and output paths) and source file contents (hashing raw bytes of `musicxml`, `tabraw`, `ascii_alignment`, `template` files).
-- **Pipeline and CLI Integration**:
-  - Integrated with `src/score2gp/batch.py` to bypass compilation completely on cache hit, copy cached artifacts directly, cache successfully generated products to `work/cache_artifacts/` on success, and track cache-hit/miss metrics in execution summaries.
-  - Updated `src/score2gp/cli.py` to support `--cache/--no-cache` on the `batch` command, enabling cache toggles.
-- **Synthetic Manifest Fixtures & Extensive Tests**:
-  - Added `fixtures/public/test_cache_execution_manifest.json` modeling reproducible, identical payloads.
-  - Authored unit tests in `tests/test_incremental_build_cache.py` confirming complete, correct cache hit/miss metrics, self-invalidation on configuration changes, self-invalidation on file content updates, self-invalidation when cached files are deleted, and cache-disabled configurations.
+- **Version-Gated XML Generation & Transform Adapters**:
+  - Created `src/score2gp/version_adapter.py` providing structural XML translations, attribute strips, and tag overrides to down-convert/up-convert GPIF files based on requested version specifications (GP6, GP7, GP8).
+- **Transformation Rules per Profile**:
+  - For **GP6**: Strips style collections (`StyleCollections`), master output mix balances (`MasterMixer`), and pipeline configuration presets (`PipelinePresetCascade`), injecting a `LegacyLayout` indicator tag inside `PageSetup`.
+  - For **GP8**: Injects `TargetCompliancy` and `VersionLayout` tags under `Metadata` and enables modern style collections with the attribute `gp8Compatible="true"`.
+  - Automatically overrides package `VERSION` text file output contents (e.g. `6.0\n`, `7.0\n`, `8.0\n`) to preserve zip compliance.
+- **Orchestrator and CLI Support**:
+  - Integrated target specification into `src/score2gp/batch.py` so individual payloads can specify a `target_version` key (defaulting to `"GP7"`).
+  - Updated `src/score2gp/cli.py` `write-gp` command to expose a `--target` (GP6, GP7, GP8) option directly to developers.
+- **Synthetic Manifest Fixtures & Unit Tests**:
+  - Created `fixtures/public/test_version_adapters_manifest.json` modeling concurrent target profiles.
+  - Authored unit tests in `tests/test_target_version_adapters.py` verifying correct structural transforms, VERSION overrides, and batch execution compatibility.
 
 ## Known Limitations
 
