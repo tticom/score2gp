@@ -1,0 +1,163 @@
+{
+  "schema_version": "0.1.0",
+  "metadata": {
+    "title": "Timeline Repeat Brackets and Voltas Test",
+    "artist": "Synthetic Fixture",
+    "composer": "Synthetic Fixture",
+    "transcriber": "score2gp",
+    "copyright": "Public Domain"
+  },
+  "conversion": {
+    "tool_name": "score2gp",
+    "tool_version": "0.1.0",
+    "conversion_timestamp": "2026-05-26T12:00:00Z",
+    "source_file_hash": "sha256:test-timeline-repeats",
+    "source_page_count": 1
+  },
+  "tempo": {
+    "bpm": 120,
+    "text": "Moderato"
+  },
+  "tracks": [
+    {
+      "id": "gtr-1",
+      "name": "Guitar",
+      "instrument": "steel guitar",
+      "capo": 0,
+      "tablature_enabled": true,
+      "staff_count": 1,
+      "tuning": {
+        "name": "Standard Guitar",
+        "strings": [
+          { "number": 1, "pitch": 64, "name": "E4" },
+          { "number": 2, "pitch": 59, "name": "B3" },
+          { "number": 3, "pitch": 55, "name": "G3" },
+          { "number": 4, "pitch": 50, "name": "D3" },
+          { "number": 5, "pitch": 45, "name": "A2" },
+          { "number": 6, "pitch": 40, "name": "E2" }
+        ]
+      }
+    }
+  ],
+  "bars": [
+    {
+      "index": 1,
+      "time_signature": { "numerator": 4, "denominator": 4 },
+      "key_signature": { "fifths": 0, "mode": "major" },
+      "events": [
+        {
+          "id": "e1",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 0,
+            "duration_ticks": 960,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "quarter", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 1,
+              "fret": 5,
+              "pitch": 69,
+              "confidence": 1.0
+            }
+          ],
+          "confidence": 1.0
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "time_signature": { "numerator": 4, "denominator": 4 },
+      "key_signature": { "fifths": 0, "mode": "major" },
+      "barline": "repeat-start",
+      "events": [
+        {
+          "id": "e2",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 2,
+            "onset_ticks": 0,
+            "duration_ticks": 960,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "quarter", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 2,
+              "fret": 3,
+              "pitch": 62,
+              "confidence": 1.0
+            }
+          ],
+          "confidence": 1.0
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "time_signature": { "numerator": 4, "denominator": 4 },
+      "key_signature": { "fifths": 0, "mode": "major" },
+      "barline": "repeat-end",
+      "repeat_count": 2,
+      "events": [
+        {
+          "id": "e3",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 3,
+            "onset_ticks": 0,
+            "duration_ticks": 960,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "quarter", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 3,
+              "fret": 2,
+              "pitch": 57,
+              "confidence": 1.0
+            }
+          ],
+          "confidence": 1.0
+        }
+      ],
+      "alternate_ending_passes": [1],
+      "alternate_ending_is_stop": true
+    },
+    {
+      "index": 4,
+      "time_signature": { "numerator": 4, "denominator": 4 },
+      "key_signature": { "fifths": 0, "mode": "major" },
+      "events": [
+        {
+          "id": "e4",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 4,
+            "onset_ticks": 0,
+            "duration_ticks": 960,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "quarter", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 4,
+              "fret": 0,
+              "pitch": 50,
+              "confidence": 1.0
+            }
+          ],
+          "confidence": 1.0
+        }
+      ],
+      "alternate_ending_passes": [2]
+    }
+  ],
+  "warnings": []
+}

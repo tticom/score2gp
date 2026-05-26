@@ -3,6 +3,33 @@
     "Bar": {
       "additionalProperties": false,
       "properties": {
+        "alternate_ending_is_stop": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Alternate Ending Is Stop"
+        },
+        "alternate_ending_passes": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Alternate Ending Passes"
+        },
         "anacrusis": {
           "default": false,
           "title": "Anacrusis",
