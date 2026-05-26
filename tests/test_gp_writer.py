@@ -1846,3 +1846,56 @@ def test_gpif_style_collections(tmp_path) -> None:
             lsps_prop = block.find("Property[@name='LineSizingPerSystem']")
             assert lsps_prop is not None
             assert lsps_prop.find("Size").text == "Small"
+
+
+def test_gpif_styles_formatting_and_measure_layout(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_styles_formatting.ir.json")
+    out = tmp_path / "styles_formatting.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        score_node = root.find("Score")
+        assert score_node is not None
+
+        # 1. Verify Styles block & sub-elements
+        styles_node = score_node.find("Styles")
+        assert styles_node is not None
+
+        styles = styles_node.findall("Property[@name='Style']")
+        assert len(styles) == 2
+
+        # Check staff style
+        assert styles[0].find("Category").text == "staff"
+        assert float(styles[0].find("LineWidth").text) == 1.2
+        assert float(styles[0].find("SpacingCushion").text) == 0.8
+        assert styles[0].find("Color").text == "#ff0000"
+
+        # Check note style
+        assert styles[1].find("Category").text == "note"
+        assert float(styles[1].find("LineWidth").text) == 0.9
+        assert float(styles[1].find("SpacingCushion").text) == 0.5
+        assert styles[1].find("Color").text == "#0000ff"
+
+        # 2. Verify MasterBar MeasureLayout
+        mb = root.find(".//MasterBars/MasterBar[@index='1']")
+        assert mb is not None
+        mb_ml = mb.find("MeasureLayout")
+        assert mb_ml is not None
+        assert float(mb_ml.find("Width").text) == 120.0
+        assert float(mb_ml.find("StretchFactor").text) == 1.5
+        assert float(mb_ml.find("Spacing").text) == 2.0
+
+        # 3. Verify Bar MeasureLayout
+        bar = root.find(".//Bars/Bar[@index='1']")
+        assert bar is not None
+        bar_ml = bar.find("MeasureLayout")
+        assert bar_ml is not None
+        assert float(bar_ml.find("Width").text) == 120.0
+        assert float(bar_ml.find("StretchFactor").text) == 1.5
+        assert float(bar_ml.find("Spacing").text) == 2.0

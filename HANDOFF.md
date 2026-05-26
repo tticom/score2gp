@@ -2,11 +2,11 @@
 
 ## Metadata
 
-- **Current Branch**: `feature/gpif-style-collections-and-staff-properties-v0.1`
+- **Current Branch**: `feature/gpif-styles-formatting-and-measure-layout-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: PR #100 (https://github.com/tticom/score2gp/pull/100)
-- **Latest Local Commit**: `a2633b25d8f35f7537cb19a7d985bdec08e40731` ("docs: update tasks and handoff for style collections and staff properties")
-- **Latest Pushed Commit**: `a2633b25d8f35f7537cb19a7d985bdec08e40731` ("docs: update tasks and handoff for style collections and staff properties")
+- **Current PR**: PR #101 (https://github.com/tticom/score2gp/pull/101)
+- **Latest Local Commit**: `2becde0c38645cb6c2ae965da9d60f0e3c3102a0` ("docs: finalize HANDOFF.md metadata before push")
+- **Latest Pushed Commit**: `2becde0c38645cb6c2ae965da9d60f0e3c3102a0` ("docs: finalize HANDOFF.md metadata before push")
 
 - **Working Tree Status**: Clean (except untracked scratch files).
 
@@ -16,9 +16,9 @@
 
 ## Tests And Checks Run
 
-- `python -m pytest` -> 350 passed (100% success, including the new GP7 style collections and dynamic staff properties unit tests).
-- `python -m score2gp.cli export-schema --out schemas` -> passed cleanly (updated schemas with new `StyleCollection`, and `TrackLayoutPreferences.brackets_visible`, `TrackLayoutPreferences.stems_visible`, `TrackLayoutPreferences.line_sizing_per_system` parameters).
-- `python -m score2gp.cli validate-ir fixtures/public/test_gpif_style_collections.ir.json` -> valid.
+- `python -m pytest` -> 351 passed (100% success, including the new GP7 visual styles formatting overrides and dynamic measure layout unit tests).
+- `python -m score2gp.cli export-schema --out schemas` -> passed cleanly (updated schemas with new `StyleProperty` model under `ScoreLayout`, and `MeasureLayout` model under `Bar` parameters).
+- `python -m score2gp.cli validate-ir fixtures/public/test_gpif_styles_formatting.ir.json` -> valid.
 - `git diff --check` -> passed cleanly (zero trailing whitespace or EOF blank line violations).
 - `git diff -- schemas` -> passed cleanly (valid schema additions).
 - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep`.
@@ -27,18 +27,20 @@
 ## What Changed In This Task
 
 - **ScoreIR Schema & Model Expansion**:
-  - Created `StyleCollection` model under `src/score2gp/ir.py` specifying `id`, `name`, and optional `description` parameters.
-  - Expanded `ScoreLayout` with `style_collections` property.
-  - Expanded `TrackLayoutPreferences` with track-level dynamic staff rendering layout overrides: `brackets_visible`, `stems_visible`, and `line_sizing_per_system` properties.
+  - Created `StyleProperty` model under `src/score2gp/ir.py` specifying `category`, `line_width`, `spacing_cushion`, and `color` parameters.
+  - Expanded `ScoreLayout` with `styles` property list.
+  - Created `MeasureLayout` model under `src/score2gp/ir.py` specifying `width`, `stretch_factor`, and `spacing` parameters.
+  - Expanded `Bar` with `measure_layout` property.
+  - Updated `semantic_scoreir_summary` in `src/score2gp/ir.py` to properly serialize `measure_layout` of bars.
   - Successfully re-exported updated JSON schema version via CLI.
 - **GPIF XML Generator Serialization**:
-  - Handled XML generation for centralized score-level stylesheet `<StyleCollections>` containing `<StyleCollection>` sub-elements.
-  - Serialized track/staff-level dynamic rendering overrides (`brackets_visible`, `stems_visible`, `line_sizing_per_system`) into both staff `<Properties>` and `<StaffProperties>` visual layout blocks to ensure full compatibility.
+  - Handled XML generation for centralized score-level stylesheet `<Styles>` properties containing `<Property name="Style">` sub-elements (mapping `category`, `line_width`, `spacing_cushion`, and `color`).
+  - Serialized measure/master-bar level `<MeasureLayout>` property nodes inside both `_master_bars` and `_bars` to ensure specific bar presentations and styling layout constraints match design preferences.
 - **Synthetic Testing & Validation**:
-  - Authored a dedicated public synthetic fixture `fixtures/public/test_gpif_style_collections.ir.json` modeling all style collections and track rendering settings.
-  - Wrote comprehensive unit tests in `tests/test_gp_writer.py` (`test_gpif_style_collections`) verifying layout settings inside the zipped GPIF XML.
+  - Authored a dedicated public synthetic fixture `fixtures/public/test_gpif_styles_formatting.ir.json` modeling style formatting overrides and dynamic measure layouts.
+  - Wrote comprehensive unit tests in `tests/test_gp_writer.py` (`test_gpif_styles_formatting_and_measure_layout`) verifying visual stylesheet formatting overrides and measure layout settings inside the zipped GPIF XML.
 - **E2E Private Smoke Test Results**:
-  - Ran E2E private smoke compiler against real private inputs to verify zero regressions or crashes with the new view preferences.
+  - Ran E2E private smoke compiler against real private inputs to verify zero regressions or crashes with the new styles and measure layouts.
 
 ## Known Limitations
 
@@ -50,7 +52,7 @@
 
 ## Next Recommended Task
 
-- **Support visual stylesheet styles formatting overrides and dynamic measures layout preferences**: Implement visual stylesheet styles formatting parameters, custom visual layout categories overrides, and dynamic measure-level layout settings inside the GPIF XML generator.
+- Continue wrapping visual elements or formatting capabilities as per project roadmap.
 
 ## Explicit Scope Boundaries
 

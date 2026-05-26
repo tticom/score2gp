@@ -232,6 +232,19 @@ def build_gpif(score: ScoreIR) -> bytes:
             if sc.description is not None:
                 _text(item, "Description", sc.description)
 
+    # Score-level custom stylesheet style formatting overrides
+    if getattr(score, "layout", None) is not None and score.layout.styles is not None:
+        styles_node = ET.SubElement(score_node, "Styles")
+        for style in score.layout.styles:
+            style_prop = ET.SubElement(styles_node, "Property", {"name": "Style"})
+            _text(style_prop, "Category", style.category)
+            if style.line_width is not None:
+                _text(style_prop, "LineWidth", style.line_width)
+            if style.spacing_cushion is not None:
+                _text(style_prop, "SpacingCushion", style.spacing_cushion)
+            if style.color is not None:
+                _text(style_prop, "Color", style.color)
+
     event_map = {}
     for bar in score.bars:
         for event in bar.events:
@@ -531,11 +544,30 @@ def _master_bars(parent: ET.Element, score: ScoreIR) -> None:
                 repeat_count = getattr(bar, "repeat_count", None) or 2
                 ET.SubElement(node, "Repeat", {"count": str(repeat_count)})
 
+        if getattr(bar, "measure_layout", None) is not None:
+            ml_node = ET.SubElement(node, "MeasureLayout")
+            if bar.measure_layout.width is not None:
+                _text(ml_node, "Width", bar.measure_layout.width)
+            if bar.measure_layout.stretch_factor is not None:
+                _text(ml_node, "StretchFactor", bar.measure_layout.stretch_factor)
+            if bar.measure_layout.spacing is not None:
+                _text(ml_node, "Spacing", bar.measure_layout.spacing)
+
+
 
 def _bars(parent: ET.Element, score: ScoreIR, hopo_dests: set[tuple[int, int, int]], let_ring_notes: set[tuple[int, int, int]], palm_mute_notes: set[tuple[int, int, int]], track_cd_maps: dict[str, dict[str, str]], event_map: dict[str, Event]) -> None:
     bars = ET.SubElement(parent, "Bars")
     for bar in score.bars:
         bar_node = ET.SubElement(bars, "Bar", {"index": str(bar.index)})
+
+        if getattr(bar, "measure_layout", None) is not None:
+            ml_node = ET.SubElement(bar_node, "MeasureLayout")
+            if bar.measure_layout.width is not None:
+                _text(ml_node, "Width", bar.measure_layout.width)
+            if bar.measure_layout.stretch_factor is not None:
+                _text(ml_node, "StretchFactor", bar.measure_layout.stretch_factor)
+            if bar.measure_layout.spacing is not None:
+                _text(ml_node, "Spacing", bar.measure_layout.spacing)
 
         if getattr(bar, "anacrusis", False):
             props = ET.SubElement(bar_node, "Properties")
