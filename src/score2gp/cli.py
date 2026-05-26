@@ -17,6 +17,29 @@ from .pdf import extract_tab as extract_tab_file
 from .pdf import inspect_pdf as inspect_pdf_file
 from .report import write_conversion_report, write_warnings
 
+def parse_page_range(pages_str: str | None) -> tuple[int, int] | None:
+    if not pages_str:
+        return None
+    pages_str = pages_str.strip()
+    if not pages_str:
+        return None
+    import re
+    parts = re.split(r'[-–—,]', pages_str)
+    if len(parts) == 1:
+        try:
+            val = int(parts[0].strip())
+            return (val, val)
+        except ValueError:
+            pass
+    elif len(parts) == 2:
+        try:
+            start = int(parts[0].strip())
+            end = int(parts[1].strip())
+            return (start, end)
+        except ValueError:
+            pass
+    raise typer.BadParameter(f"Invalid page range format: '{pages_str}'. Use format like '1-1' or '1-2'.")
+
 app = typer.Typer(help="Inspectable PDF score to Guitar Pro conversion pipeline.")
 
 
@@ -192,6 +215,7 @@ def build_ir_command(
     allow_remediation: bool = typer.Option(False, "--allow-remediation"),
     allow_skip_unboxed: bool = typer.Option(False, "--allow-skip-unboxed-systems"),
     optimize_fret_snapping: bool = typer.Option(False, "--optimize-fret-snapping", help="Enable Left-hand finger position/fret-snapping optimization"),
+    pages: Optional[str] = typer.Option(None, "--pages", help="Explicit page range subset to process (e.g. '1-1' or '1-2')."),
 ) -> None:
     """Build a limited ScoreIR file from synthetic MusicXML plus TabRaw inputs."""
     if musicxml is None or tabraw is None:
@@ -208,6 +232,7 @@ def build_ir_command(
             allow_remediation=allow_remediation,
             allow_skip_unboxed=allow_skip_unboxed,
             optimize_fret_snapping=optimize_fret_snapping,
+            page_range=parse_page_range(pages),
         )
     except BuildIrInputRiskError as exc:
         payload = exc.to_diagnostics_payload()
@@ -282,6 +307,7 @@ def convert_command(
     allow_remediation: bool = typer.Option(False, "--allow-remediation"),
     allow_skip_unboxed: bool = typer.Option(False, "--allow-skip-unboxed-systems"),
     optimize_fret_snapping: bool = typer.Option(False, "--optimize-fret-snapping", help="Enable Left-hand finger position/fret-snapping optimization"),
+    pages: Optional[str] = typer.Option(None, "--pages", help="Explicit page range subset to process (e.g. '1-1' or '1-2')."),
 ) -> None:
     """Run the complete conversion pipeline: extraction, alignment, IR generation, and GP7 package writing."""
     workdir.mkdir(parents=True, exist_ok=True)
@@ -303,7 +329,43 @@ def convert_command(
         tab_summary = extract_tab_file(input_pdf, tabraw_path)
         summary["tab"] = tab_summary
         if tab_summary.get("warnings"):
+            p_range = parse_page_range(pages)
             for w in tab_summary["warnings"]:
+                if p_range is not None:
+                    p_idx = w.get("page_index") or w.get("page_number")
+                    if p_idx is not None:
+                        try:
+                            p = int(p_idx)
+                            if not (p_range[0] <= p <= p_range[1]):
+                                continue
+                        except (ValueError, TypeError):
+                            pass
+                    else:
+                        # Strip global/general suitability or layout warnings that are stale when page range constraints are active
+                        code = w.get("code")
+                        if code in {
+                            "pdf_grouping_not_safe_for_build_ir",
+                            "pdf_missing_pdf_grouping_blocks_build_ir",
+                            "pdf_partial_grouping_one_system_unboxed",
+                            "pdf_playable_candidate_requires_string_assignment",
+                            "pdf_partial_grouping_with_playable_candidates",
+                            "pdf_layout_detection_requires_manual_review",
+                            "partial_pdf_grouping",
+                            "missing_pdf_grouping",
+                            "missing_pdf_barlines",
+                            "incomplete_tab_staff",
+                            "ambiguous_string_assignment",
+                            "ambiguous_bar_assignment",
+                            "pdf_system_detection_not_enough_for_build_ir",
+                            "pdf_bar_detection_not_enough_for_build_ir",
+                            "pdf_bar_box_construction_not_enough_for_build_ir",
+                            "pdf_string_assignment_not_enough_for_build_ir",
+                            "pdf_fret_refinement_not_enough_for_build_ir",
+                            "pdf_pitch_tuning_diagnostics_not_enough_for_build_ir",
+                            "pdf_timing_mapping_refused",
+                            "pdf_timing_mapping_not_enough_for_build_ir",
+                        } or (isinstance(code, str) and (code.startswith("pdf_") or code.startswith("ascii_"))):
+                            continue
                 if w not in warnings:
                     warnings.append(w)
     except Exception as exc:
@@ -380,6 +442,7 @@ def convert_command(
             allow_remediation=allow_remediation,
             allow_skip_unboxed=allow_skip_unboxed,
             optimize_fret_snapping=optimize_fret_snapping,
+            page_range=parse_page_range(pages),
         )
         summary["build_ir"] = {
             "ran": True,
