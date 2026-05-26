@@ -675,7 +675,7 @@ class Bar(BaseModel):
     tempo: Tempo | None = None
     layout_break: Literal["line", "page", "none"] | None = None
     anacrusis: bool = False
-    barline: Literal["regular", "double", "end", "section", "repeat-start", "repeat-end"] | None = None
+    barline: Literal["regular", "double", "end", "section", "repeat-start", "repeat-end", "hidden", "dashed"] | None = None
     repeat_count: int | None = Field(default=None, ge=1)
     measure_layout: MeasureLayout | None = None
     bar_numbering: BarNumberingOverride | None = None
@@ -832,6 +832,21 @@ class PipelinePresetCascade(BaseModel):
     options: dict[str, Any] = Field(default_factory=dict)
 
 
+class SystemLayout(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    system_size_percent: float | None = None
+    staff_distancing_cushion: float | None = None
+    barline_style: Literal["hidden", "dashed", "solid", "default"] | None = None
+
+
+class StaffLayout(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    staff_spacing_cushion: float | None = None
+    staff_size: float | None = None
+
+
 class ScoreLayout(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -849,6 +864,8 @@ class ScoreLayout(BaseModel):
     part_separation: list[PartSeparationRule] | None = None
     master_mixer: MasterMixer | None = None
     preset_cascade: PipelinePresetCascade | None = None
+    system_layout: SystemLayout | None = None
+    staff_layout: StaffLayout | None = None
 
 
 

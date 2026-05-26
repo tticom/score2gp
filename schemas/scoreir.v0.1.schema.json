@@ -55,7 +55,9 @@
                 "end",
                 "section",
                 "repeat-start",
-                "repeat-end"
+                "repeat-end",
+                "hidden",
+                "dashed"
               ],
               "type": "string"
             },
@@ -2499,6 +2501,17 @@
           "title": "Score Systems Layout",
           "type": "integer"
         },
+        "staff_layout": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StaffLayout"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "style_collections": {
           "anyOf": [
             {
@@ -2528,6 +2541,17 @@
           ],
           "default": null,
           "title": "Styles"
+        },
+        "system_layout": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SystemLayout"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "system_page_margins": {
           "anyOf": [
@@ -2833,6 +2857,37 @@
       "title": "SourceStage",
       "type": "string"
     },
+    "StaffLayout": {
+      "additionalProperties": false,
+      "properties": {
+        "staff_size": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Staff Size"
+        },
+        "staff_spacing_cushion": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Staff Spacing Cushion"
+        }
+      },
+      "title": "StaffLayout",
+      "type": "object"
+    },
     "StyleCollection": {
       "additionalProperties": false,
       "properties": {
@@ -2912,6 +2967,55 @@
         "category"
       ],
       "title": "StyleProperty",
+      "type": "object"
+    },
+    "SystemLayout": {
+      "additionalProperties": false,
+      "properties": {
+        "barline_style": {
+          "anyOf": [
+            {
+              "enum": [
+                "hidden",
+                "dashed",
+                "solid",
+                "default"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Barline Style"
+        },
+        "staff_distancing_cushion": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Staff Distancing Cushion"
+        },
+        "system_size_percent": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "System Size Percent"
+        }
+      },
+      "title": "SystemLayout",
       "type": "object"
     },
     "SystemPageMargins": {

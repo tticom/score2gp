@@ -203,7 +203,10 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
 
     # Score-level advanced Layout templates, margins, and bracing/bracket properties
     if getattr(score, "layout", None) is not None and (
-        score.layout.system_page_margins is not None or score.layout.ensemble_brackets is not None
+        score.layout.system_page_margins is not None or
+        score.layout.ensemble_brackets is not None or
+        getattr(score.layout, "system_layout", None) is not None or
+        getattr(score.layout, "staff_layout", None) is not None
     ):
         layout_node = ET.SubElement(score_node, "Layout")
         if score.layout.system_page_margins is not None:
@@ -220,6 +223,22 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
                 _text(brace_node, "Tracks", " ".join(bracket.track_ids))
                 bracket_node = ET.SubElement(ensemble_brackets_node, "Bracket", {"style": bracket.style})
                 _text(bracket_node, "Tracks", " ".join(bracket.track_ids))
+
+        if getattr(score.layout, "system_layout", None) is not None:
+            sys_lay = ET.SubElement(layout_node, "SystemLayout")
+            if score.layout.system_layout.system_size_percent is not None:
+                _text(sys_lay, "SystemSizePercent", score.layout.system_layout.system_size_percent)
+            if score.layout.system_layout.staff_distancing_cushion is not None:
+                _text(sys_lay, "StaffDistancingCushion", score.layout.system_layout.staff_distancing_cushion)
+            if score.layout.system_layout.barline_style is not None:
+                _text(sys_lay, "BarlineStyle", score.layout.system_layout.barline_style.capitalize())
+
+        if getattr(score.layout, "staff_layout", None) is not None:
+            staff_lay = ET.SubElement(layout_node, "StaffLayout")
+            if score.layout.staff_layout.staff_spacing_cushion is not None:
+                _text(staff_lay, "StaffSpacingCushion", score.layout.staff_layout.staff_spacing_cushion)
+            if score.layout.staff_layout.staff_size is not None:
+                _text(staff_lay, "StaffSize", score.layout.staff_layout.staff_size)
 
     # Score-level custom visual part-separation configurations
     if getattr(score, "layout", None) is not None and score.layout.part_separation is not None:
@@ -662,6 +681,8 @@ def _master_bars(parent: ET.Element, score: ScoreIR) -> None:
                 "section": "Section",
                 "repeat-start": "RepeatStart",
                 "repeat-end": "RepeatEnd",
+                "hidden": "Hidden",
+                "dashed": "Dashed",
             }
             barline_val = barline_map.get(bar.barline, "Simple")
             _text(node, "Barline", barline_val)
@@ -716,6 +737,9 @@ def _bars(parent: ET.Element, score: ScoreIR, hopo_dests: set[tuple[int, int, in
     bars = ET.SubElement(parent, "Bars")
     for bar in score.bars:
         bar_node = ET.SubElement(bars, "Bar", {"index": str(bar.index)})
+        if getattr(bar, "layout_break", None) is not None:
+            lb_node = ET.SubElement(bar_node, "LayoutBreak")
+            _text(lb_node, "Type", "System" if bar.layout_break == "line" else ("Page" if bar.layout_break == "page" else "None"))
         if getattr(bar, "alternate_ending_passes", None):
             mask = sum(1 << (p - 1) for p in bar.alternate_ending_passes)
             _text(bar_node, "AlternateEndings", mask)
