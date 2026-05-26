@@ -5,8 +5,8 @@
 - **Current Branch**: `feature/gpif-track-automations-v0.1`
 - **Base Branch**: `main`
 - **Current PR**: PR #104 (https://github.com/tticom/score2gp/pull/104)
-- **Latest Local Commit**: `e8fd150a1c925187cd191569e3ad7218f4ff10d5` ("docs: update TASKS.md and HANDOFF.md with track automations progress")
-- **Latest Pushed Commit**: `e8fd150a1c925187cd191569e3ad7218f4ff10d5` ("docs: update TASKS.md and HANDOFF.md with track automations progress")
+- **Latest Local Commit**: `bd457ca4de540f3d0c30a0d000977f7c20041752` ("docs: finalize HANDOFF.md with PR 104 details")
+- **Latest Pushed Commit**: `bd457ca4de540f3d0c30a0d000977f7c20041752` ("docs: finalize HANDOFF.md with PR 104 details")
 
 - **Working Tree Status**: Clean (except doc/tasks updates).
 
