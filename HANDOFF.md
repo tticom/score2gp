@@ -3,9 +3,9 @@
 ## Metadata
 - **Current Branch**: `feature/pdf-confidence-ambiguity-public-fixtures-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: Draft PR to be created
-- **Latest Local Commit**: (Pending commit hash) ("test: add public synthetic fixtures for pdf confidence and ambiguity blockers")
-- **Latest Pushed Commit**: (Pending commit hash)
+- **Current PR**: Open draft PR
+- **Latest Local Commit**: `cd08eea73a7d304e76ee62eaeb547e6b0bbd6676` ("test: add public synthetic fixtures for pdf confidence and ambiguity blockers")
+- **Latest Pushed Commit**: `cd08eea73a7d304e76ee62eaeb547e6b0bbd6676` ("test: add public synthetic fixtures for pdf confidence and ambiguity blockers")
 - **Working Tree Status**: Clean.
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked.
 
