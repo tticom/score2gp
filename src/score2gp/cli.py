@@ -75,7 +75,12 @@ def compare_ir_command(expected_ir: Path, actual_ir: Path) -> None:
 
 
 @app.command("write-gp")
-def write_gp_command(ir_json: Path, template: Optional[Path] = typer.Option(None), out: Path = typer.Option(...)) -> None:
+def write_gp_command(
+    ir_json: Path,
+    template: Optional[Path] = typer.Option(None),
+    out: Path = typer.Option(...),
+    target: str = typer.Option("GP7", "--target", help="Target Guitar Pro version profile (GP6, GP7, GP8)"),
+) -> None:
     """Write a minimal GP7-style package from ScoreIR JSON or Booklet JSON."""
     score, errors = validate_score_ir_file(ir_json)
     if errors:
@@ -83,7 +88,7 @@ def write_gp_command(ir_json: Path, template: Optional[Path] = typer.Option(None
             typer.echo(f"error: {err}", err=True)
         raise typer.Exit(1)
     assert score is not None
-    warnings = write_gp(score, out, template)
+    warnings = write_gp(score, out, template, target_version=target)
     for warning in warnings:
         typer.echo(f"warning: {warning}", err=True)
     typer.echo(str(out))
