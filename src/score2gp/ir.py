@@ -628,6 +628,26 @@ class BarNumberingOverride(BaseModel):
     show: bool | None = None
 
 
+class BarDirection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal[
+        "segno",
+        "coda",
+        "double-coda",
+        "fine",
+        "to-coda",
+        "da-capo",
+        "da-capo-al-coda",
+        "da-capo-al-fine",
+        "dal-segno",
+        "dal-segno-al-coda",
+        "dal-segno-al-fine",
+        "dal-double-segno",
+    ]
+    target_bar_index: int | None = None
+
+
 class Bar(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -642,6 +662,9 @@ class Bar(BaseModel):
     repeat_count: int | None = Field(default=None, ge=1)
     measure_layout: MeasureLayout | None = None
     bar_numbering: BarNumberingOverride | None = None
+    directions: list[BarDirection] | None = None
+    marker: str | None = None
+    marker_color: str | None = None
 
 
     @model_validator(mode="before")
