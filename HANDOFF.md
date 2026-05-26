@@ -2,13 +2,13 @@
 
 ## Metadata
 
-- **Current Branch**: `feature/pipeline-system-integration-and-verification-v0.1`
+- **Current Branch**: `feature/gpif-booklet-formatting-and-cover-templates-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: PR #110 (https://github.com/tticom/score2gp/pull/110)
-- **Latest Local Commit**: `40046c665869552609449777a938ddb595702913` ("fix: resolve AttributeError in cli convert command BuildIrInputRiskError handler")
-- **Latest Pushed Commit**: `40046c665869552609449777a938ddb595702913` ("fix: resolve AttributeError in cli convert command BuildIrInputRiskError handler")
+- **Current PR**: Draft PR (created via `gh pr create --draft --fill`)
+- **Latest Local Commit**: `78d2e63e6191ac3aa1b46c94c32d06937d595558` ("docs: update HANDOFF.md and TASKS.md with Booklet cover templates and bar numbering achievements")
+- **Latest Pushed Commit**: `78d2e63e6191ac3aa1b46c94c32d06937d595558` ("docs: update HANDOFF.md and TASKS.md with Booklet cover templates and bar numbering achievements")
 
-- **Working Tree Status**: Clean (except doc/tasks updates).
+- **Working Tree Status**: Clean.
 
 - **GitHub Check Status**: N/A
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or `work/` contents are tracked.
@@ -16,7 +16,7 @@
 
 ## Tests And Checks Run
 
-- `python -m pytest` -> 367 passed (100% success, including the new pipeline integration diagnostics unit tests).
+- `python -m pytest` -> 368 passed (100% success, including the new booklet cover page templates and bar numbering overrides unit tests).
 - `python -m score2gp.cli export-schema --out schemas` -> passed cleanly.
 - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid.
 - `git diff --check` -> passed cleanly (zero trailing whitespace or EOF blank line violations).
@@ -26,16 +26,18 @@
 
 ## What Changed In This Task
 
-- **High-Throughput Pipeline Diagnostics Runner**:
-  - Created `src/score2gp/diagnostics.py` containing `run_system_diagnostics` and `get_process_memory`.
-  - Captured resident set size (RSS) memory footprint using `psutil` or native Windows API falls back via `ctypes` (for thread/process execution metrics).
-- **Strict Bidirectional Round-Trip Checks**:
-  - Orchestrated parallelized score generation streams using full caching paths, verified that sandboxed `score.ir.json` matches generated packages using `validate_roundtrip` assertions, and cleanly tolerated equivalent default track orders (empty track_order list matches the actual track listing order).
-- **CLI Command Support**:
-  - Registered a new `diagnose` command under `src/score2gp/cli.py` to expose the diagnostics runner, returning structured JSON footprint reports and exit codes.
-- **Synthetic Stress Manifest & Extensive Tests**:
-  - Created `fixtures/public/test_system_integration_manifest.json` modeling a matrix of multi-track, voices, and version-gated synthetic payloads.
-  - Authored unit tests in `tests/test_system_integration_diagnostics.py` verifying diagnostics orchestrator report metrics and subprocess CLI execution.
+- **Booklet Cover Page Geometric Templates**:
+  - Implemented the `BookletCoverPage` model under `src/score2gp/ir.py` specifying `enabled`, `title_alignment`, `margin_offset`, `separator_style`, and `intro_text`.
+  - Serialized the options into a custom booklet-level `<CoverPage>` XML node inside `src/score2gp/gpif.py`.
+- **Movement-Level BarNumbering Overrides**:
+  - Implemented the `BarNumberingOverride` model under `src/score2gp/ir.py` specifying `prefix`, `offset`, and `show`.
+  - Serialized the overrides into measure-level `<BarNumbering>` XML elements inside `src/score2gp/gpif.py`.
+- **Symmetric Zip Extraction and Round-Trip Validation**:
+  - Updated `src/score2gp/gp_package.py` to extract `BookletCoverPage` and `BarNumberingOverride` properties from zipped GP packages and booklet indexes back symmetrically into models.
+  - Authored comprehensive validation checks for both models inside `validate_roundtrip` and `semantic_scoreir_summary`.
+- **Public Fixtures & Extensive Tests**:
+  - Created a new public synthetic booklet cover templates fixture `fixtures/public/test_booklet_cover_templates.ir.json` modeling these properties.
+  - Created a new unit test suite `tests/test_booklet_cover_templates.py` asserting correct XML tag structure, booklet zip serialization, and robust round-trip validation.
 
 ## Known Limitations
 
@@ -47,7 +49,7 @@
 
 ## Next Recommended Task
 
-- Proceed with booklet pagination enhancements or visual booklet formatting overrides.
+- Proceed with advanced visual styling enhancements or timeline expression controllers.
 
 ## Explicit Scope Boundaries
 
