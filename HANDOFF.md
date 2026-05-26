@@ -2,11 +2,11 @@
 
 ## Metadata
 
-- **Current Branch**: `feature/gpif-master-mixer-and-config-cascades-v0.1`
+- **Current Branch**: `feature/gpif-bidirectional-roundtrip-gates-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: PR #105 (https://github.com/tticom/score2gp/pull/105)
-- **Latest Local Commit**: `a73a96a739032bb1f97247e16291bf9238b435eb` ("docs: finalize HANDOFF.md with PR 105 details")
-- **Latest Pushed Commit**: `a73a96a739032bb1f97247e16291bf9238b435eb` ("docs: finalize HANDOFF.md with PR 105 details")
+- **Current PR**: `Draft PR to be created`
+- **Latest Local Commit**: `a6d9dff66c76f299ad573d2ecf8281d9006a2d6b` ("feat: implement bidirectional roundtrip validation and package extraction recovery loops")
+- **Latest Pushed Commit**: `N/A`
 
 - **Working Tree Status**: Clean (except doc/tasks updates).
 
@@ -16,30 +16,30 @@
 
 ## Tests And Checks Run
 
-- `python -m pytest` -> 355 passed (100% success, including the new master mixer and global preset cascade unit tests).
-- `python -m score2gp.cli export-schema --out schemas` -> passed cleanly (updated schemas with `MasterMixer` and `PipelinePresetCascade` models).
-- `python -m score2gp.cli validate-ir fixtures/public/test_gpif_master_mixer.ir.json` -> valid.
+- `python -m pytest` -> 356 passed (100% success, including the new bidirectional round-trip symmetry gate unit tests).
+- `python -m score2gp.cli export-schema --out schemas` -> passed cleanly.
+- `python -m score2gp.cli validate-ir fixtures/public/test_gpif_bidirectional_roundtrip.ir.json` -> valid.
 - `git diff --check` -> passed cleanly (zero trailing whitespace or EOF blank line violations).
-- `git diff -- schemas` -> passed cleanly (valid schema additions).
+- `git diff -- schemas` -> passed cleanly.
 - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep`.
 - `python scripts/private_e2e_smoke.py` -> passed cleanly against all private PDF inputs with zero regressions.
 
 ## What Changed In This Task
 
-- **ScoreIR Schema & Model Expansion**:
-  - Created `MasterMixer` model under `src/score2gp/ir.py` specifying `volume` (float 0..1), `pan` (float -1..1), `reverb` (float 0..100), and `chorus` (float 0..100).
-  - Created `PipelinePresetCascade` model under `src/score2gp/ir.py` specifying `preset_name` (str), `target_engine` (str), and `options` (dict).
-  - Updated `ScoreLayout` model in `src/score2gp/ir.py` to support optional `master_mixer` and `preset_cascade` blocks.
-  - Successfully re-exported updated JSON schema version via CLI.
-- **GPIF XML Generator Serialization**:
-  - Serialized master audio properties and preset cascades inside `<MasterTrack>` element in `src/score2gp/gpif.py`:
-    - Master mixer parameters inside `<Mixer>` containing `<Volume>`, `<Pan>`, `<Reverb>`, and `<Chorus>`.
-    - Preset cascade configurations inside `<PresetCascade>` detailing preset name, target engine, and child `<Option>` key-value elements.
+- **Zipped Package Parsing & Element Reconstructors**:
+  - Implemented `extract_score_ir_from_gp(path)` in `src/score2gp/gp_package.py` to recursively traverse and deserialize the zipped GP7 XML layout sub-trees into structural Pydantic models.
+  - Symmetrically recovered metadata fields, tempo structures, custom tuning strings (with volume offsets and fine-tuning balances), track layout preferences, track playback automations, track performance expressions, and master-level layout settings.
+  - Reconstructed complete, valid `ScoreIR` instances suitable for full validation.
+- **Bidirectional Round-Trip Validation Gate**:
+  - Implemented `validate_roundtrip(path, original)` in `src/score2gp/gp_package.py` executing a deep semantic comparator check on all serialized and deserialized parameters, ensuring full structural asset symmetry.
+  - Tolerated equivalent default mappings (e.g. `None` vs `0.0` offsets) cleanly without generating false validation discrepancies.
+- **Round-Trip CLI Subcommand**:
+  - Exposed `validate-roundtrip` in `src/score2gp/cli.py` to enable automated pipeline round-trip checks directly from the command line.
 - **Synthetic Testing & Validation**:
-  - Created public synthetic fixture `fixtures/public/test_gpif_master_mixer.ir.json` containing master mixer volume/pan overrides and preset cascade block.
-  - Authored comprehensive unit tests `test_gpif_master_mixer` in `tests/test_gp_writer.py` asserting `<MasterTrack>` XML structures, child nodes, and nested option properties.
+  - Created public synthetic baseline fixture `fixtures/public/test_gpif_bidirectional_roundtrip.ir.json` modeling violin and guitar tracks with layout configurations, mixer volumes, tuning balances, and timeline envelopes.
+  - Authored comprehensive unit tests `test_gpif_bidirectional_roundtrip` in `tests/test_gp_writer.py` verifying full bidirectional property recovery and zero validation discrepancies.
 - **E2E Private Smoke Test Results**:
-  - Ran E2E private smoke compiler against real private inputs to verify zero regressions or crashes with the new global master mixer and config preset cascade structures.
+  - Ran E2E private smoke compiler against real private inputs to verify zero regressions or crashes with the new bidirectional round-trip extraction pathways.
 
 ## Known Limitations
 
