@@ -68,6 +68,17 @@
           "default": null,
           "title": "Layout Break"
         },
+        "measure_layout": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MeasureLayout"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "repeat_count": {
           "anyOf": [
             {
@@ -936,6 +947,49 @@
       "title": "LetRingTechnique",
       "type": "object"
     },
+    "MeasureLayout": {
+      "additionalProperties": false,
+      "properties": {
+        "spacing": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Spacing"
+        },
+        "stretch_factor": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stretch Factor"
+        },
+        "width": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Width"
+        }
+      },
+      "title": "MeasureLayout",
+      "type": "object"
+    },
     "Metadata": {
       "additionalProperties": false,
       "properties": {
@@ -1652,6 +1706,21 @@
           "default": null,
           "title": "Style Collections"
         },
+        "styles": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/StyleProperty"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Styles"
+        },
         "system_page_margins": {
           "anyOf": [
             {
@@ -1985,6 +2054,56 @@
         "name"
       ],
       "title": "StyleCollection",
+      "type": "object"
+    },
+    "StyleProperty": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "title": "Category",
+          "type": "string"
+        },
+        "color": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Color"
+        },
+        "line_width": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Line Width"
+        },
+        "spacing_cushion": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Spacing Cushion"
+        }
+      },
+      "required": [
+        "category"
+      ],
+      "title": "StyleProperty",
       "type": "object"
     },
     "SystemPageMargins": {
