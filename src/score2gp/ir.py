@@ -1097,8 +1097,10 @@ def semantic_scoreir_summary(score: ScoreIR) -> dict[str, Any]:
                 "tempo": bar.tempo.model_dump() if bar.tempo else None,
                 "layout_break": bar.layout_break,
                 "anacrusis": bar.anacrusis,
-                "barline": bar.barline,
-                "repeat_count": bar.repeat_count,
+                "barline": bar.barline if bar.barline not in (None, "regular") else None,
+                "repeat_count": (bar.repeat_count or 2) if bar.barline == "repeat-end" else None,
+                "alternate_ending_passes": bar.alternate_ending_passes,
+                "alternate_ending_is_stop": True if bar.alternate_ending_passes else None,
                 "measure_layout": bar.measure_layout.model_dump() if bar.measure_layout else None,
                 "bar_numbering": bar.bar_numbering.model_dump(exclude_none=True) if bar.bar_numbering else None,
                 "events": [

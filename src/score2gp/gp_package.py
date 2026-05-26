@@ -666,13 +666,78 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
                         style=ta_style.lower() if ta_style else "default",
                         target_bpm=float(ta_val)
                     )
-            mb_map[idx] = (num, den, key_sig, tempo_automation)
+
+            layout_break = None
+            break_val = _first_text(mb_node, ["Break"])
+            if break_val is not None:
+                if break_val == "Line":
+                    layout_break = "line"
+                elif break_val == "Page":
+                    layout_break = "page"
+                elif break_val == "None":
+                    layout_break = "none"
+
+            barline = None
+            barline_val = _first_text(mb_node, ["Barline"])
+            if barline_val is not None:
+                barline_inv_map = {
+                    "Simple": "regular",
+                    "Double": "double",
+                    "End": "end",
+                    "Section": "section",
+                    "RepeatStart": "repeat-start",
+                    "RepeatEnd": "repeat-end",
+                }
+                barline = barline_inv_map.get(barline_val, "regular")
+
+            if mb_node.find("RepeatStart") is not None:
+                barline = "repeat-start"
+
+            repeat_count = None
+            repeat_node = mb_node.find("Repeat")
+            if repeat_node is not None:
+                barline = "repeat-end"
+                repeat_count_str = repeat_node.get("count")
+                repeat_count = int(repeat_count_str) if repeat_count_str else 2
+
+            alternate_ending_passes = None
+            ae_node = mb_node.find("AlternateEndings")
+            if ae_node is not None and ae_node.text:
+                mask = int(ae_node.text)
+                alternate_ending_passes = [p for p in range(1, 32) if (mask & (1 << (p - 1))) != 0]
+
+            mb_map[idx] = {
+                "num": num,
+                "den": den,
+                "key_sig": key_sig,
+                "tempo_automation": tempo_automation,
+                "layout_break": layout_break,
+                "barline": barline,
+                "repeat_count": repeat_count,
+                "alternate_ending_passes": alternate_ending_passes,
+            }
 
     bars_node = root.find(".//Bars")
     if bars_node is not None:
         for bar_node in bars_node.findall("Bar"):
             idx = int(bar_node.get("index") or 1)
-            num, den, key_sig, tempo_automation = mb_map.get(idx, (4, 4, None, None))
+            mb_data = mb_map.get(idx, {
+                "num": 4,
+                "den": 4,
+                "key_sig": None,
+                "tempo_automation": None,
+                "layout_break": None,
+                "barline": None,
+                "repeat_count": None,
+                "alternate_ending_passes": None,
+            })
+            num = mb_data["num"]
+            den = mb_data["den"]
+            key_sig = mb_data["key_sig"]
+            tempo_automation = mb_data["tempo_automation"]
+            layout_break = mb_data["layout_break"]
+            barline = mb_data["barline"]
+            repeat_count = mb_data["repeat_count"]
             events: list[Event] = []
             for ev_node in bar_node.findall(".//Event"):
                 ev_id = ev_node.get("id") or "e"
@@ -800,6 +865,22 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
                         style=rc_style.lower() if rc_style is not None else "default"
                     )
 
+            # Alternate endings
+            ae_passes = mb_data.get("alternate_ending_passes")
+            ae_node = bar_node.find("AlternateEndings")
+            if ae_node is not None and ae_node.text:
+                mask = int(ae_node.text)
+                ae_passes = [p for p in range(1, 32) if (mask & (1 << (p - 1))) != 0]
+            else:
+                ae_node_alt = bar_node.find(".//AlternativeEnding/AlternateEndings")
+                if ae_node_alt is not None and ae_node_alt.text:
+                    mask = int(ae_node_alt.text)
+                    ae_passes = [p for p in range(1, 32) if (mask & (1 << (p - 1))) != 0]
+
+            ae_is_stop = None
+            if ae_passes is not None:
+                ae_is_stop = True
+
             bars.append(
                 Bar(
                     index=idx,
@@ -809,7 +890,12 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
                     bar_numbering=bar_numbering,
                     multi_measure_rest_count=multi_measure_rest_count,
                     repeat_count_overlay=repeat_count_overlay,
-                    tempo_automation=tempo_automation
+                    tempo_automation=tempo_automation,
+                    layout_break=layout_break,
+                    barline=barline,
+                    repeat_count=repeat_count,
+                    alternate_ending_passes=ae_passes,
+                    alternate_ending_is_stop=ae_is_stop
                 )
             )
 
