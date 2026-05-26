@@ -184,6 +184,14 @@ class TrackExpression(BaseModel):
     text: str
 
 
+class TrackAutomation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["Volume", "Pan"]
+    bar_index: int = Field(ge=1)
+    value: float
+
+
 class Track(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -202,6 +210,7 @@ class Track(BaseModel):
     sound: SoundConfig | None = None
     layout_preferences: TrackLayoutPreferences | None = None
     expressions: list[TrackExpression] | None = None
+    automations: list[TrackAutomation] | None = None
 
 
 
@@ -950,6 +959,7 @@ def semantic_scoreir_summary(score: ScoreIR) -> dict[str, Any]:
                 "color": track.color,
                 "systems_layout": getattr(track, "systems_layout", None),
                 "expressions": [expr.model_dump() for expr in track.expressions] if getattr(track, "expressions", None) else None,
+                "automations": [auto.model_dump() for auto in track.automations] if getattr(track, "automations", None) else None,
             }
             for track in score.tracks
         ],
