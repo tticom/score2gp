@@ -4,9 +4,9 @@
 
 - **Current Branch**: `feature/gpif-booklet-formatting-and-cover-templates-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: Draft PR (created via `gh pr create --draft --fill`)
-- **Latest Local Commit**: `78d2e63e6191ac3aa1b46c94c32d06937d595558` ("docs: update HANDOFF.md and TASKS.md with Booklet cover templates and bar numbering achievements")
-- **Latest Pushed Commit**: `78d2e63e6191ac3aa1b46c94c32d06937d595558` ("docs: update HANDOFF.md and TASKS.md with Booklet cover templates and bar numbering achievements")
+- **Current PR**: PR #111 (https://github.com/tticom/score2gp/pull/111)
+- **Latest Local Commit**: `bea46395b0fa2eebdaffc1ea99cb51a99efcc62a` ("docs: update HANDOFF.md and TASKS.md with Booklet cover templates and bar numbering achievements")
+- **Latest Pushed Commit**: `bea46395b0fa2eebdaffc1ea99cb51a99efcc62a` ("docs: update HANDOFF.md and TASKS.md with Booklet cover templates and bar numbering achievements")
 
 - **Working Tree Status**: Clean.
 
