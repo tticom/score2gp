@@ -5,8 +5,8 @@
 - **Current Branch**: `feature/gpif-score-booklets-and-collections-v0.1`
 - **Base Branch**: `main`
 - **Current PR**: PR #102 (https://github.com/tticom/score2gp/pull/102)
-- **Latest Local Commit**: `b55daf3f36f87cba5aacc4ee278651b03647ec16` ("docs: update tasks and handoff for multi-score booklets")
-- **Latest Pushed Commit**: `b55daf3f36f87cba5aacc4ee278651b03647ec16` ("docs: update tasks and handoff for multi-score booklets")
+- **Latest Local Commit**: `0223e5fbed8e8f22349531d0955ac8d8afe0d70e` ("docs: finalize HANDOFF.md metadata before push")
+- **Latest Pushed Commit**: `0223e5fbed8e8f22349531d0955ac8d8afe0d70e` ("docs: finalize HANDOFF.md metadata before push")
 
 - **Working Tree Status**: Clean (except untracked scratch files).
 
