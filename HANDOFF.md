@@ -5,8 +5,8 @@
 - **Current Branch**: `feature/build-ir-advanced-ornaments-v0.1`
 - **Base Branch**: `main`
 - **Current PR**: [PR #115](https://github.com/tticom/score2gp/pull/115) (Draft)
-- **Latest Local Commit**: `d7ec425907c8e4b1b6f72ddac6122f7b78f70e3d` ("docs: update HANDOFF.md and TASKS.md with advanced ornaments details")
-- **Latest Pushed Commit**: `d7ec425907c8e4b1b6f72ddac6122f7b78f70e3d` ("docs: update HANDOFF.md and TASKS.md with advanced ornaments details")
+- **Latest Local Commit**: `c928fa2202e85ebea718d4aa70cea13864e0dad1` ("docs: finalize HANDOFF.md with draft PR URL")
+- **Latest Pushed Commit**: `c928fa2202e85ebea718d4aa70cea13864e0dad1` ("docs: finalize HANDOFF.md with draft PR URL")
 
 - **Working Tree Status**: Clean (except TASKS.md and HANDOFF.md, which will be committed in the next step).
 
