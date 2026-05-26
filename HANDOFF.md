@@ -4,9 +4,9 @@
 
 - **Current Branch**: `feature/build-ir-dynamics-and-hairpins-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: Draft (To be created)
-- **Latest Local Commit**: `8f1f92cd38b30f3675037d04d80a13ea2f654b79` ("feat: parse and serialize dynamic expression hairpins and staccatissimo accents")
-- **Latest Pushed Commit**: N/A (To be pushed)
+- **Current PR**: [PR #116](https://github.com/tticom/score2gp/pull/116) (Draft)
+- **Latest Local Commit**: `559b5ef60d5bfa780d603a115456f937d57cd6ad` ("docs: update HANDOFF.md and TASKS.md with dynamics and hairpins details")
+- **Latest Pushed Commit**: `559b5ef60d5bfa780d603a115456f937d57cd6ad` ("docs: update HANDOFF.md and TASKS.md with dynamics and hairpins details")
 
 - **Working Tree Status**: Clean (except TASKS.md and HANDOFF.md, which will be committed in the next step).
 
