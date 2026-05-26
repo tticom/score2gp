@@ -4,6 +4,8 @@
 
 ## Done
 
+- [x] Refactor the barline classification and deduplication logic in `src/score2gp/pdf.py` and expose new tuning parameters via `src/score2gp/cli.py` to correctly accept internal barlines that are slightly shorter than the staff height and intelligently merge adjacent double-barlines instead of rejecting them as ambiguous, verified with robust E2E smoke tests and mock geometry unit tests (`bugfix/pipeline-internal-barline-tolerances`).
+
 - [x] Refactor the vertical line classification loops in `src/score2gp/pdf.py` to explicitly accept left-edge vertical brackets that align horizontally with the system start (`x0`) and vertically with the bottom baseline of the TAB staff (`y1`) even if they span upward above the notation staff region, verified with robust mock geometry unit tests (`bugfix/pdf-left-bracket-barline-alignment`).
 
 - [x] Implement a thread-safe pipeline performance profiler and diagnostic execution logging module (`src/score2gp/telemetry.py`), integrated directly across parallel batch processing pathways (`src/score2gp/batch.py`) to systematically record execution latencies, peak memory RSS ceilings (with high-fidelity native system-level fallbacks), and content caching ratios to `work/telemetry_footprint.json`, verified with public synthetic manifests and extensive unit tests (`feature/pipeline-production-telemetry-and-profiling-v0.1`).
