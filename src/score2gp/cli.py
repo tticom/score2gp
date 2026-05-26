@@ -75,8 +75,13 @@ def compare_ir_command(expected_ir: Path, actual_ir: Path) -> None:
 
 @app.command("write-gp")
 def write_gp_command(ir_json: Path, template: Optional[Path] = typer.Option(None), out: Path = typer.Option(...)) -> None:
-    """Write a minimal GP7-style package from ScoreIR JSON."""
-    score = ScoreIR.from_json_file(ir_json)
+    """Write a minimal GP7-style package from ScoreIR JSON or Booklet JSON."""
+    score, errors = validate_score_ir_file(ir_json)
+    if errors:
+        for err in errors:
+            typer.echo(f"error: {err}", err=True)
+        raise typer.Exit(1)
+    assert score is not None
     warnings = write_gp(score, out, template)
     for warning in warnings:
         typer.echo(f"warning: {warning}", err=True)
