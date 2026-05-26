@@ -4,6 +4,8 @@
 
 ## Done
 
+- [x] Implement a thread-safe pipeline performance profiler and diagnostic execution logging module (`src/score2gp/telemetry.py`), integrated directly across parallel batch processing pathways (`src/score2gp/batch.py`) to systematically record execution latencies, peak memory RSS ceilings (with high-fidelity native system-level fallbacks), and content caching ratios to `work/telemetry_footprint.json`, verified with public synthetic manifests and extensive unit tests (`feature/pipeline-production-telemetry-and-profiling-v0.1`).
+
 - [x] Implement ScoreIR parsing/schema mapping and GPIF XML generation for system-level visual alignment properties—specifically measure width distribution ratios (bar-level `<Width>` tags directly under `<MasterBar>` and `<Bar>`) and track presentation header styles (mapping page-level visual elements like text font visibility tags for titles and artist footnotes under a `<Header>` element within score-level `<Layout>`), verified with public synthetic manifests and unit tests (`feature/gpif-presentation-layout-polishing-v0.1`).
 
 

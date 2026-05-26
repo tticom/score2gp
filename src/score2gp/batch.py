@@ -12,12 +12,15 @@ from typing import Any
 from .build_ir import build_ir_with_diagnostics_from_files, BuildIrInputRiskError
 from .gp_package import write_gp
 from .cache import PipelineCacheManager, compute_payload_hash
+from .telemetry import PipelineTelemetryTracker
+
 
 
 def run_single_payload(
     payload: dict[str, Any],
     base_work_dir: Path,
-    cache_manager: PipelineCacheManager | None = None
+    cache_manager: PipelineCacheManager | None = None,
+    telemetry_tracker: PipelineTelemetryTracker | None = None
 ) -> dict[str, Any]:
     worker_id = payload.get("id") or str(uuid.uuid4())
     start_time = time.perf_counter()
@@ -62,6 +65,8 @@ def run_single_payload(
                 status = "success"
                 cache_status = "hit"
                 elapsed = time.perf_counter() - start_time
+                if telemetry_tracker is not None:
+                    telemetry_tracker.record_run(worker_id, elapsed, cache_status)
                 return {
                     "id": worker_id,
                     "status": status,
@@ -103,6 +108,8 @@ def run_single_payload(
         error_code = type(exc).__name__
 
     elapsed = time.perf_counter() - start_time
+    if telemetry_tracker is not None:
+        telemetry_tracker.record_run(worker_id, elapsed, cache_status)
     return {
         "id": worker_id,
         "status": status,
@@ -121,66 +128,71 @@ def run_batch_pipeline(
     manifest_path: str | Path,
     base_work_dir: str | Path,
     max_workers: int = 4,
-    use_cache: bool = True
+    use_cache: bool = True,
+    telemetry_tracker: PipelineTelemetryTracker | None = None
 ) -> dict[str, Any]:
-    start_time = time.perf_counter()
-    manifest_file = Path(manifest_path)
-    base_dir = Path(base_work_dir)
-    base_dir.mkdir(parents=True, exist_ok=True)
+    if telemetry_tracker is None:
+        telemetry_tracker = PipelineTelemetryTracker()
 
-    cache_manager = PipelineCacheManager(base_dir) if use_cache else None
+    with telemetry_tracker:
+        start_time = time.perf_counter()
+        manifest_file = Path(manifest_path)
+        base_dir = Path(base_work_dir)
+        base_dir.mkdir(parents=True, exist_ok=True)
 
-    payloads = json.loads(manifest_file.read_text(encoding="utf-8"))
-    if not isinstance(payloads, list):
-        raise ValueError("Manifest JSON must be a list of payloads.")
+        cache_manager = PipelineCacheManager(base_dir) if use_cache else None
 
-    results = []
-    success_count = 0
-    failure_count = 0
-    cache_hit_count = 0
-    cache_miss_count = 0
+        payloads = json.loads(manifest_file.read_text(encoding="utf-8"))
+        if not isinstance(payloads, list):
+            raise ValueError("Manifest JSON must be a list of payloads.")
 
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {
-            executor.submit(run_single_payload, payload, base_dir, cache_manager): payload
-            for payload in payloads
-        }
-        for future in as_completed(futures):
-            payload = futures[future]
-            try:
-                res = future.result()
-                results.append(res)
-                if res["status"] == "success":
-                    success_count += 1
-                else:
+        results = []
+        success_count = 0
+        failure_count = 0
+        cache_hit_count = 0
+        cache_miss_count = 0
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(run_single_payload, payload, base_dir, cache_manager, telemetry_tracker): payload
+                for payload in payloads
+            }
+            for future in as_completed(futures):
+                payload = futures[future]
+                try:
+                    res = future.result()
+                    results.append(res)
+                    if res["status"] == "success":
+                        success_count += 1
+                    else:
+                        failure_count += 1
+                    if res.get("cache_status") == "hit":
+                        cache_hit_count += 1
+                    else:
+                        cache_miss_count += 1
+                except Exception as exc:
+                    results.append({
+                        "id": payload.get("id") or "escaped",
+                        "status": "failed",
+                        "error": str(exc),
+                        "error_code": "supervisor_catch",
+                        "elapsed_seconds": 0.0,
+                        "thread_id": None,
+                        "process_id": None,
+                        "output_path": None,
+                        "cache_status": "miss",
+                        "payload_hash": None,
+                    })
                     failure_count += 1
-                if res.get("cache_status") == "hit":
-                    cache_hit_count += 1
-                else:
                     cache_miss_count += 1
-            except Exception as exc:
-                results.append({
-                    "id": payload.get("id") or "escaped",
-                    "status": "failed",
-                    "error": str(exc),
-                    "error_code": "supervisor_catch",
-                    "elapsed_seconds": 0.0,
-                    "thread_id": None,
-                    "process_id": None,
-                    "output_path": None,
-                    "cache_status": "miss",
-                    "payload_hash": None,
-                })
-                failure_count += 1
-                cache_miss_count += 1
 
-    total_time = time.perf_counter() - start_time
-    return {
-        "total_runtime_seconds": total_time,
-        "total_payloads": len(payloads),
-        "success_count": success_count,
-        "failure_count": failure_count,
-        "cache_hit_count": cache_hit_count,
-        "cache_miss_count": cache_miss_count,
-        "results": results,
-    }
+        total_time = time.perf_counter() - start_time
+        return {
+            "total_runtime_seconds": total_time,
+            "total_payloads": len(payloads),
+            "success_count": success_count,
+            "failure_count": failure_count,
+            "cache_hit_count": cache_hit_count,
+            "cache_miss_count": cache_miss_count,
+            "results": results,
+        }

@@ -1,16 +1,16 @@
 # HANDOFF
 
 ## Metadata
-- **Current Branch**: `feature/gpif-presentation-layout-polishing-v0.1`
+- **Current Branch**: `feature/pipeline-production-telemetry-and-profiling-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: #127 (https://github.com/tticom/score2gp/pull/127)
-- **Latest Local Commit**: `c848586` ("docs: update HANDOFF.md with latest commit details")
-- **Latest Pushed Commit**: `c848586` ("docs: update HANDOFF.md with latest commit details")
-- **Working Tree Status**: Clean and synchronized with origin.
+- **Current PR**: Draft PR to be created
+- **Latest Local Commit**: Pending commit of implementation changes
+- **Latest Pushed Commit**: Pending push to origin
+- **Working Tree Status**: Uncommitted changes in `src/score2gp/batch.py`, `src/score2gp/telemetry.py`, `tests/test_telemetry.py`, `fixtures/public/test_telemetry_manifest.json`, `TASKS.md`, and `HANDOFF.md`.
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked.
 
 ## Tests and Checks Run
-- `python -m pytest` -> All 385 tests passed successfully (100% success rate, including the new `test_gpif_presentation_polishing_and_measure_width` proving visual layout alignment and measure widths map flawlessly).
+- `python -m pytest` -> All 386 tests passed successfully (100% success rate, including the new `test_pipeline_telemetry_metrics_and_footprint` proving latency, cache efficiency, and high-fidelity native system-level memory RSS fallbacks are tracked seamlessly).
 - `python -m score2gp.cli export-schema --out schemas` -> schemas exported cleanly.
 - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid and compliant.
 - `git diff --check` -> passed cleanly with zero whitespace errors.
@@ -18,13 +18,15 @@
 - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep` is tracked under private/work paths.
 
 ## What Changed in the Task
-- **Measure Width Mappings (`src/score2gp/gpif.py`)**:
-  - Automatically serialize the direct `<Width>` element under both `<MasterBar>` and `<Bar>` nodes if `bar.measure_layout` is present and contains a specific `width` value.
-- **Track Presentation Header Mappings (`src/score2gp/gpif.py`)**:
-  - Automatically map the layout visibility options (`print_title`, `print_subtitle`, `print_artist`, `print_composer`, `print_transcriber`, `print_copyright`, and `print_page_numbering`) into a structural `<Header>` layout configuration under the score-level `<Layout>` block.
+- **Pipeline Telemetry Profiler (`src/score2gp/telemetry.py`)**:
+  - Implemented a thread-safe `PipelineTelemetryTracker` context manager that systematically records execution times, cache statistics, and peak resident set size (RSS) memory consumption.
+  - Implemented native system-level RSS fallbacks (using `ctypes` and Windows PSAPI functions with explicit argtypes and restype on Windows, and utilizing the native `resource` module on Linux/macOS) to ensure robust memory tracking without requiring external process monitor utilities like `psutil`.
+  - Automatically exports structured footprints directly to `work/telemetry_footprint.json`.
+- **Concurrent Batch Integration (`src/score2gp/batch.py`)**:
+  - Thread-safely integrated metrics tracking across both isolated sandbox worker threads (`run_single_payload`) and supervisorial coordinators (`run_batch_pipeline`).
 - **Fixtures & Tests**:
-  - Created a public synthetic ScoreIR layout fixture `fixtures/public/test_presentation_polishing.ir.json` modeling explicit bar width metrics and layout print setup fields.
-  - Added unit test assertions inside `tests/test_gp_writer.py` under `test_gpif_presentation_polishing_and_measure_width` to ensure that generated XML structures perfectly preserve these design settings.
+  - Created a public synthetic batch manifest `fixtures/public/test_telemetry_manifest.json` modeling sequential execution matrix tasks.
+  - Added full test coverage under `tests/test_telemetry.py` validating strictly positive RSS memory tracking, correct cache efficiency ratio transitions, and robust JSON serialization.
 
 ## Known Limitations
 - None.
@@ -33,7 +35,7 @@
 - None.
 
 ## Next Recommended Task
-- Merge `feature/gpif-presentation-layout-polishing-v0.1` into `main` after checks pass.
+- Merge `feature/pipeline-production-telemetry-and-profiling-v0.1` into `main` after checks pass.
 
 ## Explicit Scope Boundaries
 - **No OCR, scanned-PDF, or ML layout recognition** used.
