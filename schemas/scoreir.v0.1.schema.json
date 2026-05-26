@@ -814,6 +814,9 @@
               "type": "string"
             },
             {
+              "$ref": "#/$defs/Hairpin"
+            },
+            {
               "type": "null"
             }
           ],
@@ -1112,6 +1115,78 @@
         }
       },
       "title": "GraceTiming",
+      "type": "object"
+    },
+    "Hairpin": {
+      "additionalProperties": false,
+      "properties": {
+        "start_beat": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Start Beat"
+        },
+        "stop_beat": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stop Beat"
+        },
+        "thickness": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Thickness"
+        },
+        "type": {
+          "enum": [
+            "crescendo",
+            "decrescendo",
+            "diminuendo",
+            "stop",
+            "none"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "value_path": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value Path"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "Hairpin",
       "type": "object"
     },
     "HammerOnTechnique": {
@@ -1464,6 +1539,7 @@
           "items": {
             "enum": [
               "staccato",
+              "staccatissimo",
               "accent",
               "marcato",
               "tenuto"

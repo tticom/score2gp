@@ -497,7 +497,7 @@ class Note(BaseModel):
     fret: int = Field(ge=0, le=36)
     pitch: int = Field(ge=0, le=127)
     is_dead: bool = False
-    articulations: list[Literal["staccato", "accent", "marcato", "tenuto"]] = Field(default_factory=list)
+    articulations: list[Literal["staccato", "staccatissimo", "accent", "marcato", "tenuto"]] = Field(default_factory=list)
     techniques: list[Technique] = Field(default_factory=list)
     left_hand_fingering: str | None = None
     right_hand_fingering: str | None = None
@@ -560,6 +560,16 @@ class ChordDiagram(BaseModel):
     bass_note_accidental: str = "Natural"
 
 
+class Hairpin(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["crescendo", "decrescendo", "diminuendo", "stop", "none"]
+    start_beat: int | None = None
+    stop_beat: int | None = None
+    thickness: float | None = None
+    value_path: list[float] | None = None
+
+
 class Event(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -571,7 +581,7 @@ class Event(BaseModel):
     chord_symbol: str | None = None
     chord_diagram: ChordDiagram | None = None
     dynamic: str | None = None
-    hairpin: Literal["crescendo", "decrescendo", "diminuendo", "stop", "none"] | None = None
+    hairpin: Literal["crescendo", "decrescendo", "diminuendo", "stop", "none"] | Hairpin | None = None
     fermata: Literal["standard", "short", "long", "none"] | None = None
     arpeggio: Literal["up", "down", "none"] | None = None
     arpeggio_duration: Literal["whole", "half", "quarter", "eighth", "16th", "32nd", "64th", "128th"] | None = None

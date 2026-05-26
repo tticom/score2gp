@@ -733,6 +733,7 @@ def _event(parent: ET.Element, event: Event, hopo_dests: set[tuple[int, int, int
         _text(node, "Dynamic", event.dynamic.upper())
 
     if getattr(event, "hairpin", None) is not None:
+        hairpin_data = event.hairpin
         hairpin_map = {
             "crescendo": "Crescendo",
             "decrescendo": "Decrescendo",
@@ -740,9 +741,24 @@ def _event(parent: ET.Element, event: Event, hopo_dests: set[tuple[int, int, int
             "stop": "None",
             "none": "None",
         }
-        hairpin_type = hairpin_map.get(event.hairpin, "None")
-        hp_node = ET.SubElement(node, "Hairpin", {"type": hairpin_type})
-        _text(hp_node, "Type", hairpin_type)
+        if isinstance(hairpin_data, str):
+            hairpin_type = hairpin_map.get(hairpin_data, "None")
+            hp_node = ET.SubElement(node, "Hairpin", {"type": hairpin_type})
+            _text(hp_node, "Type", hairpin_type)
+        else:
+            hairpin_type = hairpin_map.get(hairpin_data.type, "None")
+            hp_node = ET.SubElement(node, "Hairpin", {"type": hairpin_type})
+            _text(hp_node, "Type", hairpin_type)
+            if hairpin_data.start_beat is not None:
+                _text(hp_node, "StartBeat", hairpin_data.start_beat)
+            if hairpin_data.stop_beat is not None:
+                _text(hp_node, "StopBeat", hairpin_data.stop_beat)
+            if hairpin_data.thickness is not None:
+                _text(hp_node, "Thickness", f"{hairpin_data.thickness:.6f}")
+            if hairpin_data.value_path is not None:
+                vp_node = ET.SubElement(hp_node, "ValuePath")
+                for val in hairpin_data.value_path:
+                    _text(vp_node, "Value", f"{val:.6f}")
 
     if event.text:
         _text(node, "FreeText", event.text)
@@ -913,6 +929,8 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
     articulations = getattr(note, "articulations", [])
     if "staccato" in articulations:
         ET.SubElement(note_node, "Staccato")
+    if "staccatissimo" in articulations:
+        ET.SubElement(note_node, "Staccatissimo")
     if "tenuto" in articulations:
         ET.SubElement(note_node, "Tenuto")
     if "accent" in articulations:
@@ -1247,6 +1265,12 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
         elif "tenuto" in articulations:
             acc_prop = ET.SubElement(properties_node, "Property", {"name": "Accentuation"})
             _text(acc_prop, "Value", "Tenuto")
+        elif "staccato" in articulations:
+            acc_prop = ET.SubElement(properties_node, "Property", {"name": "Accentuation"})
+            _text(acc_prop, "Value", "Staccato")
+        elif "staccatissimo" in articulations:
+            acc_prop = ET.SubElement(properties_node, "Property", {"name": "Accentuation"})
+            _text(acc_prop, "Value", "Staccatissimo")
 
         if has_slide:
             slide_prop = ET.SubElement(properties_node, "Property", {"name": "Slide"})
