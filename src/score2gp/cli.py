@@ -10,6 +10,7 @@ import typer
 from .ascii_alignment import align_ascii_musicxml_files
 from .build_ir import BuildIrInputRiskError, build_ir_with_diagnostics_from_files
 from .batch import run_batch_pipeline
+from .diagnostics import run_system_diagnostics
 from .gp_package import compare_gp, dumps_summary, inspect_gp, validate_gp, write_gp, validate_roundtrip
 from .ir import ScoreIR, compare_score_ir, export_scoreir_schema, validate_score_ir_file
 from .pdf import extract_tab as extract_tab_file
@@ -123,6 +124,19 @@ def batch_command(
     result = run_batch_pipeline(manifest, workdir, max_workers=workers, use_cache=cache)
     typer.echo(json.dumps(result, indent=2, sort_keys=True))
     if result["failure_count"] > 0:
+        raise typer.Exit(1)
+
+
+@app.command("diagnose")
+def diagnose_command(
+    manifest: Path,
+    workdir: Path,
+    workers: int = 4,
+) -> None:
+    """Execute concurrent batch pipeline processing on multiple score payloads with strict diagnostics and roundtrip checks."""
+    result = run_system_diagnostics(manifest, workdir, max_workers=workers)
+    typer.echo(json.dumps(result, indent=2, sort_keys=True))
+    if result["failure_count"] > 0 or result["roundtrip_failure_count"] > 0:
         raise typer.Exit(1)
 
 
@@ -388,14 +402,14 @@ def convert_command(
 
         warnings.append({
             "code": exc.category,
-            "message": exc.message,
+            "message": str(exc),
             "severity": "error"
         })
         summary["build_ir"] = {
             "ran": False,
             "failed": True,
             "error_category": exc.category,
-            "message": exc.message,
+            "message": str(exc),
         }
         write_warnings(workdir / "warnings.json", warnings)
         write_conversion_report(workdir / "conversion-report.html", "score2gp conversion report", warnings, summary)

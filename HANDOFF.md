@@ -2,11 +2,11 @@
 
 ## Metadata
 
-- **Current Branch**: `feature/gpif-target-version-adapters-v0.1`
+- **Current Branch**: `feature/pipeline-system-integration-and-verification-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: PR #109 (https://github.com/tticom/score2gp/pull/109)
-- **Latest Local Commit**: `5ec3129a7bfd737219c35090813597b4c7af4969` ("feat: implement target version-gate adapters for legacy and modern formats")
-- **Latest Pushed Commit**: `5ec3129a7bfd737219c35090813597b4c7af4969` ("feat: implement target version-gate adapters for legacy and modern formats")
+- **Current PR**: PR #110 (https://github.com/tticom/score2gp/pull/110)
+- **Latest Local Commit**: `40046c665869552609449777a938ddb595702913` ("fix: resolve AttributeError in cli convert command BuildIrInputRiskError handler")
+- **Latest Pushed Commit**: `40046c665869552609449777a938ddb595702913` ("fix: resolve AttributeError in cli convert command BuildIrInputRiskError handler")
 
 - **Working Tree Status**: Clean (except doc/tasks updates).
 
@@ -16,7 +16,7 @@
 
 ## Tests And Checks Run
 
-- `python -m pytest` -> 365 passed (100% success, including the new version-gated adapters down-conversion/up-conversion unit tests).
+- `python -m pytest` -> 367 passed (100% success, including the new pipeline integration diagnostics unit tests).
 - `python -m score2gp.cli export-schema --out schemas` -> passed cleanly.
 - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid.
 - `git diff --check` -> passed cleanly (zero trailing whitespace or EOF blank line violations).
@@ -26,18 +26,16 @@
 
 ## What Changed In This Task
 
-- **Version-Gated XML Generation & Transform Adapters**:
-  - Created `src/score2gp/version_adapter.py` providing structural XML translations, attribute strips, and tag overrides to down-convert/up-convert GPIF files based on requested version specifications (GP6, GP7, GP8).
-- **Transformation Rules per Profile**:
-  - For **GP6**: Strips style collections (`StyleCollections`), master output mix balances (`MasterMixer`), and pipeline configuration presets (`PipelinePresetCascade`), injecting a `LegacyLayout` indicator tag inside `PageSetup`.
-  - For **GP8**: Injects `TargetCompliancy` and `VersionLayout` tags under `Metadata` and enables modern style collections with the attribute `gp8Compatible="true"`.
-  - Automatically overrides package `VERSION` text file output contents (e.g. `6.0\n`, `7.0\n`, `8.0\n`) to preserve zip compliance.
-- **Orchestrator and CLI Support**:
-  - Integrated target specification into `src/score2gp/batch.py` so individual payloads can specify a `target_version` key (defaulting to `"GP7"`).
-  - Updated `src/score2gp/cli.py` `write-gp` command to expose a `--target` (GP6, GP7, GP8) option directly to developers.
-- **Synthetic Manifest Fixtures & Unit Tests**:
-  - Created `fixtures/public/test_version_adapters_manifest.json` modeling concurrent target profiles.
-  - Authored unit tests in `tests/test_target_version_adapters.py` verifying correct structural transforms, VERSION overrides, and batch execution compatibility.
+- **High-Throughput Pipeline Diagnostics Runner**:
+  - Created `src/score2gp/diagnostics.py` containing `run_system_diagnostics` and `get_process_memory`.
+  - Captured resident set size (RSS) memory footprint using `psutil` or native Windows API falls back via `ctypes` (for thread/process execution metrics).
+- **Strict Bidirectional Round-Trip Checks**:
+  - Orchestrated parallelized score generation streams using full caching paths, verified that sandboxed `score.ir.json` matches generated packages using `validate_roundtrip` assertions, and cleanly tolerated equivalent default track orders (empty track_order list matches the actual track listing order).
+- **CLI Command Support**:
+  - Registered a new `diagnose` command under `src/score2gp/cli.py` to expose the diagnostics runner, returning structured JSON footprint reports and exit codes.
+- **Synthetic Stress Manifest & Extensive Tests**:
+  - Created `fixtures/public/test_system_integration_manifest.json` modeling a matrix of multi-track, voices, and version-gated synthetic payloads.
+  - Authored unit tests in `tests/test_system_integration_diagnostics.py` verifying diagnostics orchestrator report metrics and subprocess CLI execution.
 
 ## Known Limitations
 
@@ -49,7 +47,7 @@
 
 ## Next Recommended Task
 
-- Proceed with final packaging enhancements or visual booklets.
+- Proceed with booklet pagination enhancements or visual booklet formatting overrides.
 
 ## Explicit Scope Boundaries
 
