@@ -1,0 +1,150 @@
+{
+  "schema_version": "0.1.0",
+  "booklet_title": "Synthetic Multi-Movement Sonata Booklet",
+  "metadata": {
+    "title": "Sonata Booklet",
+    "artist": "Synthetic Composer",
+    "composer": "Synthetic Composer",
+    "transcriber": "score2gp",
+    "copyright": "Public Domain"
+  },
+  "pagination": {
+    "start_page": 1,
+    "running_headers": true,
+    "continuous": true
+  },
+  "scores": [
+    {
+      "schema_version": "0.1.0",
+      "metadata": {
+        "title": "Movement I - Allegro",
+        "artist": "Synthetic Composer"
+      },
+      "conversion": {
+        "tool_name": "score2gp",
+        "tool_version": "0.1.0",
+        "source_page_count": 2
+      },
+      "tempo": {
+        "bpm": 120,
+        "text": "Allegro"
+      },
+      "tracks": [
+        {
+          "id": "gtr-1",
+          "name": "Guitar",
+          "instrument": "steel guitar",
+          "tuning": {
+            "name": "Standard Guitar",
+            "strings": [
+              { "number": 1, "pitch": 64, "name": "E4" },
+              { "number": 2, "pitch": 59, "name": "B3" },
+              { "number": 3, "pitch": 55, "name": "G3" },
+              { "number": 4, "pitch": 50, "name": "D3" },
+              { "number": 5, "pitch": 45, "name": "A2" },
+              { "number": 6, "pitch": 40, "name": "E2" }
+            ]
+          }
+        }
+      ],
+      "bars": [
+        {
+          "index": 1,
+          "time_signature": {
+            "numerator": 4,
+            "denominator": 4
+          },
+          "events": [
+            {
+              "id": "e1",
+              "track_id": "gtr-1",
+              "timing": {
+                "bar_index": 1,
+                "onset_ticks": 0,
+                "duration_ticks": 1920,
+                "ticks_per_quarter": 960,
+                "voice": 1,
+                "notated_duration": { "value": "half", "dots": 0 }
+              },
+              "notes": [
+                {
+                  "string": 3,
+                  "fret": 2,
+                  "pitch": 57,
+                  "confidence": 1.0
+                }
+              ],
+              "confidence": 1.0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "schema_version": "0.1.0",
+      "metadata": {
+        "title": "Movement II - Adagio",
+        "artist": "Synthetic Composer"
+      },
+      "conversion": {
+        "tool_name": "score2gp",
+        "tool_version": "0.1.0",
+        "source_page_count": 3
+      },
+      "tempo": {
+        "bpm": 70,
+        "text": "Adagio"
+      },
+      "tracks": [
+        {
+          "id": "gtr-1",
+          "name": "Guitar",
+          "instrument": "steel guitar",
+          "tuning": {
+            "name": "Standard Guitar",
+            "strings": [
+              { "number": 1, "pitch": 64, "name": "E4" },
+              { "number": 2, "pitch": 59, "name": "B3" },
+              { "number": 3, "pitch": 55, "name": "G3" },
+              { "number": 4, "pitch": 50, "name": "D3" },
+              { "number": 5, "pitch": 45, "name": "A2" },
+              { "number": 6, "pitch": 40, "name": "E2" }
+            ]
+          }
+        }
+      ],
+      "bars": [
+        {
+          "index": 1,
+          "time_signature": {
+            "numerator": 3,
+            "denominator": 4
+          },
+          "events": [
+            {
+              "id": "e2",
+              "track_id": "gtr-1",
+              "timing": {
+                "bar_index": 1,
+                "onset_ticks": 0,
+                "duration_ticks": 960,
+                "ticks_per_quarter": 960,
+                "voice": 1,
+                "notated_duration": { "value": "quarter", "dots": 0 }
+              },
+              "notes": [
+                {
+                  "string": 3,
+                  "fret": 0,
+                  "pitch": 55,
+                  "confidence": 1.0
+                }
+              ],
+              "confidence": 1.0
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
