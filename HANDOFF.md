@@ -4,9 +4,9 @@
 
 - **Current Branch**: `feature/gpif-styles-formatting-and-measure-layout-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: Draft PR to be created
-- **Latest Local Commit**: `fccb973018aed8163e2eb02ed88b80deeeebfa67` ("feat: implement centralized visual stylesheet styles formatting overrides and dynamic measure-level layout settings inside GPIF XML generation")
-- **Latest Pushed Commit**: N/A (to be pushed)
+- **Current PR**: PR #101 (https://github.com/tticom/score2gp/pull/101)
+- **Latest Local Commit**: `ce125bf5cda5e491c52039d5010a6edb3f413f3e` ("docs: update tasks and handoff for visual stylesheet styles formatting and measure layouts")
+- **Latest Pushed Commit**: `ce125bf5cda5e491c52039d5010a6edb3f413f3e` ("docs: update tasks and handoff for visual stylesheet styles formatting and measure layouts")
 
 - **Working Tree Status**: Clean (except untracked scratch files).
 
