@@ -3,10 +3,10 @@
 ## Metadata
 - **Current Branch**: `feature/gp-originated-pdf-roundtrip-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: Draft PR to be created
-- **Latest Local Commit**: `9a7e4f8` ("Merge pull request #125 from tticom/feature/pipeline-page-filtering-remediation-v0.1")
-- **Latest Pushed Commit**: `8406880` (main head state)
-- **Working Tree Status**: Modified `src/score2gp/gp_package.py`, `scripts/gp_roundtrip_eval.py`, `tests/test_pdf_confidence_ambiguity.py`
+- **Current PR**: [PR #135](https://github.com/tticom/score2gp/pull/135)
+- **Latest Local Commit**: `a2f3d8c` ("feat: implement GP flat XML parsing and E2E round-trip evaluation tool")
+- **Latest Pushed Commit**: `a2f3d8c`
+- **Working Tree Status**: Clean (committed and pushed)
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked.
 
 ## Tests and Checks Run
