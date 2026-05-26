@@ -2,43 +2,39 @@
 
 ## Metadata
 
-- **Current Branch**: `main`
+- **Current Branch**: `feature/build-ir-timeline-repeats-and-volta-refinements-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: #120 (Merged, URL: `https://github.com/tticom/score2gp/pull/120`)
-- **Latest Local Commit**: `66d04660583de3e969c38180966c39652ae93462` ("docs: update HANDOFF.md and TASKS.md with gradual tempo variations and staff text annotations details")
-- **Latest Pushed Commit**: `66d04660583de3e969c38180966c39652ae93462` ("docs: update HANDOFF.md and TASKS.md with gradual tempo variations and staff text annotations details")
+- **Current PR**: Draft PR created on origin
+- **Latest Local Commit**: `46952fd7868afc1fe14f2e519e48c772e42ef998` ("feat: implement timeline repeat refinements and alternative endings bidirectional extraction")
+- **Latest Pushed Commit**: `46952fd7868afc1fe14f2e519e48c772e42ef998` ("feat: implement timeline repeat refinements and alternative endings bidirectional extraction")
 
 - **Working Tree Status**: Clean.
 
-- **GitHub Check Status**: Passed.
+- **GitHub Check Status**: Pending.
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or `work/` contents are tracked.
 - **Root Generated-Artifact Audit**: Clean. No root generated artifacts tracked.
 
 ## Tests And Checks Run
 
-- `python -m pytest` -> 380 passed (100% success, including the new `test_tempo_variations_xml` verifying the `<TempoAutomation>` and `<Texts>`/`<Text>` tags and values under `<MasterBar>` and `<Staff>` and bidirectional round-trip parsing).
-- `python -m score2gp.cli export-schema --out schemas` -> passed cleanly and updated Intermediate schemas.
-- `python -m score2gp.cli validate-ir fixtures/public/test_tempo_variations.ir.json` -> valid and fully compliant.
+- `python -m pytest` -> 381 passed (100% success, including the new unit test file `tests/test_timeline_refinements.py` asserting nested repeat structures, barlines, and non-consecutive voltas, plus bidirectional round-trip extraction).
+- `python -m score2gp.cli export-schema --out schemas` -> passed cleanly.
+- `python -m score2gp.cli validate-ir fixtures/public/test_timeline_refinements.ir.json` -> valid and fully compliant.
 - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid.
 - `git diff --check` -> passed cleanly.
 - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep`.
-- `python scripts/private_e2e_smoke.py` -> passed cleanly against all private PDF inputs, including `fixtures/private/Lesson-7.pdf`, with zero regressions.
+- `python scripts/private_e2e_smoke.py` -> passed cleanly against all private PDF inputs (including derek trucks, hal leonard, jazz classics, CAGEDShapes, etc., and `fixtures/private/Lesson-7.pdf`) with zero regressions.
 
 ## What Changed In This Task
 
-- **Model & Schema Expansion (`src/score2gp/ir.py`)**:
-  - Added `TempoAutomation` Pydantic model with `type`, `style`, and `target_bpm` fields.
-  - Expanded `Bar` Pydantic model with optional `tempo_automation` field.
-  - Expanded `Track` Pydantic model with optional `text_annotations` list of strings.
-  - Re-exported the schema via the CLI schema exporter.
-- **GPIF Gradual Tempo Variations & Staff Text Mappings (`src/score2gp/gpif.py`)**:
-  - Implemented `<TempoAutomation>` element inside `<MasterBar>` detailing type, style, and target BPM.
-  - Implemented `<Texts>` and `<Text>` elements inside `<Staff>` detailing staff free-text annotations.
+- **Model & Schema Validation Support (`src/score2gp/ir.py`)**:
+  - Expanded `semantic_scoreir_summary` to include `"barline"`, `"repeat_count"`, and `"alternate_ending_passes"` comparison. Normalizes default states (like `None` vs `"regular"` barlines and default `repeat_count=2`) so they round-trip cleanly and are verified accurately.
 - **Reverse Extraction (`src/score2gp/gp_package.py`)**:
-  - Updated `extract_score_ir_from_gp` to extract `tempo_automation` and `text_annotations` from GPIF XML back to ScoreIR.
+  - Added extraction of `barline` (Simple, Double, End, Section, RepeatStart, RepeatEnd), `repeat_count`, `alternate_ending_passes`, and `layout_break` from `<MasterBar>` and `<Bar>` tags back into the `Bar` model instantiation during round-tripping.
+  - Automatically reconstructs consecutive and non-consecutive `alternate_ending_passes` from the integer bitmask.
 - **Public Fixtures & Tests**:
-  - Created `fixtures/public/test_tempo_variations.ir.json` representing ritardando/accelerando curves and staff rubato annotations.
-  - Created unit test suite `tests/test_tempo_variations.py` verifying accurate structural GP7-compatible XML tag output and bidirectional extraction round-tripping.
+  - Created `fixtures/public/test_timeline_refinements.ir.json` representing multiple nested repeats and non-consecutive alternative endings (`[1, 3]` and `[2, 4]`).
+  - Created `tests/test_timeline_refinements.py` verifying accurate structural GP7-compatible XML tag output and bidirectional extraction round-tripping.
+  - Upgraded `tests/test_timeline_repeats.py` to also assert 100% successful round-trip validation using `validate_roundtrip()`.
 
 ## Known Limitations
 
@@ -50,8 +46,8 @@
 
 ## Next Recommended Task
 
-- Next branch: `feature/build-ir-timeline-repeats-and-volta-refinements-v0.1`
-- Goal: Implement repeat layout refinements, such as multiple nested repeat loops and non-consecutive alternative endings.
+- Merge the current PR #122 into `main` after checks pass.
+- Explicit non-goals for next tasks: Do not reopen tempo-variations or repeats/voltas branches unless investigating a regression.
 
 ## Explicit Scope Boundaries
 
@@ -59,20 +55,3 @@
 - **No private files or work/ outputs committed**.
 - **No MusicXML timing repair or alterations**.
 - **No loosening of grouping/string/fret/timing/build-ir gates**.
-
-## New Private Fixture Added
-
-- Added private score PDF:
-  - `fixtures/private/Lesson-7.pdf`
-  - Source/content: 5-page guitar/tab score, "7th Arpeggios", standard tuning, tempo ♩=70.
-  - Important extraction features:
-    - dense notation + tab systems
-    - chord symbols with accidentals and extensions
-    - half-diminished / diminished / altered chord labels
-    - timestamp text annotations such as `[0:50]`
-    - numbered bars through 50
-    - page counters 1/5 through 5/5
-  - Expected value:
-    - private smoke regression coverage for grouping, chord-text extraction, tab/string/fret alignment, and staff text handling.
-  - Expected limitation:
-    - does not appear to exercise gradual tempo automation, repeats, volta endings, or scanned/OCR paths.
