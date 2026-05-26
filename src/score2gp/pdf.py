@@ -2401,7 +2401,7 @@ def _append_grouping_warnings(raw: dict[str, Any], meta: dict[str, int] | None =
                 "pdf_non_playable_text_not_string_assigned",
             }:
                 continue
-            if c.get("system_index") is None:
+            if ref_reason == "pdf_fret_digit_symbol_overlap_ambiguous" and c.get("system_index") is None:
                 continue
         fret_candidates.append(c)
 

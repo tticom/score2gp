@@ -1266,58 +1266,67 @@ def build_ir_with_diagnostics_from_imports(
                         "system_index": s_idx,
                     })
 
-            # Clean up page-level unboxed system warning and grouping taxonomy warning codes
-            UNSAFE_GROUPING_CODES = set(_tabraw_unsafe_grouping_warning_codes(tabraw))
-            UNSAFE_GROUPING_CODES.update({
-                "pdf_barlines_not_detected_in_system",
-                "pdf_bar_boxes_not_constructible",
-                "pdf_bar_detection_not_enough_for_build_ir",
-                "pdf_barlines_missing",
-                "pdf_bar_boxes_missing",
-                "pdf_bar_box_construction_not_enough_for_build_ir",
-                "pdf_candidate_unassigned_due_to_unboxed_system",
-                "pdf_candidate_unassigned_to_bar",
-                "pdf_candidates_unassigned_to_bar",
-                "pdf_candidates_unassigned_to_system",
-                "pdf_candidates_unassigned_to_string",
-                "pdf_string_assignment_missing",
-                "pdf_string_assignment_not_enough_for_build_ir",
-                "pdf_candidate_outside_system",
-                "pdf_candidate_outside_bar",
-                "pdf_fret_optical_bounds_confidence_below_threshold",
-                "pdf_fret_refinement_not_enough_for_build_ir",
-                "pdf_grouping_confidence_below_threshold",
-                "pdf_grouping_not_safe_for_build_ir",
-                "pdf_input_class_drawn_tab_requires_barlines",
-                "pdf_layout_detection_requires_manual_review",
-                "pdf_missing_pdf_grouping_blocks_build_ir",
-                "pdf_partial_grouping_with_playable_candidates",
-                "pdf_system_detected_bar_detection_missing",
-                "missing_pdf_grouping",
-                "partial_pdf_grouping",
-                "pdf_partial_grouping_one_system_unboxed",
-                "pdf_string_assignment_succeeded_upstream_grouping_still_blocks",
-                "pdf_candidate_near_missing_bar_boundary",
-                "pdf_partial_system_detection",
-                "pdf_playable_candidate_requires_string_assignment",
-                "pdf_string_assignment_confidence_below_threshold",
-                "pdf_string_assignment_outside_staff",
-                "pdf_tab_staff_incomplete",
-                "pdf_fret_bbox_too_tall",
-                "pdf_fret_digit_symbol_overlap_ambiguous",
-                "pdf_fret_digits_not_merged_gap_too_large",
-                "incomplete_tab_staff",
-                "missing_pdf_barlines",
-                "ambiguous_bar_assignment",
-            })
-            filtered_warnings = []
-            for w in tabraw.warnings:
-                code = w.get("code")
-                if code in UNSAFE_GROUPING_CODES:
-                    continue
-                filtered_warnings.append(w)
-            tabraw.warnings = filtered_warnings
-            _synchronize_skipped_system_measures(musicxml, tabraw, skipped_systems)
+        # Clean up page-level unboxed system warning and grouping taxonomy warning codes
+        UNSAFE_GROUPING_CODES = set(_tabraw_unsafe_grouping_warning_codes(tabraw))
+        UNSAFE_GROUPING_CODES.update({
+            "pdf_barlines_not_detected_in_system",
+            "pdf_bar_boxes_not_constructible",
+            "pdf_bar_detection_not_enough_for_build_ir",
+            "pdf_barlines_missing",
+            "pdf_bar_boxes_missing",
+            "pdf_bar_box_construction_not_enough_for_build_ir",
+            "pdf_candidate_unassigned_due_to_unboxed_system",
+            "pdf_candidate_unassigned_to_bar",
+            "pdf_candidates_unassigned_to_bar",
+            "pdf_candidates_unassigned_to_system",
+            "pdf_candidates_unassigned_to_string",
+            "pdf_string_assignment_missing",
+            "pdf_string_assignment_not_enough_for_build_ir",
+            "pdf_candidate_outside_system",
+            "pdf_candidate_outside_bar",
+            "pdf_fret_optical_bounds_confidence_below_threshold",
+            "pdf_fret_refinement_not_enough_for_build_ir",
+            "pdf_grouping_confidence_below_threshold",
+            "pdf_grouping_not_safe_for_build_ir",
+            "pdf_input_class_drawn_tab_requires_barlines",
+            "pdf_layout_detection_requires_manual_review",
+            "pdf_missing_pdf_grouping_blocks_build_ir",
+            "pdf_partial_grouping_with_playable_candidates",
+            "pdf_system_detected_bar_detection_missing",
+            "missing_pdf_grouping",
+            "partial_pdf_grouping",
+            "pdf_partial_grouping_one_system_unboxed",
+            "pdf_string_assignment_succeeded_upstream_grouping_still_blocks",
+            "pdf_candidate_near_missing_bar_boundary",
+            "pdf_partial_system_detection",
+            "pdf_playable_candidate_requires_string_assignment",
+            "pdf_string_assignment_confidence_below_threshold",
+            "pdf_string_assignment_outside_staff",
+            "pdf_tab_staff_incomplete",
+            "pdf_fret_bbox_too_tall",
+            "pdf_fret_digit_symbol_overlap_ambiguous",
+            "pdf_fret_digits_not_merged_gap_too_large",
+            "incomplete_tab_staff",
+            "missing_pdf_barlines",
+            "ambiguous_bar_assignment",
+        })
+        filtered_warnings = []
+        for w in tabraw.warnings:
+            code = w.get("code")
+            if code in UNSAFE_GROUPING_CODES:
+                continue
+            filtered_warnings.append(w)
+        tabraw.warnings = filtered_warnings
+
+        for candidate in tabraw.candidates:
+            raw_dict = candidate.raw
+            if isinstance(raw_dict, dict):
+                for field in ("grouping_warnings", "assignment_warnings"):
+                    values = raw_dict.get(field)
+                    if isinstance(values, list):
+                        raw_dict[field] = [v for v in values if v not in UNSAFE_GROUPING_CODES]
+
+        _synchronize_skipped_system_measures(musicxml, tabraw, skipped_systems)
 
 
 
@@ -2544,9 +2553,7 @@ def _tabraw_grouping_risk(tabraw: TabRaw) -> dict[str, object] | None:
                 "pdf_non_playable_text_not_string_assigned",
             }:
                 continue
-            if candidate.system_index is None:
-                continue
-            if candidate.confidence < 0.70:
+            if ref_reason == "pdf_fret_digit_symbol_overlap_ambiguous" and candidate.system_index is None:
                 continue
         playable.append(candidate)
     unsafe_codes = _tabraw_unsafe_grouping_warning_codes(tabraw)

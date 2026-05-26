@@ -63,7 +63,7 @@ def build_grouping_diagnostics(
                 "pdf_non_playable_text_not_string_assigned",
             }:
                 continue
-            if c.get("system_index") is None:
+            if ref_reason == "pdf_fret_digit_symbol_overlap_ambiguous" and c.get("system_index") is None:
                 continue
         playable.append(c)
     kind_counts: dict[str, int] = {}
@@ -179,7 +179,7 @@ def build_grouping_diagnostics(
                 "pdf_non_playable_text_not_string_assigned",
             }:
                 continue
-            if c.get("system_index") is None:
+            if ref_reason == "pdf_fret_digit_symbol_overlap_ambiguous" and c.get("system_index") is None:
                 continue
         aw = c.get("raw", {}).get("assignment_warnings", [])
         if isinstance(aw, list):
@@ -383,7 +383,7 @@ def grouping_status_for_tabraw(tabraw: dict[str, Any]) -> str:
                 "pdf_non_playable_text_not_string_assigned",
             }:
                 continue
-            if c.get("system_index") is None:
+            if ref_reason == "pdf_fret_digit_symbol_overlap_ambiguous" and c.get("system_index") is None:
                 continue
         playable.append(c)
     if not candidates or not playable:
