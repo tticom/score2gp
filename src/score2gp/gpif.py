@@ -206,7 +206,8 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
         score.layout.system_page_margins is not None or
         score.layout.ensemble_brackets is not None or
         getattr(score.layout, "system_layout", None) is not None or
-        getattr(score.layout, "staff_layout", None) is not None
+        getattr(score.layout, "staff_layout", None) is not None or
+        score.layout.print_setup is not None
     ):
         layout_node = ET.SubElement(score_node, "Layout")
         if score.layout.system_page_margins is not None:
@@ -239,6 +240,17 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
                 _text(staff_lay, "StaffSpacingCushion", score.layout.staff_layout.staff_spacing_cushion)
             if score.layout.staff_layout.staff_size is not None:
                 _text(staff_lay, "StaffSize", score.layout.staff_layout.staff_size)
+
+        if score.layout.print_setup is not None:
+            header_node = ET.SubElement(layout_node, "Header")
+            ps_cfg = score.layout.print_setup
+            ET.SubElement(header_node, "Title", {"show": "true" if ps_cfg.print_title else "false"})
+            ET.SubElement(header_node, "Subtitle", {"show": "true" if ps_cfg.print_subtitle else "false"})
+            ET.SubElement(header_node, "Artist", {"show": "true" if ps_cfg.print_artist else "false"})
+            ET.SubElement(header_node, "Composer", {"show": "true" if ps_cfg.print_composer else "false"})
+            ET.SubElement(header_node, "Transcriber", {"show": "true" if ps_cfg.print_transcriber else "false"})
+            ET.SubElement(header_node, "Copyright", {"show": "true" if ps_cfg.print_copyright else "false"})
+            ET.SubElement(header_node, "PageNumbering", {"show": "true" if ps_cfg.print_page_numbering else "false"})
 
     # Score-level custom visual part-separation configurations
     if getattr(score, "layout", None) is not None and score.layout.part_separation is not None:
@@ -697,6 +709,7 @@ def _master_bars(parent: ET.Element, score: ScoreIR) -> None:
             ml_node = ET.SubElement(node, "MeasureLayout")
             if bar.measure_layout.width is not None:
                 _text(ml_node, "Width", bar.measure_layout.width)
+                _text(node, "Width", bar.measure_layout.width)
             if bar.measure_layout.stretch_factor is not None:
                 _text(ml_node, "StretchFactor", bar.measure_layout.stretch_factor)
             if bar.measure_layout.spacing is not None:
@@ -773,6 +786,7 @@ def _bars(parent: ET.Element, score: ScoreIR, hopo_dests: set[tuple[int, int, in
             ml_node = ET.SubElement(bar_node, "MeasureLayout")
             if bar.measure_layout.width is not None:
                 _text(ml_node, "Width", bar.measure_layout.width)
+                _text(bar_node, "Width", bar.measure_layout.width)
             if bar.measure_layout.stretch_factor is not None:
                 _text(ml_node, "StretchFactor", bar.measure_layout.stretch_factor)
             if bar.measure_layout.spacing is not None:

@@ -2110,3 +2110,56 @@ def test_gpif_bidirectional_roundtrip(tmp_path) -> None:
     result = validate_roundtrip(out, score)
     assert result["valid"] is True, f"Round-trip validation failed: {result['errors']}"
     assert len(result["errors"]) == 0
+
+
+def test_gpif_presentation_polishing_and_measure_width(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_presentation_polishing.ir.json")
+    out = tmp_path / "presentation_polishing.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        score_node = root.find("Score")
+        assert score_node is not None
+
+        # 1. Verify Layout Header print visibility flags
+        layout_node = score_node.find("Layout")
+        assert layout_node is not None
+
+        header_node = layout_node.find("Header")
+        assert header_node is not None
+
+        # We set: print_title=True, print_subtitle=False, print_artist=True, print_composer=False,
+        # print_transcriber=True, print_copyright=False, print_page_numbering=True
+        assert header_node.find("Title").get("show") == "true"
+        assert header_node.find("Subtitle").get("show") == "false"
+        assert header_node.find("Artist").get("show") == "true"
+        assert header_node.find("Composer").get("show") == "false"
+        assert header_node.find("Transcriber").get("show") == "true"
+        assert header_node.find("Copyright").get("show") == "false"
+        assert header_node.find("PageNumbering").get("show") == "true"
+
+        # 2. Verify MasterBar direct Width tag and MeasureLayout
+        mb = root.find(".//MasterBars/MasterBar[@index='1']")
+        assert mb is not None
+        assert float(mb.find("Width").text) == 145.0
+        mb_ml = mb.find("MeasureLayout")
+        assert mb_ml is not None
+        assert float(mb_ml.find("Width").text) == 145.0
+        assert float(mb_ml.find("StretchFactor").text) == 1.2
+        assert float(mb_ml.find("Spacing").text) == 1.5
+
+        # 3. Verify Bar direct Width tag and MeasureLayout
+        bar = root.find(".//Bars/Bar[@index='1']")
+        assert bar is not None
+        assert float(bar.find("Width").text) == 145.0
+        bar_ml = bar.find("MeasureLayout")
+        assert bar_ml is not None
+        assert float(bar_ml.find("Width").text) == 145.0
+        assert float(bar_ml.find("StretchFactor").text) == 1.2
+        assert float(bar_ml.find("Spacing").text) == 1.5

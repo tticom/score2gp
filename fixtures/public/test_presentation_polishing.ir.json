@@ -1,0 +1,104 @@
+{
+  "schema_version": "0.1.0",
+  "metadata": {
+    "title": "Presentation Polishing & Visual Alignment Test",
+    "artist": "Presentation Artist",
+    "composer": "Presentation Composer",
+    "transcriber": "score2gp transcriber",
+    "copyright": "Presentation Copyright"
+  },
+  "conversion": {
+    "tool_name": "score2gp",
+    "tool_version": "0.1.0",
+    "conversion_timestamp": "2026-05-26T12:00:00Z",
+    "source_file_hash": "sha256:test-presentation-polishing-layout",
+    "source_page_count": 1
+  },
+  "tempo": {
+    "bpm": 80,
+    "text": "Andante"
+  },
+  "layout": {
+    "page_setup": {
+      "width": 210.0,
+      "height": 297.0,
+      "margins": {
+        "top": 10.0,
+        "bottom": 10.0,
+        "left": 10.0,
+        "right": 10.0
+      },
+      "scale": 1.0
+    },
+    "track_order": ["gtr-1"],
+    "score_systems_layout": 3,
+    "print_setup": {
+      "print_title": true,
+      "print_subtitle": false,
+      "print_artist": true,
+      "print_composer": false,
+      "print_transcriber": true,
+      "print_copyright": false,
+      "print_page_numbering": true
+    }
+  },
+  "tracks": [
+    {
+      "id": "gtr-1",
+      "name": "Guitar",
+      "instrument": "acoustic guitar",
+      "capo": 0,
+      "tablature_enabled": true,
+      "staff_count": 1,
+      "tuning": {
+        "name": "Standard Guitar",
+        "strings": [
+          { "number": 1, "pitch": 64, "name": "E4" },
+          { "number": 2, "pitch": 59, "name": "B3" },
+          { "number": 3, "pitch": 55, "name": "G3" },
+          { "number": 4, "pitch": 50, "name": "D3" },
+          { "number": 5, "pitch": 45, "name": "A2" },
+          { "number": 6, "pitch": 40, "name": "E2" }
+         ]
+      }
+    }
+  ],
+  "bars": [
+    {
+      "index": 1,
+      "time_signature": {
+        "numerator": 4,
+        "denominator": 4
+      },
+      "measure_layout": {
+        "width": 145.0,
+        "stretch_factor": 1.2,
+        "spacing": 1.5
+      },
+      "events": [
+        {
+          "id": "e1",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 0,
+            "duration_ticks": 1920,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "half", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 3,
+              "fret": 2,
+              "pitch": 57,
+              "confidence": 1.0
+            }
+          ],
+          "confidence": 1.0
+        }
+      ]
+    }
+  ],
+  "warnings": []
+}

@@ -4,6 +4,9 @@
 
 ## Done
 
+- [x] Implement ScoreIR parsing/schema mapping and GPIF XML generation for system-level visual alignment properties—specifically measure width distribution ratios (bar-level `<Width>` tags directly under `<MasterBar>` and `<Bar>`) and track presentation header styles (mapping page-level visual elements like text font visibility tags for titles and artist footnotes under a `<Header>` element within score-level `<Layout>`), verified with public synthetic manifests and unit tests (`feature/gpif-presentation-layout-polishing-v0.1`).
+
+
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for beat-level visual chord grid diagrams (specifying chord names, base frets, multi-string fret indicators, and left-hand fingering arrays) and note-level digit execution markers (left-hand fingering indicators like T/1/2/3/4 and right-hand pick/finger symbols like p/i/m/a/ch), verified with public synthetic fixtures and unit tests (`feature/build-ir-chord-diagrams-and-fingerings-v0.1`).
 
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for bar-level visual system/page layout breaks and global staff-system sizing scale attributes, verified with public synthetic fixtures and unit tests (`feature/gpif-system-breaks-and-staff-scaling-v0.1`).
