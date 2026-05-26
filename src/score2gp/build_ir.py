@@ -2528,20 +2528,27 @@ def _x_to_onset_warnings(
 
 
 def _tabraw_grouping_risk(tabraw: TabRaw) -> dict[str, object] | None:
-    playable = [
-        candidate
-        for candidate in tabraw.candidates
-        if candidate.parsed_fret is not None
-        and not (
-            isinstance(candidate.raw, dict)
-            and candidate.raw.get("refusal_reason")
-            in {
+    has_detected_systems = any(
+        c.system_index is not None for c in tabraw.candidates
+    )
+    playable = []
+    for candidate in tabraw.candidates:
+        if candidate.parsed_fret is None:
+            continue
+        if has_detected_systems:
+            raw_dict = candidate.raw if isinstance(candidate.raw, dict) else {}
+            ref_reason = raw_dict.get("refusal_reason")
+            if ref_reason in {
                 "pdf_fret_page_or_legend_number_excluded",
                 "pdf_fret_chord_text_digit_excluded",
                 "pdf_non_playable_text_not_string_assigned",
-            }
-        )
-    ]
+            }:
+                continue
+            if candidate.system_index is None:
+                continue
+            if candidate.confidence < 0.70:
+                continue
+        playable.append(candidate)
     unsafe_codes = _tabraw_unsafe_grouping_warning_codes(tabraw)
     if not playable and not unsafe_codes:
         return None

@@ -2385,7 +2385,25 @@ def _append_grouping_warnings(raw: dict[str, Any], meta: dict[str, int] | None =
     candidates = raw.get("candidates", [])
     if not candidates:
         return
-    fret_candidates = [candidate for candidate in candidates if candidate.get("parsed_fret") is not None]
+    has_detected_systems = any(
+        c.get("system_index") is not None for c in candidates
+    )
+    fret_candidates = []
+    for c in candidates:
+        if c.get("parsed_fret") is None:
+            continue
+        if has_detected_systems:
+            raw_dict = c.get("raw", {}) if isinstance(c.get("raw"), dict) else {}
+            ref_reason = raw_dict.get("refusal_reason")
+            if ref_reason in {
+                "pdf_fret_page_or_legend_number_excluded",
+                "pdf_fret_chord_text_digit_excluded",
+                "pdf_non_playable_text_not_string_assigned",
+            }:
+                continue
+            if c.get("system_index") is None:
+                continue
+        fret_candidates.append(c)
 
     grouping_counts = {
         "total_candidate_count": len(candidates),
@@ -3281,18 +3299,22 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
                     s = _LineSegment(s.x0, y0, s.x1, y1)
                 system_candidates.append(s)
 
-        # Deduplicate very close candidates (e.g. double barlines) to prevent ambiguity rejection
+        # Deduplicate very close candidates near system edges (e.g. left bracket/barline, right double barline)
         filtered_candidates = []
         sorted_candidates = sorted(system_candidates, key=lambda s: (s.x0 + s.x1) / 2)
         clusters: list[list[_LineSegment]] = []
         for s in sorted_candidates:
             x_s = (s.x0 + s.x1) / 2
             added = False
-            for cluster in clusters:
-                if any(abs(x_s - (c.x0 + c.x1) / 2) < 6.0 for c in cluster):
-                    cluster.append(s)
-                    added = True
-                    break
+            is_near_edge = (abs(x_s - x0) < 15.0 or abs(x_s - x1) < 15.0)
+            if is_near_edge:
+                for cluster in clusters:
+                    cx = (cluster[0].x0 + cluster[0].x1) / 2
+                    if abs(cx - x0) < 15.0 or abs(cx - x1) < 15.0:
+                        if any(abs(x_s - (c.x0 + c.x1) / 2) < 6.0 for c in cluster):
+                            cluster.append(s)
+                            added = True
+                            break
             if not added:
                 clusters.append([s])
                 

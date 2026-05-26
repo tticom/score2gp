@@ -47,7 +47,25 @@ def build_grouping_diagnostics(
     """Build a public-safe summary of PDF grouping quality."""
 
     candidates = list(tabraw.get("candidates", []))
-    playable = [candidate for candidate in candidates if candidate.get("parsed_fret") is not None]
+    has_detected_systems = any(
+        c.get("system_index") is not None for c in candidates
+    )
+    playable = []
+    for c in candidates:
+        if c.get("parsed_fret") is None:
+            continue
+        if has_detected_systems:
+            raw_dict = c.get("raw", {}) if isinstance(c.get("raw"), dict) else {}
+            ref_reason = raw_dict.get("refusal_reason")
+            if ref_reason in {
+                "pdf_fret_page_or_legend_number_excluded",
+                "pdf_fret_chord_text_digit_excluded",
+                "pdf_non_playable_text_not_string_assigned",
+            }:
+                continue
+            if c.get("system_index") is None:
+                continue
+        playable.append(c)
     kind_counts: dict[str, int] = {}
     for candidate in candidates:
         kind = str(candidate.get("kind", "candidate-text"))
@@ -150,6 +168,19 @@ def build_grouping_diagnostics(
 
     warning_codes = [str(warning.get("code", "warning")) for warning in tabraw.get("warnings", [])]
     for c in candidates:
+        if c.get("parsed_fret") is None:
+            continue
+        if has_detected_systems:
+            raw_dict = c.get("raw", {}) if isinstance(c.get("raw"), dict) else {}
+            ref_reason = raw_dict.get("refusal_reason")
+            if ref_reason in {
+                "pdf_fret_page_or_legend_number_excluded",
+                "pdf_fret_chord_text_digit_excluded",
+                "pdf_non_playable_text_not_string_assigned",
+            }:
+                continue
+            if c.get("system_index") is None:
+                continue
         aw = c.get("raw", {}).get("assignment_warnings", [])
         if isinstance(aw, list):
             for code in aw:
@@ -336,7 +367,25 @@ def grouping_status_for_tabraw(tabraw: dict[str, Any]) -> str:
     """Return grouped, partial, missing, ambiguous, or unsupported for playable PDF-derived tab evidence."""
 
     candidates = list(tabraw.get("candidates", []))
-    playable = [candidate for candidate in candidates if candidate.get("parsed_fret") is not None]
+    has_detected_systems = any(
+        c.get("system_index") is not None for c in candidates
+    )
+    playable = []
+    for c in candidates:
+        if c.get("parsed_fret") is None:
+            continue
+        if has_detected_systems:
+            raw_dict = c.get("raw", {}) if isinstance(c.get("raw"), dict) else {}
+            ref_reason = raw_dict.get("refusal_reason")
+            if ref_reason in {
+                "pdf_fret_page_or_legend_number_excluded",
+                "pdf_fret_chord_text_digit_excluded",
+                "pdf_non_playable_text_not_string_assigned",
+            }:
+                continue
+            if c.get("system_index") is None:
+                continue
+        playable.append(c)
     if not candidates or not playable:
         return "missing"
 
