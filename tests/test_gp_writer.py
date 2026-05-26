@@ -2009,3 +2009,46 @@ def test_gpif_track_expressions_and_part_separation(tmp_path) -> None:
 
         assert exprs[1].get("measure") == "2"
         assert exprs[1].text == "arco"
+
+
+def test_gpif_track_automations(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_track_automations.ir.json")
+    out = tmp_path / "track_automations.gp"
+    warnings = write_gp(score, out)
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        score_node = root.find("Score")
+        assert score_node is not None
+
+        # Verify Track Automations
+        track = root.find(".//Tracks/Track[@id='gt-1']")
+        assert track is not None
+
+        automations_node = track.find("Automations")
+        assert automations_node is not None
+
+        automations = automations_node.findall("Automation")
+        assert len(automations) == 2
+
+        # Automation 0: Pan (alphabetical sort order for 'Pan' vs 'Volume')
+        auto_pan = automations[0]
+        assert auto_pan.get("type") == "Pan"
+        pan_points = auto_pan.findall("Point")
+        assert len(pan_points) == 1
+        assert pan_points[0].get("measure") == "2"
+        assert pan_points[0].get("value") == "-0.5"
+
+        # Automation 1: Volume
+        auto_vol = automations[1]
+        assert auto_vol.get("type") == "Volume"
+        vol_points = auto_vol.findall("Point")
+        assert len(vol_points) == 2
+        assert vol_points[0].get("measure") == "1"
+        assert vol_points[0].get("value") == "0.8"
+        assert vol_points[1].get("measure") == "3"
+        assert vol_points[1].get("value") == "1.0"
