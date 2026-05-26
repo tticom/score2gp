@@ -4,6 +4,10 @@
 
 ## Done
 
+- [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for beat-level visual chord grid diagrams (specifying chord names, base frets, multi-string fret indicators, and left-hand fingering arrays) and note-level digit execution markers (left-hand fingering indicators like T/1/2/3/4 and right-hand pick/finger symbols like p/i/m/a/ch), verified with public synthetic fixtures and unit tests (`feature/build-ir-chord-diagrams-and-fingerings-v0.1`).
+
+- [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for bar-level visual system/page layout breaks and global staff-system sizing scale attributes, verified with public synthetic fixtures and unit tests (`feature/gpif-system-breaks-and-staff-scaling-v0.1`).
+
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for bar-level gradual tempo variations (accelerando and ritardando expressive curves specifying linear/exponential velocity changes and final target BPM values) and free-text staff informational annotations in `src/score2gp/gpif.py`, verified with public synthetic manifests and unit tests (`feature/build-ir-expressing-tempo-variations-v0.1`).
 
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for multi-measure rests (compressing multiple consecutive empty bars into a single visual block specifying a start/stop measure range and a center-aligned rest count number) and numbered repeat count overlays (such as measure-span repeats, part-quantities, or bar % placeholders) in `src/score2gp/gpif.py`, verified with public synthetic manifests and unit tests (`feature/build-ir-timeline-measure-ranges-v0.1`).
