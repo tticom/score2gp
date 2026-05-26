@@ -2052,3 +2052,44 @@ def test_gpif_track_automations(tmp_path) -> None:
         assert vol_points[0].get("value") == "0.8"
         assert vol_points[1].get("measure") == "3"
         assert vol_points[1].get("value") == "1.0"
+
+
+def test_gpif_master_mixer(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_master_mixer.ir.json")
+    out = tmp_path / "master_mixer.gp"
+    warnings = write_gp(score, out)
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        score_node = root.find("Score")
+        assert score_node is not None
+
+        # Verify MasterTrack
+        master_track = score_node.find("MasterTrack")
+        assert master_track is not None
+        assert master_track.find("Tracks").text == "gt-1"
+
+        # 1. Mixer parameters
+        mixer = master_track.find("Mixer")
+        assert mixer is not None
+        assert mixer.find("Volume").text == "90"
+        assert mixer.find("Pan").text == "40"  # (-0.2 + 1) * 50 = 0.8 * 50 = 40
+        assert mixer.find("Reverb").text == "15"
+        assert mixer.find("Chorus").text == "25"
+
+        # 2. PresetCascade parameters
+        preset_cascade = master_track.find("PresetCascade")
+        assert preset_cascade is not None
+        assert preset_cascade.get("presetName") == "orchestral_hall"
+        assert preset_cascade.get("targetEngine") == "gp7"
+
+        options = preset_cascade.findall("Option")
+        assert len(options) == 2
+        assert options[0].get("name") == "pre_delay_ms"
+        assert options[0].get("value") == "40"
+        assert options[1].get("name") == "room_size"
+        assert options[1].get("value") == "large"

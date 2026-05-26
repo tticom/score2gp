@@ -114,6 +114,25 @@ def _master_track(parent: ET.Element, score: ScoreIR) -> None:
         mt = ET.SubElement(parent, "MasterTrack")
         _text(mt, "Tracks", " ".join(track_order))
 
+        if getattr(score, "layout", None) is not None and getattr(score.layout, "master_mixer", None) is not None:
+            mixer_node = ET.SubElement(mt, "Mixer")
+            _text(mixer_node, "Volume", int(score.layout.master_mixer.volume * 100))
+            _text(mixer_node, "Pan", int((score.layout.master_mixer.pan + 1) * 50))
+            _text(mixer_node, "Reverb", int(score.layout.master_mixer.reverb))
+            _text(mixer_node, "Chorus", int(score.layout.master_mixer.chorus))
+
+        if getattr(score, "layout", None) is not None and getattr(score.layout, "preset_cascade", None) is not None:
+            pc = score.layout.preset_cascade
+            pc_node = ET.SubElement(mt, "PresetCascade", {
+                "presetName": pc.preset_name,
+                "targetEngine": pc.target_engine
+            })
+            for k, v in sorted(pc.options.items()):
+                ET.SubElement(pc_node, "Option", {
+                    "name": k,
+                    "value": str(v)
+                })
+
 
 def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = None) -> bytes:
     if isinstance(score, ScoreBooklet):

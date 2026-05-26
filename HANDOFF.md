@@ -2,11 +2,11 @@
 
 ## Metadata
 
-- **Current Branch**: `feature/gpif-track-automations-v0.1`
+- **Current Branch**: `feature/gpif-master-mixer-and-config-cascades-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: PR #104 (https://github.com/tticom/score2gp/pull/104)
-- **Latest Local Commit**: `bd457ca4de540f3d0c30a0d000977f7c20041752` ("docs: finalize HANDOFF.md with PR 104 details")
-- **Latest Pushed Commit**: `bd457ca4de540f3d0c30a0d000977f7c20041752` ("docs: finalize HANDOFF.md with PR 104 details")
+- **Current PR**: PR #105 (https://github.com/tticom/score2gp/pull/105)
+- **Latest Local Commit**: `a73a96a739032bb1f97247e16291bf9238b435eb` ("docs: finalize HANDOFF.md with PR 105 details")
+- **Latest Pushed Commit**: `a73a96a739032bb1f97247e16291bf9238b435eb` ("docs: finalize HANDOFF.md with PR 105 details")
 
 - **Working Tree Status**: Clean (except doc/tasks updates).
 
@@ -16,9 +16,9 @@
 
 ## Tests And Checks Run
 
-- `python -m pytest` -> 354 passed (100% success, including the new track volume and panning playback automation envelope unit tests).
-- `python -m score2gp.cli export-schema --out schemas` -> passed cleanly (updated schemas with `TrackAutomation` model).
-- `python -m score2gp.cli validate-ir fixtures/public/test_gpif_track_automations.ir.json` -> valid.
+- `python -m pytest` -> 355 passed (100% success, including the new master mixer and global preset cascade unit tests).
+- `python -m score2gp.cli export-schema --out schemas` -> passed cleanly (updated schemas with `MasterMixer` and `PipelinePresetCascade` models).
+- `python -m score2gp.cli validate-ir fixtures/public/test_gpif_master_mixer.ir.json` -> valid.
 - `git diff --check` -> passed cleanly (zero trailing whitespace or EOF blank line violations).
 - `git diff -- schemas` -> passed cleanly (valid schema additions).
 - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep`.
@@ -27,17 +27,19 @@
 ## What Changed In This Task
 
 - **ScoreIR Schema & Model Expansion**:
-  - Created `TrackAutomation` model under `src/score2gp/ir.py` specifying `type` (Literal "Volume" or "Pan"), `bar_index` (minimum 1), and float `value`.
-  - Updated `Track` model in `src/score2gp/ir.py` to support `automations` as an optional list of `TrackAutomation` items.
-  - Expanded semantic summary generation `semantic_scoreir_summary()` in `src/score2gp/ir.py` to serialize track automations.
+  - Created `MasterMixer` model under `src/score2gp/ir.py` specifying `volume` (float 0..1), `pan` (float -1..1), `reverb` (float 0..100), and `chorus` (float 0..100).
+  - Created `PipelinePresetCascade` model under `src/score2gp/ir.py` specifying `preset_name` (str), `target_engine` (str), and `options` (dict).
+  - Updated `ScoreLayout` model in `src/score2gp/ir.py` to support optional `master_mixer` and `preset_cascade` blocks.
   - Successfully re-exported updated JSON schema version via CLI.
 - **GPIF XML Generator Serialization**:
-  - Serialized track performance automations under standard track properties: `<Track id="..."><Automations><Automation type="Volume"><Point measure="1" value="0.8"/></Automation></Automations></Track>` inside `_tracks` in `src/score2gp/gpif.py`.
+  - Serialized master audio properties and preset cascades inside `<MasterTrack>` element in `src/score2gp/gpif.py`:
+    - Master mixer parameters inside `<Mixer>` containing `<Volume>`, `<Pan>`, `<Reverb>`, and `<Chorus>`.
+    - Preset cascade configurations inside `<PresetCascade>` detailing preset name, target engine, and child `<Option>` key-value elements.
 - **Synthetic Testing & Validation**:
-  - Created public synthetic fixture `fixtures/public/test_gpif_track_automations.ir.json` containing track volume and pan automations.
-  - Authored comprehensive unit tests `test_gpif_track_automations` in `tests/test_gp_writer.py` asserting XML structures, automation points, and value attributes.
+  - Created public synthetic fixture `fixtures/public/test_gpif_master_mixer.ir.json` containing master mixer volume/pan overrides and preset cascade block.
+  - Authored comprehensive unit tests `test_gpif_master_mixer` in `tests/test_gp_writer.py` asserting `<MasterTrack>` XML structures, child nodes, and nested option properties.
 - **E2E Private Smoke Test Results**:
-  - Ran E2E private smoke compiler against real private inputs to verify zero regressions or crashes with the new track playback automation structures.
+  - Ran E2E private smoke compiler against real private inputs to verify zero regressions or crashes with the new global master mixer and config preset cascade structures.
 
 ## Known Limitations
 
