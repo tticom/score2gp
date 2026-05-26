@@ -90,6 +90,8 @@ def extract_tab(
     string_snap_tolerance: float = 1.5,
     strip_technique_text: bool = False,
     bar_cushion: float = 0.0,
+    min_barline_height_ratio: float | None = None,
+    barline_dedup_gap: float = 0.0,
 ) -> dict[str, Any]:
     out_target = Path(out_dir)
     if out_target.suffix.lower() == ".json":
@@ -136,6 +138,8 @@ def extract_tab(
                 string_snap_tolerance=string_snap_tolerance,
                 strip_technique_text=strip_technique_text,
                 bar_cushion=bar_cushion,
+                min_barline_height_ratio=min_barline_height_ratio,
+                barline_dedup_gap=barline_dedup_gap,
             )
         )
 
@@ -679,6 +683,8 @@ def _extract_pdf_text_candidates(
     string_snap_tolerance: float = 1.5,
     strip_technique_text: bool = False,
     bar_cushion: float = 0.0,
+    min_barline_height_ratio: float | None = None,
+    barline_dedup_gap: float = 0.0,
 ) -> list[dict[str, Any]]:
     import fitz  # type: ignore[import-not-found]
 
@@ -686,7 +692,12 @@ def _extract_pdf_text_candidates(
     filtered_index = 0
     with fitz.open(pdf_path) as doc:
         for page_number, page in enumerate(doc, start=1):
-            systems = _detect_tab_systems(page, page_number)
+            systems = _detect_tab_systems(
+                page,
+                page_number,
+                min_barline_height_ratio=min_barline_height_ratio,
+                barline_dedup_gap=barline_dedup_gap,
+            )
             ascii_blocks = _detect_ascii_tab_blocks(page, page_number, first_system_index=len(systems) + 1)
 
             words = sorted(
@@ -3289,7 +3300,12 @@ def _relative_artifact_path(path: Path, base: Path) -> str:
         return str(path)
 
 
-def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
+def _detect_tab_systems(
+    page: Any,
+    page_index: int,
+    min_barline_height_ratio: float | None = None,
+    barline_dedup_gap: float = 0.0,
+) -> list[_TabSystem]:
     segments = list(_drawing_segments(page.get_drawings()))
     horizontal = sorted((segment for segment in segments if segment.is_horizontal), key=lambda segment: segment.y0)
 
@@ -3378,6 +3394,40 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
                 
         system_candidates = filtered_candidates
 
+        if barline_dedup_gap > 0.0:
+            # Cluster and merge adjacent vertical candidates within barline_dedup_gap
+            merged_candidates = []
+            sorted_candidates = sorted(system_candidates, key=lambda s: (s.x0 + s.x1) / 2)
+
+            current_cluster = []
+            for s in sorted_candidates:
+                x_s = (s.x0 + s.x1) / 2
+                if not current_cluster:
+                    current_cluster.append(s)
+                else:
+                    prev_x = (current_cluster[-1].x0 + current_cluster[-1].x1) / 2
+                    if abs(x_s - prev_x) <= barline_dedup_gap:
+                        current_cluster.append(s)
+                    else:
+                        if len(current_cluster) == 1:
+                            merged_candidates.append(current_cluster[0])
+                        else:
+                            avg_x = sum((c.x0 + c.x1) / 2 for c in current_cluster) / len(current_cluster)
+                            min_y = min(min(c.y0, c.y1) for c in current_cluster)
+                            max_y = max(max(c.y0, c.y1) for c in current_cluster)
+                            merged_candidates.append(_LineSegment(avg_x, min_y, avg_x, max_y))
+                        current_cluster = [s]
+            if current_cluster:
+                if len(current_cluster) == 1:
+                    merged_candidates.append(current_cluster[0])
+                else:
+                    avg_x = sum((c.x0 + c.x1) / 2 for c in current_cluster) / len(current_cluster)
+                    min_y = min(min(c.y0, c.y1) for c in current_cluster)
+                    max_y = max(max(c.y0, c.y1) for c in current_cluster)
+                    merged_candidates.append(_LineSegment(avg_x, min_y, avg_x, max_y))
+
+            system_candidates = merged_candidates
+
         barline_candidates_count = len(system_candidates)
         rejection_reasons = {
             "pdf_barline_outside_system_bounds": 0,
@@ -3460,14 +3510,19 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
                 abs(y_max - y1) < 4.0
             )
 
-            crosses_entire_staff = (y_min <= y0 + 4.0 and y_max >= y1 - 4.0) or (gaps_crossed >= len(ys) - 1)
+            if min_barline_height_ratio is not None:
+                has_relaxed_height = (height >= staff_height * min_barline_height_ratio) and (gaps_crossed >= len(ys) - 3)
+            else:
+                has_relaxed_height = False
+
+            crosses_entire_staff = (y_min <= y0 + 4.0 and y_max >= y1 - 4.0) or (gaps_crossed >= len(ys) - 1) or has_relaxed_height
             if is_left_edge_bracket:
                 crosses_entire_staff = True
 
             absolute_height_ok = (height >= 40.0)
-            relative_height_ok = crosses_entire_staff
+            relative_height_ok = crosses_entire_staff or has_relaxed_height
             is_accepted_relative = (height >= 20.0 and relative_height_ok)
-            is_accepted = (absolute_height_ok or is_accepted_relative) and relative_height_ok
+            is_accepted = (absolute_height_ok or is_accepted_relative or has_relaxed_height) and relative_height_ok
 
             if is_left_edge_bracket:
                 is_accepted = True
@@ -3509,8 +3564,12 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
                     for i in range(len(ys) - 1):
                         if other_y_min <= ys[i] + 1.5 and other_y_max >= ys[i+1] - 1.5:
                             other_gaps += 1
-                    other_crosses = (other_y_min <= y0 + 4.0 and other_y_max >= y1 - 4.0) or (other_gaps >= len(ys) - 1)
-                    other_accepted = ((other_height >= 40.0) or (other_height >= 20.0 and other_crosses)) and other_crosses
+                    if min_barline_height_ratio is not None:
+                        other_relaxed = (other_height >= staff_height * min_barline_height_ratio) and (other_gaps >= len(ys) - 3)
+                    else:
+                        other_relaxed = False
+                    other_crosses = (other_y_min <= y0 + 4.0 and other_y_max >= y1 - 4.0) or (other_gaps >= len(ys) - 1) or other_relaxed
+                    other_accepted = ((other_height >= 40.0) or (other_height >= 20.0 and other_crosses) or other_relaxed) and other_crosses
 
                     if other_accepted and abs(x_val - other_x) < 6.0:
                         is_ambiguous = True

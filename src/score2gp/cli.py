@@ -220,6 +220,8 @@ def build_ir_command(
     string_snap_tolerance: float = typer.Option(1.5, "--string-snap-tolerance", help="Vertical search window cushion in points around a horizontal string line vector for note snapping"),
     strip_technique_text: bool = typer.Option(False, "--strip-technique-text", help="Pre-filter layout strings matching known technique expressions before executing character collision matrix routines"),
     bar_cushion: float = typer.Option(0.0, "--bar-cushion", help="Horizontal cushion in points to extend the left and right matching thresholds of a bar box"),
+    min_barline_height_ratio: float = typer.Option(0.65, "--min-barline-height-ratio", help="Minimum relative height (candidate height / staff height) required to accept an internal barline"),
+    barline_dedup_gap: float = typer.Option(3.0, "--barline-dedup-gap", help="Maximum horizontal distance in points to merge adjacent barlines"),
 ) -> None:
     """Build a limited ScoreIR file from synthetic MusicXML plus TabRaw inputs."""
     if musicxml is None or tabraw is None:
@@ -241,6 +243,8 @@ def build_ir_command(
             string_snap_tolerance=string_snap_tolerance,
             strip_technique_text=strip_technique_text,
             bar_cushion=bar_cushion,
+            min_barline_height_ratio=min_barline_height_ratio,
+            barline_dedup_gap=barline_dedup_gap,
         )
     except BuildIrInputRiskError as exc:
         payload = exc.to_diagnostics_payload()
@@ -320,6 +324,8 @@ def convert_command(
     string_snap_tolerance: float = typer.Option(1.5, "--string-snap-tolerance", help="Vertical search window cushion in points around a horizontal string line vector for note snapping"),
     strip_technique_text: bool = typer.Option(False, "--strip-technique-text", help="Pre-filter layout strings matching known technique expressions before executing character collision matrix routines"),
     bar_cushion: float = typer.Option(0.0, "--bar-cushion", help="Horizontal cushion in points to extend the left and right matching thresholds of a bar box"),
+    min_barline_height_ratio: float = typer.Option(0.65, "--min-barline-height-ratio", help="Minimum relative height (candidate height / staff height) required to accept an internal barline"),
+    barline_dedup_gap: float = typer.Option(3.0, "--barline-dedup-gap", help="Maximum horizontal distance in points to merge adjacent barlines"),
 ) -> None:
     """Run the complete conversion pipeline: extraction, alignment, IR generation, and GP7 package writing."""
     workdir.mkdir(parents=True, exist_ok=True)
@@ -345,6 +351,8 @@ def convert_command(
             string_snap_tolerance=string_snap_tolerance,
             strip_technique_text=strip_technique_text,
             bar_cushion=bar_cushion,
+            min_barline_height_ratio=min_barline_height_ratio,
+            barline_dedup_gap=barline_dedup_gap,
         )
         summary["tab"] = tab_summary
         if tab_summary.get("warnings"):
@@ -451,7 +459,6 @@ def convert_command(
     diagnostics = None
     ir_path = workdir / "score.ir.json"
     diagnostics_path = workdir / "diagnostics.json"
-
     try:
         score, diagnostics = build_ir_with_diagnostics_from_files(
             musicxml_path=musicxml,
@@ -466,6 +473,8 @@ def convert_command(
             string_snap_tolerance=string_snap_tolerance,
             strip_technique_text=strip_technique_text,
             bar_cushion=bar_cushion,
+            min_barline_height_ratio=min_barline_height_ratio,
+            barline_dedup_gap=barline_dedup_gap,
         )
         summary["build_ir"] = {
             "ran": True,

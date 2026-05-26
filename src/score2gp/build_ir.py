@@ -545,6 +545,8 @@ def build_ir_from_files(
     string_snap_tolerance: float = 1.5,
     strip_technique_text: bool = False,
     bar_cushion: float = 0.0,
+    min_barline_height_ratio: float = 0.9,
+    barline_dedup_gap: float = 0.0,
 ) -> ScoreIR:
     try:
         score, diagnostics = build_ir_with_diagnostics_from_files(
@@ -560,6 +562,8 @@ def build_ir_from_files(
             string_snap_tolerance=string_snap_tolerance,
             strip_technique_text=strip_technique_text,
             bar_cushion=bar_cushion,
+            min_barline_height_ratio=min_barline_height_ratio,
+            barline_dedup_gap=barline_dedup_gap,
         )
         if diagnostics_out_path is not None:
             diagnostics.to_json_file(diagnostics_out_path)
@@ -628,6 +632,8 @@ def build_ir_with_diagnostics_from_files(
     string_snap_tolerance: float = 1.5,
     strip_technique_text: bool = False,
     bar_cushion: float = 0.0,
+    min_barline_height_ratio: float = 0.9,
+    barline_dedup_gap: float = 0.0,
 ) -> tuple[ScoreIR, BuildIrDiagnostics]:
     musicxml = parse_musicxml(musicxml_path, allow_remediation=allow_remediation)
     tabraw = TabRaw.from_json_file(tabraw_path)
