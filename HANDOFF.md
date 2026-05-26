@@ -4,9 +4,9 @@
 
 - **Current Branch**: `feature/gpif-score-booklets-and-collections-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: Draft PR to be created
-- **Latest Local Commit**: `05890ad507ab59fed2d305022cb954a6aab7f0af` ("feat: implement multi-score booklet packaging architecture and multi-movement compilation routines")
-- **Latest Pushed Commit**: N/A (to be pushed)
+- **Current PR**: PR #102 (https://github.com/tticom/score2gp/pull/102)
+- **Latest Local Commit**: `b55daf3f36f87cba5aacc4ee278651b03647ec16` ("docs: update tasks and handoff for multi-score booklets")
+- **Latest Pushed Commit**: `b55daf3f36f87cba5aacc4ee278651b03647ec16` ("docs: update tasks and handoff for multi-score booklets")
 
 - **Working Tree Status**: Clean (except untracked scratch files).
 
