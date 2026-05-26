@@ -2,11 +2,11 @@
 
 ## Metadata
 
-- **Current Branch**: `feature/pipeline-batch-parallelization-v0.1`
+- **Current Branch**: `feature/pipeline-incremental-build-cache-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: PR #107 (https://github.com/tticom/score2gp/pull/107)
-- **Latest Local Commit**: `a46808d630f45b3520ded51731049c5ebbeb78f7` ("feat: implement concurrent pipeline batch supervisor and sandboxed workspaces")
-- **Latest Pushed Commit**: `a46808d630f45b3520ded51731049c5ebbeb78f7` ("feat: implement concurrent pipeline batch supervisor and sandboxed workspaces")
+- **Current PR**: PR #108 (https://github.com/tticom/score2gp/pull/108)
+- **Latest Local Commit**: `5cf2832e4dda4dfe4eabf75a270c956d9931a285` ("feat: implement thread-safe incremental build cache and content-based hashing")
+- **Latest Pushed Commit**: `5cf2832e4dda4dfe4eabf75a270c956d9931a285` ("feat: implement thread-safe incremental build cache and content-based hashing")
 
 - **Working Tree Status**: Clean (except doc/tasks updates).
 
@@ -16,7 +16,7 @@
 
 ## Tests And Checks Run
 
-- `python -m pytest` -> 358 passed (100% success, including the new pipeline batch parallelization and graceful localized failure unit tests).
+- `python -m pytest` -> 363 passed (100% success, including the new pipeline incremental build cache hit/miss/invalidation unit tests).
 - `python -m score2gp.cli export-schema --out schemas` -> passed cleanly.
 - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid.
 - `git diff --check` -> passed cleanly (zero trailing whitespace or EOF blank line violations).
@@ -26,19 +26,16 @@
 
 ## What Changed In This Task
 
-- **Asynchronous Concurrent Pipeline Batch Processing Engine**:
-  - Created `src/score2gp/batch.py` containing `run_single_payload` worker task and `run_batch_pipeline` supervisor manager.
-  - Used standard Python `ThreadPoolExecutor` from `concurrent.futures` to execute multiple score-generation runs simultaneously.
-- **Symmetric Workspace Sandboxing**:
-  - Mapped each worker payload run to an isolated sub-directory under `work/` (specifically `work/batch_worker_{payload_id}`) to ensure zero race conditions, file access conflicts, or output collision corruption during concurrent writes.
-- **Graceful Localized Exception Boundaries**:
-  - Wrapped individual worker routines in a strict try/except boundary, catching both expected `BuildIrInputRiskError` exceptions and arbitrary other runtime exceptions.
-  - Prevented any isolated worker crash from terminating the supervisor's global coordinator loop, collecting all results and errors into a unified batch status execution report dictionary.
-- **CLI Batch Execution Command**:
-  - Added the `batch` command inside `src/score2gp/cli.py` to expose the concurrent pipeline orchestrator to command line interface environments, returning JSON structured output and propagating failure exit codes on error.
-- **Synthetic Fixtures & Concurrency Testing**:
-  - Added public synthetic manifest fixture `fixtures/public/test_batch_concurrency_manifest.json` pointing to valid, existing synthetic inputs.
-  - Authored extensive unit tests in `tests/test_batch_parallelization.py` confirming complete, correct status reports, thread footprints, output file validity, and graceful localized failure handling under overfull measure timing risks.
+- **Thread-Safe, Self-Invalidating Incremental Build Cache**:
+  - Created `src/score2gp/cache.py` containing `PipelineCacheManager` (using a threading Lock for concurrency safety) and `compute_payload_hash`.
+- **Content-Based SHA-256 Payload Hashing**:
+  - Computed unique hashes based on both structural payload scalar parameters (excluding ID and output paths) and source file contents (hashing raw bytes of `musicxml`, `tabraw`, `ascii_alignment`, `template` files).
+- **Pipeline and CLI Integration**:
+  - Integrated with `src/score2gp/batch.py` to bypass compilation completely on cache hit, copy cached artifacts directly, cache successfully generated products to `work/cache_artifacts/` on success, and track cache-hit/miss metrics in execution summaries.
+  - Updated `src/score2gp/cli.py` to support `--cache/--no-cache` on the `batch` command, enabling cache toggles.
+- **Synthetic Manifest Fixtures & Extensive Tests**:
+  - Added `fixtures/public/test_cache_execution_manifest.json` modeling reproducible, identical payloads.
+  - Authored unit tests in `tests/test_incremental_build_cache.py` confirming complete, correct cache hit/miss metrics, self-invalidation on configuration changes, self-invalidation on file content updates, self-invalidation when cached files are deleted, and cache-disabled configurations.
 
 ## Known Limitations
 
@@ -50,7 +47,7 @@
 
 ## Next Recommended Task
 
-- Proceed with packaging finalizations or high-level booklet formatting overrides.
+- Proceed with final packaging enhancements or visual booklets.
 
 ## Explicit Scope Boundaries
 
