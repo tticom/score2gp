@@ -4,6 +4,8 @@
 
 ## Done
 
+- [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for dynamic expression hairpins (crescendo and decrescendo visual wedges with thickness parameters, start/stop beat anchors, and continuous value paths) and localized note-level accents (such as marcato and staccatissimo markers), mapped to beat-level GP7 visual wedging XML nodes and note-level Accentuation properties, verified with public synthetic manifests and unit tests (`feature/build-ir-dynamics-and-hairpins-v0.1`).
+
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for advanced visual note-level performance ornaments (vibratos, rasgueados, tremolo-picking speeds, and trills with custom frequency parameters) and visual grace note configurations (stem-slash visibility, duration metrics, and position mappings), verified with public synthetic manifests, schema validation, and unit tests (`feature/build-ir-advanced-ornaments-v0.1`).
 
 - [x] Implement a penalty-based costing grid and Viterbi-like dynamic programming optimization routine inside `src/score2gp/build_ir.py` to optimize left-hand finger fret execution positions. The solver tracks position centroids, clamps unplayable fret stretch boundaries, and penalizes shift jumps, exposed via a new opt-in `--optimize-fret-snapping` compiler and CLI flag (`feature/build-ir-fret-snapping-optimization-v0.1`).
