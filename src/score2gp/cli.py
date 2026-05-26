@@ -402,14 +402,14 @@ def convert_command(
 
         warnings.append({
             "code": exc.category,
-            "message": exc.message,
+            "message": str(exc),
             "severity": "error"
         })
         summary["build_ir"] = {
             "ran": False,
             "failed": True,
             "error_category": exc.category,
-            "message": exc.message,
+            "message": str(exc),
         }
         write_warnings(workdir / "warnings.json", warnings)
         write_conversion_report(workdir / "conversion-report.html", "score2gp conversion report", warnings, summary)
