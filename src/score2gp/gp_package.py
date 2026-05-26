@@ -638,6 +638,41 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
             scale=scale
         )
 
+    layout_node = root.find(".//Layout")
+    if layout_node is not None:
+        sys_lay_node = layout_node.find("SystemLayout")
+        if sys_lay_node is not None:
+            sys_sz_str = _first_text(sys_lay_node, ["SystemSizePercent"])
+            sys_sz = float(sys_sz_str) if sys_sz_str is not None else None
+            
+            cush_str = _first_text(sys_lay_node, ["StaffDistancingCushion"])
+            cush = float(cush_str) if cush_str is not None else None
+            
+            bl_style = _first_text(sys_lay_node, ["BarlineStyle"])
+            if bl_style is not None:
+                bl_style = bl_style.lower()
+                
+            from .ir import SystemLayout
+            layout.system_layout = SystemLayout(
+                system_size_percent=sys_sz,
+                staff_distancing_cushion=cush,
+                barline_style=bl_style
+            )
+            
+        staff_lay_node = layout_node.find("StaffLayout")
+        if staff_lay_node is not None:
+            sp_cush_str = _first_text(staff_lay_node, ["StaffSpacingCushion"])
+            sp_cush = float(sp_cush_str) if sp_cush_str is not None else None
+            
+            sz_str = _first_text(staff_lay_node, ["StaffSize"])
+            sz = float(sz_str) if sz_str is not None else None
+            
+            from .ir import StaffLayout
+            layout.staff_layout = StaffLayout(
+                staff_spacing_cushion=sp_cush,
+                staff_size=sz
+            )
+
     # 5. Parse Bars and Events
     bars: list[Bar] = []
     master_bars_node = root.find(".//MasterBars")
@@ -687,6 +722,8 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
                     "Section": "section",
                     "RepeatStart": "repeat-start",
                     "RepeatEnd": "repeat-end",
+                    "Hidden": "hidden",
+                    "Dashed": "dashed",
                 }
                 barline = barline_inv_map.get(barline_val, "regular")
 
@@ -736,6 +773,16 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
             key_sig = mb_data["key_sig"]
             tempo_automation = mb_data["tempo_automation"]
             layout_break = mb_data["layout_break"]
+            lb_node = bar_node.find("LayoutBreak")
+            if lb_node is not None:
+                type_val = _first_text(lb_node, ["Type"])
+                if type_val == "System":
+                    layout_break = "line"
+                elif type_val == "Page":
+                    layout_break = "page"
+                elif type_val == "None":
+                    layout_break = "none"
+
             barline = mb_data["barline"]
             repeat_count = mb_data["repeat_count"]
             events: list[Event] = []
