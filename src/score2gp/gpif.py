@@ -5,7 +5,7 @@ from xml.etree import ElementTree as ET
 
 from .ir import Event, Note, ScoreIR, Technique, ScoreBooklet
 
-SUPPORTED_MINIMAL_TECHNIQUES = {"slide", "vibrato", "hammer-on", "pull-off", "tie", "slur", "bend", "let-ring", "palm-mute", "grace", "dead-note", "tremolo-bar", "tremolo-picking", "slap", "pop", "tapping", "trill"}
+SUPPORTED_MINIMAL_TECHNIQUES = {"slide", "vibrato", "hammer-on", "pull-off", "tie", "slur", "bend", "let-ring", "palm-mute", "grace", "dead-note", "tremolo-bar", "tremolo-picking", "slap", "pop", "tapping", "trill", "rasgueado"}
 
 
 def _text(parent: ET.Element, tag: str, value: object | None) -> ET.Element:
@@ -936,6 +936,18 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
     has_trill = False
     trill_fret = None
     trill_interval = None
+    trill_frequency = None
+    has_vibrato = False
+    vibrato_width = None
+    has_rasgueado = False
+    rasgueado_direction = "none"
+    has_grace = False
+    grace_slash = False
+    grace_duration = None
+    grace_position = "before"
+    has_tremolo_picking = False
+    tremolo_picking_duration = None
+    tremolo_picking_speed = None
     has_tremolo_bar = False
     has_hammer_on = False
     has_pull_off = False
@@ -1072,7 +1084,9 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
                 note_node.set("slur", "start")
                 has_slur = True
         if technique.kind == "vibrato":
-            _text(note_node, "Vibrato", "Wide" if getattr(technique, "width", "unknown") == "wide" else "Slight")
+            has_vibrato = True
+            vibrato_width = getattr(technique, "width", "unknown")
+            _text(note_node, "Vibrato", "Wide" if vibrato_width == "wide" else "Slight")
             curve = getattr(technique, "curve", None)
             if curve is not None:
                 curve_node = ET.SubElement(note_node, "VibratoCurve")
@@ -1086,6 +1100,26 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
                             "speed": pt.speed,
                         }
                     )
+        if technique.kind == "rasgueado":
+            has_rasgueado = True
+            ornament_node = ET.SubElement(note_node, "Ornament")
+            rasgueado_node = ET.SubElement(ornament_node, "Rasgueado")
+            direction_map = {
+                "up": "Up",
+                "down": "Down",
+                "none": "None",
+            }
+            rasgueado_direction = direction_map.get(getattr(technique, "direction", "none"), "None")
+            _text(rasgueado_node, "Direction", rasgueado_direction)
+        if technique.kind == "grace":
+            has_grace = True
+            grace_slash = getattr(technique, "slash", False)
+            grace_timing = getattr(technique, "timing", None)
+            if grace_timing is not None:
+                if getattr(grace_timing, "slash", None) is not None:
+                    grace_slash = grace_timing.slash
+                grace_duration = getattr(grace_timing, "duration", None)
+                grace_position = getattr(grace_timing, "position", "before")
         if technique.kind == "tremolo-bar":
             has_tremolo_bar = True
             tremolo_node = ET.SubElement(note_node, "TremoloBar")
@@ -1099,6 +1133,7 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
                     }
                 )
         if technique.kind == "tremolo-picking":
+            has_tremolo_picking = True
             duration_map = {
                 "eighth": "Eighth",
                 "16th": "Sixteenth",
@@ -1106,6 +1141,8 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
                 "64th": "SixtyFourth",
             }
             dur_val = duration_map.get(getattr(technique, "duration", "16th"), "Sixteenth")
+            tremolo_picking_duration = dur_val
+            tremolo_picking_speed = getattr(technique, "speed", None)
             ET.SubElement(note_node, "TremoloPicking", {"duration": dur_val})
         if technique.kind == "slap":
             has_slap = True
@@ -1121,6 +1158,7 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
             ET.SubElement(note_node, "Trill")
             trill_fret = getattr(technique, "fret", None)
             trill_interval = getattr(technique, "interval", None)
+            trill_frequency = getattr(technique, "frequency", None)
 
     if has_hammer_on and not any(ch.tag == "HO" for ch in note_node):
         ET.SubElement(note_node, "HO")
@@ -1130,7 +1168,29 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
     has_articulation = bool(articulations)
     lh_val = getattr(note, "left_hand_fingering", None)
     rh_val = getattr(note, "right_hand_fingering", None)
-    if has_slide or has_bend or has_hopo_origin or is_hopo_dest or has_slap or has_pop or has_tapping or has_trill or has_tremolo_bar or has_glissando or has_articulation or has_hammer_on or has_pull_off or has_slur or lh_val or rh_val:
+
+    if (
+        has_slide
+        or has_bend
+        or has_hopo_origin
+        or is_hopo_dest
+        or has_slap
+        or has_pop
+        or has_tapping
+        or has_trill
+        or has_tremolo_bar
+        or has_glissando
+        or has_articulation
+        or has_hammer_on
+        or has_pull_off
+        or has_slur
+        or lh_val
+        or rh_val
+        or has_vibrato
+        or has_rasgueado
+        or has_grace
+        or has_tremolo_picking
+    ):
         properties_node = ET.SubElement(note_node, "Properties")
 
         fret_prop = ET.SubElement(properties_node, "Property", {"name": "Fret"})
@@ -1281,6 +1341,8 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
                 _text(trill_prop, "Fret", trill_fret)
             if trill_interval is not None:
                 _text(trill_prop, "Interval", trill_interval)
+            if trill_frequency is not None:
+                _text(trill_prop, "Frequency", f"{trill_frequency:.6f}")
 
         if has_tremolo_bar:
             trem_prop = ET.SubElement(properties_node, "Property", {"name": "TremoloBar"})
@@ -1289,6 +1351,34 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
         if has_glissando:
             gliss_prop = ET.SubElement(properties_node, "Property", {"name": "Glissando"})
             ET.SubElement(gliss_prop, "Enable")
+
+        if has_vibrato:
+            vibrato_prop = ET.SubElement(properties_node, "Property", {"name": "Vibrato"})
+            _text(vibrato_prop, "WaveSize", "Wide" if vibrato_width == "wide" else "Slight")
+
+        if has_rasgueado:
+            rasg_prop = ET.SubElement(properties_node, "Property", {"name": "Rasgueado"})
+            _text(rasg_prop, "Direction", rasgueado_direction)
+
+        if has_grace:
+            grace_prop = ET.SubElement(properties_node, "Property", {"name": "Grace"})
+            _text(grace_prop, "Slash", str(grace_slash).lower())
+            if grace_duration is not None:
+                _text(grace_prop, "Duration", grace_duration)
+            if grace_position is not None:
+                pos_map = {
+                    "before": "BeforeBeat",
+                    "on-beat": "OnBeat",
+                    "after": "AfterBeat"
+                }
+                _text(grace_prop, "Position", pos_map.get(grace_position, "BeforeBeat"))
+
+        if has_tremolo_picking:
+            tremolo_prop = ET.SubElement(properties_node, "Property", {"name": "TremoloPicking"})
+            if tremolo_picking_duration is not None:
+                _text(tremolo_prop, "Duration", tremolo_picking_duration)
+            if tremolo_picking_speed is not None:
+                _text(tremolo_prop, "Speed", tremolo_picking_speed)
 
     if note.techniques:
         techniques = ET.SubElement(note_node, "Techniques")
