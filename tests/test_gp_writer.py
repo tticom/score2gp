@@ -1961,3 +1961,51 @@ def test_gpif_score_booklets(tmp_path) -> None:
         assert mvs[1].get("title") == "Movement II - Adagio"
         assert mvs[1].get("file") == "Content/movement_2.gpif"
         assert mvs[1].get("startPage") == "3"
+
+
+def test_gpif_track_expressions_and_part_separation(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_track_expressions.ir.json")
+    out = tmp_path / "expressions_layout.gp"
+    warnings = write_gp(score, out)
+    assert len(warnings) == 2
+    assert any("vln-1" in w for w in warnings)
+    assert any("vcl-1" in w for w in warnings)
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        score_node = root.find("Score")
+        assert score_node is not None
+
+        # 1. Verify Layout PartSeparation & Part nodes
+        layout_node = score_node.find("Layout")
+        assert layout_node is not None
+
+        ps_node = layout_node.find("PartSeparation")
+        assert ps_node is not None
+
+        parts = ps_node.findall("Part")
+        assert len(parts) == 1
+        part = parts[0]
+        assert part.get("id") == "vln-part"
+        assert part.get("layoutMode") == "standalone"
+        assert part.get("visible") == "true"
+        assert part.find("Tracks").text == "vln-1"
+
+        # 2. Verify Track Expressions
+        track = root.find(".//Tracks/Track[@id='vln-1']")
+        assert track is not None
+
+        et_node = track.find("ExpressionTexts")
+        assert et_node is not None
+
+        exprs = et_node.findall("ExpressionText")
+        assert len(exprs) == 2
+
+        assert exprs[0].get("measure") == "1"
+        assert exprs[0].text == "pizzicato"
+
+        assert exprs[1].get("measure") == "2"
+        assert exprs[1].text == "arco"
