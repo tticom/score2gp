@@ -1,0 +1,127 @@
+{
+  "schema_version": "0.1.0",
+  "metadata": {
+    "title": "Binary Hardened Synthetic Suite",
+    "artist": "Compiler Hardening Test Suite",
+    "composer": "Compiler Hardening Test Suite",
+    "transcriber": "score2gp",
+    "copyright": "Creative Commons License"
+  },
+  "conversion": {
+    "tool_name": "score2gp",
+    "tool_version": "0.1.0",
+    "source_page_count": 1
+  },
+  "tempo": {
+    "bpm": 140,
+    "text": "Moderately Fast"
+  },
+  "layout": {
+    "page_setup": {
+      "width": 210.0,
+      "height": 297.0,
+      "margins": {
+        "top": 15.0,
+        "bottom": 15.0,
+        "left": 15.0,
+        "right": 15.0
+      },
+      "scale": 1.2
+    },
+    "track_order": ["gtr-1"],
+    "score_systems_layout": 3,
+    "view": {
+      "mode": "screen",
+      "scroll_speed": 1.5
+    },
+    "print_setup": {
+      "print_title": true,
+      "print_subtitle": false,
+      "print_artist": true,
+      "print_composer": true,
+      "print_transcriber": false,
+      "print_copyright": true,
+      "print_page_numbering": true,
+      "print_multi_track": false
+    },
+    "system_page_margins": {
+      "top": 12.0,
+      "bottom": 12.0,
+      "left": 12.0,
+      "right": 12.0
+    },
+    "engraving_boundaries": {
+      "width": 185.0,
+      "height": 265.0
+    },
+    "fonts": {
+      "music_font": "Bravura",
+      "symbol_font": "Jazz"
+    },
+    "style_collections": [
+      {
+        "id": "style-coll-1",
+        "name": "Hardened Custom Style",
+        "description": "A style collection verifying element sequencing"
+      }
+    ],
+    "styles": [
+      {
+        "category": "Tablature",
+        "line_width": 1.5,
+        "spacing_cushion": 2.0,
+        "color": "0x00FF00"
+      }
+    ]
+  },
+  "tracks": [
+    {
+      "id": "gtr-1",
+      "name": "Hardened Guitar",
+      "instrument": "acoustic guitar steel",
+      "tuning": {
+        "name": "Standard Guitar",
+        "strings": [
+          { "number": 1, "pitch": 64, "name": "E4" },
+          { "number": 2, "pitch": 59, "name": "B3" },
+          { "number": 3, "pitch": 55, "name": "G3" },
+          { "number": 4, "pitch": 50, "name": "D3" },
+          { "number": 5, "pitch": 45, "name": "A2" },
+          { "number": 6, "pitch": 40, "name": "E2" }
+        ]
+      }
+    }
+  ],
+  "bars": [
+    {
+      "index": 1,
+      "time_signature": {
+        "numerator": 4,
+        "denominator": 4
+      },
+      "events": [
+        {
+          "id": "e1",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 0,
+            "duration_ticks": 3840,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "whole", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 3,
+              "fret": 2,
+              "pitch": 57,
+              "confidence": 1.0
+            }
+          ],
+          "confidence": 1.0
+        }
+      ]
+    }
+  ]
+}

@@ -43,9 +43,59 @@ def write_gp(
         else:
             warnings.append(f"template does not exist: {template_path}")
 
+    # Dynamic companion files generation matching active layout styles
+    primary_score = score.scores[0] if isinstance(score, ScoreBooklet) else score
+    pref_dict = {}
+    if getattr(primary_score, "layout", None) is not None:
+        layout = primary_score.layout
+        if layout.view is not None:
+            pref_dict["scoreViewMode"] = layout.view.mode.capitalize()
+        else:
+            pref_dict["scoreViewMode"] = "Page"
+
+        if layout.page_setup is not None:
+            ps = layout.page_setup
+            pref_dict["pageFormat"] = {
+                "width": ps.width,
+                "height": ps.height,
+                "scale": ps.scale
+            }
+            if ps.margins is not None:
+                pref_dict["pageFormat"].update({
+                    "marginTop": ps.margins.top,
+                    "marginBottom": ps.margins.bottom,
+                    "marginLeft": ps.margins.left,
+                    "marginRight": ps.margins.right
+                })
+    else:
+        pref_dict["scoreViewMode"] = "Page"
+
+    preferences_bytes = (json.dumps(pref_dict, indent=2) + "\n").encode("utf-8")
+
+    layout_cfg_xml = ET.Element("LayoutConfiguration", {"version": "1.0"})
+    if getattr(primary_score, "layout", None) is not None:
+        layout = primary_score.layout
+        if layout.view is not None:
+            ET.SubElement(layout_cfg_xml, "ActiveLayout").text = layout.view.mode.capitalize()
+        else:
+            ET.SubElement(layout_cfg_xml, "ActiveLayout").text = "Page"
+        ET.SubElement(layout_cfg_xml, "SystemLayout").text = str(layout.score_systems_layout)
+        if layout.system_page_margins is not None:
+            spm = ET.SubElement(layout_cfg_xml, "SystemPageMargins")
+            ET.SubElement(spm, "Top").text = str(layout.system_page_margins.top)
+            ET.SubElement(spm, "Bottom").text = str(layout.system_page_margins.bottom)
+            ET.SubElement(spm, "Left").text = str(layout.system_page_margins.left)
+            ET.SubElement(spm, "Right").text = str(layout.system_page_margins.right)
+    else:
+        ET.SubElement(layout_cfg_xml, "ActiveLayout").text = "Page"
+        ET.SubElement(layout_cfg_xml, "SystemLayout").text = "4"
+
+    ET.indent(layout_cfg_xml, space="  ")
+    layout_cfg_bytes = ET.tostring(layout_cfg_xml, encoding="utf-8", xml_declaration=True)
+
     copied["VERSION"] = get_version_file_content(target_version)
-    copied.setdefault("Content/Preferences.json", b"{}\n")
-    copied.setdefault("Content/LayoutConfiguration", b"")
+    copied["Content/Preferences.json"] = preferences_bytes
+    copied["Content/LayoutConfiguration"] = layout_cfg_bytes
     copied.setdefault("Content/PartConfiguration", b"")
     copied.setdefault("Content/BinaryStylesheet", b"")
 

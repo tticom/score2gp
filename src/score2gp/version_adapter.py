@@ -74,6 +74,32 @@ def adapt_gpif(gpif_xml: bytes, target_version: str) -> bytes:
             else:
                 style_collections.set("gp8Compatible", "true")
 
+    # Enforce strict GP7/GP8 unmarshalling element sequence constraints under <Score> after adaptations
+    if score_node is not None:
+        TAG_ORDER = [
+            "Metadata",
+            "Tempo",
+            "PageSetup",
+            "ScoreSystemsDefaultLayout",
+            "ScoreSystemsLayout",
+            "View",
+            "Print",
+            "Layout",
+            "MusicFont",
+            "SymbolFont",
+            "Fonts",
+            "StyleCollections",
+            "Styles",
+            "MasterTrack",
+            "Booklet",
+            "Tracks",
+            "MasterBars",
+            "Bars"
+        ]
+        score_children = list(score_node)
+        score_children.sort(key=lambda x: TAG_ORDER.index(x.tag) if x.tag in TAG_ORDER else len(TAG_ORDER))
+        score_node[:] = score_children
+
     # ET.tostring returns bytes representing the XML tree
     return ET.tostring(root, encoding="utf-8")
 
