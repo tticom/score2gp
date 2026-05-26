@@ -216,6 +216,9 @@ def build_ir_command(
     allow_skip_unboxed: bool = typer.Option(False, "--allow-skip-unboxed-systems"),
     optimize_fret_snapping: bool = typer.Option(False, "--optimize-fret-snapping", help="Enable Left-hand finger position/fret-snapping optimization"),
     pages: Optional[str] = typer.Option(None, "--pages", help="Explicit page range subset to process (e.g. '1-1' or '1-2')."),
+    max_digit_gap: float = typer.Option(2.0, "--max-digit-gap", help="Maximum horizontal point distance allowed to merge separate characters into multi-digit frets"),
+    string_snap_tolerance: float = typer.Option(1.5, "--string-snap-tolerance", help="Vertical search window cushion in points around a horizontal string line vector for note snapping"),
+    strip_technique_text: bool = typer.Option(False, "--strip-technique-text", help="Pre-filter layout strings matching known technique expressions before executing character collision matrix routines"),
 ) -> None:
     """Build a limited ScoreIR file from synthetic MusicXML plus TabRaw inputs."""
     if musicxml is None or tabraw is None:
@@ -233,6 +236,9 @@ def build_ir_command(
             allow_skip_unboxed=allow_skip_unboxed,
             optimize_fret_snapping=optimize_fret_snapping,
             page_range=parse_page_range(pages),
+            max_digit_gap=max_digit_gap,
+            string_snap_tolerance=string_snap_tolerance,
+            strip_technique_text=strip_technique_text,
         )
     except BuildIrInputRiskError as exc:
         payload = exc.to_diagnostics_payload()
@@ -308,6 +314,9 @@ def convert_command(
     allow_skip_unboxed: bool = typer.Option(False, "--allow-skip-unboxed-systems"),
     optimize_fret_snapping: bool = typer.Option(False, "--optimize-fret-snapping", help="Enable Left-hand finger position/fret-snapping optimization"),
     pages: Optional[str] = typer.Option(None, "--pages", help="Explicit page range subset to process (e.g. '1-1' or '1-2')."),
+    max_digit_gap: float = typer.Option(2.0, "--max-digit-gap", help="Maximum horizontal point distance allowed to merge separate characters into multi-digit frets"),
+    string_snap_tolerance: float = typer.Option(1.5, "--string-snap-tolerance", help="Vertical search window cushion in points around a horizontal string line vector for note snapping"),
+    strip_technique_text: bool = typer.Option(False, "--strip-technique-text", help="Pre-filter layout strings matching known technique expressions before executing character collision matrix routines"),
 ) -> None:
     """Run the complete conversion pipeline: extraction, alignment, IR generation, and GP7 package writing."""
     workdir.mkdir(parents=True, exist_ok=True)
@@ -326,7 +335,13 @@ def convert_command(
 
     try:
         tabraw_path = workdir / "tab" / "tab_raw.json"
-        tab_summary = extract_tab_file(input_pdf, tabraw_path)
+        tab_summary = extract_tab_file(
+            input_pdf,
+            tabraw_path,
+            max_digit_gap=max_digit_gap,
+            string_snap_tolerance=string_snap_tolerance,
+            strip_technique_text=strip_technique_text,
+        )
         summary["tab"] = tab_summary
         if tab_summary.get("warnings"):
             p_range = parse_page_range(pages)
@@ -443,6 +458,9 @@ def convert_command(
             allow_skip_unboxed=allow_skip_unboxed,
             optimize_fret_snapping=optimize_fret_snapping,
             page_range=parse_page_range(pages),
+            max_digit_gap=max_digit_gap,
+            string_snap_tolerance=string_snap_tolerance,
+            strip_technique_text=strip_technique_text,
         )
         summary["build_ir"] = {
             "ran": True,

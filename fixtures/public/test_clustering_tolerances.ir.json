@@ -1,0 +1,92 @@
+{
+  "schema_version": "0.1.0",
+  "metadata": {
+    "title": "Clustering Tolerances Test Score",
+    "artist": "Synthetic",
+    "composer": "Synthetic",
+    "transcriber": "score2gp",
+    "copyright": "Public domain",
+    "source": "hand-authored synthetic fixture"
+  },
+  "conversion": {
+    "tool_name": "score2gp",
+    "tool_version": "0.1.0",
+    "conversion_timestamp": "2026-05-26T21:30:00Z",
+    "source_file_hash": "sha256:clustering-tolerances-fixture",
+    "source_page_count": 1
+  },
+  "tempo": { "bpm": 120, "text": "Moderato" },
+  "tracks": [
+    {
+      "id": "gtr-1",
+      "name": "Guitar",
+      "instrument": "steel guitar",
+      "capo": 0,
+      "tablature_enabled": true,
+      "staff_count": 1,
+      "tuning": {
+        "name": "Standard",
+        "strings": [
+          { "number": 1, "pitch": 64, "name": "E4" },
+          { "number": 2, "pitch": 59, "name": "B3" },
+          { "number": 3, "pitch": 56, "name": "G3" },
+          { "number": 4, "pitch": 52, "name": "D3" },
+          { "number": 5, "pitch": 47, "name": "A2" },
+          { "number": 6, "pitch": 40, "name": "E2" }
+        ]
+      }
+    }
+  ],
+  "bars": [
+    {
+      "index": 1,
+      "time_signature": { "numerator": 4, "denominator": 4 },
+      "events": [
+        {
+          "id": "e1",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 0,
+            "duration_ticks": 480,
+            "ticks_per_quarter": 480,
+            "voice": 1,
+            "notated_duration": { "value": "quarter", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 1,
+              "fret": 12,
+              "pitch": 64,
+              "confidence": 1.0,
+              "provenance": [
+                {
+                  "source_stage": "manual",
+                  "page": 1,
+                  "system_id": "synthetic-system-1",
+                  "staff_id": "tab-1",
+                  "bar_index": 1,
+                  "bbox": { "page": 1, "x0": 10, "y0": 20, "x1": 20, "y1": 30 },
+                  "raw_token_id": "note-1",
+                  "confidence": 1.0
+                }
+              ]
+            }
+          ],
+          "confidence": 1.0,
+          "provenance": [
+            {
+              "source_stage": "manual",
+              "page": 1,
+              "system_id": "synthetic-system-1",
+              "staff_id": "tab-1",
+              "bar_index": 1,
+              "confidence": 1.0
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "warnings": []
+}

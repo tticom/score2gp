@@ -83,7 +83,13 @@ def inspect_pdf(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
     return summary
 
 
-def extract_tab(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
+def extract_tab(
+    path: str | Path,
+    out_dir: str | Path,
+    max_digit_gap: float = 5.0,
+    string_snap_tolerance: float = 1.5,
+    strip_technique_text: bool = False,
+) -> dict[str, Any]:
     out_target = Path(out_dir)
     if out_target.suffix.lower() == ".json":
         out = out_target.parent
@@ -120,7 +126,16 @@ def extract_tab(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001
         raw["warnings"].append({"code": "pymupdf-unavailable", "message": str(exc), "severity": "error"})
     else:
-        raw["candidates"].extend(_extract_pdf_text_candidates(Path(path), raw["warnings"], meta))
+        raw["candidates"].extend(
+            _extract_pdf_text_candidates(
+                Path(path),
+                raw["warnings"],
+                meta,
+                max_digit_gap=max_digit_gap,
+                string_snap_tolerance=string_snap_tolerance,
+                strip_technique_text=strip_technique_text,
+            )
+        )
 
     _append_grouping_warnings(raw, meta)
     raw = TabRaw.model_validate(raw).model_dump(mode="json", exclude_none=True)
@@ -276,19 +291,23 @@ class _TabSystem:
         return boxes
 
     def string_for_y(
-        self, y: float | None, height: float | None = None, systematic_offset: float = 0.0, relaxed_tolerance: bool = False
+        self,
+        y: float | None,
+        height: float | None = None,
+        systematic_offset: float = 0.0,
+        relaxed_tolerance: bool = False,
+        string_snap_tolerance: float = 1.5,
     ) -> tuple[int | None, int | None, float | None, list[str]]:
         if y is None:
             return None, None, None, []
         calibrated_y = y - systematic_offset
         distances = [(abs(line_y - calibrated_y), index + 1) for index, line_y in enumerate(self.line_ys)]
-        distance, line_index = min(distances, key=lambda item: item[0])
+        matching_lines = [item for item in distances if item[0] <= string_snap_tolerance]
+
         if relaxed_tolerance:
-            tolerance = max(6.0, self.line_spacing * 0.75)
+            tolerance = max(6.0, self.line_spacing * 0.75, string_snap_tolerance)
         else:
-            tolerance = max(5.0, self.line_spacing * 0.48)
-
-
+            tolerance = max(5.0, self.line_spacing * 0.48, string_snap_tolerance)
 
         warnings = []
 
@@ -297,8 +316,17 @@ class _TabSystem:
             warnings.append("pdf_string_assignment_compact_staff_ambiguous")
             warnings.append("pdf_string_assignment_confidence_below_threshold")
 
-        # Check overlaps multiple bands
-        if height is not None and height > self.line_spacing * 1.5:
+        # Ambiguity Resolver: If multiple lines match the snapping cushion, resolve to the closest one
+        if len(matching_lines) > 1:
+            matching_lines.sort(key=lambda item: item[0])
+            best_dist, best_line_index = matching_lines[0]
+            warnings.append("pdf_string_assignment_nearest_line")
+            return best_line_index, best_line_index, best_dist, warnings
+
+        distance, line_index = min(distances, key=lambda item: item[0])
+
+        # Check overlaps multiple bands (unless we snapped cleanly to one via matching_lines)
+        if height is not None and height > self.line_spacing * 1.5 and len(matching_lines) != 1:
             warnings.append("pdf_string_assignment_overlaps_multiple_bands")
             warnings.append("pdf_string_assignment_ambiguous")
             warnings.append("ambiguous_string_assignment")
@@ -641,7 +669,14 @@ def _split_technique_mixed_words(words: list[tuple[float, float, float, float, s
     return refined
 
 
-def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]], meta: dict[str, int]) -> list[dict[str, Any]]:
+def _extract_pdf_text_candidates(
+    pdf_path: Path,
+    warnings: list[dict[str, Any]],
+    meta: dict[str, int],
+    max_digit_gap: float = 5.0,
+    string_snap_tolerance: float = 1.5,
+    strip_technique_text: bool = False,
+) -> list[dict[str, Any]]:
     import fitz  # type: ignore[import-not-found]
 
     candidates = []
@@ -1529,7 +1564,9 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                 for d in digits:
                     y_center = (d["y0"] + d["y1"]) / 2
                     height = d["y1"] - d["y0"]
-                    line_idx, string, string_dist, string_warnings = system.string_for_y(y_center, height, systematic_offset)
+                    line_idx, string, string_dist, string_warnings = system.string_for_y(
+                        y_center, height, systematic_offset, string_snap_tolerance=string_snap_tolerance
+                    )
 
                     d["y_center"] = y_center
                     d["height_val"] = height
@@ -1561,7 +1598,11 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                         y_center = ud["y_center"]
                         height = ud["height_val"]
                         line_idx, string, string_dist, string_warnings = system.string_for_y(
-                            y_center, height, systematic_offset, relaxed_tolerance=True
+                            y_center,
+                            height,
+                            systematic_offset,
+                            relaxed_tolerance=True,
+                            string_snap_tolerance=string_snap_tolerance,
                         )
                         if string is not None:
                             ud["assigned_string"] = string
@@ -1611,7 +1652,7 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                             y_center2 = (d2["y0"] + d2["y1"]) / 2
                             vertical_offset = abs(y_center2 - y_center1)
 
-                            if -3.0 <= gap <= 5.0:
+                            if -3.0 <= gap <= max_digit_gap:
                                 if vertical_offset <= 2.0:
                                     merged_text += d2["text"]
                                     merged_x1 = d2["x1"]
@@ -1632,7 +1673,7 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                                 merged_warnings.append("pdf_fret_digits_overlap_ambiguous")
                                 merged_warnings.append("pdf_fret_refinement_not_enough_for_build_ir")
                                 break
-                            elif 5.0 < gap <= 12.0:
+                            elif max_digit_gap < gap <= 12.0:
                                 d2["warnings"].append("pdf_fret_digits_not_merged_gap_too_large")
                                 d2["warnings"].append("pdf_fret_refinement_not_enough_for_build_ir")
                                 break
@@ -1682,6 +1723,8 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                     npw_x = (npw["x0"] + npw["x1"]) / 2
                     npw_y = (npw["y0"] + npw["y1"]) / 2
                     if _nearest_system(systems, npw_x, npw_y) == system:
+                        if strip_technique_text and npw["text"].strip().lower() in {"full", "b", "r", "sl", "vibrato"}:
+                            continue
                         system_non_playables.append(npw)
 
                 for mc in merged_candidates:
