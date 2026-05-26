@@ -540,6 +540,7 @@ def build_ir_from_files(
     allow_remediation: bool = False,
     allow_skip_unboxed: bool = False,
     optimize_fret_snapping: bool = False,
+    page_range: tuple[int, int] | None = None,
 ) -> ScoreIR:
     try:
         score, diagnostics = build_ir_with_diagnostics_from_files(
@@ -550,6 +551,7 @@ def build_ir_from_files(
             allow_remediation=allow_remediation,
             allow_skip_unboxed=allow_skip_unboxed,
             optimize_fret_snapping=optimize_fret_snapping,
+            page_range=page_range,
         )
         if diagnostics_out_path is not None:
             diagnostics.to_json_file(diagnostics_out_path)
@@ -613,6 +615,7 @@ def build_ir_with_diagnostics_from_files(
     allow_remediation: bool = False,
     allow_skip_unboxed: bool = False,
     optimize_fret_snapping: bool = False,
+    page_range: tuple[int, int] | None = None,
 ) -> tuple[ScoreIR, BuildIrDiagnostics]:
     musicxml = parse_musicxml(musicxml_path, allow_remediation=allow_remediation)
     tabraw = TabRaw.from_json_file(tabraw_path)
@@ -645,6 +648,7 @@ def build_ir_with_diagnostics_from_files(
         ascii_gate_details=ascii_gate_details,
         allow_skip_unboxed=allow_skip_unboxed,
         optimize_fret_snapping=optimize_fret_snapping,
+        page_range=page_range,
     )
     if out_path is not None:
         out = Path(out_path)
@@ -1065,9 +1069,10 @@ def build_ir_from_imports(
     tabraw: TabRaw,
     *,
     optimize_fret_snapping: bool = False,
+    page_range: tuple[int, int] | None = None,
 ) -> ScoreIR:
     score, _ = build_ir_with_diagnostics_from_imports(
-        musicxml, tabraw, optimize_fret_snapping=optimize_fret_snapping
+        musicxml, tabraw, optimize_fret_snapping=optimize_fret_snapping, page_range=page_range
     )
     return score
 
@@ -1079,7 +1084,66 @@ def build_ir_with_diagnostics_from_imports(
     ascii_gate_details: dict[str, object] | None = None,
     allow_skip_unboxed: bool = False,
     optimize_fret_snapping: bool = False,
+    page_range: tuple[int, int] | None = None,
 ) -> tuple[ScoreIR, BuildIrDiagnostics]:
+    if page_range is not None:
+        start_page, end_page = page_range
+        # Filter candidates: keep only selected pages, and strip explicitly excluded text/digits (like page numbers)
+        tabraw.candidates = [
+            c for c in tabraw.candidates
+            if c.page_index is not None and start_page <= c.page_index <= end_page
+            and not (
+                isinstance(c.raw, dict)
+                and any(
+                    w in (c.raw.get("assignment_warnings") or [])
+                    for w in (
+                        "pdf_fret_technique_marker_excluded",
+                        "pdf_fret_chord_text_digit_excluded",
+                        "pdf_fret_page_or_legend_number_excluded",
+                    )
+                )
+            )
+        ]
+        # Filter warnings: remove page-specific warnings outside range,
+        # and strip general/global grouping or suitability warnings that are stale under page range constraints.
+        filtered_warnings = []
+        for w in tabraw.warnings:
+            code = w.get("code")
+            p_idx = w.get("page_index") or w.get("page_number")
+            if p_idx is not None:
+                try:
+                    p = int(p_idx)
+                    if start_page <= p <= end_page:
+                        filtered_warnings.append(w)
+                except (ValueError, TypeError):
+                    filtered_warnings.append(w)
+            else:
+                # Strip global/general suitability or layout warnings that are stale when page range constraints are active
+                if code in {
+                    "pdf_grouping_not_safe_for_build_ir",
+                    "pdf_missing_pdf_grouping_blocks_build_ir",
+                    "pdf_partial_grouping_one_system_unboxed",
+                    "pdf_playable_candidate_requires_string_assignment",
+                    "pdf_partial_grouping_with_playable_candidates",
+                    "pdf_layout_detection_requires_manual_review",
+                    "partial_pdf_grouping",
+                    "missing_pdf_grouping",
+                    "missing_pdf_barlines",
+                    "incomplete_tab_staff",
+                    "ambiguous_string_assignment",
+                    "ambiguous_bar_assignment",
+                    "pdf_system_detection_not_enough_for_build_ir",
+                    "pdf_bar_detection_not_enough_for_build_ir",
+                    "pdf_bar_box_construction_not_enough_for_build_ir",
+                    "pdf_string_assignment_not_enough_for_build_ir",
+                    "pdf_fret_refinement_not_enough_for_build_ir",
+                    "pdf_pitch_tuning_diagnostics_not_enough_for_build_ir",
+                    "pdf_timing_mapping_refused",
+                    "pdf_timing_mapping_not_enough_for_build_ir",
+                } or (isinstance(code, str) and (code.startswith("pdf_") or code.startswith("ascii_"))):
+                    continue
+                filtered_warnings.append(w)
+        tabraw.warnings = filtered_warnings
     if allow_skip_unboxed:
         unboxed_systems = set()
         skipped_systems = set()
