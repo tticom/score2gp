@@ -4,6 +4,8 @@
 
 ## Done
 
+- [x] Implement a thread-safe, self-invalidating incremental build cache registry and asset hash validation layer in `src/score2gp/cache.py` to calculate unique SHA-256 content hashes, cache generated GP7 packages under `work/cache_artifacts/`, bypass compile loops on cache hits, and track cache-status metrics, integrated with both batch and CLI run entry points (`feature/pipeline-incremental-build-cache-v0.1`).
+
 - [x] Implement an asynchronous pipeline batch-processing engine and concurrent execution framework in a new orchestrator module (`src/score2gp/batch.py`) to process multiple separate score-generation payloads simultaneously using isolated sandboxed workspaces under `work/` and returning a centralized batch status execution report dictionary, exposed via a new `batch` CLI command (`feature/pipeline-batch-parallelization-v0.1`).
 
 - [x] Implement package extraction recovery loops and reverse inspection gates in the Guitar Pro package parsing pathway (`src/score2gp/gp_package.py`) to extract zipped GP7 native elements and map them back symmetrically into ScoreIR properties, establishing an explicit round-trip gate (`validate-roundtrip`) (`feature/gpif-bidirectional-roundtrip-gates-v0.1`).
