@@ -2,12 +2,18 @@ from __future__ import annotations
 
 import json
 import zipfile
+from fractions import Fraction
 from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree as ET
 
 from .gpif import build_gpif, gpif_warnings
-from .ir import ScoreIR, ScoreBooklet
+from .ir import (
+    ScoreIR, ScoreBooklet, Track, Tuning, TuningString, Mixer, SoundConfig,
+    TrackLayoutPreferences, TrackExpression, TrackAutomation, ScoreLayout,
+    Metadata, Tempo, TimeSignature, KeySignature, Bar, Event, Note,
+    BoundingBox, Provenance, ConversionInfo, MasterMixer, PipelinePresetCascade
+)
 
 REQUIRED_MEMBERS = {"VERSION", "Content/score.gpif"}
 
@@ -272,3 +278,425 @@ def _known_tuning_name(pitches: list[str]) -> str | None:
 
 def dumps_summary(summary: dict[str, Any]) -> str:
     return json.dumps(summary, indent=2, sort_keys=True)
+
+
+def extract_score_ir_from_gp(path: str | Path) -> ScoreIR:
+    gp_path = Path(path)
+    with zipfile.ZipFile(gp_path, "r") as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+    # 1. Parse Metadata
+    meta_node = root.find(".//Metadata")
+    metadata = Metadata()
+    if meta_node is not None:
+        metadata.title = _first_text(meta_node, ["Title"]) or "Untitled"
+        metadata.artist = _first_text(meta_node, ["Artist"])
+        metadata.composer = _first_text(meta_node, ["Composer"])
+        metadata.album = _first_text(meta_node, ["Album"])
+        metadata.transcriber = _first_text(meta_node, ["Transcriber"])
+        metadata.copyright = _first_text(meta_node, ["Copyright"])
+
+    # 2. Parse Tempo
+    tempo_node = root.find(".//Tempo")
+    bpm = 120
+    tempo_text = None
+    if tempo_node is not None:
+        bpm = int(_first_text(tempo_node, ["Value"]) or 120)
+        tempo_text = _first_text(tempo_node, ["Text"])
+    tempo = Tempo(bpm=bpm, text=tempo_text)
+
+    # 3. Parse Tracks
+    tracks: list[Track] = []
+    for track_node in root.findall(".//Tracks/Track"):
+        track_id = track_node.get("id") or "unknown"
+        name = _first_text(track_node, ["Name"]) or "Track"
+        instrument = _first_text(track_node, ["Instrument"]) or "guitar"
+        capo = int(_first_text(track_node, ["Capo"]) or 0)
+        color = _first_text(track_node, ["Color"])
+
+        # Tuning
+        tuning_node = track_node.find("Tuning")
+        tuning_name = "Standard"
+        if tuning_node is not None:
+            tuning_name = tuning_node.get("name") or "Standard"
+
+        strings: list[TuningString] = []
+        if tuning_node is not None:
+            for s_node in tuning_node.findall("String"):
+                num = int(s_node.get("number") or 1)
+                pitch = int(s_node.get("pitch") or 0)
+                s_name = s_node.get("name") or ""
+                strings.append(TuningString(number=num, pitch=pitch, name=s_name))
+
+        # Staff properties for Balance/FineTuning
+        staff_node = track_node.find(".//Staff")
+        if staff_node is not None:
+            tuning_prop = staff_node.find(".//Property[@name='Tuning']")
+            if tuning_prop is not None:
+                balance_node = tuning_prop.find("Balance")
+                finetuning_node = tuning_prop.find("FineTuning")
+                strings.sort(key=lambda s: s.number, reverse=True)
+                if balance_node is not None and balance_node.text:
+                    balances = [float(b) for b in balance_node.text.split()]
+                    for s, bal in zip(strings, balances):
+                        if bal != 0.0:
+                            s.volume_offset = bal
+                if finetuning_node is not None and finetuning_node.text:
+                    finetunes = [float(f) for f in finetuning_node.text.split()]
+                    for s, ft in zip(strings, finetunes):
+                        if ft != 0.0:
+                            s.fine_tune = ft
+                strings.sort(key=lambda s: s.number)
+
+        tuning = Tuning(name=tuning_name, strings=strings)
+
+        # Mixer
+        mixer = None
+        mixer_node = track_node.find("Mixer")
+        if mixer_node is not None:
+            vol = float(_first_text(mixer_node, ["Volume"]) or 100) / 100.0
+            pan = (float(_first_text(mixer_node, ["Pan"]) or 50) / 50.0) - 1.0
+            mute = _first_text(mixer_node, ["Mute"]) == "true"
+            solo = _first_text(mixer_node, ["Solo"]) == "true"
+            mixer = Mixer(volume=vol, pan=pan, mute=mute, solo=solo)
+
+        # Expressions
+        expressions = None
+        expr_texts_node = track_node.find("ExpressionTexts")
+        if expr_texts_node is not None:
+            expressions = []
+            for expr_node in expr_texts_node.findall("ExpressionText"):
+                bar_idx = int(expr_node.get("measure") or 1)
+                text_val = expr_node.text or ""
+                expressions.append(TrackExpression(bar_index=bar_idx, text=text_val))
+
+        # Automations
+        automations = None
+        automations_node = track_node.find("Automations")
+        if automations_node is not None:
+            automations = []
+            for auto_node in automations_node.findall("Automation"):
+                auto_type = auto_node.get("type") or "Volume"
+                for pt_node in auto_node.findall("Point"):
+                    bar_idx = int(pt_node.get("measure") or 1)
+                    val_val = float(pt_node.get("value") or 0.0)
+                    automations.append(TrackAutomation(type=auto_type, bar_index=bar_idx, value=val_val))
+
+        # Layout Preferences
+        layout_preferences = None
+        tab_only = False
+        tab_node = track_node.find("Tablature")
+        if tab_node is not None:
+            tab_only = _first_text(tab_node, ["TabOnly"]) == "true"
+
+        view_mode = None
+        view_node = track_node.find("View")
+        if view_node is not None:
+            view_mode = (_first_text(view_node, ["Mode"]) or "page").lower()
+
+        stem_dir = None
+        line_sz = None
+        brackets_vis = None
+        stems_vis = None
+        line_sz_sys = None
+
+        if staff_node is not None:
+            stems_prop = staff_node.find(".//Property[@name='Stems']")
+            if stems_prop is not None:
+                if _first_text(stems_prop, ["Enable"]) == "true":
+                    stem_dir = (_first_text(stems_prop, ["Direction"]) or "auto").lower()
+                else:
+                    stem_dir = "auto"
+
+            ls_prop = staff_node.find(".//Property[@name='LineSizing']")
+            if ls_prop is not None:
+                line_sz = (_first_text(ls_prop, ["Size"]) or "standard").lower()
+
+            brackets_prop = staff_node.find(".//Property[@name='Brackets']")
+            if brackets_prop is not None:
+                brackets_vis = _first_text(brackets_prop, ["Enable"]) == "true"
+
+            stem_vis_prop = staff_node.find(".//Property[@name='StemVisibility']")
+            if stem_vis_prop is not None:
+                stems_vis = _first_text(stem_vis_prop, ["Enable"]) == "true"
+
+            ls_sys_prop = staff_node.find(".//Property[@name='LineSizingPerSystem']")
+            if ls_sys_prop is not None:
+                line_sz_sys = (_first_text(ls_sys_prop, ["Size"]) or "standard").lower()
+
+        if any(v is not None for v in (tab_only, stem_dir, line_sz, view_mode, brackets_vis, stems_vis, line_sz_sys)):
+            layout_preferences = TrackLayoutPreferences(
+                tab_only=tab_only,
+                stem_direction=stem_dir,
+                line_sizing=line_sz,
+                view_mode=view_mode,
+                brackets_visible=brackets_vis,
+                stems_visible=stems_vis,
+                line_sizing_per_system=line_sz_sys
+            )
+
+        tab_enabled = True
+        if staff_node is not None:
+            tab_prop = staff_node.find(".//Property[@name='Tablature']")
+            if tab_prop is not None:
+                tab_enabled = _first_text(tab_prop, ["Enable"]) == "true"
+
+        tracks.append(
+            Track(
+                id=track_id,
+                name=name,
+                instrument=instrument,
+                tuning=tuning,
+                capo=capo,
+                tablature_enabled=tab_enabled,
+                mixer=mixer,
+                color=color,
+                layout_preferences=layout_preferences,
+                expressions=expressions,
+                automations=automations
+            )
+        )
+
+    # 4. Parse ScoreLayout
+    layout = ScoreLayout()
+    master_track_node = root.find(".//MasterTrack")
+    if master_track_node is not None:
+        tracks_text = _first_text(master_track_node, ["Tracks"])
+        if tracks_text:
+            layout.track_order = tracks_text.split()
+
+        mm_node = master_track_node.find("Mixer")
+        if mm_node is not None:
+            vol = float(_first_text(mm_node, ["Volume"]) or 100) / 100.0
+            pan = (float(_first_text(mm_node, ["Pan"]) or 50) / 50.0) - 1.0
+            reverb = float(_first_text(mm_node, ["Reverb"]) or 0.0)
+            chorus = float(_first_text(mm_node, ["Chorus"]) or 0.0)
+            layout.master_mixer = MasterMixer(volume=vol, pan=pan, reverb=reverb, chorus=chorus)
+
+        pc_node = master_track_node.find("PresetCascade")
+        if pc_node is not None:
+            p_name = pc_node.get("presetName") or "standard"
+            t_engine = pc_node.get("targetEngine") or "gp7"
+            opts = {}
+            for opt in pc_node.findall("Option"):
+                o_name = opt.get("name")
+                o_val = opt.get("value")
+                if o_name:
+                    try:
+                        if "." in o_val:
+                            opts[o_name] = float(o_val)
+                        else:
+                            opts[o_name] = int(o_val)
+                    except ValueError:
+                        opts[o_name] = o_val
+            layout.preset_cascade = PipelinePresetCascade(preset_name=p_name, target_engine=t_engine, options=opts)
+
+    ps_node = root.find(".//PageSetup")
+    if ps_node is not None:
+        w = float(_first_text(ps_node, ["Width"]) or 210.0)
+        h = float(_first_text(ps_node, ["Height"]) or 297.0)
+        margin_top = float(_first_text(ps_node, ["MarginTop"]) or 15.0)
+        margin_bottom = float(_first_text(ps_node, ["MarginBottom"]) or 15.0)
+        margin_left = float(_first_text(ps_node, ["MarginLeft"]) or 15.0)
+        margin_right = float(_first_text(ps_node, ["MarginRight"]) or 15.0)
+        scale = float(_first_text(ps_node, ["Scale"]) or 1.0)
+
+        from .ir import PageSetup, PageMargins
+        layout.page_setup = PageSetup(
+            width=w,
+            height=h,
+            margins=PageMargins(top=margin_top, bottom=margin_bottom, left=margin_left, right=margin_right),
+            scale=scale
+        )
+
+    # 5. Parse Bars and Events
+    bars: list[Bar] = []
+    master_bars_node = root.find(".//MasterBars")
+    mb_map = {}
+    if master_bars_node is not None:
+        for mb_node in master_bars_node.findall("MasterBar"):
+            idx = int(mb_node.get("index") or 1)
+            time_str = _first_text(mb_node, ["Time"]) or "4/4"
+            num, den = map(int, time_str.split("/"))
+            key_sig = None
+            key_node = mb_node.find("Key")
+            if key_node is not None:
+                fifths = int(_first_text(key_node, ["Fifths"]) or 0)
+                mode = _first_text(key_node, ["Mode"]) or "major"
+                key_sig = KeySignature(fifths=fifths, mode=mode)
+            mb_map[idx] = (num, den, key_sig)
+
+    bars_node = root.find(".//Bars")
+    if bars_node is not None:
+        for bar_node in bars_node.findall("Bar"):
+            idx = int(bar_node.get("index") or 1)
+            num, den, key_sig = mb_map.get(idx, (4, 4, None))
+            events: list[Event] = []
+            for ev_node in bar_node.findall(".//Event"):
+                ev_id = ev_node.get("id") or "e"
+                tr_id = ev_node.get("track") or "t"
+                rest = ev_node.get("rest") == "true"
+                voice = int(ev_node.get("voice") or 0) + 1
+                pos_frac = ev_node.get("position") or "0"
+                dur_frac = ev_node.get("duration") or "1/2"
+
+                pos = int(Fraction(pos_frac) * 960 * 4)
+                dur = int(Fraction(dur_frac) * 960 * 4)
+
+                from .ir import Timing
+                timing = Timing(bar_index=idx, onset_ticks=pos, duration_ticks=dur, voice=voice)
+                notes: list[Note] = []
+                for n_node in ev_node.findall(".//Note"):
+                    string = int(n_node.get("string") or 1)
+                    fret = int(n_node.get("fret") or 0)
+                    pitch = int(n_node.get("pitch") or 0)
+                    notes.append(Note(string=string, fret=fret, pitch=pitch))
+                events.append(Event(id=ev_id, track_id=tr_id, timing=timing, notes=notes, is_rest=rest))
+
+            bars.append(
+                Bar(
+                    index=idx,
+                    time_signature=TimeSignature(numerator=num, denominator=den),
+                    key_signature=key_sig,
+                    events=events
+                )
+            )
+
+    return ScoreIR(
+        schema_version="0.1.0",
+        metadata=metadata,
+        tempo=tempo,
+        tracks=tracks,
+        bars=bars,
+        layout=layout
+    )
+
+
+def validate_roundtrip(path: str | Path, original: ScoreIR) -> dict[str, Any]:
+    recovered = extract_score_ir_from_gp(path)
+    from .ir import semantic_scoreir_summary
+    original_sum = semantic_scoreir_summary(original)
+    recovered_sum = semantic_scoreir_summary(recovered)
+
+    errors = []
+
+    for k in ["title", "artist", "composer", "album", "transcriber", "copyright"]:
+        orig_val = getattr(original.metadata, k, None)
+        rec_val = getattr(recovered.metadata, k, None)
+        if orig_val != rec_val:
+            errors.append(f"metadata.{k} mismatch: original={orig_val}, recovered={rec_val}")
+
+    if original.tempo.bpm != recovered.tempo.bpm:
+        errors.append(f"tempo.bpm mismatch: original={original.tempo.bpm}, recovered={recovered.tempo.bpm}")
+    if original.tempo.text != recovered.tempo.text:
+        errors.append(f"tempo.text mismatch: original={original.tempo.text}, recovered={recovered.tempo.text}")
+
+    orig_tracks_map = {t.id: t for t in original.tracks}
+    rec_tracks_map = {t.id: t for t in recovered.tracks}
+
+    if set(orig_tracks_map.keys()) != set(rec_tracks_map.keys()):
+        errors.append(f"tracks IDs mismatch: original={sorted(orig_tracks_map.keys())}, recovered={sorted(rec_tracks_map.keys())}")
+    else:
+        for tid, orig_t in orig_tracks_map.items():
+            rec_t = rec_tracks_map[tid]
+            if orig_t.name != rec_t.name:
+                errors.append(f"track '{tid}'.name mismatch: original={orig_t.name}, recovered={rec_t.name}")
+            if orig_t.instrument != rec_t.instrument:
+                errors.append(f"track '{tid}'.instrument mismatch: original={orig_t.instrument}, recovered={rec_t.instrument}")
+            if orig_t.capo != rec_t.capo:
+                errors.append(f"track '{tid}'.capo mismatch: original={orig_t.capo}, recovered={rec_t.capo}")
+            if orig_t.tuning.name != rec_t.tuning.name:
+                errors.append(f"track '{tid}'.tuning.name mismatch: original={orig_t.tuning.name}, recovered={rec_t.tuning.name}")
+
+            orig_strings = sorted(orig_t.tuning.strings, key=lambda s: s.number)
+            rec_strings = sorted(rec_t.tuning.strings, key=lambda s: s.number)
+            if len(orig_strings) != len(rec_strings):
+                errors.append(f"track '{tid}'.tuning strings count mismatch: original={len(orig_strings)}, recovered={len(rec_strings)}")
+            else:
+                for os, rs in zip(orig_strings, rec_strings):
+                    if os.number != rs.number or os.pitch != rs.pitch:
+                        errors.append(f"track '{tid}'.string {os.number} mismatch: original=({os.pitch}, {os.name}), recovered=({rs.pitch}, {rs.name})")
+                    orig_offset = os.volume_offset if os.volume_offset is not None else 0.0
+                    rec_offset = rs.volume_offset if rs.volume_offset is not None else 0.0
+                    if orig_offset != rec_offset:
+                        errors.append(f"track '{tid}'.string {os.number}.volume_offset mismatch: original={os.volume_offset}, recovered={rs.volume_offset}")
+                    orig_ft = os.fine_tune if os.fine_tune is not None else 0.0
+                    rec_ft = rs.fine_tune if rs.fine_tune is not None else 0.0
+                    if orig_ft != rec_ft:
+                        errors.append(f"track '{tid}'.string {os.number}.fine_tune mismatch: original={os.fine_tune}, recovered={rs.fine_tune}")
+
+            if (orig_t.mixer is None) != (rec_t.mixer is None):
+                errors.append(f"track '{tid}'.mixer presence mismatch: original={orig_t.mixer is not None}, recovered={rec_t.mixer is not None}")
+            elif orig_t.mixer is not None:
+                if int(orig_t.mixer.volume * 100) != int(rec_t.mixer.volume * 100):
+                    errors.append(f"track '{tid}'.mixer.volume mismatch: original={orig_t.mixer.volume}, recovered={rec_t.mixer.volume}")
+                if int((orig_t.mixer.pan + 1) * 50) != int((rec_t.mixer.pan + 1) * 50):
+                    errors.append(f"track '{tid}'.mixer.pan mismatch: original={orig_t.mixer.pan}, recovered={rec_t.mixer.pan}")
+                if orig_t.mixer.mute != rec_t.mixer.mute:
+                    errors.append(f"track '{tid}'.mixer.mute mismatch: original={orig_t.mixer.mute}, recovered={rec_t.mixer.mute}")
+                if orig_t.mixer.solo != rec_t.mixer.solo:
+                    errors.append(f"track '{tid}'.mixer.solo mismatch: original={orig_t.mixer.solo}, recovered={rec_t.mixer.solo}")
+
+            orig_exprs = sorted(orig_t.expressions or [], key=lambda e: e.bar_index)
+            rec_exprs = sorted(rec_t.expressions or [], key=lambda e: e.bar_index)
+            if len(orig_exprs) != len(rec_exprs):
+                errors.append(f"track '{tid}'.expressions count mismatch: original={len(orig_exprs)}, recovered={len(rec_exprs)}")
+            else:
+                for oe, re in zip(orig_exprs, rec_exprs):
+                    if oe.bar_index != re.bar_index or oe.text != re.text:
+                        errors.append(f"track '{tid}'.expression mismatch: original=({oe.bar_index}, {oe.text}), recovered=({re.bar_index}, {re.text})")
+
+            orig_autos = sorted(orig_t.automations or [], key=lambda a: (a.type, a.bar_index))
+            rec_autos = sorted(rec_t.automations or [], key=lambda a: (a.type, a.bar_index))
+            if len(orig_autos) != len(rec_autos):
+                errors.append(f"track '{tid}'.automations count mismatch: original={len(orig_autos)}, recovered={len(rec_autos)}")
+            else:
+                for oa, ra in zip(orig_autos, rec_autos):
+                    if oa.type != ra.type or oa.bar_index != ra.bar_index or abs(oa.value - ra.value) > 1e-4:
+                        errors.append(f"track '{tid}'.automation mismatch: original=({oa.type}, {oa.bar_index}, {oa.value}), recovered=({ra.type}, {ra.bar_index}, {ra.value})")
+
+            orig_lp = orig_t.layout_preferences
+            rec_lp = rec_t.layout_preferences
+            if orig_lp is not None and rec_lp is not None:
+                for field in ["tab_only", "stem_direction", "line_sizing", "view_mode", "brackets_visible", "stems_visible", "line_sizing_per_system"]:
+                    orig_val = getattr(orig_lp, field, None)
+                    rec_val = getattr(rec_lp, field, None)
+                    if orig_val != rec_val:
+                        errors.append(f"track '{tid}'.layout_preferences.{field} mismatch: original={orig_val}, recovered={rec_val}")
+
+    if original.layout.track_order != recovered.layout.track_order:
+        errors.append(f"layout.track_order mismatch: original={original.layout.track_order}, recovered={recovered.layout.track_order}")
+
+    orig_mm = original.layout.master_mixer
+    rec_mm = recovered.layout.master_mixer
+    if (orig_mm is None) != (rec_mm is None):
+        errors.append(f"layout.master_mixer presence mismatch: original={orig_mm is not None}, recovered={rec_mm is not None}")
+    elif orig_mm is not None:
+        if int(orig_mm.volume * 100) != int(rec_mm.volume * 100):
+            errors.append(f"layout.master_mixer.volume mismatch: original={orig_mm.volume}, recovered={rec_mm.volume}")
+        if int((orig_mm.pan + 1) * 50) != int((rec_mm.pan + 1) * 50):
+            errors.append(f"layout.master_mixer.pan mismatch: original={orig_mm.pan}, recovered={rec_mm.pan}")
+        if orig_mm.reverb != rec_mm.reverb:
+            errors.append(f"layout.master_mixer.reverb mismatch: original={orig_mm.reverb}, recovered={rec_mm.reverb}")
+        if orig_mm.chorus != rec_mm.chorus:
+            errors.append(f"layout.master_mixer.chorus mismatch: original={orig_mm.chorus}, recovered={rec_mm.chorus}")
+
+    orig_pc = original.layout.preset_cascade
+    rec_pc = recovered.layout.preset_cascade
+    if (orig_pc is None) != (rec_pc is None):
+        errors.append(f"layout.preset_cascade presence mismatch: original={orig_pc is not None}, recovered={rec_pc is not None}")
+    elif orig_pc is not None:
+        if orig_pc.preset_name != rec_pc.preset_name:
+            errors.append(f"layout.preset_cascade.preset_name mismatch: original={orig_pc.preset_name}, recovered={rec_pc.preset_name}")
+        if orig_pc.target_engine != rec_pc.target_engine:
+            errors.append(f"layout.preset_cascade.target_engine mismatch: original={orig_pc.target_engine}, recovered={rec_pc.target_engine}")
+        if orig_pc.options != rec_pc.options:
+            errors.append(f"layout.preset_cascade.options mismatch: original={orig_pc.options}, recovered={rec_pc.options}")
+
+    return {
+        "valid": len(errors) == 0,
+        "errors": errors,
+        "original_summary": original_sum,
+        "recovered_summary": recovered_sum
+    }

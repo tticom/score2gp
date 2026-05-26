@@ -2093,3 +2093,20 @@ def test_gpif_master_mixer(tmp_path) -> None:
         assert options[0].get("value") == "40"
         assert options[1].get("name") == "room_size"
         assert options[1].get("value") == "large"
+
+
+def test_gpif_bidirectional_roundtrip(tmp_path) -> None:
+    from score2gp.gp_package import validate_roundtrip
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_bidirectional_roundtrip.ir.json")
+    out = tmp_path / "roundtrip.gp"
+
+    # Write the package
+    warnings = write_gp(score, out)
+    assert len(warnings) == 1
+    assert "vln-1" in warnings[0]
+    assert zipfile.is_zipfile(out)
+
+    # Perform round-trip validation
+    result = validate_roundtrip(out, score)
+    assert result["valid"] is True, f"Round-trip validation failed: {result['errors']}"
+    assert len(result["errors"]) == 0

@@ -9,7 +9,7 @@ import typer
 
 from .ascii_alignment import align_ascii_musicxml_files
 from .build_ir import BuildIrInputRiskError, build_ir_with_diagnostics_from_files
-from .gp_package import compare_gp, dumps_summary, inspect_gp, validate_gp, write_gp
+from .gp_package import compare_gp, dumps_summary, inspect_gp, validate_gp, write_gp, validate_roundtrip
 from .ir import ScoreIR, compare_score_ir, export_scoreir_schema, validate_score_ir_file
 from .pdf import extract_tab as extract_tab_file
 from .pdf import inspect_pdf as inspect_pdf_file
@@ -86,6 +86,24 @@ def write_gp_command(ir_json: Path, template: Optional[Path] = typer.Option(None
     for warning in warnings:
         typer.echo(f"warning: {warning}", err=True)
     typer.echo(str(out))
+
+
+@app.command("validate-roundtrip")
+def validate_roundtrip_command(ir_json: Path, gp_package: Path) -> None:
+    """Verify that an exported GP7 package can be round-tripped back to ScoreIR."""
+    score, errors = validate_score_ir_file(ir_json)
+    if errors:
+        for err in errors:
+            typer.echo(f"error loading IR: {err}", err=True)
+        raise typer.Exit(1)
+    if not isinstance(score, ScoreIR):
+        typer.echo("error: round-trip validation is only supported for single ScoreIR inputs", err=True)
+        raise typer.Exit(1)
+
+    result = validate_roundtrip(gp_package, score)
+    typer.echo(json.dumps(result, indent=2, sort_keys=True))
+    if not result["valid"]:
+        raise typer.Exit(1)
 
 
 @app.command("inspect-pdf")
