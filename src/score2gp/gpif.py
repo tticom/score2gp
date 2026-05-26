@@ -707,6 +707,19 @@ def _bars(parent: ET.Element, score: ScoreIR, hopo_dests: set[tuple[int, int, in
             ae_node = ET.SubElement(bar_node, "AlternativeEnding")
             _text(ae_node, "AlternateEndings", mask)
 
+        if getattr(bar, "multi_measure_rest_count", None) is not None:
+            mmr_node = ET.SubElement(bar_node, "MultiMeasureRest")
+            _text(mmr_node, "BarCount", bar.multi_measure_rest_count)
+
+        if getattr(bar, "repeat_count_overlay", None) is not None:
+            rc_node = ET.SubElement(bar_node, "RepeatCount")
+            _text(rc_node, "Count", bar.repeat_count_overlay.count)
+            if bar.repeat_count_overlay.span is not None:
+                _text(rc_node, "Span", bar.repeat_count_overlay.span)
+            if bar.repeat_count_overlay.style is not None:
+                style_val = bar.repeat_count_overlay.style.capitalize()
+                _text(rc_node, "Style", style_val)
+
         if getattr(bar, "bar_numbering", None) is not None:
             bn = bar.bar_numbering
             bn_node = ET.SubElement(bar_node, "BarNumbering")

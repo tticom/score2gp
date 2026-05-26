@@ -648,6 +648,14 @@ class BarDirection(BaseModel):
     target_bar_index: int | None = None
 
 
+class RepeatCountOverlay(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    count: int = Field(ge=1)
+    span: int | None = Field(default=None, ge=1)
+    style: Literal["standard", "percent", "numbered", "default"] | None = "default"
+
+
 class Bar(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -667,6 +675,9 @@ class Bar(BaseModel):
     marker_color: str | None = None
     alternate_ending_passes: list[int] | None = None
     alternate_ending_is_stop: bool | None = None
+    multi_measure_rest_count: int | None = Field(default=None, ge=1)
+    repeat_count_overlay: RepeatCountOverlay | None = None
+
 
 
     @model_validator(mode="before")
