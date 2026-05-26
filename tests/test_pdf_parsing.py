@@ -49,3 +49,26 @@ def test_string_for_y_ambiguity_closer_snapping() -> None:
     assert line_idx == 1
     assert string == 1
     assert dist == 2.0
+
+def test_bar_cushion_edge_snapping() -> None:
+    line_ys = [100.0, 112.0, 124.0, 136.0, 148.0, 160.0]
+    system = _TabSystem(
+        page_index=1,
+        system_index=1,
+        staff_index=1,
+        first_bar_index=1,
+        line_ys=line_ys,
+        x0=50.0,
+        x1=500.0,
+        barlines=[50.0, 200.0, 500.0],
+    )
+    # Candidate sitting 1.5 points outside left outer boundary of bar 1 at 50.0 (i.e. x=48.5)
+    # With bar_cushion=0.0: it includes 'pdf_candidate_outside_bar' warning.
+    bar_idx_no_cushion, bar_warns_no_cushion = system.bar_for_x(48.5, bar_cushion=0.0)
+    assert bar_idx_no_cushion == 1
+    assert "pdf_candidate_outside_bar" in bar_warns_no_cushion
+
+    # With bar cushion >= 1.5 (e.g. 2.0): it maps cleanly without throwing 'pdf_candidate_outside_bar' warning!
+    bar_idx_with_cushion, bar_warns_with_cushion = system.bar_for_x(48.5, bar_cushion=2.0)
+    assert bar_idx_with_cushion == 1
+    assert "pdf_candidate_outside_bar" not in bar_warns_with_cushion

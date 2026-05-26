@@ -89,6 +89,7 @@ def extract_tab(
     max_digit_gap: float = 5.0,
     string_snap_tolerance: float = 1.5,
     strip_technique_text: bool = False,
+    bar_cushion: float = 0.0,
 ) -> dict[str, Any]:
     out_target = Path(out_dir)
     if out_target.suffix.lower() == ".json":
@@ -134,6 +135,7 @@ def extract_tab(
                 max_digit_gap=max_digit_gap,
                 string_snap_tolerance=string_snap_tolerance,
                 strip_technique_text=strip_technique_text,
+                bar_cushion=bar_cushion,
             )
         )
 
@@ -355,24 +357,24 @@ class _TabSystem:
         warnings.append("pdf_string_assignment_nearest_line")
         return line_index, line_index, distance, warnings
 
-    def bar_for_x(self, x: float | None) -> tuple[int | None, list[str]]:
-        local_bar, warnings = self.local_bar_for_x(x)
+    def bar_for_x(self, x: float | None, bar_cushion: float = 0.0) -> tuple[int | None, list[str]]:
+        local_bar, warnings = self.local_bar_for_x(x, bar_cushion)
         if local_bar is None:
             return None, warnings
         return self.first_bar_index + local_bar - 1, warnings
 
-    def bar_bounds_for_x(self, x: float | None) -> tuple[float, float] | None:
-        local_bar, _ = self.local_bar_for_x(x)
+    def bar_bounds_for_x(self, x: float | None, bar_cushion: float = 0.0) -> tuple[float, float] | None:
+        local_bar, _ = self.local_bar_for_x(x, bar_cushion)
         if local_bar is None or len(self.barlines) < 2:
             return None
         return self.barlines[local_bar - 1], self.barlines[local_bar]
 
-    def local_bar_for_x(self, x: float | None) -> tuple[int | None, list[str]]:
+    def local_bar_for_x(self, x: float | None, bar_cushion: float = 0.0) -> tuple[int | None, list[str]]:
         if x is None or len(self.barlines) < 2:
             return None, ["missing_pdf_barlines", "pdf_barlines_missing"] if x is not None else []
 
-        # Outer boundary snapping: up to 24.0 pixels (matching horizontal margin of the system)
-        outer_tolerance = 24.0
+        # Outer boundary snapping: up to 24.0 pixels (matching horizontal margin of the system) + bar_cushion
+        outer_tolerance = 24.0 + bar_cushion
         if x < self.barlines[0] - outer_tolerance or x > self.barlines[-1] + outer_tolerance:
             return None, ["pdf_candidate_outside_bar", "ambiguous_bar_assignment", "pdf_candidate_unassigned_to_bar"]
 
@@ -381,12 +383,12 @@ class _TabSystem:
             return None, ["ambiguous_bar_assignment", "pdf_barlines_ambiguous", "pdf_candidate_on_bar_boundary", "pdf_candidate_boundary_ambiguous", "pdf_bar_box_boundary_ambiguous"]
 
         for index, (left, right) in enumerate(zip(self.barlines, self.barlines[1:]), start=1):
-            left_tol = outer_tolerance if left == self.barlines[0] else 4.5
-            right_tol = outer_tolerance if right == self.barlines[-1] else 4.5
+            left_tol = outer_tolerance if left == self.barlines[0] else (4.5 + bar_cushion)
+            right_tol = outer_tolerance if right == self.barlines[-1] else (4.5 + bar_cushion)
 
             if left - left_tol <= x <= right + right_tol:
                 warnings = []
-                if x < left or x > right:
+                if x < left - bar_cushion or x > right + bar_cushion:
                     warnings.append("pdf_candidate_outside_bar")
                 if self.inferred_left is not None and abs(left - self.inferred_left) < 1.0:
                     warnings.append("pdf_bar_box_inferred_left_boundary")
@@ -676,6 +678,7 @@ def _extract_pdf_text_candidates(
     max_digit_gap: float = 5.0,
     string_snap_tolerance: float = 1.5,
     strip_technique_text: bool = False,
+    bar_cushion: float = 0.0,
 ) -> list[dict[str, Any]]:
     import fitz  # type: ignore[import-not-found]
 
@@ -1755,7 +1758,7 @@ def _extract_pdf_text_candidates(
                 system = _nearest_system(systems, x, y)
                 pc["system_ref"] = system
                 if system is not None:
-                    bar_idx, bar_warns = system.bar_for_x(x)
+                    bar_idx, bar_warns = system.bar_for_x(x, bar_cushion=bar_cushion)
                     pc["initial_bar_index"] = bar_idx
                     pc["initial_bar_warnings"] = bar_warns
                 else:
@@ -1841,7 +1844,7 @@ def _extract_pdf_text_candidates(
                                 assignment_warnings.append("pdf_fret_chord_text_digit_excluded")
 
                 if system is not None:
-                    if x < system.x0 or x > system.x1:
+                    if x < system.x0 - bar_cushion or x > system.x1 + bar_cushion:
                         if "pdf_tuning_label_outside_system" not in assignment_warnings and "pdf_tuning_label_unassociated" not in assignment_warnings and not pc.get("is_tuning_evidence"):
                             assignment_warnings.append("pdf_candidate_outside_system")
                     string_warnings = pc.get("string_warnings", [])
@@ -1883,7 +1886,7 @@ def _extract_pdf_text_candidates(
                         if "pdf_non_playable_text_not_string_assigned" not in assignment_warnings:
                             assignment_warnings.append("pdf_non_playable_text_not_string_assigned")
 
-                bar_bounds = system.bar_bounds_for_x(x) if system is not None else None
+                bar_bounds = system.bar_bounds_for_x(x, bar_cushion=bar_cushion) if system is not None else None
                 height_val = pc["y1"] - pc["y0"]
                 width_val = pc["x1"] - pc["x0"]
                 line_spacing_val = system.line_spacing if system is not None else 12.0

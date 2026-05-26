@@ -219,6 +219,7 @@ def build_ir_command(
     max_digit_gap: float = typer.Option(2.0, "--max-digit-gap", help="Maximum horizontal point distance allowed to merge separate characters into multi-digit frets"),
     string_snap_tolerance: float = typer.Option(1.5, "--string-snap-tolerance", help="Vertical search window cushion in points around a horizontal string line vector for note snapping"),
     strip_technique_text: bool = typer.Option(False, "--strip-technique-text", help="Pre-filter layout strings matching known technique expressions before executing character collision matrix routines"),
+    bar_cushion: float = typer.Option(0.0, "--bar-cushion", help="Horizontal cushion in points to extend the left and right matching thresholds of a bar box"),
 ) -> None:
     """Build a limited ScoreIR file from synthetic MusicXML plus TabRaw inputs."""
     if musicxml is None or tabraw is None:
@@ -239,6 +240,7 @@ def build_ir_command(
             max_digit_gap=max_digit_gap,
             string_snap_tolerance=string_snap_tolerance,
             strip_technique_text=strip_technique_text,
+            bar_cushion=bar_cushion,
         )
     except BuildIrInputRiskError as exc:
         payload = exc.to_diagnostics_payload()
@@ -317,6 +319,7 @@ def convert_command(
     max_digit_gap: float = typer.Option(2.0, "--max-digit-gap", help="Maximum horizontal point distance allowed to merge separate characters into multi-digit frets"),
     string_snap_tolerance: float = typer.Option(1.5, "--string-snap-tolerance", help="Vertical search window cushion in points around a horizontal string line vector for note snapping"),
     strip_technique_text: bool = typer.Option(False, "--strip-technique-text", help="Pre-filter layout strings matching known technique expressions before executing character collision matrix routines"),
+    bar_cushion: float = typer.Option(0.0, "--bar-cushion", help="Horizontal cushion in points to extend the left and right matching thresholds of a bar box"),
 ) -> None:
     """Run the complete conversion pipeline: extraction, alignment, IR generation, and GP7 package writing."""
     workdir.mkdir(parents=True, exist_ok=True)
@@ -341,6 +344,7 @@ def convert_command(
             max_digit_gap=max_digit_gap,
             string_snap_tolerance=string_snap_tolerance,
             strip_technique_text=strip_technique_text,
+            bar_cushion=bar_cushion,
         )
         summary["tab"] = tab_summary
         if tab_summary.get("warnings"):
@@ -461,6 +465,7 @@ def convert_command(
             max_digit_gap=max_digit_gap,
             string_snap_tolerance=string_snap_tolerance,
             strip_technique_text=strip_technique_text,
+            bar_cushion=bar_cushion,
         )
         summary["build_ir"] = {
             "ran": True,
