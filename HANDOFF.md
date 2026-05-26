@@ -2,11 +2,11 @@
 
 ## Metadata
 
-- **Current Branch**: `feature/gpif-bidirectional-roundtrip-gates-v0.1`
+- **Current Branch**: `feature/pipeline-batch-parallelization-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: PR #106 (https://github.com/tticom/score2gp/pull/106)
-- **Latest Local Commit**: `653f2544ae0ff22ca1f32412dea5998ce143f22c` ("docs: finalize HANDOFF.md with PR 106 details")
-- **Latest Pushed Commit**: `653f2544ae0ff22ca1f32412dea5998ce143f22c` ("docs: finalize HANDOFF.md with PR 106 details")
+- **Current PR**: PR #107 (https://github.com/tticom/score2gp/pull/107)
+- **Latest Local Commit**: `a46808d630f45b3520ded51731049c5ebbeb78f7` ("feat: implement concurrent pipeline batch supervisor and sandboxed workspaces")
+- **Latest Pushed Commit**: `a46808d630f45b3520ded51731049c5ebbeb78f7` ("feat: implement concurrent pipeline batch supervisor and sandboxed workspaces")
 
 - **Working Tree Status**: Clean (except doc/tasks updates).
 
@@ -16,9 +16,9 @@
 
 ## Tests And Checks Run
 
-- `python -m pytest` -> 356 passed (100% success, including the new bidirectional round-trip symmetry gate unit tests).
+- `python -m pytest` -> 358 passed (100% success, including the new pipeline batch parallelization and graceful localized failure unit tests).
 - `python -m score2gp.cli export-schema --out schemas` -> passed cleanly.
-- `python -m score2gp.cli validate-ir fixtures/public/test_gpif_bidirectional_roundtrip.ir.json` -> valid.
+- `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid.
 - `git diff --check` -> passed cleanly (zero trailing whitespace or EOF blank line violations).
 - `git diff -- schemas` -> passed cleanly.
 - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep`.
@@ -26,20 +26,19 @@
 
 ## What Changed In This Task
 
-- **Zipped Package Parsing & Element Reconstructors**:
-  - Implemented `extract_score_ir_from_gp(path)` in `src/score2gp/gp_package.py` to recursively traverse and deserialize the zipped GP7 XML layout sub-trees into structural Pydantic models.
-  - Symmetrically recovered metadata fields, tempo structures, custom tuning strings (with volume offsets and fine-tuning balances), track layout preferences, track playback automations, track performance expressions, and master-level layout settings.
-  - Reconstructed complete, valid `ScoreIR` instances suitable for full validation.
-- **Bidirectional Round-Trip Validation Gate**:
-  - Implemented `validate_roundtrip(path, original)` in `src/score2gp/gp_package.py` executing a deep semantic comparator check on all serialized and deserialized parameters, ensuring full structural asset symmetry.
-  - Tolerated equivalent default mappings (e.g. `None` vs `0.0` offsets) cleanly without generating false validation discrepancies.
-- **Round-Trip CLI Subcommand**:
-  - Exposed `validate-roundtrip` in `src/score2gp/cli.py` to enable automated pipeline round-trip checks directly from the command line.
-- **Synthetic Testing & Validation**:
-  - Created public synthetic baseline fixture `fixtures/public/test_gpif_bidirectional_roundtrip.ir.json` modeling violin and guitar tracks with layout configurations, mixer volumes, tuning balances, and timeline envelopes.
-  - Authored comprehensive unit tests `test_gpif_bidirectional_roundtrip` in `tests/test_gp_writer.py` verifying full bidirectional property recovery and zero validation discrepancies.
-- **E2E Private Smoke Test Results**:
-  - Ran E2E private smoke compiler against real private inputs to verify zero regressions or crashes with the new bidirectional round-trip extraction pathways.
+- **Asynchronous Concurrent Pipeline Batch Processing Engine**:
+  - Created `src/score2gp/batch.py` containing `run_single_payload` worker task and `run_batch_pipeline` supervisor manager.
+  - Used standard Python `ThreadPoolExecutor` from `concurrent.futures` to execute multiple score-generation runs simultaneously.
+- **Symmetric Workspace Sandboxing**:
+  - Mapped each worker payload run to an isolated sub-directory under `work/` (specifically `work/batch_worker_{payload_id}`) to ensure zero race conditions, file access conflicts, or output collision corruption during concurrent writes.
+- **Graceful Localized Exception Boundaries**:
+  - Wrapped individual worker routines in a strict try/except boundary, catching both expected `BuildIrInputRiskError` exceptions and arbitrary other runtime exceptions.
+  - Prevented any isolated worker crash from terminating the supervisor's global coordinator loop, collecting all results and errors into a unified batch status execution report dictionary.
+- **CLI Batch Execution Command**:
+  - Added the `batch` command inside `src/score2gp/cli.py` to expose the concurrent pipeline orchestrator to command line interface environments, returning JSON structured output and propagating failure exit codes on error.
+- **Synthetic Fixtures & Concurrency Testing**:
+  - Added public synthetic manifest fixture `fixtures/public/test_batch_concurrency_manifest.json` pointing to valid, existing synthetic inputs.
+  - Authored extensive unit tests in `tests/test_batch_parallelization.py` confirming complete, correct status reports, thread footprints, output file validity, and graceful localized failure handling under overfull measure timing risks.
 
 ## Known Limitations
 
@@ -51,7 +50,7 @@
 
 ## Next Recommended Task
 
-- Continue wrapping visual elements or formatting capabilities as per project roadmap.
+- Proceed with packaging finalizations or high-level booklet formatting overrides.
 
 ## Explicit Scope Boundaries
 

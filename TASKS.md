@@ -4,6 +4,8 @@
 
 ## Done
 
+- [x] Implement an asynchronous pipeline batch-processing engine and concurrent execution framework in a new orchestrator module (`src/score2gp/batch.py`) to process multiple separate score-generation payloads simultaneously using isolated sandboxed workspaces under `work/` and returning a centralized batch status execution report dictionary, exposed via a new `batch` CLI command (`feature/pipeline-batch-parallelization-v0.1`).
+
 - [x] Implement package extraction recovery loops and reverse inspection gates in the Guitar Pro package parsing pathway (`src/score2gp/gp_package.py`) to extract zipped GP7 native elements and map them back symmetrically into ScoreIR properties, establishing an explicit round-trip gate (`validate-roundtrip`) (`feature/gpif-bidirectional-roundtrip-gates-v0.1`).
 
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for project-wide global master configuration profiles (master mixer volume coefficients, stereo pan alignment, reverb/chorus parameters, and pipeline preset cascades) in the Guitar Pro writer (`src/score2gp/gpif.py`), verified with public synthetic fixtures and unit tests (`feature/gpif-master-mixer-and-config-cascades-v0.1`).
