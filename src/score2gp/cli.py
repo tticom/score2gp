@@ -191,6 +191,7 @@ def build_ir_command(
     ascii_alignment: Optional[Path] = typer.Option(None, "--ascii-alignment"),
     allow_remediation: bool = typer.Option(False, "--allow-remediation"),
     allow_skip_unboxed: bool = typer.Option(False, "--allow-skip-unboxed-systems"),
+    optimize_fret_snapping: bool = typer.Option(False, "--optimize-fret-snapping", help="Enable Left-hand finger position/fret-snapping optimization"),
 ) -> None:
     """Build a limited ScoreIR file from synthetic MusicXML plus TabRaw inputs."""
     if musicxml is None or tabraw is None:
@@ -206,6 +207,7 @@ def build_ir_command(
             ascii_alignment,
             allow_remediation=allow_remediation,
             allow_skip_unboxed=allow_skip_unboxed,
+            optimize_fret_snapping=optimize_fret_snapping,
         )
     except BuildIrInputRiskError as exc:
         payload = exc.to_diagnostics_payload()
@@ -279,6 +281,7 @@ def convert_command(
     workdir: Path = typer.Option(...),
     allow_remediation: bool = typer.Option(False, "--allow-remediation"),
     allow_skip_unboxed: bool = typer.Option(False, "--allow-skip-unboxed-systems"),
+    optimize_fret_snapping: bool = typer.Option(False, "--optimize-fret-snapping", help="Enable Left-hand finger position/fret-snapping optimization"),
 ) -> None:
     """Run the complete conversion pipeline: extraction, alignment, IR generation, and GP7 package writing."""
     workdir.mkdir(parents=True, exist_ok=True)
@@ -376,6 +379,7 @@ def convert_command(
             ascii_alignment_path=alignment_path,
             allow_remediation=allow_remediation,
             allow_skip_unboxed=allow_skip_unboxed,
+            optimize_fret_snapping=optimize_fret_snapping,
         )
         summary["build_ir"] = {
             "ran": True,
