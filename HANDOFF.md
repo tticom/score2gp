@@ -1,45 +1,59 @@
 # HANDOFF
 
 ## Metadata
-- **Current Branch**: `feature/pipeline-page-filtering-remediation-v0.1`
+- **Current Branch**: `feature/roundtrip-quality-gate-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: Draft PR to be created
-- **Latest Local Commit**: `c0bbd82` ("feat: implement optional page range filtering constraint in layout compiler and typer cli converter")
+- **Current PR**: Draft PR to be created (associated with PR #135 / #136 context)
+- **Latest Local Commit**: `060a0e3` ("feat: implement hard round-trip quality gate and hybrid flat/nested GP note extractor")
 - **Latest Pushed Commit**: Pending push to origin
-- **Working Tree Status**: Modified `HANDOFF.md` (uncommitted)
+- **Working Tree Status**: Clean
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked.
 
 ## Tests and Checks Run
-- `python -m pytest` -> All 384 tests passed successfully (100% success rate, including the new `tests/test_page_filtering.py` proving page filtering works flawlessly).
+- `python -m pytest` -> All 387 tests passed successfully (100% success rate, including mock quality gate and GP robust bar queries).
 - `python -m score2gp.cli export-schema --out schemas` -> schemas exported cleanly.
 - `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid and compliant.
 - `git diff --check` -> passed cleanly.
 - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep` is tracked.
 
+## Round-Trip Evaluation on Private E2E Case
+- **PDF File**: `fixtures/private/Derek Trucks BB King.pdf`
+- **ScoreIR/GP Written**: Yes (`ScoreIR` and `smoke.gp` packages written).
+- **Semantic Round-Trip Passed**: No.
+- **Verdict Status**: `failed_alignment_quality` (fret match rate `0.0`, string match rate `0.0117`, all 16 bars have count mismatches).
+- **Exact Failure Category**: `poor_bar_quality` (poor=13, unknown=3).
+- **Recommended Next Action**: `inspect-poor-or-unknown-bars-before-conversion`
+
 ## What Changed in the Task
-- **Optional Page Range Constraint (`src/score2gp/build_ir.py`)**:
-  - Refactored `build_ir_from_files`, `build_ir_with_diagnostics_from_files`, `build_ir_from_imports`, and `build_ir_with_diagnostics_from_imports` to accept and pass down `page_range: tuple[int, int] | None`.
-  - Inside `build_ir_with_diagnostics_from_imports`, we restrict the processed envelope by keeping only `tabraw.candidates` on pages in the requested `page_range`.
-  - Excluded explicitly rejected/refused text digits (like page numbers or chord text labels) from `tabraw.candidates` under page range constraints to avoid triggering false-positive `partial_pdf_grouping` risk blocks.
-  - Stripped stale global suitability, layout, or grouping warnings (like `missing_pdf_barlines` or unboxed systems) where `page_index is None` when `page_range` is active, so the compiler re-evaluates the grouping risk of page 1 subset cleanly.
-- **CLI Command Options (`src/score2gp/cli.py`)**:
-  - Implemented `parse_page_range(pages_str: str | None) -> tuple[int, int] | None` support for interval constraints like `1-1` or `1-2`.
-  - Integrated `--pages` option to `convert` and `build-ir` subcommands.
-  - Updated `convert_command` to filter out stale global suitability warnings when `--pages` is active.
-- **Fixtures & Tests**:
-  - Added synthetic `fixtures/public/test_page_filtering.musicxml` and `test_page_filtering.tabraw.json` modeling clean page 1 with an unboxed, layout-failing page 2.
-  - Added unit test `tests/test_page_filtering.py` verifying that full compilation fails with layout grouping risks, while compiling with page filter `(1, 1)` succeeds perfectly and produces a loadable GP package.
-- **Manual Verification (Derek Trucks BB King E2E)**:
-  - Confirmed E2E conversion pass successfully compiles page 1 of `Derek Trucks BB King.pdf` with `--pages 1-1 --allow-remediation --allow-skip-unboxed-systems`. The resulting package parses and extracts successfully with exactly 16 bars!
+- **Round-Trip Quality Gate Verdicts (`scripts/gp_roundtrip_eval.py`)**:
+  - Implemented explicit verdict fields: `whether_scoreir_written`, `whether_gp_written`, `whether_semantic_comparison_ran`, `semantic_roundtrip_status`, `semantic_roundtrip_passed`, `diagnostic_only`, `failure_category`, `primary_failure_reason`, and `recommended_next_action`.
+  - Defined explicit statuses: `not_run`, `passed`, `failed_note_count_mismatch`, `failed_string_fret_mismatch`, `failed_alignment_quality`, and `diagnostic_only`.
+- **Acceptance Thresholds**:
+  - String, fret, and full match rates must be >= 0.90.
+  - Note counts must be within 2% tolerance.
+  - No bars may have `unknown` or `poor` quality.
+  - Any conversion that does not meet these is reported as failed / diagnostic-only.
+- **Private-Safe Semantic Diagnostics**:
+  - Added flags for string concentration on string 1, zero fret matching rate, measure count mismatches, and unboxed system barlines.
+- **Hybrid Note Extraction**:
+  - Refactored `extract_native_gp_notes` to be a hybrid parser. It checks the GP file structure: if it is a flat GP7 file, it parses `Bars`/`Voices`/`Beats`/`Notes`. If it is a score2gp nested package, it falls back to `extract_score_ir_from_gp` + `extract_recovered_notes`.
+- **GP Package Parser Queries (`src/score2gp/gp_package.py`)**:
+  - Made the `Bars` and `MasterBars` querying in `_extract_score_ir_from_gpif_root` robust to both nested score2gp elements and native flat XML elements.
+- **Public Synthetic Regression Tests (`tests/test_pdf_confidence_ambiguity.py`)**:
+  - Added `test_gp_package_robust_bars_querying` to verify robust GPIF element lookups.
+  - Added `test_round_trip_quality_gate` validating:
+    - Positive passing case where oracle matches exactly.
+    - Negative failing case due to poor bar quality.
+    - Negative failing case due to low string/fret match rates.
 
 ## Known Limitations
-- Page constraints are explicit intervals. Only clean contiguous page subsets should be targeted.
+- The private GP-exported PDF case currently fails the semantic round-trip gate due to alignment offsets and geometry failures.
 
 ## Remaining Risks
-- None.
+- Tuning string/fret layout mappings remains to be addressed in future tasks.
 
 ## Next Recommended Task
-- Merge `feature/pipeline-page-filtering-remediation-v0.1` into `main` after checks pass.
+- Move to the next branch (e.g., `bugfix/string-layout-geometry-matching-v0.1`) to diagnose and resolve the string offset / fret snapping failures.
 
 ## Explicit Scope Boundaries
 - **No OCR, scanned-PDF, or ML layout recognition** used.
