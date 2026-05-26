@@ -4,6 +4,8 @@
 
 ## Done
 
+- [x] Refactor the GPIF XML serialization and target adaptation pathways to enforce strict child element sequencing under `<Score>` compliant with native unmarshalling rules, and dynamically generate populated layout companion files (`Content/Preferences.json`, `Content/LayoutConfiguration`) mapping active layout style preferences to match native applications structurally (`feature/gpif-package-binary-hardening-v0.1`).
+
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for track-level continuous performance expression controllers (Volume/Expression envelopes) and note-level multi-point visual pitch bend curves (custom bezier vectors, absolute destination values, and graphic durations), verified with public synthetic manifests and extensive unit tests (`feature/gpif-expression-controllers-and-bend-curves-v0.1`).
 
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for Booklet Cover Page layout geometric templates (alignment, margins, separator styling, introductory text) and measure-level BarNumbering overrides (alphanumeric prefixes and measure index offsets), verified with public synthetic manifests and extensive unit tests (`feature/gpif-booklet-formatting-and-cover-templates-v0.1`).
