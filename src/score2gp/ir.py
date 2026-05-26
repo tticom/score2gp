@@ -234,6 +234,7 @@ class GraceTiming(BaseModel):
     position: Literal["before", "on-beat", "after"] = "before"
     slash: bool = False
     duration_ticks: int = Field(default=0, ge=0)
+    duration: str | None = None
 
 
 class Timing(BaseModel):
@@ -420,6 +421,7 @@ class TremoloPickingTechnique(BaseModel):
 
     kind: Literal["tremolo-picking"] = "tremolo-picking"
     duration: Literal["eighth", "16th", "32nd", "64th", "unknown"] = "16th"
+    speed: str | None = None
 
 
 class SlapTechnique(BaseModel):
@@ -446,6 +448,14 @@ class TrillTechnique(BaseModel):
     kind: Literal["trill"] = "trill"
     fret: int | None = Field(default=None, ge=0, le=36)
     interval: int | None = Field(default=None, ge=0, le=24)
+    frequency: float | None = Field(default=None, ge=0.0)
+
+
+class RasgueadoTechnique(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["rasgueado"] = "rasgueado"
+    direction: Literal["up", "down", "none"] = "none"
 
 
 class UnsupportedTechnique(BaseModel):
@@ -474,6 +484,7 @@ Technique = Annotated[
     | PopTechnique
     | TappingTechnique
     | TrillTechnique
+    | RasgueadoTechnique
     | UnsupportedTechnique,
     Field(discriminator="kind"),
 ]
