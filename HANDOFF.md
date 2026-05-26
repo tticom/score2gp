@@ -4,9 +4,9 @@
 
 - **Current Branch**: `feature/build-ir-coda-segno-markers-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: Draft (To be created)
-- **Latest Local Commit**: `273b1a0eef6b5dfa40ab68a733cd1a18da9e0da1` ("feat: parse and serialize master-bar level timeline markers and visual navigation jump directions")
-- **Latest Pushed Commit**: N/A (To be pushed)
+- **Current PR**: [PR #117](https://github.com/tticom/score2gp/pull/117) (Draft)
+- **Latest Local Commit**: `65d4da90632b505ba7bc89d479c7b91d24ea2a1a` ("docs: update HANDOFF.md and TASKS.md with repeating markers and roadmap details")
+- **Latest Pushed Commit**: `65d4da90632b505ba7bc89d479c7b91d24ea2a1a` ("docs: update HANDOFF.md and TASKS.md with repeating markers and roadmap details")
 
 - **Working Tree Status**: Clean (except TASKS.md and HANDOFF.md, which will be committed in the next step).
 
