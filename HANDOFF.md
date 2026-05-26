@@ -5,8 +5,8 @@
 - **Current Branch**: `feature/pipeline-system-integration-and-verification-v0.1`
 - **Base Branch**: `main`
 - **Current PR**: PR #110 (https://github.com/tticom/score2gp/pull/110)
-- **Latest Local Commit**: `429ebb11a1b4b75ce0d130135984b0b770377366` ("feat: implement high-throughput pipeline verification diagnostics runner and round-trip assertions")
-- **Latest Pushed Commit**: `429ebb11a1b4b75ce0d130135984b0b770377366` ("feat: implement high-throughput pipeline verification diagnostics runner and round-trip assertions")
+- **Latest Local Commit**: `40046c665869552609449777a938ddb595702913` ("fix: resolve AttributeError in cli convert command BuildIrInputRiskError handler")
+- **Latest Pushed Commit**: `40046c665869552609449777a938ddb595702913` ("fix: resolve AttributeError in cli convert command BuildIrInputRiskError handler")
 
 - **Working Tree Status**: Clean (except doc/tasks updates).
 
