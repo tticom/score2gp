@@ -2528,7 +2528,12 @@ def _x_to_onset_warnings(
 
 
 def _tabraw_grouping_risk(tabraw: TabRaw) -> dict[str, object] | None:
-    playable = [candidate for candidate in tabraw.candidates if candidate.parsed_fret is not None]
+    playable = [
+        candidate
+        for candidate in tabraw.candidates
+        if candidate.parsed_fret is not None
+        and not (isinstance(candidate.raw, dict) and candidate.raw.get("refusal_reason"))
+    ]
     unsafe_codes = _tabraw_unsafe_grouping_warning_codes(tabraw)
     if not playable and not unsafe_codes:
         return None

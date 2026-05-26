@@ -58,3 +58,9 @@ def test_left_bracket_barline_alignment_acceptance() -> None:
     assert abs(system.barlines[0] - 28.346) < 0.001
     assert system.valid_barline_count == 1
     assert system.rejected_barline_count == 0
+
+    # Assert that the candidate's y_min matches the staff's y0 exactly after ingestion
+    assert len(system.barline_candidates_details) == 1
+    detail = system.barline_candidates_details[0]
+    assert detail["y_min"] == round(y0, 3)
+    assert detail["height"] == round(y1 - y0, 3)

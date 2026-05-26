@@ -3273,7 +3273,42 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
             y_min = min(s.y0, s.y1)
             y_max = max(s.y0, s.y1)
             if y_max >= y0 - 15.0 and y_min <= y1 + 15.0 and x0 - 25.0 <= x_val <= x1 + 25.0:
+                is_left_edge_bracket = (
+                    abs(x_val - x0) < 6.0 and
+                    abs(y_max - y1) < 4.0
+                )
+                if is_left_edge_bracket:
+                    s = _LineSegment(s.x0, y0, s.x1, y1)
                 system_candidates.append(s)
+
+        # Deduplicate very close candidates (e.g. double barlines) to prevent ambiguity rejection
+        filtered_candidates = []
+        sorted_candidates = sorted(system_candidates, key=lambda s: (s.x0 + s.x1) / 2)
+        clusters: list[list[_LineSegment]] = []
+        for s in sorted_candidates:
+            x_s = (s.x0 + s.x1) / 2
+            added = False
+            for cluster in clusters:
+                if any(abs(x_s - (c.x0 + c.x1) / 2) < 6.0 for c in cluster):
+                    cluster.append(s)
+                    added = True
+                    break
+            if not added:
+                clusters.append([s])
+                
+        for cluster in clusters:
+            if len(cluster) == 1:
+                filtered_candidates.append(cluster[0])
+            else:
+                mid_system = (x0 + x1) / 2
+                first_x = (cluster[0].x0 + cluster[0].x1) / 2
+                if first_x > mid_system:
+                    best = max(cluster, key=lambda s: (s.x0 + s.x1) / 2)
+                else:
+                    best = min(cluster, key=lambda s: (s.x0 + s.x1) / 2)
+                filtered_candidates.append(best)
+                
+        system_candidates = filtered_candidates
 
         barline_candidates_count = len(system_candidates)
         rejection_reasons = {
