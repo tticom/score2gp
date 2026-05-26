@@ -3,10 +3,10 @@
 ## Metadata
 - **Current Branch**: `feature/gpif-presentation-layout-polishing-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: Draft PR to be created
-- **Latest Local Commit**: `5f58a53` ("feat: implement score-level print setup headers and bar-level width mapping in GPIF XML generation")
-- **Latest Pushed Commit**: Pending push to origin
-- **Working Tree Status**: Modified `HANDOFF.md` (uncommitted)
+- **Current PR**: #127 (https://github.com/tticom/score2gp/pull/127)
+- **Latest Local Commit**: `c848586` ("docs: update HANDOFF.md with latest commit details")
+- **Latest Pushed Commit**: `c848586` ("docs: update HANDOFF.md with latest commit details")
+- **Working Tree Status**: Clean and synchronized with origin.
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked.
 
 ## Tests and Checks Run
