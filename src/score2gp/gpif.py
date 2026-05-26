@@ -319,6 +319,31 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
     _master_bars(score_node, score)
     _bars(score_node, score, hopo_dests, let_ring_notes, palm_mute_notes, track_cd_maps, event_map)
 
+    # Strict GP7/GP8 unmarshalling element sequence constraints under <Score>
+    TAG_ORDER = [
+        "Metadata",
+        "Tempo",
+        "PageSetup",
+        "ScoreSystemsDefaultLayout",
+        "ScoreSystemsLayout",
+        "View",
+        "Print",
+        "Layout",
+        "MusicFont",
+        "SymbolFont",
+        "Fonts",
+        "StyleCollections",
+        "Styles",
+        "MasterTrack",
+        "Booklet",
+        "Tracks",
+        "MasterBars",
+        "Bars"
+    ]
+    score_children = list(score_node)
+    score_children.sort(key=lambda x: TAG_ORDER.index(x.tag) if x.tag in TAG_ORDER else len(TAG_ORDER))
+    score_node[:] = score_children
+
     ET.indent(root, space="  ")
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)
 
