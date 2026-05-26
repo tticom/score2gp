@@ -4,6 +4,8 @@
 
 ## Done
 
+- [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for master-bar level structural repeat markers (Coda, Segno, Fine visual anchor glyphs) and repeat visual jump directions (such as "Dal Segno al Coda" or "To Coda" execution markers), mapped into structural GP7 MasterBar level Marker and Directions XML elements, verified with public synthetic manifests and unit tests (`feature/build-ir-coda-segno-markers-v0.1`).
+
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for dynamic expression hairpins (crescendo and decrescendo visual wedges with thickness parameters, start/stop beat anchors, and continuous value paths) and localized note-level accents (such as marcato and staccatissimo markers), mapped to beat-level GP7 visual wedging XML nodes and note-level Accentuation properties, verified with public synthetic manifests and unit tests (`feature/build-ir-dynamics-and-hairpins-v0.1`).
 
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for advanced visual note-level performance ornaments (vibratos, rasgueados, tremolo-picking speeds, and trills with custom frequency parameters) and visual grace note configurations (stem-slash visibility, duration metrics, and position mappings), verified with public synthetic manifests, schema validation, and unit tests (`feature/build-ir-advanced-ornaments-v0.1`).
