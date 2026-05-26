@@ -3,10 +3,10 @@
 ## Metadata
 - **Current Branch**: `feature/pipeline-clustering-tolerances-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: Draft PR (pending creation via GitHub CLI)
-- **Latest Local Commit**: `b1e8cbf` ("docs: update HANDOFF.md with feature implementation and validation details")
-- **Latest Pushed Commit**: Pending push to origin
-- **Working Tree Status**: Clean and synchronized locally.
+- **Current PR**: #130 (https://github.com/tticom/score2gp/pull/130)
+- **Latest Local Commit**: `8c26295` ("docs: update HANDOFF.md with feature implementation and validation details")
+- **Latest Pushed Commit**: `8c26295` ("docs: update HANDOFF.md with feature implementation and validation details")
+- **Working Tree Status**: Clean and synchronized with origin.
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked.
 
 ## Tests and Checks Run
