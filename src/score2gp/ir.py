@@ -665,6 +665,8 @@ class Bar(BaseModel):
     directions: list[BarDirection] | None = None
     marker: str | None = None
     marker_color: str | None = None
+    alternate_ending_passes: list[int] | None = None
+    alternate_ending_is_stop: bool | None = None
 
 
     @model_validator(mode="before")

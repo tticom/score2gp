@@ -631,6 +631,10 @@ def _master_bars(parent: ET.Element, score: ScoreIR) -> None:
             if bar.tempo.text:
                 _text(tempo_node, "Text", bar.tempo.text)
 
+        if getattr(bar, "alternate_ending_passes", None):
+            mask = sum(1 << (p - 1) for p in bar.alternate_ending_passes)
+            _text(node, "AlternateEndings", mask)
+
         if getattr(bar, "layout_break", None) is not None:
             break_val = "Line" if bar.layout_break == "line" else ("Page" if bar.layout_break == "page" else "None")
             _text(node, "Break", break_val)
@@ -697,6 +701,11 @@ def _bars(parent: ET.Element, score: ScoreIR, hopo_dests: set[tuple[int, int, in
     bars = ET.SubElement(parent, "Bars")
     for bar in score.bars:
         bar_node = ET.SubElement(bars, "Bar", {"index": str(bar.index)})
+        if getattr(bar, "alternate_ending_passes", None):
+            mask = sum(1 << (p - 1) for p in bar.alternate_ending_passes)
+            _text(bar_node, "AlternateEndings", mask)
+            ae_node = ET.SubElement(bar_node, "AlternativeEnding")
+            _text(ae_node, "AlternateEndings", mask)
 
         if getattr(bar, "bar_numbering", None) is not None:
             bn = bar.bar_numbering
