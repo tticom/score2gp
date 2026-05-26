@@ -2,24 +2,35 @@
 
 ## Metadata
 
-- **Current Branch**: `feature/build-ir-advanced-ornaments-v0.1`
+- **Current Branch**: `feature/build-ir-dynamics-and-hairpins-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: [PR #115](https://github.com/tticom/score2gp/pull/115) (Draft)
-- **Latest Local Commit**: `c928fa2202e85ebea718d4aa70cea13864e0dad1` ("docs: finalize HANDOFF.md with draft PR URL")
-- **Latest Pushed Commit**: `c928fa2202e85ebea718d4aa70cea13864e0dad1` ("docs: finalize HANDOFF.md with draft PR URL")
+- **Current PR**: [PR #116](https://github.com/tticom/score2gp/pull/116) (Draft)
+- **Latest Local Commit**: `f6bf999b0c2a2e4a428236d6545b73645b7cd6ad` ("docs: finalize HANDOFF.md with PR details and commit hashes")
+- **Latest Pushed Commit**: `f6bf999b0c2a2e4a428236d6545b73645b7cd6ad` ("docs: finalize HANDOFF.md with PR details and commit hashes")
 
-- **Working Tree Status**: Clean (except TASKS.md and HANDOFF.md, which will be committed in the next step).
+- **Working Tree Status**: Clean (except HANDOFF.md which is being committed now).
 
-- **GitHub Check Status**: N/A
+- **GitHub Check Status**: Failed (Blocked by remote checkout error 403/Forbidden due to GitHub account suspension).
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked under `fixtures/private/`. No private PDFs, GP files, MXL/MusicXML files, summaries, overlays, logs, or `work/` contents are tracked.
 - **Root Generated-Artifact Audit**: Clean. No root generated artifacts tracked.
 
+## Early Stoppage Details
+
+- **Where it Stopped**: The GitHub Actions runner failed immediately on the initial checkout step (`actions/checkout@v4`) due to remote access restrictions.
+- **Exact Failing/Pending Command or Condition**: The `git fetch` operation in GitHub Actions failed with:
+  `remote: Your account is suspended. Please visit https://support.github.com for more information.`
+  `##[error]fatal: unable to access 'https://github.com/tticom/score2gp/': The requested URL returned error: 403`
+- **Files Involved**: None. All local repository files, schemas, and tests are perfectly healthy, compile-safe, and fully operational.
+- **What was Already Committed**: `f6bf999b0c2a2e4a428236d6545b73645b7cd6ad` ("docs: finalize HANDOFF.md with PR details and commit hashes").
+- **What was Already Pushed**: Yes, the entire feature branch is successfully pushed to `origin/feature/build-ir-dynamics-and-hairpins-v0.1`.
+- **Safest Next Action**: Contact GitHub Support to resolve the remote account suspension for the `tticom` account, then trigger a rerun of the Actions or re-evaluate the PR status once unsuspended.
+
 ## Tests And Checks Run
 
-- `python -m pytest` -> 375 passed (100% success, including the new `test_advanced_ornaments_xml` test verifying GPIF output properties).
-- `python -m score2gp.cli export-schema --out schemas` -> passed cleanly and updated committed schema with new models.
-- `python -m score2gp.cli validate-ir fixtures/public/test_advanced_ornaments.ir.json` -> valid and fully compliant.
-- `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid and fully compliant.
+- `python -m pytest` -> 376 passed (100% success, including the new `test_dynamics_hairpins_xml` verifying the `<Hairpin>` wedge nodes and `<Property name="Accentuation">` staccatissimo note properties).
+- `python -m score2gp.cli export-schema --out schemas` -> passed cleanly and updated Intermediate schemas.
+- `python -m score2gp.cli validate-ir fixtures/public/test_dynamics_hairpins.ir.json` -> valid and fully compliant.
+- `python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json` -> valid.
 - `git diff --check` -> passed cleanly.
 - `git ls-files fixtures/private work` -> only `fixtures/private/.gitkeep`.
 - `python scripts/private_e2e_smoke.py` -> passed cleanly against all private PDF inputs with zero regressions.
@@ -27,21 +38,17 @@
 ## What Changed In This Task
 
 - **Model & Schema Expansion (`src/score2gp/ir.py`)**:
-  - Expanded `GraceTiming` with an optional `duration` string field.
-  - Expanded `TremoloPickingTechnique` with an optional `speed` string field.
-  - Expanded `TrillTechnique` with an optional `frequency` float field.
-  - Added the `RasgueadoTechnique` representing rasgueado strumming with a `direction` field (up/down/none).
-  - Re-exported Intermediate JSON schema via CLI schema exporter.
-- **GPIF Performance Ornaments & Grace Mappings (`src/score2gp/gpif.py`)**:
-  - Added support for the `rasgueado` technique inside the note serialization loops.
-  - Serialized native `<Ornament><Rasgueado><Direction>...</Direction></Rasgueado></Ornament>` elements for rasgueado strum directions.
-  - Formatted note-level `<Vibrato>` and wave-size under `<Property name="Vibrato"><WaveSize>...</WaveSize></Property>`.
-  - Serialized grace note configurations (`Slash`, `Duration`, `Position`) under `<Property name="Grace">` nested property nodes.
-  - Mapped tremolo-picking speed parameters under `<Property name="TremoloPicking"><Speed>...</Speed></Property>`.
-  - Added auxiliary trill frequencies under `<Property name="Trill"><Frequency>...</Frequency></Property>`.
+  - Defined the `Hairpin` Pydantic model representing visual hairpins with type, start/stop beat anchors, thickness, and continuous value path coordinates.
+  - Expanded `Event.hairpin` to support either simple legacyliterals or the new `Hairpin` object model.
+  - Expanded `Note.articulations` enum list to support `staccatissimo` note markings.
+  - Re-exported the schema via the CLI schema exporter.
+- **GPIF Hairpins & Accents Mappings (`src/score2gp/gpif.py`)**:
+  - Implemented event-level visual `<Hairpin>` wedging XML generation detailing thickness, start/stop beats, and continuous `<ValuePath>` nodes.
+  - Implemented note-level `<Staccatissimo/>` child tag serialization.
+  - Mapped note-level `staccato` and `staccatissimo` values under `<Property name="Accentuation"><Value>...</Value></Property>` nested nodes under the `<Properties>` block.
 - **Public Fixtures & Tests**:
-  - Created `fixtures/public/test_advanced_ornaments.ir.json` to model detailed classical/fingerstyle ornaments.
-  - Created modular test suite `tests/test_advanced_ornaments.py` verifying accurate GP7-compatible XML tag structure and property nested nodes.
+  - Created `fixtures/public/test_dynamics_hairpins.ir.json` modeling volume crescendo/decrescendo sweeps and sharp note accents.
+  - Created unit test suite `tests/test_dynamics_hairpins.py` verifying accurate GP7-compatible XML structures.
 
 ## Known Limitations
 
@@ -53,8 +60,8 @@
 
 ## Next Recommended Task
 
-- Next branch: `feature/build-ir-dynamics-and-hairpins-v0.1`
-- Goal: Implement dynamic expression hairpins and crescendo/decrescendo visual controllers.
+- Next branch: `feature/build-ir-coda-segno-markers-v0.1`
+- Goal: Implement ScoreIR parsing and GPIF XML generation for timeline navigation markers (Coda, Segno, Fine, and Dal Segno repeats).
 
 ## Explicit Scope Boundaries
 
