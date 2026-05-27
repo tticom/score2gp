@@ -12,6 +12,46 @@ Ground rules:
 - Keep modules small, typed, and tested.
 - Code and tests must be written before any PR is raised. Do not create tasks or PRs solely to run tests or update markdown files. Validation and markdown updates must be performed as a result of actual code changes within the same task.
 
+# Critical review rule
+
+When evaluating agent output, PRs, handoffs, diagnostic reports, or private benchmark summaries, act first as a sceptical reviewer, not as a progress narrator.
+
+Read `REVIEW_RULES.md` before reviewing any PR or handoff that claims conversion progress.
+
+Do not describe work as a breakthrough, success, fix, or improvement unless the claim is supported by:
+
+1. a coherent single-run artifact set,
+2. a clearly stated baseline,
+3. private-safe before/after metric deltas,
+4. public regression coverage where code changed,
+5. strict separation between diagnostic/remediation output and strict conversion success.
+
+Use the terms `claimed`, `verified`, `unverified`, `contradicted`, and `blocked` deliberately.
+
+A PR is not mergeable merely because tests pass, files are generated, or diagnostics are richer. A PR is mergeable only if it satisfies the stated acceptance criteria without weakening project invariants.
+
+If artifacts disagree, stop evaluation and require artifact reconciliation before interpreting metrics.
+
+If a source score and a diagnostic table disagree, investigate the diagnostic table before concluding the source score is wrong. The software must conform to the music; the music is not required to conform to the software's inferred structure.
+
+Generated ScoreIR or GP output is not conversion success unless the semantic quality gate passes.
+
+# Agentic architecture rule
+
+`AGENTIC_ARCHITECTURE.md` describes the separation between implementation agents, reviewer/architect agents, and human maintainer decisions.
+
+The implementation agent reports what it did. The reviewer or architect agent decides whether that report should be trusted.
+
+Do not let agent-control artifacts become a substitute for product correctness. Better handoff text is not a better converter.
+
+For significant agent results, review first and prompt second:
+
+1. Review the claims.
+2. Check for contradictions.
+3. Identify architectural risks.
+4. Decide approve / keep draft / request changes / close.
+5. Only then write the next implementation prompt.
+
 # Persistent handoff rule
 
 At the end of every task, update `HANDOFF.md` before reporting completion.
@@ -201,18 +241,6 @@ Allowed without extra confirmation:
 - python -m pytest
 - python -m score2gp.cli export-schema --out schemas
 - python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json
-- git push --force*
-- git reset --hard*
-- git clean*
-- git rm*
-- gh pr merge*
-- gh repo*
-- gh secret*
-- del*
-- rmdir*
-- rm*
-- type fixtures/private/*
-- cat fixtures/private/*
 
 The agent may commit and push normal feature-branch work after required checks pass, provided:
 - the branch is not `main`
@@ -236,15 +264,27 @@ Still require explicit user confirmation for:
 - changing GitHub repo settings, secrets, or permissions
 - running arbitrary network upload/download commands
 
-Run:
+Standard verification commands:
+
+```bash
 python -m pytest
 python -m score2gp.cli export-schema --out schemas
 python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json
 git diff --check
 git diff -- schemas
 git ls-files fixtures/private work
+git status --short
+git status --branch
+```
 
-If checks pass, commit and push:
-git add AGENTS.md HANDOFF.md
-git commit -m "Document routine command permissions"
-git push origin feature/ascii-scoreir-gate-refusal-diagnostics-v0.1
+Private-safety invariant:
+
+```bash
+git ls-files fixtures/private work
+```
+
+must output only:
+
+```text
+fixtures/private/.gitkeep
+```
