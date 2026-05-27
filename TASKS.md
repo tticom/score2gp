@@ -4,6 +4,8 @@
 
 ## Done
 
+- [x] Implement a robust, global Dynamic Programming (DP) alignment algorithm using standard sounding pitches (with transposing octave offsets) and a GAP_PENALTY of 0.5 inside `src/score2gp/build_ir.py` to correctly align PDF systems to MusicXML measures across call-and-response gaps. Resolve a GP7 MasterBar indexing bug in `scripts/gp_roundtrip_eval.py` to retrieve correct 1-indexed bar mappings, raising the lead guitar oracle note count to 203 notes. (`bugfix/gp-exported-pdf-layout-research-v0.1`)
+
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for beat-level visual chord grid diagrams (specifying chord names, base frets, multi-string fret indicators, and left-hand fingering arrays) and note-level digit execution markers (left-hand fingering indicators like T/1/2/3/4 and right-hand pick/finger symbols like p/i/m/a/ch), verified with public synthetic fixtures and unit tests (`feature/build-ir-chord-diagrams-and-fingerings-v0.1`).
 
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for bar-level visual system/page layout breaks and global staff-system sizing scale attributes, verified with public synthetic fixtures and unit tests (`feature/gpif-system-breaks-and-staff-scaling-v0.1`).
