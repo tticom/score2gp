@@ -12,6 +12,187 @@ Ground rules:
 - Keep modules small, typed, and tested.
 - Code and tests must be written before any PR is raised. Do not create tasks or PRs solely to run tests or update markdown files. Validation and markdown updates must be performed as a result of actual code changes within the same task.
 
+## Critical Review Invariant
+
+When evaluating agent output, PRs, handoffs, or diagnostic reports, act first as a sceptical reviewer, not as a progress narrator.
+
+Do not describe work as a breakthrough, success, fix, or improvement unless the claim is supported by:
+1. a coherent single-run artifact set,
+2. a clearly stated baseline,
+3. private-safe before/after metric deltas,
+4. public regression coverage where code changed,
+5. strict separation between diagnostic/remediation output and strict conversion success.
+
+Use the terms:
+- claimed
+- verified
+- unverified
+- contradicted
+- blocked
+
+Avoid celebratory or promotional language in reviews.
+
+A PR is not mergeable merely because tests pass, files are generated, or diagnostics are richer. A PR is mergeable only if it satisfies the stated acceptance criteria without weakening project invariants.
+
+If artifacts disagree, stop evaluation and require artifact reconciliation before interpreting metrics.
+
+If a branch changes the benchmark or oracle, treat that as a hypothesis to verify, not a success.
+
+## Evidence Hierarchy
+
+When reviewing conversion progress, trust evidence in this order:
+
+1. A clean strict-mode run from a fresh output directory.
+2. A clean private-safe round-trip evaluation from a fresh output directory.
+3. Public synthetic tests reproducing the same mechanical defect.
+4. Handoff summaries.
+5. Agent claims.
+
+Never treat HANDOFF.md claims as sufficient evidence by themselves.
+
+Every review must explicitly separate:
+- strict conversion status,
+- remediation/diagnostic status,
+- semantic round-trip status,
+- generated-file existence.
+
+Generated ScoreIR or GP output is not conversion success unless the semantic quality gate passes.
+
+## Automatic Review Blockers
+
+Request changes or keep the PR in draft if any of these are true:
+
+- Artifacts are from mixed or stale runs.
+- summary.json, diagnostics.json, warnings.json, edge-boundary reports, and roundtrip_report.json disagree on whether build-ir ran or whether ScoreIR/GP was written.
+- The PR suppresses unsafe grouping, string, fret, bar, or timing warnings without proving the suppression is isolated to diagnostic/remediation mode.
+- MusicXML pitch, tuning, or oracle data is used to bypass PDF geometry gates.
+- A private benchmark is reinterpreted without proving source-pair equivalence.
+- Tests mostly assert implementation copies rather than exercising the production path.
+- The PR improves one metric while worsening or invalidating the acceptance benchmark.
+- The PR claims progress without a public fixture reproducing the mechanical defect.
+## Review Verdict
+
+Status: Fix / Research-Isolation / Infrastructure / Blocked / Rejected
+
+Merge recommendation:
+- Approve
+- Keep Draft
+- Request Changes
+- Close/Supersede
+
+One-sentence reason:
+
+## Claims vs Evidence
+
+Claim:
+Evidence:
+Verified? yes/no
+Contradictions:
+
+## Artifact Coherence
+
+Fresh output directory used: yes/no
+Exact command:
+Artifacts regenerated in same run:
+- summary.json: yes/no
+- diagnostics.json: yes/no
+- warnings.json: yes/no
+- edge-boundary report: yes/no
+- roundtrip_report.json: yes/no
+
+Do all artifacts agree on build-ir status? yes/no
+Do all artifacts agree on ScoreIR/GP written status? yes/no
+Do all artifacts agree on semantic comparison status? yes/no
+
+If no, stop and do not interpret metrics.
+
+## Strict Mode Result
+
+Grouping status:
+ScoreIR written:
+GP written:
+Primary blocker:
+Changed from previous baseline? yes/no
+
+## Remediation / Diagnostic Result
+
+Diagnostic-only:
+ScoreIR written:
+GP written:
+Warnings suppressed:
+Why suppression cannot leak into strict mode:
+
+## Semantic Round-Trip Result
+
+Oracle source:
+Source-pair equivalence verified? yes/no/unknown
+Oracle note count:
+Recovered note count:
+String match rate:
+Fret match rate:
+Full match rate:
+Poor bars:
+Unknown bars:
+Unmatched oracle notes:
+Unmatched PDF candidates:
+
+## Metric Delta Against Previous Baseline
+
+Metric:
+Previous:
+Current:
+Improved / worsened / unchanged / invalidated:
+Explanation:
+
+## Architectural Risk Review
+
+Uses MusicXML pitch/tuning/oracle evidence? yes/no
+If yes, for what purpose?
+Does it affect layout grouping, bar assignment, string assignment, fret inference, or timing?
+Allowed by project rules? yes/no/needs decision
+
+Unsafe warning suppression added? yes/no
+Strict-mode impact proven absent? yes/no
+
+## Public Regression Coverage
+
+Public fixture added:
+Mechanical defect reproduced:
+Guardrail test added:
+Production path exercised:
+
+## Done - Accepted Fixes
+
+Only list work here if it passed acceptance criteria and is merged or approved.
+
+## Done - Research Findings
+
+Use this section for useful investigations that did not fix conversion.
+
+Each entry must include:
+- hypothesis tested
+- result
+- evidence location
+- next decision
+
+## Rejected / Superseded Work
+
+Use this section for PRs or branches that produced useful information but should not be treated as accepted architecture.
+
+## Current Acceptance Target
+
+The active target is:
+
+[plain English acceptance test]
+
+Current blocker:
+Current baseline:
+Required next evidence:
+Disallowed shortcuts:
+
+## Review Rules
+- Read REVIEW_RULES.md for review rules.
+
 # Persistent handoff rule
 
 At the end of every task, update `HANDOFF.md` before reporting completion.
