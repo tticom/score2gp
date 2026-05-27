@@ -446,6 +446,16 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
                 s_name = s_node.get("name") or ""
                 strings.append(TuningString(number=num, pitch=pitch, name=s_name))
 
+        if not strings:
+            strings = [
+                TuningString(number=1, pitch=64, name="E"),
+                TuningString(number=2, pitch=59, name="B"),
+                TuningString(number=3, pitch=55, name="G"),
+                TuningString(number=4, pitch=50, name="D"),
+                TuningString(number=5, pitch=45, name="A"),
+                TuningString(number=6, pitch=40, name="E"),
+            ]
+
         # Staff properties for Balance/FineTuning
         staff_node = track_node.find(".//Staff")
         if staff_node is not None:
@@ -675,7 +685,14 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
 
     # 5. Parse Bars and Events
     bars: list[Bar] = []
-    master_bars_node = root.find(".//MasterBars")
+    master_bars_node = root.find("MasterBars")
+    if master_bars_node is None:
+        for mb in root.findall(".//MasterBars"):
+            if mb.find("MasterBar") is not None:
+                master_bars_node = mb
+                break
+        if master_bars_node is None:
+            master_bars_node = root.find(".//MasterBars")
     mb_map = {}
     if master_bars_node is not None:
         for mb_node in master_bars_node.findall("MasterBar"):
@@ -754,10 +771,22 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
                 "alternate_ending_passes": alternate_ending_passes,
             }
 
-    bars_node = root.find(".//Bars")
+    bars_node = root.find("Bars")
+    if bars_node is None:
+        for b in root.findall(".//Bars"):
+            if b.find("Bar") is not None:
+                bars_node = b
+                break
+        if bars_node is None:
+            bars_node = root.find(".//Bars")
     if bars_node is not None:
         for bar_node in bars_node.findall("Bar"):
-            idx = int(bar_node.get("index") or 1)
+            if bar_node.get("index") is not None:
+                idx = int(bar_node.get("index"))
+            elif bar_node.get("id") is not None:
+                idx = int(bar_node.get("id")) + 1
+            else:
+                idx = 1
             mb_data = mb_map.get(idx, {
                 "num": 4,
                 "den": 4,
