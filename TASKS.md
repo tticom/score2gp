@@ -1,8 +1,8 @@
 # TASKS
 
-## Next
-
 ## Done
+
+- [x] Revert unapproved pitch-based shortcuts in the system-to-measure alignment loop in `src/score2gp/build_ir.py`, returning strictly to PDF layout geometry-driven system-to-measure mapping. Tighten the global warning-masking gate to `UNBOXED_SUITABILITY_BLOCKERS` (while explicitly preserving `pdf_unboxed_system_skipped` warnings), resolving all 389 tests to green. Reconcile workspace artifacts in a fresh unique output directory `work/roundtrip_eval_clean_2026_05_27_reconciled`. Mathematically prove the structural arrangement mismatch of the private Derek Trucks BB King PDF and MusicXML/GP oracle files, identifying Measures 15 and 16 as structural omissions. (`bugfix/gp-exported-pdf-layout-research-v0.1`)
 
 - [x] Implement a robust, global Dynamic Programming (DP) alignment algorithm using standard sounding pitches (with transposing octave offsets) and a GAP_PENALTY of 0.5 inside `src/score2gp/build_ir.py` to correctly align PDF systems to MusicXML measures across call-and-response gaps. Resolve a GP7 MasterBar indexing bug in `scripts/gp_roundtrip_eval.py` to retrieve correct 1-indexed bar mappings, raising the lead guitar oracle note count to 203 notes. (`bugfix/gp-exported-pdf-layout-research-v0.1`)
 

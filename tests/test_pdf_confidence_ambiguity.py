@@ -321,89 +321,62 @@ def test_double_barline_clustering_and_string_inversion(tmp_path) -> None:
 
 
 def test_dp_measure_resynchronization() -> None:
-    # Proves our DP alignment resolves call-and-response skipped measures
-    xml_measure_pitches = {
-        1: [64, 66],
-        2: [68, 69],
-        3: [71, 72],
-        4: [40, 42],  # skipped in PDF solo
-        5: [64, 66],
-        6: [68, 69],
-    }
+    # Verify our pitch-free visual-sequence geometry alignment
+    from score2gp.build_ir import _synchronize_skipped_system_measures
+    from score2gp.musicxml import MusicXmlImport, MusicXmlPart, MusicXmlMeasure
+    from score2gp.tabraw import TabRaw, TabCandidate
 
-    sys_info = [
-        {
-            'key': (1, 1),
-            'len': 3,
-            'orig_min_bar': 1,
-            'pitches': [64-12, 66-12, 68-12, 69-12, 71-12, 72-12]
-        },
-        {
-            'key': (1, 2),
-            'len': 2,
-            'orig_min_bar': 4,
-            'pitches': [64-12, 66-12, 68-12, 69-12]
-        }
+    # 1. Create a dummy MusicXML structure with 6 measures
+    class DummyMeasure:
+        def __init__(self, index: int):
+            self.index = index
+            self.notes = []
+            self.time_signature = None
+            self.key_fifths = None
+
+    class DummyPart:
+        def __init__(self):
+            self.measures = [DummyMeasure(i) for i in range(1, 7)]
+
+    class DummyMusicXml:
+        def __init__(self):
+            self.parts = [DummyPart()]
+
+    musicxml = DummyMusicXml()
+
+    # 2. Create a TabRaw structure with candidates:
+    # - System 1 (Page 1) spans 3 measures (originally Bars 1, 2, 3)
+    # - System 2 (Page 1) is skipped (represented by warning/skipped set)
+    # - System 3 (Page 1) spans 2 measures (originally Bars 4, 5)
+    candidates = [
+        TabCandidate(id="c1", page_index=1, system_index=1, bar_index=1, raw_text="0", parsed_fret=0),
+        TabCandidate(id="c2", page_index=1, system_index=1, bar_index=3, raw_text="0", parsed_fret=0),
+        TabCandidate(id="c3", page_index=1, system_index=3, bar_index=4, raw_text="0", parsed_fret=0),
+        TabCandidate(id="c4", page_index=1, system_index=3, bar_index=5, raw_text="0", parsed_fret=0),
     ]
+    tabraw = TabRaw(
+        candidates=candidates,
+        warnings=[
+            {
+                "code": "pdf_barlines_not_detected_in_system",
+                "page_index": 1,
+                "system_index": 2,
+            }
+        ]
+    )
 
-    total_xml_measures = 6
-    from collections import Counter
+    skipped_systems = {(1, 2)}
 
-    def get_match_score(cand_pitches, block_pitches):
-        if not cand_pitches or not block_pitches:
-            return 0
-        shifted_cands = [p + 12 for p in cand_pitches]
-        c_cand = Counter(shifted_cands)
-        c_xml = Counter(block_pitches)
-        return sum((c_cand & c_xml).values())
+    # Run pitch-free visual sequence alignment
+    _synchronize_skipped_system_measures(musicxml, tabraw, skipped_systems)
 
-    score_matrix = []
-    for s_idx, s in enumerate(sys_info):
-        s_scores = {}
-        for m in range(1, total_xml_measures - s['len'] + 2):
-            block_pitches = []
-            for idx in range(m, m + s['len']):
-                block_pitches.extend(xml_measure_pitches.get(idx, []))
-            s_scores[m] = get_match_score(s['pitches'], block_pitches)
-        score_matrix.append(s_scores)
-
-    dp = [{} for _ in range(len(sys_info))]
-    GAP_PENALTY = 0.5
-
-    for m in score_matrix[0]:
-        penalty = GAP_PENALTY * (m - 1)
-        dp[0][m] = (score_matrix[0][m] - penalty, None)
-
-    for s_idx in range(1, len(sys_info)):
-        s = sys_info[s_idx]
-        prev_s = sys_info[s_idx - 1]
-        for m in score_matrix[s_idx]:
-            best_val = -float('inf')
-            best_prev = None
-            for prev_m in dp[s_idx - 1]:
-                if m >= prev_m + prev_s['len']:
-                    gap = m - (prev_m + prev_s['len'])
-                    penalty = GAP_PENALTY * gap
-                    val = dp[s_idx - 1][prev_m][0] + score_matrix[s_idx][m] - penalty
-                    if val > best_val:
-                        best_val = val
-                        best_prev = prev_m
-            if best_prev is not None:
-                dp[s_idx][m] = (best_val, best_prev)
-
-    best_end_val = -float('inf')
-    best_end_m = None
-    for m in dp[-1]:
-        if dp[-1][m][0] > best_end_val:
-            best_end_val = dp[-1][m][0]
-            best_end_m = m
-
-    alignment = {}
-    curr_m = best_end_m
-    for s_idx in range(len(sys_info) - 1, -1, -1):
-        alignment[sys_info[s_idx]['key']] = curr_m
-        curr_m = dp[s_idx][curr_m][1]
-
-    # Verify that System 2 (originally Bar 4) is aligned to Measure 5 (offset = 1)
-    assert alignment[(1, 1)] == 1
-    assert alignment[(1, 2)] == 5
+    # System 1 should start at 1 and span 3 measures (starts 1). Offset = 0.
+    # System 2 (skipped) should span 1 measure (Measure 4).
+    # System 3 should start at 5 and span 2 measures. Offset = 5 - 4 = +1.
+    # So System 3 candidates' bar_indices should be shifted by +1:
+    # c3 (bar_index 4 -> 5)
+    # c4 (bar_index 5 -> 6)
+    assert tabraw.candidates[0].bar_index == 1
+    assert tabraw.candidates[1].bar_index == 3
+    assert tabraw.candidates[2].bar_index == 5
+    assert tabraw.candidates[3].bar_index == 6

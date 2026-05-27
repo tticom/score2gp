@@ -1266,108 +1266,82 @@ def build_ir_with_diagnostics_from_imports(
                         "system_index": s_idx,
                     })
 
-            # Clean up page-level unboxed system warning and grouping taxonomy warning codes
-            UNSAFE_GROUPING_CODES = set(_tabraw_unsafe_grouping_warning_codes(tabraw))
-            UNSAFE_GROUPING_CODES.update({
-                "pdf_barlines_not_detected_in_system",
-                "pdf_bar_boxes_not_constructible",
-                "pdf_bar_detection_not_enough_for_build_ir",
-                "pdf_barlines_missing",
-                "pdf_bar_boxes_missing",
-                "pdf_bar_box_construction_not_enough_for_build_ir",
-                "pdf_candidate_unassigned_due_to_unboxed_system",
-                "pdf_candidate_unassigned_to_bar",
-                "pdf_candidates_unassigned_to_bar",
-                "pdf_candidates_unassigned_to_system",
-                "pdf_candidates_unassigned_to_string",
-                "pdf_string_assignment_missing",
-                "pdf_string_assignment_not_enough_for_build_ir",
-                "pdf_candidate_outside_system",
-                "pdf_candidate_outside_bar",
-                "pdf_fret_optical_bounds_confidence_below_threshold",
-                "pdf_fret_refinement_not_enough_for_build_ir",
-                "pdf_grouping_confidence_below_threshold",
-                "pdf_grouping_not_safe_for_build_ir",
-                "pdf_input_class_drawn_tab_requires_barlines",
-                "pdf_layout_detection_requires_manual_review",
-                "pdf_missing_pdf_grouping_blocks_build_ir",
-                "pdf_partial_grouping_with_playable_candidates",
-                "pdf_system_detected_bar_detection_missing",
-                "missing_pdf_grouping",
-                "partial_pdf_grouping",
-                "pdf_partial_grouping_one_system_unboxed",
-                "pdf_string_assignment_succeeded_upstream_grouping_still_blocks",
-                "pdf_candidate_near_missing_bar_boundary",
-                "pdf_partial_system_detection",
-                "pdf_playable_candidate_requires_string_assignment",
-                "pdf_string_assignment_confidence_below_threshold",
-                "pdf_string_assignment_outside_staff",
-                "pdf_tab_staff_incomplete",
-                "pdf_fret_bbox_too_tall",
-                "pdf_fret_digit_symbol_overlap_ambiguous",
-                "pdf_fret_digits_not_merged_gap_too_large",
-                "incomplete_tab_staff",
-                "missing_pdf_barlines",
-                "ambiguous_bar_assignment",
-            })
-            filtered_warnings = []
-            for w in tabraw.warnings:
-                code = w.get("code")
-                if code in UNSAFE_GROUPING_CODES:
-                    continue
-                filtered_warnings.append(w)
-            tabraw.warnings = filtered_warnings
+            # Synchronize visual systems to measures
             _synchronize_skipped_system_measures(musicxml, tabraw, skipped_systems)
 
-        # Always filter out UNSAFE_GROUPING_CODES when allow_skip_unboxed is True
-        UNSAFE_GROUPING_CODES = set(_tabraw_unsafe_grouping_warning_codes(tabraw))
-        UNSAFE_GROUPING_CODES.update({
-            "pdf_barlines_not_detected_in_system",
-            "pdf_bar_boxes_not_constructible",
-            "pdf_bar_detection_not_enough_for_build_ir",
-            "pdf_barlines_missing",
-            "pdf_bar_boxes_missing",
-            "pdf_bar_box_construction_not_enough_for_build_ir",
-            "pdf_candidate_unassigned_due_to_unboxed_system",
-            "pdf_candidate_unassigned_to_bar",
-            "pdf_candidates_unassigned_to_bar",
-            "pdf_candidates_unassigned_to_system",
-            "pdf_candidates_unassigned_to_string",
-            "pdf_string_assignment_missing",
-            "pdf_string_assignment_not_enough_for_build_ir",
-            "pdf_candidate_outside_system",
-            "pdf_candidate_outside_bar",
-            "pdf_fret_optical_bounds_confidence_below_threshold",
-            "pdf_fret_refinement_not_enough_for_build_ir",
-            "pdf_grouping_confidence_below_threshold",
-            "pdf_grouping_not_safe_for_build_ir",
-            "pdf_input_class_drawn_tab_requires_barlines",
-            "pdf_layout_detection_requires_manual_review",
-            "pdf_missing_pdf_grouping_blocks_build_ir",
-            "pdf_partial_grouping_with_playable_candidates",
-            "pdf_system_detected_bar_detection_missing",
+        # Tighten warning filter: only filter out unboxed suitability blockers and
+        # warnings that belong to explicitly skipped/recovered systems.
+        UNBOXED_SUITABILITY_BLOCKERS = {
             "missing_pdf_grouping",
             "partial_pdf_grouping",
+            "pdf_grouping_not_safe_for_build_ir",
+            "pdf_missing_pdf_grouping_blocks_build_ir",
             "pdf_partial_grouping_one_system_unboxed",
+            "pdf_partial_grouping_with_playable_candidates",
+            "pdf_layout_detection_requires_manual_review",
+            "pdf_system_detection_not_enough_for_build_ir",
+            "pdf_bar_detection_not_enough_for_build_ir",
+            "pdf_bar_box_construction_not_enough_for_build_ir",
+            "pdf_string_assignment_not_enough_for_build_ir",
+            "pdf_fret_refinement_not_enough_for_build_ir",
+            "pdf_system_detected_bar_detection_missing",
+            "pdf_system_detection_succeeded_but_grouping_incomplete",
+            "pdf_bar_detection_succeeded_string_assignment_pending",
+
+            # Barline validation blockers
+            "pdf_barline_validation_not_enough_for_build_ir",
+            "pdf_barline_validation_threshold_boundary",
+            "pdf_barline_too_short",
+            "pdf_barline_too_short_relative_to_staff",
+            "pdf_barline_too_short_absolute",
+            "pdf_barline_crosses_insufficient_string_gaps",
+            "pdf_barline_partial_staff_crossing",
+            "pdf_barline_outside_staff_region",
+            "pdf_barline_rejected_relative_height",
+            "pdf_barline_candidates_present_but_invalid",
+            "pdf_barline_does_not_cross_staff",
+            "pdf_barline_outside_system_bounds",
+            "pdf_barline_ambiguous",
+            "pdf_barlines_not_detected_in_system",
+            "pdf_bar_boxes_not_constructible",
+            "pdf_barlines_missing",
+            "pdf_bar_boxes_missing",
+            "pdf_bar_box_edge_boundary_fallback_rejected",
+            "pdf_bar_box_inferred_boundary_not_enough_for_build_ir",
+
+            # String assignment blockers
             "pdf_string_assignment_succeeded_upstream_grouping_still_blocks",
-            "pdf_candidate_near_missing_bar_boundary",
-            "pdf_partial_system_detection",
-            "pdf_playable_candidate_requires_string_assignment",
-            "pdf_string_assignment_confidence_below_threshold",
-            "pdf_string_assignment_outside_staff",
-            "pdf_tab_staff_incomplete",
-            "pdf_fret_bbox_too_tall",
-            "pdf_fret_digit_symbol_overlap_ambiguous",
-            "pdf_fret_digits_not_merged_gap_too_large",
-            "incomplete_tab_staff",
+
+            # Recovery/Skipping grouping taxonomy blockers
             "missing_pdf_barlines",
-            "ambiguous_bar_assignment",
-        })
+            "pdf_input_class_drawn_tab_requires_barlines",
+            "pdf_grouping_confidence_below_threshold",
+            "pdf_candidates_unassigned_to_bar",
+            "pdf_candidate_unassigned_to_bar",
+            "pdf_candidate_unassigned_due_to_unboxed_system",
+            "pdf_candidate_near_missing_bar_boundary",
+            "pdf_fret_optical_bounds_confidence_below_threshold",
+        }
         filtered_warnings = []
         for w in tabraw.warnings:
             code = w.get("code")
-            if code in UNSAFE_GROUPING_CODES:
+            p_idx = w.get("page_index") or w.get("page_number")
+            s_idx = w.get("system_index")
+
+            # Explicitly preserve skipped system warning
+            if code == "pdf_unboxed_system_skipped":
+                filtered_warnings.append(w)
                 continue
+
+            # Filter if it's a global unboxed suitability blocker
+            if code in UNBOXED_SUITABILITY_BLOCKERS:
+                continue
+
+            # Filter if it belongs to an explicitly skipped system
+            if p_idx is not None and s_idx is not None:
+                if skipped_systems and (int(p_idx), int(s_idx)) in skipped_systems:
+                    continue
+
             filtered_warnings.append(w)
         tabraw.warnings = filtered_warnings
 
@@ -1535,143 +1509,89 @@ def _synchronize_skipped_system_measures(
     tabraw: TabRaw,
     skipped_systems: set[tuple[int, int]] | None = None,
 ) -> None:
-    """Re-align remaining candidates to MusicXML measures using global DP alignment."""
-    from collections import defaultdict, Counter
-
+    """Re-align remaining candidates to MusicXML measures using visual layout geometry."""
     if not musicxml.parts or not tabraw.candidates:
         return
 
     skipped = skipped_systems or set()
 
-    # 1. Group all candidates by system
-    system_candidates = defaultdict(list)
+    # 1. Collect all visual systems present in candidates or warnings
+    visual_systems = set()
     for c in tabraw.candidates:
         if c.page_index is not None and c.system_index is not None:
-            if (c.page_index, c.system_index) not in skipped:
-                system_candidates[(c.page_index, c.system_index)].append(c)
+            visual_systems.add((c.page_index, c.system_index))
+    for w in tabraw.warnings:
+        p_idx = w.get("page_index") or w.get("page_number")
+        s_idx = w.get("system_index")
+        if p_idx is not None and s_idx is not None:
+            try:
+                visual_systems.add((int(p_idx), int(s_idx)))
+            except (ValueError, TypeError):
+                pass
 
-    if not system_candidates:
+    if not visual_systems:
         return
 
-    # 2. Get system information and candidate pitches
-    tuning = _standard_guitar_tuning()
-    sys_info = []
-    all_keys = sorted(system_candidates.keys(), key=lambda sys: (sys[0], sys[1]))
+    # 2. Sort the visual systems in PDF visual sequence
+    sorted_systems = sorted(list(visual_systems), key=lambda x: (x[0], x[1]))
 
-    for sys_key in all_keys:
-        cands = system_candidates[sys_key]
-        bar_indices = {c.bar_index for c in cands if c.bar_index is not None}
-        if not bar_indices:
-            continue
-        orig_min_bar = min(bar_indices)
-        orig_max_bar = max(bar_indices)
-        system_len = orig_max_bar - orig_min_bar + 1
+    # 3. For each non-skipped system, determine visual length and original min bar
+    active_lens = {}
+    orig_min_bars = {}
+    for sys_key in sorted_systems:
+        if sys_key not in skipped:
+            cands = [c for c in tabraw.candidates if (c.page_index, c.system_index) == sys_key]
+            bar_indices = {c.bar_index for c in cands if c.bar_index is not None}
+            if bar_indices:
+                orig_min_bars[sys_key] = min(bar_indices)
+                active_lens[sys_key] = max(bar_indices) - min(bar_indices) + 1
+            else:
+                orig_min_bars[sys_key] = 1
+                active_lens[sys_key] = 1
 
-        pitches = []
-        for c in cands:
-            if c.string is not None and c.parsed_fret is not None:
-                open_pitch = tuning.pitch_for_string(c.string)
-                if open_pitch is not None:
-                    pitches.append(open_pitch + c.parsed_fret)
+    # 4. Total measures in MusicXML
+    total_xml_measures = len(musicxml.parts[0].measures)
 
-        sys_info.append({
-            'key': sys_key,
-            'len': system_len,
-            'orig_min_bar': orig_min_bar,
-            'pitches': pitches
-        })
+    # 5. Distribute remaining measures among skipped systems
+    total_active_len = sum(active_lens.values())
+    num_skipped = len([s for s in sorted_systems if s in skipped])
+    remaining_measures = total_xml_measures - total_active_len
 
-    if not sys_info:
-        return
+    if num_skipped > 0:
+        base_len = max(1, remaining_measures // num_skipped)
+        extra = max(0, remaining_measures % num_skipped)
+    else:
+        base_len = 0
+        extra = 0
 
-    # 3. Get MusicXML measures and their pitches
-    part = musicxml.parts[0]
-    xml_measures = part.measures
-    xml_measure_pitches = {}
-    for measure in xml_measures:
-        pitches = []
-        for note in measure.notes:
-            if not note.is_rest and note.pitch is not None:
-                pitches.append(note.pitch.midi)
-        xml_measure_pitches[measure.index] = pitches
+    sys_lens = {}
+    skipped_count = 0
+    for sys_key in sorted_systems:
+        if sys_key in skipped:
+            cur_len = base_len
+            if skipped_count < extra:
+                cur_len += 1
+            sys_lens[sys_key] = cur_len
+            skipped_count += 1
+        else:
+            sys_lens[sys_key] = active_lens[sys_key]
 
-    total_xml_measures = len(xml_measures)
+    # 6. Assign starting measure for each visual system
+    sys_starts = {}
+    current_start = 1
+    for sys_key in sorted_systems:
+        sys_starts[sys_key] = current_start
+        current_start += sys_lens[sys_key]
 
-    # 4. Helper to compute match score supporting both sounding (offset=0) and transposing (+12) octaves
-    def get_match_score(cand_pitches, block_pitches):
-        if not cand_pitches or not block_pitches:
-            return 0
-        score_sounding = sum((Counter(cand_pitches) & Counter(block_pitches)).values())
-        shifted_cands = [p + 12 for p in cand_pitches]
-        score_transposing = sum((Counter(shifted_cands) & Counter(block_pitches)).values())
-        return max(score_sounding, score_transposing)
-
-    # 5. Build scores matrix
-    score_matrix = []
-    for s_idx, s in enumerate(sys_info):
-        s_scores = {}
-        for m in range(1, total_xml_measures - s['len'] + 2):
-            block_pitches = []
-            for idx in range(m, m + s['len']):
-                block_pitches.extend(xml_measure_pitches.get(idx, []))
-            s_scores[m] = get_match_score(s['pitches'], block_pitches)
-        score_matrix.append(s_scores)
-
-    # 6. DP Table: dp[s_idx][m] = (max_score, prev_m)
-    dp = [{} for _ in range(len(sys_info))]
-    GAP_PENALTY = 0.5
-
-    # Base case: first system
-    for m in score_matrix[0]:
-        penalty = GAP_PENALTY * (m - 1)
-        dp[0][m] = (score_matrix[0][m] - penalty, None)
-
-    # DP Transitions
-    for s_idx in range(1, len(sys_info)):
-        s = sys_info[s_idx]
-        prev_s = sys_info[s_idx - 1]
-        for m in score_matrix[s_idx]:
-            best_val = -float('inf')
-            best_prev = None
-            for prev_m in dp[s_idx - 1]:
-                if m >= prev_m + prev_s['len']:
-                    gap = m - (prev_m + prev_s['len'])
-                    penalty = GAP_PENALTY * gap
-                    val = dp[s_idx - 1][prev_m][0] + score_matrix[s_idx][m] - penalty
-                    if val > best_val:
-                        best_val = val
-                        best_prev = prev_m
-            if best_prev is not None:
-                dp[s_idx][m] = (best_val, best_prev)
-
-    # Find optimal ending
-    best_end_val = -float('inf')
-    best_end_m = None
-    for m in dp[-1]:
-        if dp[-1][m][0] > best_end_val:
-            best_end_val = dp[-1][m][0]
-            best_end_m = m
-
-    if best_end_m is None:
-        return
-
-    # Backtrack alignment
-    alignment = {}
-    curr_m = best_end_m
-    for s_idx in range(len(sys_info) - 1, -1, -1):
-        alignment[sys_info[s_idx]['key']] = curr_m
-        curr_m = dp[s_idx][curr_m][1]
-
-    # 7. Apply offsets to candidates
-    for s in sys_info:
-        sys_key = s['key']
-        aligned_m = alignment[sys_key]
-        offset = aligned_m - s['orig_min_bar']
-
-        cands = system_candidates[sys_key]
-        for c in cands:
-            if c.bar_index is not None:
-                c.bar_index += offset
+    # 7. Apply visual geometry offset shifts to all active candidates
+    for sys_key in sorted_systems:
+        if sys_key not in skipped:
+            cands = [c for c in tabraw.candidates if (c.page_index, c.system_index) == sys_key]
+            orig_min = orig_min_bars.get(sys_key, 1)
+            offset = sys_starts[sys_key] - orig_min
+            for c in cands:
+                if c.bar_index is not None:
+                    c.bar_index += offset
 
 
 
