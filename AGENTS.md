@@ -406,8 +406,6 @@ Still require explicit user confirmation for:
 - git push --force
 - git push --force-with-lease
 - git reset --hard
-- git clean
-- git rm
 - deleting branches
 - deleting files or directories
 - merging PRs
