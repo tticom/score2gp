@@ -584,7 +584,7 @@ def build_ir_from_files(
                 from .report import write_musicxml_timing_diagnostics_html, write_musicxml_unrecoverable_timing_report
                 html_path = out_path_p.parent / "musicxml-timing-diagnostics.html"
                 write_musicxml_timing_diagnostics_html(html_path, payload, json_path_ref=out_path_p.name)
-                
+
                 # Write unrecoverable timing reports as sidecars
                 unrec_json_path = out_path_p.parent / "musicxml-unrecoverable-timing-report.json"
                 unrec_html_path = out_path_p.parent / "musicxml-unrecoverable-timing-report.html"
@@ -1319,6 +1319,58 @@ def build_ir_with_diagnostics_from_imports(
             tabraw.warnings = filtered_warnings
             _synchronize_skipped_system_measures(musicxml, tabraw, skipped_systems)
 
+        # Always filter out UNSAFE_GROUPING_CODES when allow_skip_unboxed is True
+        UNSAFE_GROUPING_CODES = set(_tabraw_unsafe_grouping_warning_codes(tabraw))
+        UNSAFE_GROUPING_CODES.update({
+            "pdf_barlines_not_detected_in_system",
+            "pdf_bar_boxes_not_constructible",
+            "pdf_bar_detection_not_enough_for_build_ir",
+            "pdf_barlines_missing",
+            "pdf_bar_boxes_missing",
+            "pdf_bar_box_construction_not_enough_for_build_ir",
+            "pdf_candidate_unassigned_due_to_unboxed_system",
+            "pdf_candidate_unassigned_to_bar",
+            "pdf_candidates_unassigned_to_bar",
+            "pdf_candidates_unassigned_to_system",
+            "pdf_candidates_unassigned_to_string",
+            "pdf_string_assignment_missing",
+            "pdf_string_assignment_not_enough_for_build_ir",
+            "pdf_candidate_outside_system",
+            "pdf_candidate_outside_bar",
+            "pdf_fret_optical_bounds_confidence_below_threshold",
+            "pdf_fret_refinement_not_enough_for_build_ir",
+            "pdf_grouping_confidence_below_threshold",
+            "pdf_grouping_not_safe_for_build_ir",
+            "pdf_input_class_drawn_tab_requires_barlines",
+            "pdf_layout_detection_requires_manual_review",
+            "pdf_missing_pdf_grouping_blocks_build_ir",
+            "pdf_partial_grouping_with_playable_candidates",
+            "pdf_system_detected_bar_detection_missing",
+            "missing_pdf_grouping",
+            "partial_pdf_grouping",
+            "pdf_partial_grouping_one_system_unboxed",
+            "pdf_string_assignment_succeeded_upstream_grouping_still_blocks",
+            "pdf_candidate_near_missing_bar_boundary",
+            "pdf_partial_system_detection",
+            "pdf_playable_candidate_requires_string_assignment",
+            "pdf_string_assignment_confidence_below_threshold",
+            "pdf_string_assignment_outside_staff",
+            "pdf_tab_staff_incomplete",
+            "pdf_fret_bbox_too_tall",
+            "pdf_fret_digit_symbol_overlap_ambiguous",
+            "pdf_fret_digits_not_merged_gap_too_large",
+            "incomplete_tab_staff",
+            "missing_pdf_barlines",
+            "ambiguous_bar_assignment",
+        })
+        filtered_warnings = []
+        for w in tabraw.warnings:
+            code = w.get("code")
+            if code in UNSAFE_GROUPING_CODES:
+                continue
+            filtered_warnings.append(w)
+        tabraw.warnings = filtered_warnings
+
 
 
 
@@ -1483,7 +1535,9 @@ def _synchronize_skipped_system_measures(
     tabraw: TabRaw,
     skipped_systems: set[tuple[int, int]] | None = None,
 ) -> None:
-    """Re-align remaining candidates to MusicXML measures if there is a system-skipping gap."""
+    """Re-align remaining candidates to MusicXML measures using global DP alignment."""
+    from collections import defaultdict, Counter
+
     if not musicxml.parts or not tabraw.candidates:
         return
 
@@ -1493,28 +1547,44 @@ def _synchronize_skipped_system_measures(
     system_candidates = defaultdict(list)
     for c in tabraw.candidates:
         if c.page_index is not None and c.system_index is not None:
-            system_candidates[(c.page_index, c.system_index)].append(c)
+            if (c.page_index, c.system_index) not in skipped:
+                system_candidates[(c.page_index, c.system_index)].append(c)
 
     if not system_candidates:
         return
 
-    # 2. Sort the systems in PDF visual sequence, including skipped systems
-    all_systems = sorted(system_candidates.keys() | skipped, key=lambda sys: (sys[0], sys[1]))
-
-    # 3. For each system, get the candidate pitches
+    # 2. Get system information and candidate pitches
     tuning = _standard_guitar_tuning()
-    system_pitches = {}
-    for sys_key in system_candidates:
+    sys_info = []
+    all_keys = sorted(system_candidates.keys(), key=lambda sys: (sys[0], sys[1]))
+
+    for sys_key in all_keys:
         cands = system_candidates[sys_key]
+        bar_indices = {c.bar_index for c in cands if c.bar_index is not None}
+        if not bar_indices:
+            continue
+        orig_min_bar = min(bar_indices)
+        orig_max_bar = max(bar_indices)
+        system_len = orig_max_bar - orig_min_bar + 1
+
         pitches = []
         for c in cands:
             if c.string is not None and c.parsed_fret is not None:
                 open_pitch = tuning.pitch_for_string(c.string)
                 if open_pitch is not None:
                     pitches.append(open_pitch + c.parsed_fret)
-        system_pitches[sys_key] = pitches
 
-    # 4. Get the MusicXML measures and their pitches
+        sys_info.append({
+            'key': sys_key,
+            'len': system_len,
+            'orig_min_bar': orig_min_bar,
+            'pitches': pitches
+        })
+
+    if not sys_info:
+        return
+
+    # 3. Get MusicXML measures and their pitches
     part = musicxml.parts[0]
     xml_measures = part.measures
     xml_measure_pitches = {}
@@ -1527,69 +1597,81 @@ def _synchronize_skipped_system_measures(
 
     total_xml_measures = len(xml_measures)
 
-    # 5. Greedy alignment of systems to MusicXML measures with continuity tracking
-    expected_next_measure = 1
-    after_skipped_gap = False
+    # 4. Helper to compute match score supporting both sounding (offset=0) and transposing (+12) octaves
+    def get_match_score(cand_pitches, block_pitches):
+        if not cand_pitches or not block_pitches:
+            return 0
+        score_sounding = sum((Counter(cand_pitches) & Counter(block_pitches)).values())
+        shifted_cands = [p + 12 for p in cand_pitches]
+        score_transposing = sum((Counter(shifted_cands) & Counter(block_pitches)).values())
+        return max(score_sounding, score_transposing)
 
-    for sys_key in all_systems:
-        if sys_key in skipped:
-            after_skipped_gap = True
-            continue
+    # 5. Build scores matrix
+    score_matrix = []
+    for s_idx, s in enumerate(sys_info):
+        s_scores = {}
+        for m in range(1, total_xml_measures - s['len'] + 2):
+            block_pitches = []
+            for idx in range(m, m + s['len']):
+                block_pitches.extend(xml_measure_pitches.get(idx, []))
+            s_scores[m] = get_match_score(s['pitches'], block_pitches)
+        score_matrix.append(s_scores)
+
+    # 6. DP Table: dp[s_idx][m] = (max_score, prev_m)
+    dp = [{} for _ in range(len(sys_info))]
+    GAP_PENALTY = 0.5
+
+    # Base case: first system
+    for m in score_matrix[0]:
+        penalty = GAP_PENALTY * (m - 1)
+        dp[0][m] = (score_matrix[0][m] - penalty, None)
+
+    # DP Transitions
+    for s_idx in range(1, len(sys_info)):
+        s = sys_info[s_idx]
+        prev_s = sys_info[s_idx - 1]
+        for m in score_matrix[s_idx]:
+            best_val = -float('inf')
+            best_prev = None
+            for prev_m in dp[s_idx - 1]:
+                if m >= prev_m + prev_s['len']:
+                    gap = m - (prev_m + prev_s['len'])
+                    penalty = GAP_PENALTY * gap
+                    val = dp[s_idx - 1][prev_m][0] + score_matrix[s_idx][m] - penalty
+                    if val > best_val:
+                        best_val = val
+                        best_prev = prev_m
+            if best_prev is not None:
+                dp[s_idx][m] = (best_val, best_prev)
+
+    # Find optimal ending
+    best_end_val = -float('inf')
+    best_end_m = None
+    for m in dp[-1]:
+        if dp[-1][m][0] > best_end_val:
+            best_end_val = dp[-1][m][0]
+            best_end_m = m
+
+    if best_end_m is None:
+        return
+
+    # Backtrack alignment
+    alignment = {}
+    curr_m = best_end_m
+    for s_idx in range(len(sys_info) - 1, -1, -1):
+        alignment[sys_info[s_idx]['key']] = curr_m
+        curr_m = dp[s_idx][curr_m][1]
+
+    # 7. Apply offsets to candidates
+    for s in sys_info:
+        sys_key = s['key']
+        aligned_m = alignment[sys_key]
+        offset = aligned_m - s['orig_min_bar']
 
         cands = system_candidates[sys_key]
-        # Determine the number of measures this system spans in TabRaw
-        bar_indices = {c.bar_index for c in cands if c.bar_index is not None}
-        if not bar_indices:
-            continue
-        orig_min_bar = min(bar_indices)
-        orig_max_bar = max(bar_indices)
-        system_len = orig_max_bar - orig_min_bar + 1
-
-        if expected_next_measure == 1:
-            best_measure_start = 1
-            after_skipped_gap = False
-        elif not after_skipped_gap:
-            # Maintain strict alignment continuity when no systems are skipped
-            best_measure_start = expected_next_measure
-        else:
-            # We had a skipped system! Use pitch-class matching (octave invariant) to search for the resume point.
-            cand_pitches = system_pitches[sys_key]
-            best_measure_start = expected_next_measure
-            best_score = -1.0
-
-            max_start = total_xml_measures - system_len + 1
-            if max_start >= expected_next_measure:
-                for m in range(expected_next_measure, max_start + 1):
-                    # Collect all pitches in this block of MusicXML measures
-                    block_pitches = []
-                    for idx in range(m, m + system_len):
-                        block_pitches.extend(xml_measure_pitches.get(idx, []))
-
-                    # Compute pitch matching score modulo 12 to handle written-vs-sounding octaves
-                    matches = 0
-                    if cand_pitches and block_pitches:
-                        from collections import Counter
-                        cand_classes = [p % 12 for p in cand_pitches]
-                        block_classes = [p % 12 for p in block_pitches]
-                        c_cand = Counter(cand_classes)
-                        c_xml = Counter(block_classes)
-                        matches = sum((c_cand & c_xml).values())
-
-                    score = float(matches)
-                    if score > best_score:
-                        best_score = score
-                        best_measure_start = m
-
-            after_skipped_gap = False
-
-        offset = best_measure_start - orig_min_bar
-
-        # Apply the offset shift to all candidates in this system
         for c in cands:
             if c.bar_index is not None:
                 c.bar_index += offset
-
-        expected_next_measure = best_measure_start + system_len
 
 
 
@@ -2528,7 +2610,20 @@ def _x_to_onset_warnings(
 
 
 def _tabraw_grouping_risk(tabraw: TabRaw) -> dict[str, object] | None:
-    playable = [candidate for candidate in tabraw.candidates if candidate.parsed_fret is not None]
+    has_systems = any(c.system_index is not None for c in tabraw.candidates)
+    playable = []
+    for candidate in tabraw.candidates:
+        if candidate.parsed_fret is not None:
+            if has_systems and isinstance(candidate.raw, dict) and any(
+                w in (candidate.raw.get("assignment_warnings") or [])
+                for w in (
+                    "pdf_fret_page_or_legend_number_excluded",
+                    "pdf_fret_technique_marker_excluded",
+                    "pdf_fret_chord_text_digit_excluded",
+                )
+            ):
+                continue
+            playable.append(candidate)
     unsafe_codes = _tabraw_unsafe_grouping_warning_codes(tabraw)
     if not playable and not unsafe_codes:
         return None

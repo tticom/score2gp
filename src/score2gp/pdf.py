@@ -646,9 +646,13 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
 
     candidates = []
     filtered_index = 0
+    cumulative_first_bar_index = 1
     with fitz.open(pdf_path) as doc:
         for page_number, page in enumerate(doc, start=1):
-            systems = _detect_tab_systems(page, page_number)
+            systems = _detect_tab_systems(page, page_number, first_bar_index=cumulative_first_bar_index)
+            if systems:
+                last_sys = systems[-1]
+                cumulative_first_bar_index = last_sys.first_bar_index + max(1, len(last_sys.barlines) - 1)
             ascii_blocks = _detect_ascii_tab_blocks(page, page_number, first_system_index=len(systems) + 1)
 
             words = sorted(
@@ -3225,7 +3229,7 @@ def _relative_artifact_path(path: Path, base: Path) -> str:
         return str(path)
 
 
-def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
+def _detect_tab_systems(page: Any, page_index: int, first_bar_index: int = 1) -> list[_TabSystem]:
     segments = list(_drawing_segments(page.get_drawings()))
     horizontal = sorted((segment for segment in segments if segment.is_horizontal), key=lambda segment: segment.y0)
 
@@ -3258,7 +3262,7 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
 
     systems = []
     system_index = 1
-    next_bar_index = 1
+    next_bar_index = first_bar_index
 
     for group in _tab_line_groups(horizontal):
         line_ys = [round((line.y0 + line.y1) / 2, 3) for line in group]

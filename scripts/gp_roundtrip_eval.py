@@ -29,12 +29,12 @@ def extract_native_gp_notes(gp_path: Path) -> List[Dict[str, Any]]:
     """Parse notes from either native flat GP7 or score2gp nested GP package."""
     if not gp_path.exists():
         return []
-        
+
     try:
         with zipfile.ZipFile(gp_path, 'r') as zf:
             xml_content = zf.read('Content/score.gpif')
         root = ET.fromstring(xml_content)
-        
+
         # If it's a score2gp nested package (no global 'Notes' element), convert via extract_score_ir_from_gp
         if root.find('Notes') is None:
             from score2gp.gp_package import extract_score_ir_from_gp, ScoreBooklet
@@ -44,7 +44,7 @@ def extract_native_gp_notes(gp_path: Path) -> List[Dict[str, Any]]:
             else:
                 score = score_booklet_or_ir
             return extract_recovered_notes(score)
-            
+
         # Otherwise, parse native GP7 flat XML structure:
         # 1. Parse Notes map
         notes_map = {}
@@ -66,7 +66,7 @@ def extract_native_gp_notes(gp_path: Path) -> List[Dict[str, Any]]:
                         elif name == 'Fret':
                             fret = int(prop.find('Fret').text or 0)
                 notes_map[nid] = {'string': string, 'fret': fret}
-                
+
         # 2. Parse Beats map
         beats_map = {}
         beats_node = root.find('Beats')
@@ -76,7 +76,7 @@ def extract_native_gp_notes(gp_path: Path) -> List[Dict[str, Any]]:
                 notes_text = beat_node.find('Notes')
                 nids = notes_text.text.split() if (notes_text is not None and notes_text.text) else []
                 beats_map[bid] = nids
-                
+
         # 3. Parse Voices map
         voices_map = {}
         voices_node = root.find('Voices')
@@ -86,27 +86,40 @@ def extract_native_gp_notes(gp_path: Path) -> List[Dict[str, Any]]:
                 beats_text = voice_node.find('Beats')
                 bids = beats_text.text.split() if (beats_text is not None and beats_text.text) else []
                 voices_map[vid] = bids
-                
-        # 4. Traverse Bars and extract notes sequence for first track/voice
+
+        # 4. Traverse MasterBars and map Track 0 Bar IDs to their 1-indexed MasterBar index
+        bar_to_mb = {}
+        mb_node = root.find('MasterBars')
+        if mb_node is not None:
+            for mb_idx, mb in enumerate(mb_node.findall('MasterBar')):
+                bars_text = mb.find('Bars')
+                if bars_text is not None and bars_text.text:
+                    bar_ids = [int(x) for x in bars_text.text.split()]
+                    if bar_ids:
+                        bar_to_mb[bar_ids[0]] = mb_idx + 1
+
         notes = []
         bars_node = root.find('Bars')
         if bars_node is not None:
-            for b_idx, bar_node in enumerate(bars_node.findall('Bar')):
-                voices_text = bar_node.find('Voices')
-                vids = voices_text.text.split() if (voices_text is not None and voices_text.text) else []
-                if vids:
-                    guitar_vid = vids[0]
-                    if guitar_vid != '-1':
-                        bids = voices_map.get(guitar_vid, [])
-                        for bid in bids:
-                            nids = beats_map.get(bid, [])
-                            for nid in nids:
-                                note_info = notes_map.get(nid, {})
-                                notes.append({
-                                    'bar_index': b_idx + 1,
-                                    'string': note_info.get('string'),
-                                    'fret': note_info.get('fret'),
-                                })
+            bars = bars_node.findall('Bar')
+            for bar_id, mb_index in bar_to_mb.items():
+                if bar_id < len(bars):
+                    bar_node = bars[bar_id]
+                    voices_text = bar_node.find('Voices')
+                    vids = voices_text.text.split() if (voices_text is not None and voices_text.text) else []
+                    if vids:
+                        guitar_vid = vids[0]
+                        if guitar_vid != '-1':
+                            bids = voices_map.get(guitar_vid, [])
+                            for bid in bids:
+                                nids = beats_map.get(bid, [])
+                                for nid in nids:
+                                    note_info = notes_map.get(nid, {})
+                                    notes.append({
+                                        'bar_index': mb_index,
+                                        'string': note_info.get('string'),
+                                        'fret': note_info.get('fret'),
+                                    })
         return notes
     except Exception as e:
         print(f"Warning: Failed to extract native GP notes: {e}", file=sys.stderr)
@@ -137,7 +150,7 @@ def run_roundtrip_eval(
 ) -> Dict[str, Any]:
     """Execute E2E diagnostic and run semantic comparison against oracle."""
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # 1. Run pipeline smoke pass
     summary_raw = run_private_diagnostic_smoke(
         pdf_path=pdf_path,
@@ -146,13 +159,13 @@ def run_roundtrip_eval(
         allow_remediation=True,
         allow_skip_unboxed=True,
     )
-    
+
     ir_path = output_dir / "score.ir.json"
     gp_path = output_dir / "smoke.gp"
-    
+
     score_ir_written = ir_path.exists()
     gp_written = False
-    
+
     # Write GP if ScoreIR is present
     if score_ir_written:
         try:
@@ -169,13 +182,13 @@ def run_roundtrip_eval(
     candidates_with_system = extraction.get("candidates_with_system", 0)
     candidates_with_bar = extraction.get("candidates_with_bar", 0)
     candidates_with_string = extraction.get("candidates_with_string", 0)
-    
+
     # 3. Read warning codes/blocking safety gate
     refusal_reasons = summary_raw.get("build_ir", {}).get("error_category") or summary_raw.get("blocking_reason")
     secondary_codes = summary_raw.get("build_ir", {}).get("message") or extraction.get("grouping_warning_codes", [])
     if isinstance(secondary_codes, str):
         secondary_codes = [secondary_codes]
-        
+
     # 4. Semantic Comparison against Oracle GP
     comparison = {
         "oracle_available": False,
@@ -187,40 +200,40 @@ def run_roundtrip_eval(
         "string_match_rate": 0.0,
         "fret_match_rate": 0.0,
     }
-    
+
     if oracle_gp_path and oracle_gp_path.exists() and score_ir_written:
         comparison["oracle_available"] = True
-        
+
         # Load scores
         recovered_score = ScoreIR.from_json_file(ir_path)
         oracle_notes = extract_native_gp_notes(oracle_gp_path)
         recovered_notes = extract_recovered_notes(recovered_score)
-        
+
         # Filter oracle notes to only cover the measures we processed
         max_bar = len(recovered_score.bars)
         oracle_notes_filtered = [n for n in oracle_notes if n["bar_index"] <= max_bar]
-        
+
         comparison["oracle_notes_count"] = len(oracle_notes_filtered)
         comparison["recovered_notes_count"] = len(recovered_notes)
-        
+
         # Pairwise compare within each bar
         total_matched = 0
         total_string_matched = 0
-        
+
         for b in range(1, max_bar + 1):
             b_oracle = [n for n in oracle_notes_filtered if n["bar_index"] == b]
             b_recovered = [n for n in recovered_notes if n["bar_index"] == b]
-            
+
             for o_note, r_note in zip(b_oracle, b_recovered):
                 if o_note["string"] == r_note["string"]:
                     total_string_matched += 1
                     if o_note["fret"] == r_note["fret"]:
                         total_matched += 1
-                        
+
         comparison["string_matches"] = total_string_matched
         comparison["fret_matches"] = total_matched
         comparison["full_matches"] = total_matched
-        
+
         if len(oracle_notes_filtered) > 0:
             comparison["string_match_rate"] = total_string_matched / len(oracle_notes_filtered)
             comparison["fret_match_rate"] = total_matched / len(oracle_notes_filtered)
@@ -229,14 +242,14 @@ def run_roundtrip_eval(
     per_bar_quality = summary_raw.get("build_ir", {}).get("per_bar_quality_counts", {})
     poor_bars = per_bar_quality.get("poor", 0)
     unknown_bars = per_bar_quality.get("unknown", 0)
-    
+
     semantic_comparison_ran = comparison.get("oracle_available", False)
     semantic_roundtrip_passed = False
     semantic_roundtrip_status = "not_run"
     failure_category = None
     primary_failure_reason = None
     recommended_next_action = None
-    
+
     if not score_ir_written:
         semantic_roundtrip_status = "diagnostic_only"
         failure_category = "strict_grouping_refused"
@@ -258,9 +271,9 @@ def run_roundtrip_eval(
         recovered_count = comparison["recovered_notes_count"]
         string_rate = comparison["string_match_rate"]
         fret_rate = comparison["fret_match_rate"]
-        
+
         note_count_diff_ratio = abs(recovered_count - oracle_count) / max(1, oracle_count)
-        
+
         if poor_bars > 0 or unknown_bars > 0:
             semantic_roundtrip_status = "failed_alignment_quality"
             failure_category = "failed_alignment_quality"
@@ -290,7 +303,7 @@ def run_roundtrip_eval(
         "measure_count_mismatches_present": False,
         "unboxed_systems_present": False,
     }
-    
+
     if score_ir_written:
         # Check string concentration
         try:
@@ -302,17 +315,17 @@ def run_roundtrip_eval(
                     diagnose_failure["string_concentration_on_string_1"] = True
         except Exception:
             pass
-                
+
         # Check fret matching rate is 0
         if semantic_comparison_ran:
             if comparison["fret_match_rate"] == 0.0 and comparison["oracle_notes_count"] > 0:
                 diagnose_failure["fret_matching_rate_is_zero"] = True
-                
+
         # Check measure count mismatches
         build_ir_info = summary_raw.get("build_ir", {})
         if build_ir_info.get("bars_with_count_mismatches"):
             diagnose_failure["measure_count_mismatches_present"] = True
-            
+
         # Check unboxed systems
         for w_code in summary_raw.get("extraction", {}).get("warning_counts", {}):
             if "unboxed" in w_code or "missing_pdf_barlines" in w_code or "not_constructible" in w_code:
@@ -346,7 +359,7 @@ def run_roundtrip_eval(
         "semantic_diagnostics": diagnose_failure,
         "private_safe_output_dir": str(output_dir.relative_to(PROJECT_ROOT)) if output_dir.is_relative_to(PROJECT_ROOT) else str(output_dir),
     }
-    
+
     return report
 
 
@@ -356,25 +369,25 @@ def main():
     parser.add_argument("--musicxml", type=Path, help="Path to matching MusicXML (optional).")
     parser.add_argument("--gp", type=Path, help="Path to original GP oracle (optional).")
     parser.add_argument("--out", type=Path, help="Target output directory (optional).")
-    
+
     args = parser.parse_args()
-    
+
     pdf_path = args.pdf
     musicxml_path = args.musicxml
     gp_path = args.gp
-    
+
     output_dir = args.out if args.out else PROJECT_ROOT / "work" / "roundtrip_eval"
-    
+
     print(f"Running GP round-trip evaluation for {pdf_path.name}...")
     report = run_roundtrip_eval(pdf_path, musicxml_path, gp_path, output_dir)
-    
+
     # Print clean private-safe report
     print("\n=======================================================")
     print("      PRIVATE-SAFE GP ROUND-TRIP EVALUATION REPORT      ")
     print("=======================================================")
     print(json.dumps(report, indent=2))
     print("=======================================================")
-    
+
     # Save the report
     report_json_path = output_dir / "roundtrip_report.json"
     report_json_path.write_text(json.dumps(report, indent=2), encoding="utf-8")

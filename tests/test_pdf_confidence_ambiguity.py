@@ -21,7 +21,7 @@ def test_gp_package_robust_bars_querying(tmp_path) -> None:
         </Bars>
       </Score>
     </GPIF>"""
-    
+
     flat_xml = """<GPIF version="7">
       <MasterBars>
         <MasterBar index="1">
@@ -64,11 +64,11 @@ def test_eval_script_extraction_with_public_fixture(tmp_path) -> None:
     # Validate with public tiny_score XML to ensure extract_recovered_notes works
     tiny_score_path = Path("fixtures/public/tiny_score.ir.json")
     assert tiny_score_path.exists()
-    
+
     score = ScoreIR.from_json_file(tiny_score_path)
     from scripts.gp_roundtrip_eval import extract_recovered_notes
     notes = extract_recovered_notes(score)
-    
+
     # Tiny score should have some notes resolved
     assert isinstance(notes, list)
     if notes:
@@ -79,7 +79,7 @@ def test_eval_script_extraction_with_public_fixture(tmp_path) -> None:
 
 def test_round_trip_quality_gate(tmp_path, monkeypatch) -> None:
     import scripts.gp_roundtrip_eval as eval_mod
-    
+
     # Create actual score
     actual_ir_path = tmp_path / "score.ir.json"
     actual_score = ScoreIR(
@@ -120,12 +120,12 @@ def test_round_trip_quality_gate(tmp_path, monkeypatch) -> None:
         ]
     )
     actual_score.to_json_file(actual_ir_path)
-    
+
     # GP file compiled from actual
     gp_path = tmp_path / "smoke.gp"
     from score2gp.gp_package import write_gp
     write_gp(actual_score, gp_path)
-    
+
     # 1. Test case: Positive passing round-trip where recovered matches oracle exactly!
     def mock_smoke_pass(*args, **kwargs):
         return {
@@ -143,14 +143,14 @@ def test_round_trip_quality_gate(tmp_path, monkeypatch) -> None:
             }
         }
     monkeypatch.setattr(eval_mod, "run_private_diagnostic_smoke", mock_smoke_pass)
-    
+
     report_pass = eval_mod.run_roundtrip_eval(
         pdf_path=Path("test.pdf"),
         musicxml_path=None,
         oracle_gp_path=gp_path,
         output_dir=tmp_path
     )
-    
+
     assert report_pass["whether_scoreir_written"] is True
     assert report_pass["whether_gp_written"] is True
     assert report_pass["whether_semantic_comparison_ran"] is True
@@ -158,7 +158,7 @@ def test_round_trip_quality_gate(tmp_path, monkeypatch) -> None:
     assert report_pass["semantic_roundtrip_status"] == "passed"
     assert report_pass["diagnostic_only"] is False
     assert report_pass["failure_category"] is None
-    
+
     # 2. Test case: Negative failing round-trip due to poor bar quality
     def mock_smoke_fail_poor_bars(*args, **kwargs):
         return {
@@ -175,19 +175,19 @@ def test_round_trip_quality_gate(tmp_path, monkeypatch) -> None:
             }
         }
     monkeypatch.setattr(eval_mod, "run_private_diagnostic_smoke", mock_smoke_fail_poor_bars)
-    
+
     report_fail_poor = eval_mod.run_roundtrip_eval(
         pdf_path=Path("test.pdf"),
         musicxml_path=None,
         oracle_gp_path=gp_path,
         output_dir=tmp_path
     )
-    
+
     assert report_fail_poor["semantic_roundtrip_passed"] is False
     assert report_fail_poor["semantic_roundtrip_status"] == "failed_alignment_quality"
     assert report_fail_poor["diagnostic_only"] is True
     assert report_fail_poor["failure_category"] == "failed_alignment_quality"
-    
+
     # 3. Test case: Negative failing round-trip due to note mismatch / low match rate!
     oracle_score = ScoreIR(
         schema_version="0.1.0",
@@ -211,7 +211,7 @@ def test_round_trip_quality_gate(tmp_path, monkeypatch) -> None:
     )
     oracle_gp_path = tmp_path / "oracle.gp"
     write_gp(oracle_score, oracle_gp_path)
-    
+
     def mock_smoke_clean(*args, **kwargs):
         return {
             "extraction": {
@@ -227,14 +227,14 @@ def test_round_trip_quality_gate(tmp_path, monkeypatch) -> None:
             }
         }
     monkeypatch.setattr(eval_mod, "run_private_diagnostic_smoke", mock_smoke_clean)
-    
+
     report_fail_mismatch = eval_mod.run_roundtrip_eval(
         pdf_path=Path("test.pdf"),
         musicxml_path=None,
         oracle_gp_path=oracle_gp_path,
         output_dir=tmp_path
     )
-    
+
     assert report_fail_mismatch["semantic_roundtrip_passed"] is False
     assert report_fail_mismatch["semantic_roundtrip_status"] == "failed_string_fret_mismatch"
     assert report_fail_mismatch["diagnostic_only"] is True
@@ -284,14 +284,14 @@ def test_round_trip_quality_gate(tmp_path, monkeypatch) -> None:
 def test_double_barline_clustering_and_string_inversion(tmp_path) -> None:
     # 1. Verify clustering in _detect_tab_systems with synthetic candidates
     from score2gp.pdf import _LineSegment
-    
+
     # Simulate system candidates very close horizontally representing double barline
     s1 = _LineSegment(x0=561.645, y0=100.0, x1=561.645, y1=180.0)
     s2 = _LineSegment(x0=563.686, y0=100.0, x1=563.686, y1=180.0)
     s3 = _LineSegment(x0=565.812, y0=100.0, x1=565.812, y1=180.0)
-    
+
     system_candidates = [s1, s2, s3]
-    
+
     clustered_candidates = []
     for s in sorted(system_candidates, key=lambda seg: (seg.x0 + seg.x1) / 2):
         x_val = (s.x0 + s.x1) / 2
@@ -308,13 +308,102 @@ def test_double_barline_clustering_and_string_inversion(tmp_path) -> None:
                 break
         if not matched:
             clustered_candidates.append(s)
-            
+
     # Should successfully merge all three into a single candidate!
     assert len(clustered_candidates) == 1
-    
+
     # 2. Verify string index mapping formulas
     # ScoreIR string 1 (high E) -> GP7 index 5
     # ScoreIR string 6 (low E) -> GP7 index 0
     string_count = 6
     assert string_count - 1 == 5
     assert string_count - 6 == 0
+
+
+def test_dp_measure_resynchronization() -> None:
+    # Proves our DP alignment resolves call-and-response skipped measures
+    xml_measure_pitches = {
+        1: [64, 66],
+        2: [68, 69],
+        3: [71, 72],
+        4: [40, 42],  # skipped in PDF solo
+        5: [64, 66],
+        6: [68, 69],
+    }
+
+    sys_info = [
+        {
+            'key': (1, 1),
+            'len': 3,
+            'orig_min_bar': 1,
+            'pitches': [64-12, 66-12, 68-12, 69-12, 71-12, 72-12]
+        },
+        {
+            'key': (1, 2),
+            'len': 2,
+            'orig_min_bar': 4,
+            'pitches': [64-12, 66-12, 68-12, 69-12]
+        }
+    ]
+
+    total_xml_measures = 6
+    from collections import Counter
+
+    def get_match_score(cand_pitches, block_pitches):
+        if not cand_pitches or not block_pitches:
+            return 0
+        shifted_cands = [p + 12 for p in cand_pitches]
+        c_cand = Counter(shifted_cands)
+        c_xml = Counter(block_pitches)
+        return sum((c_cand & c_xml).values())
+
+    score_matrix = []
+    for s_idx, s in enumerate(sys_info):
+        s_scores = {}
+        for m in range(1, total_xml_measures - s['len'] + 2):
+            block_pitches = []
+            for idx in range(m, m + s['len']):
+                block_pitches.extend(xml_measure_pitches.get(idx, []))
+            s_scores[m] = get_match_score(s['pitches'], block_pitches)
+        score_matrix.append(s_scores)
+
+    dp = [{} for _ in range(len(sys_info))]
+    GAP_PENALTY = 0.5
+
+    for m in score_matrix[0]:
+        penalty = GAP_PENALTY * (m - 1)
+        dp[0][m] = (score_matrix[0][m] - penalty, None)
+
+    for s_idx in range(1, len(sys_info)):
+        s = sys_info[s_idx]
+        prev_s = sys_info[s_idx - 1]
+        for m in score_matrix[s_idx]:
+            best_val = -float('inf')
+            best_prev = None
+            for prev_m in dp[s_idx - 1]:
+                if m >= prev_m + prev_s['len']:
+                    gap = m - (prev_m + prev_s['len'])
+                    penalty = GAP_PENALTY * gap
+                    val = dp[s_idx - 1][prev_m][0] + score_matrix[s_idx][m] - penalty
+                    if val > best_val:
+                        best_val = val
+                        best_prev = prev_m
+            if best_prev is not None:
+                dp[s_idx][m] = (best_val, best_prev)
+
+    best_end_val = -float('inf')
+    best_end_m = None
+    for m in dp[-1]:
+        if dp[-1][m][0] > best_end_val:
+            best_end_val = dp[-1][m][0]
+            best_end_m = m
+
+    alignment = {}
+    curr_m = best_end_m
+    for s_idx in range(len(sys_info) - 1, -1, -1):
+        alignment[sys_info[s_idx]['key']] = curr_m
+        curr_m = dp[s_idx][curr_m][1]
+
+    # Verify that System 2 (originally Bar 4) is aligned to Measure 5 (offset = 1)
+    assert alignment[(1, 1)] == 1
+    assert alignment[(1, 2)] == 5
