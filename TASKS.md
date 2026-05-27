@@ -2,6 +2,10 @@
 
 ## Next
 
+- [ ] Execute Major Triads Lesson 3 benchmark conversion task as governed by the external [BENCHMARK_LADDER.md](https://github.com/tticom/score2gp-agentops/blob/main/projects/score2gp/BENCHMARK_LADDER.md) in `score2gp-agentops`.
+  > [!NOTE]
+  > All long-term benchmark ladder policies, rungs, and acceptance targets are maintained externally in the [score2gp-agentops](https://github.com/tticom/score2gp-agentops) repository. Do not duplicate benchmark ladder details locally.
+
 ## Done
 
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for beat-level visual chord grid diagrams (specifying chord names, base frets, multi-string fret indicators, and left-hand fingering arrays) and note-level digit execution markers (left-hand fingering indicators like T/1/2/3/4 and right-hand pick/finger symbols like p/i/m/a/ch), verified with public synthetic fixtures and unit tests (`feature/build-ir-chord-diagrams-and-fingerings-v0.1`).
