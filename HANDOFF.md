@@ -3,10 +3,10 @@
 ## Metadata
 - **Current Branch**: `docs/agentops-integration-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: Draft PR to be created
-- **Latest Local Commit**: Pending commit
-- **Latest Pushed Commit**: Pending push to origin
-- **Working Tree Status**: Modified `HANDOFF.md` (uncommitted)
+- **Current PR**: [Draft PR #139](https://github.com/tticom/score2gp/pull/139)
+- **Latest Local Commit**: `31a5fcf75480391ab0186480376257b2c1952412` ("docs: integrate score2gp-agentops external governance")
+- **Latest Pushed Commit**: `31a5fcf75480391ab0186480376257b2c1952412` ("docs: integrate score2gp-agentops external governance")
+- **Working Tree Status**: clean
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked.
 
 ## Tests and Checks Run
