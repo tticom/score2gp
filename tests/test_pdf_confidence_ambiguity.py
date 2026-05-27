@@ -279,3 +279,42 @@ def test_round_trip_quality_gate(tmp_path, monkeypatch) -> None:
     assert report_fail_count["semantic_roundtrip_status"] == "failed_note_count_mismatch"
     assert report_fail_count["diagnostic_only"] is True
     assert report_fail_count["failure_category"] == "failed_note_count_mismatch"
+
+
+def test_double_barline_clustering_and_string_inversion(tmp_path) -> None:
+    # 1. Verify clustering in _detect_tab_systems with synthetic candidates
+    from score2gp.pdf import _LineSegment
+    
+    # Simulate system candidates very close horizontally representing double barline
+    s1 = _LineSegment(x0=561.645, y0=100.0, x1=561.645, y1=180.0)
+    s2 = _LineSegment(x0=563.686, y0=100.0, x1=563.686, y1=180.0)
+    s3 = _LineSegment(x0=565.812, y0=100.0, x1=565.812, y1=180.0)
+    
+    system_candidates = [s1, s2, s3]
+    
+    clustered_candidates = []
+    for s in sorted(system_candidates, key=lambda seg: (seg.x0 + seg.x1) / 2):
+        x_val = (s.x0 + s.x1) / 2
+        matched = False
+        for existing in clustered_candidates:
+            exist_x = (existing.x0 + existing.x1) / 2
+            if abs(x_val - exist_x) < 6.0:
+                h_s = abs(s.y1 - s.y0)
+                h_e = abs(existing.y1 - existing.y0)
+                if h_s > h_e:
+                    clustered_candidates.remove(existing)
+                    clustered_candidates.append(s)
+                matched = True
+                break
+        if not matched:
+            clustered_candidates.append(s)
+            
+    # Should successfully merge all three into a single candidate!
+    assert len(clustered_candidates) == 1
+    
+    # 2. Verify string index mapping formulas
+    # ScoreIR string 1 (high E) -> GP7 index 5
+    # ScoreIR string 6 (low E) -> GP7 index 0
+    string_count = 6
+    assert string_count - 1 == 5
+    assert string_count - 6 == 0

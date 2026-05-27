@@ -59,7 +59,10 @@ def extract_native_gp_notes(gp_path: Path) -> List[Dict[str, Any]]:
                     for prop in props.findall('Property'):
                         name = prop.get('name')
                         if name == 'String':
-                            string = int(prop.find('String').text or 1)
+                            # Native GP7 is 0-indexed where 0 = low E (string 6) and 5 = high E (string 1)
+                            # We map to 1-indexed (1 = high E, 6 = low E)
+                            val = int(prop.find('String').text or 0)
+                            string = 6 - val
                         elif name == 'Fret':
                             fret = int(prop.find('Fret').text or 0)
                 notes_map[nid] = {'string': string, 'fret': fret}

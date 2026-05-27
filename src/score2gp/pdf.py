@@ -3275,6 +3275,26 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
             if y_max >= y0 - 15.0 and y_min <= y1 + 15.0 and x0 - 25.0 <= x_val <= x1 + 25.0:
                 system_candidates.append(s)
 
+        # Cluster vertical candidates horizontally (within 6.0 points) to handle double/end-of-score barlines
+        clustered_candidates = []
+        for s in sorted(system_candidates, key=lambda seg: (seg.x0 + seg.x1) / 2):
+            x_val = (s.x0 + s.x1) / 2
+            matched = False
+            for existing in clustered_candidates:
+                exist_x = (existing.x0 + existing.x1) / 2
+                if abs(x_val - exist_x) < 6.0:
+                    # Keep the one that is taller/longer to ensure we don't drop a valid barline in favor of a short fragment
+                    h_s = abs(s.y1 - s.y0)
+                    h_e = abs(existing.y1 - existing.y0)
+                    if h_s > h_e:
+                        clustered_candidates.remove(existing)
+                        clustered_candidates.append(s)
+                    matched = True
+                    break
+            if not matched:
+                clustered_candidates.append(s)
+        system_candidates = clustered_candidates
+
         barline_candidates_count = len(system_candidates)
         rejection_reasons = {
             "pdf_barline_outside_system_bounds": 0,

@@ -616,14 +616,16 @@ def _tracks(parent: ET.Element, score: ScoreIR, track_cd_maps: dict[str, dict[st
                         "barsStates": "1 1 1 1 1",
                     })
                     for f in cd.frets:
-                        ET.SubElement(diag_node, "Fret", {"string": str(f.string), "fret": str(f.fret)})
+                        gp7_str = cd.string_count - f.string
+                        ET.SubElement(diag_node, "Fret", {"string": str(gp7_str), "fret": str(f.fret)})
 
                     fing_node = ET.SubElement(diag_node, "Fingering")
                     for fg in cd.fingers:
+                        gp7_str = cd.string_count - fg.string
                         ET.SubElement(fing_node, "Position", {
                             "finger": fg.finger,
                             "fret": str(fg.fret),
-                            "string": str(fg.string),
+                            "string": str(gp7_str),
                         })
 
                     ET.SubElement(diag_node, "Property", {"name": "ShowName", "type": "bool", "value": "true"})
@@ -734,6 +736,7 @@ def _master_bars(parent: ET.Element, score: ScoreIR) -> None:
 
 
 def _bars(parent: ET.Element, score: ScoreIR, hopo_dests: set[tuple[int, int, int]], let_ring_notes: set[tuple[int, int, int]], palm_mute_notes: set[tuple[int, int, int]], track_cd_maps: dict[str, dict[str, str]], event_map: dict[str, Event]) -> None:
+    track_string_counts = {t.id: len(t.tuning.strings) for t in score.tracks}
     bars = ET.SubElement(parent, "Bars")
     for bar in score.bars:
         bar_node = ET.SubElement(bars, "Bar", {"index": str(bar.index)})
@@ -792,10 +795,11 @@ def _bars(parent: ET.Element, score: ScoreIR, hopo_dests: set[tuple[int, int, in
         for v_idx in sorted(events_by_voice.keys()):
             voice_node = ET.SubElement(voices_node, "Voice", {"id": str(v_idx)})
             for event in sorted(events_by_voice[v_idx], key=lambda item: item.timing.onset_ticks):
-                _event(voice_node, event, hopo_dests, let_ring_notes, palm_mute_notes, track_cd_maps, event_map)
+                string_count = track_string_counts.get(event.track_id, 6)
+                _event(voice_node, event, hopo_dests, let_ring_notes, palm_mute_notes, track_cd_maps, event_map, string_count)
 
 
-def _event(parent: ET.Element, event: Event, hopo_dests: set[tuple[int, int, int]], let_ring_notes: set[tuple[int, int, int]], palm_mute_notes: set[tuple[int, int, int]], track_cd_maps: dict[str, dict[str, str]], event_map: dict[str, Event]) -> None:
+def _event(parent: ET.Element, event: Event, hopo_dests: set[tuple[int, int, int]], let_ring_notes: set[tuple[int, int, int]], palm_mute_notes: set[tuple[int, int, int]], track_cd_maps: dict[str, dict[str, str]], event_map: dict[str, Event], string_count: int) -> None:
     attrs = {
         "id": event.id,
         "track": event.track_id,
@@ -908,14 +912,16 @@ def _event(parent: ET.Element, event: Event, hopo_dests: set[tuple[int, int, int
             "baseFret": str(cd.base_fret),
         })
         for f in cd.frets:
-            ET.SubElement(cd_node, "Fret", {"string": str(f.string), "fret": str(f.fret)})
+            gp7_str = cd.string_count - f.string
+            ET.SubElement(cd_node, "Fret", {"string": str(gp7_str), "fret": str(f.fret)})
         if cd.fingers:
             fing_node = ET.SubElement(cd_node, "Fingering")
             for fg in cd.fingers:
+                gp7_str = cd.string_count - fg.string
                 ET.SubElement(fing_node, "Position", {
                     "finger": fg.finger,
                     "fret": str(fg.fret),
-                    "string": str(fg.string),
+                    "string": str(gp7_str),
                 })
         ET.SubElement(cd_node, "KeyNote", {"step": cd.key_note_step, "accidental": cd.key_note_accidental})
         ET.SubElement(cd_node, "BassNote", {"step": cd.bass_note_step, "accidental": cd.bass_note_accidental})
@@ -979,15 +985,16 @@ def _event(parent: ET.Element, event: Event, hopo_dests: set[tuple[int, int, int
         for technique in event.techniques:
             ET.SubElement(techniques, "Technique", {"name": technique.kind})
     for note in event.notes:
-        _note(node, note, event.timing.bar_index, event.timing.onset_ticks, event.timing.duration_ticks, hopo_dests, let_ring_notes, palm_mute_notes, event_map)
+        _note(node, note, event.timing.bar_index, event.timing.onset_ticks, event.timing.duration_ticks, hopo_dests, let_ring_notes, palm_mute_notes, event_map, string_count)
 
 
-def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, duration_ticks: int, hopo_dests: set[tuple[int, int, int]], let_ring_notes: set[tuple[int, int, int]], palm_mute_notes: set[tuple[int, int, int]], event_map: dict[str, Event]) -> None:
+def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, duration_ticks: int, hopo_dests: set[tuple[int, int, int]], let_ring_notes: set[tuple[int, int, int]], palm_mute_notes: set[tuple[int, int, int]], event_map: dict[str, Event], string_count: int) -> None:
+    gp7_str = string_count - note.string
     note_node = ET.SubElement(
         parent,
         "Note",
         {
-            "string": str(note.string),
+            "string": str(gp7_str),
             "fret": str(note.fret),
             "pitch": str(note.pitch),
             "confidence": f"{note.confidence:.3f}",
@@ -1305,7 +1312,7 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
         _text(fret_prop, "Fret", note.fret)
 
         string_prop = ET.SubElement(properties_node, "Property", {"name": "String"})
-        _text(string_prop, "String", note.string)
+        _text(string_prop, "String", gp7_str)
 
         midi_prop = ET.SubElement(properties_node, "Property", {"name": "Midi"})
         _text(midi_prop, "Number", note.pitch)

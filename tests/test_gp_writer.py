@@ -517,14 +517,14 @@ def test_gpif_chords_and_vibrato_curves(tmp_path) -> None:
 
         fret = diag.find("Fret")
         assert fret is not None
-        assert fret.get("string") == "5"
+        assert fret.get("string") == "1"
         assert fret.get("fret") == "1"
 
         pos = diag.find(".//Fingering/Position")
         assert pos is not None
         assert pos.get("finger") == "Index"
         assert pos.get("fret") == "1"
-        assert pos.get("string") == "5"
+        assert pos.get("string") == "1"
 
         key = item.find(".//Chord/KeyNote")
         assert key is not None

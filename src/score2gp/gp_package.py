@@ -771,6 +771,7 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
                 "alternate_ending_passes": alternate_ending_passes,
             }
 
+    track_string_counts = {t.id: len(t.tuning.strings) for t in tracks}
     bars_node = root.find("Bars")
     if bars_node is None:
         for b in root.findall(".//Bars"):
@@ -844,7 +845,9 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
 
                 notes: list[Note] = []
                 for n_node in ev_node.findall(".//Note"):
-                    string = int(n_node.get("string") or 1)
+                    gp7_str = int(n_node.get("string") or 0)
+                    string_count = track_string_counts.get(tr_id, 6)
+                    string = string_count - gp7_str
                     fret = int(n_node.get("fret") or 0)
                     pitch = int(n_node.get("pitch") or 0)
 
@@ -945,7 +948,8 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
 
                     frets = []
                     for f_node in cd_node.findall("Fret"):
-                        f_string = int(f_node.get("string") or 1)
+                        gp7_str = int(f_node.get("string") or 0)
+                        f_string = string_count - gp7_str
                         f_fret = int(f_node.get("fret") or 0)
                         from .ir import ChordFret
                         frets.append(ChordFret(string=f_string, fret=f_fret))
@@ -956,7 +960,8 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
                         for pos in fing_node.findall("Position"):
                             finger_val = pos.get("finger") or "None"
                             fg_fret = int(pos.get("fret") or 0)
-                            fg_string = int(pos.get("string") or 1)
+                            gp7_str = int(pos.get("string") or 0)
+                            fg_string = string_count - gp7_str
                             from .ir import ChordFinger
                             fingers.append(ChordFinger(string=fg_string, fret=fg_fret, finger=finger_val))
 
