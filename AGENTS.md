@@ -2,7 +2,7 @@
 
 This repository is an open-source-style experiment for converting owned PDF guitar scores into inspectable intermediate data and then into Guitar Pro 7 packages.
 
-Ground rules:
+---
 
 If the external score2gp-agentops repository is unavailable, stop and ask for guidance rather than proceeding without the review-governance rules.
 
@@ -13,260 +13,28 @@ If the external score2gp-agentops repository is unavailable, stop and ask for gu
 - Unsupported notation must be surfaced in warnings or reports, not silently dropped.
 - Keep modules small, typed, and tested.
 - Code and tests must be written before any PR is raised. Do not create tasks or PRs solely to run tests or update markdown files. Validation and markdown updates must be performed as a result of actual code changes within the same task.
+## 1. Ground Rules
 
-# Critical review rule
+- **Be Honest**: Never claim perfect PDF-to-GP conversion. Be honest about recognition and alignment quality.
+- **Respect DRM**: Do not bypass DRM or process scores the user does not own or have permission to process.
+- **Staged Outputs**: Prefer staged, human-inspectable intermediate artifacts: rendered pages, overlays, raw extraction JSON, strict ScoreIR JSON, warnings, and reports.
+- **Notation Integrity**: Unsupported notation must be surfaced in warnings or reports, not silently dropped.
+- **Engineering Quality**: Keep modules small, typed, and fully tested. Code and tests must be written before any pull request is raised.
 
-When evaluating agent output, PRs, handoffs, diagnostic reports, or private benchmark summaries, act first as a sceptical reviewer, not as a progress narrator.
+---
 
-Read `REVIEW_RULES.md` before reviewing any PR or handoff that claims conversion progress.
+## 2. Local Repository Safety Rules
 
-Do not describe work as a breakthrough, success, fix, or improvement unless the claim is supported by:
+- **No Direct Main Push**: Never push directly to `main`. On feature branches, push commits after all tests and checks pass.
+- **Private File Protection**: Keep all private PDFs, companion MusicXML files, and derived conversion artifacts strictly inside gitignored folders (`fixtures/private/` and `work/`).
+- **Prohibited Product Changes**: Do not implement OCR, scanned-PDF support, ML-based layout recognition, MusicXML timing repair, or automatic GPIF expansion unless explicitly requested.
+- **Handoff Update Requirement**: Every completed task must leave `HANDOFF.md` updated with exact commit details, PR state, and checks run before reporting completion.
 
-1. a coherent single-run artifact set,
-2. a clearly stated baseline,
-3. private-safe before/after metric deltas,
-4. public regression coverage where code changed,
-5. strict separation between diagnostic/remediation output and strict conversion success.
+---
 
-Use the terms `claimed`, `verified`, `unverified`, `contradicted`, and `blocked` deliberately.
+## 3. Standard Verification & Private-Safety Audit
 
-A PR is not mergeable merely because tests pass, files are generated, or diagnostics are richer. A PR is mergeable only if it satisfies the stated acceptance criteria without weakening project invariants.
-
-If artifacts disagree, stop evaluation and require artifact reconciliation before interpreting metrics.
-
-If a source score and a diagnostic table disagree, investigate the diagnostic table before concluding the source score is wrong. The software must conform to the music; the music is not required to conform to the software's inferred structure.
-
-Generated ScoreIR or GP output is not conversion success unless the semantic quality gate passes.
-
-# Agentic architecture rule
-
-`AGENTIC_ARCHITECTURE.md` describes the separation between implementation agents, reviewer/architect agents, and human maintainer decisions.
-
-The implementation agent reports what it did. The reviewer or architect agent decides whether that report should be trusted.
-
-Do not let agent-control artifacts become a substitute for product correctness. Better handoff text is not a better converter.
-
-For significant agent results, review first and prompt second:
-
-1. Review the claims.
-2. Check for contradictions.
-3. Identify architectural risks.
-4. Decide approve / keep draft / request changes / close.
-5. Only then write the next implementation prompt.
-
-# Persistent handoff rule
-
-At the end of every task, update `HANDOFF.md` before reporting completion.
-
-`HANDOFF.md` is the canonical project handoff file. Do not create or use `HANDOVER.md` unless explicitly instructed.
-
-Because some agent CLIs may limit access to previous output, `HANDOFF.md` must be kept durable and pushed to the remote branch whenever it changes.
-
-Every completed task must leave `HANDOFF.md` with:
-- current branch
-- base branch
-- current PR number and URL if one exists
-- latest local commit hash and subject
-- latest pushed commit hash and subject
-- working tree status
-- tests/checks run and results
-- GitHub check status if applicable
-- private-safety status
-- what changed in the task
-- known limitations
-- remaining risks
-- next recommended task
-- explicit scope boundaries, including what must not be started in the current branch
-
-If the task stops early because of a failure, conflict, pending GitHub check, missing approval, missing information, or CLI/tool limitation, update `HANDOFF.md` with:
-- where it stopped
-- exact failing/pending command or condition
-- files involved
-- what was already committed
-- what was already pushed
-- safest next action
-
-After updating `HANDOFF.md`:
-1. Run the relevant verification checks for the task.
-2. Confirm no private files or `work/` artifacts are tracked.
-3. Commit `HANDOFF.md` together with the task changes, or as a small handoff-only commit if the task changes were already committed.
-4. Push the current feature branch so the handoff is available remotely.
-5. Re-check PR/GitHub status if a PR exists.
-6. Only then report completion.
-
-Never push directly to `main` unless explicitly instructed. On feature branches, push handoff updates to the feature branch after checks pass.
-
-Do not put private musical content, private PDF text, private fret sequences, private titles, private URLs, private diagnostic output, or `work/` artifact contents into `HANDOFF.md`.
-
-Keep `HANDOFF.md` private-safe and useful enough that a new agent can continue without reading previous chat history.
-
-# Cross-agent final report rule
-
-At the end of every task, the final response must include a complete, copy/pasteable final report for another assistant that cannot access GitHub.
-
-The final report must be based on local Git, GitHub CLI output, HANDOFF.md, TASKS.md, and the actual verification commands run.
-
-The report must include:
-
-## Repository State
-- current branch
-- base branch
-- whether local branch tracks origin
-- latest local commit hash and subject
-- latest pushed commit hash and subject
-- working tree status
-- whether local branch is clean and synchronized
-
-## Pull Request State
-- PR number
-- PR URL
-- PR title
-- PR state: draft/open/ready/merged/closed
-- whether PR is draft
-- whether PR is mergeable if known
-- GitHub check status
-- names/statuses of relevant checks where available
-- whether the PR was created, updated, marked ready, or left draft
-- whether the PR was merged: yes/no
-- merge commit hash if merged
-
-## Verification Results
-- exact test command and result
-- schema export command and result
-- validate-ir command and result
-- git diff --check result
-- git diff -- schemas result
-- private/work audit command and result
-- root generated-artifact audit result if relevant
-- public E2E smoke result if relevant
-
-## Private-Safety Result
-- whether any private PDFs, GP files, MusicXML/MXL files, overlays, logs, summaries, diagnostics, or work/ outputs are tracked
-- exact result of git ls-files fixtures/private work
-- confirmation that only fixtures/private/.gitkeep is tracked under private/work paths
-- any untracked private outputs must be named only by safe path category, not content
-
-## What Changed
-- concise bullet list of implementation changes
-- public fixtures added or updated
-- diagnostics/reporting added or updated
-- docs/tasks/handoff files updated
-- strict gates preserved
-
-## Current Blocker Classification
-- top blocker
-- secondary blockers
-- current private-safe summary using only anonymized counts/statuses/reason codes
-- comparison with previous summary if known
-- whether the blocker improved, stayed same, or moved to a new stage
-
-## Scope Boundaries Preserved
-Explicitly state whether these were preserved:
-- no private files committed
-- no work/ outputs committed
-- no OCR
-- no scanned-PDF support
-- no ML layout recognition
-- no MusicXML timing repair
-- no GPIF expansion
-- no tuning/pitch inference used to bypass geometry gates
-- no loosening of grouping/string/fret/timing/build-ir gates
-
-## Next Recommended Task
-- exact next branch name
-- goal of next branch
-- why this is the next branch
-- explicit non-goals for next branch
-- whether next task should wait for current PR merge
-
-The final response must not rely on “see PR” or “see GitHub” as the only source. Include the information directly.
-
-If the task stops early, the final report must include:
-- where it stopped
-- exact pending/failing command or condition
-- what was already committed
-- what was already pushed
-- PR status if any
-- safest next action
-
-HANDOFF.md must contain the same essential state before the final response is given.
-
-# Planning and execution rule
-
-Unless the user explicitly asks for planning only, do not stop after creating an implementation plan. Create a short plan if useful, then continue into implementation.
-
-The agent may proceed through normal repo-local implementation, tests, commits, pushes to feature branches, and draft PR creation without asking for another approval, provided:
-- the task remains within the requested scope
-- required checks pass
-- no private files or work/ artifacts are tracked
-- HANDOFF.md is updated, committed, and pushed
-- the branch is not main
-- the push is not a force push
-
-The agent must still stop and ask before:
-- merging PRs
-- force-pushing
-- deleting branches
-- destructive file operations
-- reading private fixtures unless explicitly instructed
-- reading secrets or credential files
-- broadening scope beyond the current branch
-
-# Allowed routine commands
-
-The user permits the agent to run routine Git, GitHub CLI, and pytest/project-validation commands without asking for additional confirmation.
-
-Allowed without extra confirmation:
-- git status
-- git status --branch
-- git branch
-- git branch --show-current
-- git switch
-- git checkout
-- git pull --ff-only
-- git fetch
-- git log
-- git diff
-- git diff --stat
-- git diff --check
-- git diff -- schemas
-- git ls-files
-- git add
-- git commit
-- git push origin <current-feature-branch>
-- gh pr view
-- gh pr checks
-- gh pr status
-- gh pr create
-- gh pr edit
-- gh pr ready
-- python -m pytest
-- python -m score2gp.cli export-schema --out schemas
-- python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json
-
-The agent may commit and push normal feature-branch work after required checks pass, provided:
-- the branch is not `main`
-- no private files or `work/` artifacts are tracked
-- `HANDOFF.md` has been updated
-- the push is a normal push to the current feature branch
-- the working tree is clean after the push
-
-Still require explicit user confirmation for:
-- git push --force
-- git push --force-with-lease
-- git reset --hard
-- git clean
-- git rm
-- deleting branches
-- deleting files or directories
-- merging PRs
-- pushing directly to main
-- reading fixtures/private/*
-- reading secrets, .env files, credentials, keys, or tokens
-- changing GitHub repo settings, secrets, or permissions
-- running arbitrary network upload/download commands
-
-Standard verification commands:
+Implementation agents must run and report the full verification matrix before concluding:
 
 ```bash
 python -m pytest
@@ -279,14 +47,24 @@ git status --short
 git status --branch
 ```
 
-Private-safety invariant:
-
+### Private-Safety Invariant
+The command:
 ```bash
 git ls-files fixtures/private work
 ```
-
-must output only:
-
+must output **exactly and only**:
 ```text
 fixtures/private/.gitkeep
 ```
+
+---
+
+## 4. Governance & Review Policy Routing
+
+This repository does not host prompt templates, rejected claim logs, or review rubrics. All control-plane agentops policies are maintained in the external governance repository:
+
+- **Canonical Review Rules**: See [REVIEW_RULES.md](https://github.com/tticom/score2gp-agentops/blob/main/projects/score2gp/REVIEW_RULES.md)
+- **Active Benchmark Ladder**: See [BENCHMARK_LADDER.md](https://github.com/tticom/score2gp-agentops/blob/main/projects/score2gp/BENCHMARK_LADDER.md)
+- **Acceptance Targets**: See [ACCEPTANCE_TARGETS.md](https://github.com/tticom/score2gp-agentops/blob/main/projects/score2gp/ACCEPTANCE_TARGETS.md)
+- **Rejected Claims Register**: See [REJECTED_CLAIMS.md](https://github.com/tticom/score2gp-agentops/blob/main/projects/score2gp/REJECTED_CLAIMS.md)
+- **Prompt and PR Templates**: See [projects/score2gp/](https://github.com/tticom/score2gp-agentops/tree/main/projects/score2gp)
