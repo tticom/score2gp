@@ -186,7 +186,7 @@ def test_round_trip_quality_gate(tmp_path, monkeypatch) -> None:
     assert report_fail_poor["semantic_roundtrip_passed"] is False
     assert report_fail_poor["semantic_roundtrip_status"] == "failed_alignment_quality"
     assert report_fail_poor["diagnostic_only"] is True
-    assert report_fail_poor["failure_category"] == "poor_bar_quality"
+    assert report_fail_poor["failure_category"] == "failed_alignment_quality"
     
     # 3. Test case: Negative failing round-trip due to note mismatch / low match rate!
     oracle_score = ScoreIR(
@@ -238,5 +238,44 @@ def test_round_trip_quality_gate(tmp_path, monkeypatch) -> None:
     assert report_fail_mismatch["semantic_roundtrip_passed"] is False
     assert report_fail_mismatch["semantic_roundtrip_status"] == "failed_string_fret_mismatch"
     assert report_fail_mismatch["diagnostic_only"] is True
-    assert report_fail_mismatch["failure_category"] == "string_fret_mismatch"
+    assert report_fail_mismatch["failure_category"] == "failed_string_fret_mismatch"
     assert report_fail_mismatch["semantic_diagnostics"]["fret_matching_rate_is_zero"] is True
+
+    # 4. Test case: Negative failing round-trip due to note count mismatch!
+    oracle_score_count = ScoreIR(
+        schema_version="0.1.0",
+        metadata={"title": "Test oracle count"},
+        tempo={"bpm": 120},
+        tracks=actual_score.tracks,
+        bars=[
+            {
+                "index": 1,
+                "time_signature": {"numerator": 4, "denominator": 4},
+                "events": [
+                    {
+                        "id": "e1",
+                        "track_id": "t1",
+                        "timing": {"bar_index": 1, "onset_ticks": 0, "duration_ticks": 480, "voice": 1},
+                        "notes": [
+                            {"string": 1, "fret": 5, "pitch": 69},
+                            {"string": 2, "fret": 7, "pitch": 66}
+                        ]
+                    }
+                ]
+            }
+        ]
+    )
+    oracle_gp_path_count = tmp_path / "oracle_count.gp"
+    write_gp(oracle_score_count, oracle_gp_path_count)
+
+    report_fail_count = eval_mod.run_roundtrip_eval(
+        pdf_path=Path("test.pdf"),
+        musicxml_path=None,
+        oracle_gp_path=oracle_gp_path_count,
+        output_dir=tmp_path
+    )
+
+    assert report_fail_count["semantic_roundtrip_passed"] is False
+    assert report_fail_count["semantic_roundtrip_status"] == "failed_note_count_mismatch"
+    assert report_fail_count["diagnostic_only"] is True
+    assert report_fail_count["failure_category"] == "failed_note_count_mismatch"

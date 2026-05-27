@@ -236,16 +236,17 @@ def run_roundtrip_eval(
     
     if not score_ir_written:
         semantic_roundtrip_status = "diagnostic_only"
-        failure_category = "file_generation_failed"
+        failure_category = "strict_grouping_refused"
         primary_failure_reason = "ScoreIR file was not generated."
         recommended_next_action = "resolve-pipeline-exception-or-missing-input"
     elif not gp_written:
         semantic_roundtrip_status = "diagnostic_only"
-        failure_category = "gp_compile_failed"
+        failure_category = "generated_output_semantically_invalid"
         primary_failure_reason = "GP package file compilation failed."
         recommended_next_action = "fix-gp-writer-validation-errors"
     elif not semantic_comparison_ran:
         semantic_roundtrip_status = "not_run"
+        failure_category = "oracle_unavailable"
         primary_failure_reason = "Oracle GP file is not available for comparison."
         recommended_next_action = "provide-oracle-gp-package"
     else:
@@ -259,17 +260,17 @@ def run_roundtrip_eval(
         
         if poor_bars > 0 or unknown_bars > 0:
             semantic_roundtrip_status = "failed_alignment_quality"
-            failure_category = "poor_bar_quality"
+            failure_category = "failed_alignment_quality"
             primary_failure_reason = f"Poor/unknown bar quality detected (poor={poor_bars}, unknown={unknown_bars})."
             recommended_next_action = "inspect-poor-or-unknown-bars-before-conversion"
         elif note_count_diff_ratio > 0.02:
             semantic_roundtrip_status = "failed_note_count_mismatch"
-            failure_category = "note_count_mismatch"
+            failure_category = "failed_note_count_mismatch"
             primary_failure_reason = f"Recovered note count {recovered_count} differs from oracle count {oracle_count} by {note_count_diff_ratio:.1%}."
             recommended_next_action = "align-unboxed-system-barlines"
         elif string_rate < 0.90 or fret_rate < 0.90:
             semantic_roundtrip_status = "failed_string_fret_mismatch"
-            failure_category = "string_fret_mismatch"
+            failure_category = "failed_string_fret_mismatch"
             primary_failure_reason = f"Low string/fret match rates (string={string_rate:.1%}, fret={fret_rate:.1%})."
             recommended_next_action = "tune-string-mapping-heuristics"
         else:
