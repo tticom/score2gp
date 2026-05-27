@@ -4,6 +4,8 @@ This repository is an open-source-style experiment for converting owned PDF guit
 
 Ground rules:
 
+If the external score2gp-agentops repository is unavailable, stop and ask for guidance rather than proceeding without the review-governance rules.
+
 - Be honest about recognition quality. Never claim perfect PDF-to-GP conversion.
 - Do not bypass DRM or process scores the user does not own or have permission to process.
 - Keep private fixtures under `fixtures/private/`; they are ignored by Git.
