@@ -3,10 +3,10 @@
 ## Metadata
 - **Current Branch**: `bugfix/gp-exported-pdf-layout-research-v0.1`
 - **Base Branch**: `main`
-- **Current PR**: Pending draft creation
-- **Latest Local Commit**: `d2914b3` ("fix: resolve System 6 layout grouping block and correct string numbering inversion")
-- **Latest Pushed Commit**: Pending push
-- **Working Tree Status**: Modified `HANDOFF.md` (uncommitted)
+- **Current PR**: [PR #137](https://github.com/tticom/score2gp/pull/137) (Draft)
+- **Latest Local Commit**: `4e185de` ("docs: update HANDOFF.md with latest E2E evaluation and defect fixes")
+- **Latest Pushed Commit**: `4e185de` ("docs: update HANDOFF.md with latest E2E evaluation and defect fixes")
+- **Working Tree Status**: Clean
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked.
 
 ## Tests and Checks Run
