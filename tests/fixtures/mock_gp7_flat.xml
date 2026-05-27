@@ -1,0 +1,48 @@
+<GPIF>
+  <Notes>
+    <Note id="0">
+      <Properties>
+        <Property name="String"><String>0</String></Property>
+        <Property name="Fret"><Fret>3</Fret></Property>
+      </Properties>
+    </Note>
+    <Note id="1">
+      <Properties>
+        <Property name="String"><String>2</String></Property>
+        <Property name="Fret"><Fret>5</Fret></Property>
+      </Properties>
+    </Note>
+  </Notes>
+  <Beats>
+    <Beat id="0">
+      <Notes>0</Notes>
+    </Beat>
+    <Beat id="1">
+      <Notes>1</Notes>
+    </Beat>
+  </Beats>
+  <Voices>
+    <Voice id="0">
+      <Beats>0</Beats>
+    </Voice>
+    <Voice id="1">
+      <Beats>1</Beats>
+    </Voice>
+  </Voices>
+  <MasterBars>
+    <MasterBar>
+      <Bars>0</Bars>
+    </MasterBar>
+    <MasterBar>
+      <Bars>1</Bars>
+    </MasterBar>
+  </MasterBars>
+  <Bars>
+    <Bar>
+      <Voices>0</Voices>
+    </Bar>
+    <Bar>
+      <Voices>1</Voices>
+    </Bar>
+  </Bars>
+</GPIF>

@@ -2615,3 +2615,73 @@ def test_edge_candidate_snapping(tmp_path) -> None:
     assert fret_5.raw_text == "5"
     assert fret_5.bar_index == 1
     assert fret_5.string == 3
+
+
+def test_synthetic_short_barline_edge_projection() -> None:
+    # Load synthetic layout JSON fixture
+    fixture_path = Path("fixtures/public/synthetic_short_barline.json")
+    assert fixture_path.exists()
+
+    with open(fixture_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    class MockPoint:
+        def __init__(self, x, y):
+            self.x = x
+            self.y = y
+
+    class MockDrawing:
+        def __init__(self, items):
+            self.items = items
+
+        def get(self, key, default=None):
+            if key == "items":
+                return self.items
+            return default
+
+    # Reconstruct drawings and word tuples for the mock PyMuPDF page object
+    drawings = []
+    words = []
+
+    for sys_data in data["systems"]:
+        # Staff lines (6 horizontal lines)
+        line_items = []
+        for y in sys_data["line_ys"]:
+            line_items.append(["l", MockPoint(sys_data["x0"], y), MockPoint(sys_data["x1"], y)])
+        drawings.append(MockDrawing(line_items))
+
+        # Barlines
+        for bl in sys_data["barline_drawings"]:
+            drawings.append(MockDrawing([
+                ["l", MockPoint(bl["x"], bl["y0"]), MockPoint(bl["x"], bl["y1"])]
+            ]))
+
+        # Playable candidates (words)
+        for w in sys_data["words"]:
+            # word format: (x0, y0, x1, y1, text, block_no, line_no, word_no)
+            words.append((w["x"] - 2.0, w["y"] - 5.0, w["x"] + 2.0, w["y"] + 5.0, w["text"], 0, 0, 0))
+
+    class MockPage:
+        def get_drawings(self):
+            return drawings
+        def get_text(self, kind):
+            if kind == "words":
+                return words
+            return []
+
+    # Detect staves and systems
+    from score2gp.pdf import _detect_tab_systems
+    systems = _detect_tab_systems(MockPage(), 1)
+
+    assert len(systems) == 2
+
+    # System 1: Valid and complete
+    sys1 = systems[0]
+    assert len(sys1.barlines) == 2
+    assert sys1.barlines == [180.0, 332.0]
+
+    # System 2: Short closing barline normally rejected but projected symmetrically
+    sys2 = systems[1]
+    # Symmetrical edge projection should normalize sys2.x1 to ref_x1 (332.0)
+    assert sys2.x0 == 72.0
+    assert sys2.x1 == 332.0

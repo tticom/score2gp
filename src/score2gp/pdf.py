@@ -684,7 +684,16 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
             for system in systems:
                 if len(system.barlines) == 1:
                     p_xs = system_playable_xs.get(system.system_index, [])
-                    rej_xs = [d["x"] for d in (system.barline_candidates_details or []) if d.get("final_decision") == "rejected"]
+                    rej_xs = []
+                    ambig_tol = system.ambiguous_bar_tolerance
+                    for d in (system.barline_candidates_details or []):
+                        if d.get("final_decision") == "rejected":
+                            reason = d.get("rejection_reason")
+                            if reason in ("pdf_barline_outside_staff_region", "pdf_barline_outside_system_bounds"):
+                                continue
+                            if reason == "pdf_barline_ambiguous" and (d["x"] < system.x0 + ambig_tol or d["x"] > system.x1 - ambig_tol):
+                                continue
+                            rej_xs.append(d["x"])
                     inf_left, inf_right, inf_warnings = system.infer_edge_boundaries(p_xs, rej_xs)
                     if inf_left is not None or inf_right is not None:
                         new_barlines = list(system.barlines)
@@ -3484,6 +3493,51 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
     for idx, sys in enumerate(non_ghost_systems, start=1):
         from dataclasses import replace
         final_systems.append(replace(sys, system_index=idx))
+
+    # Stage 1 Geometry-Normalizer Slice: stabilize system edge boundaries via margin projection
+    # Group systems into columns based on center-coordinate proximity to support multi-column layouts
+    columns = []
+    for sys in sorted(final_systems, key=lambda s: s.x0):
+        placed = False
+        sys_cx = (sys.x0 + sys.x1) / 2
+        for col in columns:
+            col_cx = sum((s.x0 + s.x1)/2 for s in col) / len(col)
+            # Systems belong to the same column if their horizontal centers are within 80.0pt
+            if abs(sys_cx - col_cx) < 80.0:
+                col.append(sys)
+                placed = True
+                break
+        if not placed:
+            columns.append([sys])
+
+    normalized_systems = []
+    for col in columns:
+        validated_systems = [s for s in col if len(s.barlines) >= 2]
+        if validated_systems:
+            import statistics
+            ref_x0 = statistics.median([s.x0 for s in validated_systems])
+            ref_x1 = statistics.median([s.x1 for s in validated_systems])
+
+            for sys in col:
+                new_x0 = sys.x0
+                new_x1 = sys.x1
+
+                # Symmetrically project clipped, truncated, or over-extended margins in the column
+                if abs(sys.x0 - ref_x0) > 3.0:
+                    new_x0 = ref_x0
+                if abs(sys.x1 - ref_x1) > 3.0:
+                    new_x1 = ref_x1
+
+                if new_x0 != sys.x0 or new_x1 != sys.x1:
+                    from dataclasses import replace
+                    sys = replace(sys, x0=new_x0, x1=new_x1)
+                normalized_systems.append(sys)
+        else:
+            normalized_systems.extend(col)
+
+    # Sort final normalized systems by system_index to preserve top-to-bottom reading order
+    final_systems = sorted(normalized_systems, key=lambda s: s.system_index)
+
     return final_systems
 
 
@@ -3553,9 +3607,10 @@ def _tab_line_groups(lines: list[_LineSegment]) -> list[list[_LineSegment]]:
 
             if len(group_indices) == 6:
                 group = [sorted_lines[idx] for idx in group_indices]
-                groups.append(group)
-                used.update(group_indices)
-                break
+                if _looks_like_tab_line_group(group):
+                    groups.append(group)
+                    used.update(group_indices)
+                    break
 
     # Also find 5-line groups among the remaining unused lines
     for i0 in range(n):
@@ -3590,9 +3645,10 @@ def _tab_line_groups(lines: list[_LineSegment]) -> list[list[_LineSegment]]:
 
             if len(group_indices) == 5:
                 group = [sorted_lines[idx] for idx in group_indices]
-                groups.append(group)
-                used.update(group_indices)
-                break
+                if _looks_like_tab_line_group(group):
+                    groups.append(group)
+                    used.update(group_indices)
+                    break
 
     # Column-aware sorting: group into columns based on horizontal overlap and proximity
     columns: list[list[list[_LineSegment]]] = []
@@ -3619,7 +3675,7 @@ def _tab_line_groups(lines: list[_LineSegment]) -> list[list[_LineSegment]]:
     for col in columns:
         col.sort(key=lambda g: sum((l.y0 + l.y1)/2 for l in g) / len(g))
         final_groups.extend(col)
-    
+
     groups = final_groups
     return groups
 
