@@ -4,9 +4,9 @@
 - **Current Branch**: `bugfix/gp-exported-pdf-layout-research-v0.1`
 - **Base Branch**: `main`
 - **Current PR**: [PR #137](https://github.com/tticom/score2gp/pull/137) (Draft)
-- **Latest Local Commit**: (Will commit and push after this handoff update)
-- **Latest Pushed Commit**: (Will commit and push after this handoff update)
-- **Working Tree Status**: Dirty (modified code files, tests, TASKS.md, and HANDOFF.md)
+- **Latest Local Commit**: `b5522d1e8ad733fe1b0ce623ab480070903ce3cd` (plus this final handoff update commit)
+- **Latest Pushed Commit**: `b5522d1e8ad733fe1b0ce623ab480070903ce3cd` (the main implementation commit is pushed; this final docs update is pushed immediately)
+- **Working Tree Status**: Clean (all code files, tests, and reports are fully committed and pushed)
 - **Private-Safety Status**: Clean. Only `fixtures/private/.gitkeep` is tracked.
 
 ## Executive Summary
