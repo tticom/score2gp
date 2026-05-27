@@ -4,6 +4,8 @@
 
 ## Done
 
+- [x] Implement a hard GP round-trip quality gate with explicit diagnostic status/verdicts, conservative semantic match rate thresholds (string/fret match rates >= 0.90, note counts within 2%), private-safe diagnostic reporting, hybrid native flat/nested note extraction loader, and public synthetic regression tests in `tests/test_pdf_confidence_ambiguity.py` (`feature/roundtrip-quality-gate-v0.1`).
+
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for beat-level visual chord grid diagrams (specifying chord names, base frets, multi-string fret indicators, and left-hand fingering arrays) and note-level digit execution markers (left-hand fingering indicators like T/1/2/3/4 and right-hand pick/finger symbols like p/i/m/a/ch), verified with public synthetic fixtures and unit tests (`feature/build-ir-chord-diagrams-and-fingerings-v0.1`).
 
 - [x] Implement ScoreIR parsing/schema expansion and GPIF XML generation for bar-level visual system/page layout breaks and global staff-system sizing scale attributes, verified with public synthetic fixtures and unit tests (`feature/gpif-system-breaks-and-staff-scaling-v0.1`).
