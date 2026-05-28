@@ -95,6 +95,51 @@ def main() -> None:
     doc_amb.close()
     print(f"Compiled {pdf_path_amb.name} successfully.")
 
+    # 3. Compile generated_paired_tab_row_fragmentation.json to PDF
+    json_path_frag = fixtures_dir / "generated_paired_tab_row_fragmentation.json"
+    pdf_path_frag = pdf_dir / "generated_paired_tab_row_fragmentation.pdf"
+
+    with open(json_path_frag, encoding="utf-8") as f:
+        data_frag = json.load(f)
+
+    doc_frag = fitz.open()
+    page_frag = doc_frag.new_page(width=data_frag["page_width"], height=data_frag["page_height"])
+
+    page_frag.insert_text((36, 40), "Generated Paired TAB Row Fragmentation", fontsize=12, fontname="helv")
+
+    # Draw standard 5-line notation staff
+    not_data = data_frag["notation_staff"]
+    not_ys = [not_data["y_start"] + i * not_data["line_gap"] for i in range(not_data["line_count"])]
+    for y in not_ys:
+        page_frag.draw_line((not_data["x0"], y), (not_data["x1"], y), color=(0, 0, 0), width=0.5)
+
+    # Draw split collinear segments across ALL TAB strings
+    tab_data = data_frag["tab_staff"]
+    tab_ys = [tab_data["y_start"] + i * tab_data["line_gap"] for i in range(tab_data["line_count"])]
+    for y in tab_ys:
+        page_frag.draw_line((tab_data["fragment_left"]["x0"], y), (tab_data["fragment_left"]["x1"], y), color=(0, 0, 0), width=0.6)
+        page_frag.draw_line((tab_data["fragment_right"]["x0"], y), (tab_data["fragment_right"]["x1"], y), color=(0, 0, 0), width=0.6)
+
+    # Draw true shared barlines
+    for bar in data_frag["barlines"]:
+        page_frag.draw_line((bar["x"], bar["y_min"]), (bar["x"], bar["y_max"]), color=(0, 0, 0), width=0.6)
+
+    # Draw notation-only stems
+    for stem in data_frag["notation_stems"]:
+        page_frag.draw_line((stem["x"], stem["y_min"]), (stem["x"], stem["y_max"]), color=(0, 0, 0), width=0.4)
+
+    # Draw TAB rhythm stems
+    for stem in data_frag["tab_rhythm_stems"]:
+        page_frag.draw_line((stem["x"], stem["y_min"]), (stem["x"], stem["y_max"]), color=(0, 0, 0), width=0.4)
+
+    # Insert fret candidates
+    for fret in data_frag["fret_candidates"]:
+        page_frag.insert_text((fret["x"], fret["y"] + 1.8), fret["text"], fontsize=5.5, fontname="cour")
+
+    doc_frag.save(pdf_path_frag, garbage=4, deflate=True)
+    doc_frag.close()
+    print(f"Compiled {pdf_path_frag.name} successfully.")
+
 
 if __name__ == "__main__":
     main()

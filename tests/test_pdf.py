@@ -2772,3 +2772,57 @@ def test_filter_tab_barline_candidates_direct() -> None:
     res_rhythm = filter_tab_barline_candidates([rhythm_stem], y0, y1, line_ys, x0, x1)
     assert 120.0 not in res_rhythm["valid_barlines"]
     assert res_rhythm["rejection_reasons"]["pdf_barline_crosses_insufficient_string_gaps"] == 1
+
+
+def test_paired_tab_row_fragmentation_merging(tmp_path) -> None:
+    # 1. Load the compiled public row fragmentation PDF
+    pdf_path = Path("tests/fixtures/pdf/generated_paired_tab_row_fragmentation.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "fragmentation.tabraw.json"
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+
+    # Assert exactly one TAB system was detected (the split collinear left and right halves merged!)
+    systems = tabraw.candidates
+    system_indices = {c.system_index for c in systems if c.system_index is not None}
+    assert len(system_indices) == 1
+    assert 1 in system_indices
+
+    # Verify that fret candidates are correctly assigned strings/frets on the merged row
+    playable = sorted([c for c in tabraw.candidates if c.parsed_fret is not None], key=lambda c: c.x)
+    assert len(playable) == 3
+
+    # Candidate '3' -> String 1
+    assert playable[0].raw_text == "3"
+    assert playable[0].string == 1
+    assert playable[0].system_index == 1
+
+    # Candidate '5' -> String 3
+    assert playable[1].raw_text == "5"
+    assert playable[1].string == 3
+
+    # Candidate '0' -> String 5
+    assert playable[2].raw_text == "0"
+    assert playable[2].string == 5
+
+    # Verify barlines (true shared barlines are accepted, stems are ignored)
+    assert playable[0].bar_index == 1
+    assert playable[1].bar_index == 1
+    assert playable[2].bar_index == 2
+
+
+def test_merge_collinear_horizontal_segments_row_fragmentation_direct() -> None:
+    from score2gp.pdf import merge_collinear_horizontal_segments, _LineSegment
+
+    # Setup 6 split lines collinear horizontally representing a split guitar TAB staff
+    line_ys = [154.0, 160.4, 166.8, 173.2, 179.6, 186.0]
+    segments = []
+    for y in line_ys:
+        segments.append(_LineSegment(36.0, y, 290.0, y))
+        segments.append(_LineSegment(310.0, y, 575.0, y))
+
+    merged = merge_collinear_horizontal_segments(segments)
+    # They should all merge successfully since they form a matching collinear split staff row of 6 parallel lines
+    assert len(merged) == 6
+    for line in merged:
+        assert line.x0 == 36.0
+        assert line.x1 == 575.0
