@@ -14,9 +14,9 @@ This repository is the product repository for the **ScoreToGP** compiler. Projec
 ## Developer and Reviewer Guidelines
 
 1. **Implementation Developer Agents**:
-   - Must read and strictly follow [AGENTS.md](file:///c:/Users/niall/src/Python/score2gp/AGENTS.md) for local repository safety invariants, branch commit guidelines, and private-safety audits.
+   - Must read and strictly follow [AGENTS.md](../AGENTS.md) for local repository safety invariants, branch commit guidelines, and private-safety audits.
 2. **Reviewer / Architect Agents**:
    - Must consult the canonical [REVIEW_RULES.md](https://github.com/tticom/score2gp-agentops/blob/main/projects/score2gp/REVIEW_RULES.md) inside the `score2gp-agentops` governance repository before evaluating pull requests.
 3. **Task Tracking & Branch State**:
-   - [HANDOFF.md](file:///c:/Users/niall/src/Python/score2gp/HANDOFF.md) is a branch-local state tracking file, not a repository of long-term architectural truth.
-   - [TASKS.md](file:///c:/Users/niall/src/Python/score2gp/TASKS.md) maintains active todo checklists during execution and must not duplicate the comprehensive benchmark ladder defined in `score2gp-agentops`.
+   - [HANDOFF.md](../HANDOFF.md) is a branch-local state tracking file, not a repository of long-term architectural truth.
+   - [TASKS.md](../TASKS.md) maintains active todo checklists during execution and must not duplicate the comprehensive benchmark ladder defined in `score2gp-agentops`.
