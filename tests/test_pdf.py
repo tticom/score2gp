@@ -2866,6 +2866,16 @@ def test_double_barline_ambiguity_resolution(tmp_path) -> None:
     unsafe_codes = _tabraw_unsafe_grouping_warning_codes(tabraw)
     assert "pdf_barline_double_secondary" not in unsafe_codes
 
+    # Prove that non-edge close parallel barlines still produce fatal pdf_barline_ambiguous
+    dummy_tabraw = tabraw.model_copy(deep=True)
+    dummy_tabraw.warnings.append({
+        "code": "pdf_barline_ambiguous",
+        "message": "Ambiguous barlines",
+        "severity": "fatal"
+    })
+    dummy_unsafe = _tabraw_unsafe_grouping_warning_codes(dummy_tabraw)
+    assert "pdf_barline_ambiguous" in dummy_unsafe
+
     # Verify 2 bar boxes were successfully constructed (proving true rightmost boundary remains accepted)
     assert any(w["code"] == "pdf_bar_boxes_constructed" for w in tabraw.warnings)
 
