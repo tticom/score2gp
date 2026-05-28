@@ -2615,3 +2615,61 @@ def test_edge_candidate_snapping(tmp_path) -> None:
     assert fret_5.raw_text == "5"
     assert fret_5.bar_index == 1
     assert fret_5.string == 3
+
+
+def test_paired_notation_tab_grid_merging_and_filtering(tmp_path) -> None:
+    # 1. Load the compiled public paired notation+TAB PDF
+    paired_pdf = Path("tests/fixtures/pdf/generated_paired_notation_tab_system.pdf")
+    assert paired_pdf.exists()
+    tabraw_path_paired = tmp_path / "paired.tabraw.json"
+    tabraw_paired = TabRaw.model_validate(extract_tab(paired_pdf, tabraw_path_paired))
+
+    # Assert exactly one TAB system was detected
+    # (Standard 5-line notation staff above must NOT produce a competing system)
+    systems = tabraw_paired.candidates
+    system_indices = {c.system_index for c in systems if c.system_index is not None}
+    assert len(system_indices) == 1
+    assert 1 in system_indices
+
+    # Verify that fragmented horizontal segments are merged
+    # Check that candidates are correctly assigned strings/frets
+    playable = sorted([c for c in tabraw_paired.candidates if c.parsed_fret is not None], key=lambda c: c.x)
+    assert len(playable) == 3
+
+    # Candidate '3' -> String 1
+    assert playable[0].raw_text == "3"
+    assert playable[0].string == 1
+    assert playable[0].system_index == 1
+
+    # Candidate '5' -> String 3 (on y=166.8)
+    assert playable[1].raw_text == "5"
+    assert playable[1].string == 3
+
+    # Candidate '0' -> String 5 (on y=179.6)
+    assert playable[2].raw_text == "0"
+    assert playable[2].string == 5
+
+    # Verify barlines (true shared barlines are accepted, stems are ignored)
+    assert playable[0].bar_index == 1
+    assert playable[1].bar_index == 1
+    assert playable[2].bar_index == 2
+
+    # 2. Load the compiled ambiguous damaged PDF
+    amb_pdf = Path("tests/fixtures/pdf/generated_paired_notation_tab_system_ambiguous.pdf")
+    assert amb_pdf.exists()
+    tabraw_path_amb = tmp_path / "ambiguous.tabraw.json"
+    tabraw_amb = TabRaw.model_validate(extract_tab(amb_pdf, tabraw_path_amb))
+
+    # Verify that the damaged 5-line TAB staff (spacing gap 6.4) is preserved as a system candidate
+    # while the ambiguous 5-line staff (spacing gap 7.5) is safely refused or ignored.
+    playable_amb = [c for c in tabraw_amb.candidates if c.parsed_fret is not None]
+    cands_by_text = {c.raw_text: c for c in playable_amb}
+
+    assert "3" in cands_by_text
+    assert cands_by_text["3"].system_index == 1
+
+    assert "5" in cands_by_text
+    assert cands_by_text["5"].system_index == 1
+
+    if "2" in cands_by_text:
+        assert cands_by_text["2"].system_index is None

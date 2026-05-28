@@ -1,0 +1,36 @@
+{
+  "page_width": 595.0,
+  "page_height": 842.0,
+  "damaged_tab_staff": {
+    "description": "A damaged 5-line TAB staff that should NOT be discarded as notation because its spacing gap is 6.4",
+    "y_start": 154.0,
+    "line_gap": 6.4,
+    "line_count": 5,
+    "x0": 36.0,
+    "x1": 575.0,
+    "barlines": [
+      {"x": 36.0, "y_min": 154.0, "y_max": 179.6},
+      {"x": 300.0, "y_min": 154.0, "y_max": 179.6},
+      {"x": 575.0, "y_min": 154.0, "y_max": 179.6}
+    ],
+    "fret_candidates": [
+      {"text": "3", "x": 100.0, "y": 154.0},
+      {"text": "5", "x": 200.0, "y": 166.8}
+    ]
+  },
+  "ambiguous_damaged_staff": {
+    "description": "An ambiguous 5-line staff with line spacing gap 7.5 that must refuse safely",
+    "y_start": 300.0,
+    "line_gap": 7.5,
+    "line_count": 5,
+    "x0": 36.0,
+    "x1": 575.0,
+    "barlines": [
+      {"x": 36.0, "y_min": 300.0, "y_max": 330.0},
+      {"x": 575.0, "y_min": 300.0, "y_max": 330.0}
+    ],
+    "fret_candidates": [
+      {"text": "2", "x": 150.0, "y": 300.0}
+    ]
+  }
+}

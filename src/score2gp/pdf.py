@@ -3225,9 +3225,101 @@ def _relative_artifact_path(path: Path, base: Path) -> str:
         return str(path)
 
 
+def merge_collinear_horizontal_segments(segments: list[_LineSegment], tolerance_y: float = 1.0, max_gap_x: float = 120.0) -> list[_LineSegment]:
+    if not segments:
+        return []
+    sorted_segs = sorted(segments, key=lambda s: ((s.y0 + s.y1) / 2, min(s.x0, s.x1)))
+    merged: list[_LineSegment] = []
+
+    for seg in sorted_segs:
+        if not merged:
+            merged.append(seg)
+            continue
+        last = merged[-1]
+        last_y = (last.y0 + last.y1) / 2
+        seg_y = (seg.y0 + seg.y1) / 2
+
+        if abs(last_y - seg_y) <= tolerance_y:
+            last_x0, last_x1 = min(last.x0, last.x1), max(last.x0, last.x1)
+            seg_x0, seg_x1 = min(seg.x0, seg.x1), max(seg.x0, seg.x1)
+
+            if last_x1 - 5.0 <= seg_x0 <= last_x1 + max_gap_x:
+                # Check if this is a column gap or a fragment split.
+                # It is a fragment split if there is at least one other segment (e.g. a neighboring staff line)
+                # that spans continuously across the gap.
+                gap_start = last_x1
+                gap_end = seg_x0
+                has_continuous_neighbor = False
+                for other in segments:
+                    other_y = (other.y0 + other.y1) / 2
+                    if 2.0 <= abs(other_y - seg_y) <= 45.0: # neighboring lines in a staff
+                        other_x0 = min(other.x0, other.x1)
+                        other_x1 = max(other.x0, other.x1)
+                        if other_x0 <= gap_start + 2.0 and other_x1 >= gap_end - 2.0:
+                            has_continuous_neighbor = True
+                            break
+
+                if has_continuous_neighbor or (seg_x0 - last_x1) <= 5.0:
+                    new_x0 = min(last_x0, seg_x0)
+                    new_x1 = max(last_x1, seg_x1)
+                    new_y0 = (last.y0 + seg.y0) / 2
+                    new_y1 = (last.y1 + seg.y1) / 2
+                    merged[-1] = _LineSegment(new_x0, new_y0, new_x1, new_y1)
+                    continue
+
+        merged.append(seg)
+    return merged
+
+
+def _has_fret_digit_intersection(group: list[_LineSegment], page: Any) -> bool:
+    if page is None:
+        return False
+    try:
+        words = page.get_text("words")
+    except Exception:
+        return False
+
+    x0 = min(min(l.x0, l.x1) for l in group)
+    x1 = max(max(l.x0, l.x1) for l in group)
+    y0 = min((l.y0 + l.y1) / 2 for l in group)
+    y1 = max((l.y0 + l.y1) / 2 for l in group)
+
+    for word in words:
+        raw_text = str(word[4]).strip()
+        if not raw_text:
+            continue
+        if parse_fret_text(raw_text) is not None:
+            # Word coordinates: (x0, y0, x1, y1, text, block_no, line_no, word_no)
+            wx = (word[0] + word[2]) / 2
+            wy = (word[1] + word[3]) / 2
+            if x0 - 5.0 <= wx <= x1 + 5.0 and y0 - 3.0 <= wy <= y1 + 3.0:
+                return True
+    return False
+
+
+def classify_staff_line_group(group: list[_LineSegment], page: Any = None) -> str:
+    if not group:
+        return "ambiguous"
+    ys = sorted([round((line.y0 + line.y1) / 2, 3) for line in group])
+    gaps = [right - left for left, right in zip(ys, ys[1:])]
+    if not gaps:
+        return "ambiguous"
+
+    sorted_gaps = sorted(gaps)
+    n_gaps = len(sorted_gaps)
+    median_gap = sorted_gaps[n_gaps // 2]
+
+    # 7.3 to 9.2 is standard five-line notation and ambiguous spacing
+    if 7.3 <= median_gap <= 9.2:
+        return "notation"
+
+    return "tab"
+
+
 def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
     segments = list(_drawing_segments(page.get_drawings()))
-    horizontal = sorted((segment for segment in segments if segment.is_horizontal), key=lambda segment: segment.y0)
+    raw_horizontal = sorted((segment for segment in segments if segment.is_horizontal), key=lambda segment: segment.y0)
+    horizontal = sorted(merge_collinear_horizontal_segments(raw_horizontal), key=lambda segment: segment.y0)
 
     # Extract vertical candidates with a wider margin
     raw_verticals = []
@@ -3261,6 +3353,10 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
     next_bar_index = 1
 
     for group in _tab_line_groups(horizontal):
+        classification = classify_staff_line_group(group, page)
+        if classification == "notation":
+            continue
+
         line_ys = [round((line.y0 + line.y1) / 2, 3) for line in group]
         x0 = min(min(line.x0, line.x1) for line in group)
         x1 = max(max(line.x0, line.x1) for line in group)
@@ -3619,7 +3715,7 @@ def _tab_line_groups(lines: list[_LineSegment]) -> list[list[_LineSegment]]:
     for col in columns:
         col.sort(key=lambda g: sum((l.y0 + l.y1)/2 for l in g) / len(g))
         final_groups.extend(col)
-    
+
     groups = final_groups
     return groups
 
