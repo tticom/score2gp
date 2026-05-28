@@ -10,7 +10,13 @@ Before doing agentic implementation or review work, agents must read:
 
 https://github.com/tticom/score2gp-agentops/blob/main/projects/score2gp/README.md
 
-If `score2gp-agentops` is unavailable, stop and ask the human maintainer for guidance. Do not recreate or duplicate governance rules in this product repository.
+## Governance Record Keeping
+
+- **Mandatory Reporting**: Every agent task must write durable result records to `score2gp-agentops`.
+- **Prompt Chain Recording**: For multi-prompt sessions, every explicit prompt must be stored as a numbered prompt-chain record in `score2gp-agentops`.
+- **No Local Long-Form State**: The product repository must not carry long-form agent-control state.
+- **Lightweight Pointer**: The product repository `HANDOFF.md`, if present, is strictly a short pointer to the governance repository and must not become the canonical evidence store again.
+- **Fail-Safe**: If `score2gp-agentops` is unavailable, stop and ask the human maintainer for guidance rather than recreating or duplicating governance rules locally.
 
 ## Local Private-Safety Rules
 
