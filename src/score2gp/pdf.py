@@ -832,6 +832,15 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                             "page_index": page_number,
                             "system_index": system.system_index,
                         })
+                    if reasons.get("pdf_barline_double_secondary", 0) > 0:
+                        warnings.append({
+                            "code": "pdf_barline_double_secondary",
+                            "message": f"One or more secondary double-barline candidates were ignored in system {system.system_index} on page {page_number}.",
+                            "severity": "info",
+                            "grouping_status": "grouped",
+                            "page_index": page_number,
+                            "system_index": system.system_index,
+                        })
                     if reasons.get("pdf_barline_too_short_absolute", 0) > 0:
                         warnings.append({
                             "code": "pdf_barline_too_short_absolute",
@@ -2732,7 +2741,6 @@ def _unsafe_grouping_codes(fret_candidates: list[dict[str, Any]], page_warnings:
         "pdf_barline_too_short",
         "pdf_barline_outside_system_bounds",
         "pdf_barline_ambiguous",
-        "pdf_barline_double_secondary",
         "pdf_bar_boxes_not_constructible",
         "pdf_bar_detection_succeeded_string_assignment_pending",
         "pdf_bar_detection_not_enough_for_build_ir",

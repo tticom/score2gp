@@ -2854,10 +2854,18 @@ def test_double_barline_ambiguity_resolution(tmp_path) -> None:
     assert playable[1].bar_index == 2
     assert playable[1].system_index == 1
 
-    # Verify no ambiguous barline warning was triggered
+    # Verify no ambiguous barline warning was triggered at the right edge
     warning_codes = {warning["code"] for warning in tabraw.warnings}
     assert "pdf_barline_ambiguous" not in warning_codes
 
-    # Verify 2 bar boxes were successfully constructed
+    # Verify that the secondary double-barline candidate produced a diagnostic warning pdf_barline_double_secondary
+    assert "pdf_barline_double_secondary" in warning_codes
+
+    # Verify that this diagnostic warning is non-fatal and does not make grouping unsafe by itself
+    from score2gp.build_ir import _tabraw_unsafe_grouping_warning_codes
+    unsafe_codes = _tabraw_unsafe_grouping_warning_codes(tabraw)
+    assert "pdf_barline_double_secondary" not in unsafe_codes
+
+    # Verify 2 bar boxes were successfully constructed (proving true rightmost boundary remains accepted)
     assert any(w["code"] == "pdf_bar_boxes_constructed" for w in tabraw.warnings)
 
