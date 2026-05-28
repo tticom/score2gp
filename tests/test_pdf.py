@@ -2615,3 +2615,160 @@ def test_edge_candidate_snapping(tmp_path) -> None:
     assert fret_5.raw_text == "5"
     assert fret_5.bar_index == 1
     assert fret_5.string == 3
+
+
+def test_paired_notation_tab_grid_merging_and_filtering(tmp_path) -> None:
+    # 1. Load the compiled public paired notation+TAB PDF
+    paired_pdf = Path("tests/fixtures/pdf/generated_paired_notation_tab_system.pdf")
+    assert paired_pdf.exists()
+    tabraw_path_paired = tmp_path / "paired.tabraw.json"
+    tabraw_paired = TabRaw.model_validate(extract_tab(paired_pdf, tabraw_path_paired))
+
+    # Assert exactly one TAB system was detected
+    # (Standard 5-line notation staff above must NOT produce a competing system)
+    systems = tabraw_paired.candidates
+    system_indices = {c.system_index for c in systems if c.system_index is not None}
+    assert len(system_indices) == 1
+    assert 1 in system_indices
+
+    # Verify that fragmented horizontal segments are merged
+    # Check that candidates are correctly assigned strings/frets
+    playable = sorted([c for c in tabraw_paired.candidates if c.parsed_fret is not None], key=lambda c: c.x)
+    assert len(playable) == 3
+
+    # Candidate '3' -> String 1
+    assert playable[0].raw_text == "3"
+    assert playable[0].string == 1
+    assert playable[0].system_index == 1
+
+    # Candidate '5' -> String 3 (on y=166.8)
+    assert playable[1].raw_text == "5"
+    assert playable[1].string == 3
+
+    # Candidate '0' -> String 5 (on y=179.6)
+    assert playable[2].raw_text == "0"
+    assert playable[2].string == 5
+
+    # Verify barlines (true shared barlines are accepted, stems are ignored)
+    assert playable[0].bar_index == 1
+    assert playable[1].bar_index == 1
+    assert playable[2].bar_index == 2
+
+    # 2. Load the compiled ambiguous damaged PDF
+    amb_pdf = Path("tests/fixtures/pdf/generated_paired_notation_tab_system_ambiguous.pdf")
+    assert amb_pdf.exists()
+    tabraw_path_amb = tmp_path / "ambiguous.tabraw.json"
+    tabraw_amb = TabRaw.model_validate(extract_tab(amb_pdf, tabraw_path_amb))
+
+    # Verify that the damaged 5-line TAB staff (spacing gap 6.4) is preserved as a system candidate
+    # while the ambiguous 5-line staff (spacing gap 7.5) is safely refused or ignored.
+    playable_amb = [c for c in tabraw_amb.candidates if c.parsed_fret is not None]
+    cands_by_text = {c.raw_text: c for c in playable_amb}
+
+    assert "3" in cands_by_text
+    assert cands_by_text["3"].system_index == 1
+
+    assert "5" in cands_by_text
+    assert cands_by_text["5"].system_index == 1
+
+    if "2" in cands_by_text:
+        assert cands_by_text["2"].system_index is None
+
+
+def test_classify_staff_line_group_direct() -> None:
+    from score2gp.pdf import classify_staff_line_group, _LineSegment
+
+    # 1. Six-line TAB spacing -> tab
+    segs_6_tab = [_LineSegment(0, 100 + i * 6.4, 100, 100 + i * 6.4) for i in range(6)]
+    assert classify_staff_line_group(segs_6_tab) == "tab"
+
+    # 2. Five-line notation spacing -> notation (no fret/page context provided)
+    segs_5_not = [_LineSegment(0, 100 + i * 8.5, 100, 100 + i * 8.5) for i in range(5)]
+    assert classify_staff_line_group(segs_5_not) == "notation"
+
+    # Mock fitz page for fret digit intersection tests
+    class MockPage:
+        def __init__(self, words: list[tuple[float, float, float, float, str, int, int, int]]) -> None:
+            self._words = words
+        def get_text(self, kind: str) -> list[tuple[float, float, float, float, str, int, int, int]]:
+            if kind == "words":
+                return self._words
+            return []
+
+    # 3. Damaged five-line TAB spacing with fret intersections -> incomplete_tab_candidate
+    segs_5_tab = [_LineSegment(36, 154 + i * 6.4, 575, 154 + i * 6.4) for i in range(5)]
+    page_with_fret = MockPage([
+        (100.0, 151.0, 106.0, 157.0, "3", 0, 0, 0)
+    ])
+    assert classify_staff_line_group(segs_5_tab, page_with_fret) == "incomplete_tab_candidate"
+
+    # 4. Five-line ambiguous spacing -> ambiguous (gap 7.5)
+    segs_5_amb = [_LineSegment(0, 100 + i * 7.5, 100, 100 + i * 7.5) for i in range(5)]
+    assert classify_staff_line_group(segs_5_amb) == "ambiguous"
+
+    # 5. No fret/context support -> not promoted to TAB
+    page_no_fret = MockPage([])
+    assert classify_staff_line_group(segs_5_tab, page_no_fret) == "ambiguous"
+
+
+def test_merge_collinear_horizontal_segments_direct() -> None:
+    from score2gp.pdf import merge_collinear_horizontal_segments, _LineSegment
+
+    # 1. Fragmented same staff line merges (with a continuous neighbor)
+    segments = [
+        # Fragmented 3rd line of a TAB staff
+        _LineSegment(36.0, 166.8, 290.0, 166.8),
+        _LineSegment(310.0, 166.8, 575.0, 166.8),
+        # A continuous neighboring staff line (e.g. 4th line)
+        _LineSegment(36.0, 173.2, 575.0, 173.2),
+    ]
+    merged = merge_collinear_horizontal_segments(segments)
+    merged_y_166 = [s for s in merged if abs((s.y0+s.y1)/2 - 166.8) < 0.1]
+    assert len(merged_y_166) == 1
+    assert merged_y_166[0].x0 == 36.0
+    assert merged_y_166[0].x1 == 575.0
+
+    # 2. Unrelated columns/systems do not merge (no continuous neighbor across the gap)
+    segments_cols = [
+        # Column 1 staff line
+        _LineSegment(50.0, 120.0, 190.0, 120.0),
+        # Column 2 staff line (collinear at Y=120)
+        _LineSegment(210.0, 120.0, 350.0, 120.0),
+    ]
+    merged_cols = merge_collinear_horizontal_segments(segments_cols)
+    assert len(merged_cols) == 2
+
+    # 3. Notation and TAB line groups are not merged into one group
+    segments_diff_y = [
+        _LineSegment(36.0, 100.0, 575.0, 100.0), # Notation Y=100
+        _LineSegment(36.0, 154.0, 575.0, 154.0), # TAB Y=154
+    ]
+    merged_diff_y = merge_collinear_horizontal_segments(segments_diff_y)
+    assert len(merged_diff_y) == 2
+
+
+def test_filter_tab_barline_candidates_direct() -> None:
+    from score2gp.pdf import filter_tab_barline_candidates, _LineSegment
+
+    line_ys = [154.0, 160.4, 166.8, 173.2, 179.6, 186.0]
+    y0 = 154.0
+    y1 = 186.0
+    x0 = 36.0
+    x1 = 575.0
+
+    # 1. True shared barline (spans notation Y=100 to TAB Y=186)
+    shared_barline = _LineSegment(300.0, 100.0, 300.0, 186.0)
+    res_shared = filter_tab_barline_candidates([shared_barline], y0, y1, line_ys, x0, x1)
+    assert 300.0 in res_shared["valid_barlines"]
+
+    # 2. Notation-only stem (spans strictly inside notation Y=90 to Y=130, completely above TAB Y=154)
+    notation_stem = _LineSegment(200.0, 90.0, 200.0, 130.0)
+    res_not = filter_tab_barline_candidates([notation_stem], y0, y1, line_ys, x0, x1)
+    assert 200.0 not in res_not["valid_barlines"]
+    assert res_not["rejection_reasons"]["pdf_barline_outside_staff_region"] == 1
+
+    # 3. TAB rhythm stem (spans Y=180 to Y=205, only intersects bottom of TAB staff, does not cross)
+    rhythm_stem = _LineSegment(120.0, 180.0, 120.0, 205.0)
+    res_rhythm = filter_tab_barline_candidates([rhythm_stem], y0, y1, line_ys, x0, x1)
+    assert 120.0 not in res_rhythm["valid_barlines"]
+    assert res_rhythm["rejection_reasons"]["pdf_barline_crosses_insufficient_string_gaps"] == 1
