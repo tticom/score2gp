@@ -140,6 +140,50 @@ def main() -> None:
     doc_frag.close()
     print(f"Compiled {pdf_path_frag.name} successfully.")
 
+    # 4. Compile generated_paired_notation_tab_system_double_barline.json to PDF
+    json_path_dbl = fixtures_dir / "generated_paired_notation_tab_system_double_barline.json"
+    pdf_path_dbl = pdf_dir / "generated_paired_notation_tab_system_double_barline.pdf"
+
+    with open(json_path_dbl, encoding="utf-8") as f:
+        data_dbl = json.load(f)
+
+    doc_dbl = fitz.open()
+    page_dbl = doc_dbl.new_page(width=data_dbl["page_width"], height=data_dbl["page_height"])
+
+    page_dbl.insert_text((36, 40), "Generated Paired Notation TAB System Double Barline", fontsize=12, fontname="helv")
+
+    # Draw standard 5-line notation staff
+    not_data = data_dbl["notation_staff"]
+    not_ys = [not_data["y_start"] + i * not_data["line_gap"] for i in range(not_data["line_count"])]
+    for y in not_ys:
+        page_dbl.draw_line((not_data["x0"], y), (not_data["x1"], y), color=(0, 0, 0), width=0.5)
+
+    # Draw 6-line TAB staff
+    tab_data = data_dbl["tab_staff"]
+    tab_ys = [tab_data["y_start"] + i * tab_data["line_gap"] for i in range(tab_data["line_count"])]
+    for y in tab_ys:
+        page_dbl.draw_line((tab_data["x0"], y), (tab_data["x1"], y), color=(0, 0, 0), width=0.6)
+
+    # Draw true shared barlines (including the double barline)
+    for bar in data_dbl["barlines"]:
+        page_dbl.draw_line((bar["x"], bar["y_min"]), (bar["x"], bar["y_max"]), color=(0, 0, 0), width=0.6)
+
+    # Draw notation-only stems
+    for stem in data_dbl["notation_stems"]:
+        page_dbl.draw_line((stem["x"], stem["y_min"]), (stem["x"], stem["y_max"]), color=(0, 0, 0), width=0.4)
+
+    # Draw TAB rhythm stems
+    for stem in data_dbl["tab_rhythm_stems"]:
+        page_dbl.draw_line((stem["x"], stem["y_min"]), (stem["x"], stem["y_max"]), color=(0, 0, 0), width=0.4)
+
+    # Insert fret candidates
+    for fret in data_dbl["fret_candidates"]:
+        page_dbl.insert_text((fret["x"], fret["y"] + 1.8), fret["text"], fontsize=5.5, fontname="cour")
+
+    doc_dbl.save(pdf_path_dbl, garbage=4, deflate=True)
+    doc_dbl.close()
+    print(f"Compiled {pdf_path_dbl.name} successfully.")
+
 
 if __name__ == "__main__":
     main()
