@@ -3259,7 +3259,36 @@ def merge_collinear_horizontal_segments(segments: list[_LineSegment], tolerance_
                             has_continuous_neighbor = True
                             break
 
-                if has_continuous_neighbor or (seg_x0 - last_x1) <= 5.0:
+                # Spacing-aware row-level fragment split check:
+                # If there are no continuous neighbors across the gap, it could still be a split staff row
+                # if multiple neighboring staff lines are collinear and split at the exact same horizontal coordinate range.
+                has_matching_split_neighbors = False
+                if not has_continuous_neighbor:
+                    gap_len = seg_x0 - last_x1
+                    if gap_len <= 40.0:
+                        matching_split_count = 0
+                        for other_left in segments:
+                            ol_y = (other_left.y0 + other_left.y1) / 2
+                            if 2.0 <= abs(ol_y - seg_y) <= 45.0:
+                                ol_x1 = max(other_left.x0, other_left.x1)
+                                # Check if other_left ends near last_x1
+                                if abs(ol_x1 - last_x1) <= 15.0:
+                                    # Find corresponding other_right
+                                    for other_right in segments:
+                                        or_y = (other_right.y0 + other_right.y1) / 2
+                                        if abs(or_y - ol_y) <= tolerance_y:
+                                            or_x0 = min(other_right.x0, other_right.x1)
+                                            # Check if other_right starts near seg_x0
+                                            if abs(or_x0 - seg_x0) <= 15.0:
+                                                matching_split_count += 1
+                                                break
+
+                        # If we found at least 4 neighboring parallel lines with the same collinear split,
+                        # this represents a split staff row of at least 5 lines (Guitar TAB staff split).
+                        if matching_split_count >= 4:
+                            has_matching_split_neighbors = True
+
+                if has_continuous_neighbor or has_matching_split_neighbors or (seg_x0 - last_x1) <= 5.0:
                     new_x0 = min(last_x0, seg_x0)
                     new_x1 = max(last_x1, seg_x1)
                     new_y0 = (last.y0 + seg.y0) / 2
