@@ -17,3 +17,7 @@ fixtures/private/*
 tests/fixtures/private/
 work/private/
 work/private_diagnostics/
+
+# Local diagnostic scratch analysis tools
+scratch/analyze_*.py
+
