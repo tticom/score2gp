@@ -2826,3 +2826,38 @@ def test_merge_collinear_horizontal_segments_row_fragmentation_direct() -> None:
     for line in merged:
         assert line.x0 == 36.0
         assert line.x1 == 575.0
+
+
+def test_double_barline_ambiguity_resolution(tmp_path) -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_paired_notation_tab_system_double_barline.pdf")
+    assert pdf_path.exists()
+    tabraw_path = tmp_path / "double_barline.tabraw.json"
+    tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
+
+    # Assert exactly one TAB system was detected
+    systems = tabraw.candidates
+    system_indices = {c.system_index for c in systems if c.system_index is not None}
+    assert len(system_indices) == 1
+    assert 1 in system_indices
+
+    # Verify that the two fret candidates are correctly assigned to their respective bar indices
+    playable = sorted([c for c in tabraw.candidates if c.parsed_fret is not None], key=lambda c: c.x)
+    assert len(playable) == 2
+
+    # Candidate '3' at x=100.0 is in Bar 1 (between 36.0 and 300.0)
+    assert playable[0].raw_text == "3"
+    assert playable[0].bar_index == 1
+    assert playable[0].system_index == 1
+
+    # Candidate '5' at x=400.0 is in Bar 2 (between 300.0 and 575.0)
+    assert playable[1].raw_text == "5"
+    assert playable[1].bar_index == 2
+    assert playable[1].system_index == 1
+
+    # Verify no ambiguous barline warning was triggered
+    warning_codes = {warning["code"] for warning in tabraw.warnings}
+    assert "pdf_barline_ambiguous" not in warning_codes
+
+    # Verify 2 bar boxes were successfully constructed
+    assert any(w["code"] == "pdf_bar_boxes_constructed" for w in tabraw.warnings)
+

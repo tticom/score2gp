@@ -2732,6 +2732,7 @@ def _unsafe_grouping_codes(fret_candidates: list[dict[str, Any]], page_warnings:
         "pdf_barline_too_short",
         "pdf_barline_outside_system_bounds",
         "pdf_barline_ambiguous",
+        "pdf_barline_double_secondary",
         "pdf_bar_boxes_not_constructible",
         "pdf_bar_detection_succeeded_string_assignment_pending",
         "pdf_bar_detection_not_enough_for_build_ir",
@@ -2891,6 +2892,7 @@ def _specific_grouping_warning(code: str, grouping_counts: dict[str, int]) -> di
         "pdf_barline_too_short": "Vertical lines too short to trust.",
         "pdf_barline_outside_system_bounds": "Barlines outside detected system bounds.",
         "pdf_barline_ambiguous": "Ambiguous extra vertical lines detected.",
+        "pdf_barline_double_secondary": "Secondary barline in a double-barline pair ignored.",
         "pdf_bar_boxes_not_constructible": "Measure bar boxes could not be constructed from barlines.",
         "pdf_bar_detection_succeeded_string_assignment_pending": "Bar detection succeeded, but string assignment is the next blocker.",
         "pdf_bar_detection_not_enough_for_build_ir": "PDF bar detection is incomplete and not safe to build IR.",
@@ -3381,59 +3383,29 @@ def filter_tab_barline_candidates(
         "pdf_barline_partial_staff_crossing": 0,
         "pdf_barline_outside_staff_region": 0,
         "pdf_barline_rejected_relative_height": 0,
+        "pdf_barline_double_secondary": 0,
     }
     valid_barlines = []
     rejected_count = 0
     details = []
     staff_height = y1 - y0
 
-    for s in candidates:
+    # Pass 1: Pre-calculate baseline acceptance properties for each candidate
+    candidate_data = []
+    ys = sorted(line_ys)
+    for idx, s in enumerate(candidates):
         x_val = (s.x0 + s.x1) / 2
         y_min = min(s.y0, s.y1)
         y_max = max(s.y0, s.y1)
         height = y_max - y_min
 
         # 1. Check horizontal bounds
-        if x_val < x0 - 8.0 or x_val > x1 + 8.0:
-            rejection_reasons["pdf_barline_outside_system_bounds"] += 1
-            rejected_count += 1
-            details.append({
-                "x": round(x_val, 3),
-                "y_min": round(y_min, 3),
-                "y_max": round(y_max, 3),
-                "height": round(height, 3),
-                "staff_height": round(staff_height, 3),
-                "coverage_ratio": 0.0,
-                "gaps_crossed": 0,
-                "absolute_height_decision": "rejected",
-                "relative_staff_crossing_decision": "rejected",
-                "final_decision": "rejected",
-                "rejection_reason": "pdf_barline_outside_system_bounds",
-            })
-            continue
+        in_bounds = not (x_val < x0 - 8.0 or x_val > x1 + 8.0)
 
         # 2. Check staff intersection
-        if y_max < y0 or y_min > y1:
-            rejection_reasons["pdf_barline_outside_staff_region"] += 1
-            rejection_reasons["pdf_barline_does_not_cross_staff"] += 1
-            rejected_count += 1
-            details.append({
-                "x": round(x_val, 3),
-                "y_min": round(y_min, 3),
-                "y_max": round(y_max, 3),
-                "height": round(height, 3),
-                "staff_height": round(staff_height, 3),
-                "coverage_ratio": 0.0,
-                "gaps_crossed": 0,
-                "absolute_height_decision": "rejected",
-                "relative_staff_crossing_decision": "rejected",
-                "final_decision": "rejected",
-                "rejection_reason": "pdf_barline_outside_staff_region",
-            })
-            continue
+        intersects = not (y_max < y0 or y_min > y1)
 
         # Calculate gaps crossed
-        ys = sorted(line_ys)
         gaps_crossed = 0
         for i in range(len(ys) - 1):
             if y_min <= ys[i] + 1.5 and y_max >= ys[i+1] - 1.5:
@@ -3450,78 +3422,141 @@ def filter_tab_barline_candidates(
         absolute_height_ok = (height >= 40.0)
         relative_height_ok = crosses_entire_staff
         is_accepted_relative = (height >= 20.0 and relative_height_ok)
-        is_accepted = (absolute_height_ok or is_accepted_relative) and relative_height_ok
 
-        rejection_reason = None
-        if not relative_height_ok:
-            if gaps_crossed < len(ys) - 2:
-                rejection_reason = "pdf_barline_crosses_insufficient_string_gaps"
-                rejection_reasons["pdf_barline_crosses_insufficient_string_gaps"] += 1
-                rejection_reasons["pdf_barline_does_not_cross_staff"] += 1
-            else:
-                rejection_reason = "pdf_barline_partial_staff_crossing"
-                rejection_reasons["pdf_barline_partial_staff_crossing"] += 1
-                rejection_reasons["pdf_barline_does_not_cross_staff"] += 1
-        elif not is_accepted:
-            rejection_reason = "pdf_barline_too_short_absolute"
-            rejection_reasons["pdf_barline_too_short_absolute"] += 1
-            rejection_reasons["pdf_barline_too_short"] += 1
+        # Initially accepted is True if it would pass all individual checks
+        initially_accepted = in_bounds and intersects and (absolute_height_ok or is_accepted_relative) and relative_height_ok
 
-        if rejection_reason is None and not is_accepted:
-            rejection_reason = "pdf_barline_rejected_relative_height"
-            rejection_reasons["pdf_barline_rejected_relative_height"] += 1
-            rejection_reasons["pdf_barline_too_short"] += 1
+        candidate_data.append({
+            "idx": idx,
+            "segment": s,
+            "x": x_val,
+            "y_min": y_min,
+            "y_max": y_max,
+            "height": height,
+            "gaps_crossed": gaps_crossed,
+            "coverage_ratio": coverage_ratio,
+            "absolute_height_ok": absolute_height_ok,
+            "relative_height_ok": relative_height_ok,
+            "in_bounds": in_bounds,
+            "intersects": intersects,
+            "initially_accepted": initially_accepted,
+        })
 
-        # Check ambiguity among candidates that otherwise would be valid barlines
-        if is_accepted:
-            is_ambiguous = False
-            for other in candidates:
-                if other is s:
-                    continue
-                other_x = (other.x0 + other.x1) / 2
-                other_y_min = min(other.y0, other.y1)
-                other_y_max = max(other.y0, other.y1)
-                other_height = other_y_max - other_y_min
+    # Pass 2: Perform single-linkage clustering on initially accepted candidates
+    accepted_candidates = [item for item in candidate_data if item["initially_accepted"]]
+    accepted_candidates.sort(key=lambda item: item["x"])
 
-                # Estimate other gaps crossed
-                other_gaps = 0
-                for i in range(len(ys) - 1):
-                    if other_y_min <= ys[i] + 1.5 and other_y_max >= ys[i+1] - 1.5:
-                        other_gaps += 1
-                other_crosses = (other_y_min <= y0 + 4.0 and other_y_max >= y1 - 4.0) or (other_gaps >= len(ys) - 1)
-                other_accepted = ((other_height >= 40.0) or (other_height >= 20.0 and other_crosses)) and other_crosses
-
-                if other_accepted and abs(x_val - other_x) < 6.0:
-                    is_ambiguous = True
-                    break
-
-            if is_ambiguous:
-                is_accepted = False
-                rejection_reason = "pdf_barline_ambiguous"
-                rejection_reasons["pdf_barline_ambiguous"] += 1
-
-        if not is_accepted:
-            if rejection_reason is None:
-                rejection_reason = "pdf_barline_too_short"
-                rejection_reasons["pdf_barline_too_short"] += 1
-            elif height < 40.0:
-                rejection_reasons["pdf_barline_too_short"] += 1
-            rejected_count += 1
+    clusters = []
+    current_cluster = []
+    for item in accepted_candidates:
+        if not current_cluster:
+            current_cluster.append(item)
         else:
-            valid_barlines.append(round(x_val, 3))
+            if item["x"] - current_cluster[-1]["x"] < 6.0:
+                current_cluster.append(item)
+            else:
+                clusters.append(current_cluster)
+                current_cluster = [item]
+    if current_cluster:
+        clusters.append(current_cluster)
+
+    # Assign decisions based on cluster membership and initial status
+    final_decisions = {}  # idx -> (is_accepted, rejection_reason)
+
+    # Put all clusters' results into decisions
+    for cluster in clusters:
+        # Check if the cluster is at the rightmost tab-system edge
+        is_rightmost_edge = any(item["x"] >= x1 - 10.0 for item in cluster)
+        
+        if len(cluster) > 1 and is_rightmost_edge:
+            # Multi-line rightmost edge cluster (double barline). Choose the rightmost candidate.
+            representative = cluster[-1]
+            final_decisions[representative["idx"]] = (True, None)
+            for item in cluster[:-1]:
+                final_decisions[item["idx"]] = (False, "pdf_barline_double_secondary")
+        else:
+            # Single-line or non-edge cluster. They are default accepted initially,
+            # but will be verified by the ambiguity check below.
+            for item in cluster:
+                final_decisions[item["idx"]] = (True, None)
+
+    # For candidates that were NOT initially accepted, determine their rejection reason
+    for item in candidate_data:
+        if not item["initially_accepted"]:
+            reason = None
+            if not item["in_bounds"]:
+                reason = "pdf_barline_outside_system_bounds"
+            elif not item["intersects"]:
+                reason = "pdf_barline_outside_staff_region"
+            elif not item["relative_height_ok"]:
+                if item["gaps_crossed"] < len(ys) - 2:
+                    reason = "pdf_barline_crosses_insufficient_string_gaps"
+                else:
+                    reason = "pdf_barline_partial_staff_crossing"
+            elif not (item["absolute_height_ok"] or (item["height"] >= 20.0 and item["relative_height_ok"])):
+                reason = "pdf_barline_too_short_absolute"
+
+            if reason is None:
+                reason = "pdf_barline_rejected_relative_height"
+
+            final_decisions[item["idx"]] = (False, reason)
+
+    # Perform ambiguity check among currently accepted candidates
+    accepted_indices = {idx for idx, (accepted, _) in final_decisions.items() if accepted}
+    for idx in list(accepted_indices):
+        item = next(it for it in candidate_data if it["idx"] == idx)
+        is_ambiguous = False
+        for other_idx in accepted_indices:
+            if other_idx == idx:
+                continue
+            other_item = next(it for it in candidate_data if it["idx"] == other_idx)
+            if abs(item["x"] - other_item["x"]) < 6.0:
+                is_ambiguous = True
+                break
+        
+        if is_ambiguous:
+            final_decisions[idx] = (False, "pdf_barline_ambiguous")
+
+    # Construct the final returned structures
+    for item in candidate_data:
+        idx = item["idx"]
+        is_accepted, reason = final_decisions[idx]
+
+        if is_accepted:
+            valid_barlines.append(round(item["x"], 3))
+        else:
+            rejected_count += 1
+            if reason:
+                if reason in rejection_reasons:
+                    rejection_reasons[reason] += 1
+                
+                # Increment general categories matching original logic
+                if reason == "pdf_barline_outside_staff_region":
+                    rejection_reasons["pdf_barline_does_not_cross_staff"] += 1
+                elif reason == "pdf_barline_crosses_insufficient_string_gaps":
+                    rejection_reasons["pdf_barline_does_not_cross_staff"] += 1
+                elif reason == "pdf_barline_partial_staff_crossing":
+                    rejection_reasons["pdf_barline_does_not_cross_staff"] += 1
+                elif reason == "pdf_barline_too_short_absolute":
+                    rejection_reasons["pdf_barline_too_short"] += 1
+                elif reason == "pdf_barline_rejected_relative_height":
+                    rejection_reasons["pdf_barline_too_short"] += 1
+
+            if item["height"] < 40.0:
+                rejection_reasons["pdf_barline_too_short"] += 1
 
         details.append({
-            "x": round(x_val, 3),
-            "y_min": round(y_min, 3),
-            "y_max": round(y_max, 3),
-            "height": round(height, 3),
+            "x": round(item["x"], 3),
+            "y_min": round(item["y_min"], 3),
+            "y_max": round(item["y_max"], 3),
+            "height": round(item["height"], 3),
             "staff_height": round(staff_height, 3),
-            "coverage_ratio": round(coverage_ratio, 3),
-            "gaps_crossed": gaps_crossed,
-            "absolute_height_decision": "accepted" if absolute_height_ok else "rejected",
-            "relative_staff_crossing_decision": "accepted" if relative_height_ok else "rejected",
+            "coverage_ratio": round(item["coverage_ratio"], 3),
+            "gaps_crossed": item["gaps_crossed"],
+            "absolute_height_decision": "accepted" if item["absolute_height_ok"] else "rejected",
+            "relative_staff_crossing_decision": "accepted" if item["relative_height_ok"] else "rejected",
             "final_decision": "accepted" if is_accepted else "rejected",
-            "rejection_reason": rejection_reason,
+            "rejection_reason": reason,
         })
 
     valid_barlines = _unique_sorted(valid_barlines)
