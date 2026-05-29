@@ -47,7 +47,16 @@ def build_grouping_diagnostics(
     """Build a public-safe summary of PDF grouping quality."""
 
     candidates = list(tabraw.get("candidates", []))
-    playable = [candidate for candidate in candidates if candidate.get("parsed_fret") is not None]
+    exclusion_warnings = {
+        "pdf_fret_page_or_legend_number_excluded",
+        "pdf_fret_chord_text_digit_excluded",
+        "pdf_fret_technique_marker_excluded",
+    }
+    playable = [
+        candidate for candidate in candidates
+        if candidate.get("parsed_fret") is not None
+        and not any(w in (candidate.get("raw", {}).get("assignment_warnings", []) or []) for w in exclusion_warnings)
+    ]
     kind_counts: dict[str, int] = {}
     for candidate in candidates:
         kind = str(candidate.get("kind", "candidate-text"))
@@ -336,7 +345,16 @@ def grouping_status_for_tabraw(tabraw: dict[str, Any]) -> str:
     """Return grouped, partial, missing, ambiguous, or unsupported for playable PDF-derived tab evidence."""
 
     candidates = list(tabraw.get("candidates", []))
-    playable = [candidate for candidate in candidates if candidate.get("parsed_fret") is not None]
+    exclusion_warnings = {
+        "pdf_fret_page_or_legend_number_excluded",
+        "pdf_fret_chord_text_digit_excluded",
+        "pdf_fret_technique_marker_excluded",
+    }
+    playable = [
+        candidate for candidate in candidates
+        if candidate.get("parsed_fret") is not None
+        and not any(w in (candidate.get("raw", {}).get("assignment_warnings", []) or []) for w in exclusion_warnings)
+    ]
     if not candidates or not playable:
         return "missing"
 

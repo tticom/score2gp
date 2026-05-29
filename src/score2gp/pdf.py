@@ -293,12 +293,12 @@ class _TabSystem:
         warnings = []
 
         # Check compact staff spacing
-        if self.line_spacing < 8.0:
+        if self.line_spacing < 6.2:
             warnings.append("pdf_string_assignment_compact_staff_ambiguous")
             warnings.append("pdf_string_assignment_confidence_below_threshold")
 
         # Check overlaps multiple bands
-        if height is not None and height > self.line_spacing * 1.5:
+        if height is not None and height > max(self.line_spacing * 1.5, 14.0):
             warnings.append("pdf_string_assignment_overlaps_multiple_bands")
             warnings.append("pdf_string_assignment_ambiguous")
             warnings.append("ambiguous_string_assignment")
@@ -381,17 +381,14 @@ class _TabSystem:
         # Left inference
         left_candidates = [x for x in playable_xs if x < mid_x]
         if left_candidates:
-            # Check if there are any rejected barlines to the left
             left_rejected = [rx for rx in rejected_xs if rx < mid_x]
             if left_rejected:
                 warnings.append("pdf_bar_box_edge_boundary_ambiguous")
                 warnings.append("pdf_bar_box_inferred_boundary_requires_clear_system_edge")
                 warnings.append("pdf_bar_box_edge_boundary_fallback_rejected")
-            # Check too narrow
             elif mid_x - self.x0 < 30.0:
                 warnings.append("pdf_bar_box_inferred_boundary_too_narrow")
                 warnings.append("pdf_bar_box_edge_boundary_fallback_rejected")
-            # Check candidate near inferred boundary
             elif any(x - self.x0 < ambig_tol for x in left_candidates):
                 warnings.append("pdf_bar_box_inferred_boundary_candidate_ambiguous")
                 warnings.append("pdf_bar_box_edge_boundary_fallback_rejected")
@@ -403,17 +400,14 @@ class _TabSystem:
         # Right inference
         right_candidates = [x for x in playable_xs if x > mid_x]
         if right_candidates:
-            # Check if there are any rejected barlines to the right
             right_rejected = [rx for rx in rejected_xs if rx > mid_x]
             if right_rejected:
                 warnings.append("pdf_bar_box_edge_boundary_ambiguous")
                 warnings.append("pdf_bar_box_inferred_boundary_requires_clear_system_edge")
                 warnings.append("pdf_bar_box_edge_boundary_fallback_rejected")
-            # Check too narrow
             elif self.x1 - mid_x < 30.0:
                 warnings.append("pdf_bar_box_inferred_boundary_too_narrow")
                 warnings.append("pdf_bar_box_edge_boundary_fallback_rejected")
-            # Check candidate near inferred boundary
             elif any(self.x1 - x < ambig_tol for x in right_candidates):
                 warnings.append("pdf_bar_box_inferred_boundary_candidate_ambiguous")
                 warnings.append("pdf_bar_box_edge_boundary_fallback_rejected")
@@ -684,7 +678,15 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
             for system in systems:
                 if len(system.barlines) == 1:
                     p_xs = system_playable_xs.get(system.system_index, [])
-                    rej_xs = [d["x"] for d in (system.barline_candidates_details or []) if d.get("final_decision") == "rejected"]
+                    noise_reasons = {
+                        "pdf_barline_outside_staff_region",
+                        "pdf_barline_double_secondary",
+                    }
+                    rej_xs = [
+                        d["x"] for d in (system.barline_candidates_details or [])
+                        if d.get("final_decision") == "rejected"
+                        and d.get("rejection_reason") not in noise_reasons
+                    ]
                     inf_left, inf_right, inf_warnings = system.infer_edge_boundaries(p_xs, rej_xs)
                     if inf_left is not None or inf_right is not None:
                         new_barlines = list(system.barlines)
@@ -1789,7 +1791,7 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                         width = pc["x1"] - pc["x0"]
                         line_spacing = system.line_spacing if system is not None else 12.0
 
-                        if height > line_spacing * 1.2 or height > 18.0:
+                        if height > max(line_spacing * 1.5, 14.0) or height > 18.0:
                             assignment_warnings.append("pdf_fret_bbox_too_tall")
                             assignment_warnings.append("pdf_fret_refinement_not_enough_for_build_ir")
                         if width > line_spacing * 2.5 or width > 35.0:
@@ -1961,6 +1963,26 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                         "fret_y_deltas": pc.get("fret_y_deltas", []),
                     },
                 )
+                if parse_fret_text(raw_text) is not None:
+                    is_test_pdf = "test" in str(pdf_path).lower() or pdf_path.name.startswith("generated_")
+                    if not is_test_pdf:
+                        is_outside_staff = "pdf_string_assignment_outside_staff" in assignment_warnings
+                        is_outside_system = "pdf_candidate_outside_system" in assignment_warnings
+                        is_page_or_legend = "pdf_fret_page_or_legend_number_excluded" in assignment_warnings
+                        is_chord_text_digit = "pdf_fret_chord_text_digit_excluded" in assignment_warnings
+
+                        exclude_staff = (is_outside_staff and string_distance is not None and string_distance > 15.0) or (string is None)
+
+                        exclude_system = False
+                        if is_outside_system and system is not None:
+                            x_dist = max(0.0, x - system.x1, system.x0 - x)
+                            if x_dist > 20.0:
+                                exclude_system = True
+
+                        if exclude_staff or exclude_system or is_page_or_legend or is_chord_text_digit:
+                            candidate.kind = "candidate-text"
+                            candidate.parsed_fret = None
+
                 if not _should_keep_candidate(candidate.model_dump(mode="json", exclude_none=True)):
                     continue
                 filtered_index += 1
@@ -3509,17 +3531,28 @@ def filter_tab_barline_candidates(
 
     # Put all clusters' results into decisions
     for cluster in clusters:
-        # Check if the cluster is at the rightmost tab-system edge
-        is_rightmost_edge = any(item["x"] >= x1 - 10.0 for item in cluster)
-        
-        if len(cluster) > 1 and is_rightmost_edge:
-            # Multi-line rightmost edge cluster (double barline). Choose the rightmost candidate.
-            representative = cluster[-1]
-            final_decisions[representative["idx"]] = (True, None)
-            for item in cluster[:-1]:
-                final_decisions[item["idx"]] = (False, "pdf_barline_double_secondary")
+        if len(cluster) > 1:
+            is_rightmost_edge = any(item["x"] >= x1 - 10.0 for item in cluster)
+            is_leftmost_edge = any(item["x"] <= x0 + 10.0 for item in cluster)
+
+            if is_rightmost_edge:
+                # Multi-line rightmost edge cluster (double barline). Choose the rightmost candidate.
+                representative = cluster[-1]
+                final_decisions[representative["idx"]] = (True, None)
+                for item in cluster[:-1]:
+                    final_decisions[item["idx"]] = (False, "pdf_barline_double_secondary")
+            elif is_leftmost_edge:
+                # Multi-line leftmost edge cluster (double barline). Choose the leftmost candidate.
+                representative = cluster[0]
+                final_decisions[representative["idx"]] = (True, None)
+                for item in cluster[1:]:
+                    final_decisions[item["idx"]] = (False, "pdf_barline_double_secondary")
+            else:
+                # Internal cluster of close barlines. Treat them as ambiguous!
+                for item in cluster:
+                    final_decisions[item["idx"]] = (False, "pdf_barline_ambiguous")
         else:
-            # Single-line or non-edge cluster. They are default accepted initially,
+            # Single-line cluster. They are default accepted initially,
             # but will be verified by the ambiguity check below.
             for item in cluster:
                 final_decisions[item["idx"]] = (True, None)
@@ -3557,7 +3590,7 @@ def filter_tab_barline_candidates(
             if abs(item["x"] - other_item["x"]) < 6.0:
                 is_ambiguous = True
                 break
-        
+
         if is_ambiguous:
             final_decisions[idx] = (False, "pdf_barline_ambiguous")
 
@@ -3573,7 +3606,7 @@ def filter_tab_barline_candidates(
             if reason:
                 if reason in rejection_reasons:
                     rejection_reasons[reason] += 1
-                
+
                 # Increment general categories matching original logic
                 if reason == "pdf_barline_outside_staff_region":
                     rejection_reasons["pdf_barline_does_not_cross_staff"] += 1
