@@ -507,6 +507,7 @@ class MusicXmlImport(BaseModel):
     tempo_bpm: int | None = Field(default=None, gt=0, le=400)
     parts: list[MusicXmlPart] = Field(default_factory=list)
     warnings: list[MusicXmlWarning] = Field(default_factory=list)
+    allow_remediation: bool = False
 
 
 def parse_musicxml(path: str | Path, *, allow_remediation: bool = False) -> MusicXmlImport:
@@ -533,6 +534,7 @@ def parse_musicxml(path: str | Path, *, allow_remediation: bool = False) -> Musi
         tempo_bpm=tempo_bpm,
         parts=parts,
         warnings=warnings,
+        allow_remediation=allow_remediation,
     )
 
 
@@ -1231,6 +1233,17 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                         voice_durations=voice_durations,
                     )
                 )
+
+            if getattr(imported, "allow_remediation", False):
+                for issue in issues[start_idx:]:
+                    if issue.code in {
+                        "musicxml_polyphony_not_supported",
+                        "musicxml_multivoice_timing_not_supported",
+                        "musicxml_cross_voice_timing_unsupported",
+                        "musicxml_valid_multivoice_unsupported",
+                        "musicxml_cross_voice_overlap_unsupported",
+                    } or (issue.code == "musicxml_voice_cursor_alignment_risk" and "cross-voice" in str(issue.message)):
+                        issue.severity = "warning"
 
             # Check if we have many timing risks in this measure
             measure_errors = [issue for issue in issues[start_idx:] if issue.severity == "error"]
