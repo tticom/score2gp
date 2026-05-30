@@ -138,8 +138,14 @@ def write_gp(
         gpif = adapt_gpif(gpif, target_version)
         copied["Content/score.gpif"] = gpif
 
+    directories = {"Content/"}
+    for name in copied.keys():
+        parts = name.split("/")
+        for i in range(1, len(parts)):
+            dir_path = "/".join(parts[:i]) + "/"
+            directories.add(dir_path)
+
     with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as zout:
-        directories = {"Content/"}
         for directory in sorted(directories):
             zout.writestr(directory, b"")
         for name, data in copied.items():
