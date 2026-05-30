@@ -94,9 +94,9 @@ def write_gp(
     ET.indent(layout_cfg_xml, space="  ")
     layout_cfg_bytes = ET.tostring(layout_cfg_xml, encoding="utf-8", xml_declaration=True)
 
-    copied["VERSION"] = get_version_file_content(target_version)
-    copied["Content/Preferences.json"] = preferences_bytes
-    copied["Content/LayoutConfiguration"] = layout_cfg_bytes
+    copied.setdefault("VERSION", get_version_file_content(target_version))
+    copied.setdefault("Content/Preferences.json", preferences_bytes)
+    copied.setdefault("Content/LayoutConfiguration", layout_cfg_bytes)
     copied.setdefault("Content/PartConfiguration", b"")
     copied.setdefault("Content/BinaryStylesheet", b"")
 
