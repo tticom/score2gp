@@ -1734,19 +1734,35 @@ def _aligned_note(
     candidate_pitch = open_pitch + candidate.parsed_fret
     confidence = min(0.9, candidate.confidence)
     if xml_note.pitch is not None and candidate_pitch != xml_note.pitch.midi:
-        warnings.append(
-            _event_warning(
-                "musicxml-tab-pitch-mismatch",
-                xml_note,
-                (
-                    f"MusicXML pitch {xml_note.pitch.name} ({xml_note.pitch.midi}) does not match "
-                    f"TabRaw string {candidate.string} fret {candidate.parsed_fret} ({candidate_pitch}); "
-                    "ScoreIR keeps the tab-derived pitch so validation remains strict."
-                ),
-                candidate,
+        xml_pitch_val = xml_note.pitch.midi
+        pitch_diff = xml_pitch_val - candidate_pitch
+        if pitch_diff % 12 == 0:
+            warnings.append(
+                _event_warning(
+                    "musicxml-transposition-corrected",
+                    xml_note,
+                    (
+                        f"MusicXML written pitch {xml_note.pitch.name} ({xml_pitch_val}) was transposed "
+                        f"by {-pitch_diff} semitones to align with sounding pitch ({candidate_pitch}) "
+                        f"on string {candidate.string} fret {candidate.parsed_fret}."
+                    ),
+                    candidate,
+                )
             )
-        )
-        confidence = min(confidence, 0.5)
+        else:
+            warnings.append(
+                _event_warning(
+                    "musicxml-tab-pitch-mismatch",
+                    xml_note,
+                    (
+                        f"MusicXML pitch {xml_note.pitch.name} ({xml_note.pitch.midi}) does not match "
+                        f"TabRaw string {candidate.string} fret {candidate.parsed_fret} ({candidate_pitch}); "
+                        "ScoreIR keeps the tab-derived pitch so validation remains strict."
+                    ),
+                    candidate,
+                )
+            )
+            confidence = min(confidence, 0.5)
 
     tab_provenance = candidate.to_provenance()
     tab_provenance.raw["alignment_strategy"] = candidate.raw.get("alignment_strategy", "bar-x-order")
