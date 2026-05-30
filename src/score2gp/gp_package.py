@@ -402,7 +402,7 @@ def extract_score_ir_from_gp(path: str | Path) -> ScoreIR | ScoreBooklet:
             return _extract_score_ir_from_gpif_root(root)
 
 
-def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
+def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
     # 1. Parse Metadata
     meta_node = root.find(".//Metadata")
     metadata = Metadata()
@@ -421,11 +421,643 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
     if tempo_node is not None:
         bpm = int(_first_text(tempo_node, ["Value"]) or 120)
         tempo_text = _first_text(tempo_node, ["Text"])
+    else:
+        # Fall back to tempo automation under MasterTrack
+        for auto in root.findall(".//MasterTrack/Automations/Automation"):
+            if _first_text(auto, ["Type"]) == "Tempo":
+                val = _first_text(auto, ["Value"])
+                if val:
+                    bpm = int(float(val.split()[0]))
+                    break
     tempo = Tempo(bpm=bpm, text=tempo_text)
 
     # 3. Parse Tracks
     tracks: list[Track] = []
+    track_staves = [] # list of (track_id, staff_idx)
     for track_node in root.findall(".//Tracks/Track"):
+        track_id = track_node.get("id") or "unknown"
+        name = _first_text(track_node, ["Name"]) or "Track"
+        instrument = _first_text(track_node, ["Instrument"]) or "guitar"
+        capo = int(_first_text(track_node, ["Capo"]) or 0)
+        color = _first_text(track_node, ["Color"])
+
+        # Tuning
+        tuning_node = track_node.find("Tuning")
+        tuning_name = "Standard"
+        if tuning_node is not None:
+            tuning_name = tuning_node.get("name") or "Standard"
+
+        strings: list[TuningString] = []
+        if tuning_node is not None:
+            for s_node in tuning_node.findall("String"):
+                num = int(s_node.get("number") or 1)
+                pitch = int(s_node.get("pitch") or 0)
+                s_name = s_node.get("name") or ""
+                strings.append(TuningString(number=num, pitch=pitch, name=s_name))
+
+        # Staff properties for Balance/FineTuning
+        staff_node = track_node.find(".//Staff")
+        if staff_node is not None:
+            tuning_prop = staff_node.find(".//Property[@name='Tuning']")
+            if tuning_prop is not None:
+                balance_node = tuning_prop.find("Balance")
+                finetuning_node = tuning_prop.find("FineTuning")
+                strings.sort(key=lambda s: s.number, reverse=True)
+                if balance_node is not None and balance_node.text:
+                    balances = [float(b) for b in balance_node.text.split()]
+                    for s, bal in zip(strings, balances):
+                        if bal != 0.0:
+                            s.volume_offset = bal
+                if finetuning_node is not None and finetuning_node.text:
+                    finetunes = [float(f) for f in finetuning_node.text.split()]
+                    for s, ft in zip(strings, finetunes):
+                        if ft != 0.0:
+                            s.fine_tune = ft
+                strings.sort(key=lambda s: s.number)
+
+        tuning = Tuning(name=tuning_name, strings=strings)
+
+        # Mixer
+        mixer = None
+        mixer_node = track_node.find("Mixer")
+        if mixer_node is not None:
+            vol = float(_first_text(mixer_node, ["Volume"]) or 100) / 100.0
+            pan = (float(_first_text(mixer_node, ["Pan"]) or 50) / 50.0) - 1.0
+            mute = _first_text(mixer_node, ["Mute"]) == "true"
+            solo = _first_text(mixer_node, ["Solo"]) == "true"
+            mixer = Mixer(volume=vol, pan=pan, mute=mute, solo=solo)
+
+        # Expressions
+        expressions = None
+        expr_texts_node = track_node.find("ExpressionTexts")
+        if expr_texts_node is not None:
+            expressions = []
+            for expr_node in expr_texts_node.findall("ExpressionText"):
+                bar_idx = int(expr_node.get("measure") or 1)
+                text_val = expr_node.text or ""
+                expressions.append(TrackExpression(bar_index=bar_idx, text=text_val))
+
+        # Automations
+        automations = None
+        automations_node = track_node.find("Automations")
+        if automations_node is not None:
+            automations = []
+            for auto_node in automations_node.findall("Automation"):
+                auto_type = auto_node.get("type") or "Volume"
+                for pt_node in auto_node.findall("Point"):
+                    bar_idx = int(pt_node.get("measure") or 1)
+                    val_val = float(pt_node.get("value") or 0.0)
+                    automations.append(TrackAutomation(type=auto_type, bar_index=bar_idx, value=val_val))
+
+        # Layout Preferences
+        layout_preferences = None
+        tab_only = False
+        tab_node = track_node.find("Tablature")
+        if tab_node is not None:
+            tab_only = _first_text(tab_node, ["TabOnly"]) == "true"
+
+        view_mode = None
+        view_node = track_node.find("View")
+        if view_node is not None:
+            view_mode = (_first_text(view_node, ["Mode"]) or "page").lower()
+
+        stem_dir = None
+        line_sz = None
+        brackets_vis = None
+        stems_vis = None
+        line_sz_sys = None
+
+        if staff_node is not None:
+            stems_prop = staff_node.find(".//Property[@name='Stems']")
+            if stems_prop is not None:
+                if _first_text(stems_prop, ["Enable"]) == "true":
+                    stem_dir = (_first_text(stems_prop, ["Direction"]) or "auto").lower()
+                else:
+                    stem_dir = "auto"
+
+            ls_prop = staff_node.find(".//Property[@name='LineSizing']")
+            if ls_prop is not None:
+                line_sz = (_first_text(ls_prop, ["Size"]) or "standard").lower()
+
+            brackets_prop = staff_node.find(".//Property[@name='Brackets']")
+            if brackets_prop is not None:
+                brackets_vis = _first_text(brackets_prop, ["Enable"]) == "true"
+
+            stem_vis_prop = staff_node.find(".//Property[@name='StemVisibility']")
+            if stem_vis_prop is not None:
+                stems_vis = _first_text(stem_vis_prop, ["Enable"]) == "true"
+
+            ls_sys_prop = staff_node.find(".//Property[@name='LineSizingPerSystem']")
+            if ls_sys_prop is not None:
+                line_sz_sys = (_first_text(ls_sys_prop, ["Size"]) or "standard").lower()
+
+        if any(v is not None for v in (tab_only, stem_dir, line_sz, view_mode, brackets_vis, stems_vis, line_sz_sys)):
+            layout_preferences = TrackLayoutPreferences(
+                tab_only=tab_only,
+                stem_direction=stem_dir,
+                line_sizing=line_sz,
+                view_mode=view_mode,
+                brackets_visible=brackets_vis,
+                stems_visible=stems_vis,
+                line_sizing_per_system=line_sz_sys
+            )
+
+        tab_enabled = True
+        if staff_node is not None:
+            tab_prop = staff_node.find(".//Property[@name='Tablature']")
+            if tab_prop is not None:
+                tab_enabled = _first_text(tab_prop, ["Enable"]) == "true"
+
+        text_annotations = None
+        if staff_node is not None:
+            texts_node = staff_node.find("Texts")
+            if texts_node is not None:
+                text_annotations = []
+                for t_node in texts_node.findall("Text"):
+                    t_val = _first_text(t_node, ["Value"]) or t_node.text
+                    if t_val:
+                        text_annotations.append(t_val)
+
+        tracks.append(
+            Track(
+                id=track_id,
+                name=name,
+                instrument=instrument,
+                tuning=tuning,
+                capo=capo,
+                tablature_enabled=tab_enabled,
+                mixer=mixer,
+                color=color,
+                layout_preferences=layout_preferences,
+                expressions=expressions,
+                automations=automations,
+                text_annotations=text_annotations
+            )
+        )
+
+        staff_nodes = track_node.findall(".//Staves/Staff")
+        if not staff_nodes:
+            track_staves.append((track_id, 0))
+        else:
+            for s_idx in range(len(staff_nodes)):
+                track_staves.append((track_id, s_idx))
+
+    # 4. Parse ScoreLayout
+    layout = ScoreLayout()
+    master_track_node = root.find(".//MasterTrack")
+    if master_track_node is not None:
+        tracks_text = _first_text(master_track_node, ["Tracks"])
+        if tracks_text:
+            layout.track_order = tracks_text.split()
+
+        mm_node = master_track_node.find("Mixer")
+        if mm_node is not None:
+            vol = float(_first_text(mm_node, ["Volume"]) or 100) / 100.0
+            pan = (float(_first_text(mm_node, ["Pan"]) or 50) / 50.0) - 1.0
+            reverb = float(_first_text(mm_node, ["Reverb"]) or 0.0)
+            chorus = float(_first_text(mm_node, ["Chorus"]) or 0.0)
+            layout.master_mixer = MasterMixer(volume=vol, pan=pan, reverb=reverb, chorus=chorus)
+
+        pc_node = master_track_node.find("PresetCascade")
+        if pc_node is not None:
+            p_name = pc_node.get("presetName") or "standard"
+            t_engine = pc_node.get("targetEngine") or "gp7"
+            opts = {}
+            for opt in pc_node.findall("Option"):
+                o_name = opt.get("name")
+                o_val = opt.get("value")
+                if o_name:
+                    try:
+                        if "." in o_val:
+                            opts[o_name] = float(o_val)
+                        else:
+                            opts[o_name] = int(o_val)
+                    except ValueError:
+                        opts[o_name] = o_val
+            layout.preset_cascade = PipelinePresetCascade(preset_name=p_name, target_engine=t_engine, options=opts)
+
+    ps_node = root.find(".//PageSetup")
+    if ps_node is not None:
+        w = float(_first_text(ps_node, ["Width"]) or 210.0)
+        h = float(_first_text(ps_node, ["Height"]) or 297.0)
+        margin_top = float(_first_text(ps_node, ["MarginTop"]) or 15.0)
+        margin_bottom = float(_first_text(ps_node, ["MarginBottom"]) or 15.0)
+        margin_left = float(_first_text(ps_node, ["MarginLeft"]) or 15.0)
+        margin_right = float(_first_text(ps_node, ["MarginRight"]) or 15.0)
+        scale = float(_first_text(ps_node, ["Scale"]) or 1.0)
+
+        from .ir import PageSetup, PageMargins
+        layout.page_setup = PageSetup(
+            width=w,
+            height=h,
+            margins=PageMargins(top=margin_top, bottom=margin_bottom, left=margin_left, right=margin_right),
+            scale=scale
+        )
+
+    layout_node = root.find(".//Layout")
+    if layout_node is not None:
+        sys_lay_node = layout_node.find("SystemLayout")
+        if sys_lay_node is not None:
+            sys_sz_str = _first_text(sys_lay_node, ["SystemSizePercent"])
+            sys_sz = float(sys_sz_str) if sys_sz_str is not None else None
+
+            cush_str = _first_text(sys_lay_node, ["StaffDistancingCushion"])
+            cush = float(cush_str) if cush_str is not None else None
+
+            bl_style = _first_text(sys_lay_node, ["BarlineStyle"])
+            if bl_style is not None:
+                bl_style = bl_style.lower()
+
+            from .ir import SystemLayout
+            layout.system_layout = SystemLayout(
+                system_size_percent=sys_sz,
+                staff_distancing_cushion=cush,
+                barline_style=bl_style
+            )
+
+        staff_lay_node = layout_node.find("StaffLayout")
+        if staff_lay_node is not None:
+            sp_cush_str = _first_text(staff_lay_node, ["StaffSpacingCushion"])
+            sp_cush = float(sp_cush_str) if sp_cush_str is not None else None
+
+            sz_str = _first_text(staff_lay_node, ["StaffSize"])
+            sz = float(sz_str) if sz_str is not None else None
+
+            from .ir import StaffLayout
+            layout.staff_layout = StaffLayout(
+                staff_spacing_cushion=sp_cush,
+                staff_size=sz
+            )
+
+    # 5. Parse Rhythms
+    rhythms = {}
+    duration_ticks_map = {
+        "Whole": 3840,
+        "Half": 1920,
+        "Quarter": 960,
+        "Eighth": 480,
+        "Sixteenth": 240,
+        "ThirtySecond": 120,
+        "SixtyFourth": 60,
+    }
+    rhythms_node = root.find("Rhythms")
+    if rhythms_node is not None:
+        for r in rhythms_node.findall("Rhythm"):
+            r_id = r.get("id")
+            val_node = r.find("NoteValue")
+            val = val_node.text if val_node is not None else "Quarter"
+            ticks = duration_ticks_map.get(val, 960)
+
+            dots = r.find("AugmentationDot")
+            if dots is not None:
+                count = int(dots.get("count") or 1)
+                factor = 1.0
+                for i in range(count):
+                    factor += 1.0 / (2 ** (i + 1))
+                ticks = int(ticks * factor)
+
+            tuplet = r.find("PrimaryTuplet")
+            tuplet_obj = None
+            if tuplet is not None:
+                num = int(tuplet.get("num") or 1)
+                den = int(tuplet.get("den") or 1)
+                ticks = int(ticks * den / num)
+                from .ir import PrimaryTuplet
+                tuplet_obj = PrimaryTuplet(actual_notes=num, normal_notes=den)
+
+            from .ir import NotatedDuration
+            inv_val_map = {
+                "Whole": "whole",
+                "Half": "half",
+                "Quarter": "quarter",
+                "Eighth": "eighth",
+                "Sixteenth": "16th",
+                "ThirtySecond": "32nd",
+                "SixtyFourth": "64th",
+            }
+            duration_obj = NotatedDuration(value=inv_val_map.get(val, "quarter"), dots=int(dots.get("count") or 1) if dots is not None else 0)
+
+            rhythms[r_id] = {
+                "value": val,
+                "ticks": ticks,
+                "duration_obj": duration_obj,
+                "tuplet_obj": tuplet_obj
+            }
+
+    # 6. Parse Notes
+    notes = {}
+    notes_node = root.find("Notes")
+    if notes_node is not None:
+        for n in notes_node.findall("Note"):
+            n_id = n.get("id")
+            props = n.find("Properties")
+
+            fret_prop = props.find('.//Property[@name="Fret"]/Fret') if props is not None else None
+            fret = int(fret_prop.text) if fret_prop is not None else 0
+
+            string_prop = props.find('.//Property[@name="String"]/String') if props is not None else None
+            string = int(string_prop.text) + 1 if string_prop is not None else 1
+
+            midi_prop = props.find('.//Property[@name="Midi"]/Number') if props is not None else None
+            pitch = int(midi_prop.text) if midi_prop is not None else 0
+
+            techniques = []
+            articulations = []
+
+            if n.find("LetRing") is not None:
+                from .ir import Technique
+                techniques.append(Technique(kind="let-ring"))
+
+            if n.find("DeadNote") is not None:
+                from .ir import Technique
+                techniques.append(Technique(kind="dead-note"))
+
+            acc = n.find("Accent")
+            if acc is not None:
+                val = acc.text
+                if val == "1":
+                    articulations.append("accent")
+                elif val == "2":
+                    articulations.append("marcato")
+
+            vib = n.find("Vibrato")
+            if vib is not None:
+                from .ir import Technique
+                techniques.append(Technique(kind="vibrato"))
+
+            tie = n.find("Tie")
+            if tie is not None:
+                state = "stop" if tie.get("destination") == "true" else "start"
+                from .ir import Technique
+                techniques.append(Technique(kind="tie", state=state))
+
+            slide_prop = props.find('.//Property[@name="Slide"]') if props is not None else None
+            if slide_prop is not None:
+                from .ir import Technique
+                techniques.append(Technique(kind="slide"))
+
+            bend_prop = props.find('.//Property[@name="Bended"]') if props is not None else None
+            if bend_prop is not None:
+                pts = []
+                bend_node = n.find("Bend")
+                if bend_node is not None:
+                    for pt_node in bend_node.findall("Point"):
+                        off_pct = float(pt_node.get("offset") or 0.0)
+                        val_gp = float(pt_node.get("value") or 0.0)
+                        semitones = val_gp / 50.0
+                        pts.append(BendPoint(offset_ticks=int(off_pct), semitones=semitones))
+                from .ir import BendTechnique
+                techniques.append(BendTechnique(kind="bend", points=pts))
+
+            lh_fingering = None
+            rh_fingering = None
+            if props is not None:
+                for prop in props.findall("Property"):
+                    name = prop.get("name")
+                    if name == "LeftHandFingering":
+                        lh_fingering = _first_text(prop, ["Fingering"])
+                    elif name == "RightHandFingering":
+                        rh_fingering = _first_text(prop, ["Fingering"])
+
+            notes[n_id] = Note(
+                string=string,
+                fret=fret,
+                pitch=pitch,
+                techniques=techniques,
+                articulations=articulations,
+                left_hand_fingering=lh_fingering,
+                right_hand_fingering=rh_fingering
+            )
+
+    # 7. Parse Beats
+    beats = {}
+    beats_node = root.find("Beats")
+    if beats_node is not None:
+        for b in beats_node.findall("Beat"):
+            b_id = b.get("id")
+            dyn_node = b.find("Dynamic")
+            dyn = dyn_node.text if dyn_node is not None else "MF"
+
+            rhythm_ref = b.find("Rhythm").get("ref")
+            r_info = rhythms[rhythm_ref]
+
+            rest = b.find("Rest") is not None
+
+            notes_ref_text = b.find("Notes")
+            notes_refs = notes_ref_text.text.split() if notes_ref_text is not None and notes_ref_text.text else []
+            beat_notes = [notes[nid] for nid in notes_refs if nid in notes]
+
+            free_text = b.find("FreeText")
+            text = free_text.text if free_text is not None else None
+
+            brush = b.find("Brush")
+            brush_dir = brush.get("direction").lower() if brush is not None else None
+
+            arpeggio = b.find("Arpeggio")
+            arp_dir = arpeggio.get("direction").lower() if arpeggio is not None else None
+
+            chord_symbol = _first_text(b, ["Chord"])
+
+            beats[b_id] = {
+                "dynamic": dyn,
+                "duration_ticks": r_info["ticks"],
+                "duration_obj": r_info["duration_obj"],
+                "tuplet_obj": r_info["tuplet_obj"],
+                "rest": rest,
+                "notes": beat_notes,
+                "text": text,
+                "brush": brush_dir,
+                "arpeggio": arp_dir,
+                "chord_symbol": chord_symbol
+            }
+
+    # 8. Parse Voices
+    voices = {}
+    voices_node = root.find("Voices")
+    if voices_node is not None:
+        for v in voices_node.findall("Voice"):
+            v_id = v.get("id")
+            beats_ref_text = v.find("Beats")
+            beat_refs = beats_ref_text.text.split() if beats_ref_text is not None and beats_ref_text.text else []
+            voices[v_id] = beat_refs
+
+    # 9. Parse Bars
+    bars_dict = {}
+    bars_node = root.find("Bars")
+    if bars_node is not None:
+        for bar in bars_node.findall("Bar"):
+            bar_id = bar.get("id")
+            voice_refs = bar.find("Voices").text.split()
+            bars_dict[bar_id] = {
+                "clef": _first_text(bar, ["Clef"]) or "G2",
+                "voice_refs": voice_refs
+            }
+
+    # 10. Reconstruct Bars
+    bars: list[Bar] = []
+    master_bars_node = root.find(".//MasterBars")
+    if master_bars_node is not None:
+        for mb_node in master_bars_node.findall("MasterBar"):
+            mb_idx = int(mb_node.get("index") or 1)
+            time_str = _first_text(mb_node, ["Time"]) or "4/4"
+            num, den = map(int, time_str.split("/"))
+
+            key_sig = None
+            key_node = mb_node.find("Key")
+            if key_node is not None:
+                fifths = int(_first_text(key_node, ["Fifths"]) or 0)
+                mode = _first_text(key_node, ["Mode"]) or "major"
+                key_sig = KeySignature(fifths=fifths, mode=mode)
+
+            tempo_automation = None
+            ta_node = mb_node.find("TempoAutomation")
+            if ta_node is not None:
+                ta_type = _first_text(ta_node, ["Type"])
+                ta_style = _first_text(ta_node, ["Style"])
+                ta_val = _first_text(ta_node, ["TargetBPM"])
+                if ta_type is not None and ta_val is not None:
+                    tempo_automation = TempoAutomation(
+                        type=ta_type.lower(),
+                        style=ta_style.lower() if ta_style else "default",
+                        target_bpm=float(ta_val)
+                    )
+
+            layout_break = None
+            break_val = _first_text(mb_node, ["Break"])
+            if break_val == "Line":
+                layout_break = "line"
+            elif break_val == "Page":
+                layout_break = "page"
+            elif break_val == "None":
+                layout_break = "none"
+
+            barline = None
+            barline_val = _first_text(mb_node, ["Barline"])
+            if barline_val is not None:
+                barline_inv_map = {
+                    "Simple": "regular",
+                    "Double": "double",
+                    "End": "end",
+                    "Section": "section",
+                    "RepeatStart": "repeat-start",
+                    "RepeatEnd": "repeat-end",
+                    "Hidden": "hidden",
+                    "Dashed": "dashed",
+                }
+                barline = barline_inv_map.get(barline_val, "regular")
+
+            if mb_node.find("RepeatStart") is not None:
+                barline = "repeat-start"
+
+            repeat_count = None
+            repeat_node = mb_node.find("Repeat")
+            if repeat_node is not None:
+                barline = "repeat-end"
+                repeat_count_str = repeat_node.get("count")
+                repeat_count = int(repeat_count_str) if repeat_count_str else 2
+
+            events: list[Event] = []
+            bar_ids_text = _first_text(mb_node, ["Bars"])
+            bar_ids = bar_ids_text.split() if bar_ids_text else []
+
+            for s_idx, bar_id in enumerate(bar_ids):
+                if s_idx >= len(track_staves):
+                    continue
+                track_id, staff_idx = track_staves[s_idx]
+
+                b_info = bars_dict.get(bar_id)
+                if not b_info:
+                    continue
+
+                for v_idx, v_id in enumerate(b_info["voice_refs"]):
+                    if v_id == "-1" or v_id not in voices:
+                        continue
+
+                    voice_num = v_idx + 1
+                    onset = 0
+                    for beat_id in voices[v_id]:
+                        beat = beats.get(beat_id)
+                        if not beat:
+                            continue
+
+                        from .ir import Timing
+                        timing = Timing(
+                            bar_index=mb_idx,
+                            onset_ticks=onset,
+                            duration_ticks=beat["duration_ticks"],
+                            voice=voice_num,
+                            notated_duration=beat["duration_obj"],
+                            tuplet=beat["tuplet_obj"]
+                        )
+
+                        ev_id = f"e_m{mb_idx}_s{s_idx}_v{voice_num}_{onset}"
+
+                        from .ir import Event
+                        events.append(Event(
+                            id=ev_id,
+                            track_id=track_id,
+                            timing=timing,
+                            notes=beat["notes"],
+                            is_rest=beat["rest"],
+                            dynamic=beat["dynamic"],
+                            text=beat["text"],
+                            brush=beat["brush"],
+                            arpeggio=beat["arpeggio"],
+                            chord_symbol=beat["chord_symbol"]
+                        ))
+
+                        onset += beat["duration_ticks"]
+
+            bars.append(
+                Bar(
+                    index=mb_idx,
+                    time_signature=TimeSignature(numerator=num, denominator=den),
+                    key_signature=key_sig,
+                    events=events,
+                    tempo_automation=tempo_automation,
+                    layout_break=layout_break,
+                    barline=barline,
+                    repeat_count=repeat_count
+                )
+            )
+
+    return ScoreIR(
+        schema_version="0.1.0",
+        metadata=metadata,
+        tempo=tempo,
+        tracks=tracks,
+        bars=bars,
+        layout=layout
+    )
+
+
+def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
+    if root.find("Beats") is not None and root.find(".//Score/Bars") is None:
+        return _extract_score_ir_from_relational_gpif_root(root)
+
+    # 1. Parse Metadata
+    meta_node = root.find(".//Score/Metadata")
+    metadata = Metadata()
+    if meta_node is not None:
+        metadata.title = _first_text(meta_node, ["Title"]) or "Untitled"
+        metadata.artist = _first_text(meta_node, ["Artist"])
+        metadata.composer = _first_text(meta_node, ["Composer"])
+        metadata.album = _first_text(meta_node, ["Album"])
+        metadata.transcriber = _first_text(meta_node, ["Transcriber"])
+        metadata.copyright = _first_text(meta_node, ["Copyright"])
+
+    # 2. Parse Tempo
+    tempo_node = root.find(".//Score/Tempo")
+    bpm = 120
+    tempo_text = None
+    if tempo_node is not None:
+        bpm = int(_first_text(tempo_node, ["Value"]) or 120)
+        tempo_text = _first_text(tempo_node, ["Text"])
+    tempo = Tempo(bpm=bpm, text=tempo_text)
+
+    # 3. Parse Tracks
+    tracks: list[Track] = []
+    for track_node in root.findall(".//Score/Tracks/Track"):
         track_id = track_node.get("id") or "unknown"
         name = _first_text(track_node, ["Name"]) or "Track"
         instrument = _first_text(track_node, ["Instrument"]) or "guitar"
@@ -588,7 +1220,7 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
 
     # 4. Parse ScoreLayout
     layout = ScoreLayout()
-    master_track_node = root.find(".//MasterTrack")
+    master_track_node = root.find(".//Score/MasterTrack")
     if master_track_node is not None:
         tracks_text = _first_text(master_track_node, ["Tracks"])
         if tracks_text:
@@ -620,7 +1252,7 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
                         opts[o_name] = o_val
             layout.preset_cascade = PipelinePresetCascade(preset_name=p_name, target_engine=t_engine, options=opts)
 
-    ps_node = root.find(".//PageSetup")
+    ps_node = root.find(".//Score/PageSetup")
     if ps_node is not None:
         w = float(_first_text(ps_node, ["Width"]) or 210.0)
         h = float(_first_text(ps_node, ["Height"]) or 297.0)
@@ -638,35 +1270,35 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
             scale=scale
         )
 
-    layout_node = root.find(".//Layout")
+    layout_node = root.find(".//Score/Layout")
     if layout_node is not None:
         sys_lay_node = layout_node.find("SystemLayout")
         if sys_lay_node is not None:
             sys_sz_str = _first_text(sys_lay_node, ["SystemSizePercent"])
             sys_sz = float(sys_sz_str) if sys_sz_str is not None else None
-            
+
             cush_str = _first_text(sys_lay_node, ["StaffDistancingCushion"])
             cush = float(cush_str) if cush_str is not None else None
-            
+
             bl_style = _first_text(sys_lay_node, ["BarlineStyle"])
             if bl_style is not None:
                 bl_style = bl_style.lower()
-                
+
             from .ir import SystemLayout
             layout.system_layout = SystemLayout(
                 system_size_percent=sys_sz,
                 staff_distancing_cushion=cush,
                 barline_style=bl_style
             )
-            
+
         staff_lay_node = layout_node.find("StaffLayout")
         if staff_lay_node is not None:
             sp_cush_str = _first_text(staff_lay_node, ["StaffSpacingCushion"])
             sp_cush = float(sp_cush_str) if sp_cush_str is not None else None
-            
+
             sz_str = _first_text(staff_lay_node, ["StaffSize"])
             sz = float(sz_str) if sz_str is not None else None
-            
+
             from .ir import StaffLayout
             layout.staff_layout = StaffLayout(
                 staff_spacing_cushion=sp_cush,
@@ -675,7 +1307,7 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
 
     # 5. Parse Bars and Events
     bars: list[Bar] = []
-    master_bars_node = root.find(".//MasterBars")
+    master_bars_node = root.find(".//Score/MasterBars")
     mb_map = {}
     if master_bars_node is not None:
         for mb_node in master_bars_node.findall("MasterBar"):
@@ -754,7 +1386,7 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
                 "alternate_ending_passes": alternate_ending_passes,
             }
 
-    bars_node = root.find(".//Bars")
+    bars_node = root.find(".//Score/Bars")
     if bars_node is not None:
         for bar_node in bars_node.findall("Bar"):
             idx = int(bar_node.get("index") or 1)
