@@ -672,7 +672,7 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
         for track in score.tracks:
             staff_count = getattr(track, "staff_count", None) or 1
             for s_idx in range(staff_count):
-                track_staves.append(track.id)
+                track_staves.append((track, s_idx, staff_count))
 
         duration_map = {
             "whole": "Whole",
@@ -687,19 +687,26 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
         for bar in score.bars:
             measure_bar_ids = []
 
-            for staff_idx, track_id in enumerate(track_staves):
-                track_obj = next((t for t in score.tracks if t.id == track_id), None)
-                num_strings = len(track_obj.tuning.strings) if track_obj and track_obj.tuning else 6
-                staff_events = [e for e in bar.events if e.track_id == track_id]
+            for staff_idx, (track_obj, s_idx, staff_count) in enumerate(track_staves):
+                track_id = track_obj.id
+                num_strings = len(track_obj.tuning.strings) if track_obj.tuning else 6
+
+                staff_events = []
+                for event in bar.events:
+                    if event.track_id != track_id:
+                        continue
+                    event_staff_idx = 0 if staff_count == 1 else min(staff_count - 1, (event.timing.voice - 1) // 4)
+                    if event_staff_idx == s_idx:
+                        staff_events.append(event)
 
                 events_by_voice = {}
                 for event in staff_events:
-                    v_idx = event.timing.voice - 1
-                    events_by_voice.setdefault(v_idx, []).append(event)
+                    gp_v_idx = (event.timing.voice - 1) % 4
+                    events_by_voice.setdefault(gp_v_idx, []).append(event)
 
                 voice_refs = []
-                for v_idx in range(4):
-                    events = events_by_voice.get(v_idx, [])
+                for gp_v_idx in range(4):
+                    events = events_by_voice.get(gp_v_idx, [])
                     if not events:
                         voice_refs.append("-1")
                         continue
