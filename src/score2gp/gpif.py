@@ -670,6 +670,8 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
             measure_bar_ids = []
 
             for staff_idx, track_id in enumerate(track_staves):
+                track_obj = next((t for t in score.tracks if t.id == track_id), None)
+                num_strings = len(track_obj.tuning.strings) if track_obj and track_obj.tuning else 6
                 staff_events = [e for e in bar.events if e.track_id == track_id]
 
                 events_by_voice = {}
@@ -792,7 +794,7 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
                             _text(fret_prop, "Fret", note.fret)
 
                             string_prop = ET.SubElement(props, "Property", {"name": "String"})
-                            _text(string_prop, "String", note.string - 1)
+                            _text(string_prop, "String", max(0, min(num_strings - 1, num_strings - note.string)))
 
                             midi_prop = ET.SubElement(props, "Property", {"name": "Midi"})
                             _text(midi_prop, "Number", note.pitch)
