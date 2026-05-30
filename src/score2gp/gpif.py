@@ -103,12 +103,15 @@ def _page_setup(parent: ET.Element, score: ScoreIR) -> None:
             _text(eb, "Height", score.layout.engraving_boundaries.height)
 
 
-def _master_track(parent: ET.Element, score: ScoreIR) -> None:
+def _master_track(parent: ET.Element, score: ScoreIR, track_id_map: dict[str, str] | None = None) -> None:
     track_order = []
     if getattr(score, "layout", None) is not None and score.layout.track_order:
         track_order = score.layout.track_order
     else:
         track_order = [t.id for t in score.tracks]
+
+    if track_id_map:
+        track_order = [track_id_map.get(tid, tid) for tid in track_order]
 
     if track_order:
         mt = ET.SubElement(parent, "MasterTrack")
@@ -407,17 +410,7 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
 
         layout_systems = 4
         if getattr(score, "layout", None) is not None:
-            _page_setup(score_node, score)
             layout_systems = score.layout.score_systems_layout
-        else:
-            ps = ET.SubElement(score_node, "PageSetup")
-            _text(ps, "Width", 210.0)
-            _text(ps, "Height", 297.0)
-            _text(ps, "MarginTop", 15.0)
-            _text(ps, "MarginBottom", 15.0)
-            _text(ps, "MarginLeft", 15.0)
-            _text(ps, "MarginRight", 15.0)
-            _text(ps, "Scale", 1.0)
 
         _text(score_node, "ScoreSystemsDefaultLayout", layout_systems)
         _text(score_node, "ScoreSystemsLayout", layout_systems)
@@ -569,11 +562,26 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
                 start_page += pg_count
 
         TAG_ORDER = [
-            "Metadata",
-            "Tempo",
-            "PageSetup",
+            "Title",
+            "SubTitle",
+            "Artist",
+            "Album",
+            "Words",
+            "Music",
+            "WordsAndMusic",
+            "Copyright",
+            "Tabber",
+            "Instructions",
+            "Notices",
+            "FirstPageHeader",
+            "FirstPageFooter",
+            "PageHeader",
+            "PageFooter",
             "ScoreSystemsDefaultLayout",
             "ScoreSystemsLayout",
+            "ScoreZoomPolicy",
+            "ScoreZoom",
+            "MultiVoice",
             "View",
             "Print",
             "Layout",
@@ -590,17 +598,25 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
         score_node[:] = score_children
 
         # Reconstruct flat databases directly under GPIF
-        _master_track(root, score)
-        _tracks(root, score, track_cd_maps)
+        track_id_map = {track.id: str(idx) for idx, track in enumerate(score.tracks)}
+        _master_track(root, score, track_id_map=track_id_map)
+        _tracks(root, score, track_cd_maps, is_relational=True, track_id_map=track_id_map)
 
         master_bars_db = ET.SubElement(root, "MasterBars")
         for bar in score.bars:
-            mb_node = ET.SubElement(master_bars_db, "MasterBar", {"index": str(bar.index)})
-            _text(mb_node, "Time", f"{bar.time_signature.numerator}/{bar.time_signature.denominator}")
+            mb_node = ET.SubElement(master_bars_db, "MasterBar")
             if bar.key_signature is not None:
                 key = ET.SubElement(mb_node, "Key")
-                _text(key, "Fifths", bar.key_signature.fifths)
-                _text(key, "Mode", bar.key_signature.mode)
+                fifths = bar.key_signature.fifths
+                accidental_count = fifths
+                transpose_as = "Sharps"
+                if fifths < 0:
+                    accidental_count = -fifths
+                    transpose_as = "Flats"
+                _text(key, "AccidentalCount", accidental_count)
+                _text(key, "Mode", bar.key_signature.mode.capitalize())
+                _text(key, "TransposeAs", transpose_as)
+            _text(mb_node, "Time", f"{bar.time_signature.numerator}/{bar.time_signature.denominator}")
             if getattr(bar, "tempo", None) is not None:
                 tempo_node = ET.SubElement(mb_node, "Tempo")
                 _text(tempo_node, "Value", bar.tempo.bpm)
@@ -861,9 +877,8 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
                 _text(bar_node, "Voices", " ".join(voice_refs))
                 measure_bar_ids.append(bar_id)
 
-            mb = master_bars_db.find(f"./MasterBar[@index='{bar.index}']")
-            if mb is not None:
-                _text(mb, "Bars", " ".join(measure_bar_ids))
+            mb = list(master_bars_db)[bar.index - 1]
+            _text(mb, "Bars", " ".join(measure_bar_ids))
 
         ROOT_TAG_ORDER = [
             "GPVersion",
@@ -905,10 +920,11 @@ def _tempo(parent: ET.Element, score: ScoreIR) -> None:
         _text(tempo, "Text", score.tempo.text)
 
 
-def _tracks(parent: ET.Element, score: ScoreIR, track_cd_maps: dict[str, dict[str, str]]) -> None:
+def _tracks(parent: ET.Element, score: ScoreIR, track_cd_maps: dict[str, dict[str, str]], is_relational: bool = False, track_id_map: dict[str, str] | None = None) -> None:
     tracks = ET.SubElement(parent, "Tracks")
     for track in score.tracks:
-        node = ET.SubElement(tracks, "Track", {"id": track.id})
+        tid = track_id_map.get(track.id, track.id) if track_id_map else track.id
+        node = ET.SubElement(tracks, "Track", {"id": tid})
         _text(node, "Name", track.name)
         if getattr(track, "color", None) is not None:
             _text(node, "Color", track.color)
@@ -920,10 +936,25 @@ def _tracks(parent: ET.Element, score: ScoreIR, track_cd_maps: dict[str, dict[st
             else:
                 layout_code = 3 if track.tablature_enabled else 1
         _text(node, "SystemsDefautLayout", layout_code)
-        _text(node, "SystemsLayout", layout_code)
 
-        _text(node, "Instrument", track.instrument)
-        _text(node, "Capo", track.capo)
+        if is_relational:
+            total_measures = len(score.bars)
+            sys_size = layout_code if isinstance(layout_code, int) else 3
+            if sys_size <= 0:
+                sys_size = 3
+            num_full = total_measures // sys_size
+            rem = total_measures % sys_size
+            parts = [str(sys_size)] * num_full
+            if rem > 0:
+                parts.append(str(rem))
+            systems_layout_str = " ".join(parts) if parts else str(sys_size)
+            _text(node, "SystemsLayout", systems_layout_str)
+        else:
+            _text(node, "SystemsLayout", layout_code)
+
+        if not is_relational:
+            _text(node, "Instrument", track.instrument)
+            _text(node, "Capo", track.capo)
 
         if getattr(track, "expressions", None) is not None:
             et_node = ET.SubElement(node, "ExpressionTexts")
@@ -960,17 +991,18 @@ def _tracks(parent: ET.Element, score: ScoreIR, track_cd_maps: dict[str, dict[st
             _text(mixer_node, "Mute", str(track.mixer.mute).lower())
             _text(mixer_node, "Solo", str(track.mixer.solo).lower())
 
-        tuning = ET.SubElement(node, "Tuning", {"name": track.tuning.name})
-        for string in sorted(track.tuning.strings, key=lambda item: item.number):
-            ET.SubElement(
-                tuning,
-                "String",
-                {
-                    "number": str(string.number),
-                    "pitch": str(string.pitch),
-                    "name": string.name,
-                },
-            )
+        if not is_relational:
+            tuning = ET.SubElement(node, "Tuning", {"name": track.tuning.name})
+            for string in sorted(track.tuning.strings, key=lambda item: item.number):
+                ET.SubElement(
+                    tuning,
+                    "String",
+                    {
+                        "number": str(string.number),
+                        "pitch": str(string.pitch),
+                        "name": string.name,
+                    },
+                )
 
         # Sounds
         if (
@@ -1016,10 +1048,9 @@ def _tracks(parent: ET.Element, score: ScoreIR, track_cd_maps: dict[str, dict[st
         # Staves, Staff and Properties (Tuning, FretCount, Capo, etc.)
         staves_node = ET.SubElement(node, "Staves")
         staff_node = ET.SubElement(staves_node, "Staff")
-        properties_nodes = [
-            ET.SubElement(staff_node, "Properties"),
-            ET.SubElement(staff_node, "StaffProperties")
-        ]
+        properties_nodes = [ET.SubElement(staff_node, "Properties")]
+        if not is_relational:
+            properties_nodes.append(ET.SubElement(staff_node, "StaffProperties"))
 
         # 1. CapoFret
         for p_node in properties_nodes:
