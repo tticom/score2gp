@@ -437,29 +437,37 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
     for track_node in root.findall(".//Tracks/Track"):
         track_id = track_node.get("id") or "unknown"
         name = _first_text(track_node, ["Name"]) or "Track"
-        instrument = _first_text(track_node, ["Instrument"]) or "guitar"
-        capo = int(_first_text(track_node, ["Capo"]) or 0)
         color = _first_text(track_node, ["Color"])
 
-        # Tuning
-        tuning_node = track_node.find("Tuning")
+        instrument = "guitar"
+        capo = 0
         tuning_name = "Standard"
-        if tuning_node is not None:
-            tuning_name = tuning_node.get("name") or "Standard"
-
         strings: list[TuningString] = []
-        if tuning_node is not None:
-            for s_node in tuning_node.findall("String"):
-                num = int(s_node.get("number") or 1)
-                pitch = int(s_node.get("pitch") or 0)
-                s_name = s_node.get("name") or ""
-                strings.append(TuningString(number=num, pitch=pitch, name=s_name))
 
-        # Staff properties for Balance/FineTuning
         staff_node = track_node.find(".//Staff")
         if staff_node is not None:
+            # Parse Capo from CapoFret property
+            capo_prop = staff_node.find(".//Property[@name='CapoFret']/Fret")
+            if capo_prop is not None and capo_prop.text:
+                capo = int(capo_prop.text)
+
+            # Parse Tuning from Tuning property
             tuning_prop = staff_node.find(".//Property[@name='Tuning']")
             if tuning_prop is not None:
+                inst_node = tuning_prop.find("Instrument")
+                if inst_node is not None and inst_node.text:
+                    instrument = inst_node.text.lower()
+
+                pitches_node = tuning_prop.find("Pitches")
+                if pitches_node is not None and pitches_node.text:
+                    pitches = pitches_node.text.split()
+                    tuning_name = _known_tuning_name(pitches) or "Standard"
+                    for index, pitch_str in enumerate(pitches):
+                        num = len(pitches) - index
+                        pitch = int(pitch_str)
+                        strings.append(TuningString(number=num, pitch=pitch, name=""))
+
+                # Staff properties for Balance/FineTuning
                 balance_node = tuning_prop.find("Balance")
                 finetuning_node = tuning_prop.find("FineTuning")
                 strings.sort(key=lambda s: s.number, reverse=True)
@@ -474,6 +482,19 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
                         if ft != 0.0:
                             s.fine_tune = ft
                 strings.sort(key=lambda s: s.number)
+
+        # Fallback to direct elements under Track if staff is not present or Tuning property is missing
+        if not strings:
+            instrument = _first_text(track_node, ["Instrument"]) or "guitar"
+            capo = int(_first_text(track_node, ["Capo"]) or 0)
+            tuning_node = track_node.find("Tuning")
+            if tuning_node is not None:
+                tuning_name = tuning_node.get("name") or "Standard"
+                for s_node in tuning_node.findall("String"):
+                    num = int(s_node.get("number") or 1)
+                    pitch = int(s_node.get("pitch") or 0)
+                    s_name = s_node.get("name") or ""
+                    strings.append(TuningString(number=num, pitch=pitch, name=s_name))
 
         tuning = Tuning(name=tuning_name, strings=strings)
 
@@ -900,16 +921,27 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
     bars: list[Bar] = []
     master_bars_node = root.find(".//MasterBars")
     if master_bars_node is not None:
-        for mb_node in master_bars_node.findall("MasterBar"):
-            mb_idx = int(mb_node.get("index") or 1)
+        for mb_counter, mb_node in enumerate(master_bars_node.findall("MasterBar"), 1):
+            mb_idx = int(mb_node.get("index") or mb_counter)
             time_str = _first_text(mb_node, ["Time"]) or "4/4"
             num, den = map(int, time_str.split("/"))
 
             key_sig = None
             key_node = mb_node.find("Key")
             if key_node is not None:
-                fifths = int(_first_text(key_node, ["Fifths"]) or 0)
+                fifths_str = _first_text(key_node, ["Fifths"])
+                if fifths_str is not None:
+                    fifths = int(fifths_str)
+                else:
+                    acc_str = _first_text(key_node, ["AccidentalCount"])
+                    acc = int(acc_str) if acc_str is not None else 0
+                    trans = _first_text(key_node, ["TransposeAs"]) or "Sharps"
+                    if "flat" in trans.lower():
+                        fifths = -acc
+                    else:
+                        fifths = acc
                 mode = _first_text(key_node, ["Mode"]) or "major"
+                mode = mode.lower()
                 key_sig = KeySignature(fifths=fifths, mode=mode)
 
             tempo_automation = None
@@ -1338,8 +1370,19 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
             key_sig = None
             key_node = mb_node.find("Key")
             if key_node is not None:
-                fifths = int(_first_text(key_node, ["Fifths"]) or 0)
+                fifths_str = _first_text(key_node, ["Fifths"])
+                if fifths_str is not None:
+                    fifths = int(fifths_str)
+                else:
+                    acc_str = _first_text(key_node, ["AccidentalCount"])
+                    acc = int(acc_str) if acc_str is not None else 0
+                    trans = _first_text(key_node, ["TransposeAs"]) or "Sharps"
+                    if "flat" in trans.lower():
+                        fifths = -acc
+                    else:
+                        fifths = acc
                 mode = _first_text(key_node, ["Mode"]) or "major"
+                mode = mode.lower()
                 key_sig = KeySignature(fifths=fifths, mode=mode)
 
             tempo_automation = None
