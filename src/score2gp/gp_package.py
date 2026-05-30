@@ -756,7 +756,7 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
             fret = int(fret_prop.text) if fret_prop is not None else 0
 
             string_prop = props.find('.//Property[@name="String"]/String') if props is not None else None
-            string = int(string_prop.text) + 1 if string_prop is not None else 1
+            string_idx = int(string_prop.text) if string_prop is not None else 0
 
             midi_prop = props.find('.//Property[@name="Midi"]/Number') if props is not None else None
             pitch = int(midi_prop.text) if midi_prop is not None else 0
@@ -819,15 +819,15 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
                     elif name == "RightHandFingering":
                         rh_fingering = _first_text(prop, ["Fingering"])
 
-            notes[n_id] = Note(
-                string=string,
-                fret=fret,
-                pitch=pitch,
-                techniques=techniques,
-                articulations=articulations,
-                left_hand_fingering=lh_fingering,
-                right_hand_fingering=rh_fingering
-            )
+            notes[n_id] = {
+                "string_idx": string_idx,
+                "fret": fret,
+                "pitch": pitch,
+                "techniques": techniques,
+                "articulations": articulations,
+                "left_hand_fingering": lh_fingering,
+                "right_hand_fingering": rh_fingering
+            }
 
     # 7. Parse Beats
     beats = {}
@@ -845,7 +845,6 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
 
             notes_ref_text = b.find("Notes")
             notes_refs = notes_ref_text.text.split() if notes_ref_text is not None and notes_ref_text.text else []
-            beat_notes = [notes[nid] for nid in notes_refs if nid in notes]
 
             free_text = b.find("FreeText")
             text = free_text.text if free_text is not None else None
@@ -864,7 +863,7 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
                 "duration_obj": r_info["duration_obj"],
                 "tuplet_obj": r_info["tuplet_obj"],
                 "rest": rest,
-                "notes": beat_notes,
+                "notes_refs": notes_refs,
                 "text": text,
                 "brush": brush_dir,
                 "arpeggio": arp_dir,
@@ -894,6 +893,10 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
             }
 
     # 10. Reconstruct Bars
+    track_string_counts = {}
+    for track in tracks:
+        track_string_counts[track.id] = len(track.tuning.strings) if track.tuning else 6
+
     bars: list[Bar] = []
     master_bars_node = root.find(".//MasterBars")
     if master_bars_node is not None:
@@ -980,6 +983,24 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
                         if not beat:
                             continue
 
+                        num_strings = track_string_counts.get(track_id, 6)
+                        resolved_notes = []
+                        for nid in beat["notes_refs"]:
+                            if nid in notes:
+                                n_dict = notes[nid]
+                                physical_string = num_strings - n_dict["string_idx"]
+                                physical_string = max(1, min(num_strings, physical_string))
+                                from .ir import Note
+                                resolved_notes.append(Note(
+                                    string=physical_string,
+                                    fret=n_dict["fret"],
+                                    pitch=n_dict["pitch"],
+                                    techniques=n_dict["techniques"],
+                                    articulations=n_dict["articulations"],
+                                    left_hand_fingering=n_dict["left_hand_fingering"],
+                                    right_hand_fingering=n_dict["right_hand_fingering"]
+                                ))
+
                         from .ir import Timing
                         timing = Timing(
                             bar_index=mb_idx,
@@ -997,7 +1018,7 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
                             id=ev_id,
                             track_id=track_id,
                             timing=timing,
-                            notes=beat["notes"],
+                            notes=resolved_notes,
                             is_rest=beat["rest"],
                             dynamic=beat["dynamic"],
                             text=beat["text"],
