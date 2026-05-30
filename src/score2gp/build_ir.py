@@ -1428,7 +1428,10 @@ def build_ir_with_diagnostics_from_imports(
     candidate_pools = CandidatePools.from_tabraw(tabraw)
     bars: list[Bar] = []
     if part is not None:
+        staves_in_part = {note.staff for measure in part.measures for note in measure.notes if note.staff is not None}
+        target_staff = max(staves_in_part) if staves_in_part else 1
         for measure in part.measures:
+            measure.notes = [note for note in measure.notes if note.staff is None or note.staff == target_staff]
             bar_warnings: list[WarningItem] = []
             events = _measure_events(measure, candidate_pools, bar_warnings)
             warnings.extend(bar_warnings)
