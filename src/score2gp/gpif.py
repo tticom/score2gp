@@ -644,7 +644,9 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
                     "repeat-end": "RepeatEnd",
                 }
                 _text(mb_node, "Barline", barline_map.get(bar.barline, "Simple"))
-                if bar.barline == "repeat-start":
+                if bar.barline == "double":
+                    ET.SubElement(mb_node, "DoubleBar")
+                elif bar.barline == "repeat-start":
                     ET.SubElement(mb_node, "RepeatStart")
                 elif bar.barline == "repeat-end":
                     repeat_count = getattr(bar, "repeat_count", None) or 2
@@ -713,8 +715,7 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
                         beat_node = ET.SubElement(beats_db, "Beat", {"id": beat_id})
 
                         _text(beat_node, "Dynamic", event.dynamic.upper() if event.dynamic else "MF")
-                        if event.is_rest:
-                            _text(beat_node, "Rest", "")
+
 
                         nd_val = event.timing.notated_duration.value if event.timing.notated_duration else "quarter"
                         dots = event.timing.notated_duration.dots if event.timing.notated_duration else 0
@@ -739,6 +740,9 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
 
                         rhythm_ref = rhythms_map[rhythm_key]
                         ET.SubElement(beat_node, "Rhythm", {"ref": rhythm_ref})
+
+                        _text(beat_node, "TransposedPitchStemOrientation", "Downward" if event.is_rest else "Upward")
+                        _text(beat_node, "ConcertPitchStemOrientation", "Undefined")
 
                         if event.text:
                             _text(beat_node, "FreeText", event.text)
@@ -865,6 +869,19 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
 
                         if note_refs:
                             _text(beat_node, "Notes", " ".join(note_refs))
+
+                        # Default Beat Properties
+                        beat_props = ET.SubElement(beat_node, "Properties")
+                        v_prop = ET.SubElement(beat_props, "Property", {"name": "PrimaryPickupVolume"})
+                        _text(v_prop, "Float", "0.500000")
+                        t_prop = ET.SubElement(beat_props, "Property", {"name": "PrimaryPickupTone"})
+                        _text(t_prop, "Float", "0.500000")
+
+                        # Default Beat XProperties
+                        beat_xprops = ET.SubElement(beat_node, "XProperties")
+                        xp1 = ET.SubElement(beat_xprops, "XProperty", {"id": "1124204546"})
+                        _text(xp1, "Int", "1")
+
                         beat_refs.append(beat_id)
 
                     _text(voice_node, "Beats", " ".join(beat_refs))
@@ -895,12 +912,241 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
             "Rhythms",
             "ScoreViews"
         ]
+        _apply_relational_defaults(root)
+
         root_children = list(root)
         root_children.sort(key=lambda x: ROOT_TAG_ORDER.index(x.tag) if x.tag in ROOT_TAG_ORDER else len(ROOT_TAG_ORDER))
         root[:] = root_children
 
         ET.indent(root, space="  ")
         return ET.tostring(root, encoding="utf-8", xml_declaration=True)
+
+
+def _apply_relational_defaults(root: ET.Element) -> None:
+    # 1. MasterTrack defaults
+    mt = root.find("MasterTrack")
+    if mt is not None:
+        if mt.find("Automations") is None:
+            autos = ET.SubElement(mt, "Automations")
+            auto = ET.SubElement(autos, "Automation")
+            _text(auto, "Type", "Tempo")
+            _text(auto, "Linear", "false")
+            _text(auto, "Bar", "0")
+            _text(auto, "Position", "0")
+            _text(auto, "Visible", "true")
+            _text(auto, "Value", "120 2")
+        if mt.find("RSE") is None:
+            rse = ET.SubElement(mt, "RSE")
+            master = ET.SubElement(rse, "Master")
+
+            eff1 = ET.SubElement(master, "Effect", {"id": "M06_DynamicAnalogDynamic"})
+            ET.SubElement(eff1, "ByPass")
+            _text(eff1, "Parameters", "0 0 0.8 0 0.4 0.6 0.5 0.5")
+
+            eff2 = ET.SubElement(master, "Effect", {"id": "M03_StudioReverbRoomStudioA"})
+            ET.SubElement(eff2, "ByPass")
+            _text(eff2, "Parameters", "0 0 0 0 0")
+
+            eff3 = ET.SubElement(master, "Effect", {"id": "M08_GraphicEQ10Band"})
+            ET.SubElement(eff3, "ByPass")
+            _text(eff3, "Parameters", "0 0 0.5 0.5 0.5 0.5 0.5 0.5 0.5 0.5 0.5 0.5 0.5")
+
+            eff4 = ET.SubElement(master, "Effect", {"id": "I01_VolumeAndPan"})
+            _text(eff4, "Parameters", "0.76 0.5")
+
+    # 2. Tracks defaults
+    tracks = root.find("Tracks")
+    if tracks is not None:
+        for track in tracks.findall("Track"):
+            if track.find("ShortName") is None:
+                _text(track, "ShortName", "el.guit.")
+            if track.find("Color") is None:
+                _text(track, "Color", "235 152 125")
+            if track.find("AutoBrush") is None:
+                ET.SubElement(track, "AutoBrush")
+            if track.find("PalmMute") is None:
+                _text(track, "PalmMute", "0.3")
+            if track.find("AutoAccentuation") is None:
+                _text(track, "AutoAccentuation", "0.2")
+            if track.find("PlayingStyle") is None:
+                _text(track, "PlayingStyle", "StringedPick")
+            if track.find("UseOneChannelPerString") is None:
+                ET.SubElement(track, "UseOneChannelPerString")
+            if track.find("IconId") is None:
+                _text(track, "IconId", "4")
+            if track.find("InstrumentSet") is None:
+                iset = ET.SubElement(track, "InstrumentSet")
+                _text(iset, "Name", "Electric Guitar")
+                _text(iset, "Type", "electricGuitar")
+                _text(iset, "LineCount", "5")
+                elements = ET.SubElement(iset, "Elements")
+                element = ET.SubElement(elements, "Element")
+                _text(element, "Name", "Pitched")
+                _text(element, "Type", "pitched")
+                _text(element, "SoundbankName", "")
+                articulations = ET.SubElement(element, "Articulations")
+                articulation = ET.SubElement(articulations, "Articulation")
+                _text(articulation, "Name", "")
+                _text(articulation, "StaffLine", "0")
+                _text(articulation, "Noteheads", "noteheadBlack noteheadHalf noteheadWhole")
+                _text(articulation, "TechniquePlacement", "outside")
+                _text(articulation, "TechniqueSymbol", "")
+                _text(articulation, "InputMidiNumbers", "")
+                _text(articulation, "OutputRSESound", "")
+                _text(articulation, "OutputMidiNumber", "0")
+            if track.find("Transpose") is None:
+                trans = ET.SubElement(track, "Transpose")
+                _text(trans, "Chromatic", "0")
+                _text(trans, "Octave", "-1")
+            if track.find("RSE") is None:
+                trse = ET.SubElement(track, "RSE")
+                cstrip = ET.SubElement(trse, "ChannelStrip", {"version": "E56"})
+                _text(cstrip, "Parameters", "0.5 0.5 0.5 0.5 0.5 0.5 0.5 0.5 0.5 0 0.5 0.5 0.795 0.5 0.5 0.5")
+                automations = ET.SubElement(cstrip, "Automations")
+
+                auto1 = ET.SubElement(automations, "Automation")
+                _text(auto1, "Type", "DSPParam_11")
+                _text(auto1, "Linear", "false")
+                _text(auto1, "Bar", "0")
+                _text(auto1, "Position", "0")
+                _text(auto1, "Visible", "true")
+                _text(auto1, "Value", "0.5")
+
+                auto2 = ET.SubElement(automations, "Automation")
+                _text(auto2, "Type", "DSPParam_12")
+                _text(auto2, "Linear", "false")
+                _text(auto2, "Bar", "0")
+                _text(auto2, "Position", "0")
+                _text(auto2, "Visible", "true")
+                _text(auto2, "Value", "0.67")
+            if track.find("ForcedSound") is None:
+                _text(track, "ForcedSound", "-1")
+            if track.find("Sounds") is None:
+                sounds = ET.SubElement(track, "Sounds")
+                sound = ET.SubElement(sounds, "Sound")
+                _text(sound, "Name", "Clean Strat")
+                _text(sound, "Label", "Clean Strat")
+                _text(sound, "Path", "Stringed/Electric Guitars/Clean Guitar")
+                _text(sound, "Role", "Factory")
+                midi = ET.SubElement(sound, "MIDI")
+                _text(midi, "LSB", "0")
+                _text(midi, "MSB", "0")
+                _text(midi, "Program", "27")
+                sound_rse = ET.SubElement(sound, "RSE")
+                _text(sound_rse, "SoundbankPatch", "Strat-Guitar")
+                _text(sound_rse, "ElementsSettings", "")
+                pickups = ET.SubElement(sound_rse, "Pickups")
+                _text(pickups, "OverloudPosition", "1")
+                _text(pickups, "Volumes", "1 1")
+                _text(pickups, "Tones", "1 1")
+                effchain = ET.SubElement(sound_rse, "EffectChain")
+
+                eff1 = ET.SubElement(effchain, "Effect", {"id": "A01_ComboTop30"})
+                _text(eff1, "Parameters", "0.61 0.59 0.38 0.511667 0.21 0.29 0 0")
+
+                eff2 = ET.SubElement(effchain, "Effect", {"id": "E30_EqGEq"})
+                _text(eff2, "Parameters", "0.5 0.5 0.5 0.5 0.5 0.5 0.5 0.541667")
+            if track.find("MidiConnection") is None:
+                mconn = ET.SubElement(track, "MidiConnection")
+                _text(mconn, "Port", "0")
+                _text(mconn, "PrimaryChannel", "0")
+                _text(mconn, "SecondaryChannel", "1")
+                _text(mconn, "ForeOneChannelPerString", "false")
+            if track.find("PlaybackState") is None:
+                _text(track, "PlaybackState", "Default")
+            if track.find("AudioEngineState") is None:
+                _text(track, "AudioEngineState", "RSE")
+            if track.find("Lyrics") is None:
+                lyrics = ET.SubElement(track, "Lyrics", {"dispatched": "true"})
+                for _ in range(5):
+                    line = ET.SubElement(lyrics, "Line")
+                    _text(line, "Text", "")
+                    _text(line, "Offset", "0")
+            if track.find("Automations") is None:
+                tautos = ET.SubElement(track, "Automations")
+                tauto = ET.SubElement(tautos, "Automation")
+                _text(tauto, "Type", "Sound")
+                _text(tauto, "Linear", "false")
+                _text(tauto, "Bar", "0")
+                _text(tauto, "Position", "0")
+                _text(tauto, "Visible", "true")
+                _text(tauto, "Value", "Stringed/Electric Guitars/Clean Guitar;Clean Strat;Factory")
+
+            staves = track.find("Staves")
+            if staves is not None:
+                for staff in staves.findall("Staff"):
+                    props = staff.find("Properties")
+                    if props is not None:
+                        tuning_prop = None
+                        for p in props.findall("Property"):
+                            if p.get("name") == "Tuning":
+                                tuning_prop = p
+                        if tuning_prop is not None:
+                            if tuning_prop.find("Flat") is None:
+                                ET.SubElement(tuning_prop, "Flat")
+                            lbl = tuning_prop.find("Label")
+                            if lbl is not None:
+                                lbl.text = ""
+
+                        default_props = ["ChordCollection", "ChordWorkingSet", "DiagramCollection", "DiagramWorkingSet"]
+                        for dp_name in default_props:
+                            dp = None
+                            for p in props.findall("Property"):
+                                if p.get("name") == dp_name:
+                                    dp = p
+                            if dp is None:
+                                dp = ET.SubElement(props, "Property", {"name": dp_name})
+                                ET.SubElement(dp, "Items")
+
+                        tf = None
+                        for p in props.findall("Property"):
+                            if p.get("name") == "TuningFlat":
+                                tf = p
+                        if tf is None:
+                            tf = ET.SubElement(props, "Property", {"name": "TuningFlat"})
+                            ET.SubElement(tf, "Enable")
+
+                        if props.find("Name") is None:
+                            _text(props, "Name", "Standard")
+
+            TRACK_TAG_ORDER = [
+                "Name", "ShortName", "Color", "SystemsDefautLayout", "SystemsLayout",
+                "AutoBrush", "PalmMute", "AutoAccentuation", "PlayingStyle", "UseOneChannelPerString",
+                "IconId", "InstrumentSet", "Transpose", "RSE", "ForcedSound", "Sounds",
+                "MidiConnection", "PlaybackState", "AudioEngineState", "Lyrics", "Staves", "Automations"
+            ]
+            track_children = list(track)
+            track_children.sort(key=lambda x: TRACK_TAG_ORDER.index(x.tag) if x.tag in TRACK_TAG_ORDER else len(TRACK_TAG_ORDER))
+            track[:] = track_children
+
+    # 3. MasterBars defaults
+    master_bars = root.find("MasterBars")
+    if master_bars is not None:
+        for mb in master_bars.findall("MasterBar"):
+            if mb.find("XProperties") is None:
+                xprops = ET.SubElement(mb, "XProperties")
+                xp_ids = [
+                    ("1124139010", "8"),
+                    ("1124139264", "4"),
+                    ("1124139265", "4")
+                ] + [(str(1124139266 + idx), "0") for idx in range(30)]
+                for xpid, val in xp_ids:
+                    xp = ET.SubElement(xprops, "XProperty", {"id": xpid})
+                    _text(xp, "Int", val)
+
+            MB_TAG_ORDER = ["Key", "Time", "DoubleBar", "RepeatStart", "Repeat", "Bars", "XProperties"]
+            mb_children = list(mb)
+            mb_children.sort(key=lambda x: MB_TAG_ORDER.index(x.tag) if x.tag in MB_TAG_ORDER else len(MB_TAG_ORDER))
+            mb[:] = mb_children
+
+    # 4. Bars defaults
+    bars = root.find("Bars")
+    if bars is not None:
+        for bar in bars.findall("Bar"):
+            if bar.find("XProperties") is None:
+                xprops = ET.SubElement(bar, "XProperties")
+                xp = ET.SubElement(xprops, "XProperty", {"id": "1124139520"})
+                _text(xp, "Double", "0.340000")
 
 
 def _metadata(parent: ET.Element, score: ScoreIR) -> None:
