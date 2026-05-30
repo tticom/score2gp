@@ -957,6 +957,25 @@ class ScoreIR(BaseModel):
                             f"expected {expected_pitch} from tuning"
                         )
 
+                    # Check standard guitar tuning pitch range
+                    pitches = {s.number: s.pitch for s in track.tuning.strings}
+                    is_standard_guitar = (
+                        len(track.tuning.strings) == 6
+                        and pitches.get(6) == 40
+                        and pitches.get(5) == 45
+                        and pitches.get(4) == 50
+                        and pitches.get(3) == 55
+                        and pitches.get(2) == 59
+                        and pitches.get(1) == 64
+                    )
+                    if is_standard_guitar:
+                        if note.pitch < 40 or note.pitch > 88:
+                            errors.append(
+                                f"event '{event.id}' note string {note.string} has sounding pitch {note.pitch}, "
+                                f"which is outside the physically playable pitch range of a standard guitar "
+                                f"(E2 sounding / MIDI 40 to E6 sounding / MIDI 88)"
+                            )
+
                 _validate_technique_links(event.id, event.techniques, event_ids, errors)
                 for note in event.notes:
                     _validate_technique_links(event.id, note.techniques, event_ids, errors)
