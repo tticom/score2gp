@@ -1,0 +1,13 @@
+# Domain Test Matrix
+
+This matrix maps verified guitar domain facts, project decisions, and constraints to specific automated stage integration tests in the test suite.
+
+| Domain Fact / Constraint | Source Document | Stage Tested | Test File | Expected Result | Failure Meaning |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Physical Guitar Limits** (Standard tuning pitches within `[40, 88]`) | `guitar_pitch_range.md` | Stage 4: ScoreIR Model | `test_guitar_pitch_validation.py` | Pitches outside `[40, 88]` are rejected with readable semantic errors. | Validator fails to enforce physical playability limits, allowing impossible pitches to pass. |
+| **Clef Transposition Reality** (treble clef written G3 is 5 steps below E4 bottom line) | `guitar_notation_guide.md`, `guitar_pitch_range.md` | Stage 5: Output Writer | `test_intermediate_products.py` | Relational ConcertPitch Octave = `pitch // 12` and TransposedPitch Octave = `(pitch // 12) + 1`. | Note displays 1 octave too low (written G2 with 5-6 ledger lines instead of G3 with 2 ledger lines). |
+| **Guitar String Count** (A standard guitar has 6 strings, 1 to 6) | `tablature-semantics.md` | Stage 2: Tab Extraction | `test_tablature_semantics.py` | String numbers outside `[1, 6]` are rejected or mapped correctly. | Invalid string assignment allows impossible tab layouts to be compiled. |
+| **Fret Range Limits** (Standard frets must be integers within `[0, 24]`) | `tablature-semantics.md` | Stage 2: Tab Extraction | `test_tablature_semantics.py` | Fret values outside standard boundaries are correctly clamped or rejected. | Invalid frets cause out-of-bounds fret numbers to be written to output files. |
+| **Measure Timing Capacity** (Measures cannot be overfull) | `timing-and-voices.md` | Stage 4: Timing & Voices | `test_timing_and_voices.py` | Overfull bars trigger unrecoverable timing failures or blocking errors. | Overfull measures compile silently, causing audio playback clipping or layout corruption. |
+| **Simultaneous Chord Attack** (Notes in a chord share onset) | `timing-and-voices.md` | Stage 4: Timing & Voices | `test_timing_and_voices.py` | Chords in the ScoreIR have perfectly synchronized onset tick counts. | Desynchronized chord onsets cause arpeggiation or incorrect polyphony layering. |
+| **4/4 Eighth-Note Beaming** (4/4 eight eighth notes beamed as `[4, 4]`) | `notation-readability.md` | Stage 5: Output Writer | `test_intermediate_products.py` | Beat XProperty `1124204546` is selectively serialized to prevent crossing the bar midpoint. | Emits one continuous beam group of eight (`[8]`), hiding the middle of the 4/4 bar. |

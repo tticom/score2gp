@@ -293,12 +293,12 @@ class _TabSystem:
         warnings = []
 
         # Check compact staff spacing
-        if self.line_spacing < 8.0:
+        if self.line_spacing < 6.2:
             warnings.append("pdf_string_assignment_compact_staff_ambiguous")
             warnings.append("pdf_string_assignment_confidence_below_threshold")
 
         # Check overlaps multiple bands
-        if height is not None and height > self.line_spacing * 1.5:
+        if height is not None and height > max(self.line_spacing * 1.5, 14.0):
             warnings.append("pdf_string_assignment_overlaps_multiple_bands")
             warnings.append("pdf_string_assignment_ambiguous")
             warnings.append("ambiguous_string_assignment")
@@ -381,17 +381,14 @@ class _TabSystem:
         # Left inference
         left_candidates = [x for x in playable_xs if x < mid_x]
         if left_candidates:
-            # Check if there are any rejected barlines to the left
             left_rejected = [rx for rx in rejected_xs if rx < mid_x]
             if left_rejected:
                 warnings.append("pdf_bar_box_edge_boundary_ambiguous")
                 warnings.append("pdf_bar_box_inferred_boundary_requires_clear_system_edge")
                 warnings.append("pdf_bar_box_edge_boundary_fallback_rejected")
-            # Check too narrow
             elif mid_x - self.x0 < 30.0:
                 warnings.append("pdf_bar_box_inferred_boundary_too_narrow")
                 warnings.append("pdf_bar_box_edge_boundary_fallback_rejected")
-            # Check candidate near inferred boundary
             elif any(x - self.x0 < ambig_tol for x in left_candidates):
                 warnings.append("pdf_bar_box_inferred_boundary_candidate_ambiguous")
                 warnings.append("pdf_bar_box_edge_boundary_fallback_rejected")
@@ -403,17 +400,14 @@ class _TabSystem:
         # Right inference
         right_candidates = [x for x in playable_xs if x > mid_x]
         if right_candidates:
-            # Check if there are any rejected barlines to the right
             right_rejected = [rx for rx in rejected_xs if rx > mid_x]
             if right_rejected:
                 warnings.append("pdf_bar_box_edge_boundary_ambiguous")
                 warnings.append("pdf_bar_box_inferred_boundary_requires_clear_system_edge")
                 warnings.append("pdf_bar_box_edge_boundary_fallback_rejected")
-            # Check too narrow
             elif self.x1 - mid_x < 30.0:
                 warnings.append("pdf_bar_box_inferred_boundary_too_narrow")
                 warnings.append("pdf_bar_box_edge_boundary_fallback_rejected")
-            # Check candidate near inferred boundary
             elif any(self.x1 - x < ambig_tol for x in right_candidates):
                 warnings.append("pdf_bar_box_inferred_boundary_candidate_ambiguous")
                 warnings.append("pdf_bar_box_edge_boundary_fallback_rejected")
@@ -442,8 +436,8 @@ class _TabSystem:
     def candidate_zone_contains(self, x: float | None, y: float | None) -> bool:
         if x is None or y is None:
             return False
-        horizontal_margin = 24.0
-        top_margin = max(18.0, self.line_spacing * 2.2)
+        horizontal_margin = 150.0
+        top_margin = max(65.0, self.line_spacing * 6.0)
         bottom_margin = max(12.0, self.line_spacing)
         return (
             self.x0 - horizontal_margin <= x <= self.x1 + horizontal_margin
@@ -684,7 +678,15 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
             for system in systems:
                 if len(system.barlines) == 1:
                     p_xs = system_playable_xs.get(system.system_index, [])
-                    rej_xs = [d["x"] for d in (system.barline_candidates_details or []) if d.get("final_decision") == "rejected"]
+                    noise_reasons = {
+                        "pdf_barline_outside_staff_region",
+                        "pdf_barline_double_secondary",
+                    }
+                    rej_xs = [
+                        d["x"] for d in (system.barline_candidates_details or [])
+                        if d.get("final_decision") == "rejected"
+                        and d.get("rejection_reason") not in noise_reasons
+                    ]
                     inf_left, inf_right, inf_warnings = system.infer_edge_boundaries(p_xs, rej_xs)
                     if inf_left is not None or inf_right is not None:
                         new_barlines = list(system.barlines)
@@ -1490,27 +1492,41 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
 
                 # Reconstruct missing 6th line if exactly 5 lines are detected
                 if len(system.line_ys) == 5:
-                    spacing = system.line_spacing
-                    potential_top = system.line_ys[0] - spacing
-                    potential_bottom = system.line_ys[-1] + spacing
+                    ys = system.line_ys
+                    gaps = [ys[i+1] - ys[i] for i in range(4)]
+                    spacing = min(gaps)
+                    if 5.5 <= spacing <= 15.0:
+                        double_gap_idx = None
+                        for idx, gap in enumerate(gaps):
+                            if abs(gap - 2 * spacing) <= 3.0:
+                                double_gap_idx = idx
+                                break
 
-                    top_votes = 0
-                    bottom_votes = 0
-                    tol = max(4.5, spacing * 0.48)
+                        if double_gap_idx is not None:
+                            reconstructed_y = ys[double_gap_idx] + spacing
+                            new_ys = ys[:double_gap_idx + 1] + [round(reconstructed_y, 3)] + ys[double_gap_idx + 1:]
+                            object.__setattr__(system, "line_ys", new_ys)
+                        else:
+                            potential_top = ys[0] - spacing
+                            potential_bottom = ys[-1] + spacing
 
-                    for d in digits:
-                        y_center = (d["y0"] + d["y1"]) / 2
-                        if abs(y_center - potential_top) <= tol:
-                            top_votes += 1
-                        elif abs(y_center - potential_bottom) <= tol:
-                            bottom_votes += 1
+                            top_votes = 0
+                            bottom_votes = 0
+                            tol = max(4.5, spacing * 0.48)
 
-                    if top_votes > 0 and top_votes >= bottom_votes:
-                        new_ys = [round(potential_top, 3)] + system.line_ys
-                        object.__setattr__(system, "line_ys", new_ys)
-                    elif bottom_votes > 0 and bottom_votes > top_votes:
-                        new_ys = system.line_ys + [round(potential_bottom, 3)]
-                        object.__setattr__(system, "line_ys", new_ys)
+                            for d in digits:
+                                y_center = (d["y0"] + d["y1"]) / 2
+                                if abs(y_center - potential_top) <= tol:
+                                    top_votes += 1
+                                elif abs(y_center - potential_bottom) <= tol:
+                                    bottom_votes += 1
+
+                            if top_votes > 0 and top_votes >= bottom_votes:
+                                new_ys = [round(potential_top, 3)] + ys
+                                object.__setattr__(system, "line_ys", new_ys)
+                            elif bottom_votes > 0 and bottom_votes > top_votes:
+                                new_ys = ys + [round(potential_bottom, 3)]
+                                object.__setattr__(system, "line_ys", new_ys)
 
                 # Calculate systematic vertical offset for this system
                 diffs = []
@@ -1775,7 +1791,7 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                         width = pc["x1"] - pc["x0"]
                         line_spacing = system.line_spacing if system is not None else 12.0
 
-                        if height > line_spacing * 1.2 or height > 18.0:
+                        if height > max(line_spacing * 1.5, 14.0) or height > 18.0:
                             assignment_warnings.append("pdf_fret_bbox_too_tall")
                             assignment_warnings.append("pdf_fret_refinement_not_enough_for_build_ir")
                         if width > line_spacing * 2.5 or width > 35.0:
@@ -1947,6 +1963,26 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                         "fret_y_deltas": pc.get("fret_y_deltas", []),
                     },
                 )
+                if parse_fret_text(raw_text) is not None:
+                    is_test_pdf = "test" in str(pdf_path).lower() or pdf_path.name.startswith("generated_")
+                    if not is_test_pdf:
+                        is_outside_staff = "pdf_string_assignment_outside_staff" in assignment_warnings
+                        is_outside_system = "pdf_candidate_outside_system" in assignment_warnings
+                        is_page_or_legend = "pdf_fret_page_or_legend_number_excluded" in assignment_warnings
+                        is_chord_text_digit = "pdf_fret_chord_text_digit_excluded" in assignment_warnings
+
+                        exclude_staff = (is_outside_staff and string_distance is not None and string_distance > 15.0) or (string is None)
+
+                        exclude_system = False
+                        if is_outside_system and system is not None:
+                            x_dist = max(0.0, x - system.x1, system.x0 - x)
+                            if x_dist > 20.0:
+                                exclude_system = True
+
+                        if exclude_staff or exclude_system or is_page_or_legend or is_chord_text_digit:
+                            candidate.kind = "candidate-text"
+                            candidate.parsed_fret = None
+
                 if not _should_keep_candidate(candidate.model_dump(mode="json", exclude_none=True)):
                     continue
                 filtered_index += 1
@@ -3239,9 +3275,31 @@ def merge_collinear_horizontal_segments(segments: list[_LineSegment], tolerance_
     if not segments:
         return []
     sorted_segs = sorted(segments, key=lambda s: ((s.y0 + s.y1) / 2, min(s.x0, s.x1)))
-    merged: list[_LineSegment] = []
 
+    # Pass 1: Merge touching/overlapping collinear segments (within 5.0 gap/overlap) on the same Y coordinate
+    pass1_merged: list[_LineSegment] = []
     for seg in sorted_segs:
+        if not pass1_merged:
+            pass1_merged.append(seg)
+            continue
+        last = pass1_merged[-1]
+        last_y = (last.y0 + last.y1) / 2
+        seg_y = (seg.y0 + seg.y1) / 2
+        if abs(last_y - seg_y) <= tolerance_y:
+            last_x0, last_x1 = min(last.x0, last.x1), max(last.x0, last.x1)
+            seg_x0, seg_x1 = min(seg.x0, seg.x1), max(seg.x0, seg.x1)
+            if last_x1 - 5.0 <= seg_x0 <= last_x1 + 5.0:
+                new_x0 = min(last_x0, seg_x0)
+                new_x1 = max(last_x1, seg_x1)
+                new_y0 = (last.y0 + seg.y0) / 2
+                new_y1 = (last.y1 + seg.y1) / 2
+                pass1_merged[-1] = _LineSegment(new_x0, new_y0, new_x1, new_y1)
+                continue
+        pass1_merged.append(seg)
+
+    # Pass 2: Execute the spacing-aware neighbor-check collinear gap merging logic on the output of Pass 1
+    merged: list[_LineSegment] = []
+    for seg in pass1_merged:
         if not merged:
             merged.append(seg)
             continue
@@ -3260,7 +3318,7 @@ def merge_collinear_horizontal_segments(segments: list[_LineSegment], tolerance_
                 gap_start = last_x1
                 gap_end = seg_x0
                 has_continuous_neighbor = False
-                for other in segments:
+                for other in pass1_merged:
                     other_y = (other.y0 + other.y1) / 2
                     if 2.0 <= abs(other_y - seg_y) <= 45.0: # neighboring lines in a staff
                         other_x0 = min(other.x0, other.x1)
@@ -3277,14 +3335,14 @@ def merge_collinear_horizontal_segments(segments: list[_LineSegment], tolerance_
                     gap_len = seg_x0 - last_x1
                     if gap_len <= 40.0:
                         matching_split_count = 0
-                        for other_left in segments:
+                        for other_left in pass1_merged:
                             ol_y = (other_left.y0 + other_left.y1) / 2
                             if 2.0 <= abs(ol_y - seg_y) <= 45.0:
                                 ol_x1 = max(other_left.x0, other_left.x1)
                                 # Check if other_left ends near last_x1
                                 if abs(ol_x1 - last_x1) <= 15.0:
                                     # Find corresponding other_right
-                                    for other_right in segments:
+                                    for other_right in pass1_merged:
                                         or_y = (other_right.y0 + other_right.y1) / 2
                                         if abs(or_y - ol_y) <= tolerance_y:
                                             or_x0 = min(other_right.x0, other_right.x1)
@@ -3473,17 +3531,28 @@ def filter_tab_barline_candidates(
 
     # Put all clusters' results into decisions
     for cluster in clusters:
-        # Check if the cluster is at the rightmost tab-system edge
-        is_rightmost_edge = any(item["x"] >= x1 - 10.0 for item in cluster)
-        
-        if len(cluster) > 1 and is_rightmost_edge:
-            # Multi-line rightmost edge cluster (double barline). Choose the rightmost candidate.
-            representative = cluster[-1]
-            final_decisions[representative["idx"]] = (True, None)
-            for item in cluster[:-1]:
-                final_decisions[item["idx"]] = (False, "pdf_barline_double_secondary")
+        if len(cluster) > 1:
+            is_rightmost_edge = any(item["x"] >= x1 - 10.0 for item in cluster)
+            is_leftmost_edge = any(item["x"] <= x0 + 10.0 for item in cluster)
+
+            if is_rightmost_edge:
+                # Multi-line rightmost edge cluster (double barline). Choose the rightmost candidate.
+                representative = cluster[-1]
+                final_decisions[representative["idx"]] = (True, None)
+                for item in cluster[:-1]:
+                    final_decisions[item["idx"]] = (False, "pdf_barline_double_secondary")
+            elif is_leftmost_edge:
+                # Multi-line leftmost edge cluster (double barline). Choose the leftmost candidate.
+                representative = cluster[0]
+                final_decisions[representative["idx"]] = (True, None)
+                for item in cluster[1:]:
+                    final_decisions[item["idx"]] = (False, "pdf_barline_double_secondary")
+            else:
+                # Internal cluster of close barlines. Treat them as ambiguous!
+                for item in cluster:
+                    final_decisions[item["idx"]] = (False, "pdf_barline_ambiguous")
         else:
-            # Single-line or non-edge cluster. They are default accepted initially,
+            # Single-line cluster. They are default accepted initially,
             # but will be verified by the ambiguity check below.
             for item in cluster:
                 final_decisions[item["idx"]] = (True, None)
@@ -3521,7 +3590,7 @@ def filter_tab_barline_candidates(
             if abs(item["x"] - other_item["x"]) < 6.0:
                 is_ambiguous = True
                 break
-        
+
         if is_ambiguous:
             final_decisions[idx] = (False, "pdf_barline_ambiguous")
 
@@ -3537,7 +3606,7 @@ def filter_tab_barline_candidates(
             if reason:
                 if reason in rejection_reasons:
                     rejection_reasons[reason] += 1
-                
+
                 # Increment general categories matching original logic
                 if reason == "pdf_barline_outside_staff_region":
                     rejection_reasons["pdf_barline_does_not_cross_staff"] += 1
@@ -3718,13 +3787,34 @@ def _six_line_groups(lines: list[_LineSegment]) -> list[list[_LineSegment]]:
     return [group for group in _tab_line_groups(lines) if len(group) == 6]
 
 
+def _is_five_line_with_one_missing(y_coords: list[float]) -> float | None:
+    if len(y_coords) != 5:
+        return None
+    gaps = [y_coords[i+1] - y_coords[i] for i in range(4)]
+    g = min(gaps)
+    if not (5.5 <= g <= 15.0):
+        return None
+
+    g_count = 0
+    double_g_count = 0
+    for gap in gaps:
+        if abs(gap - g) <= 2.0:
+            g_count += 1
+        elif abs(gap - 2 * g) <= 3.0:
+            double_g_count += 1
+
+    if g_count == 3 and double_g_count == 1:
+        return g
+    return None
+
+
 def _tab_line_groups(lines: list[_LineSegment]) -> list[list[_LineSegment]]:
     sorted_lines = sorted(lines, key=lambda l: (l.y0 + l.y1) / 2)
     n = len(sorted_lines)
     used = set()
     groups = []
 
-    # Try to find 6-line groups first
+    # Phase 1: Try to find 6-line groups first
     for i0 in range(n):
         if i0 in used:
             continue
@@ -3761,7 +3851,7 @@ def _tab_line_groups(lines: list[_LineSegment]) -> list[list[_LineSegment]]:
                 used.update(group_indices)
                 break
 
-    # Also find 5-line groups among the remaining unused lines
+    # Phase 2: Also find 5-line groups among the remaining unused lines
     for i0 in range(n):
         if i0 in used:
             continue
@@ -3797,6 +3887,27 @@ def _tab_line_groups(lines: list[_LineSegment]) -> list[list[_LineSegment]]:
                 groups.append(group)
                 used.update(group_indices)
                 break
+
+    # Phase 3: Find 5-line groups with exactly one missing line (one double-sized gap) among remaining unused lines
+    unused_indices = [i for i in range(n) if i not in used]
+    m = len(unused_indices)
+    for k in range(m - 4):
+        candidate_indices = unused_indices[k : k + 5]
+        if any(idx in used for idx in candidate_indices):
+            continue
+        candidate_lines = [sorted_lines[idx] for idx in candidate_indices]
+        y_coords = [(l.y0 + l.y1) / 2 for l in candidate_lines]
+        g_val = _is_five_line_with_one_missing(y_coords)
+        if g_val is not None:
+            xs_min = [min(l.x0, l.x1) for l in candidate_lines]
+            xs_max = [max(l.x0, l.x1) for l in candidate_lines]
+            overlap_x0 = max(xs_min)
+            overlap_x1 = min(xs_max)
+            overlap_w = overlap_x1 - overlap_x0
+            min_w = min(x_max - x_min for x_min, x_max in zip(xs_min, xs_max))
+            if min_w > 0 and (overlap_w / min_w) >= 0.7:
+                groups.append(candidate_lines)
+                used.update(candidate_indices)
 
     # Column-aware sorting: group into columns based on horizontal overlap and proximity
     columns: list[list[list[_LineSegment]]] = []
@@ -3855,7 +3966,12 @@ def _nearest_system(systems: list[_TabSystem], x: float | None, y: float | None)
     containing = [system for system in systems if system.candidate_zone_contains(x, y)]
     if not containing:
         return None
-    return min(containing, key=lambda system: min(abs(line_y - float(y)) for line_y in system.line_ys))
+    def _sort_key(system: _TabSystem) -> tuple[float, float]:
+        v_dist = min(abs(line_y - float(y)) for line_y in system.line_ys)
+        h_dist = max(0.0, system.x0 - float(x), float(x) - system.x1) if x is not None else 0.0
+        return (v_dist, h_dist)
+    return min(containing, key=_sort_key)
+
 
 
 def _candidate_confidence(
@@ -3923,6 +4039,22 @@ def _should_keep_candidate(candidate: dict[str, Any]) -> bool:
         "pdf_tuning_label_unassociated",
     )):
         return True
+    if candidate.get("kind") == "candidate-text" and near_tab_system:
+        x = candidate.get("x")
+        y = candidate.get("y")
+        sys_x0 = raw.get("system_x0")
+        sys_x1 = raw.get("system_x1")
+        line_ys = raw.get("tab_line_ys")
+        if x is not None and sys_x0 is not None and sys_x1 is not None:
+            if not (sys_x0 - 24.0 <= x <= sys_x1 + 24.0):
+                return False
+        if y is not None and line_ys:
+            spacing = 12.0
+            if len(line_ys) >= 2:
+                spacing = line_ys[1] - line_ys[0]
+            limit_y = line_ys[0] - max(34.0, spacing * 2.5)
+            if y < limit_y:
+                return False
     return text in {"x"} or near_tab_system
 
 
