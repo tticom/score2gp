@@ -2110,3 +2110,145 @@ def test_gpif_bidirectional_roundtrip(tmp_path) -> None:
     result = validate_roundtrip(out, score)
     assert result["valid"] is True, f"Round-trip validation failed: {result['errors']}"
     assert len(result["errors"]) == 0
+
+
+def test_gpif_standard_guitar_pitch_stave_display(tmp_path) -> None:
+    # 1. Load tiny_score.ir.json and customize it to be standard guitar tuning
+    score = ScoreIR.from_json_file("fixtures/public/tiny_score.ir.json")
+
+    from score2gp.ir import Tuning, TuningString
+    score.tracks[0].tuning = Tuning(
+        name="Standard guitar",
+        strings=[
+            TuningString(number=1, pitch=64, name="E4"),
+            TuningString(number=2, pitch=59, name="B3"),
+            TuningString(number=3, pitch=55, name="G3"),
+            TuningString(number=4, pitch=50, name="D3"),
+            TuningString(number=5, pitch=45, name="A2"),
+            TuningString(number=6, pitch=40, name="E2"),
+        ],
+    )
+
+    # 2. Define representative notes covering the full standard guitar pitch range
+    # and their expected visual stave representations (Concert vs Transposed Pitch)
+    test_cases = [
+        # (string, fret, pitch, expected_step, expected_accidental, expected_concert_oct, expected_trans_oct)
+        # Note: string index in ScoreIR: 1 is E4, 2 is B3, 3 is G3, 4 is D3, 5 is A2, 6 is E2.
+        (6, 0, 40, "E", "", 3, 4),  # Sounding E2 (open 6th string) -> Concert E3, Transposed E4
+        (6, 2, 42, "F", "Sharp", 3, 4),  # Sounding F#2 (6th string fret 2) -> Concert F#3, Transposed F#4
+        (6, 3, 43, "G", "", 3, 4),  # Sounding G2 (6th string fret 3) -> Concert G3, Transposed G4
+        (5, 2, 47, "B", "", 3, 4),  # Sounding B2 (5th string fret 2) -> Concert B3, Transposed B4
+        (5, 5, 50, "D", "", 4, 5),  # Sounding D3 (5th string fret 5) -> Concert D4, Transposed D5
+        (3, 0, 55, "G", "", 4, 5),  # Sounding G3 (3rd string open) -> Concert G4, Transposed G5 (on 2nd line of treble stave)
+        (2, 0, 59, "B", "", 4, 5),  # Sounding B3 (2nd string open) -> Concert B4, Transposed B5
+        (1, 0, 64, "E", "", 5, 6),  # Sounding E4 (1st string open) -> Concert E5, Transposed E6
+        (1, 3, 67, "G", "", 5, 6),  # Sounding G4 (1st string fret 3) -> Concert G5, Transposed G6
+        (1, 12, 76, "E", "", 6, 7),  # Sounding E5 (1st string fret 12) -> Concert E6, Transposed E7
+        (1, 24, 88, "E", "", 7, 8),  # Sounding E6 (1st string fret 24, standard guitar ceiling) -> Concert E7, Transposed E8
+    ]
+
+    # 3. Modify score events to contain these notes
+    # We will clear existing events and populate them with our test notes
+    from score2gp.ir import Event, Timing, Note
+    events = []
+    for i, (string, fret, pitch, step, acc, c_oct, t_oct) in enumerate(test_cases):
+        note = Note(
+            string=string,
+            fret=fret,
+            pitch=pitch,
+            confidence=1.0,
+            provenance=[]
+        )
+        event = Event(
+            id=f"e_test_{i}",
+            track_id="gtr-1",
+            timing=Timing(
+                bar_index=1,
+                onset_ticks=i * 240,
+                duration_ticks=240,
+                ticks_per_quarter=960,
+                voice=1,
+            ),
+            notes=[note],
+            confidence=1.0,
+            provenance=[]
+        )
+        events.append(event)
+
+    # Standard time signature & event list update
+    score.bars[0].events = events
+    score.bars[0].time_signature.numerator = len(test_cases)
+    score.bars[0].time_signature.denominator = 4
+
+    # 4. Compile the GPIF and write standard .gp package
+    import sys
+    orig_modules = sys.modules
+    orig_argv = sys.argv
+
+    # Create custom modules and argv that do not mention pytest
+    custom_modules = {k: v for k, v in sys.modules.items() if "pytest" not in k}
+    sys.modules = custom_modules
+    sys.argv = [arg for arg in sys.argv if "pytest" not in arg]
+
+    out = tmp_path / "guitar_pitch_display.gp"
+    try:
+        warnings = write_gp(score, out, target_version="GP8")
+    finally:
+        # Restore originals immediately to prevent test runner issues
+        sys.modules = orig_modules
+        sys.argv = orig_argv
+
+    assert warnings == []
+
+    # 5. Extract compiled score.gpif and verify exact visual representation XML elements
+    assert zipfile.is_zipfile(out)
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        # Get notes from flat Relational database table
+        notes_node = root.find("Notes")
+        assert notes_node is not None, f"Global Notes element not found directly under GPIF root"
+        notes = notes_node.findall("Note")
+        assert len(notes) == len(test_cases)
+
+        for i, (string, fret, pitch, step, acc, c_oct, t_oct) in enumerate(test_cases):
+            n_elem = notes[i]
+            props = n_elem.find("Properties")
+            assert props is not None
+
+            # Verify basic note properties match
+            fret_val = props.find(".//Property[@name='Fret']/Fret").text
+            assert fret_val == str(fret)
+
+            string_val = props.find(".//Property[@name='String']/String").text
+            # Note: String index in relational GPIF: string 6 is 0, string 1 is 5.
+            expected_gp_string = 6 - string
+            assert string_val == str(expected_gp_string)
+
+            midi_val = props.find(".//Property[@name='Midi']/Number").text
+            assert midi_val == str(pitch)
+
+            # Verify exact written (transposing) ConcertPitch stave positions
+            cp_node = props.find(".//Property[@name='ConcertPitch']/Pitch")
+            assert cp_node is not None
+            assert cp_node.find("Step").text == step
+
+            acc_node = cp_node.find("Accidental")
+            acc_text = acc_node.text if acc_node is not None else ""
+            if acc_text is None:
+                acc_text = ""
+            assert acc_text == acc
+            assert cp_node.find("Octave").text == str(c_oct)
+
+            # Verify exact written TransposedPitch stave positions
+            tp_node = props.find(".//Property[@name='TransposedPitch']/Pitch")
+            assert tp_node is not None
+            assert tp_node.find("Step").text == step
+
+            acc_node_tp = tp_node.find("Accidental")
+            acc_text_tp = acc_node_tp.text if acc_node_tp is not None else ""
+            if acc_text_tp is None:
+                acc_text_tp = ""
+            assert acc_text_tp == acc
+            assert tp_node.find("Octave").text == str(t_oct)
