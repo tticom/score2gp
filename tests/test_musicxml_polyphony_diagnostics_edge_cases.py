@@ -535,3 +535,98 @@ def test_multiple_candidate_duplicate_pairs_refuse_as_ambiguous() -> None:
     dedup = deduplicate_suspected_staff_tab_voices(imported)
     warning_codes = {w.code for w in dedup.warnings}
     assert "musicxml_duplicate_staff_tab_rejected_independent_polyphony" in warning_codes
+
+
+def test_duplicate_staff_tab_unstable_pitch_offset_rejected() -> None:
+    from score2gp.musicxml import (
+        MusicXmlImport, MusicXmlPart, MusicXmlMeasure, MusicXmlNote, MusicXmlPitch, MusicXmlMetadata,
+        classify_musicxml_voice_duplication
+    )
+    from score2gp.ir import TimeSignature
+
+    pitch_d4 = MusicXmlPitch(step="D", alter=0, octave=4, midi=62, name="D4")
+    pitch_d3 = MusicXmlPitch(step="D", alter=0, octave=3, midi=50, name="D3")
+    pitch_e4 = MusicXmlPitch(step="E", alter=0, octave=4, midi=64, name="E4")
+
+    # In measure 1, notes have 12 semitones offset: D4 (62) vs D3 (50)
+    n1_m1 = MusicXmlNote(
+        id="n1", part_id="P1", measure_index=1, measure_number="1", note_index=1,
+        onset_divisions=0, duration_divisions=4, voice=1, staff=1, pitch=pitch_d4, source_path="fake.musicxml"
+    )
+    n2_m1 = MusicXmlNote(
+        id="n2", part_id="P1", measure_index=1, measure_number="1", note_index=2,
+        onset_divisions=0, duration_divisions=4, voice=5, staff=2, pitch=pitch_d3, source_path="fake.musicxml"
+    )
+
+    # In measure 2, notes have 0 semitones offset: E4 (64) vs E4 (64)
+    n1_m2 = MusicXmlNote(
+        id="n3", part_id="P1", measure_index=2, measure_number="2", note_index=1,
+        onset_divisions=0, duration_divisions=4, voice=1, staff=1, pitch=pitch_e4, source_path="fake.musicxml"
+    )
+    n2_m2 = MusicXmlNote(
+        id="n4", part_id="P1", measure_index=2, measure_number="2", note_index=2,
+        onset_divisions=0, duration_divisions=4, voice=5, staff=2, pitch=pitch_e4, source_path="fake.musicxml"
+    )
+
+    measure1 = MusicXmlMeasure(
+        index=1, number="1", divisions=4, time_signature=TimeSignature(numerator=4, denominator=4),
+        notes=[n1_m1, n2_m1], harmonies=[]
+    )
+    measure2 = MusicXmlMeasure(
+        index=2, number="2", divisions=4, time_signature=TimeSignature(numerator=4, denominator=4),
+        notes=[n1_m2, n2_m2], harmonies=[]
+    )
+    part = MusicXmlPart(id="P1", name="Guitar", measures=[measure1, measure2])
+
+    # Unstable offset (12 semitones in measure 1, 0 semitones in measure 2) must be rejected
+    confirmed, warnings = classify_musicxml_voice_duplication(part)
+    assert not confirmed
+    warning_codes = {w for _, _, w in warnings}
+    assert "musicxml_duplicate_staff_tab_not_applied_low_confidence" in warning_codes
+
+
+def test_duplicate_staff_tab_roles_selected_by_staff_evidence() -> None:
+    from score2gp.musicxml import (
+        MusicXmlImport, MusicXmlPart, MusicXmlMeasure, MusicXmlNote, MusicXmlPitch, MusicXmlMetadata,
+        deduplicate_suspected_staff_tab_voices
+    )
+    from score2gp.ir import TimeSignature
+
+    pitch_1 = MusicXmlPitch(step="D", alter=0, octave=4, midi=62, name="D4")
+    pitch_2 = MusicXmlPitch(step="D", alter=0, octave=3, midi=50, name="D3")
+
+    # Voice 5 is standard notation (staff=1)
+    # Voice 1 is TAB staff (staff=2)
+    n1 = MusicXmlNote(
+        id="n1", part_id="P1", measure_index=1, measure_number="1", note_index=1,
+        onset_divisions=0, duration_divisions=4, voice=5, staff=1, pitch=pitch_1, source_path="fake.musicxml"
+    )
+    n2 = MusicXmlNote(
+        id="n2", part_id="P1", measure_index=1, measure_number="1", note_index=2,
+        onset_divisions=0, duration_divisions=4, voice=1, staff=2, pitch=pitch_2, source_path="fake.musicxml"
+    )
+
+    measure = MusicXmlMeasure(
+        index=1, number="1", divisions=4, time_signature=TimeSignature(numerator=4, denominator=4),
+        notes=[n1, n2], harmonies=[]
+    )
+    part = MusicXmlPart(id="P1", name="Guitar", measures=[measure])
+
+    imported = MusicXmlImport(
+        source_path="fake.musicxml", source_sha256="fake_sha", metadata=MusicXmlMetadata(),
+        tempo_bpm=120, parts=[part], warnings=[]
+    )
+
+    # Deduplication must correctly identify notation_voice=5 and tab_voice=1 using staff evidence, not min/max voice numbers
+    dedup = deduplicate_suspected_staff_tab_voices(imported)
+
+    # Notation note (Voice 5) should remain unsuppressed, and TAB note (Voice 1) should be suppressed
+    xml_part = dedup.parts[0]
+    xml_measure = xml_part.measures[0]
+    voice_5_note = next(n for n in xml_measure.notes if n.voice == 5)
+    voice_1_note = next(n for n in xml_measure.notes if n.voice == 1)
+
+    assert not voice_5_note.is_suppressed
+    assert voice_1_note.is_suppressed
+    assert voice_5_note.dedup_tab_note_voice == 1
+    assert voice_5_note.dedup_tab_note_staff == 2
