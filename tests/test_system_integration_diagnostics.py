@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 from score2gp.diagnostics import run_system_diagnostics, get_process_memory
@@ -41,12 +42,20 @@ def test_cli_diagnose_command(tmp_path) -> None:
 
     # Run the diagnose command via subprocess to verify CLI integration and output
     cmd = [
-        "python", "-m", "score2gp.cli", "diagnose",
+        sys.executable, "-m", "score2gp.cli", "diagnose",
         str(manifest_path),
         str(workdir),
         "--workers", "3"
     ]
-    completed = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    import os
+    env = os.environ.copy()
+    src_dir = str(Path(__file__).resolve().parent.parent / "src")
+    if "PYTHONPATH" in env:
+        env["PYTHONPATH"] = f"{src_dir}{os.pathsep}{env['PYTHONPATH']}"
+    else:
+        env["PYTHONPATH"] = src_dir
+
+    completed = subprocess.run(cmd, capture_output=True, text=True, check=True, env=env)
 
     # Validate that command returns JSON report
     report = json.loads(completed.stdout)

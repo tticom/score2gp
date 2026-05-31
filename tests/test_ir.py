@@ -34,6 +34,8 @@ def test_ir_rejects_unknown_track() -> None:
         ("overlapping_voice_events.ir.json", "overlap"),
         ("invalid_string.ir.json", "tuning does not define"),
         ("malformed_technique.ir.json", "less than or equal to 12"),
+        ("impossible_guitar_pitch_low.ir.json", "physically playable pitch range of a standard guitar"),
+        ("impossible_guitar_pitch_high.ir.json", "physically playable pitch range of a standard guitar"),
     ],
 )
 def test_invalid_ir_fixtures_fail_with_readable_messages(fixture_name: str, expected: str) -> None:

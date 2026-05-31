@@ -20,13 +20,22 @@ def adapt_gpif(gpif_xml: bytes, target_version: str) -> bytes:
         # Fallback if invalid XML is passed
         return gpif_xml
 
-    # 1. Map root version attribute
-    if version_str == "GP6":
-        root.set("version", "6")
-    elif version_str == "GP7":
-        root.set("version", "7")
-    elif version_str == "GP8":
-        root.set("version", "8")
+    # 1. Map root version attribute (only for classic layouts; relational layouts have no attributes on GPIF)
+    is_relational = False
+    score_node = root.find("Score")
+    if score_node is not None and score_node.find("Title") is not None:
+        is_relational = True
+
+    if not is_relational:
+        if version_str == "GP6":
+            root.set("version", "6")
+        elif version_str == "GP7":
+            root.set("version", "7")
+        elif version_str == "GP8":
+            root.set("version", "8")
+    else:
+        # Relational database XML: ensure no attributes are on root GPIF element
+        root.attrib.clear()
 
     score_node = root.find("Score")
     if score_node is not None:
@@ -76,26 +85,62 @@ def adapt_gpif(gpif_xml: bytes, target_version: str) -> bytes:
 
     # Enforce strict GP7/GP8 unmarshalling element sequence constraints under <Score> after adaptations
     if score_node is not None:
-        TAG_ORDER = [
-            "Metadata",
-            "Tempo",
-            "PageSetup",
-            "ScoreSystemsDefaultLayout",
-            "ScoreSystemsLayout",
-            "View",
-            "Print",
-            "Layout",
-            "MusicFont",
-            "SymbolFont",
-            "Fonts",
-            "StyleCollections",
-            "Styles",
-            "MasterTrack",
-            "Booklet",
-            "Tracks",
-            "MasterBars",
-            "Bars"
-        ]
+        if score_node.find("Title") is not None:
+            # Relational database layout sorting!
+            TAG_ORDER = [
+                "Title",
+                "SubTitle",
+                "Artist",
+                "Album",
+                "Words",
+                "Music",
+                "WordsAndMusic",
+                "Copyright",
+                "Tabber",
+                "Instructions",
+                "Notices",
+                "FirstPageHeader",
+                "FirstPageFooter",
+                "PageHeader",
+                "PageFooter",
+                "ScoreSystemsDefaultLayout",
+                "ScoreSystemsLayout",
+                "ScoreZoomPolicy",
+                "ScoreZoom",
+                "MultiVoice",
+                "View",
+                "Print",
+                "Layout",
+                "MusicFont",
+                "SymbolFont",
+                "Fonts",
+                "StyleCollections",
+                "Styles",
+                "MasterTrack",
+                "Booklet"
+            ]
+        else:
+            # Classic layout sorting!
+            TAG_ORDER = [
+                "Metadata",
+                "Tempo",
+                "PageSetup",
+                "ScoreSystemsDefaultLayout",
+                "ScoreSystemsLayout",
+                "View",
+                "Print",
+                "Layout",
+                "MusicFont",
+                "SymbolFont",
+                "Fonts",
+                "StyleCollections",
+                "Styles",
+                "MasterTrack",
+                "Booklet",
+                "Tracks",
+                "MasterBars",
+                "Bars"
+            ]
         score_children = list(score_node)
         score_children.sort(key=lambda x: TAG_ORDER.index(x.tag) if x.tag in TAG_ORDER else len(TAG_ORDER))
         score_node[:] = score_children

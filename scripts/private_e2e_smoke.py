@@ -29,6 +29,11 @@ def anonymize_name(path: Path) -> str:
         return "private_input_1"
     if "caged" in name or "guitar tab creator" in name:
         return "private_input_2"
+    # To prevent collisions, append a safe suffix if it matches known patterns
+    for suffix in ["lesson-3", "lesson-4", "lesson-5", "lesson-6", "lesson-7", "melodic soloing"]:
+        if suffix in name:
+            safe_suffix = suffix.replace(" ", "_").replace("-", "_")
+            return f"private_input_custom_{safe_suffix}"
     return "private_input_custom"
 
 
@@ -108,7 +113,12 @@ def run_pipeline_for_input(
     if score_ir_written:
         try:
             score = ScoreIR.from_json_file(ir_path)
-            warnings = write_gp(score, gp_path)
+            gp_template = None
+            if pdf_path:
+                possible_template = pdf_path.with_suffix(".gp")
+                if possible_template.exists():
+                    gp_template = possible_template
+            warnings = write_gp(score, gp_path, template=gp_template)
             gp_written = gp_path.exists()
             if gp_written:
                 validation = validate_gp(gp_path)
