@@ -17,6 +17,7 @@ The existing `guitar_notation_guide.md` explains the basic notation vocabulary: 
 7. `guitar-pro-relational-schema.md`
 8. `validation-rules.md`
 9. `notation-readability.md`
+10. `guitar-technique-articulation.md`
 
 ## How agents should use these files
 
