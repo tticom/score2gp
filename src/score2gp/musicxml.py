@@ -2509,6 +2509,7 @@ def classify_musicxml_voice_duplication(part: MusicXmlPart) -> tuple[list[tuple[
             has_timing_errors = False
             chord_stack_confusion = False
             perfect_matches = 0
+            observed_diffs = set()
 
             for m_idx in sorted(list(shared_measures)):
                 measure = part.measures[m_idx - 1]
@@ -2558,6 +2559,7 @@ def classify_musicxml_voice_duplication(part: MusicXmlPart) -> tuple[list[tuple[
                             if diff not in (0, 12):
                                 chord_stack_confusion = True
                                 break
+                            observed_diffs.add(diff)
                     if chord_stack_confusion:
                         break
                     perfect_matches += 1
@@ -2581,11 +2583,15 @@ def classify_musicxml_voice_duplication(part: MusicXmlPart) -> tuple[list[tuple[
                     if diff not in (0, 12):
                         match = False
                         break
+                    observed_diffs.add(diff)
 
                 if match:
                     perfect_matches += 1
 
             if has_timing_errors or chord_stack_confusion:
+                pair_statuses[(v1, v2)] = "duplicate_staff_tab_rejected"
+            elif len(observed_diffs) != 1 or next(iter(observed_diffs)) not in (0, 12):
+                # Reject if there is no stable, consistent pitch offset across the entire voice pair
                 pair_statuses[(v1, v2)] = "duplicate_staff_tab_rejected"
             elif perfect_matches == len(active_m_v1) and perfect_matches == len(active_m_v2):
                 pair_statuses[(v1, v2)] = "duplicate_staff_tab_confirmed"
@@ -2648,8 +2654,19 @@ def deduplicate_suspected_staff_tab_voices(musicxml: MusicXmlImport) -> MusicXml
             )
 
         for v1, v2 in confirmed_pairs:
-            notation_voice = min(v1, v2)
-            tab_voice = max(v1, v2)
+            # Choose notation/TAB roles by staff evidence, not min/max voice number
+            v1_staves = {note.staff for measure in part.measures for note in measure.notes if note.voice == v1 and note.staff is not None}
+            v2_staves = {note.staff for measure in part.measures for note in measure.notes if note.voice == v2 and note.staff is not None}
+
+            if 1 in v1_staves and 2 in v2_staves:
+                notation_voice = v1
+                tab_voice = v2
+            elif 2 in v1_staves and 1 in v2_staves:
+                notation_voice = v2
+                tab_voice = v1
+            else:
+                notation_voice = min(v1, v2)
+                tab_voice = max(v1, v2)
 
             # Emit detection and preservation warnings
             dedup_musicxml.warnings.append(
