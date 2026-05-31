@@ -5,15 +5,6 @@
     <EncodingDescription>GP8</EncodingDescription>
   </Encoding>
   <Score>
-    <PageSetup>
-      <Width>210.0</Width>
-      <Height>297.0</Height>
-      <MarginTop>15.0</MarginTop>
-      <MarginBottom>15.0</MarginBottom>
-      <MarginLeft>15.0</MarginLeft>
-      <MarginRight>15.0</MarginRight>
-      <Scale>1.0</Scale>
-    </PageSetup>
     <ScoreSystemsDefaultLayout>4</ScoreSystemsDefaultLayout>
     <ScoreSystemsLayout>4</ScoreSystemsLayout>
     <Title>Major Triad Exercises</Title>
@@ -43,16 +34,6 @@
       <Name>Guitar</Name>
       <SystemsDefautLayout>3</SystemsDefautLayout>
       <SystemsLayout>3</SystemsLayout>
-      <Instrument>guitar</Instrument>
-      <Capo>0</Capo>
-      <Tuning name="Standard guitar">
-        <String number="1" pitch="64" name="E4" />
-        <String number="2" pitch="59" name="B3" />
-        <String number="3" pitch="55" name="G3" />
-        <String number="4" pitch="50" name="D3" />
-        <String number="5" pitch="45" name="A2" />
-        <String number="6" pitch="40" name="E2" />
-      </Tuning>
       <Staves>
         <Staff>
           <Properties>
@@ -78,561 +59,472 @@
               <Enable>true</Enable>
             </Property>
           </Properties>
-          <StaffProperties>
-            <Property name="CapoFret">
-              <Fret>0</Fret>
-            </Property>
-            <Property name="FretCount">
-              <Number>24</Number>
-            </Property>
-            <Property name="PartialCapoFret">
-              <Fret>0</Fret>
-            </Property>
-            <Property name="PartialCapoStringFlags">
-              <Bitset>000000</Bitset>
-            </Property>
-            <Property name="Tuning">
-              <Pitches>40 45 50 55 59 64</Pitches>
-              <Instrument>Guitar</Instrument>
-              <Label>None</Label>
-              <LabelVisible>true</LabelVisible>
-            </Property>
-            <Property name="Tablature">
-              <Enable>true</Enable>
-            </Property>
-          </StaffProperties>
         </Staff>
       </Staves>
     </Track>
   </Tracks>
   <MasterBars>
-    <MasterBar index="1">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>0</Bars>
     </MasterBar>
-    <MasterBar index="2">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>1</Bars>
     </MasterBar>
-    <MasterBar index="3">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>2</Bars>
     </MasterBar>
-    <MasterBar index="4">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>3</Bars>
     </MasterBar>
-    <MasterBar index="5">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>4</Bars>
     </MasterBar>
-    <MasterBar index="6">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>5</Bars>
     </MasterBar>
-    <MasterBar index="7">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>6</Bars>
     </MasterBar>
-    <MasterBar index="8">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>7</Bars>
     </MasterBar>
-    <MasterBar index="9">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>8</Bars>
     </MasterBar>
-    <MasterBar index="10">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>9</Bars>
     </MasterBar>
-    <MasterBar index="11">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>10</Bars>
     </MasterBar>
-    <MasterBar index="12">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>11</Bars>
     </MasterBar>
-    <MasterBar index="13">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>12</Bars>
     </MasterBar>
-    <MasterBar index="14">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>13</Bars>
     </MasterBar>
-    <MasterBar index="15">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>14</Bars>
     </MasterBar>
-    <MasterBar index="16">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>15</Bars>
     </MasterBar>
-    <MasterBar index="17">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>16</Bars>
     </MasterBar>
-    <MasterBar index="18">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>17</Bars>
     </MasterBar>
-    <MasterBar index="19">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>18</Bars>
     </MasterBar>
-    <MasterBar index="20">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>19</Bars>
     </MasterBar>
-    <MasterBar index="21">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>20</Bars>
     </MasterBar>
-    <MasterBar index="22">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>21</Bars>
     </MasterBar>
-    <MasterBar index="23">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>22</Bars>
     </MasterBar>
-    <MasterBar index="24">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>23</Bars>
     </MasterBar>
-    <MasterBar index="25">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>24</Bars>
     </MasterBar>
-    <MasterBar index="26">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>25</Bars>
     </MasterBar>
-    <MasterBar index="27">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>26</Bars>
     </MasterBar>
-    <MasterBar index="28">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>27</Bars>
     </MasterBar>
-    <MasterBar index="29">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>28</Bars>
     </MasterBar>
-    <MasterBar index="30">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>29</Bars>
     </MasterBar>
-    <MasterBar index="31">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>30</Bars>
     </MasterBar>
-    <MasterBar index="32">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>31</Bars>
     </MasterBar>
-    <MasterBar index="33">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>32</Bars>
     </MasterBar>
-    <MasterBar index="34">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>33</Bars>
     </MasterBar>
-    <MasterBar index="35">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>34</Bars>
     </MasterBar>
-    <MasterBar index="36">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>35</Bars>
     </MasterBar>
-    <MasterBar index="37">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>36</Bars>
     </MasterBar>
-    <MasterBar index="38">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>37</Bars>
     </MasterBar>
-    <MasterBar index="39">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>38</Bars>
     </MasterBar>
-    <MasterBar index="40">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>39</Bars>
     </MasterBar>
-    <MasterBar index="41">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>40</Bars>
     </MasterBar>
-    <MasterBar index="42">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>41</Bars>
     </MasterBar>
-    <MasterBar index="43">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>42</Bars>
     </MasterBar>
-    <MasterBar index="44">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>43</Bars>
     </MasterBar>
-    <MasterBar index="45">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>44</Bars>
     </MasterBar>
-    <MasterBar index="46">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>45</Bars>
     </MasterBar>
-    <MasterBar index="47">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>46</Bars>
     </MasterBar>
-    <MasterBar index="48">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>47</Bars>
     </MasterBar>
-    <MasterBar index="49">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>48</Bars>
     </MasterBar>
-    <MasterBar index="50">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>49</Bars>
     </MasterBar>
-    <MasterBar index="51">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>50</Bars>
     </MasterBar>
-    <MasterBar index="52">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>51</Bars>
     </MasterBar>
-    <MasterBar index="53">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>52</Bars>
     </MasterBar>
-    <MasterBar index="54">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>53</Bars>
     </MasterBar>
-    <MasterBar index="55">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>54</Bars>
     </MasterBar>
-    <MasterBar index="56">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>55</Bars>
     </MasterBar>
-    <MasterBar index="57">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>56</Bars>
     </MasterBar>
-    <MasterBar index="58">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>57</Bars>
     </MasterBar>
-    <MasterBar index="59">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>58</Bars>
     </MasterBar>
-    <MasterBar index="60">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>59</Bars>
     </MasterBar>
-    <MasterBar index="61">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>60</Bars>
     </MasterBar>
-    <MasterBar index="62">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>61</Bars>
     </MasterBar>
-    <MasterBar index="63">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>62</Bars>
     </MasterBar>
-    <MasterBar index="64">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>63</Bars>
     </MasterBar>
-    <MasterBar index="65">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>64</Bars>
     </MasterBar>
-    <MasterBar index="66">
+    <MasterBar>
       <Time>4/4</Time>
       <Key>
         <Fifths>1</Fifths>
         <Mode>major</Mode>
       </Key>
-      <Bars>65</Bars>
     </MasterBar>
   </MasterBars>
   <Bars>
