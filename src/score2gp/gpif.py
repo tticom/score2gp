@@ -832,7 +832,7 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
                                 8: ("G", "Sharp"), 9: ("A", ""), 10: ("A", "Sharp"), 11: ("B", "")
                             }
                             step, accidental = pitch_map[note.pitch % 12]
-                            octave = (note.pitch // 12) - 1
+                            octave = note.pitch // 12
 
                             cp_prop = ET.SubElement(props, "Property", {"name": "ConcertPitch"})
                             pitch_node = ET.SubElement(cp_prop, "Pitch")
