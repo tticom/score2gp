@@ -1089,6 +1089,9 @@ def build_ir_with_diagnostics_from_imports(
     page_range: tuple[int, int] | None = None,
     include_polyphony_diagnostics: bool = False,
 ) -> tuple[ScoreIR, BuildIrDiagnostics]:
+    from .musicxml import deduplicate_suspected_staff_tab_voices
+    musicxml = deduplicate_suspected_staff_tab_voices(musicxml)
+
     if page_range is not None:
         start_page, end_page = page_range
         # Filter candidates: keep only selected pages, and strip explicitly excluded text/digits (like page numbers)
@@ -1431,10 +1434,10 @@ def build_ir_with_diagnostics_from_imports(
     candidate_pools = CandidatePools.from_tabraw(tabraw)
     bars: list[Bar] = []
     if part is not None:
-        staves_in_part = {note.staff for measure in part.measures for note in measure.notes if note.staff is not None}
+        staves_in_part = {note.staff for measure in part.measures for note in measure.notes if note.staff is not None and not note.is_suppressed}
         target_staff = max(staves_in_part) if staves_in_part else 1
         for measure in part.measures:
-            measure.notes = [note for note in measure.notes if note.staff is None or note.staff == target_staff]
+            measure.notes = [note for note in measure.notes if (note.staff is None or note.staff == target_staff) and not note.is_suppressed]
             bar_warnings: list[WarningItem] = []
             events = _measure_events(measure, candidate_pools, bar_warnings)
             warnings.extend(bar_warnings)
@@ -1911,13 +1914,32 @@ def _aligned_note(
     tab_provenance.raw["musicxml_pitch"] = xml_note.pitch.midi if xml_note.pitch is not None else None
     tab_provenance.raw["pitch_matched"] = xml_note.pitch is None or candidate_pitch == xml_note.pitch.midi
 
+    provenance = [_musicxml_provenance(xml_note, measure)]
+    if xml_note.dedup_tab_note_id is not None:
+        from .musicxml import MusicXmlNote
+        temp_note = MusicXmlNote(
+            id=xml_note.dedup_tab_note_id,
+            part_id=xml_note.part_id,
+            measure_index=xml_note.measure_index,
+            measure_number=xml_note.measure_number,
+            note_index=xml_note.note_index,
+            onset_divisions=xml_note.onset_divisions,
+            duration_divisions=xml_note.duration_divisions,
+            voice=xml_note.dedup_tab_note_voice or 5,
+            staff=xml_note.dedup_tab_note_staff,
+            techniques=xml_note.dedup_tab_note_techniques or [],
+            source_path=xml_note.source_path,
+        )
+        provenance.append(_musicxml_provenance(temp_note, measure))
+    provenance.append(tab_provenance)
+
     return Note(
         string=candidate.string,
         fret=candidate.parsed_fret,
         pitch=candidate_pitch,
         techniques=_note_techniques(xml_note),
         confidence=confidence,
-        provenance=[_musicxml_provenance(xml_note, measure), tab_provenance],
+        provenance=provenance,
     )
 
 
