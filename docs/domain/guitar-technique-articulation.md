@@ -89,9 +89,10 @@ To develop and test technique conversion without exposing private inputs, the fo
 ### Fixture 3: `synthetic_bends.xml` / `synthetic_bends.json`
 - **Rhythm:** 4/4 bar of quarter notes.
 - **Articulation:**
-  - Note 1: Pitch D3 (string 3, fret 7) with a `full bend` (+2 semitones).
-  - Note 2: Pitch D3 with a `1/2 bend and release`.
+  - Note 1: Pitch D4 (string 3, fret 7) with a `full bend` (+2 semitones).
+  - Note 2: Pitch D4 with a `1/2 bend and release`.
 - **Assertion:** Note pitch is correct; `BendTechnique` contains valid `DestinationValue` and points list.
+
 
 ### Fixture 4: `synthetic_mixed_rhythms.xml` / `synthetic_mixed_rhythms.json`
 - **Phrase:** Lead melody with sixteenth, dotted eighth, and quarter notes.
