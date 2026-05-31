@@ -616,6 +616,7 @@ def build_ir_with_diagnostics_from_files(
     allow_skip_unboxed: bool = False,
     optimize_fret_snapping: bool = False,
     page_range: tuple[int, int] | None = None,
+    include_polyphony_diagnostics: bool = False,
 ) -> tuple[ScoreIR, BuildIrDiagnostics]:
     musicxml = parse_musicxml(musicxml_path, allow_remediation=allow_remediation)
     tabraw = TabRaw.from_json_file(tabraw_path)
@@ -649,6 +650,7 @@ def build_ir_with_diagnostics_from_files(
         allow_skip_unboxed=allow_skip_unboxed,
         optimize_fret_snapping=optimize_fret_snapping,
         page_range=page_range,
+        include_polyphony_diagnostics=include_polyphony_diagnostics,
     )
     if out_path is not None:
         out = Path(out_path)
@@ -1085,6 +1087,7 @@ def build_ir_with_diagnostics_from_imports(
     allow_skip_unboxed: bool = False,
     optimize_fret_snapping: bool = False,
     page_range: tuple[int, int] | None = None,
+    include_polyphony_diagnostics: bool = False,
 ) -> tuple[ScoreIR, BuildIrDiagnostics]:
     if page_range is not None:
         start_page, end_page = page_range
@@ -1325,7 +1328,7 @@ def build_ir_with_diagnostics_from_imports(
 
 
     warnings = _musicxml_warnings(musicxml)
-    timing_issues = analyze_musicxml_timing(musicxml)
+    timing_issues = analyze_musicxml_timing(musicxml, include_polyphony_diagnostics=include_polyphony_diagnostics)
     if ascii_gate_details is None:
         for issue in timing_issues:
             if issue.code in ("musicxml_duration_missing", "musicxml_duration_zero"):

@@ -310,3 +310,18 @@ def test_musicxml_inferred_time_signature_when_missing(tmp_path) -> None:
     # It must dynamically infer 12/8 instead of 4/4
     assert measure.time_signature.numerator == 12
     assert measure.time_signature.denominator == 8
+
+
+def test_musicxml_polyphony_diagnostics() -> None:
+    # 1. Parse two-voice score
+    imported = parse_musicxml(FIXTURES / "tiny_two_voice.musicxml")
+
+    # 2. Timing check without diagnostics should be empty or contain only standard info/warning
+    issues_default = analyze_musicxml_timing(imported)
+    assert not any(issue.code.startswith("musicxml_polyphony_gate_") for issue in issues_default)
+
+    # 3. Timing check with diagnostics enabled
+    issues_diag = analyze_musicxml_timing(imported, include_polyphony_diagnostics=True)
+    diag_codes = {issue.code for issue in issues_diag}
+    assert "musicxml_polyphony_gate_measure_count" in diag_codes
+    assert "musicxml_polyphony_gate_voice_count" in diag_codes

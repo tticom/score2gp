@@ -545,7 +545,7 @@ def mxl_rootfile_path(path: str | Path) -> str:
         return _mxl_rootfile(package)
 
 
-def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssue]:
+def analyze_musicxml_timing(imported: MusicXmlImport, include_polyphony_diagnostics: bool = False) -> list[MusicXmlTimingIssue]:
     """Return public-safe timing risks before ScoreIR construction."""
 
     issues: list[MusicXmlTimingIssue] = []
@@ -1368,6 +1368,148 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                     issue.primary_reason = vcd.primary_reason
                     issue.secondary_reasons = vcd.secondary_reasons
 
+            # Measure-level polyphony gate diagnostics
+            if include_polyphony_diagnostics:
+                measure_polyphony_errs = [
+                    issue for issue in issues[start_idx:]
+                    if issue.severity == "error" and issue.code in {
+                        "musicxml_polyphony_not_supported",
+                        "musicxml_multivoice_timing_not_supported",
+                        "musicxml_cross_voice_timing_unsupported",
+                        "musicxml_valid_multivoice_unsupported",
+                        "musicxml_voice_cursor_alignment_risk",
+                        "musicxml-voice-overlap",
+                        "musicxml_voice_cursor_overlap",
+                        "musicxml_same_voice_tick_overlap",
+                        "musicxml_rest_overlap",
+                        "musicxml_rest_voice_overlap",
+                    }
+                ]
+                if measure_polyphony_errs:
+                    issues.append(
+                        MusicXmlTimingIssue(
+                            code="musicxml_polyphony_gate_blocking_measure",
+                            message=f"Measure {measure.number} blocked by polyphony gate.",
+                            severity="info",
+                            part_id=part.id,
+                            measure_index=measure.index,
+                            measure_number=measure.number,
+                        )
+                    )
+
+                if vcd is not None and vcd.measure_overfull:
+                    issues.append(
+                        MusicXmlTimingIssue(
+                            code="musicxml_polyphony_gate_overfull_measure",
+                            message=f"Measure {measure.number} is overfull.",
+                            severity="info",
+                            part_id=part.id,
+                            measure_index=measure.index,
+                            measure_number=measure.number,
+                        )
+                    )
+
+                if vcd is not None and (vcd.same_voice_overlap_count > 0 or vcd.cross_voice_overlap_count > 0):
+                    issues.append(
+                        MusicXmlTimingIssue(
+                            code="musicxml_polyphony_gate_overlap_detected",
+                            message=f"Measure {measure.number} has timeline overlap detected (same_voice={vcd.same_voice_overlap_count}, cross_voice={vcd.cross_voice_overlap_count}).",
+                            severity="info",
+                            part_id=part.id,
+                            measure_index=measure.index,
+                            measure_number=measure.number,
+                        )
+                    )
+
+                # Check for duplicate staff/TAB voice duplication
+                notes_by_voice = {}
+                for note in timed_notes:
+                    if note.onset_divisions is not None and note.duration_divisions is not None:
+                        notes_by_voice.setdefault(note.voice, []).append(note)
+
+                if len(notes_by_voice) == 2:
+                    voices = list(notes_by_voice.keys())
+                    v1, v2 = voices[0], voices[1]
+                    list1, list2 = notes_by_voice[v1], notes_by_voice[v2]
+                    list1 = sorted(list1, key=lambda n: (n.onset_divisions, n.id or ""))
+                    list2 = sorted(list2, key=lambda n: (n.onset_divisions, n.id or ""))
+
+                    if len(list1) == len(list2) and len(list1) > 0:
+                        all_overlap = True
+                        pitch_12_offset = True
+                        for n1, n2 in zip(list1, list2):
+                            if n1.onset_divisions != n2.onset_divisions or n1.duration_divisions != n2.duration_divisions:
+                                all_overlap = False
+                                break
+                            if n1.pitch is not None and n2.pitch is not None:
+                                diff = abs(n1.pitch.midi - n2.pitch.midi)
+                                if diff != 12:
+                                    pitch_12_offset = False
+
+                        if all_overlap and pitch_12_offset:
+                            issues.append(
+                                MusicXmlTimingIssue(
+                                    code="musicxml_polyphony_gate_duplicate_staff_tab_suspected",
+                                    message=f"Measure {measure.number} has suspected duplicate staff/TAB voice duplication (matching onset/duration and 12-semitone pitch offset).",
+                                    severity="info",
+                                    part_id=part.id,
+                                    measure_index=measure.index,
+                                    measure_number=measure.number,
+                                )
+                            )
+
+                if any(issue.code == "musicxml_chord_stack_detected" for issue in issues[start_idx:]):
+                    issues.append(
+                        MusicXmlTimingIssue(
+                            code="musicxml_polyphony_gate_valid_chord_suspected",
+                            message=f"Measure {measure.number} has a suspected valid guitar chord stack.",
+                            severity="info",
+                            part_id=part.id,
+                            measure_index=measure.index,
+                            measure_number=measure.number,
+                        )
+                    )
+
+                has_tie_or_slur = False
+                for note in timed_notes:
+                    if note.ties or any(tech.kind == "slur" for tech in note.techniques):
+                        has_tie_or_slur = True
+                        break
+                if has_tie_or_slur:
+                    issues.append(
+                        MusicXmlTimingIssue(
+                            code="musicxml_polyphony_gate_slur_tie_continuation_suspected",
+                            message=f"Measure {measure.number} contains suspected tie/slur continuation notation.",
+                            severity="info",
+                            part_id=part.id,
+                            measure_index=measure.index,
+                            measure_number=measure.number,
+                        )
+                    )
+
+                if any(issue.code == "musicxml_polyphony_gate_blocking_measure" for issue in issues[start_idx:]):
+                    any_suspected = any(
+                        issue.code in {
+                            "musicxml_polyphony_gate_overfull_measure",
+                            "musicxml_polyphony_gate_overlap_detected",
+                            "musicxml_polyphony_gate_duplicate_staff_tab_suspected",
+                            "musicxml_polyphony_gate_valid_chord_suspected",
+                            "musicxml_polyphony_gate_slur_tie_continuation_suspected",
+                        }
+                        for issue in issues[start_idx:]
+                    )
+                    if not any_suspected:
+                        issues.append(
+                            MusicXmlTimingIssue(
+                                code="musicxml_polyphony_gate_reason_unknown",
+                                message=f"Measure {measure.number} blocked by polyphony gate for unknown reason.",
+                                severity="info",
+                                part_id=part.id,
+                                measure_index=measure.index,
+                                measure_number=measure.number,
+                            )
+                        )
+
         # Check for tie continuity risks
         for voice, notes in part_vnotes.items():
             for idx in range(len(notes)):
@@ -1468,6 +1610,34 @@ def analyze_musicxml_timing(imported: MusicXmlImport) -> list[MusicXmlTimingIssu
                                     voice_durations=m_durations,
                                 )
                             )
+
+        # Part-level polyphony gate summary issues
+        if include_polyphony_diagnostics:
+            all_voices_in_part = set()
+            for measure in part.measures:
+                for note in measure.notes:
+                    all_voices_in_part.add(note.voice)
+
+            issues.append(
+                MusicXmlTimingIssue(
+                    code="musicxml_polyphony_gate_measure_count",
+                    message=f"Total MusicXML measures parsed: {len(part.measures)}.",
+                    severity="info",
+                    part_id=part.id,
+                    measure_index=1,
+                    measure_number="1",
+                )
+            )
+            issues.append(
+                MusicXmlTimingIssue(
+                    code="musicxml_polyphony_gate_voice_count",
+                    message=f"Total voices detected across part: {len(all_voices_in_part)}.",
+                    severity="info",
+                    part_id=part.id,
+                    measure_index=1,
+                    measure_number="1",
+                )
+            )
 
     # Post-process global calibration feasibility and reasons
     has_tie_continuity_risk = any(issue.code == "musicxml_tie_continuity_risk" for issue in issues)

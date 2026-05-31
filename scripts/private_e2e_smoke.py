@@ -58,6 +58,7 @@ def run_pipeline_for_input(
             out_dir=out_dir,
             allow_remediation=allow_remediation,
             allow_skip_unboxed=allow_skip_unboxed,
+            include_polyphony_diagnostics=True,
         )
     except Exception as exc:
         summary_raw = {
