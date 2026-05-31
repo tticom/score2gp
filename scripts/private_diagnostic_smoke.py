@@ -25,7 +25,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out-dir", required=True, type=Path, help="Ignored output directory, usually work/private_diagnostics/<name>.")
     args = parser.parse_args(argv)
 
-    summary = run_private_diagnostic_smoke(pdf_path=args.pdf, musicxml_path=args.musicxml, out_dir=args.out_dir)
+    summary = run_private_diagnostic_smoke(
+        pdf_path=args.pdf,
+        musicxml_path=args.musicxml,
+        out_dir=args.out_dir,
+        include_polyphony_diagnostics=True,
+    )
     print(json.dumps(summary, indent=2, sort_keys=True))
     return 0
 
