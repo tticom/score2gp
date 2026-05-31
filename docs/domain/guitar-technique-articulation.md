@@ -65,16 +65,19 @@ To prevent valid inputs from compiling into blank sheets, the pipeline must enfo
 
 ---
 
-## 4. Public Synthetic Fixture Plan
+## 4. Future Public Synthetic Fixture Plan (Future Work)
 
-To develop and test technique conversion without exposing private inputs, we will implement the following public-safe synthetic test files:
+> [!NOTE]
+> This section outlines planned future work. No synthetic fixtures or technique-specific assertions are implemented in the current branch.
+
+To develop and test technique conversion without exposing private inputs, the following public-safe synthetic test files are planned for subsequent implementation branches:
 
 ### Fixture 1: `synthetic_hammer_pull.xml` / `synthetic_hammer_pull.json`
 - **Rhythm:** 4/4 bar of four quarter notes.
 - **Articulation:**
   - Note 1 to Note 2: Pitch E3 (string 4, fret 2) to G3 (string 3, fret 0) connected by `HammerOn` (slur + `H`).
   - Note 3 to Note 4: Pitch G3 (string 3, fret 0) to E3 (string 4, fret 2) connected by `PullOff` (slur + `P`).
-- **Assertion:** Fret notes are preserved; `HammerOnTechnique` and `PullOffTechnique` are verified in the IR and written as `<HO>` / `<PO>` properties.
+- **Assertion:** Fret notes are preserved; `HammerOnTechnique` and `PullOffTechnique` are verified in the IR. ScoreIR model support exists; exact GPIF representation must be verified in a later implementation fixture.
 
 ### Fixture 2: `synthetic_slides.xml` / `synthetic_slides.json`
 - **Rhythm:** 4/4 bar of eighth notes.
@@ -93,3 +96,4 @@ To develop and test technique conversion without exposing private inputs, we wil
 ### Fixture 4: `synthetic_mixed_rhythms.xml` / `synthetic_mixed_rhythms.json`
 - **Phrase:** Lead melody with sixteenth, dotted eighth, and quarter notes.
 - **Assertion:** Mixed rhythmic durations are successfully aligned using dynamic sequence alignment with zero timing overlap warnings.
+
