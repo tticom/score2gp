@@ -98,6 +98,7 @@ def extract_tab(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
         "detected_staves": 0,
         "detected_bar_boxes": 0,
         "detected_string_lines": 0,
+        "large_spaced_tab_system_count": 0,
     }
     raw: dict[str, Any] = {
         "schema_version": TABRAW_SCHEMA_VERSION,
@@ -717,6 +718,8 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                 meta["detected_staves"] += 1
                 meta["detected_bar_boxes"] += len(system.bar_boxes)
                 meta["detected_string_lines"] += len(system.line_ys)
+                if len(system.line_ys) == 6 and system.line_spacing > 15.0:
+                    meta["large_spaced_tab_system_count"] = meta.get("large_spaced_tab_system_count", 0) + 1
 
             drawings = page.get_drawings()
             segments = list(_drawing_segments(drawings))
@@ -2458,6 +2461,19 @@ def _append_grouping_warnings(raw: dict[str, Any], meta: dict[str, int] | None =
             "detected_bar_boxes": meta.get("detected_bar_boxes", 0),
             "detected_string_lines": meta.get("detected_string_lines", 0),
         })
+        large_count = meta.get("large_spaced_tab_system_count", 0)
+        if large_count > 0:
+            raw["warnings"].append({
+                "code": "pdf_large_tab_staff_spacing_detected",
+                "severity": "info",
+                "message": "Large-spaced TAB staff detected and accepted by dynamic spacing checks.",
+                "large_spaced_tab_system_count": large_count,
+            })
+            raw["warnings"].append({
+                "code": "pdf_tab_staff_spacing_supported_dynamic",
+                "severity": "info",
+                "message": "Large tab staff spacing is supported dynamically.",
+            })
 
     if (grouping_counts["fret_candidates_with_system"] == 0 and len(fret_candidates) > 0) or (meta is not None and meta.get("detected_systems", 0) == 0):
         raw["warnings"].append({
@@ -3411,6 +3427,8 @@ def classify_staff_line_group(group: list[_LineSegment], page: Any = None) -> st
     if len(group) == 6:
         if 5.5 <= median_gap <= 7.2 or 9.5 <= median_gap <= 15.0:
             return "tab"
+        elif 15.0 < median_gap <= 32.0 and _is_coherent_large_tab_group(group):
+            return "tab"
         else:
             return "ambiguous"
     elif len(group) == 5:
@@ -3824,7 +3842,7 @@ def _tab_line_groups(lines: list[_LineSegment]) -> list[list[_LineSegment]]:
             y0 = (sorted_lines[i0].y0 + sorted_lines[i0].y1) / 2
             y1 = (sorted_lines[i1].y0 + sorted_lines[i1].y1) / 2
             gap = y1 - y0
-            if gap < 6.0 or gap > 24.0:
+            if gap < 6.0 or gap > 32.0:
                 continue
 
             group_indices = [i0, i1]
@@ -3847,6 +3865,9 @@ def _tab_line_groups(lines: list[_LineSegment]) -> list[list[_LineSegment]]:
 
             if len(group_indices) == 6:
                 group = [sorted_lines[idx] for idx in group_indices]
+                if gap > 24.0:
+                    if not _is_coherent_large_tab_group(group):
+                        continue
                 groups.append(group)
                 used.update(group_indices)
                 break
@@ -3937,6 +3958,45 @@ def _tab_line_groups(lines: list[_LineSegment]) -> list[list[_LineSegment]]:
 
     groups = final_groups
     return groups
+
+
+def _is_coherent_large_tab_group(group: list[_LineSegment]) -> bool:
+    if len(group) != 6:
+        return False
+    ys = sorted([(line.y0 + line.y1) / 2 for line in group])
+    gaps = [ys[i+1] - ys[i] for i in range(len(ys) - 1)]
+    if not gaps:
+        return False
+    sorted_gaps = sorted(gaps)
+    median_gap = sorted_gaps[len(sorted_gaps) // 2]
+
+    if not (15.0 < median_gap <= 32.0):
+        return False
+
+    mean_gap = sum(gaps) / len(gaps)
+    variance = sum((gap - mean_gap) ** 2 for gap in gaps) / len(gaps)
+    std_dev = variance ** 0.5
+    cv = std_dev / mean_gap if mean_gap > 0 else float('inf')
+
+    xs_min = [min(l.x0, l.x1) for l in group]
+    xs_max = [max(l.x0, l.x1) for l in group]
+    overlap_x0 = max(xs_min)
+    overlap_x1 = min(xs_max)
+    overlap_w = max(0.0, overlap_x1 - overlap_x0)
+    widths = [abs(l.x1 - l.x0) for l in group]
+    min_w = min(widths)
+    overlap_ratio = overlap_w / min_w if min_w > 0 else 0.0
+
+    if cv >= 0.05:
+        return False
+    if overlap_ratio < 0.80:
+        return False
+    if min_w < 200.0:
+        return False
+    if not all(abs(gap - median_gap) <= 2.0 for gap in gaps):
+        return False
+
+    return True
 
 
 def _looks_like_six_line_tab(group: list[_LineSegment]) -> bool:

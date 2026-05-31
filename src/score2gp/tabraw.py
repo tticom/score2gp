@@ -176,7 +176,7 @@ def _candidate_kind(raw_text: str, parsed_fret: int | None) -> str:
     if any(token in lower for token in technique_tokens):
         if "string" not in lower:
             return "technique-text"
-    if stripped.lower().rstrip(".") in {"h", "p", "pm", "/", "\\", "~", "b", "r", "v", "s"}:
+    if stripped.lower().rstrip(".") in {"h", "p", "pm", "/", "\\", "~", "b", "r", "v", "s", "sl", "full"}:
         return "technique-text"
     if _looks_like_chord_symbol(stripped):
         return "chord-symbol"
