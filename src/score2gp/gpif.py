@@ -716,7 +716,8 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
                     voice_node = ET.SubElement(voices_db, "Voice", {"id": voice_id})
 
                     beat_refs = []
-                    for event in sorted(events, key=lambda e: e.timing.onset_ticks):
+                    sorted_events = sorted(events, key=lambda e: e.timing.onset_ticks)
+                    for ev_idx, event in enumerate(sorted_events):
                         beat_id = str(beats_count)
                         beats_count += 1
                         beat_node = ET.SubElement(beats_db, "Beat", {"id": beat_id})
@@ -886,8 +887,32 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
 
                         # Default Beat XProperties
                         beat_xprops = ET.SubElement(beat_node, "XProperties")
-                        xp1 = ET.SubElement(beat_xprops, "XProperty", {"id": "1124204546"})
-                        _text(xp1, "Int", "1")
+                        
+                        # Beaming logic for XProperty id="1124204546" (Link to Next)
+                        link_to_next = False
+                        if not event.is_rest:
+                            is_short = event.timing.duration_ticks <= (event.timing.ticks_per_quarter // 2)
+                            if is_short and ev_idx + 1 < len(sorted_events):
+                                next_event = sorted_events[ev_idx + 1]
+                                if not next_event.is_rest:
+                                    next_is_short = next_event.timing.duration_ticks <= (next_event.timing.ticks_per_quarter // 2)
+                                    if next_is_short:
+                                        if event.timing.onset_ticks + event.timing.duration_ticks == next_event.timing.onset_ticks:
+                                            is_4_4 = bar.time_signature.numerator == 4 and bar.time_signature.denominator == 4
+                                            if is_4_4:
+                                                midpoint = 2 * event.timing.ticks_per_quarter
+                                                crosses_midpoint = (event.timing.onset_ticks < midpoint and next_event.timing.onset_ticks >= midpoint)
+                                                if not crosses_midpoint:
+                                                    link_to_next = True
+                                            else:
+                                                beat_unit = event.timing.ticks_per_quarter
+                                                crosses_beat_boundary = (event.timing.onset_ticks // beat_unit != next_event.timing.onset_ticks // beat_unit)
+                                                if not crosses_beat_boundary:
+                                                    link_to_next = True
+                                                    
+                        if link_to_next:
+                            xp1 = ET.SubElement(beat_xprops, "XProperty", {"id": "1124204546"})
+                            _text(xp1, "Int", "1")
 
                         beat_refs.append(beat_id)
 
