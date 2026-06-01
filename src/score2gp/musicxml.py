@@ -445,6 +445,19 @@ class MusicXmlNote(BaseModel):
     duration_missing: bool = False
     duration_zero: bool = False
     tuplet_unsupported: bool = False
+    is_suppressed: bool = False
+    dedup_tab_note_id: str | None = None
+    dedup_tab_note_voice: int | None = None
+    dedup_tab_note_staff: int | None = None
+    dedup_tab_note_techniques: list[MusicXmlTechnique] = Field(default_factory=list)
+    dedup_tab_note_source_path: str | None = None
+    dedup_tab_note_pitch_midi: int | None = None
+    dedup_tab_note_pitch_name: str | None = None
+    dedup_tab_note_string: int | None = None
+    dedup_tab_note_fret: int | None = None
+    dedup_tab_note_ties: list[str] = Field(default_factory=list)
+    dedup_tab_note_onset_divisions: int | None = None
+    dedup_tab_note_duration_divisions: int | None = None
 
     def duration_ticks(self, divisions: int) -> tuple[int, bool]:
         value = Fraction(self.duration_divisions * DEFAULT_TICKS_PER_QUARTER, divisions)
@@ -565,7 +578,7 @@ def analyze_musicxml_timing(imported: MusicXmlImport, include_polyphony_diagnost
             # Calculate voice extents and durations for the measure
             voice_extents: dict[str, int] = {}
             voice_durations: dict[str, int] = {}
-            timed_notes = [n for n in measure.notes if not n.grace]
+            timed_notes = [n for n in measure.notes if not n.grace and not n.is_suppressed]
             for note in timed_notes:
                 if note.duration_divisions > 0:
                     end = note.onset_divisions + note.duration_divisions
@@ -754,11 +767,13 @@ def analyze_musicxml_timing(imported: MusicXmlImport, include_polyphony_diagnost
 
             # Collect pitched notes for tie checking later
             for note in measure.notes:
-                if not note.grace and not note.is_rest and note.pitch is not None:
+                if not note.grace and not note.is_rest and note.pitch is not None and not note.is_suppressed:
                     part_vnotes.setdefault(note.voice, []).append(note)
 
             # Note-level duration and tuplet issues
             for note in measure.notes:
+                if note.is_suppressed:
+                    continue
                 if note.duration_missing:
                     issues.append(
                         MusicXmlTimingIssue(
@@ -2450,3 +2465,287 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return f"sha256:{digest.hexdigest()}"
+
+
+def classify_musicxml_voice_duplication(part: MusicXmlPart) -> tuple[list[tuple[int, int]], list[tuple[int, int, str]]]:
+    """
+    Classifies voice pairs in a part.
+    Returns:
+      - confirmed_pairs: list of confirmed (notation_voice, tab_voice)
+      - warnings_to_log: list of (v1, v2, code) warnings
+    """
+    from collections import Counter
+    voices = sorted(list({note.voice for measure in part.measures for note in measure.notes if not note.grace}))
+
+    pair_statuses = {}
+    warnings_to_log = []
+
+    # 1. Evaluate each pair (v1, v2)
+    for i in range(len(voices)):
+        for j in range(i + 1, len(voices)):
+            v1 = voices[i]
+            v2 = voices[j]
+
+            # Active measures with pitched notes for each voice
+            active_m_v1 = set()
+            active_m_v2 = set()
+            for measure in part.measures:
+                if any(n.voice == v1 and not n.grace and not n.is_rest and n.pitch is not None for n in measure.notes):
+                    active_m_v1.add(measure.index)
+                if any(n.voice == v2 and not n.grace and not n.is_rest and n.pitch is not None for n in measure.notes):
+                    active_m_v2.add(measure.index)
+
+            if not active_m_v1 or not active_m_v2:
+                # One or both voices not active at all in part
+                pair_statuses[(v1, v2)] = "duplicate_staff_tab_rejected"
+                continue
+
+            shared_measures = active_m_v1.intersection(active_m_v2)
+            if not shared_measures:
+                pair_statuses[(v1, v2)] = "independent_polyphony"
+                continue
+
+            # Same pitched note count, onsets, durations, and stable pitch offset
+            has_timing_errors = False
+            chord_stack_confusion = False
+            perfect_matches = 0
+            observed_diffs = set()
+
+            for m_idx in sorted(list(shared_measures)):
+                measure = part.measures[m_idx - 1]
+                notes1 = [n for n in measure.notes if n.voice == v1 and not n.grace and not n.is_rest and n.pitch is not None]
+                notes2 = [n for n in measure.notes if n.voice == v2 and not n.grace and not n.is_rest and n.pitch is not None]
+
+                # Check same-voice timing overlaps inside either voice
+                for n_list in (notes1, notes2):
+                    for a_idx in range(len(n_list)):
+                        for b_idx in range(a_idx + 1, len(n_list)):
+                            na = n_list[a_idx]
+                            nb = n_list[b_idx]
+                            if max(na.onset_divisions, nb.onset_divisions) < min(na.onset_divisions + na.duration_divisions, nb.onset_divisions + nb.duration_divisions):
+                                has_timing_errors = True
+
+                if has_timing_errors:
+                    break
+
+                # Check for chord stack count confusion
+                onsets1 = [n.onset_divisions for n in notes1]
+                onsets2 = [n.onset_divisions for n in notes2]
+                if len(set(onsets1)) != len(notes1) or len(set(onsets2)) != len(notes2):
+                    # We have a chord stack! Check if they have the exact same onset groups
+                    groups1 = {}
+                    groups2 = {}
+                    for n in notes1:
+                        groups1.setdefault(n.onset_divisions, []).append(n)
+                    for n in notes2:
+                        groups2.setdefault(n.onset_divisions, []).append(n)
+
+                    if len(groups1) != len(groups2) or set(groups1.keys()) != set(groups2.keys()):
+                        chord_stack_confusion = True
+                        break
+
+                    # Within each onset group, check size matches
+                    for onset in groups1:
+                        g1 = sorted(groups1[onset], key=lambda n: n.pitch.midi if n.pitch else 0)
+                        g2 = sorted(groups2[onset], key=lambda n: n.pitch.midi if n.pitch else 0)
+                        if len(g1) != len(g2):
+                            chord_stack_confusion = True
+                            break
+                        for n1, n2 in zip(g1, g2):
+                            if n1.duration_divisions != n2.duration_divisions:
+                                chord_stack_confusion = True
+                                break
+                            diff = abs(n1.pitch.midi - n2.pitch.midi)
+                            if diff not in (0, 12):
+                                chord_stack_confusion = True
+                                break
+                            observed_diffs.add(diff)
+                    if chord_stack_confusion:
+                        break
+                    perfect_matches += 1
+                    continue
+
+                # Simple sequence matching
+                if len(notes1) != len(notes2):
+                    break
+
+                notes1.sort(key=lambda n: n.onset_divisions)
+                notes2.sort(key=lambda n: n.onset_divisions)
+
+                match = True
+                for idx in range(len(notes1)):
+                    n1 = notes1[idx]
+                    n2 = notes2[idx]
+                    if n1.onset_divisions != n2.onset_divisions or n1.duration_divisions != n2.duration_divisions:
+                        match = False
+                        break
+                    diff = abs(n1.pitch.midi - n2.pitch.midi)
+                    if diff not in (0, 12):
+                        match = False
+                        break
+                    observed_diffs.add(diff)
+
+                if match:
+                    perfect_matches += 1
+
+            if has_timing_errors or chord_stack_confusion:
+                pair_statuses[(v1, v2)] = "duplicate_staff_tab_rejected"
+            elif len(observed_diffs) != 1 or next(iter(observed_diffs)) not in (0, 12):
+                # Reject if there is no stable, consistent pitch offset across the entire voice pair
+                pair_statuses[(v1, v2)] = "duplicate_staff_tab_rejected"
+            elif perfect_matches == len(active_m_v1) and perfect_matches == len(active_m_v2):
+                pair_statuses[(v1, v2)] = "duplicate_staff_tab_confirmed"
+            elif perfect_matches > 0:
+                pair_statuses[(v1, v2)] = "duplicate_staff_tab_partial"
+            else:
+                pair_statuses[(v1, v2)] = "independent_polyphony"
+
+    # 2. Check for multiple competing duplicate matches to prevent ambiguity
+    initially_confirmed = [pair for pair, status in pair_statuses.items() if status == "duplicate_staff_tab_confirmed"]
+    voice_usage = Counter()
+    for v1, v2 in initially_confirmed:
+        voice_usage[v1] += 1
+        voice_usage[v2] += 1
+
+    confirmed_pairs = []
+    competing_voices = {voice for voice, count in voice_usage.items() if count > 1}
+
+    for v1, v2 in initially_confirmed:
+        if v1 in competing_voices or v2 in competing_voices:
+            # Downgrade competing duplicate matches to rejected/ambiguous!
+            pair_statuses[(v1, v2)] = "duplicate_staff_tab_rejected"
+            warnings_to_log.append((v1, v2, "musicxml_duplicate_staff_tab_rejected_independent_polyphony"))
+        else:
+            confirmed_pairs.append((v1, v2))
+
+    # Add warnings for other categories
+    for pair, status in pair_statuses.items():
+        v1, v2 = pair
+        if status == "duplicate_staff_tab_partial":
+            warnings_to_log.append((v1, v2, "musicxml_duplicate_staff_tab_partial_match"))
+        elif status == "duplicate_staff_tab_rejected" and pair not in initially_confirmed:
+            warnings_to_log.append((v1, v2, "musicxml_duplicate_staff_tab_not_applied_low_confidence"))
+        elif status == "independent_polyphony":
+            warnings_to_log.append((v1, v2, "musicxml_duplicate_staff_tab_rejected_independent_polyphony"))
+
+    return confirmed_pairs, warnings_to_log
+
+
+def deduplicate_suspected_staff_tab_voices(musicxml: MusicXmlImport) -> MusicXmlImport:
+    """
+    Returns a deduplicated deep copy of the MusicXmlImport.
+    Preserves authoritative rhythmic timelines, merges TAB playability details
+    into the notation notes, and suppresses duplicate TAB notes from active timing streams.
+    """
+    dedup_musicxml = musicxml.model_copy(deep=True)
+
+    for part in dedup_musicxml.parts:
+        confirmed_pairs, warnings = classify_musicxml_voice_duplication(part)
+
+        # Log voice pair warnings
+        for v1, v2, code in warnings:
+            dedup_musicxml.warnings.append(
+                MusicXmlWarning(
+                    code=code,
+                    message=f"Duplicate staff/TAB check returned code '{code}' for voice {v1} and voice {v2}.",
+                    severity="warning" if "rejected" in code or "partial" in code or "low_confidence" in code else "info",
+                    source_path=dedup_musicxml.source_path,
+                )
+            )
+
+        for v1, v2 in confirmed_pairs:
+            # Choose notation/TAB roles by staff evidence, not min/max voice number
+            v1_staves = {note.staff for measure in part.measures for note in measure.notes if note.voice == v1 and note.staff is not None}
+            v2_staves = {note.staff for measure in part.measures for note in measure.notes if note.voice == v2 and note.staff is not None}
+
+            if 1 in v1_staves and 2 in v2_staves:
+                notation_voice = v1
+                tab_voice = v2
+            elif 2 in v1_staves and 1 in v2_staves:
+                notation_voice = v2
+                tab_voice = v1
+            else:
+                notation_voice = min(v1, v2)
+                tab_voice = max(v1, v2)
+
+            # Emit detection and preservation warnings
+            dedup_musicxml.warnings.append(
+                MusicXmlWarning(
+                    code="musicxml_duplicate_staff_tab_detected",
+                    message=f"Duplicate staff/TAB voices detected: voice {notation_voice} and voice {tab_voice}.",
+                    severity="info",
+                    source_path=dedup_musicxml.source_path,
+                )
+            )
+            dedup_musicxml.warnings.append(
+                MusicXmlWarning(
+                    code="musicxml_duplicate_staff_tab_dedup_applied",
+                    message=f"Deduplication applied successfully for voice {notation_voice} and voice {tab_voice}.",
+                    severity="info",
+                    source_path=dedup_musicxml.source_path,
+                )
+            )
+            dedup_musicxml.warnings.append(
+                MusicXmlWarning(
+                    code="musicxml_duplicate_staff_tab_preserved_rhythm_authority",
+                    message=f"Preserved Voice {notation_voice} as the authoritative rhythmic timeline.",
+                    severity="info",
+                    source_path=dedup_musicxml.source_path,
+                )
+            )
+            dedup_musicxml.warnings.append(
+                MusicXmlWarning(
+                    code="musicxml_duplicate_staff_tab_preserved_tab_evidence",
+                    message=f"Preserved Voice {tab_voice} fret and playability evidence.",
+                    severity="info",
+                    source_path=dedup_musicxml.source_path,
+                )
+            )
+
+            # Merge notes measure by measure
+            for measure in part.measures:
+                # Suppress all duplicate TAB rests/events first
+                for n in measure.notes:
+                    if n.voice == tab_voice:
+                        n.is_suppressed = True
+
+                notes1 = [n for n in measure.notes if n.voice == notation_voice and not n.grace and not n.is_rest]
+                notes2 = [n for n in measure.notes if n.voice == tab_voice and not n.grace and not n.is_rest]
+
+                if notes1 and notes2:
+                    # Chords or simple notes: sort by onset and pitch to align perfectly
+                    notes1.sort(key=lambda n: (n.onset_divisions, n.pitch.midi if n.pitch else 0))
+                    notes2.sort(key=lambda n: (n.onset_divisions, n.pitch.midi if n.pitch else 0))
+
+                    for idx in range(min(len(notes1), len(notes2))):
+                        n1 = notes1[idx]
+                        n2 = notes2[idx]
+
+                        # Merge techniques
+                        existing_tech_kinds = {t.kind for t in n1.techniques}
+                        for tech in n2.techniques:
+                            if tech.kind not in existing_tech_kinds:
+                                n1.techniques.append(tech)
+
+                        # Merge ties
+                        for tie in n2.ties:
+                            if tie not in n1.ties:
+                                n1.ties.append(tie)
+
+                        # Save dedup tab note fields on the notation note n1 to preserve evidence
+                        n1.dedup_tab_note_id = n2.id
+                        n1.dedup_tab_note_voice = n2.voice
+                        n1.dedup_tab_note_staff = n2.staff
+                        n1.dedup_tab_note_techniques = n2.techniques
+                        n1.dedup_tab_note_source_path = n2.source_path
+                        if n2.pitch:
+                            n1.dedup_tab_note_pitch_midi = n2.pitch.midi
+                            n1.dedup_tab_note_pitch_name = n2.pitch.name
+                        n1.dedup_tab_note_ties = n2.ties
+                        n1.dedup_tab_note_onset_divisions = n2.onset_divisions
+                        n1.dedup_tab_note_duration_divisions = n2.duration_divisions
+
+                        # Suppress duplicate TAB voice notes from active ScoreIR/timing stream
+                        n2.is_suppressed = True
+
+    return dedup_musicxml
