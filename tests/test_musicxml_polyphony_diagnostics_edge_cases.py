@@ -266,7 +266,7 @@ def test_duplicate_staff_tab_voice_unified() -> None:
     )
     n2 = MusicXmlNote(
         id="n2", part_id="P1", measure_index=1, measure_number="1", note_index=2,
-        onset_divisions=0, duration_divisions=4, voice=5, staff=2, pitch=pitch_2, source_path="fake.musicxml"
+        onset_divisions=0, duration_divisions=4, voice=5, staff=2, pitch=pitch_2, source_path="fake_tab.musicxml"
     )
 
     measure = MusicXmlMeasure(
@@ -320,6 +320,12 @@ def test_duplicate_staff_tab_voice_unified() -> None:
     musicxml_prov_ids = {p.raw_token_id for p in note.provenance if p.source_stage == "musicxml"}
     assert "n1" in musicxml_prov_ids
     assert "n2" in musicxml_prov_ids
+
+    # Assert standard notation and TAB provenance source paths are preserved correctly
+    notation_prov = next(p for p in note.provenance if p.raw_token_id == "n1")
+    tab_prov = next(p for p in note.provenance if p.raw_token_id == "n2")
+    assert notation_prov.raw.get("source_path") == "fake.musicxml"
+    assert tab_prov.raw.get("source_path") == "fake_tab.musicxml"
 
 
 def test_genuine_independent_polyphony_still_refuses() -> None:
@@ -630,3 +636,83 @@ def test_duplicate_staff_tab_roles_selected_by_staff_evidence() -> None:
     assert voice_1_note.is_suppressed
     assert voice_5_note.dedup_tab_note_voice == 1
     assert voice_5_note.dedup_tab_note_staff == 2
+
+
+def test_duplicate_staff_tab_voice_rest_suppressed() -> None:
+    from score2gp.musicxml import (
+        MusicXmlImport, MusicXmlPart, MusicXmlMeasure, MusicXmlNote, MusicXmlPitch, MusicXmlMetadata,
+        deduplicate_suspected_staff_tab_voices
+    )
+    from score2gp.ir import TimeSignature
+    from score2gp.tabraw import TabRaw, TabCandidate
+    from score2gp.build_ir import build_ir_with_diagnostics_from_imports
+
+    pitch_1 = MusicXmlPitch(step="D", alter=0, octave=4, midi=62, name="D4")
+    pitch_2 = MusicXmlPitch(step="D", alter=0, octave=3, midi=50, name="D3")
+
+    # Pitched notes
+    n1 = MusicXmlNote(
+        id="n1", part_id="P1", measure_index=1, measure_number="1", note_index=1,
+        onset_divisions=0, duration_divisions=2, voice=1, staff=1, pitch=pitch_1, source_path="fake.musicxml"
+    )
+    n2 = MusicXmlNote(
+        id="n2", part_id="P1", measure_index=1, measure_number="1", note_index=2,
+        onset_divisions=0, duration_divisions=2, voice=5, staff=2, pitch=pitch_2, source_path="fake_tab.musicxml"
+    )
+
+    # Rests
+    n1_rest = MusicXmlNote(
+        id="n1_rest", part_id="P1", measure_index=1, measure_number="1", note_index=3,
+        onset_divisions=2, duration_divisions=2, voice=1, staff=1, is_rest=True, source_path="fake.musicxml"
+    )
+    n2_rest = MusicXmlNote(
+        id="n2_rest", part_id="P1", measure_index=1, measure_number="1", note_index=4,
+        onset_divisions=2, duration_divisions=2, voice=5, staff=2, is_rest=True, source_path="fake_tab.musicxml"
+    )
+
+    measure = MusicXmlMeasure(
+        index=1, number="1", divisions=4, time_signature=TimeSignature(numerator=4, denominator=4),
+        notes=[n1, n2, n1_rest, n2_rest], harmonies=[]
+    )
+    part = MusicXmlPart(id="P1", name="Guitar", measures=[measure])
+
+    imported = MusicXmlImport(
+        source_path="fake.musicxml", source_sha256="fake_sha", metadata=MusicXmlMetadata(),
+        tempo_bpm=120, parts=[part], warnings=[]
+    )
+
+    # 1. Verify deduplication suppresses both duplicate pitched notes and duplicate rests
+    dedup = deduplicate_suspected_staff_tab_voices(imported)
+    m = dedup.parts[0].measures[0]
+    voice_5_notes = [n for n in m.notes if n.voice == 5]
+    assert all(n.is_suppressed for n in voice_5_notes)
+
+    # 2. Verify target staff selection and build IR successfully selects Staff 1
+    tab_cand = TabCandidate(
+        id="tc1",
+        raw_text="7",
+        parsed_fret=7,
+        string=3,
+        confidence=0.9,
+        page_index=1,
+        system_index=1,
+        bar_index=1,
+        raw={"x": 100.0, "y": 200.0}
+    )
+    tabraw = TabRaw(candidates=[tab_cand])
+
+    score, diagnostics = build_ir_with_diagnostics_from_imports(imported, tabraw)
+
+    # Target staff must be Staff 1 (since Staff 2 notes/rests are suppressed)
+    assert len(score.bars) == 1
+    # We have 2 events: the pitched note at onset 0, and the rest at onset 2
+    assert len(score.bars[0].events) == 2
+
+    # Event 0 is the pitched note aligned with TabCandidate
+    event0 = score.bars[0].events[0]
+    assert len(event0.notes) == 1
+    assert event0.notes[0].fret == 7
+
+    # Event 1 is the rest on Staff 1 (having no notes)
+    event1 = score.bars[0].events[1]
+    assert len(event1.notes) == 0

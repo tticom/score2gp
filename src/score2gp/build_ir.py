@@ -1928,7 +1928,7 @@ def _aligned_note(
             voice=xml_note.dedup_tab_note_voice or 5,
             staff=xml_note.dedup_tab_note_staff,
             techniques=xml_note.dedup_tab_note_techniques or [],
-            source_path=xml_note.source_path,
+            source_path=xml_note.dedup_tab_note_source_path or xml_note.source_path,
         )
         provenance.append(_musicxml_provenance(temp_note, measure))
     provenance.append(tab_provenance)

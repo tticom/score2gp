@@ -2704,6 +2704,11 @@ def deduplicate_suspected_staff_tab_voices(musicxml: MusicXmlImport) -> MusicXml
 
             # Merge notes measure by measure
             for measure in part.measures:
+                # Suppress all duplicate TAB rests/events first
+                for n in measure.notes:
+                    if n.voice == tab_voice:
+                        n.is_suppressed = True
+
                 notes1 = [n for n in measure.notes if n.voice == notation_voice and not n.grace and not n.is_rest]
                 notes2 = [n for n in measure.notes if n.voice == tab_voice and not n.grace and not n.is_rest]
 
