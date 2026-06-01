@@ -298,20 +298,52 @@ def _summarize_gpif(root: ET.Element) -> dict[str, Any]:
         }
     )
     notes = root.findall(".//Note")
-    bars = root.findall(".//Bar")
-    if not bars:
-        bars = root.findall(".//MasterBar")
+
+    track_bars = root.findall(".//Bars/Bar")
+    raw_bars = root.findall(".//Bar")
+    master_bars = root.findall(".//MasterBar")
+
+    if track_bars:
+        bar_count = len(track_bars)
+        bar_count_source = "track_bars"
+        gpif_bar_count_fallback_used = False
+    elif master_bars:
+        bar_count = len(master_bars)
+        bar_count_source = "master_bars"
+        gpif_bar_count_fallback_used = True
+    elif raw_bars:
+        bar_count = len(raw_bars)
+        bar_count_source = "raw_bar_tags_fallback"
+        gpif_bar_count_fallback_used = True
+    else:
+        bar_count = 0
+        bar_count_source = "raw_bar_tags_fallback"
+        gpif_bar_count_fallback_used = True
+
+    raw_bar_tag_count = len(raw_bars)
+    musical_track_bar_count = len(track_bars)
+    master_bar_count = len(master_bars)
+    automation_bar_tag_count = len(root.findall(".//Automation//Bar"))
+    template_prelude_bar_count = 0
 
     return {
         "tracks": tracks,
         "tunings": tunings,
         "tempo": tempo,
         "time_signatures": sorted(set(time_signatures)),
-        "bar_count": len(bars),
+        "bar_count": bar_count,
         "note_count": len(notes),
         "chord_symbols": chord_symbols,
         "techniques": techniques,
+        "raw_bar_tag_count": raw_bar_tag_count,
+        "musical_track_bar_count": musical_track_bar_count,
+        "master_bar_count": master_bar_count,
+        "automation_bar_tag_count": automation_bar_tag_count,
+        "template_prelude_bar_count": template_prelude_bar_count,
+        "bar_count_source": bar_count_source,
+        "gpif_bar_count_fallback_used": gpif_bar_count_fallback_used,
     }
+
 
 
 def _first_text(root: ET.Element, paths: list[str]) -> str | None:
