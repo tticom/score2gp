@@ -29,33 +29,40 @@ def classify_gp_quality(metrics: Dict[str, Any]) -> str:
     scoreir_note_count = metrics.get("scoreir_note_count", 0)
     playable_frets = metrics.get("playable_fret_candidate_count", 0)
     matched_frets = metrics.get("matched_fret_candidate_count", 0)
-    gpif_measures = metrics.get("gpif_measure_count", 0)
-    scoreir_bars = metrics.get("scoreir_bar_count", 0)
     tech_candidates = metrics.get("non_playable_technique_text_candidate_count", 0)
     warnings = metrics.get("warning_code_counts", {})
 
+    # New bar alignment metrics with fallbacks for old test compatibility
+    raw_bar_tag_count = metrics.get("raw_bar_tag_count", metrics.get("gpif_measure_count", 0))
+    musical_track_bar_count = metrics.get("musical_track_bar_count", metrics.get("gpif_measure_count", 0))
+    master_bar_count = metrics.get("master_bar_count", metrics.get("gpif_measure_count", 0))
+    automation_bar_tag_count = metrics.get("automation_bar_tag_count", 0)
+    template_prelude_bar_count = metrics.get("template_prelude_bar_count", 0)
+    scoreir_bars = metrics.get("scoreir_bar_count", 0)
+    fallback_used = metrics.get("gpif_bar_count_fallback_used", False)
+
+    score_aligned_musical_bar_count = musical_track_bar_count - template_prelude_bar_count
+    metrics["musical_gpif_measure_count"] = musical_track_bar_count
+
+    if template_prelude_bar_count > 0 and score_aligned_musical_bar_count == scoreir_bars:
+        bar_alignment_status = "expected_template_bars_accounted"
+    elif musical_track_bar_count == scoreir_bars and template_prelude_bar_count == 0:
+        bar_alignment_status = "aligned"
+    else:
+        bar_alignment_status = "mismatch"
+
+    metrics["bar_alignment_status"] = bar_alignment_status
+
+    # Priority of classifications:
     # 1. Empty or near-empty
     if not gp_written or gpif_note_count == 0 or scoreir_note_count == 0:
         return "gp_output_empty_or_near_empty"
 
-    # 2. Bar-count consistency check
-    if gpif_measures != scoreir_bars:
-        return "gp_output_bar_alignment_suspect"
-
-    # 3. Bar alignment suspect from OMR warnings
-    has_alignment_warnings = any(
-        "shifted" in k or "skipped" in k or "alignment" in k
-        for k in warnings.keys()
-    )
-    if has_alignment_warnings:
-        return "gp_output_bar_alignment_suspect"
-
-    # 4. Fret matching suspect
-    # High playable frets but very low matched count (e.g. < 40%)
+    # 2. Fret matching suspect (< 40%)
     if playable_frets > 10 and (matched_frets / playable_frets) < 0.40:
         return "gp_output_fret_matching_suspect"
 
-    # 5. Serialized-output coverage checks
+    # 3. Low serialized note coverage (< 70%)
     # gpif_note_count vs scoreir_note_count
     if gpif_note_count < scoreir_note_count * 0.70:
         return "gp_output_note_coverage_low"
@@ -64,16 +71,39 @@ def classify_gp_quality(metrics: Dict[str, Any]) -> str:
     if playable_frets > 10 and gpif_note_count < playable_frets * 0.70:
         return "gp_output_note_coverage_low"
 
-    # 6. Note coverage low (re-verify matched frets ratio)
+    # Note coverage low (re-verify matched frets ratio)
     if playable_frets > 10 and (matched_frets / playable_frets) < 0.70:
         return "gp_output_note_coverage_low"
 
-    # 7. Technique loss expected
+    # 4. Bar alignment suspect logic
+    is_alignment_suspect = False
+    if bar_alignment_status == "mismatch":
+        is_alignment_suspect = True
+    elif musical_track_bar_count != scoreir_bars and bar_alignment_status != "expected_template_bars_accounted":
+        is_alignment_suspect = True
+    elif musical_track_bar_count < scoreir_bars:
+        is_alignment_suspect = True
+    elif template_prelude_bar_count > 0 and metrics.get("template_prelude_note_count", 0) > 0:
+        is_alignment_suspect = True
+    elif fallback_used:
+        is_alignment_suspect = True
+    elif any("shifted" in k or "skipped" in k or "alignment" in k for k in warnings.keys()):
+        is_alignment_suspect = True
+
+    if is_alignment_suspect:
+        return "gp_output_bar_alignment_suspect"
+
+    # 5. Expected template bars accounted
+    if bar_alignment_status == "expected_template_bars_accounted":
+        return "gp_output_expected_template_bars_accounted"
+
+    # 6. Technique loss expected
     if tech_candidates > 0:
         return "gp_output_technique_loss_expected"
 
-    # 8. Basic pass
+    # 7. Basic pass
     return "gp_output_quality_pass_basic"
+
 
 
 def audit_single_input(out_dir: Path, label: str) -> Optional[Dict[str, Any]]:
@@ -147,6 +177,14 @@ def audit_single_input(out_dir: Path, label: str) -> Optional[Dict[str, Any]]:
     gpif_note_count = 0
     gp_non_empty = False
 
+    raw_bar_tag_count = 0
+    musical_track_bar_count = 0
+    master_bar_count = 0
+    automation_bar_tag_count = 0
+    template_prelude_bar_count = 0
+    bar_count_source = "raw_bar_tags_fallback"
+    gpif_bar_count_fallback_used = True
+
     if gp_written:
         try:
             # Run gp_package inspect helper
@@ -154,6 +192,14 @@ def audit_single_input(out_dir: Path, label: str) -> Optional[Dict[str, Any]]:
             gpif_measure_count = gp_summary.get("bar_count", 0)
             gpif_note_count = gp_summary.get("note_count", 0)
             gp_non_empty = (gpif_note_count > 0)
+
+            raw_bar_tag_count = gp_summary.get("raw_bar_tag_count", 0)
+            musical_track_bar_count = gp_summary.get("musical_track_bar_count", 0)
+            master_bar_count = gp_summary.get("master_bar_count", 0)
+            automation_bar_tag_count = gp_summary.get("automation_bar_tag_count", 0)
+            template_prelude_bar_count = gp_summary.get("template_prelude_bar_count", 0)
+            bar_count_source = gp_summary.get("bar_count_source", "raw_bar_tags_fallback")
+            gpif_bar_count_fallback_used = gp_summary.get("gpif_bar_count_fallback_used", True)
 
             # Extract beat count from ZIP without fully parsing
             with zipfile.ZipFile(smoke_gp_path, "r") as zf:
@@ -207,12 +253,20 @@ def audit_single_input(out_dir: Path, label: str) -> Optional[Dict[str, Any]]:
         "whether_large_spaced_tab_detection_applied": large_spaced_applied,
         "whether_gp_package_produced": gp_written,
         "whether_gp_package_contains_non_empty_note_content": gp_non_empty,
+        "raw_bar_tag_count": raw_bar_tag_count,
+        "musical_track_bar_count": musical_track_bar_count,
+        "master_bar_count": master_bar_count,
+        "automation_bar_tag_count": automation_bar_tag_count,
+        "template_prelude_bar_count": template_prelude_bar_count,
+        "bar_count_source": bar_count_source,
+        "gpif_bar_count_fallback_used": gpif_bar_count_fallback_used,
         "artifact_paths": artifact_paths,
     }
 
     # Classify quality
     metrics["quality_category"] = classify_gp_quality(metrics)
     return metrics
+
 
 
 def main():
