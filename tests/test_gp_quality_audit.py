@@ -70,3 +70,35 @@ def test_classify_gp_quality_technique_loss_expected() -> None:
         "warning_code_counts": {},
     }
     assert classify_gp_quality(metrics) == "gp_output_technique_loss_expected"
+
+
+def test_classify_gp_quality_serialized_coverage_low() -> None:
+    # Test 5: High ScoreIR notes but low GPIF notes => gp_output_note_coverage_low
+    metrics = {
+        "whether_gp_package_produced": True,
+        "gpif_note_count": 15,  # Much lower than ScoreIR notes (15 < 50 * 0.70)
+        "scoreir_note_count": 50,
+        "playable_fret_candidate_count": 50,
+        "matched_fret_candidate_count": 50,
+        "gpif_measure_count": 10,
+        "scoreir_bar_count": 10,
+        "non_playable_technique_text_candidate_count": 0,
+        "warning_code_counts": {},
+    }
+    assert classify_gp_quality(metrics) == "gp_output_note_coverage_low"
+
+
+def test_classify_gp_quality_measure_mismatch() -> None:
+    # Test 6: GPIF/ScoreIR measure mismatch => bar alignment suspect
+    metrics = {
+        "whether_gp_package_produced": True,
+        "gpif_note_count": 50,
+        "scoreir_note_count": 50,
+        "playable_fret_candidate_count": 50,
+        "matched_fret_candidate_count": 50,
+        "gpif_measure_count": 12,  # 12 != 10
+        "scoreir_bar_count": 10,
+        "non_playable_technique_text_candidate_count": 0,
+        "warning_code_counts": {},
+    }
+    assert classify_gp_quality(metrics) == "gp_output_bar_alignment_suspect"
