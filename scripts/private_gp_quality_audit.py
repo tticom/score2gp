@@ -38,8 +38,11 @@ def classify_gp_quality(metrics: Dict[str, Any]) -> str:
     if not gp_written or gpif_note_count == 0 or scoreir_note_count == 0:
         return "gp_output_empty_or_near_empty"
 
-    # 2. Bar alignment suspect
-    # Only suspect if we have warning codes representing shifted or skipped bars
+    # 2. Bar-count consistency check
+    if gpif_measures != scoreir_bars:
+        return "gp_output_bar_alignment_suspect"
+
+    # 3. Bar alignment suspect from OMR warnings
     has_alignment_warnings = any(
         "shifted" in k or "skipped" in k or "alignment" in k
         for k in warnings.keys()
@@ -47,23 +50,29 @@ def classify_gp_quality(metrics: Dict[str, Any]) -> str:
     if has_alignment_warnings:
         return "gp_output_bar_alignment_suspect"
 
-    # 3. Fret matching suspect
+    # 4. Fret matching suspect
     # High playable frets but very low matched count (e.g. < 40%)
     if playable_frets > 10 and (matched_frets / playable_frets) < 0.40:
         return "gp_output_fret_matching_suspect"
 
-    # 4. Note coverage low
-    # Match rate is mediocre, or note count is significantly lower than candidates (e.g. < 70%)
+    # 5. Serialized-output coverage checks
+    # gpif_note_count vs scoreir_note_count
+    if gpif_note_count < scoreir_note_count * 0.70:
+        return "gp_output_note_coverage_low"
+
+    # gpif_note_count vs playable_fret_candidate_count where relevant
+    if playable_frets > 10 and gpif_note_count < playable_frets * 0.70:
+        return "gp_output_note_coverage_low"
+
+    # 6. Note coverage low (re-verify matched frets ratio)
     if playable_frets > 10 and (matched_frets / playable_frets) < 0.70:
         return "gp_output_note_coverage_low"
 
-    # 5. Technique loss expected
-    # Notes are present, alignment is plausible, but we have technique candidates
-    # that are not yet serialized (since technique serialization is a known next step)
+    # 7. Technique loss expected
     if tech_candidates > 0:
         return "gp_output_technique_loss_expected"
 
-    # 6. Basic pass
+    # 8. Basic pass
     return "gp_output_quality_pass_basic"
 
 
