@@ -2112,6 +2112,33 @@ def test_gpif_bidirectional_roundtrip(tmp_path) -> None:
     assert len(result["errors"]) == 0
 
 
+def test_gpif_hammer_pull_roundtrip(tmp_path) -> None:
+    from score2gp.gp_package import validate_roundtrip
+    score = ScoreIR.from_json_file("fixtures/public/test_gpif_hammer_pull.ir.json")
+
+    # We only keep the first bar because the second bar contains slurs,
+    # which serialize to HO/PO in GPIF and therefore recover as HO/PO (slur recovery is not in scope).
+    score.bars = [score.bars[0]]
+
+    out = tmp_path / "hammer_pull_roundtrip.gp"
+    warnings = write_gp(score, out)
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    result = validate_roundtrip(out, score)
+    assert result["valid"] is True, f"Round-trip validation failed: {result['errors']}"
+    assert len(result["errors"]) == 0
+
+    # Verify that validation fails if target_event_id does not match the recovered value
+    import copy
+    bad_score = copy.deepcopy(score)
+    bad_score.bars[0].events[0].notes[0].techniques[0].target_event_id = "wrong_target_id"
+
+    bad_result = validate_roundtrip(out, bad_score)
+    assert bad_result["valid"] is False
+    assert any("hammer-on target_event_id mismatch" in err for err in bad_result["errors"])
+
+
 def test_gpif_standard_guitar_pitch_stave_display(tmp_path) -> None:
     # 1. Load tiny_score.ir.json and customize it to be standard guitar tuning
     score = ScoreIR.from_json_file("fixtures/public/tiny_score.ir.json")
