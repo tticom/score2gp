@@ -426,7 +426,10 @@ class _TabSystem:
 
     @property
     def ambiguous_bar_tolerance(self) -> float:
-        return max(4.0, self.line_spacing * 0.45)
+        val = max(4.0, self.line_spacing * 0.45)
+        if self.line_spacing > 15.0:
+            return min(6.0, val)
+        return val
 
     def contains_y(self, y: float | None) -> bool:
         if y is None:
@@ -801,105 +804,105 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                             "system_index": system.system_index,
                         })
                     reasons = system.rejection_reasons or {}
+                    has_usable_barlines = (len(system.barlines) >= 2)
+                    
+                    def add_barline_warning(code, message, severity="warning", grouping_status="partial"):
+                        if has_usable_barlines and severity == "warning":
+                            warnings.append({
+                                "code": f"info_{code}",
+                                "message": f"[Diagnostic Info] {message}",
+                                "severity": "info",
+                                "grouping_status": "grouped",
+                                "page_index": page_number,
+                                "system_index": system.system_index,
+                            })
+                        else:
+                            warnings.append({
+                                "code": code,
+                                "message": message,
+                                "severity": severity,
+                                "grouping_status": grouping_status,
+                                "page_index": page_number,
+                                "system_index": system.system_index,
+                            })
+                            
                     if reasons.get("pdf_barline_too_short", 0) > 0:
-                        warnings.append({
-                            "code": "pdf_barline_too_short",
-                            "message": f"One or more barline candidates are too short in system {system.system_index} on page {page_number}.",
-                            "severity": "warning",
-                            "grouping_status": "partial",
-                            "page_index": page_number,
-                            "system_index": system.system_index,
-                        })
+                        add_barline_warning(
+                            "pdf_barline_too_short",
+                            f"One or more barline candidates are too short in system {system.system_index} on page {page_number}.",
+                            "warning",
+                            "partial",
+                        )
                     if reasons.get("pdf_barline_does_not_cross_staff", 0) > 0:
-                        warnings.append({
-                            "code": "pdf_barline_does_not_cross_staff",
-                            "message": f"One or more barline candidates do not cross the tab staff in system {system.system_index} on page {page_number}.",
-                            "severity": "warning",
-                            "grouping_status": "partial",
-                            "page_index": page_number,
-                            "system_index": system.system_index,
-                        })
+                        add_barline_warning(
+                            "pdf_barline_does_not_cross_staff",
+                            f"One or more barline candidates do not cross the tab staff in system {system.system_index} on page {page_number}.",
+                            "warning",
+                            "partial",
+                        )
                     if reasons.get("pdf_barline_outside_system_bounds", 0) > 0:
-                        warnings.append({
-                            "code": "pdf_barline_outside_system_bounds",
-                            "message": f"One or more barline candidates are outside the system bounds in system {system.system_index} on page {page_number}.",
-                            "severity": "warning",
-                            "grouping_status": "partial",
-                            "page_index": page_number,
-                            "system_index": system.system_index,
-                        })
+                        add_barline_warning(
+                            "pdf_barline_outside_system_bounds",
+                            f"One or more barline candidates are outside the system bounds in system {system.system_index} on page {page_number}.",
+                            "warning",
+                            "partial",
+                        )
                     if reasons.get("pdf_barline_ambiguous", 0) > 0:
-                        warnings.append({
-                            "code": "pdf_barline_ambiguous",
-                            "message": f"One or more barline candidates are horizontally ambiguous in system {system.system_index} on page {page_number}.",
-                            "severity": "warning",
-                            "grouping_status": "ambiguous",
-                            "page_index": page_number,
-                            "system_index": system.system_index,
-                        })
+                        add_barline_warning(
+                            "pdf_barline_ambiguous",
+                            f"One or more barline candidates are horizontally ambiguous in system {system.system_index} on page {page_number}.",
+                            "warning",
+                            "ambiguous",
+                        )
                     if reasons.get("pdf_barline_double_secondary", 0) > 0:
-                        warnings.append({
-                            "code": "pdf_barline_double_secondary",
-                            "message": f"One or more secondary double-barline candidates were ignored in system {system.system_index} on page {page_number}.",
-                            "severity": "info",
-                            "grouping_status": "grouped",
-                            "page_index": page_number,
-                            "system_index": system.system_index,
-                        })
+                        add_barline_warning(
+                            "pdf_barline_double_secondary",
+                            f"One or more secondary double-barline candidates were ignored in system {system.system_index} on page {page_number}.",
+                            "info",
+                            "grouped",
+                        )
                     if reasons.get("pdf_barline_too_short_absolute", 0) > 0:
-                        warnings.append({
-                            "code": "pdf_barline_too_short_absolute",
-                            "message": f"One or more barline candidates are below absolute height threshold in system {system.system_index} on page {page_number}.",
-                            "severity": "warning",
-                            "grouping_status": "partial",
-                            "page_index": page_number,
-                            "system_index": system.system_index,
-                        })
+                        add_barline_warning(
+                            "pdf_barline_too_short_absolute",
+                            f"One or more barline candidates are below absolute height threshold in system {system.system_index} on page {page_number}.",
+                            "warning",
+                            "partial",
+                        )
                     if reasons.get("pdf_barline_too_short_relative_to_staff", 0) > 0:
-                        warnings.append({
-                            "code": "pdf_barline_too_short_relative_to_staff",
-                            "message": f"One or more barline candidates are below relative staff-height threshold in system {system.system_index} on page {page_number}.",
-                            "severity": "warning",
-                            "grouping_status": "partial",
-                            "page_index": page_number,
-                            "system_index": system.system_index,
-                        })
+                        add_barline_warning(
+                            "pdf_barline_too_short_relative_to_staff",
+                            f"One or more barline candidates are below relative staff-height threshold in system {system.system_index} on page {page_number}.",
+                            "warning",
+                            "partial",
+                        )
                     if reasons.get("pdf_barline_crosses_insufficient_string_gaps", 0) > 0:
-                        warnings.append({
-                            "code": "pdf_barline_crosses_insufficient_string_gaps",
-                            "message": f"One or more barline candidates cross too few string gaps in system {system.system_index} on page {page_number}.",
-                            "severity": "warning",
-                            "grouping_status": "partial",
-                            "page_index": page_number,
-                            "system_index": system.system_index,
-                        })
+                        add_barline_warning(
+                            "pdf_barline_crosses_insufficient_string_gaps",
+                            f"One or more barline candidates cross too few string gaps in system {system.system_index} on page {page_number}.",
+                            "warning",
+                            "partial",
+                        )
                     if reasons.get("pdf_barline_partial_staff_crossing", 0) > 0:
-                        warnings.append({
-                            "code": "pdf_barline_partial_staff_crossing",
-                            "message": f"One or more barline candidates only partially cross the staff in system {system.system_index} on page {page_number}.",
-                            "severity": "warning",
-                            "grouping_status": "partial",
-                            "page_index": page_number,
-                            "system_index": system.system_index,
-                        })
+                        add_barline_warning(
+                            "pdf_barline_partial_staff_crossing",
+                            f"One or more barline candidates only partially cross the staff in system {system.system_index} on page {page_number}.",
+                            "warning",
+                            "partial",
+                        )
                     if reasons.get("pdf_barline_outside_staff_region", 0) > 0:
-                        warnings.append({
-                            "code": "pdf_barline_outside_staff_region",
-                            "message": f"One or more barline candidates are outside the staff region in system {system.system_index} on page {page_number}.",
-                            "severity": "warning",
-                            "grouping_status": "partial",
-                            "page_index": page_number,
-                            "system_index": system.system_index,
-                        })
+                        add_barline_warning(
+                            "pdf_barline_outside_staff_region",
+                            f"One or more barline candidates are outside the staff region in system {system.system_index} on page {page_number}.",
+                            "warning",
+                            "partial",
+                        )
                     if reasons.get("pdf_barline_rejected_relative_height", 0) > 0:
-                        warnings.append({
-                            "code": "pdf_barline_rejected_relative_height",
-                            "message": f"One or more barline candidates were rejected by relative staff-height check in system {system.system_index} on page {page_number}.",
-                            "severity": "warning",
-                            "grouping_status": "partial",
-                            "page_index": page_number,
-                            "system_index": system.system_index,
-                        })
+                        add_barline_warning(
+                            "pdf_barline_rejected_relative_height",
+                            f"One or more barline candidates were rejected by relative staff-height check in system {system.system_index} on page {page_number}.",
+                            "warning",
+                            "partial",
+                        )
                     # Propagate system grouping warnings to page warnings
                     for gw in system.grouping_warnings:
                         if gw == "pdf_bar_box_too_narrow":
@@ -3722,8 +3725,77 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
         filtered = filter_tab_barline_candidates(system_candidates, y0, y1, line_ys, x0, x1)
         valid_barlines = filtered["valid_barlines"]
         rejected_count = filtered["rejected_count"]
-        rejection_reasons = filtered["rejection_reasons"]
-        details = filtered["details"]
+        rejection_reasons = dict(filtered["rejection_reasons"])
+        details = list(filtered["details"])
+
+        # Notation-to-TAB barline inheritance
+        partner_barlines = []
+        if len(valid_barlines) < 2:
+            best_partner = None
+            best_partner_dist = 999999.0
+            
+            for other_group in _tab_line_groups(horizontal):
+                if other_group == group:
+                    continue
+                
+                other_class = classify_staff_line_group(other_group, page)
+                if other_class not in ("notation", "ambiguous"):
+                    continue
+                    
+                other_ys = [round((line.y0 + line.y1) / 2, 3) for line in other_group]
+                other_y0 = min(other_ys)
+                other_y1 = max(other_ys)
+                
+                # If the other group is above the TAB staff and within 250 points
+                if other_y1 < y0 and y0 - other_y1 <= 250.0:
+                    # Check horizontal overlap alignment
+                    other_x0 = min(min(line.x0, line.x1) for line in other_group)
+                    other_x1 = max(max(line.x0, line.x1) for line in other_group)
+                    overlap_w = max(0.0, min(x1, other_x1) - max(x0, other_x0))
+                    min_w = min(x1 - x0, other_x1 - other_x0)
+                    if min_w > 0 and (overlap_w / min_w) >= 0.7:
+                        dist = y0 - other_y1
+                        if dist < best_partner_dist:
+                            best_partner_dist = dist
+                            best_partner = (other_group, other_y0, other_y1, other_x0, other_x1, other_ys)
+            
+            if best_partner is not None:
+                other_group, other_y0, other_y1, other_x0, other_x1, other_ys = best_partner
+                other_candidates = []
+                for s in deduped_verticals:
+                    x_val = (s.x0 + s.x1) / 2
+                    y_min = min(s.y0, s.y1)
+                    y_max = max(s.y0, s.y1)
+                    if y_max >= other_y0 - 15.0 and y_min <= other_y1 + 15.0 and other_x0 - 25.0 <= x_val <= other_x1 + 25.0:
+                        other_candidates.append(s)
+                
+                other_filtered = filter_tab_barline_candidates(other_candidates, other_y0, other_y1, other_ys, other_x0, other_x1)
+                partner_barlines.extend(other_filtered["valid_barlines"])
+                
+                # Accumulate rejection reasons too
+                for k, v in other_filtered["rejection_reasons"].items():
+                    rejection_reasons[k] = rejection_reasons.get(k, 0) + v
+                rejected_count += other_filtered["rejected_count"]
+                
+                # Add partner details with a flag
+                for det in other_filtered["details"]:
+                    det_copy = dict(det)
+                    det_copy["inherited"] = True
+                    details.append(det_copy)
+        
+        # Merge and deduplicate barlines within 15.0 points only if we actually inherited partner barlines
+        if partner_barlines:
+            all_barlines = sorted(list(set(valid_barlines + partner_barlines)))
+            final_barlines = []
+            for b in all_barlines:
+                if not final_barlines:
+                    final_barlines.append(b)
+                else:
+                    if b - final_barlines[-1] <= 15.0:
+                        final_barlines[-1] = b
+                        continue
+                    final_barlines.append(b)
+            valid_barlines = final_barlines
 
         systems.append(
             _TabSystem(
@@ -3846,24 +3918,51 @@ def _tab_line_groups(lines: list[_LineSegment]) -> list[list[_LineSegment]]:
                 continue
 
             group_indices = [i0, i1]
+            failed = False
             for step in range(2, 6):
                 target_y = y0 + step * gap
-                best_idx = None
-                best_diff = 2.5
+                
+                # Collect all candidates at this target Y Y-level
+                candidates_at_y = []
                 for j in range(group_indices[-1] + 1, n):
                     if j in used:
                         continue
                     yj = (sorted_lines[j].y0 + sorted_lines[j].y1) / 2
                     diff = abs(yj - target_y)
-                    if diff < best_diff:
-                        best_diff = diff
-                        best_idx = j
+                    if diff < 2.5:
+                        candidates_at_y.append((diff, j))
+                
+                best_idx = None
+                if len(candidates_at_y) == 1:
+                    best_idx = candidates_at_y[0][1]
+                elif len(candidates_at_y) > 1:
+                    # Resolve ambiguity using normalized horizontal overlap against the first line of the group
+                    ref_line = sorted_lines[group_indices[0]]
+                    group_x0 = min(ref_line.x0, ref_line.x1)
+                    group_x1 = max(ref_line.x0, ref_line.x1)
+                    
+                    valid_candidates = []
+                    for diff, j in candidates_at_y:
+                        jx0 = min(sorted_lines[j].x0, sorted_lines[j].x1)
+                        jx1 = max(sorted_lines[j].x0, sorted_lines[j].x1)
+                        candidate_w = max(1e-5, jx1 - jx0)
+                        overlap = max(0.0, min(jx1, group_x1) - max(jx0, group_x0))
+                        norm_overlap = overlap / candidate_w
+                        
+                        if norm_overlap >= 0.5:
+                            valid_candidates.append((norm_overlap, overlap, j))
+                            
+                    if valid_candidates:
+                        valid_candidates.sort(key=lambda x: (x[0], x[1]), reverse=True)
+                        best_idx = valid_candidates[0][2]
+                
                 if best_idx is not None:
                     group_indices.append(best_idx)
                 else:
+                    failed = True
                     break
 
-            if len(group_indices) == 6:
+            if not failed and len(group_indices) == 6:
                 group = [sorted_lines[idx] for idx in group_indices]
                 if gap > 24.0:
                     if not _is_coherent_large_tab_group(group):
@@ -3886,24 +3985,51 @@ def _tab_line_groups(lines: list[_LineSegment]) -> list[list[_LineSegment]]:
                 continue
 
             group_indices = [i0, i1]
+            failed = False
             for step in range(2, 5):
                 target_y = y0 + step * gap
-                best_idx = None
-                best_diff = 2.5
+                
+                # Collect all candidates at this target Y Y-level
+                candidates_at_y = []
                 for j in range(group_indices[-1] + 1, n):
                     if j in used:
                         continue
                     yj = (sorted_lines[j].y0 + sorted_lines[j].y1) / 2
                     diff = abs(yj - target_y)
-                    if diff < best_diff:
-                        best_diff = diff
-                        best_idx = j
+                    if diff < 2.5:
+                        candidates_at_y.append((diff, j))
+                
+                best_idx = None
+                if len(candidates_at_y) == 1:
+                    best_idx = candidates_at_y[0][1]
+                elif len(candidates_at_y) > 1:
+                    # Resolve ambiguity using normalized horizontal overlap against the first line of the group
+                    ref_line = sorted_lines[group_indices[0]]
+                    group_x0 = min(ref_line.x0, ref_line.x1)
+                    group_x1 = max(ref_line.x0, ref_line.x1)
+                    
+                    valid_candidates = []
+                    for diff, j in candidates_at_y:
+                        jx0 = min(sorted_lines[j].x0, sorted_lines[j].x1)
+                        jx1 = max(sorted_lines[j].x0, sorted_lines[j].x1)
+                        candidate_w = max(1e-5, jx1 - jx0)
+                        overlap = max(0.0, min(jx1, group_x1) - max(jx0, group_x0))
+                        norm_overlap = overlap / candidate_w
+                        
+                        if norm_overlap >= 0.5:
+                            valid_candidates.append((norm_overlap, overlap, j))
+                            
+                    if valid_candidates:
+                        valid_candidates.sort(key=lambda x: (x[0], x[1]), reverse=True)
+                        best_idx = valid_candidates[0][2]
+                
                 if best_idx is not None:
                     group_indices.append(best_idx)
                 else:
+                    failed = True
                     break
 
-            if len(group_indices) == 5:
+            if not failed and len(group_indices) == 5:
                 group = [sorted_lines[idx] for idx in group_indices]
                 groups.append(group)
                 used.update(group_indices)
