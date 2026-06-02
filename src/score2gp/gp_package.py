@@ -2248,8 +2248,8 @@ def _validate_score_ir_roundtrip(original: ScoreIR, recovered: ScoreIR) -> list[
                 if (on_ho is None) != (rn_ho is None):
                     errors.append(f"event '{ev_id}' note string {string_num} hammer-on technique presence mismatch")
                 elif on_ho is not None:
-                    if (on_ho.target_event_id is None) != (rn_ho.target_event_id is None):
-                        errors.append(f"event '{ev_id}' note string {string_num} hammer-on target_event_id presence mismatch: original={on_ho.target_event_id}, recovered={rn_ho.target_event_id}")
+                    if on_ho.target_event_id != rn_ho.target_event_id:
+                        errors.append(f"event '{ev_id}' note string {string_num} hammer-on target_event_id mismatch: original={on_ho.target_event_id}, recovered={rn_ho.target_event_id}")
 
                 # Note Pull-off technique
                 on_po = next((t for t in on.techniques if t.kind == "pull-off"), None)
@@ -2257,7 +2257,7 @@ def _validate_score_ir_roundtrip(original: ScoreIR, recovered: ScoreIR) -> list[
                 if (on_po is None) != (rn_po is None):
                     errors.append(f"event '{ev_id}' note string {string_num} pull-off technique presence mismatch")
                 elif on_po is not None:
-                    if (on_po.target_event_id is None) != (rn_po.target_event_id is None):
-                        errors.append(f"event '{ev_id}' note string {string_num} pull-off target_event_id presence mismatch: original={on_po.target_event_id}, recovered={rn_po.target_event_id}")
+                    if on_po.target_event_id != rn_po.target_event_id:
+                        errors.append(f"event '{ev_id}' note string {string_num} pull-off target_event_id mismatch: original={on_po.target_event_id}, recovered={rn_po.target_event_id}")
 
     return errors
