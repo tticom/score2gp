@@ -74,6 +74,12 @@ def _find_span_notes(score: ScoreIR) -> tuple[set[tuple[int, int, int]], set[tup
         for event in bar.events:
             note_abs = bar_starts[bar.index] + event.timing.onset_ticks
             for note in event.notes:
+                for tech in note.techniques:
+                    if tech.kind == "let-ring":
+                        let_ring_notes.add((bar.index, event.timing.onset_ticks, note.string))
+                    elif tech.kind == "palm-mute":
+                        palm_mute_notes.add((bar.index, event.timing.onset_ticks, note.string))
+
                 for kind, string, start_abs, end_abs in spans:
                     if note.string == string and start_abs <= note_abs <= end_abs:
                         if kind == "let-ring":
@@ -787,6 +793,8 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
 
                             if is_let_ring:
                                 ET.SubElement(note_node, "LetRing")
+                            if is_palm_mute:
+                                ET.SubElement(note_node, "PalmMute")
                             if getattr(note, "is_dead", False):
                                 ET.SubElement(note_node, "DeadNote")
 

@@ -2279,3 +2279,154 @@ def test_gpif_standard_guitar_pitch_stave_display(tmp_path) -> None:
                 acc_text_tp = ""
             assert acc_text_tp == acc
             assert tp_node.find("Octave").text == str(t_oct)
+
+
+def test_gpif_palm_mute_let_ring_roundtrip(tmp_path) -> None:
+    from score2gp.gp_package import validate_roundtrip
+    from score2gp.ir import LetRingTechnique, PalmMuteTechnique
+    score = ScoreIR.from_json_file("fixtures/public/tiny_score.ir.json")
+
+    # Attach LetRingTechnique to the first note, and PalmMuteTechnique to the second note
+    assert len(score.bars[0].events) >= 2
+
+    note1 = score.bars[0].events[0].notes[0]
+    note1.techniques.append(LetRingTechnique())
+
+    note2 = score.bars[0].events[1].notes[0]
+    note2.techniques.append(PalmMuteTechnique())
+
+    out = tmp_path / "pm_lr_roundtrip.gp"
+    warnings = write_gp(score, out)
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    # 1. Test relational round-trip (uses classic path for written GP files)
+    result = validate_roundtrip(out, score)
+    assert result["valid"] is True, f"Round-trip validation failed: {result['errors']}"
+    assert len(result["errors"]) == 0
+
+    # 2. Test both parser paths manually
+    from score2gp.gp_package import _extract_score_ir_from_gpif_root, _extract_score_ir_from_relational_gpif_root
+    import xml.etree.ElementTree as ET
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        notes_in_xml = root.findall(".//Note")
+        let_ring_found = any(n.find("LetRing") is not None for n in notes_in_xml)
+        palm_mute_found = any(n.find("PalmMute") is not None for n in notes_in_xml)
+        assert let_ring_found, "LetRing element not found in GPIF note nodes"
+        assert palm_mute_found, "PalmMute element not found in GPIF note nodes"
+
+        # Classic path
+        recovered_classic = _extract_score_ir_from_gpif_root(root)
+        c_note1 = recovered_classic.bars[0].events[0].notes[0]
+        c_note2 = recovered_classic.bars[0].events[1].notes[0]
+        assert any(t.kind == "let-ring" for t in c_note1.techniques), "LetRing not recovered in classic path"
+        assert any(t.kind == "palm-mute" for t in c_note2.techniques), "PalmMute not recovered in classic path"
+
+    # Relational path validation using a minimal relational GPIF XML structure
+    relational_xml = """<GPIF>
+        <Tracks>
+            <Track id="t1">
+                <Name>Guitar</Name>
+                <Tuning name="Standard">
+                    <String number="1" pitch="64"/>
+                    <String number="2" pitch="59"/>
+                    <String number="3" pitch="55"/>
+                    <String number="4" pitch="50"/>
+                    <String number="5" pitch="45"/>
+                    <String number="6" pitch="40"/>
+                </Tuning>
+            </Track>
+        </Tracks>
+        <MasterBars>
+            <MasterBar id="mb1">
+                <Bars>bar1</Bars>
+            </MasterBar>
+        </MasterBars>
+        <Bars>
+            <Bar id="bar1">
+                <Voices>v1</Voices>
+            </Bar>
+        </Bars>
+        <Voices>
+            <Voice id="v1">
+                <Beats>b1 b2</Beats>
+            </Voice>
+        </Voices>
+        <Rhythms>
+            <Rhythm id="r1">
+                <NoteValue>Quarter</NoteValue>
+            </Rhythm>
+        </Rhythms>
+        <Notes>
+            <Note id="n1">
+                <Properties>
+                    <Property name="Fret"><Fret>2</Fret></Property>
+                    <Property name="String"><String>1</String></Property>
+                    <Property name="Midi"><Number>47</Number></Property>
+                </Properties>
+                <LetRing/>
+            </Note>
+            <Note id="n2">
+                <Properties>
+                    <Property name="Fret"><Fret>3</Fret></Property>
+                    <Property name="String"><String>2</String></Property>
+                    <Property name="Midi"><Number>53</Number></Property>
+                </Properties>
+                <PalmMute/>
+            </Note>
+        </Notes>
+        <Beats>
+            <Beat id="b1">
+                <Rhythm ref="r1"/>
+                <Notes>n1</Notes>
+            </Beat>
+            <Beat id="b2">
+                <Rhythm ref="r1"/>
+                <Notes>n2</Notes>
+            </Beat>
+        </Beats>
+        <Songs>
+            <Song id="s1">
+                <Score>
+                    <Tracks>t1</Tracks>
+                    <MasterBars>mb1</MasterBars>
+                </Score>
+                <Track id="t1">
+                    <Bars>bar1</Bars>
+                </Track>
+            </Song>
+        </Songs>
+    </GPIF>"""
+
+    rel_root = ET.fromstring(relational_xml)
+    recovered_relational = _extract_score_ir_from_relational_gpif_root(rel_root)
+    r_notes = [note for bar in recovered_relational.bars for event in bar.events for note in event.notes]
+    assert len(r_notes) == 2
+    assert any(t.kind == "let-ring" for t in r_notes[0].techniques), "LetRing not recovered in relational path"
+    assert any(t.kind == "palm-mute" for t in r_notes[1].techniques), "PalmMute not recovered in relational path"
+
+    # 3. Test relational writer serialization directly by bypassing pytest check
+    import sys
+    from unittest.mock import patch
+    from score2gp.gpif import build_gpif
+
+    with patch.dict(sys.modules):
+        # Remove pytest from sys.modules
+        pytest_keys = [k for k in list(sys.modules.keys()) if "pytest" in k]
+        for k in pytest_keys:
+            del sys.modules[k]
+
+        with patch.object(sys, "argv", [arg for arg in sys.argv if "pytest" not in arg]):
+            relational_bytes = build_gpif(score)
+
+    rel_writer_root = ET.fromstring(relational_bytes)
+    rel_writer_notes = rel_writer_root.findall(".//Note")
+    rel_writer_let_ring_found = any(n.find("LetRing") is not None for n in rel_writer_notes)
+    rel_writer_palm_mute_found = any(n.find("PalmMute") is not None for n in rel_writer_notes)
+
+    assert rel_writer_let_ring_found, "LetRing element not found in relational writer output"
+    assert rel_writer_palm_mute_found, "PalmMute element not found in relational writer output"
