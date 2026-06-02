@@ -2430,3 +2430,176 @@ def test_gpif_palm_mute_let_ring_roundtrip(tmp_path) -> None:
 
     assert rel_writer_let_ring_found, "LetRing element not found in relational writer output"
     assert rel_writer_palm_mute_found, "PalmMute element not found in relational writer output"
+
+
+def test_gpif_slur_roundtrip(tmp_path) -> None:
+    from score2gp.gp_package import validate_roundtrip, write_gp
+    from score2gp.ir import SlurTechnique
+    import xml.etree.ElementTree as ET
+
+    score = ScoreIR.from_json_file("fixtures/public/tiny_score.ir.json")
+
+    # Put both notes on the same string
+    note1 = score.bars[0].events[0].notes[0]
+    note1.string = 3
+
+    second_event_id = score.bars[0].events[1].id
+    note1.techniques.append(SlurTechnique(state="start", target_event_id=second_event_id))
+
+    note2 = score.bars[0].events[1].notes[0]
+    note2.string = 3
+    note2.pitch = 59
+    note2.techniques.append(SlurTechnique(state="stop"))
+
+    out = tmp_path / "slur_roundtrip.gp"
+    warnings = write_gp(score, out)
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    # 1. Test round-trip and verify slur is recovered (note: classic writer adds HammerOn to slur, so we verify manually)
+    from score2gp.gp_package import extract_score_ir_from_gp
+    recovered_score = extract_score_ir_from_gp(out)
+    r_c_notes = [note for bar in recovered_score.bars for event in bar.events for note in event.notes]
+    assert any(t.kind == "slur" and t.state == "start" for t in r_c_notes[0].techniques), "Slur start not recovered from written GP file"
+    assert any(t.kind == "slur" and t.state == "stop" for t in r_c_notes[1].techniques), "Slur stop not recovered from written GP file"
+
+    # 2. Test both parser paths manually
+    from score2gp.gp_package import _extract_score_ir_from_gpif_root, _extract_score_ir_from_relational_gpif_root
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        notes_in_xml = root.findall(".//Note")
+        slur_start_found = any(n.get("slur") == "start" for n in notes_in_xml)
+        slur_stop_found = any(n.get("slur") == "stop" for n in notes_in_xml)
+        assert slur_start_found, "Slur start attribute not found in GPIF note nodes"
+        assert slur_stop_found, "Slur stop attribute not found in GPIF note nodes"
+
+        # Classic path recovery
+        recovered_classic = _extract_score_ir_from_gpif_root(root)
+        c_note1 = recovered_classic.bars[0].events[0].notes[0]
+        c_note2 = recovered_classic.bars[0].events[1].notes[0]
+        assert any(t.kind == "slur" and t.state == "start" for t in c_note1.techniques), "Slur start not recovered in classic path"
+        assert any(t.kind == "slur" and t.state == "stop" for t in c_note2.techniques), "Slur stop not recovered in classic path"
+
+    # Relational path validation using a minimal relational GPIF XML structure
+    relational_xml = """<GPIF>
+        <Tracks>
+            <Track id="t1">
+                <Name>Guitar</Name>
+                <Tuning name="Standard">
+                    <String number="1" pitch="64"/>
+                    <String number="2" pitch="59"/>
+                    <String number="3" pitch="55"/>
+                    <String number="4" pitch="50"/>
+                    <String number="5" pitch="45"/>
+                    <String number="6" pitch="40"/>
+                </Tuning>
+            </Track>
+        </Tracks>
+        <MasterBars>
+            <MasterBar id="mb1">
+                <Bars>bar1</Bars>
+            </MasterBar>
+        </MasterBars>
+        <Bars>
+            <Bar id="bar1">
+                <Voices>v1</Voices>
+            </Bar>
+        </Bars>
+        <Voices>
+            <Voice id="v1">
+                <Beats>b1 b2 b3</Beats>
+            </Voice>
+        </Voices>
+        <Rhythms>
+            <Rhythm id="r1">
+                <NoteValue>Quarter</NoteValue>
+            </Rhythm>
+        </Rhythms>
+        <Notes>
+            <Note id="n1" slur="start">
+                <Properties>
+                    <Property name="Fret"><Fret>2</Fret></Property>
+                    <Property name="String"><String>1</String></Property>
+                    <Property name="Midi"><Number>47</Number></Property>
+                </Properties>
+            </Note>
+            <Note id="n2" slur="stop">
+                <Properties>
+                    <Property name="Fret"><Fret>3</Fret></Property>
+                    <Property name="String"><String>2</String></Property>
+                    <Property name="Midi"><Number>53</Number></Property>
+                </Properties>
+            </Note>
+            <Note id="n3">
+                <Properties>
+                    <Property name="Fret"><Fret>4</Fret></Property>
+                    <Property name="String"><String>3</String></Property>
+                    <Property name="Midi"><Number>59</Number></Property>
+                    <Property name="Slur"><Enable/></Property>
+                </Properties>
+            </Note>
+            <Note id="n4">
+                <Properties>
+                    <Property name="Fret"><Fret>5</Fret></Property>
+                    <Property name="String"><String>4</String></Property>
+                    <Property name="Midi"><Number>64</Number></Property>
+                </Properties>
+                <Slur state="continue"/>
+            </Note>
+            <Note id="n5" slur="invalid_state_value">
+                <Properties>
+                    <Property name="Fret"><Fret>6</Fret></Property>
+                    <Property name="String"><String>5</String></Property>
+                    <Property name="Midi"><Number>70</Number></Property>
+                </Properties>
+            </Note>
+        </Notes>
+        <Beats>
+            <Beat id="b1">
+                <Rhythm ref="r1"/>
+                <Notes>n1 n4</Notes>
+            </Beat>
+            <Beat id="b2">
+                <Rhythm ref="r1"/>
+                <Notes>n2 n3</Notes>
+            </Beat>
+            <Beat id="b3">
+                <Rhythm ref="r1"/>
+                <Notes>n5</Notes>
+            </Beat>
+        </Beats>
+        <Songs>
+            <Song id="s1">
+                <Score>
+                    <Tracks>t1</Tracks>
+                    <MasterBars>mb1</MasterBars>
+                </Score>
+                <Track id="t1">
+                    <Bars>bar1</Bars>
+                </Track>
+            </Song>
+        </Songs>
+    </GPIF>"""
+
+    rel_root = ET.fromstring(relational_xml)
+    recovered_relational = _extract_score_ir_from_relational_gpif_root(rel_root)
+    r_notes = [note for bar in recovered_relational.bars for event in bar.events for note in event.notes]
+    assert len(r_notes) == 5
+
+    # n1 (id="n1") -> slur="start" attribute
+    assert any(t.kind == "slur" and t.state == "start" for t in r_notes[0].techniques)
+
+    # n4 (id="n4") -> <Slur state="continue"/> element
+    assert any(t.kind == "slur" and t.state == "continue" for t in r_notes[1].techniques)
+
+    # n2 (id="n2") -> slur="stop" attribute
+    assert any(t.kind == "slur" and t.state == "stop" for t in r_notes[2].techniques)
+
+    # n3 (id="n3") -> <Property name="Slur"><Enable/></Property> element
+    assert any(t.kind == "slur" and t.state == "start" for t in r_notes[3].techniques)
+
+    # n5 (id="n5") -> slur="invalid_state_value" attribute -> defaults conservatively to "start"
+    assert any(t.kind == "slur" and t.state == "start" for t in r_notes[4].techniques)

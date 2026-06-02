@@ -854,6 +854,24 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
                 from .ir import TieTechnique
                 techniques.append(TieTechnique(state=state))
 
+            slur_state = n.get("slur")
+            slur_prop = props.find('.//Property[@name="Slur"]') if props is not None else None
+            slur_element = n.find("Slur")
+            if slur_state is not None:
+                from .ir import SlurTechnique
+                if slur_state not in ("start", "stop", "continue"):
+                    slur_state = "start"
+                techniques.append(SlurTechnique(state=slur_state))
+            elif slur_element is not None:
+                from .ir import SlurTechnique
+                state = slur_element.get("state") or "start"
+                if state not in ("start", "stop", "continue"):
+                    state = "start"
+                techniques.append(SlurTechnique(state=state))
+            elif slur_prop is not None:
+                from .ir import SlurTechnique
+                techniques.append(SlurTechnique(state="start"))
+
             slide_prop = props.find('.//Property[@name="Slide"]') if props is not None else None
             if slide_prop is not None:
                 from .ir import SlideTechnique
@@ -1627,6 +1645,17 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
                         techniques.append(PalmMuteTechnique())
 
                     props_node = n_node.find("Properties")
+
+                    slur_state = n_node.get("slur")
+                    slur_prop = props_node.find('.//Property[@name="Slur"]') if props_node is not None else None
+                    if slur_state is not None:
+                        from .ir import SlurTechnique
+                        if slur_state not in ("start", "stop", "continue"):
+                            slur_state = "start"
+                        techniques.append(SlurTechnique(state=slur_state))
+                    elif slur_prop is not None:
+                        from .ir import SlurTechnique
+                        techniques.append(SlurTechnique(state="start"))
 
                     slide_prop = props_node.find('.//Property[@name="Slide"]') if props_node is not None else None
                     if n_node.find("Slide") is not None or slide_prop is not None:
