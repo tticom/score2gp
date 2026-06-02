@@ -855,6 +855,38 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
                 from .ir import Technique
                 techniques.append(Technique(kind="slide"))
 
+            ho_prop = props.find('.//Property[@name="HammerOn"]') if props is not None else None
+            if n.find("HO") is not None or ho_prop is not None:
+                from .ir import HammerOnTechnique
+                style = None
+                flags = None
+                legato = None
+                if ho_prop is not None:
+                    style = _first_text(ho_prop, ["Style"])
+                    flags_str = _first_text(ho_prop, ["Flags"])
+                    if flags_str:
+                        flags = int(flags_str)
+                    legato_str = _first_text(ho_prop, ["Legato"])
+                    if legato_str:
+                        legato = legato_str.lower() == "true"
+                techniques.append(HammerOnTechnique(kind="hammer-on", target_event_id=None, style=style, flags=flags, legato=legato))
+
+            po_prop = props.find('.//Property[@name="PullOff"]') if props is not None else None
+            if n.find("PO") is not None or po_prop is not None:
+                from .ir import PullOffTechnique
+                style = None
+                flags = None
+                legato = None
+                if po_prop is not None:
+                    style = _first_text(po_prop, ["Style"])
+                    flags_str = _first_text(po_prop, ["Flags"])
+                    if flags_str:
+                        flags = int(flags_str)
+                    legato_str = _first_text(po_prop, ["Legato"])
+                    if legato_str:
+                        legato = legato_str.lower() == "true"
+                techniques.append(PullOffTechnique(kind="pull-off", target_event_id=None, style=style, flags=flags, legato=legato))
+
             bend_prop = props.find('.//Property[@name="Bended"]') if props is not None else None
             if bend_prop is not None:
                 pts = []
@@ -1111,6 +1143,33 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
                     repeat_count=repeat_count
                 )
             )
+
+    # Resolve target_event_id for HammerOnTechnique and PullOffTechnique
+    from .ir import HammerOnTechnique, PullOffTechnique
+
+    # Group all events by (track_id, voice)
+    voice_events = {}
+    for bar in bars:
+        for event in bar.events:
+            if event.is_rest:
+                continue
+            key = (event.track_id, event.timing.voice)
+            if key not in voice_events:
+                voice_events[key] = []
+            voice_events[key].append(event)
+
+    # For each track/voice group, sort chronologically
+    for key, ev_list in voice_events.items():
+        ev_list.sort(key=lambda e: (e.timing.bar_index, e.timing.onset_ticks))
+        for i, ev_start in enumerate(ev_list):
+            for note_start in ev_start.notes:
+                for tech in note_start.techniques:
+                    if isinstance(tech, (HammerOnTechnique, PullOffTechnique)) and tech.target_event_id is None:
+                        # Look ahead for the next event in ev_list that has a note on the same string
+                        for ev_next in ev_list[i+1:]:
+                            if any(note_next.string == note_start.string for note_next in ev_next.notes):
+                                tech.target_event_id = ev_next.id
+                                break
 
     return ScoreIR(
         schema_version="0.1.0",
@@ -1553,8 +1612,47 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
                     fret = int(n_node.get("fret") or 0)
                     pitch = int(n_node.get("pitch") or 0)
 
-                    # Parse techniques (Bend)
+                    # Parse techniques (Slide, Hammer-On, Pull-Off, Bend)
                     techniques = []
+                    props_node = n_node.find("Properties")
+
+                    slide_prop = props_node.find('.//Property[@name="Slide"]') if props_node is not None else None
+                    if n_node.find("Slide") is not None or slide_prop is not None:
+                        from .ir import Technique
+                        techniques.append(Technique(kind="slide"))
+
+                    ho_prop = props_node.find('.//Property[@name="HammerOn"]') if props_node is not None else None
+                    if n_node.find("HO") is not None or ho_prop is not None:
+                        from .ir import HammerOnTechnique
+                        style = None
+                        flags = None
+                        legato = None
+                        if ho_prop is not None:
+                            style = _first_text(ho_prop, ["Style"])
+                            flags_str = _first_text(ho_prop, ["Flags"])
+                            if flags_str:
+                                flags = int(flags_str)
+                            legato_str = _first_text(ho_prop, ["Legato"])
+                            if legato_str:
+                                legato = legato_str.lower() == "true"
+                        techniques.append(HammerOnTechnique(kind="hammer-on", target_event_id=None, style=style, flags=flags, legato=legato))
+
+                    po_prop = props_node.find('.//Property[@name="PullOff"]') if props_node is not None else None
+                    if n_node.find("PO") is not None or po_prop is not None:
+                        from .ir import PullOffTechnique
+                        style = None
+                        flags = None
+                        legato = None
+                        if po_prop is not None:
+                            style = _first_text(po_prop, ["Style"])
+                            flags_str = _first_text(po_prop, ["Flags"])
+                            if flags_str:
+                                flags = int(flags_str)
+                            legato_str = _first_text(po_prop, ["Legato"])
+                            if legato_str:
+                                legato = legato_str.lower() == "true"
+                        techniques.append(PullOffTechnique(kind="pull-off", target_event_id=None, style=style, flags=flags, legato=legato))
+
                     bend_node = n_node.find("Bend")
                     if bend_node is not None:
                         pts = []
@@ -1771,6 +1869,33 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
                     alternate_ending_is_stop=ae_is_stop
                 )
             )
+
+    # Resolve target_event_id for HammerOnTechnique and PullOffTechnique
+    from .ir import HammerOnTechnique, PullOffTechnique
+
+    # Group all events by (track_id, voice)
+    voice_events = {}
+    for bar in bars:
+        for event in bar.events:
+            if event.is_rest:
+                continue
+            key = (event.track_id, event.timing.voice)
+            if key not in voice_events:
+                voice_events[key] = []
+            voice_events[key].append(event)
+
+    # For each track/voice group, sort chronologically
+    for key, ev_list in voice_events.items():
+        ev_list.sort(key=lambda e: (e.timing.bar_index, e.timing.onset_ticks))
+        for i, ev_start in enumerate(ev_list):
+            for note_start in ev_start.notes:
+                for tech in note_start.techniques:
+                    if isinstance(tech, (HammerOnTechnique, PullOffTechnique)) and tech.target_event_id is None:
+                        # Look ahead for the next event in ev_list that has a note on the same string
+                        for ev_next in ev_list[i+1:]:
+                            if any(note_next.string == note_start.string for note_next in ev_next.notes):
+                                tech.target_event_id = ev_next.id
+                                break
 
     return ScoreIR(
         schema_version="0.1.0",
@@ -2110,5 +2235,29 @@ def _validate_score_ir_roundtrip(original: ScoreIR, recovered: ScoreIR) -> list[
                                 errors.append(f"event '{ev_id}' note string {string_num} bend point {p_idx} offset/semitones mismatch: original=({op.offset_ticks}, {op.semitones}), recovered=({rp.offset_ticks}, {rp.semitones})")
                             if op.v_x != rp.v_x or op.v_y != rp.v_y:
                                 errors.append(f"event '{ev_id}' note string {string_num} bend point {p_idx} vector coordinates mismatch: original=({op.v_x}, {op.v_y}), recovered=({rp.v_x}, {rp.v_y})")
+
+                # Note Slide technique
+                on_slide = next((t for t in on.techniques if t.kind == "slide"), None)
+                rn_slide = next((t for t in rn.techniques if t.kind == "slide"), None)
+                if (on_slide is None) != (rn_slide is None):
+                    errors.append(f"event '{ev_id}' note string {string_num} slide technique presence mismatch")
+
+                # Note Hammer-on technique
+                on_ho = next((t for t in on.techniques if t.kind == "hammer-on"), None)
+                rn_ho = next((t for t in rn.techniques if t.kind == "hammer-on"), None)
+                if (on_ho is None) != (rn_ho is None):
+                    errors.append(f"event '{ev_id}' note string {string_num} hammer-on technique presence mismatch")
+                elif on_ho is not None:
+                    if (on_ho.target_event_id is None) != (rn_ho.target_event_id is None):
+                        errors.append(f"event '{ev_id}' note string {string_num} hammer-on target_event_id presence mismatch: original={on_ho.target_event_id}, recovered={rn_ho.target_event_id}")
+
+                # Note Pull-off technique
+                on_po = next((t for t in on.techniques if t.kind == "pull-off"), None)
+                rn_po = next((t for t in rn.techniques if t.kind == "pull-off"), None)
+                if (on_po is None) != (rn_po is None):
+                    errors.append(f"event '{ev_id}' note string {string_num} pull-off technique presence mismatch")
+                elif on_po is not None:
+                    if (on_po.target_event_id is None) != (rn_po.target_event_id is None):
+                        errors.append(f"event '{ev_id}' note string {string_num} pull-off target_event_id presence mismatch: original={on_po.target_event_id}, recovered={rn_po.target_event_id}")
 
     return errors
