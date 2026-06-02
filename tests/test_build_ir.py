@@ -117,7 +117,7 @@ def test_build_ir_handles_chords_tuplets_harmony_and_technique_diagnostics(tmp_p
     codes = [warning.code for warning in score.warnings]
     assert "tab-candidate-unused" in codes
     assert "tabraw-chord-symbol-not-aligned" not in codes
-    assert "tabraw-technique-text-not-aligned" in codes
+    assert "tabraw-technique-text-not-aligned" not in codes
     assert "synthetic-tabraw-note" in codes
 
     tab_provenance = first_bar_events[0].notes[0].provenance[-1]

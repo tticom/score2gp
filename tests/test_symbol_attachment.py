@@ -425,3 +425,322 @@ def test_symbol_attachment_html_diagnostics(tmp_path) -> None:
 
     # 9. HTML states that symbols did not create notes/events/timing
     assert "Symbols and techniques DID NOT create notes" in html_content
+
+
+def test_proximity_technique_attachment_cases(tmp_path) -> None:
+    # Set up a 3-note MusicXML file
+    musicxml_content = """<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1">
+      <part-name>Guitar</part-name>
+    </score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>4</divisions>
+        <time>
+          <beats>4</beats>
+          <beat-type>4</beat-type>
+        </time>
+      </attributes>
+      <note>
+        <pitch><step>E</step><octave>4</octave></pitch>
+        <duration>4</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+      </note>
+      <note>
+        <pitch><step>F</step><octave>4</octave></pitch>
+        <duration>4</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+      </note>
+      <note>
+        <pitch><step>G</step><octave>4</octave></pitch>
+        <duration>4</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+      </note>
+    </measure>
+  </part>
+</score-partwise>
+"""
+    musicxml_file = tmp_path / "three_notes.musicxml"
+    musicxml_file.write_text(musicxml_content, encoding="utf-8")
+
+    # Base tabraw template with three notes on string 1:
+    # Note 1: x = 100.0
+    # Note 2: x = 180.0
+    # Note 3: x = 260.0
+    # Total adjacent pairs are: (1, 2) midpoint 140.0, and (2, 3) midpoint 220.0.
+    base_tabraw = {
+        "schema_version": "tabraw.v0.1",
+        "source_pdf": "synthetic",
+        "inspection_kind": "synthetic",
+        "candidates": [
+            {
+                "id": "tab-001",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "line_index": 1,
+                "string": 1,
+                "raw_text": "0",
+                "parsed_fret": 0,
+                "x": 100.0,
+                "y": 40.0,
+                "confidence": 0.95,
+            },
+            {
+                "id": "tab-002",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "line_index": 1,
+                "string": 1,
+                "raw_text": "2",
+                "parsed_fret": 2,
+                "x": 180.0,
+                "y": 40.0,
+                "confidence": 0.95,
+            },
+            {
+                "id": "tab-003",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "line_index": 1,
+                "string": 1,
+                "raw_text": "3",
+                "parsed_fret": 3,
+                "x": 260.0,
+                "y": 40.0,
+                "confidence": 0.95,
+            },
+        ],
+        "warnings": []
+    }
+
+    # 1. Slide proximity test (unambiguous, matches Note 1)
+    slide_candidate = {
+        "id": "tech-slide",
+        "kind": "technique-text",
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "bar_index": 1,
+        "raw_text": "sl.",
+        "x": 103.0,
+        "confidence": 0.9,
+    }
+    tabraw_data = dict(base_tabraw)
+    tabraw_data["candidates"] = base_tabraw["candidates"] + [slide_candidate]
+
+    tabraw_file = tmp_path / "tabraw_slide_prox.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+    score, _ = build_ir_with_diagnostics_from_files(musicxml_file, tabraw_file)
+    events = score.bars[0].events
+    assert len(events) == 3
+    # slide should be on note 1 (events[0].notes[0])
+    assert len(events[0].notes[0].techniques) == 1
+    assert events[0].notes[0].techniques[0].kind == "slide"
+    assert not events[1].notes[0].techniques
+    assert not events[2].notes[0].techniques
+
+    # 2. Slide proximity test (unambiguous, matches Note 2)
+    slide_candidate["x"] = 182.0
+    tabraw_file = tmp_path / "tabraw_slide_prox_2.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+    score, _ = build_ir_with_diagnostics_from_files(musicxml_file, tabraw_file)
+    events = score.bars[0].events
+    assert not events[0].notes[0].techniques
+    assert len(events[1].notes[0].techniques) == 1
+    assert events[1].notes[0].techniques[0].kind == "slide"
+    assert not events[2].notes[0].techniques
+
+    # 3. Slide ambiguity test (x is at midpoint 140.0, difference is 0.0 < 2.0)
+    slide_candidate["x"] = 140.0
+    tabraw_file = tmp_path / "tabraw_slide_ambig.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+    score, _ = build_ir_with_diagnostics_from_files(musicxml_file, tabraw_file)
+    events = score.bars[0].events
+    assert not events[0].notes[0].techniques
+    assert not events[1].notes[0].techniques
+    assert any(w.code == "ambiguous_technique_attachment" for w in score.warnings)
+
+    # 4. Slide ambiguity threshold (x = 140.5, dists: N1=40.5, N2=39.5, diff=1.0 < 2.0)
+    slide_candidate["x"] = 140.5
+    tabraw_file = tmp_path / "tabraw_slide_ambig_thresh.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+    score, _ = build_ir_with_diagnostics_from_files(musicxml_file, tabraw_file)
+    events = score.bars[0].events
+    assert not events[0].notes[0].techniques
+    assert not events[1].notes[0].techniques
+    assert any(w.code == "ambiguous_technique_attachment" for w in score.warnings)
+
+    # 5. Hammer-on proximity test (unambiguous, matches pair (1, 2) at mid_x=140.0)
+    ho_candidate = {
+        "id": "tech-ho",
+        "kind": "technique-text",
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "bar_index": 1,
+        "raw_text": "h",
+        "x": 139.0,  # closer to mid_x 140.0 (dist 1.0) than mid_x 220.0 (dist 81.0)
+        "confidence": 0.9,
+    }
+    tabraw_data = dict(base_tabraw)
+    tabraw_data["candidates"] = base_tabraw["candidates"] + [ho_candidate]
+    tabraw_file = tmp_path / "tabraw_ho_prox.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+    score, _ = build_ir_with_diagnostics_from_files(musicxml_file, tabraw_file)
+    events = score.bars[0].events
+    # ho should be on note 1 targeting event 2
+    assert len(events[0].notes[0].techniques) == 1
+    assert events[0].notes[0].techniques[0].kind == "hammer-on"
+    assert events[0].notes[0].techniques[0].target_event_id == events[1].id
+    assert not events[1].notes[0].techniques
+
+    # 6. Hammer-on proximity test (unambiguous, matches pair (2, 3) at mid_x=220.0)
+    ho_candidate["x"] = 221.0
+    tabraw_file = tmp_path / "tabraw_ho_prox_2.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+    score, _ = build_ir_with_diagnostics_from_files(musicxml_file, tabraw_file)
+    events = score.bars[0].events
+    assert not events[0].notes[0].techniques
+    assert len(events[1].notes[0].techniques) == 1
+    assert events[1].notes[0].techniques[0].kind == "hammer-on"
+    assert events[1].notes[0].techniques[0].target_event_id == events[2].id
+
+    # 7. Hammer-on ambiguity test (x = 180.0, midpoints 140.0 and 220.0 are equidistant at 40.0, diff 0.0 < 2.0)
+    ho_candidate["x"] = 180.0
+    tabraw_file = tmp_path / "tabraw_ho_ambig.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+    score, _ = build_ir_with_diagnostics_from_files(musicxml_file, tabraw_file)
+    events = score.bars[0].events
+    assert not events[0].notes[0].techniques
+    assert not events[1].notes[0].techniques
+    assert any(w.code == "ambiguous_technique_attachment" for w in score.warnings)
+
+    # 8. Hammer-on ambiguity threshold (x = 180.5, dists: (1,2)=40.5, (2,3)=39.5, diff 1.0 < 2.0)
+    ho_candidate["x"] = 180.5
+    tabraw_file = tmp_path / "tabraw_ho_ambig_thresh.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+    score, _ = build_ir_with_diagnostics_from_files(musicxml_file, tabraw_file)
+    events = score.bars[0].events
+    assert not events[0].notes[0].techniques
+    assert not events[1].notes[0].techniques
+    assert any(w.code == "ambiguous_technique_attachment" for w in score.warnings)
+
+    # 9. Fallback preservation test (x is None, original count-based checks)
+    # For slide, since we have 3 notes, fallback will fail and warn.
+    slide_candidate["x"] = None
+    tabraw_data = dict(base_tabraw)
+    tabraw_data["candidates"] = base_tabraw["candidates"] + [slide_candidate]
+    tabraw_file = tmp_path / "tabraw_slide_fallback_fail.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+    score, _ = build_ir_with_diagnostics_from_files(musicxml_file, tabraw_file)
+    assert any(w.code == "ambiguous_technique_attachment" for w in score.warnings)
+
+    # For hammer-on, fallback will also fail and warn because we have 3 notes (not exactly 2).
+    ho_candidate["x"] = None
+    tabraw_data = dict(base_tabraw)
+    tabraw_data["candidates"] = base_tabraw["candidates"] + [ho_candidate]
+    tabraw_file = tmp_path / "tabraw_ho_fallback_fail.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+    score, _ = build_ir_with_diagnostics_from_files(musicxml_file, tabraw_file)
+    assert any(w.code == "ambiguous_technique_attachment" for w in score.warnings)
+
+    # Now let's test fallback succeeds when notes count is correct:
+    # 9a. Slide fallback succeeds on single note
+    single_note_tabraw = {
+        "schema_version": "tabraw.v0.1",
+        "source_pdf": "synthetic",
+        "inspection_kind": "synthetic",
+        "candidates": [
+            base_tabraw["candidates"][0],
+            slide_candidate
+        ]
+    }
+    musicxml_content_1 = """<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Guitar</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>4</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <note>
+        <pitch><step>E</step><octave>4</octave></pitch>
+        <duration>4</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+      </note>
+    </measure>
+  </part>
+</score-partwise>
+"""
+    musicxml_file_1 = tmp_path / "one_note.musicxml"
+    musicxml_file_1.write_text(musicxml_content_1, encoding="utf-8")
+    tabraw_file = tmp_path / "tabraw_slide_fallback_pass.json"
+    tabraw_file.write_text(json.dumps(single_note_tabraw), encoding="utf-8")
+    score, _ = build_ir_with_diagnostics_from_files(musicxml_file_1, tabraw_file)
+    assert not any(w.code == "ambiguous_technique_attachment" for w in score.warnings)
+    events = score.bars[0].events
+    assert len(events[0].notes[0].techniques) == 1
+    assert events[0].notes[0].techniques[0].kind == "slide"
+
+    # 9b. HO fallback succeeds on exactly two notes
+    two_note_tabraw = {
+        "schema_version": "tabraw.v0.1",
+        "source_pdf": "synthetic",
+        "inspection_kind": "synthetic",
+        "candidates": [
+            base_tabraw["candidates"][0],
+            base_tabraw["candidates"][1],
+            ho_candidate
+        ]
+    }
+    musicxml_content_2 = """<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Guitar</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>4</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <note>
+        <pitch><step>E</step><octave>4</octave></pitch>
+        <duration>4</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+      </note>
+      <note>
+        <pitch><step>F</step><octave>4</octave></pitch>
+        <duration>4</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+      </note>
+    </measure>
+  </part>
+</score-partwise>
+"""
+    musicxml_file_2 = tmp_path / "two_notes.musicxml"
+    musicxml_file_2.write_text(musicxml_content_2, encoding="utf-8")
+    tabraw_file = tmp_path / "tabraw_ho_fallback_pass.json"
+    tabraw_file.write_text(json.dumps(two_note_tabraw), encoding="utf-8")
+    score, _ = build_ir_with_diagnostics_from_files(musicxml_file_2, tabraw_file)
+    assert not any(w.code == "ambiguous_technique_attachment" for w in score.warnings)
+    events = score.bars[0].events
+    assert len(events[0].notes[0].techniques) == 1
+    assert events[0].notes[0].techniques[0].kind == "hammer-on"
+    assert events[0].notes[0].techniques[0].target_event_id == events[1].id

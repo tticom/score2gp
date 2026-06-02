@@ -3368,6 +3368,19 @@ def _classify_technique(text: str) -> str | None:
     return None
 
 
+TECHNIQUE_ATTACHMENT_AMBIGUITY_EPSILON = 2.0
+
+
+def _get_note_x(note: Note) -> float | None:
+    for prov in note.provenance:
+        if prov.raw and prov.raw.get("x") is not None:
+            try:
+                return float(prov.raw["x"])
+            except (ValueError, TypeError):
+                pass
+    return None
+
+
 def _remove_not_aligned_warning(score: ScoreIR, candidate: TabCandidate) -> None:
     score.warnings = [
         w for w in score.warnings
@@ -3518,47 +3531,143 @@ def _attach_symbols_and_techniques(score: ScoreIR, tabraw: TabRaw) -> None:
 
             # Differentiate by kind
             if kind in ("hammer-on", "pull-off"):
-                # Span/link technique requires exactly two notes in the bar
-                if len(notes) != 2:
-                    score.warnings.append(
-                        WarningItem(
-                            code="ambiguous_technique_attachment",
-                            message=f"Span technique '{candidate.raw_text}' requires exactly two notes in bar {bar_idx}.",
-                            severity="warning",
-                            provenance=[candidate.to_provenance()],
+                attached = False
+                if candidate.x is not None:
+                    # Collect candidate pairs of notes that:
+                    # - Belong to the same bar, same track, same voice, and same string
+                    # - Are chronologically adjacent on that string/voice/track within the bar
+                    # - Are both playable (non-rest)
+                    # - Both have valid visual x-coordinates (via _get_note_x)
+                    notes_by_group = defaultdict(list)
+                    for event in bar.events:
+                        if event.is_rest:
+                            continue
+                        for note in event.notes:
+                            x_val = _get_note_x(note)
+                            if x_val is not None:
+                                notes_by_group[(event.track_id, event.timing.voice, note.string)].append((event, note, x_val))
+
+                    candidate_pairs = []
+                    for group_key, group_notes in notes_by_group.items():
+                        group_notes.sort(key=lambda item: item[0].timing.onset_ticks)
+                        for i in range(len(group_notes) - 1):
+                            ev1, note1, x1 = group_notes[i]
+                            ev2, note2, x2 = group_notes[i+1]
+                            if ev1.timing.onset_ticks < ev2.timing.onset_ticks:
+                                mid_x = (x1 + x2) / 2.0
+                                dist = abs(mid_x - candidate.x)
+                                candidate_pairs.append((dist, ev1, note1, ev2, note2))
+
+                    if candidate_pairs:
+                        candidate_pairs.sort(key=lambda item: item[0])
+                        if len(candidate_pairs) > 1 and abs(candidate_pairs[0][0] - candidate_pairs[1][0]) < TECHNIQUE_ATTACHMENT_AMBIGUITY_EPSILON:
+                            score.warnings.append(
+                                WarningItem(
+                                    code="ambiguous_technique_attachment",
+                                    message=f"Span technique '{candidate.raw_text}' has ambiguous visual targets in bar {bar_idx}.",
+                                    severity="warning",
+                                    provenance=[candidate.to_provenance()],
+                                )
+                            )
+                        else:
+                            best_dist, ev1, note1, ev2, note2 = candidate_pairs[0]
+                            if kind == "hammer-on":
+                                tech = HammerOnTechnique(kind="hammer-on", target_event_id=ev2.id)
+                            else:
+                                tech = PullOffTechnique(kind="pull-off", target_event_id=ev2.id)
+                            note1.techniques.append(tech)
+                            note1.provenance.append(candidate.to_provenance())
+                            _remove_not_aligned_warning(score, candidate)
+                        attached = True
+
+                if not attached:
+                    # Fallback to the original exact-count logic:
+                    if len(notes) != 2:
+                        score.warnings.append(
+                            WarningItem(
+                                code="ambiguous_technique_attachment",
+                                message=f"Span technique '{candidate.raw_text}' requires exactly two notes in bar {bar_idx}.",
+                                severity="warning",
+                                provenance=[candidate.to_provenance()],
+                            )
                         )
-                    )
-                    continue
+                        continue
 
-                # Ensure notes are in chronological order (which they are, because events are sorted)
-                note1, note2 = notes
-                event1 = next(ev for ev in bar.events if note1 in ev.notes)
-                event2 = next(ev for ev in bar.events if note2 in ev.notes)
+                    note1, note2 = notes
+                    event1 = next((ev for ev in bar.events if note1 in ev.notes), None)
+                    event2 = next((ev for ev in bar.events if note2 in ev.notes), None)
 
-                # Ensure they are at different onset times
-                if event1.timing.onset_ticks >= event2.timing.onset_ticks:
-                    score.warnings.append(
-                        WarningItem(
-                            code="ambiguous_technique_attachment",
-                            message=f"Span technique '{candidate.raw_text}' endpoints are not sequential in bar {bar_idx}.",
-                            severity="warning",
-                            provenance=[candidate.to_provenance()],
+                    if not event1 or not event2 or event1.timing.onset_ticks >= event2.timing.onset_ticks:
+                        score.warnings.append(
+                            WarningItem(
+                                code="ambiguous_technique_attachment",
+                                message=f"Span technique '{candidate.raw_text}' endpoints are not sequential in bar {bar_idx}.",
+                                severity="warning",
+                                provenance=[candidate.to_provenance()],
+                            )
                         )
-                    )
-                    continue
+                        continue
 
-                # Unambiguous: attach to note1 targeting event2.id
-                if kind == "hammer-on":
-                    tech = HammerOnTechnique(kind="hammer-on", target_event_id=event2.id)
-                else:
-                    tech = PullOffTechnique(kind="pull-off", target_event_id=event2.id)
+                    if kind == "hammer-on":
+                        tech = HammerOnTechnique(kind="hammer-on", target_event_id=event2.id)
+                    else:
+                        tech = PullOffTechnique(kind="pull-off", target_event_id=event2.id)
 
-                note1.techniques.append(tech)
-                note1.provenance.append(candidate.to_provenance())
-                _remove_not_aligned_warning(score, candidate)
+                    note1.techniques.append(tech)
+                    note1.provenance.append(candidate.to_provenance())
+                    _remove_not_aligned_warning(score, candidate)
+
+            elif kind == "slide":
+                attached = False
+                if candidate.x is not None:
+                    notes_with_x = []
+                    for event in bar.events:
+                        if event.is_rest:
+                            continue
+                        for note in event.notes:
+                            x_val = _get_note_x(note)
+                            if x_val is not None:
+                                notes_with_x.append((abs(x_val - candidate.x), note))
+
+                    if notes_with_x:
+                        notes_with_x.sort(key=lambda item: item[0])
+                        if len(notes_with_x) > 1 and abs(notes_with_x[0][0] - notes_with_x[1][0]) < TECHNIQUE_ATTACHMENT_AMBIGUITY_EPSILON:
+                            score.warnings.append(
+                                WarningItem(
+                                    code="ambiguous_technique_attachment",
+                                    message=f"Technique '{candidate.raw_text}' has ambiguous visual targets in bar {bar_idx}.",
+                                    severity="warning",
+                                    provenance=[candidate.to_provenance()],
+                                )
+                            )
+                        else:
+                            best_dist, target_note = notes_with_x[0]
+                            tech = SlideTechnique(kind="slide", style="unknown", direction="unknown", target_event_id=None)
+                            target_note.techniques.append(tech)
+                            target_note.provenance.append(candidate.to_provenance())
+                            _remove_not_aligned_warning(score, candidate)
+                        attached = True
+
+                if not attached:
+                    if len(notes) != 1:
+                        score.warnings.append(
+                            WarningItem(
+                                code="ambiguous_technique_attachment",
+                                message=f"Technique '{candidate.raw_text}' requires exactly one note target in bar {bar_idx}.",
+                                severity="warning",
+                                provenance=[candidate.to_provenance()],
+                            )
+                        )
+                        continue
+
+                    target_note = notes[0]
+                    tech = SlideTechnique(kind="slide", style="unknown", direction="unknown", target_event_id=None)
+                    target_note.techniques.append(tech)
+                    target_note.provenance.append(candidate.to_provenance())
+                    _remove_not_aligned_warning(score, candidate)
 
             else:
-                # Slide, Bend, Vibrato require exactly one note in the bar
+                # Bend, Vibrato (original logic)
                 if len(notes) != 1:
                     score.warnings.append(
                         WarningItem(
@@ -3570,11 +3679,8 @@ def _attach_symbols_and_techniques(score: ScoreIR, tabraw: TabRaw) -> None:
                     )
                     continue
 
-                # Unambiguous: attach to the single note
                 target_note = notes[0]
-                if kind == "slide":
-                    tech = SlideTechnique(kind="slide", style="unknown", direction="unknown", target_event_id=None)
-                elif kind == "bend":
+                if kind == "bend":
                     tech = BendTechnique(kind="bend", semitones=None, points=[], text=None)
                 else:
                     tech = VibratoTechnique(kind="vibrato", width="unknown", speed="unknown")
