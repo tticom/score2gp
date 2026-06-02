@@ -73,6 +73,26 @@ def test_ambiguous_bar_tolerance_cap() -> None:
     )
     assert abs(sys_small.ambiguous_bar_tolerance - 4.0) < 1e-4
 
+    # 4. Medium-large spacing (e.g., 14.0) -> spacing * 0.45 = 6.3.
+    # Cap of min(6.0, max(4.0, 6.3)) -> 6.0
+    sys_midlarge = _TabSystem(
+        page_index=1,
+        system_index=1,
+        staff_index=1,
+        first_bar_index=1,
+        line_ys=[100.0, 114.0, 128.0, 142.0, 156.0, 170.0],
+        x0=100.0,
+        x1=500.0,
+        barlines=[100.0, 500.0],
+        barline_candidates_count=2,
+        valid_barline_count=2,
+        rejected_barline_count=0,
+        rejection_reasons={},
+        barline_candidates_details=[],
+    )
+    assert abs(sys_midlarge.ambiguous_bar_tolerance - 6.0) < 1e-4
+
+
 
 def test_tab_line_groups_horizontal_overlap() -> None:
     # Verify that fragmented lines with strong overlap are preferred over collinear lines with poor overlap.

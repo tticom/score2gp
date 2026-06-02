@@ -426,10 +426,8 @@ class _TabSystem:
 
     @property
     def ambiguous_bar_tolerance(self) -> float:
-        val = max(4.0, self.line_spacing * 0.45)
-        if self.line_spacing > 15.0:
-            return min(6.0, val)
-        return val
+        return min(6.0, max(4.0, self.line_spacing * 0.45))
+
 
     def contains_y(self, y: float | None) -> bool:
         if y is None:
