@@ -91,8 +91,8 @@ def make_pdf_edge_candidate_near_inferred() -> None:
     _draw_tab_lines(page, line_ys=line_ys, x0=72, x1=332)
     # Accepted barline at x=180
     _draw_barlines(page, line_ys=line_ys, bar_xs=[180])
-    # Playable candidate at x=75 (left edge is 72, so distance is 3 < ~6.3)
-    _write_fret(page, "3", 75, line_ys[0])
+    # Playable candidate at x=73 (left edge is 72, so distance is 1 < ~6.0)
+    _write_fret(page, "3", 73, line_ys[0])
     _save(doc, "generated_pdf_edge_candidate_near_inferred.pdf")
 
 
@@ -145,7 +145,7 @@ def make_pdf_multi_system_partial_fallback() -> None:
     # 1 valid barline at 180
     _draw_barlines(page, line_ys=line_ys2, bar_xs=[180])
     # Candidate near inferred boundary
-    _write_fret(page, "7", 75, line_ys2[0])
+    _write_fret(page, "7", 73, line_ys2[0])
     
     _save(doc, "generated_pdf_multi_system_partial_fallback.pdf")
 
