@@ -2408,3 +2408,25 @@ def test_gpif_palm_mute_let_ring_roundtrip(tmp_path) -> None:
     assert len(r_notes) == 2
     assert any(t.kind == "let-ring" for t in r_notes[0].techniques), "LetRing not recovered in relational path"
     assert any(t.kind == "palm-mute" for t in r_notes[1].techniques), "PalmMute not recovered in relational path"
+
+    # 3. Test relational writer serialization directly by bypassing pytest check
+    import sys
+    from unittest.mock import patch
+    from score2gp.gpif import build_gpif
+
+    with patch.dict(sys.modules):
+        # Remove pytest from sys.modules
+        pytest_keys = [k for k in list(sys.modules.keys()) if "pytest" in k]
+        for k in pytest_keys:
+            del sys.modules[k]
+
+        with patch.object(sys, "argv", [arg for arg in sys.argv if "pytest" not in arg]):
+            relational_bytes = build_gpif(score)
+
+    rel_writer_root = ET.fromstring(relational_bytes)
+    rel_writer_notes = rel_writer_root.findall(".//Note")
+    rel_writer_let_ring_found = any(n.find("LetRing") is not None for n in rel_writer_notes)
+    rel_writer_palm_mute_found = any(n.find("PalmMute") is not None for n in rel_writer_notes)
+
+    assert rel_writer_let_ring_found, "LetRing element not found in relational writer output"
+    assert rel_writer_palm_mute_found, "PalmMute element not found in relational writer output"

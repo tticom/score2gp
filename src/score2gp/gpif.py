@@ -793,6 +793,8 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
 
                             if is_let_ring:
                                 ET.SubElement(note_node, "LetRing")
+                            if is_palm_mute:
+                                ET.SubElement(note_node, "PalmMute")
                             if getattr(note, "is_dead", False):
                                 ET.SubElement(note_node, "DeadNote")
 
