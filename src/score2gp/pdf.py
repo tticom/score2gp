@@ -20,6 +20,8 @@ _ASCII_TAB_LINE_RE = re.compile(r"^\s*([eEADGB])\|([0-9A-Za-z/\\~()|\s-]+)$")
 _ASCII_TAB_TOKEN_RE = re.compile(r"\d{1,2}|[\\/hpbvr~]+")
 _ASCII_TECHNIQUE_MARKERS = {"/", "\\", "h", "p", "b", "r", "v", "~"}
 
+DOUBLE_BARLINE_CLUSTERING_TOLERANCE = 12.0
+
 
 def inspect_pdf(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
     pdf_path = Path(path)
@@ -3537,7 +3539,7 @@ def filter_tab_barline_candidates(
         if not current_cluster:
             current_cluster.append(item)
         else:
-            if item["x"] - current_cluster[-1]["x"] < 6.0:
+            if item["x"] - current_cluster[-1]["x"] <= DOUBLE_BARLINE_CLUSTERING_TOLERANCE:
                 current_cluster.append(item)
             else:
                 clusters.append(current_cluster)
@@ -3606,7 +3608,7 @@ def filter_tab_barline_candidates(
             if other_idx == idx:
                 continue
             other_item = next(it for it in candidate_data if it["idx"] == other_idx)
-            if abs(item["x"] - other_item["x"]) < 6.0:
+            if abs(item["x"] - other_item["x"]) <= DOUBLE_BARLINE_CLUSTERING_TOLERANCE:
                 is_ambiguous = True
                 break
 
@@ -3728,10 +3730,10 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
 
         # Notation-to-TAB barline inheritance
         partner_barlines = []
-        if len(valid_barlines) < 2:
-            best_partner = None
-            best_partner_dist = 999999.0
-            
+        best_partner = None
+        best_partner_dist = 999999.0
+
+        if len(valid_barlines) < 3:
             for other_group in _tab_line_groups(horizontal):
                 if other_group == group:
                     continue
@@ -3768,18 +3770,45 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
                         other_candidates.append(s)
                 
                 other_filtered = filter_tab_barline_candidates(other_candidates, other_y0, other_y1, other_ys, other_x0, other_x1)
-                partner_barlines.extend(other_filtered["valid_barlines"])
+                partner_valid = other_filtered["valid_barlines"]
                 
-                # Accumulate rejection reasons too
-                for k, v in other_filtered["rejection_reasons"].items():
-                    rejection_reasons[k] = rejection_reasons.get(k, 0) + v
-                rejected_count += other_filtered["rejected_count"]
+                inherited_from_partner = []
+                if len(valid_barlines) < 2:
+                    inherited_from_partner = partner_valid
+                else:
+                    # TAB has outer boundaries. Only inherit internal partner barlines
+                    # that are well-spaced and don't create tiny (<30.0) bar boxes.
+                    tab_left = min(valid_barlines)
+                    tab_right = max(valid_barlines)
+
+                    additional_barlines = []
+                    for pb in partner_valid:
+                        # Must be inside the outermost boundaries of the TAB staff
+                        if pb <= tab_left + 15.0 or pb >= tab_right - 15.0:
+                            continue
+                        # Must be at least 30.0 points away from any existing TAB barline
+                        if any(abs(pb - tb) < 30.0 for tb in valid_barlines):
+                            continue
+                        # Must be at least 30.0 points away from other additional barlines being added
+                        if any(abs(pb - ab) < 30.0 for ab in additional_barlines):
+                            continue
+                        additional_barlines.append(pb)
+
+                    inherited_from_partner = additional_barlines
                 
-                # Add partner details with a flag
-                for det in other_filtered["details"]:
-                    det_copy = dict(det)
-                    det_copy["inherited"] = True
-                    details.append(det_copy)
+                if inherited_from_partner:
+                    partner_barlines.extend(inherited_from_partner)
+
+                    # Accumulate rejection reasons too
+                    for k, v in other_filtered["rejection_reasons"].items():
+                        rejection_reasons[k] = rejection_reasons.get(k, 0) + v
+                    rejected_count += other_filtered["rejected_count"]
+
+                    # Add partner details with a flag
+                    for det in other_filtered["details"]:
+                        det_copy = dict(det)
+                        det_copy["inherited"] = True
+                        details.append(det_copy)
         
         # Merge and deduplicate barlines within 15.0 points only if we actually inherited partner barlines
         if partner_barlines:
