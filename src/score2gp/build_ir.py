@@ -1175,6 +1175,8 @@ def build_ir_with_diagnostics_from_imports(
             for p_idx, s_idx in unboxed_systems:
                 has_rejected_barlines = False
                 for w in tabraw.warnings:
+                    if w.get("severity") == "info":
+                        continue
                     code = str(w.get("code", ""))
                     if not code.startswith("pdf_barline_") and code != "pdf_barline_candidates_present_but_invalid":
                         continue
