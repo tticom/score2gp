@@ -824,8 +824,12 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
             articulations = []
 
             if n.find("LetRing") is not None:
-                from .ir import Technique
-                techniques.append(Technique(kind="let-ring"))
+                from .ir import LetRingTechnique
+                techniques.append(LetRingTechnique())
+
+            if n.find("PalmMute") is not None:
+                from .ir import PalmMuteTechnique
+                techniques.append(PalmMuteTechnique())
 
             if n.find("DeadNote") is not None:
                 from .ir import Technique
@@ -841,19 +845,19 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
 
             vib = n.find("Vibrato")
             if vib is not None:
-                from .ir import Technique
-                techniques.append(Technique(kind="vibrato"))
+                from .ir import VibratoTechnique
+                techniques.append(VibratoTechnique())
 
             tie = n.find("Tie")
             if tie is not None:
                 state = "stop" if tie.get("destination") == "true" else "start"
-                from .ir import Technique
-                techniques.append(Technique(kind="tie", state=state))
+                from .ir import TieTechnique
+                techniques.append(TieTechnique(state=state))
 
             slide_prop = props.find('.//Property[@name="Slide"]') if props is not None else None
             if slide_prop is not None:
-                from .ir import Technique
-                techniques.append(Technique(kind="slide"))
+                from .ir import SlideTechnique
+                techniques.append(SlideTechnique())
 
             ho_prop = props.find('.//Property[@name="HammerOn"]') if props is not None else None
             if n.find("HO") is not None or ho_prop is not None:
@@ -1614,12 +1618,20 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
 
                     # Parse techniques (Slide, Hammer-On, Pull-Off, Bend)
                     techniques = []
+                    if n_node.find("LetRing") is not None:
+                        from .ir import LetRingTechnique
+                        techniques.append(LetRingTechnique())
+
+                    if n_node.find("PalmMute") is not None:
+                        from .ir import PalmMuteTechnique
+                        techniques.append(PalmMuteTechnique())
+
                     props_node = n_node.find("Properties")
 
                     slide_prop = props_node.find('.//Property[@name="Slide"]') if props_node is not None else None
                     if n_node.find("Slide") is not None or slide_prop is not None:
-                        from .ir import Technique
-                        techniques.append(Technique(kind="slide"))
+                        from .ir import SlideTechnique
+                        techniques.append(SlideTechnique())
 
                     ho_prop = props_node.find('.//Property[@name="HammerOn"]') if props_node is not None else None
                     if n_node.find("HO") is not None or ho_prop is not None:

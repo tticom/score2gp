@@ -37,6 +37,8 @@ from .ir import (
     HammerOnTechnique,
     PullOffTechnique,
     UnsupportedTechnique,
+    LetRingTechnique,
+    PalmMuteTechnique,
 )
 from .musicxml import (
     MusicXmlHarmony,
@@ -3365,6 +3367,10 @@ def _classify_technique(text: str) -> str | None:
         return "hammer-on"
     if t in ("pull-off", "p", "pull"):
         return "pull-off"
+    if t in ("palm-mute", "p.m.", "p.m", "pm", "palm mute"):
+        return "palm-mute"
+    if t in ("let-ring", "l.r.", "l.r", "lr", "let ring"):
+        return "let-ring"
     return None
 
 
@@ -3617,7 +3623,7 @@ def _attach_symbols_and_techniques(score: ScoreIR, tabraw: TabRaw) -> None:
                     note1.provenance.append(candidate.to_provenance())
                     _remove_not_aligned_warning(score, candidate)
 
-            elif kind == "slide":
+            elif kind in ("slide", "palm-mute", "let-ring"):
                 attached = False
                 if candidate.x is not None:
                     notes_with_x = []
@@ -3642,7 +3648,12 @@ def _attach_symbols_and_techniques(score: ScoreIR, tabraw: TabRaw) -> None:
                             )
                         else:
                             best_dist, target_note = notes_with_x[0]
-                            tech = SlideTechnique(kind="slide", style="unknown", direction="unknown", target_event_id=None)
+                            if kind == "slide":
+                                tech = SlideTechnique(kind="slide", style="unknown", direction="unknown", target_event_id=None)
+                            elif kind == "palm-mute":
+                                tech = PalmMuteTechnique()
+                            else:
+                                tech = LetRingTechnique()
                             target_note.techniques.append(tech)
                             target_note.provenance.append(candidate.to_provenance())
                             _remove_not_aligned_warning(score, candidate)
@@ -3661,7 +3672,12 @@ def _attach_symbols_and_techniques(score: ScoreIR, tabraw: TabRaw) -> None:
                         continue
 
                     target_note = notes[0]
-                    tech = SlideTechnique(kind="slide", style="unknown", direction="unknown", target_event_id=None)
+                    if kind == "slide":
+                        tech = SlideTechnique(kind="slide", style="unknown", direction="unknown", target_event_id=None)
+                    elif kind == "palm-mute":
+                        tech = PalmMuteTechnique()
+                    else:
+                        tech = LetRingTechnique()
                     target_note.techniques.append(tech)
                     target_note.provenance.append(candidate.to_provenance())
                     _remove_not_aligned_warning(score, candidate)

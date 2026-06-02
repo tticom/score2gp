@@ -744,3 +744,239 @@ def test_proximity_technique_attachment_cases(tmp_path) -> None:
     assert len(events[0].notes[0].techniques) == 1
     assert events[0].notes[0].techniques[0].kind == "hammer-on"
     assert events[0].notes[0].techniques[0].target_event_id == events[1].id
+
+
+def test_proximity_palm_mute_let_ring_attachment(tmp_path) -> None:
+    # Set up a 3-note MusicXML file
+    musicxml_content = """<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1">
+      <part-name>Guitar</part-name>
+    </score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>4</divisions>
+        <time>
+          <beats>4</beats>
+          <beat-type>4</beat-type>
+        </time>
+      </attributes>
+      <note>
+        <pitch><step>E</step><octave>4</octave></pitch>
+        <duration>4</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+      </note>
+      <note>
+        <pitch><step>F</step><octave>4</octave></pitch>
+        <duration>4</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+      </note>
+      <note>
+        <pitch><step>G</step><octave>4</octave></pitch>
+        <duration>4</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+      </note>
+    </measure>
+  </part>
+</score-partwise>
+"""
+    musicxml_file = tmp_path / "three_notes.musicxml"
+    musicxml_file.write_text(musicxml_content, encoding="utf-8")
+
+    base_tabraw = {
+        "schema_version": "tabraw.v0.1",
+        "source_pdf": "synthetic",
+        "inspection_kind": "synthetic",
+        "candidates": [
+            {
+                "id": "tab-001",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "line_index": 1,
+                "string": 1,
+                "raw_text": "0",
+                "parsed_fret": 0,
+                "x": 100.0,
+                "y": 40.0,
+                "confidence": 0.95,
+            },
+            {
+                "id": "tab-002",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "line_index": 1,
+                "string": 1,
+                "raw_text": "2",
+                "parsed_fret": 2,
+                "x": 180.0,
+                "y": 40.0,
+                "confidence": 0.95,
+            },
+            {
+                "id": "tab-003",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "line_index": 1,
+                "string": 1,
+                "raw_text": "3",
+                "parsed_fret": 3,
+                "x": 260.0,
+                "y": 40.0,
+                "confidence": 0.95,
+            },
+        ],
+        "warnings": []
+    }
+
+    # 1. Palm-mute candidate attaches to closest note (Note 1)
+    pm_candidate = {
+        "id": "tech-pm",
+        "kind": "technique-text",
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "bar_index": 1,
+        "raw_text": "pm",
+        "x": 103.0,
+        "confidence": 0.9,
+    }
+    tabraw_data = dict(base_tabraw)
+    tabraw_data["candidates"] = base_tabraw["candidates"] + [pm_candidate]
+    tabraw_file = tmp_path / "tabraw_pm_prox.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+    score, _ = build_ir_with_diagnostics_from_files(musicxml_file, tabraw_file)
+    events = score.bars[0].events
+    assert len(events[0].notes[0].techniques) == 1
+    assert events[0].notes[0].techniques[0].kind == "palm-mute"
+    assert not events[1].notes[0].techniques
+    assert not events[2].notes[0].techniques
+
+    # 2. Palm-mute (alternative text e.g. "p.m." or "palm mute") attaches to Note 2
+    pm_candidate_2 = dict(pm_candidate)
+    pm_candidate_2["raw_text"] = "palm mute"
+    pm_candidate_2["x"] = 182.0
+    tabraw_data = dict(base_tabraw)
+    tabraw_data["candidates"] = base_tabraw["candidates"] + [pm_candidate_2]
+    tabraw_file = tmp_path / "tabraw_pm_prox_2.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+    score, _ = build_ir_with_diagnostics_from_files(musicxml_file, tabraw_file)
+    events = score.bars[0].events
+    assert not events[0].notes[0].techniques
+    assert len(events[1].notes[0].techniques) == 1
+    assert events[1].notes[0].techniques[0].kind == "palm-mute"
+    assert not events[2].notes[0].techniques
+
+    # 3. Let-ring candidate (lr) attaches to closest note (Note 1)
+    lr_candidate = {
+        "id": "tech-lr",
+        "kind": "technique-text",
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "bar_index": 1,
+        "raw_text": "lr",
+        "x": 103.0,
+        "confidence": 0.9,
+    }
+    tabraw_data = dict(base_tabraw)
+    tabraw_data["candidates"] = base_tabraw["candidates"] + [lr_candidate]
+    tabraw_file = tmp_path / "tabraw_lr_prox.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+    score, _ = build_ir_with_diagnostics_from_files(musicxml_file, tabraw_file)
+    events = score.bars[0].events
+    assert len(events[0].notes[0].techniques) == 1
+    assert events[0].notes[0].techniques[0].kind == "let-ring"
+    assert not events[1].notes[0].techniques
+    assert not events[2].notes[0].techniques
+
+    # 4. Let-ring (alternative text e.g. "l.r." or "let ring") attaches to Note 2
+    lr_candidate_2 = dict(lr_candidate)
+    lr_candidate_2["raw_text"] = "let ring"
+    lr_candidate_2["x"] = 182.0
+    tabraw_data = dict(base_tabraw)
+    tabraw_data["candidates"] = base_tabraw["candidates"] + [lr_candidate_2]
+    tabraw_file = tmp_path / "tabraw_lr_prox_2.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+    score, _ = build_ir_with_diagnostics_from_files(musicxml_file, tabraw_file)
+    events = score.bars[0].events
+    assert not events[0].notes[0].techniques
+    assert len(events[1].notes[0].techniques) == 1
+    assert events[1].notes[0].techniques[0].kind == "let-ring"
+    assert not events[2].notes[0].techniques
+
+    # 5. Ambiguity test (x is at midpoint 140.0)
+    pm_candidate["x"] = 140.0
+    tabraw_data = dict(base_tabraw)
+    tabraw_data["candidates"] = base_tabraw["candidates"] + [pm_candidate]
+    tabraw_file = tmp_path / "tabraw_pm_ambig.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+    score, _ = build_ir_with_diagnostics_from_files(musicxml_file, tabraw_file)
+    events = score.bars[0].events
+    assert not events[0].notes[0].techniques
+    assert not events[1].notes[0].techniques
+    assert any(w.code == "ambiguous_technique_attachment" for w in score.warnings)
+
+    # 6. Fallback warns and does not attach when visual coordinates are missing and there are multiple notes
+    pm_candidate["x"] = None
+    tabraw_data = dict(base_tabraw)
+    tabraw_data["candidates"] = base_tabraw["candidates"] + [pm_candidate]
+    tabraw_file = tmp_path / "tabraw_pm_fallback_fail.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+    score, _ = build_ir_with_diagnostics_from_files(musicxml_file, tabraw_file)
+    events = score.bars[0].events
+    assert not events[0].notes[0].techniques
+    assert not events[1].notes[0].techniques
+    assert any(w.code == "ambiguous_technique_attachment" for w in score.warnings)
+
+    # 7. Fallback succeeds when visual coordinates are missing and there is exactly one note in the bar
+    single_note_tabraw = {
+        "schema_version": "tabraw.v0.1",
+        "source_pdf": "synthetic",
+        "inspection_kind": "synthetic",
+        "candidates": [
+            base_tabraw["candidates"][0],
+            pm_candidate
+        ]
+    }
+    musicxml_content_1 = """<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Guitar</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>4</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <note>
+        <pitch><step>E</step><octave>4</octave></pitch>
+        <duration>4</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+      </note>
+    </measure>
+  </part>
+</score-partwise>
+"""
+    musicxml_file_1 = tmp_path / "one_note.musicxml"
+    musicxml_file_1.write_text(musicxml_content_1, encoding="utf-8")
+    tabraw_file = tmp_path / "tabraw_pm_fallback_pass.json"
+    tabraw_file.write_text(json.dumps(single_note_tabraw), encoding="utf-8")
+    score, _ = build_ir_with_diagnostics_from_files(musicxml_file_1, tabraw_file)
+    assert not any(w.code == "ambiguous_technique_attachment" for w in score.warnings)
+    events = score.bars[0].events
+    assert len(events[0].notes[0].techniques) == 1
+    assert events[0].notes[0].techniques[0].kind == "palm-mute"
