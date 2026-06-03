@@ -2941,3 +2941,103 @@ def test_fragmented_staff_line_merging_regression_close_gap() -> None:
     assert len(y_166_lines) == 1
     assert y_166_lines[0].x0 == 36.0
     assert y_166_lines[0].x1 == 575.0
+
+
+def test_notation_to_tab_barline_inheritance_filter() -> None:
+    from collections import namedtuple
+    from score2gp.pdf import _detect_tab_systems
+
+    Point = namedtuple('Point', ['x', 'y'])
+
+    drawings = []
+
+    # 1. TAB staff lines: 6 lines, y = 200, 206, 212, 218, 224, 230. x from 100 to 800
+    for y in [200.0, 206.0, 212.0, 218.0, 224.0, 230.0]:
+        drawings.append({
+            "items": [
+                ("l", Point(100.0, y), Point(800.0, y))
+            ]
+        })
+
+    # 2. Notation staff lines: 5 lines, y = 100, 108, 116, 124, 132. x from 100 to 800
+    # Median gap is 8.0 (which classify_staff_line_group categorizes as "notation" if 7.8 <= median_gap <= 9.2)
+    for y in [100.0, 108.0, 116.0, 124.0, 132.0]:
+        drawings.append({
+            "items": [
+                ("l", Point(100.0, y), Point(800.0, y))
+            ]
+        })
+
+    # 3. Explicit TAB barlines (anchors):
+    # Let's put them at x = 100.0 and x = 800.0 (crossing TAB staff: y from 200 to 230)
+    for x in [100.0, 800.0]:
+        drawings.append({
+            "items": [
+                ("l", Point(x, 200.0), Point(x, 230.0))
+            ]
+        })
+
+    # 4. Partner barlines (candidates):
+    # Let's add multiple candidates crossing notation staff (y from 100 to 132):
+    # Candidate a: x = 200.0 -> distance to 100.0 is 100.0 (< 130.0). Should be REJECTED.
+    # Candidate b: x = 350.0 -> distance to 100.0 (250) and 800.0 (450) are both >= 130.0. Should be ACCEPTED.
+    # Candidates c1, c2: close together (e.g. x = 500.0 and x = 582.65, difference 82.65).
+    # Since difference 82.65 < 130.0, BOTH should be REJECTED to avoid order dependency.
+    # Explicit TAB barlines (x=100.0, x=800.0) must NOT be rejected by this filter.
+    for x in [200.0, 350.0, 500.0, 582.65]:
+        drawings.append({
+            "items": [
+                ("l", Point(x, 100.0), Point(x, 132.0))
+            ]
+        })
+
+    class MockPage:
+        def get_drawings(self):
+            return drawings
+        def get_text(self, kind):
+            return []
+
+    page = MockPage()
+    systems = _detect_tab_systems(page, page_index=1)
+
+    assert len(systems) == 1
+    system = systems[0]
+
+    # Valid barlines should include:
+    # - explicit barlines: 100.0, 800.0
+    # - accepted inherited barline: 350.0
+    # It must NOT include 200.0 (too close to 100.0), or 500.0 / 582.65 (close to each other).
+    assert 100.0 in system.barlines
+    assert 800.0 in system.barlines
+    assert 350.0 in system.barlines
+
+    assert 200.0 not in system.barlines
+    assert 500.0 not in system.barlines
+    assert 582.65 not in system.barlines
+
+    # Check detail decisions
+    details = {d["x"]: d for d in system.barline_candidates_details}
+
+    # Explicit barlines are accepted, not inherited
+    assert details[100.0]["final_decision"] == "accepted"
+    assert not details[100.0].get("inherited")
+    assert details[800.0]["final_decision"] == "accepted"
+    assert not details[800.0].get("inherited")
+
+    # Inherited 350.0 is accepted
+    assert details[350.0]["final_decision"] == "accepted"
+    assert details[350.0]["inherited"] is True
+
+    # Inherited 200.0 is rejected as inherited too close
+    assert details[200.0]["final_decision"] == "rejected"
+    assert details[200.0]["rejection_reason"] == "pdf_barline_inherited_too_close"
+    assert details[200.0]["inherited"] is True
+
+    # Inherited 500.0 and 582.65 are BOTH rejected as inherited too close
+    assert details[500.0]["final_decision"] == "rejected"
+    assert details[500.0]["rejection_reason"] == "pdf_barline_inherited_too_close"
+    assert details[500.0]["inherited"] is True
+
+    assert details[582.65]["final_decision"] == "rejected"
+    assert details[582.65]["rejection_reason"] == "pdf_barline_inherited_too_close"
+    assert details[582.65]["inherited"] is True
