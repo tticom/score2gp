@@ -21,6 +21,7 @@ _ASCII_TAB_TOKEN_RE = re.compile(r"\d{1,2}|[\\/hpbvr~]+")
 _ASCII_TECHNIQUE_MARKERS = {"/", "\\", "h", "p", "b", "r", "v", "~"}
 
 DOUBLE_BARLINE_CLUSTERING_TOLERANCE = 12.0
+FRAGMENTED_STAFF_LINE_NEIGHBOR_MAX_GAP = 360.0
 
 
 def inspect_pdf(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
@@ -3330,58 +3331,85 @@ def merge_collinear_horizontal_segments(segments: list[_LineSegment], tolerance_
             last_x0, last_x1 = min(last.x0, last.x1), max(last.x0, last.x1)
             seg_x0, seg_x1 = min(seg.x0, seg.x1), max(seg.x0, seg.x1)
 
+            gap_start = last_x1
+            gap_end = seg_x0
+            gap_len = gap_end - gap_start
+            should_merge = False
+
             if last_x1 - 5.0 <= seg_x0 <= last_x1 + max_gap_x:
-                # Check if this is a column gap or a fragment split.
-                # It is a fragment split if there is at least one other segment (e.g. a neighboring staff line)
-                # that spans continuously across the gap.
-                gap_start = last_x1
-                gap_end = seg_x0
-                has_continuous_neighbor = False
+                # Close-gap regime: gap up to max_gap_x (120.0)
+                if gap_len <= 5.0:
+                    should_merge = True
+                else:
+                    # Check if there is at least one other segment (neighboring staff line)
+                    # that spans continuously across the gap.
+                    has_continuous_neighbor = False
+                    for other in pass1_merged:
+                        if other is seg or other is last:
+                            continue
+                        other_y = (other.y0 + other.y1) / 2
+                        if 2.0 <= abs(other_y - seg_y) <= 45.0:  # neighboring lines in a staff
+                            other_x0 = min(other.x0, other.x1)
+                            other_x1 = max(other.x0, other.x1)
+                            if other_x0 <= gap_start + 2.0 and other_x1 >= gap_end - 2.0:
+                                has_continuous_neighbor = True
+                                break
+
+                    # Spacing-aware row-level fragment split check
+                    has_matching_split_neighbors = False
+                    if not has_continuous_neighbor:
+                        if gap_len <= 40.0:
+                            matching_split_count = 0
+                            for other_left in pass1_merged:
+                                if other_left is seg or other_left is last:
+                                    continue
+                                ol_y = (other_left.y0 + other_left.y1) / 2
+                                if 2.0 <= abs(ol_y - seg_y) <= 45.0:
+                                    ol_x1 = max(other_left.x0, other_left.x1)
+                                    # Check if other_left ends near last_x1
+                                    if abs(ol_x1 - last_x1) <= 15.0:
+                                        # Find corresponding other_right
+                                        for other_right in pass1_merged:
+                                            if other_right is seg or other_right is last or other_right is other_left:
+                                                continue
+                                            or_y = (other_right.y0 + other_right.y1) / 2
+                                            if abs(or_y - ol_y) <= tolerance_y:
+                                                or_x0 = min(other_right.x0, other_right.x1)
+                                                # Check if other_right starts near seg_x0
+                                                if abs(or_x0 - seg_x0) <= 15.0:
+                                                    matching_split_count += 1
+                                                    break
+
+                            # If we found at least 4 neighboring parallel lines with the same collinear split,
+                            # this represents a split staff row of at least 5 lines (Guitar TAB staff split).
+                            if matching_split_count >= 4:
+                                has_matching_split_neighbors = True
+
+                    if has_continuous_neighbor or has_matching_split_neighbors:
+                        should_merge = True
+
+            elif max_gap_x < gap_len <= FRAGMENTED_STAFF_LINE_NEIGHBOR_MAX_GAP:
+                # Wide-gap regime: gap > 120.0 and <= 360.0
+                continuous_neighbor_count = 0
                 for other in pass1_merged:
+                    if other is seg or other is last:
+                        continue
                     other_y = (other.y0 + other.y1) / 2
-                    if 2.0 <= abs(other_y - seg_y) <= 45.0: # neighboring lines in a staff
+                    if 2.0 <= abs(other_y - seg_y) <= 45.0:  # neighboring lines in a staff
                         other_x0 = min(other.x0, other.x1)
                         other_x1 = max(other.x0, other.x1)
                         if other_x0 <= gap_start + 2.0 and other_x1 >= gap_end - 2.0:
-                            has_continuous_neighbor = True
-                            break
+                            continuous_neighbor_count += 1
+                if continuous_neighbor_count >= 2:
+                    should_merge = True
 
-                # Spacing-aware row-level fragment split check:
-                # If there are no continuous neighbors across the gap, it could still be a split staff row
-                # if multiple neighboring staff lines are collinear and split at the exact same horizontal coordinate range.
-                has_matching_split_neighbors = False
-                if not has_continuous_neighbor:
-                    gap_len = seg_x0 - last_x1
-                    if gap_len <= 40.0:
-                        matching_split_count = 0
-                        for other_left in pass1_merged:
-                            ol_y = (other_left.y0 + other_left.y1) / 2
-                            if 2.0 <= abs(ol_y - seg_y) <= 45.0:
-                                ol_x1 = max(other_left.x0, other_left.x1)
-                                # Check if other_left ends near last_x1
-                                if abs(ol_x1 - last_x1) <= 15.0:
-                                    # Find corresponding other_right
-                                    for other_right in pass1_merged:
-                                        or_y = (other_right.y0 + other_right.y1) / 2
-                                        if abs(or_y - ol_y) <= tolerance_y:
-                                            or_x0 = min(other_right.x0, other_right.x1)
-                                            # Check if other_right starts near seg_x0
-                                            if abs(or_x0 - seg_x0) <= 15.0:
-                                                matching_split_count += 1
-                                                break
-
-                        # If we found at least 4 neighboring parallel lines with the same collinear split,
-                        # this represents a split staff row of at least 5 lines (Guitar TAB staff split).
-                        if matching_split_count >= 4:
-                            has_matching_split_neighbors = True
-
-                if has_continuous_neighbor or has_matching_split_neighbors or (seg_x0 - last_x1) <= 5.0:
-                    new_x0 = min(last_x0, seg_x0)
-                    new_x1 = max(last_x1, seg_x1)
-                    new_y0 = (last.y0 + seg.y0) / 2
-                    new_y1 = (last.y1 + seg.y1) / 2
-                    merged[-1] = _LineSegment(new_x0, new_y0, new_x1, new_y1)
-                    continue
+            if should_merge:
+                new_x0 = min(last_x0, seg_x0)
+                new_x1 = max(last_x1, seg_x1)
+                new_y0 = (last.y0 + seg.y0) / 2
+                new_y1 = (last.y1 + seg.y1) / 2
+                merged[-1] = _LineSegment(new_x0, new_y0, new_x1, new_y1)
+                continue
 
         merged.append(seg)
     return merged
