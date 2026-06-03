@@ -2879,3 +2879,65 @@ def test_double_barline_ambiguity_resolution(tmp_path) -> None:
     # Verify 2 bar boxes were successfully constructed (proving true rightmost boundary remains accepted)
     assert any(w["code"] == "pdf_bar_boxes_constructed" for w in tabraw.warnings)
 
+
+def test_fragmented_staff_line_merging_wide_gap_positive() -> None:
+    from score2gp.pdf import merge_collinear_horizontal_segments, _LineSegment
+    # Wide gap (e.g. 150 points) with two continuous spanning neighbors
+    segments = [
+        _LineSegment(36.0, 166.8, 200.0, 166.8),   # Fragment 1 Y=166.8
+        _LineSegment(350.0, 166.8, 575.0, 166.8),  # Fragment 2 Y=166.8 (gap length = 150.0)
+        _LineSegment(36.0, 160.4, 575.0, 160.4),   # Spanning neighbor 1 (Y=160.4)
+        _LineSegment(36.0, 173.2, 575.0, 173.2),   # Spanning neighbor 2 (Y=173.2)
+    ]
+    merged = merge_collinear_horizontal_segments(segments)
+    y_166_lines = [s for s in merged if abs((s.y0 + s.y1)/2 - 166.8) < 0.1]
+    # They should merge
+    assert len(y_166_lines) == 1
+    assert y_166_lines[0].x0 == 36.0
+    assert y_166_lines[0].x1 == 575.0
+
+
+def test_fragmented_staff_line_merging_wide_gap_negative_one_neighbor() -> None:
+    from score2gp.pdf import merge_collinear_horizontal_segments, _LineSegment
+    # Wide gap (e.g. 150 points) with only one continuous spanning neighbor
+    segments = [
+        _LineSegment(36.0, 166.8, 200.0, 166.8),   # Fragment 1 Y=166.8
+        _LineSegment(350.0, 166.8, 575.0, 166.8),  # Fragment 2 Y=166.8 (gap length = 150.0)
+        _LineSegment(36.0, 160.4, 575.0, 160.4),   # Only one spanning neighbor
+    ]
+    merged = merge_collinear_horizontal_segments(segments)
+    y_166_lines = [s for s in merged if abs((s.y0 + s.y1)/2 - 166.8) < 0.1]
+    # They should NOT merge (remain separate segments)
+    assert len(y_166_lines) == 2
+
+
+def test_fragmented_staff_line_merging_wide_gap_negative_far_neighbors() -> None:
+    from score2gp.pdf import merge_collinear_horizontal_segments, _LineSegment
+    # Wide gap (e.g. 150 points) with two spanning neighbors that are too far away vertically
+    segments = [
+        _LineSegment(36.0, 166.8, 200.0, 166.8),   # Fragment 1 Y=166.8
+        _LineSegment(350.0, 166.8, 575.0, 166.8),  # Fragment 2 Y=166.8 (gap length = 150.0)
+        _LineSegment(36.0, 100.0, 575.0, 100.0),   # Spanning neighbor 1 too far (Y=100.0)
+        _LineSegment(36.0, 230.0, 575.0, 230.0),   # Spanning neighbor 2 too far (Y=230.0)
+    ]
+    merged = merge_collinear_horizontal_segments(segments)
+    y_166_lines = [s for s in merged if abs((s.y0 + s.y1)/2 - 166.8) < 0.1]
+    # They should NOT merge
+    assert len(y_166_lines) == 2
+
+
+def test_fragmented_staff_line_merging_regression_close_gap() -> None:
+    from score2gp.pdf import merge_collinear_horizontal_segments, _LineSegment
+    # Gap is <= max_gap_x (e.g., 50.0 points), which is standard close gap.
+    # It should merge if it has at least one continuous neighbor.
+    segments = [
+        _LineSegment(36.0, 166.8, 200.0, 166.8),   # Fragment 1 Y=166.8
+        _LineSegment(250.0, 166.8, 575.0, 166.8),  # Fragment 2 Y=166.8 (gap length = 50.0)
+        _LineSegment(36.0, 160.4, 575.0, 160.4),   # One continuous neighbor
+    ]
+    merged = merge_collinear_horizontal_segments(segments)
+    y_166_lines = [s for s in merged if abs((s.y0 + s.y1)/2 - 166.8) < 0.1]
+    # Should merge
+    assert len(y_166_lines) == 1
+    assert y_166_lines[0].x0 == 36.0
+    assert y_166_lines[0].x1 == 575.0
