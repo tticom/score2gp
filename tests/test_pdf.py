@@ -3041,3 +3041,87 @@ def test_notation_to_tab_barline_inheritance_filter() -> None:
     assert details[582.65]["final_decision"] == "rejected"
     assert details[582.65]["rejection_reason"] == "pdf_barline_inherited_too_close"
     assert details[582.65]["inherited"] is True
+
+
+def test_filter_tab_barline_candidates_internal_double_barline() -> None:
+    from score2gp.pdf import _LineSegment, filter_tab_barline_candidates
+
+    # Define system dimensions
+    y0 = 120.0
+    y1 = 190.0
+    line_ys = [120.0, 134.0, 148.0, 162.0, 176.0, 190.0]
+    x0 = 72.0
+    x1 = 332.0
+
+    # 1. Test case: size-2 internal double-barline cluster.
+    # Spacing is within tolerance (e.g. 2.0 units), both are initially acceptable (cross entire staff).
+    cands_size2 = [
+        _LineSegment(150.0, 120.0, 150.0, 190.0),
+        _LineSegment(152.0, 120.0, 152.0, 190.0),
+    ]
+    res_size2 = filter_tab_barline_candidates(cands_size2, y0, y1, line_ys, x0, x1)
+    # The leftmost candidate should be accepted
+    assert res_size2["valid_barlines"] == [150.0]
+    details_size2 = {d["x"]: d for d in res_size2["details"]}
+    assert details_size2[150.0]["final_decision"] == "accepted"
+    # The right candidate should be secondary and rejected with pdf_barline_double_secondary
+    assert details_size2[152.0]["final_decision"] == "rejected"
+    assert details_size2[152.0]["rejection_reason"] == "pdf_barline_double_secondary"
+
+    # 2. Test case: Existing left-edge and right-edge double barlines are resolved normally.
+    # Left edge double barline: 72.0 and 74.0 (leftmost is representative).
+    cands_left = [
+        _LineSegment(72.0, 120.0, 72.0, 190.0),
+        _LineSegment(74.0, 120.0, 74.0, 190.0),
+    ]
+    res_left = filter_tab_barline_candidates(cands_left, y0, y1, line_ys, x0, x1)
+    assert res_left["valid_barlines"] == [72.0]
+    details_left = {d["x"]: d for d in res_left["details"]}
+    assert details_left[72.0]["final_decision"] == "accepted"
+    assert details_left[74.0]["final_decision"] == "rejected"
+    assert details_left[74.0]["rejection_reason"] == "pdf_barline_double_secondary"
+
+    # Right edge double barline: 330.0 and 332.0 (rightmost is representative).
+    cands_right = [
+        _LineSegment(330.0, 120.0, 330.0, 190.0),
+        _LineSegment(332.0, 120.0, 332.0, 190.0),
+    ]
+    res_right = filter_tab_barline_candidates(cands_right, y0, y1, line_ys, x0, x1)
+    assert res_right["valid_barlines"] == [332.0]
+    details_right = {d["x"]: d for d in res_right["details"]}
+    assert details_right[332.0]["final_decision"] == "accepted"
+    assert details_right[330.0]["final_decision"] == "rejected"
+    assert details_right[330.0]["rejection_reason"] == "pdf_barline_double_secondary"
+
+    # 3. Test case: Internal cluster of 3 close candidates remains ambiguous.
+    cands_size3 = [
+        _LineSegment(150.0, 120.0, 150.0, 190.0),
+        _LineSegment(152.0, 120.0, 152.0, 190.0),
+        _LineSegment(154.0, 120.0, 154.0, 190.0),
+    ]
+    res_size3 = filter_tab_barline_candidates(cands_size3, y0, y1, line_ys, x0, x1)
+    assert res_size3["valid_barlines"] == []
+    for d in res_size3["details"]:
+        assert d["final_decision"] == "rejected"
+        assert d["rejection_reason"] == "pdf_barline_ambiguous"
+
+    # 4. Test case: Two close internal candidates that fail height/staff-crossing checks are not accepted merely because they are close.
+    cands_short = [
+        _LineSegment(150.0, 120.0, 150.0, 140.0),
+        _LineSegment(152.0, 120.0, 152.0, 140.0),
+    ]
+    res_short = filter_tab_barline_candidates(cands_short, y0, y1, line_ys, x0, x1)
+    assert res_short["valid_barlines"] == []
+    details_short = {d["x"]: d for d in res_short["details"]}
+    assert details_short[150.0]["final_decision"] == "rejected"
+    assert details_short[150.0]["rejection_reason"] in ("pdf_barline_too_short_absolute", "pdf_barline_crosses_insufficient_string_gaps")
+    assert details_short[152.0]["final_decision"] == "rejected"
+    assert details_short[152.0]["rejection_reason"] in ("pdf_barline_too_short_absolute", "pdf_barline_crosses_insufficient_string_gaps")
+
+    # 5. Test case: Ordinary single internal barlines remain accepted.
+    cands_single = [
+        _LineSegment(150.0, 120.0, 150.0, 190.0),
+    ]
+    res_single = filter_tab_barline_candidates(cands_single, y0, y1, line_ys, x0, x1)
+    assert res_single["valid_barlines"] == [150.0]
+    assert res_single["details"][0]["final_decision"] == "accepted"

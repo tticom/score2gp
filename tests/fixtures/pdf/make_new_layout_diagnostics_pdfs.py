@@ -286,11 +286,13 @@ def make_pdf_barlines_ambiguous() -> None:
     doc, page = _new_page("Barlines Ambiguous")
     line_ys = [120, 134, 148, 162, 176, 190]
     _draw_tab_lines(page, line_ys=line_ys, x0=72, x1=332)
-    # Draw ambiguous barlines (close together)
+    # Draw ambiguous barlines (close together, cluster of 3)
     page.draw_line((88, line_ys[0] - 5), (88, line_ys[-1] + 5), color=(0, 0, 0), width=0.6)
     page.draw_line((90, line_ys[0] - 5), (90, line_ys[-1] + 5), color=(0, 0, 0), width=0.6)
+    page.draw_line((92, line_ys[0] - 5), (92, line_ys[-1] + 5), color=(0, 0, 0), width=0.6)
     page.draw_line((205, line_ys[0] - 5), (205, line_ys[-1] + 5), color=(0, 0, 0), width=0.6)
     page.draw_line((207, line_ys[0] - 5), (207, line_ys[-1] + 5), color=(0, 0, 0), width=0.6)
+    page.draw_line((209, line_ys[0] - 5), (209, line_ys[-1] + 5), color=(0, 0, 0), width=0.6)
     _write_fret(page, "3", 120, line_ys[0])
     _save(doc, "generated_pdf_barlines_ambiguous.pdf")
 
