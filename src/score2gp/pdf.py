@@ -22,6 +22,8 @@ _ASCII_TECHNIQUE_MARKERS = {"/", "\\", "h", "p", "b", "r", "v", "~"}
 
 DOUBLE_BARLINE_CLUSTERING_TOLERANCE = 12.0
 FRAGMENTED_STAFF_LINE_NEIGHBOR_MAX_GAP = 360.0
+MIN_INHERITED_INTERNAL_BAR_WIDTH = 130.0
+
 
 
 def inspect_pdf(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
@@ -901,6 +903,13 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                         add_barline_warning(
                             "pdf_barline_rejected_relative_height",
                             f"One or more barline candidates were rejected by relative staff-height check in system {system.system_index} on page {page_number}.",
+                            "warning",
+                            "partial",
+                        )
+                    if reasons.get("pdf_barline_inherited_too_close", 0) > 0:
+                        add_barline_warning(
+                            "pdf_barline_inherited_too_close",
+                            f"One or more inherited barline candidates were rejected as too close in system {system.system_index} on page {page_number}.",
                             "warning",
                             "partial",
                         )
@@ -2810,6 +2819,7 @@ def _unsafe_grouping_codes(fret_candidates: list[dict[str, Any]], page_warnings:
         "pdf_barline_rejected_relative_height",
         "pdf_barline_validation_threshold_boundary",
         "pdf_barline_validation_not_enough_for_build_ir",
+        "pdf_barline_inherited_too_close",
 
         # New Phase 6 Bar Box Construction Codes
         "pdf_bar_box_requires_two_boundaries",
@@ -2970,6 +2980,7 @@ def _specific_grouping_warning(code: str, grouping_counts: dict[str, int]) -> di
         "pdf_barline_rejected_relative_height": "Barline candidate rejected by relative staff-height check.",
         "pdf_barline_validation_threshold_boundary": "Barline candidate is at validation threshold boundary.",
         "pdf_barline_validation_not_enough_for_build_ir": "Barline validation is incomplete and not safe to build IR.",
+        "pdf_barline_inherited_too_close": "Inherited barline candidate rejected as too close.",
 
         # New Phase 6 Bar Box Construction messages
         "pdf_bar_box_requires_two_boundaries": "A bar box requires at least two accepted barlines to define its boundaries.",
@@ -3499,6 +3510,7 @@ def filter_tab_barline_candidates(
         "pdf_barline_outside_staff_region": 0,
         "pdf_barline_rejected_relative_height": 0,
         "pdf_barline_double_secondary": 0,
+        "pdf_barline_inherited_too_close": 0,
     }
     valid_barlines = []
     rejected_count = 0
@@ -3799,44 +3811,67 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
                 
                 other_filtered = filter_tab_barline_candidates(other_candidates, other_y0, other_y1, other_ys, other_x0, other_x1)
                 partner_valid = other_filtered["valid_barlines"]
-                
+
                 inherited_from_partner = []
-                if len(valid_barlines) < 2:
-                    inherited_from_partner = partner_valid
-                else:
-                    # TAB has outer boundaries. Only inherit internal partner barlines
-                    # that are well-spaced and don't create tiny (<30.0) bar boxes.
-                    tab_left = min(valid_barlines)
-                    tab_right = max(valid_barlines)
+                rejected_inherited = {}  # pb -> rejection_reason
 
-                    additional_barlines = []
-                    for pb in partner_valid:
-                        # Must be inside the outermost boundaries of the TAB staff
+                tab_left = min(valid_barlines) if len(valid_barlines) >= 2 else None
+                tab_right = max(valid_barlines) if len(valid_barlines) >= 2 else None
+
+                for pb in partner_valid:
+                    # a) Check boundaries if we have outer TAB boundaries
+                    if tab_left is not None and tab_right is not None:
                         if pb <= tab_left + 15.0 or pb >= tab_right - 15.0:
+                            rejected_inherited[pb] = "pdf_barline_outside_system_bounds"
                             continue
-                        # Must be at least 30.0 points away from any existing TAB barline
-                        if any(abs(pb - tb) < 30.0 for tb in valid_barlines):
-                            continue
-                        # Must be at least 30.0 points away from other additional barlines being added
-                        if any(abs(pb - ab) < 30.0 for ab in additional_barlines):
-                            continue
-                        additional_barlines.append(pb)
 
-                    inherited_from_partner = additional_barlines
-                
+                    # b) Check if too close to any explicit TAB barline (anchors)
+                    if any(15.0 < abs(pb - tb) < MIN_INHERITED_INTERNAL_BAR_WIDTH for tb in valid_barlines):
+                        rejected_inherited[pb] = "pdf_barline_inherited_too_close"
+                        continue
+
+                    # c) Check if too close to another candidate in partner_valid (batch check)
+                    if any(15.0 < abs(pb - other) < MIN_INHERITED_INTERNAL_BAR_WIDTH for other in partner_valid if other != pb):
+                        rejected_inherited[pb] = "pdf_barline_inherited_too_close"
+                        continue
+
+                    inherited_from_partner.append(pb)
+
                 if inherited_from_partner:
                     partner_barlines.extend(inherited_from_partner)
 
-                    # Accumulate rejection reasons too
-                    for k, v in other_filtered["rejection_reasons"].items():
-                        rejection_reasons[k] = rejection_reasons.get(k, 0) + v
-                    rejected_count += other_filtered["rejected_count"]
+                # Accumulate partner staff rejection reasons
+                for k, v in other_filtered["rejection_reasons"].items():
+                    rejection_reasons[k] = rejection_reasons.get(k, 0) + v
+                rejected_count += other_filtered["rejected_count"]
 
-                    # Add partner details with a flag
-                    for det in other_filtered["details"]:
-                        det_copy = dict(det)
-                        det_copy["inherited"] = True
-                        details.append(det_copy)
+                # Add partner details with updated decision
+                for det in other_filtered["details"]:
+                    det_copy = dict(det)
+                    det_copy["inherited"] = True
+
+                    if det_copy.get("final_decision") == "accepted":
+                        x_val = det_copy.get("x")
+                        matched_pb = None
+                        if x_val is not None:
+                            for pb in partner_valid:
+                                if abs(pb - x_val) < 0.001:
+                                    matched_pb = pb
+                                    break
+
+                        if matched_pb is not None:
+                            if matched_pb in rejected_inherited:
+                                reason = rejected_inherited[matched_pb]
+                                det_copy["final_decision"] = "rejected"
+                                det_copy["rejection_reason"] = reason
+                                rejection_reasons[reason] = rejection_reasons.get(reason, 0) + 1
+                                rejected_count += 1
+                            elif matched_pb not in inherited_from_partner:
+                                det_copy["final_decision"] = "rejected"
+                                det_copy["rejection_reason"] = "pdf_barline_outside_system_bounds"
+                                rejection_reasons["pdf_barline_outside_system_bounds"] = rejection_reasons.get("pdf_barline_outside_system_bounds", 0) + 1
+                                rejected_count += 1
+                    details.append(det_copy)
         
         # Merge and deduplicate barlines within 15.0 points only if we actually inherited partner barlines
         if partner_barlines:
