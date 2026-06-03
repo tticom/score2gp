@@ -3609,9 +3609,18 @@ def filter_tab_barline_candidates(
                 for item in cluster[1:]:
                     final_decisions[item["idx"]] = (False, "pdf_barline_double_secondary")
             else:
-                # Internal cluster of close barlines. Treat them as ambiguous!
-                for item in cluster:
-                    final_decisions[item["idx"]] = (False, "pdf_barline_ambiguous")
+                # Internal cluster of close barlines.
+                if len(cluster) == 2:
+                    # Select the leftmost candidate as the representative for v0.1.
+                    # This is limited to size-2 close clusters; larger internal clusters remain ambiguous.
+                    representative = cluster[0]
+                    secondary = cluster[1]
+                    final_decisions[representative["idx"]] = (True, None)
+                    final_decisions[secondary["idx"]] = (False, "pdf_barline_double_secondary")
+                else:
+                    # Treat clusters of size 3 or more as ambiguous!
+                    for item in cluster:
+                        final_decisions[item["idx"]] = (False, "pdf_barline_ambiguous")
         else:
             # Single-line cluster. They are default accepted initially,
             # but will be verified by the ambiguity check below.
