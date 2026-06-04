@@ -558,6 +558,61 @@ def mxl_rootfile_path(path: str | Path) -> str:
         return _mxl_rootfile(package)
 
 
+def _can_remediate_backup_forward_drift(
+    measure: MusicXmlMeasure,
+    measure_issues: list[MusicXmlTimingIssue],
+    confirmed_pairs: list[tuple[int, int]],
+) -> bool:
+    vcd = measure.voice_cursor_diagnostics
+    if vcd is None:
+        return False
+
+    # Measure is underfull-only, not overfull
+    if not vcd.measure_underfull or vcd.measure_overfull:
+        return False
+
+    # No same-voice overlaps
+    if vcd.same_voice_overlap_count > 0:
+        return False
+
+    # Backup/forward bounds violations
+    if measure.backup_rewinds_before_measure_start or measure.forward_exceeds_measure_end:
+        return False
+
+    # No fatal overfull issues
+    if any(issue.severity == "error" and issue.code in ("musicxml-overfull-bar", "musicxml_compound_meter_overfull") for issue in measure_issues):
+        return False
+
+    # No fatal same-voice overlap or rest/note overlap
+    same_voice_overlap_codes = {
+        "musicxml-voice-overlap",
+        "musicxml_voice_cursor_overlap",
+        "musicxml_same_voice_tick_overlap",
+        "musicxml_rest_overlap",
+        "musicxml_rest_voice_overlap",
+    }
+    for issue in measure_issues:
+        if issue.severity == "error":
+            if issue.code in same_voice_overlap_codes:
+                return False
+            if issue.code == "musicxml_voice_cursor_alignment_risk" and "cross-voice" not in str(issue.message):
+                return False
+
+    # No musicxml_invalid_duration_grid fatal issue
+    if "musicxml_invalid_duration_grid" in vcd.secondary_reasons:
+        return False
+
+    # Duplicate staff/TAB voice evidence present
+    has_duplicate_evidence = any(
+        any(n.voice == v1 for n in measure.notes) and any(n.voice == v2 for n in measure.notes)
+        for v1, v2 in confirmed_pairs
+    )
+    if not has_duplicate_evidence:
+        return False
+
+    return True
+
+
 def analyze_musicxml_timing(imported: MusicXmlImport, include_polyphony_diagnostics: bool = False) -> list[MusicXmlTimingIssue]:
     """Return public-safe timing risks before ScoreIR construction."""
 
@@ -567,6 +622,7 @@ def analyze_musicxml_timing(imported: MusicXmlImport, include_polyphony_diagnost
     voice_notes: dict[str, dict[int, list[MusicXmlNote]]] = {}
 
     for part in imported.parts:
+        confirmed_pairs, _ = classify_musicxml_voice_duplication(part)
         part_vnotes = voice_notes.setdefault(part.id, {})
         previous_divisions: int | None = None
         for measure in part.measures:
@@ -1258,6 +1314,14 @@ def analyze_musicxml_timing(imported: MusicXmlImport, include_polyphony_diagnost
                         "musicxml_valid_multivoice_unsupported",
                         "musicxml_cross_voice_overlap_unsupported",
                     } or (issue.code == "musicxml_voice_cursor_alignment_risk" and "cross-voice" in str(issue.message)):
+                        issue.severity = "warning"
+
+            if getattr(imported, "allow_remediation", False) and _can_remediate_backup_forward_drift(measure, issues[start_idx:], confirmed_pairs):
+                for issue in issues[start_idx:]:
+                    if issue.code in {
+                        "musicxml_unbalanced_backup_forward",
+                        "musicxml_backup_forward_alignment_ambiguous",
+                    }:
                         issue.severity = "warning"
 
             # Check if we have many timing risks in this measure
