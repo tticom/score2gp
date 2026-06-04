@@ -325,3 +325,108 @@ def test_musicxml_polyphony_diagnostics() -> None:
     diag_codes = {issue.code for issue in issues_diag}
     assert "musicxml_polyphony_gate_measure_count" in diag_codes
     assert "musicxml_polyphony_gate_voice_count" in diag_codes
+
+
+def test_musicxml_tuplets_support(tmp_path) -> None:
+    # Create a synthetic MusicXML file containing triplet (3:2), quadruplet (4:3), quintuplet (5:3), and septuplet (7:4)
+    musicxml_content = """<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1">
+      <part-name>Guitar</part-name>
+    </score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>24</divisions>
+        <time>
+          <beats>12</beats>
+          <beat-type>8</beat-type>
+        </time>
+        <key><fifths>0</fifths></key>
+      </attributes>
+      <!-- Voice 1: Triplet 3:2 -->
+      <note>
+        <pitch><step>E</step><octave>4</octave></pitch>
+        <duration>8</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+        <time-modification>
+          <actual-notes>3</actual-notes>
+          <normal-notes>2</normal-notes>
+        </time-modification>
+      </note>
+      <!-- Voice 1: Quadruplet 4:3 -->
+      <note>
+        <pitch><step>G</step><octave>4</octave></pitch>
+        <duration>9</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+        <time-modification>
+          <actual-notes>4</actual-notes>
+          <normal-notes>3</normal-notes>
+        </time-modification>
+      </note>
+      <!-- Voice 1: Quintuplet 5:3 -->
+      <note>
+        <pitch><step>A</step><octave>4</octave></pitch>
+        <duration>7</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+        <time-modification>
+          <actual-notes>5</actual-notes>
+          <normal-notes>3</normal-notes>
+        </time-modification>
+      </note>
+    </measure>
+    <measure number="2">
+      <attributes>
+        <divisions>24</divisions>
+        <time>
+          <beats>12</beats>
+          <beat-type>8</beat-type>
+        </time>
+      </attributes>
+      <!-- Voice 1: Septuplet 7:4 (Unsupported) -->
+      <note>
+        <pitch><step>C</step><octave>5</octave></pitch>
+        <duration>6</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+        <time-modification>
+          <actual-notes>7</actual-notes>
+          <normal-notes>4</normal-notes>
+        </time-modification>
+      </note>
+    </measure>
+  </part>
+</score-partwise>
+"""
+    xml_file = tmp_path / "tuplets_test.musicxml"
+    xml_file.write_text(musicxml_content, encoding="utf-8")
+
+    imported = parse_musicxml(xml_file)
+    assert len(imported.parts[0].measures) == 2
+
+    measure1 = imported.parts[0].measures[0]
+    # Check that triplet, quadruplet, quintuplet are NOT marked unsupported
+    assert measure1.notes[0].tuplet is not None
+    assert measure1.notes[0].tuplet_unsupported is False
+    assert measure1.notes[1].tuplet is not None
+    assert measure1.notes[1].tuplet_unsupported is False
+    assert measure1.notes[2].tuplet is not None
+    assert measure1.notes[2].tuplet_unsupported is False
+
+    measure2 = imported.parts[0].measures[1]
+    # Check that septuplet is marked unsupported
+    assert measure2.notes[0].tuplet is not None
+    assert measure2.notes[0].tuplet_unsupported is True
+
+    # Run preflight timing analysis
+    issues = analyze_musicxml_timing(imported)
+
+    # Measure 1 should have NO tuplet errors. Measure 2 should have one tuplet error.
+    tuplet_errors = [issue for issue in issues if issue.code == "musicxml_tuplet_unsupported"]
+    assert len(tuplet_errors) == 1
+    assert tuplet_errors[0].measure_number == "2"
