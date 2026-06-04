@@ -2052,6 +2052,16 @@ def _parse_part(
     return MusicXmlPart(id=part_id, name=part_name, measures=measures)
 
 
+def _is_supported_tuplet(tuplet: MusicXmlTuplet | None) -> bool:
+    if tuplet is None:
+        return True
+    return (
+        (tuplet.actual_notes == 3 and tuplet.normal_notes == 2)
+        or (tuplet.actual_notes == 4 and tuplet.normal_notes == 3)
+        or (tuplet.actual_notes == 5 and tuplet.normal_notes == 3)
+    )
+
+
 def _parse_note(
     node: ET.Element,
     *,
@@ -2083,7 +2093,8 @@ def _parse_note(
     tuplet = _tuplet(node)
     duration_missing = not grace and _child(node, "duration") is None
     duration_zero = not grace and _child(node, "duration") is not None and duration == 0
-    tuplet_unsupported = tuplet is not None and (tuplet.actual_notes != 3 or tuplet.actual_notes <= 0 or tuplet.normal_notes <= 0)
+    tuplet_unsupported = tuplet is not None and not _is_supported_tuplet(tuplet)
+
 
     note = MusicXmlNote(
         id=f"mx-{part_id}-m{measure_index}-n{note_index}",
