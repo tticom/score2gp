@@ -124,3 +124,212 @@ def test_vc_audiveris_unsupported(tmp_path) -> None:
     with pytest.raises(BuildIrInputRiskError) as raised:
         build_ir_from_files(FIXTURES / "timing_vc_audiveris_unsupported.musicxml", TABRAW, out_ir)
     assert raised.value.category == "musicxml_scoreir_polyphony_gate_refused"
+
+
+def test_vc_underfull_backup_forward_remediation(tmp_path) -> None:
+    # 1. allow_remediation=True downgrades underfull-only backup/forward drift to warnings
+    xml_content = """<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list>
+    <score-part id="P1"><part-name>Guitar</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>8</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note>
+        <pitch><step>E</step><octave>4</octave></pitch>
+        <duration>30</duration>
+        <voice>1</voice>
+        <staff>1</staff>
+      </note>
+      <backup>
+        <duration>30</duration>
+      </backup>
+      <note>
+        <pitch><step>E</step><octave>4</octave></pitch>
+        <duration>30</duration>
+        <voice>5</voice>
+        <staff>2</staff>
+      </note>
+    </measure>
+  </part>
+</score-partwise>
+"""
+    xml_file = tmp_path / "underfull_bf.musicxml"
+    xml_file.write_text(xml_content, encoding="utf-8")
+
+    # With allow_remediation=True, it should be a warning
+    imported_remed = parse_musicxml(xml_file, allow_remediation=True)
+    issues_remed = analyze_musicxml_timing(imported_remed)
+    assert any(issue.code == "musicxml_unbalanced_backup_forward" and issue.severity == "warning" for issue in issues_remed)
+    assert not any(issue.code == "musicxml_unbalanced_backup_forward" and issue.severity == "error" for issue in issues_remed)
+
+    # With allow_remediation=False, it should be an error
+    imported_fatal = parse_musicxml(xml_file, allow_remediation=False)
+    issues_fatal = analyze_musicxml_timing(imported_fatal)
+    assert any(issue.code == "musicxml_unbalanced_backup_forward" and issue.severity == "error" for issue in issues_fatal)
+
+
+def test_vc_remediation_bounds_and_overlaps(tmp_path) -> None:
+    # 2. Overfull measure with backup/forward remains fatal
+    xml_overfull = """<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list>
+    <score-part id="P1"><part-name>Guitar</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>8</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note>
+        <pitch><step>E</step><octave>4</octave></pitch>
+        <duration>34</duration>
+        <voice>1</voice>
+        <staff>1</staff>
+      </note>
+      <backup>
+        <duration>34</duration>
+      </backup>
+      <note>
+        <pitch><step>E</step><octave>4</octave></pitch>
+        <duration>34</duration>
+        <voice>5</voice>
+        <staff>2</staff>
+      </note>
+    </measure>
+  </part>
+</score-partwise>
+"""
+    xml_file = tmp_path / "overfull_bf.musicxml"
+    xml_file.write_text(xml_overfull, encoding="utf-8")
+    imported = parse_musicxml(xml_file, allow_remediation=False)
+    issues = analyze_musicxml_timing(imported)
+    assert any(issue.code == "musicxml_unbalanced_backup_forward" and issue.severity == "error" for issue in issues)
+
+    # 3. Same-voice overlap with backup/forward remains fatal
+    xml_overlap = """<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list>
+    <score-part id="P1"><part-name>Guitar</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>8</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note>
+        <pitch><step>E</step><octave>4</octave></pitch>
+        <duration>16</duration>
+        <voice>1</voice>
+        <staff>1</staff>
+      </note>
+      <backup>
+        <duration>8</duration>
+      </backup>
+      <note>
+        <pitch><step>G</step><octave>4</octave></pitch>
+        <duration>16</duration>
+        <voice>1</voice>
+        <staff>1</staff>
+      </note>
+      <backup>
+        <duration>24</duration>
+      </backup>
+      <note>
+        <pitch><step>E</step><octave>4</octave></pitch>
+        <duration>24</duration>
+        <voice>5</voice>
+        <staff>2</staff>
+      </note>
+    </measure>
+  </part>
+</score-partwise>
+"""
+    xml_file = tmp_path / "overlap_bf.musicxml"
+    xml_file.write_text(xml_overlap, encoding="utf-8")
+    imported = parse_musicxml(xml_file, allow_remediation=True)
+    issues = analyze_musicxml_timing(imported)
+    assert any(issue.code == "musicxml_unbalanced_backup_forward" and issue.severity == "error" for issue in issues)
+
+    # 4. Backup rewinds before measure start remains fatal
+    xml_backup_past_zero = """<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list>
+    <score-part id="P1"><part-name>Guitar</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>8</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note>
+        <pitch><step>E</step><octave>4</octave></pitch>
+        <duration>30</duration>
+        <voice>1</voice>
+        <staff>1</staff>
+      </note>
+      <backup>
+        <duration>40</duration>
+      </backup>
+      <note>
+        <pitch><step>E</step><octave>4</octave></pitch>
+        <duration>30</duration>
+        <voice>5</voice>
+        <staff>2</staff>
+      </note>
+    </measure>
+  </part>
+</score-partwise>
+"""
+    xml_file = tmp_path / "backup_past_zero_bf.musicxml"
+    xml_file.write_text(xml_backup_past_zero, encoding="utf-8")
+    imported = parse_musicxml(xml_file, allow_remediation=True)
+    issues = analyze_musicxml_timing(imported)
+    assert any(issue.code == "musicxml_unbalanced_backup_forward" and issue.severity == "error" for issue in issues)
+
+    # 5. Forward exceeds measure end remains fatal
+    xml_forward_past_end = """<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list>
+    <score-part id="P1"><part-name>Guitar</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>8</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note>
+        <pitch><step>E</step><octave>4</octave></pitch>
+        <duration>20</duration>
+        <voice>1</voice>
+        <staff>1</staff>
+      </note>
+      <forward>
+        <duration>15</duration>
+      </forward>
+      <backup>
+        <duration>35</duration>
+      </backup>
+      <note>
+        <pitch><step>E</step><octave>4</octave></pitch>
+        <duration>30</duration>
+        <voice>5</voice>
+        <staff>2</staff>
+      </note>
+    </measure>
+  </part>
+</score-partwise>
+"""
+    xml_file = tmp_path / "forward_past_end_bf.musicxml"
+    xml_file.write_text(xml_forward_past_end, encoding="utf-8")
+    imported = parse_musicxml(xml_file, allow_remediation=True)
+    issues = analyze_musicxml_timing(imported)
+    assert any(issue.code == "musicxml_unbalanced_backup_forward" and issue.severity == "error" for issue in issues)
