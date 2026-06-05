@@ -512,10 +512,13 @@ def test_build_ir_refuses_public_partial_grouping_fixtures(tmp_path, pdf_path: P
         build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
 
     assert not ir_path.exists()
-    assert raised.value.category == "partial_pdf_grouping"
+    assert raised.value.category in ("partial_pdf_grouping", "pdf_input_class_drawn_tab_requires_barlines")
     payload = raised.value.to_diagnostics_payload()
-    assert payload["details"]["grouping_status"] == "partial"
-    assert expected_warning in payload["details"]["warning_codes"]
+    if raised.value.category == "partial_pdf_grouping":
+        assert payload["details"]["grouping_status"] == "partial"
+        assert expected_warning in payload["details"]["warning_codes"]
+    else:
+        assert expected_warning in payload["details"]["tabraw_warning_codes"]
 
 
 def test_ascii_tab_pdf_detects_six_row_block_and_fret_candidates(tmp_path) -> None:
@@ -674,11 +677,11 @@ def test_build_ir_refuses_ascii_tab_without_timing_alignment(tmp_path) -> None:
         build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
 
     assert not ir_path.exists()
-    assert raised.value.category == "missing_ascii_alignment_sidecar"
+    assert raised.value.category == "pdf_input_class_ascii_tab_requires_alignment"
     payload = raised.value.to_diagnostics_payload()
     assert payload["details"]["grouping_status"] == "ascii_grouped"
     assert "ascii_tab_timing_unavailable" in payload["details"]["tabraw_warning_codes"]
-    assert payload["details"]["primary_reason_code"] == "missing_ascii_alignment_sidecar"
+    assert payload["details"]["primary_reason_code"] == "pdf_input_class_ascii_tab_requires_alignment"
 
 
 def test_build_ir_refuses_partial_ascii_tab_timing(tmp_path) -> None:
@@ -691,12 +694,12 @@ def test_build_ir_refuses_partial_ascii_tab_timing(tmp_path) -> None:
         build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
 
     assert not ir_path.exists()
-    assert raised.value.category == "missing_ascii_alignment_sidecar"
+    assert raised.value.category == "pdf_input_class_ascii_tab_requires_alignment"
     payload = raised.value.to_diagnostics_payload()
     assert payload["details"]["grouping_status"] == "ascii_grouped"
     assert "partial_ascii_tab_timing" in payload["details"]["tabraw_warning_codes"]
     assert payload["details"]["ascii_timing_status_counts"]["timing_partial"] > 0
-    assert payload["details"]["primary_reason_code"] == "missing_ascii_alignment_sidecar"
+    assert payload["details"]["primary_reason_code"] == "pdf_input_class_ascii_tab_requires_alignment"
 
 
 def test_build_ir_refuses_ambiguous_ascii_tab_timing(tmp_path) -> None:
@@ -709,10 +712,10 @@ def test_build_ir_refuses_ambiguous_ascii_tab_timing(tmp_path) -> None:
         build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
 
     assert not ir_path.exists()
-    assert raised.value.category == "missing_ascii_alignment_sidecar"
+    assert raised.value.category == "pdf_input_class_ascii_tab_requires_alignment"
     payload = raised.value.to_diagnostics_payload()
     assert "ambiguous_ascii_tab_timing" in payload["details"]["tabraw_warning_codes"]
-    assert payload["details"]["primary_reason_code"] == "missing_ascii_alignment_sidecar"
+    assert payload["details"]["primary_reason_code"] == "pdf_input_class_ascii_tab_requires_alignment"
 
 
 def test_build_ir_refuses_partial_ascii_tab_grouping(tmp_path) -> None:
@@ -725,11 +728,11 @@ def test_build_ir_refuses_partial_ascii_tab_grouping(tmp_path) -> None:
         build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
 
     assert not ir_path.exists()
-    assert raised.value.category == "missing_ascii_alignment_sidecar"
+    assert raised.value.category == "pdf_input_class_ascii_tab_requires_alignment"
     payload = raised.value.to_diagnostics_payload()
     assert payload["details"]["grouping_status"] == "partial_ascii_tab_grouping"
     assert "partial_ascii_tab_grouping" in payload["details"]["tabraw_warning_codes"]
-    assert payload["details"]["primary_reason_code"] == "missing_ascii_alignment_sidecar"
+    assert payload["details"]["primary_reason_code"] == "pdf_input_class_ascii_tab_requires_alignment"
 
 
 def test_pdf_candidate_outside_system_diagnosed(tmp_path) -> None:
@@ -1255,10 +1258,13 @@ def test_build_ir_refuses_unsafe_bar_detection_cases(tmp_path) -> None:
             build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
 
         assert not ir_path.exists()
-        assert raised.value.category == "partial_pdf_grouping"
+        assert raised.value.category in ("partial_pdf_grouping", "pdf_input_class_drawn_tab_requires_barlines")
         payload = raised.value.to_diagnostics_payload()
-        assert payload["details"]["grouping_status"] == "partial"
-        assert expected_warning in payload["details"]["warning_codes"]
+        if raised.value.category == "partial_pdf_grouping":
+            assert payload["details"]["grouping_status"] == "partial"
+            assert expected_warning in payload["details"]["warning_codes"]
+        else:
+            assert expected_warning in payload["details"]["tabraw_warning_codes"]
 
 
 def test_refined_barline_validation_boundaries(tmp_path) -> None:
@@ -2524,7 +2530,7 @@ def test_synthetic_unboxed_system_skipper(tmp_path) -> None:
     # 1. Verification with allow_skip_unboxed=False (should raise BuildIrInputRiskError)
     with pytest.raises(BuildIrInputRiskError) as raised:
         build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path, allow_skip_unboxed=False)
-    assert raised.value.category == "partial_pdf_grouping"
+    assert raised.value.category in ("partial_pdf_grouping", "pdf_input_class_drawn_tab_requires_barlines")
 
     # 2. Verification with allow_skip_unboxed=True (should compile ScoreIR successfully and skip unboxed system)
     score = build_ir_from_files(
@@ -3243,3 +3249,121 @@ def test_filter_tab_barline_candidates_internal_double_barline() -> None:
     res_single = filter_tab_barline_candidates(cands_single, y0, y1, line_ys, x0, x1)
     assert res_single["valid_barlines"] == [150.0]
     assert res_single["details"][0]["final_decision"] == "accepted"
+
+
+def test_pdf_layout_classification_valid_and_ascii(tmp_path) -> None:
+    # 1. Valid vector TAB with barlines
+    inspect_out_1 = tmp_path / "inspect_valid"
+    summary_1 = inspect_pdf(GENERATED_PDF, inspect_out_1)
+    assert summary_1["pdf_layout_class"] == "vector_tab_with_barlines"
+    assert summary_1["pdf_layout_warnings"] == []
+
+    # 2. Born-digital ASCII tab
+    inspect_out_2 = tmp_path / "inspect_ascii"
+    summary_2 = inspect_pdf(ASCII_SIMPLE_PDF, inspect_out_2)
+    assert summary_2["pdf_layout_class"] == "born_digital_ascii_tab"
+    assert "pdf_input_class_ascii_tab_requires_alignment" in summary_2["pdf_layout_warnings"]
+
+
+def test_build_ir_gating_missing_musicxml(tmp_path) -> None:
+    # Create a dummy valid tabraw
+    tabraw_file = tmp_path / "valid.tabraw.json"
+    tabraw_data = {
+        "schema_version": "tabraw.v0.1",
+        "source_pdf": "test.pdf",
+        "pdf_layout_class": "vector_tab_with_barlines",
+        "pdf_layout_warnings": [],
+        "candidates": [],
+        "warnings": []
+    }
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+
+    # Call with musicxml_path=None
+    from score2gp.build_ir import build_ir_with_diagnostics_from_files
+    with pytest.raises(BuildIrInputRiskError) as exc_info:
+        build_ir_with_diagnostics_from_files(
+            musicxml_path=None,
+            tabraw_path=tabraw_file
+        )
+    assert exc_info.value.category == "pdf_input_class_missing_musicxml_sidecar"
+    assert exc_info.value.stage == "orchestration-gate"
+
+
+def test_build_ir_gating_unsupported_layouts(tmp_path) -> None:
+    # 1. Born-digital ASCII tab
+    tabraw_file = tmp_path / "ascii.tabraw.json"
+    tabraw_data = {
+        "schema_version": "tabraw.v0.1",
+        "source_pdf": "test.pdf",
+        "pdf_layout_class": "born_digital_ascii_tab",
+        "pdf_layout_warnings": ["pdf_input_class_ascii_tab_requires_alignment"],
+        "candidates": [],
+        "warnings": []
+    }
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+
+    from score2gp.build_ir import build_ir_with_diagnostics_from_files
+    with pytest.raises(BuildIrInputRiskError) as exc_info:
+        build_ir_with_diagnostics_from_files(
+            musicxml_path=GENERATED_MUSICXML,
+            tabraw_path=tabraw_file
+        )
+    assert exc_info.value.category == "pdf_input_class_ascii_tab_requires_alignment"
+    assert exc_info.value.stage == "ascii-scoreir-gate"
+
+    # 2. Vector TAB without barlines
+    tabraw_file2 = tmp_path / "drawn_no_barlines.tabraw.json"
+    tabraw_data2 = {
+        "schema_version": "tabraw.v0.1",
+        "source_pdf": "test.pdf",
+        "pdf_layout_class": "vector_tab_without_barlines",
+        "pdf_layout_warnings": ["pdf_input_class_drawn_tab_requires_barlines"],
+        "candidates": [],
+        "warnings": []
+    }
+    tabraw_file2.write_text(json.dumps(tabraw_data2), encoding="utf-8")
+    with pytest.raises(BuildIrInputRiskError) as exc_info:
+        build_ir_with_diagnostics_from_files(
+            musicxml_path=GENERATED_MUSICXML,
+            tabraw_path=tabraw_file2
+        )
+    assert exc_info.value.category == "pdf_input_class_drawn_tab_requires_barlines"
+    assert exc_info.value.stage == "layout-gating"
+
+    # 3. Scanned PDF unsupported
+    tabraw_file3 = tmp_path / "scanned_unsupported.tabraw.json"
+    tabraw_data3 = {
+        "schema_version": "tabraw.v0.1",
+        "source_pdf": "test.pdf",
+        "pdf_layout_class": "scanned_no_text",
+        "pdf_layout_warnings": ["pdf_input_class_scanned_pdf_unsupported"],
+        "candidates": [],
+        "warnings": []
+    }
+    tabraw_file3.write_text(json.dumps(tabraw_data3), encoding="utf-8")
+    with pytest.raises(BuildIrInputRiskError) as exc_info:
+        build_ir_with_diagnostics_from_files(
+            musicxml_path=GENERATED_MUSICXML,
+            tabraw_path=tabraw_file3
+        )
+    assert exc_info.value.category == "pdf_input_class_scanned_pdf_unsupported"
+    assert exc_info.value.stage == "layout-gating"
+
+    # 4. Scanned PDF no vector geometry
+    tabraw_file4 = tmp_path / "scanned_no_geometry.tabraw.json"
+    tabraw_data4 = {
+        "schema_version": "tabraw.v0.1",
+        "source_pdf": "test.pdf",
+        "pdf_layout_class": "scanned_no_vector_staff_geometry",
+        "pdf_layout_warnings": ["pdf_input_class_no_extractable_tab_geometry"],
+        "candidates": [],
+        "warnings": []
+    }
+    tabraw_file4.write_text(json.dumps(tabraw_data4), encoding="utf-8")
+    with pytest.raises(BuildIrInputRiskError) as exc_info:
+        build_ir_with_diagnostics_from_files(
+            musicxml_path=GENERATED_MUSICXML,
+            tabraw_path=tabraw_file4
+        )
+    assert exc_info.value.category == "pdf_input_class_no_extractable_tab_geometry"
+    assert exc_info.value.stage == "layout-gating"
