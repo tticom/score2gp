@@ -24,6 +24,11 @@ DOUBLE_BARLINE_CLUSTERING_TOLERANCE = 12.0
 FRAGMENTED_STAFF_LINE_NEIGHBOR_MAX_GAP = 360.0
 MIN_INHERITED_INTERNAL_BAR_WIDTH = 130.0
 
+MIN_FRET_DIGIT_WIDTH_FOR_CONFIDENCE = 4.0
+MIN_NARROW_FONT_FRET_DIGIT_WIDTH = 2.8
+MAX_SAME_FRET_DIGIT_MERGE_GAP = 5.0
+
+
 
 
 def inspect_pdf(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
@@ -590,6 +595,10 @@ def _split_technique_mixed_words(words: list[tuple[float, float, float, float, s
             if len(parts) > 1:
                 L = len(raw_text)
                 W = bbox_values[2] - bbox_values[0]
+
+                real_tech_chars = set("hpsvbr~/\\")
+                has_real_tech = any(c in real_tech_chars for c in raw_text.lower())
+
                 current_start = 0
                 for part in parts:
                     part_start = raw_text.find(part, current_start)
@@ -605,7 +614,8 @@ def _split_technique_mixed_words(words: list[tuple[float, float, float, float, s
                     is_digit_part = any(c.isdigit() for c in part)
                     if is_digit_part:
                         part_width = part_x1 - part_x0
-                        if part_width < 4.0:
+                        limit = 4.0 if has_real_tech else 2.0
+                        if part_width < limit:
                             part_warnings.append("pdf_fret_digit_symbol_overlap_ambiguous")
                             part_warnings.append("pdf_fret_refinement_not_enough_for_build_ir")
                     else:
@@ -1674,8 +1684,11 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                                 merged_warnings.append("pdf_fret_refinement_not_enough_for_build_ir")
                                 break
                             elif 5.0 < gap <= 12.0:
-                                d2["warnings"].append("pdf_fret_digits_not_merged_gap_too_large")
-                                d2["warnings"].append("pdf_fret_refinement_not_enough_for_build_ir")
+                                d1_width = merged_x1 - merged_x0
+                                d2_width = d2["x1"] - d2["x0"]
+                                if _should_warn_unmerged_fret_digits(merged_text, d2["text"], gap, d1_width, d2_width, vertical_offset):
+                                    d2["warnings"].append("pdf_fret_digits_not_merged_gap_too_large")
+                                    d2["warnings"].append("pdf_fret_refinement_not_enough_for_build_ir")
                                 break
                             else:
                                 break
@@ -1732,6 +1745,8 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                         npw_y_center = (npw["y0"] + npw["y1"]) / 2
                         dy = abs(mc_y_center - npw_y_center)
                         if overlap > 1.5 and dy <= 6.0:
+                            if _is_standard_music_symbol_or_parenthesis(npw["text"]):
+                                continue
                             if "warnings" not in mc:
                                 mc["warnings"] = []
                             if "pdf_fret_digit_symbol_overlap_ambiguous" not in mc["warnings"]:
@@ -4300,14 +4315,115 @@ def _candidate_confidence(
 
     # Deduct confidence based on physical/optical bounds
     if width is not None and height is not None:
-        if width < 4.0:
-            base -= 0.25
+        if width < MIN_FRET_DIGIT_WIDTH_FOR_CONFIDENCE:
+            if not _is_plausible_narrow_fret_digit(
+                raw_text, system, string, bar_index, width, height, assignment_warnings
+            ) or width < MIN_NARROW_FONT_FRET_DIGIT_WIDTH:
+                base -= 0.25
         if height < 4.5:
             base -= 0.25
         if width > height * 1.8:
             base -= 0.15
 
     return max(0.1, min(base, 0.9))
+
+
+def _is_plausible_narrow_fret_digit(
+    raw_text: str,
+    system: _TabSystem | None,
+    string: int | None,
+    bar_index: int | None,
+    width: float,
+    height: float,
+    assignment_warnings: list[str] | None,
+) -> bool:
+    # Recognized as a digit
+    text_stripped = raw_text.strip()
+    if not text_stripped.isdigit():
+        return False
+    try:
+        val = int(text_stripped)
+        if not (0 <= val <= 24):
+            return False
+    except ValueError:
+        return False
+
+    # Inside a detected TAB system
+    if system is None:
+        return False
+    # Assigned to a string line
+    if string is None:
+        return False
+    # Assigned to a bar or plausible bar region
+    if bar_index is None:
+        return False
+    # Height / aspect ratio is plausible
+    if height < 4.5:
+        return False
+    if width > height * 1.8:
+        return False
+
+    # Not part of surrounding prose/header text
+    warnings_set = set(assignment_warnings or [])
+    excluded_warnings = {
+        "pdf_fret_chord_text_digit_excluded",
+        "pdf_fret_page_or_legend_number_excluded",
+        "pdf_fret_technique_marker_excluded",
+    }
+    if warnings_set.intersection(excluded_warnings):
+        return False
+
+    return True
+
+
+def _should_warn_unmerged_fret_digits(
+    d1_text: str,
+    d2_text: str,
+    gap: float,
+    d1_width: float,
+    d2_width: float,
+    vertical_offset: float,
+) -> bool:
+    # Must have similar y position (same baseline/string)
+    if vertical_offset > 2.0:
+        return False
+
+    combined = d1_text + d2_text
+    try:
+        val = int(combined)
+        if not (0 <= val <= 24):
+            return False
+    except ValueError:
+        return False
+
+    max_width = max(d1_width, d2_width)
+
+    # For repeated equal digits (e.g. 11, 22), require a tighter gap
+    if d1_text == d2_text:
+        # A gap larger than max_width * 1.0 indicates separate notes (separate-note spacing evidence)
+        limit = min(max_width * 1.0, 6.0)
+        if gap > limit:
+            return False
+    else:
+        # Different digits (e.g. 10, 12, 15)
+        # Scale limit with character width (max_width * 1.6) but don't exceed the loop limit of 12.0
+        limit = max(max_width * 1.6, 8.0)
+        if gap > limit:
+            return False
+
+    return True
+
+
+def _is_standard_music_symbol_or_parenthesis(text: str) -> bool:
+    cleaned = text.strip()
+    if not cleaned:
+        return False
+    if all(char in {"(", ")", "[", "]", "{", "}"} for char in cleaned):
+        return True
+    # Check if any character is in SMuFL Private Use Area (E000 - F8FF)
+    if any(0xE000 <= ord(char) <= 0xF8FF for char in cleaned):
+        return True
+    return False
 
 
 def _should_keep_candidate(candidate: dict[str, Any]) -> bool:

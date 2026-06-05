@@ -2142,6 +2142,124 @@ def test_build_ir_refuses_overlapping_digits_ambiguous(tmp_path) -> None:
     assert "pdf_fret_digits_overlap_ambiguous" in payload["details"]["warning_codes"]
 
 
+def test_is_plausible_narrow_fret_digit() -> None:
+    from score2gp.pdf import _is_plausible_narrow_fret_digit
+    # Mock a minimal _TabSystem
+    class MockSystem:
+        line_ys = [100.0, 112.0, 124.0, 136.0, 148.0, 160.0]
+        line_spacing = 12.0
+
+    system = MockSystem()
+
+    # Valid narrow fret digit
+    assert _is_plausible_narrow_fret_digit(
+        raw_text="8", system=system, string=1, bar_index=1, width=3.86, height=6.0, assignment_warnings=[]
+    ) is True
+
+    # Valid narrow fret digit at lower bound 2.76
+    assert _is_plausible_narrow_fret_digit(
+        raw_text="7", system=system, string=2, bar_index=1, width=2.76, height=6.0, assignment_warnings=[]
+    ) is True
+
+    # Height too small
+    assert _is_plausible_narrow_fret_digit(
+        raw_text="8", system=system, string=1, bar_index=1, width=3.86, height=3.0, assignment_warnings=[]
+    ) is False
+
+    # Aspect ratio too wide
+    assert _is_plausible_narrow_fret_digit(
+        raw_text="8", system=system, string=1, bar_index=1, width=12.0, height=6.0, assignment_warnings=[]
+    ) is False
+
+    # Excluded as page number
+    assert _is_plausible_narrow_fret_digit(
+        raw_text="8", system=system, string=1, bar_index=1, width=3.86, height=6.0,
+        assignment_warnings=["pdf_fret_page_or_legend_number_excluded"]
+    ) is False
+
+
+def test_should_warn_unmerged_fret_digits() -> None:
+    from score2gp.pdf import _should_warn_unmerged_fret_digits
+
+    # Genuinely multi-digit 1 + 1 as fret 11 (wide font width=6.0, gap=5.2) -> should warn
+    assert _should_warn_unmerged_fret_digits(
+        d1_text="1", d2_text="1", gap=5.2, d1_width=6.0, d2_width=6.0, vertical_offset=0.0
+    ) is True
+
+    # Repeated digits with a gap larger than character width (narrow font width=2.0, gap=5.5) -> should not warn
+    assert _should_warn_unmerged_fret_digits(
+        d1_text="1", d2_text="1", gap=5.5, d1_width=2.0, d2_width=2.0, vertical_offset=0.0
+    ) is False
+
+    # Repeated digits but too far (gap = 7.0) -> should not warn
+    assert _should_warn_unmerged_fret_digits(
+        d1_text="1", d2_text="1", gap=7.0, d1_width=6.0, d2_width=6.0, vertical_offset=0.0
+    ) is False
+
+    # Genuinely multi-digit 1 + 2 as fret 12 (close) -> should warn
+    assert _should_warn_unmerged_fret_digits(
+        d1_text="1", d2_text="2", gap=6.0, d1_width=3.86, d2_width=3.86, vertical_offset=0.0
+    ) is True
+
+    # Distinct sequential notes 8 then 8 (gap = 5.5) -> should not warn because 88 is invalid fret
+    assert _should_warn_unmerged_fret_digits(
+        d1_text="8", d2_text="8", gap=5.5, d1_width=3.86, d2_width=3.86, vertical_offset=0.0
+    ) is False
+
+    # Genuinely multi-digit but vertical mismatch -> should not warn
+    assert _should_warn_unmerged_fret_digits(
+        d1_text="1", d2_text="2", gap=5.5, d1_width=3.86, d2_width=3.86, vertical_offset=3.0
+    ) is False
+
+
+def test_narrow_font_valid_digit_confidence() -> None:
+    from score2gp.pdf import _candidate_confidence
+    class MockSystem:
+        line_ys = [100.0, 112.0, 124.0, 136.0, 148.0, 160.0]
+        line_spacing = 12.0
+        grouping_warnings = []
+
+    system = MockSystem()
+
+    # Valid narrow digit (width 3.86pt) remains high confidence (>= 0.70)
+    conf = _candidate_confidence(
+        raw_text="8", system=system, string=1, bar_index=1, x=150.0, width=3.86, height=6.0,
+        line_spacing=12.0, assignment_warnings=[]
+    )
+    assert conf >= 0.70
+
+    # Valid narrow digit near lower bound (width 2.84pt) remains high confidence (>= 0.70)
+    conf2 = _candidate_confidence(
+        raw_text="7", system=system, string=2, bar_index=1, x=150.0, width=2.84, height=6.0,
+        line_spacing=12.0, assignment_warnings=[]
+    )
+    assert conf2 >= 0.70
+
+    # Digit below lower bound (width 2.76pt) gets penalty, dropping below 0.70
+    conf3 = _candidate_confidence(
+        raw_text="7", system=system, string=2, bar_index=1, x=150.0, width=2.76, height=6.0,
+        line_spacing=12.0, assignment_warnings=[]
+    )
+    assert conf3 < 0.70
+
+
+def test_narrow_font_noisy_digit_confidence() -> None:
+    from score2gp.pdf import _candidate_confidence
+    class MockSystem:
+        line_ys = [100.0, 112.0, 124.0, 136.0, 148.0, 160.0]
+        line_spacing = 12.0
+        grouping_warnings = []
+
+    system = MockSystem()
+
+    # Too narrow/noisy digit (width 1.5pt) gets penalty, dropping below 0.70
+    conf = _candidate_confidence(
+        raw_text="8", system=system, string=1, bar_index=1, x=150.0, width=1.5, height=6.0,
+        line_spacing=12.0, assignment_warnings=[]
+    )
+    assert conf < 0.70
+
+
 PDF_TUNING_STANDARD_TEXT = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_tuning_standard_text.pdf"
 PDF_TUNING_EXPLICIT_EADGBE = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_tuning_explicit_eadgbe.pdf"
 PDF_TUNING_ALTERNATE_DADGAD = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_tuning_alternate_dadgad.pdf"
