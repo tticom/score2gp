@@ -121,7 +121,7 @@ def test_ascii_gate_missing_alignment_sidecar_is_refused(tmp_path) -> None:
     assert not ir_path.exists()
     _assert_gate_refusal(
         raised.value,
-        "missing_ascii_alignment_sidecar",
+        "pdf_input_class_ascii_tab_requires_alignment",
         alignment_sidecar_present=False,
         alignment_status=None,
     )
@@ -448,7 +448,7 @@ def test_ascii_gate_refusal_writes_html_diagnostics_report(tmp_path) -> None:
     assert "Refused" in html_content
 
     # 3. Primary refusal reason
-    assert "missing_ascii_alignment_sidecar" in html_content
+    assert "pdf_input_class_ascii_tab_requires_alignment" in html_content
 
     # 4. Secondary refusal reasons, or explicitly says none
     assert "None" in html_content or "secondary_reason_codes" in html_content

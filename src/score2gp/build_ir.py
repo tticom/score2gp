@@ -609,8 +609,8 @@ def build_ir_from_files(
 
 
 def build_ir_with_diagnostics_from_files(
-    musicxml_path: str | Path,
-    tabraw_path: str | Path,
+    musicxml_path: str | Path | None = None,
+    tabraw_path: str | Path = None,
     out_path: str | Path | None = None,
     ascii_alignment_path: str | Path | None = None,
     *,
@@ -620,8 +620,74 @@ def build_ir_with_diagnostics_from_files(
     page_range: tuple[int, int] | None = None,
     include_polyphony_diagnostics: bool = False,
 ) -> tuple[ScoreIR, BuildIrDiagnostics]:
-    musicxml = parse_musicxml(musicxml_path, allow_remediation=allow_remediation)
     tabraw = TabRaw.from_json_file(tabraw_path)
+
+    # Gate on known refusal layout warnings (except ASCII requiring sidecar)
+    refusal_warnings = {
+        "pdf_input_class_scanned_pdf_unsupported",
+        "pdf_input_class_no_extractable_tab_geometry",
+    }
+    if not allow_skip_unboxed:
+        refusal_warnings.add("pdf_input_class_drawn_tab_requires_barlines")
+
+    for code in tabraw.pdf_layout_warnings:
+        if code in refusal_warnings:
+            details = {
+                "pdf_layout_class": tabraw.pdf_layout_class,
+                "tabraw_warning_codes": [w.get("code") for w in tabraw.warnings if w.get("code")],
+                "playable_fret_candidate_count": sum(1 for c in tabraw.candidates if c.parsed_fret is not None),
+            }
+            raise BuildIrInputRiskError(
+                category=code,
+                stage="layout-gating",
+                message=f"PDF layout is unsupported for direct alignment: {code}",
+                details=details,
+            )
+
+    if musicxml_path is None or not Path(musicxml_path).exists():
+        details = {
+            "pdf_layout_class": tabraw.pdf_layout_class,
+            "tabraw_warning_codes": [w.get("code") for w in tabraw.warnings if w.get("code")],
+            "playable_fret_candidate_count": sum(1 for c in tabraw.candidates if c.parsed_fret is not None),
+        }
+        raise BuildIrInputRiskError(
+            category="pdf_input_class_missing_musicxml_sidecar",
+            stage="orchestration-gate",
+            message="Matching MusicXML sidecar is missing or not provided.",
+            details=details,
+        )
+
+    musicxml = parse_musicxml(musicxml_path, allow_remediation=allow_remediation)
+
+    # Now handle ASCII requiring sidecar if alignment path is missing
+    if "pdf_input_class_ascii_tab_requires_alignment" in tabraw.pdf_layout_warnings and ascii_alignment_path is None:
+        candidates = _ascii_gate_candidates(tabraw)
+        timing_issues = analyze_musicxml_timing(musicxml)
+        fatal_timing_issues = [issue for issue in timing_issues if issue.severity == "error"]
+        details = _ascii_scoreir_gate_details(
+            candidates=candidates,
+            aligned_candidate_count=0,
+            alignment_sidecar_present=False,
+            alignment_status=None,
+            musicxml_timing_safe=not fatal_timing_issues,
+        )
+        warning_codes = [str(warning.get("code")) for warning in tabraw.warnings if warning.get("code")]
+        details.update(
+            {
+                "tabraw_warning_codes": warning_codes,
+                "ascii_timing_status_counts": _ascii_timing_status_counts(candidates),
+                "grouping_status": "partial_ascii_tab_grouping"
+                if "partial_ascii_tab_grouping" in warning_codes
+                else "ascii_grouped",
+            }
+        )
+        _apply_ascii_gate_refusal_details(details, ["pdf_input_class_ascii_tab_requires_alignment"])
+        raise BuildIrInputRiskError(
+            category="pdf_input_class_ascii_tab_requires_alignment",
+            stage="ascii-scoreir-gate",
+            message="ASCII TabRaw candidates require a compatible ascii-musicxml-alignment.v0.1 sidecar",
+            details=details,
+        )
     ascii_gate_details = None
     if ascii_alignment_path is not None:
         gate = _ascii_scoreir_gate(musicxml, tabraw, ascii_alignment_path)
@@ -816,8 +882,8 @@ def _ascii_scoreir_missing_sidecar_gate(
         category = "ascii_musicxml_timing_risk"
         message = "MusicXML timing risk prevents ASCII ScoreIR output."
     else:
-        reason_codes = ["missing_ascii_alignment_sidecar"]
-        category = "missing_ascii_alignment_sidecar"
+        reason_codes = ["pdf_input_class_ascii_tab_requires_alignment"]
+        category = "pdf_input_class_ascii_tab_requires_alignment"
         message = (
             "ASCII TabRaw candidates require a compatible ascii-musicxml-alignment.v0.1 sidecar; "
             "build-ir will not write ScoreIR from ASCII text without explicit alignment evidence."
@@ -1008,7 +1074,7 @@ def _ascii_alignment_status_reason(status: str) -> str:
 
 def _ascii_gate_remediation(reason_code: str) -> str:
     mapping = {
-        "missing_ascii_alignment_sidecar": "provide compatible ascii-musicxml-alignment.v0.1 evidence",
+        "pdf_input_class_ascii_tab_requires_alignment": "provide compatible ascii-musicxml-alignment.v0.1 evidence",
         "ascii_alignment_status_unavailable": "provide ASCII timing evidence with usable measure segmentation",
         "ascii_alignment_status_partial": "resolve partial ASCII/MusicXML alignment before ScoreIR writing",
         "ascii_alignment_status_ambiguous": "resolve ambiguous ASCII/MusicXML mapping before ScoreIR writing",

@@ -137,7 +137,7 @@ def test_build_ir_still_refuses_ascii_without_alignment_sidecar(tmp_path) -> Non
         build_ir_from_files(COMPATIBLE_MUSICXML, tabraw_path, ir_path)
 
     assert not ir_path.exists()
-    assert raised.value.category == "missing_ascii_alignment_sidecar"
+    assert raised.value.category == "pdf_input_class_ascii_tab_requires_alignment"
 
 
 @pytest.mark.parametrize(
