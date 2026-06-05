@@ -609,8 +609,8 @@ def build_ir_from_files(
 
 
 def build_ir_with_diagnostics_from_files(
-    musicxml_path: str | Path | None = None,
-    tabraw_path: str | Path = None,
+    musicxml_path: str | Path | None,
+    tabraw_path: str | Path,
     out_path: str | Path | None = None,
     ascii_alignment_path: str | Path | None = None,
     *,
