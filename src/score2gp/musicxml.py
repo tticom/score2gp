@@ -440,6 +440,7 @@ class MusicXmlNote(BaseModel):
     dots: int = Field(default=0, ge=0)
     tuplet: MusicXmlTuplet | None = None
     grace: bool = False
+    grace_slash: bool = False
     techniques: list[MusicXmlTechnique] = Field(default_factory=list)
     source_path: str
     duration_missing: bool = False
@@ -2138,21 +2139,16 @@ def _parse_note(
     warnings: list[MusicXmlWarning],
 ) -> tuple[MusicXmlNote, int, int]:
     chord = _child(node, "chord") is not None
-    grace = _child(node, "grace") is not None
+    grace_node = _child(node, "grace")
+    grace = grace_node is not None
+    grace_slash = False
+    if grace_node is not None:
+        grace_slash = grace_node.get("slash") == "yes"
     onset = last_note_onset if chord else cursor
     duration = _duration(node)
     voice = _int_text(_child(node, "voice"), default=1)
     staff = _optional_int_text(_child(node, "staff"))
     source_path = f"/score-partwise/part[@id='{part_id}']/measure[{measure_index}]/note[{note_index}]"
-
-    if grace:
-        warnings.append(
-            MusicXmlWarning(
-                code="unsupported-grace-note",
-                message="grace notes are parsed but not converted into timed ScoreIR events in this phase",
-                source_path=source_path,
-            )
-        )
 
     tuplet = _tuplet(node)
     duration_missing = not grace and _child(node, "duration") is None
@@ -2178,6 +2174,7 @@ def _parse_note(
         dots=len(_children(node, "dot")),
         tuplet=tuplet,
         grace=grace,
+        grace_slash=grace_slash,
         techniques=_techniques(node, source_path, warnings),
         source_path=source_path,
         duration_missing=duration_missing,
@@ -2822,5 +2819,44 @@ def deduplicate_suspected_staff_tab_voices(musicxml: MusicXmlImport) -> MusicXml
 
                         # Suppress duplicate TAB voice notes from active ScoreIR/timing stream
                         n2.is_suppressed = True
+
+                # Merge grace notes sequentially
+                grace1 = [n for n in measure.notes if n.voice == notation_voice and n.grace and not n.is_rest]
+                grace2 = [n for n in measure.notes if n.voice == tab_voice and n.grace and not n.is_rest]
+                if grace1 and grace2:
+                    grace1.sort(key=lambda n: n.note_index)
+                    grace2.sort(key=lambda n: n.note_index)
+                    for idx in range(min(len(grace1), len(grace2))):
+                        gn1 = grace1[idx]
+                        gn2 = grace2[idx]
+
+                        # Merge techniques
+                        existing_tech_kinds = {t.kind for t in gn1.techniques}
+                        for tech in gn2.techniques:
+                            if tech.kind not in existing_tech_kinds:
+                                gn1.techniques.append(tech)
+
+                        # Merge ties
+                        for tie in gn2.ties:
+                            if tie not in gn1.ties:
+                                gn1.ties.append(tie)
+
+                        # Save dedup tab note fields on the notation grace note gn1 to preserve evidence
+                        gn1.dedup_tab_note_id = gn2.id
+                        gn1.dedup_tab_note_voice = gn2.voice
+                        gn1.dedup_tab_note_staff = gn2.staff
+                        gn1.dedup_tab_note_techniques = gn2.techniques
+                        gn1.dedup_tab_note_source_path = gn2.source_path
+                        if gn2.pitch:
+                            gn1.dedup_tab_note_pitch_midi = gn2.pitch.midi
+                            gn1.dedup_tab_note_pitch_name = gn2.pitch.name
+                        gn1.dedup_tab_note_ties = gn2.ties
+                        gn1.dedup_tab_note_onset_divisions = gn2.onset_divisions
+                        gn1.dedup_tab_note_duration_divisions = gn2.duration_divisions
+
+                        gn1.grace_slash = gn1.grace_slash or gn2.grace_slash
+
+                        # Suppress duplicate TAB voice grace notes from active ScoreIR/timing stream
+                        gn2.is_suppressed = True
 
     return dedup_musicxml

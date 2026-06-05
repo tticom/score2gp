@@ -722,7 +722,7 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
                     voice_node = ET.SubElement(voices_db, "Voice", {"id": voice_id})
 
                     beat_refs = []
-                    sorted_events = sorted(events, key=lambda e: e.timing.onset_ticks)
+                    sorted_events = sorted(events, key=lambda e: (e.timing.onset_ticks, 0 if e.timing.grace else 1))
                     for ev_idx, event in enumerate(sorted_events):
                         beat_id = str(beats_count)
                         beats_count += 1
@@ -1629,7 +1629,7 @@ def _bars(parent: ET.Element, score: ScoreIR, hopo_dests: set[tuple[int, int, in
         voices_node = ET.SubElement(bar_node, "Voices")
         for v_idx in sorted(events_by_voice.keys()):
             voice_node = ET.SubElement(voices_node, "Voice", {"id": str(v_idx)})
-            for event in sorted(events_by_voice[v_idx], key=lambda item: item.timing.onset_ticks):
+            for event in sorted(events_by_voice[v_idx], key=lambda item: (item.timing.onset_ticks, 0 if item.timing.grace else 1)):
                 _event(voice_node, event, hopo_dests, let_ring_notes, palm_mute_notes, track_cd_maps, event_map)
 
 
