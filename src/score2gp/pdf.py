@@ -28,7 +28,19 @@ MIN_FRET_DIGIT_WIDTH_FOR_CONFIDENCE = 4.0
 MIN_NARROW_FONT_FRET_DIGIT_WIDTH = 2.8
 MAX_SAME_FRET_DIGIT_MERGE_GAP = 5.0
 
+# Layout classes constants
+PDF_LAYOUT_VECTOR_TAB_WITH_BARLINES = "vector_tab_with_barlines"
+PDF_LAYOUT_VECTOR_TAB_WITHOUT_BARLINES = "vector_tab_without_barlines"
+PDF_LAYOUT_ASCII_TAB = "born_digital_ascii_tab"
+PDF_LAYOUT_SCANNED_NO_TEXT = "scanned_no_extractable_text"
+PDF_LAYOUT_SCANNED_NO_GEOMETRY = "scanned_no_vector_staff_geometry"
+PDF_LAYOUT_MIXED_UNKNOWN = "mixed_unknown_layout"
 
+# Gating refusal warning codes constants
+WARN_ASCII_TAB_REQUIRES_ALIGNMENT = "pdf_input_class_ascii_tab_requires_alignment"
+WARN_DRAWN_TAB_REQUIRES_BARLINES = "pdf_input_class_drawn_tab_requires_barlines"
+WARN_SCANNED_PDF_UNSUPPORTED = "pdf_input_class_scanned_pdf_unsupported"
+WARN_NO_EXTRACTABLE_TAB_GEOMETRY = "pdf_input_class_no_extractable_tab_geometry"
 
 
 def inspect_pdf(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
@@ -54,6 +66,10 @@ def inspect_pdf(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
         summary["page_count"] = doc.page_count
         vector_pages = 0
         text_items_total = 0
+        total_systems = 0
+        systems_with_barline_candidates = 0
+        has_ascii_rows = False
+
         for index, page in enumerate(doc, start=1):
             text_blocks = page.get_text("blocks")
             drawings = page.get_drawings()
@@ -61,6 +77,24 @@ def inspect_pdf(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
             text_items_total += len(text_blocks)
             if text_blocks or drawings:
                 vector_pages += 1
+
+            # Detect systems and ASCII rows for layout classification
+            try:
+                systems = _detect_tab_systems(page, index)
+                total_systems += len(systems)
+                for sys in systems:
+                    if sys.barline_candidates_count > 0:
+                        systems_with_barline_candidates += 1
+            except Exception:
+                pass
+
+            try:
+                ascii_rows = _ascii_tab_rows(page, index)
+                if ascii_rows:
+                    has_ascii_rows = True
+            except Exception:
+                pass
+
             pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
             image_path = pages_dir / f"page-{index:03d}.png"
             pix.save(image_path)
@@ -82,12 +116,39 @@ def inspect_pdf(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
                 ],
             }
             summary["pages"].append(page_info)
+
         if vector_pages == doc.page_count and text_items_total:
             summary["kind"] = "born-digital"
         elif vector_pages:
             summary["kind"] = "mixed"
         else:
             summary["kind"] = "scanned-or-raster"
+
+        # Determine layout class
+        layout_class = PDF_LAYOUT_MIXED_UNKNOWN
+        layout_warnings = []
+
+        if has_ascii_rows:
+            layout_class = PDF_LAYOUT_ASCII_TAB
+            layout_warnings.append(WARN_ASCII_TAB_REQUIRES_ALIGNMENT)
+        elif total_systems > 0:
+            if systems_with_barline_candidates == 0:
+                layout_class = PDF_LAYOUT_VECTOR_TAB_WITHOUT_BARLINES
+                layout_warnings.append(WARN_DRAWN_TAB_REQUIRES_BARLINES)
+            else:
+                layout_class = PDF_LAYOUT_VECTOR_TAB_WITH_BARLINES
+        else:
+            if summary["kind"] == "scanned-or-raster" or text_items_total == 0:
+                layout_class = PDF_LAYOUT_SCANNED_NO_TEXT
+                layout_warnings.append(WARN_SCANNED_PDF_UNSUPPORTED)
+            elif summary["kind"] == "mixed":
+                layout_class = PDF_LAYOUT_SCANNED_NO_GEOMETRY
+                layout_warnings.append(WARN_NO_EXTRACTABLE_TAB_GEOMETRY)
+            else:
+                layout_class = PDF_LAYOUT_MIXED_UNKNOWN
+
+        summary["pdf_layout_class"] = layout_class
+        summary["pdf_layout_warnings"] = layout_warnings
 
     (out / "inspect_pdf.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     return summary
@@ -113,6 +174,8 @@ def extract_tab(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
     raw: dict[str, Any] = {
         "schema_version": TABRAW_SCHEMA_VERSION,
         "source_pdf": str(path),
+        "pdf_layout_class": inspection.get("pdf_layout_class"),
+        "pdf_layout_warnings": inspection.get("pdf_layout_warnings", []),
         "candidates": [],
         "warnings": [
             {

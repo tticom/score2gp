@@ -1431,7 +1431,7 @@ def write_ascii_gate_diagnostics_html(path: str | Path, payload: dict[str, Any],
     secondary_reasons = details.get("secondary_reason_codes", [])
 
     mapping = {
-        "missing_ascii_alignment_sidecar": "provide compatible ascii-musicxml-alignment.v0.1 evidence",
+        "pdf_input_class_ascii_tab_requires_alignment": "provide compatible ascii-musicxml-alignment.v0.1 evidence",
         "ascii_alignment_status_unavailable": "provide ASCII timing evidence with usable measure segmentation",
         "ascii_alignment_status_partial": "resolve partial ASCII/MusicXML alignment before ScoreIR writing",
         "ascii_alignment_status_ambiguous": "resolve ambiguous ASCII/MusicXML mapping before ScoreIR writing",

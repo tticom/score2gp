@@ -202,6 +202,8 @@ def summarize_tabraw(tabraw: TabRaw) -> dict[str, Any]:
         ),
         "warning_counts": dict(sorted(Counter(str(warning.get("code", "tabraw-warning")) for warning in tabraw.warnings).items())),
         "confidence": _confidence_summary(confidences),
+        "pdf_layout_class": tabraw.pdf_layout_class,
+        "pdf_layout_warnings": tabraw.pdf_layout_warnings,
     }
 
 
@@ -252,6 +254,9 @@ def summarize_diagnostics(diagnostics: BuildIrDiagnostics) -> dict[str, Any]:
 
 def _base_summary(pdf: Path, musicxml: Path | None, tabraw: TabRaw) -> dict[str, Any]:
     extraction = summarize_tabraw(tabraw)
+    categories = _extraction_risk_categories(extraction) + ["alignment_not_attempted"]
+    has_scanned = "pdf_input_class_scanned_pdf_unsupported" in categories or "pdf_input_class_no_extractable_tab_geometry" in categories
+    next_action = "provide-extractable-vector-pdf" if has_scanned else "provide-matching-musicxml-before-build-ir"
     return {
         "schema_version": SUMMARY_SCHEMA_VERSION,
         "diagnostic_only": True,
@@ -271,24 +276,34 @@ def _base_summary(pdf: Path, musicxml: Path | None, tabraw: TabRaw) -> dict[str,
         "suitability": {
             "diagnostic_only": True,
             "suitable_for_next_stage_debugging": False,
-            "recommendation_categories": _extraction_risk_categories(extraction) + ["alignment_not_attempted"],
-            "recommended_next_action": "provide-matching-musicxml-before-build-ir",
+            "recommendation_categories": _dedupe(categories),
+            "recommended_next_action": next_action,
         },
     }
 
 
 def _record_missing_musicxml(summary: dict[str, Any]) -> None:
+    categories = _summary_risk_categories(summary)
+    if "pdf_input_class_missing_musicxml_sidecar" not in categories:
+        categories.append("pdf_input_class_missing_musicxml_sidecar")
+    if "alignment_not_attempted" not in categories:
+        categories.append("alignment_not_attempted")
+
     summary["build_ir"] = {
         "ran": False,
         "failed": False,
         "blocking_reason": "matching MusicXML timing input is missing; build-ir was not run",
     }
     summary["validation"] = {"ran": False, "valid": False, "error_count": None}
+
+    has_scanned = "pdf_input_class_scanned_pdf_unsupported" in categories or "pdf_input_class_no_extractable_tab_geometry" in categories
+    next_action = "provide-extractable-vector-pdf" if has_scanned else "provide-matching-musicxml-before-build-ir"
+
     summary["suitability"] = {
         "diagnostic_only": True,
         "suitable_for_next_stage_debugging": False,
-        "recommendation_categories": _summary_risk_categories(summary) + ["alignment_not_attempted"],
-        "recommended_next_action": "provide-matching-musicxml-before-build-ir",
+        "recommendation_categories": _dedupe(categories),
+        "recommended_next_action": next_action,
     }
 
 
@@ -335,7 +350,7 @@ def _record_build_ir_risk(summary: dict[str, Any], exc: BuildIrInputRiskError, r
     summary["suitability"] = {
         "diagnostic_only": True,
         "suitable_for_next_stage_debugging": False,
-        "recommendation_categories": categories,
+        "recommendation_categories": _dedupe(categories),
         "recommended_next_action": _risk_action(exc.category),
     }
 
@@ -347,10 +362,19 @@ def _suitability(summary: dict[str, Any]) -> dict[str, Any]:
     quality_counts = build.get("per_bar_quality_counts", {})
 
     categories = _summary_risk_categories(summary)
-    if not validation.get("valid"):
+
+    has_scanned = "pdf_input_class_scanned_pdf_unsupported" in categories or "pdf_input_class_no_extractable_tab_geometry" in categories
+
+    if not validation.get("valid") and validation.get("ran"):
         action = "fix-validation-before-private-debugging"
         suitable = False
         categories.append("validation_failed")
+    elif has_scanned:
+        action = "provide-extractable-vector-pdf"
+        suitable = False
+    elif "pdf_input_class_missing_musicxml_sidecar" in categories:
+        action = "provide-matching-musicxml-before-build-ir"
+        suitable = False
     elif extraction.get("playable_candidates", 0) == 0:
         action = "inspect-pdf-extraction-before-build-ir"
         suitable = False
@@ -386,6 +410,10 @@ def _extraction_risk_categories(extraction: dict[str, Any]) -> list[str]:
         or extraction.get("candidates_with_string", 0) == 0
     ):
         categories.append("missing_pdf_grouping")
+
+    for warn in extraction.get("pdf_layout_warnings", []):
+        if warn not in categories:
+            categories.append(warn)
     return categories
 
 
@@ -415,6 +443,10 @@ def _risk_action(category: str) -> str:
         return "inspect-pdf-grouping-before-alignment"
     if category == "musicxml_timing_risk":
         return "review-musicxml-timing-risk-before-alignment"
+    if category in ("pdf_input_class_scanned_pdf_unsupported", "pdf_input_class_no_extractable_tab_geometry"):
+        return "provide-extractable-vector-pdf"
+    if category in ("pdf_input_class_missing_musicxml_sidecar", "pdf_input_class_ascii_tab_requires_alignment", "pdf_input_class_drawn_tab_requires_barlines"):
+        return "provide-matching-musicxml-before-build-ir"
     return "fix-build-ir-input-or-import-error-before-private-debugging"
 
 

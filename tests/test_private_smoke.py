@@ -52,7 +52,7 @@ def test_run_pipeline_for_input(tmp_path) -> None:
     assert summary["whether_ascii_tab_detected"] is True
     assert summary["whether_scoreir_written"] is False
     assert summary["whether_gp_written"] is False
-    assert summary["primary_failure_refusal_reason"] == "missing_ascii_alignment_sidecar"
+    assert summary["primary_failure_refusal_reason"] == "pdf_input_class_ascii_tab_requires_alignment"
 
     # Redaction checks: verify no raw file path or title containing actual filenames exists in summary values
     summary_str = str(summary)
