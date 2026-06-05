@@ -60,6 +60,8 @@ class TabRaw(BaseModel):
     schema_version: Literal["tabraw.v0.1"] = TABRAW_SCHEMA_VERSION
     source_pdf: str | None = None
     inspection_kind: str | None = None
+    pdf_layout_class: str | None = None
+    pdf_layout_warnings: list[str] = Field(default_factory=list)
     candidates: list[TabCandidate] = Field(default_factory=list)
     warnings: list[dict[str, Any]] = Field(default_factory=list)
 
@@ -90,6 +92,11 @@ def parse_fret_text(text: str) -> int | None:
 
 def normalize_tabraw_payload(data: dict[str, Any]) -> dict[str, Any]:
     if "candidates" in data:
+        # If already normalized to the format, still check for fields
+        if "pdf_layout_class" not in data:
+            data["pdf_layout_class"] = None
+        if "pdf_layout_warnings" not in data:
+            data["pdf_layout_warnings"] = []
         return data
 
     candidates = []
@@ -126,6 +133,8 @@ def normalize_tabraw_payload(data: dict[str, Any]) -> dict[str, Any]:
         "schema_version": TABRAW_SCHEMA_VERSION,
         "source_pdf": data.get("source_pdf"),
         "inspection_kind": data.get("inspection_kind"),
+        "pdf_layout_class": data.get("pdf_layout_class"),
+        "pdf_layout_warnings": data.get("pdf_layout_warnings", []),
         "candidates": candidates,
         "warnings": data.get("warnings", []),
     }
