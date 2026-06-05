@@ -39,6 +39,8 @@ from .ir import (
     UnsupportedTechnique,
     LetRingTechnique,
     PalmMuteTechnique,
+    GraceTiming,
+    GraceTechnique,
 )
 from .musicxml import (
     MusicXmlHarmony,
@@ -1810,6 +1812,19 @@ def _synchronize_skipped_system_measures(
 
 
 
+def _find_host_note(grace_note: MusicXmlNote, notes: list[MusicXmlNote]) -> MusicXmlNote | None:
+    try:
+        idx = notes.index(grace_note)
+    except ValueError:
+        return None
+    for i in range(idx + 1, len(notes)):
+        n = notes[i]
+        if n.voice == grace_note.voice and not n.grace and not n.is_rest and not n.is_suppressed:
+            return n
+    return None
+
+
+
 def _measure_events(
     measure: MusicXmlMeasure,
     candidate_pools: "CandidatePools",
@@ -1822,31 +1837,43 @@ def _measure_events(
     for group_index, group in enumerate(_note_groups(measure.notes), start=1):
         first = group[0]
         if first.grace:
-            warnings.append(_event_warning("musicxml-grace-skipped", first, "Grace note is skipped in this phase."))
-            continue
-
-        duration_ticks, exact = first.duration_ticks(measure.divisions)
-        if duration_ticks <= 0:
-            warnings.append(_event_warning("musicxml-zero-duration-skipped", first, "Zero-duration note/rest is skipped."))
-            continue
-        if not exact:
-            warnings.append(
-                _event_warning(
-                    "musicxml-non-integer-duration",
-                    first,
-                    "MusicXML duration did not map to an integer ScoreIR tick value and was truncated.",
+            host_note = _find_host_note(first, measure.notes)
+            if host_note is None:
+                warnings.append(_event_warning("musicxml-grace-skipped", first, "Grace note is skipped: no host note found in measure/voice context."))
+                continue
+            duration_ticks = 0
+            onset_ticks, onset_exact = host_note.onset_ticks(measure.divisions)
+            if not onset_exact:
+                warnings.append(
+                    _event_warning(
+                        "musicxml-non-integer-onset",
+                        first,
+                        "MusicXML grace note onset did not map to an integer ScoreIR tick value and was truncated.",
+                    )
                 )
-            )
-
-        onset_ticks, onset_exact = first.onset_ticks(measure.divisions)
-        if not onset_exact:
-            warnings.append(
-                _event_warning(
-                    "musicxml-non-integer-onset",
-                    first,
-                    "MusicXML onset did not map to an integer ScoreIR tick value and was truncated.",
+        else:
+            duration_ticks, exact = first.duration_ticks(measure.divisions)
+            if duration_ticks <= 0:
+                warnings.append(_event_warning("musicxml-zero-duration-skipped", first, "Zero-duration note/rest is skipped."))
+                continue
+            if not exact:
+                warnings.append(
+                    _event_warning(
+                        "musicxml-non-integer-duration",
+                        first,
+                        "MusicXML duration did not map to an integer ScoreIR tick value and was truncated.",
+                    )
                 )
-            )
+
+            onset_ticks, onset_exact = first.onset_ticks(measure.divisions)
+            if not onset_exact:
+                warnings.append(
+                    _event_warning(
+                        "musicxml-non-integer-onset",
+                        first,
+                        "MusicXML onset did not map to an integer ScoreIR tick value and was truncated.",
+                    )
+                )
 
         timing = _timing(first, measure, duration_ticks, onset_ticks)
         event_id = f"mx-m{measure.index}-e{group_index}"
@@ -1999,15 +2026,33 @@ def _aligned_note(
             staff=xml_note.dedup_tab_note_staff,
             techniques=xml_note.dedup_tab_note_techniques or [],
             source_path=xml_note.dedup_tab_note_source_path or xml_note.source_path,
+            grace=xml_note.grace,
+            grace_slash=getattr(xml_note, "grace_slash", False),
         )
         provenance.append(_musicxml_provenance(temp_note, measure))
     provenance.append(tab_provenance)
+
+    techniques = _note_techniques(xml_note)
+    if xml_note.grace:
+        grace_timing = GraceTiming(
+            position="before",
+            slash=getattr(xml_note, "grace_slash", False),
+            duration_ticks=0,
+            duration=xml_note.notated_type,
+        )
+        techniques.append(
+            GraceTechnique(
+                kind="grace",
+                slash=getattr(xml_note, "grace_slash", False),
+                timing=grace_timing,
+            )
+        )
 
     return Note(
         string=candidate.string,
         fret=candidate.parsed_fret,
         pitch=candidate_pitch,
-        techniques=_note_techniques(xml_note),
+        techniques=techniques,
         confidence=confidence,
         provenance=provenance,
     )
@@ -2079,6 +2124,14 @@ def _candidate_pool_sort_key(candidate: TabCandidate) -> tuple[float, str]:
 
 
 def _timing(note: MusicXmlNote, measure: MusicXmlMeasure, duration_ticks: int, onset_ticks: int) -> Timing:
+    grace_timing = None
+    if note.grace:
+        grace_timing = GraceTiming(
+            position="before",
+            slash=getattr(note, "grace_slash", False),
+            duration_ticks=0,
+            duration=note.notated_type,
+        )
     return Timing(
         bar_index=measure.index,
         onset_ticks=onset_ticks,
@@ -2089,6 +2142,7 @@ def _timing(note: MusicXmlNote, measure: MusicXmlMeasure, duration_ticks: int, o
         tuplet=Tuplet(actual_notes=note.tuplet.actual_notes, normal_notes=note.tuplet.normal_notes)
         if note.tuplet is not None
         else None,
+        grace=grace_timing,
     )
 
 
@@ -2599,10 +2653,14 @@ def _measure_for_bar(part: MusicXmlPart | None, bar_index: int) -> MusicXmlMeasu
 
 
 def _diagnostic_groups(notes: Iterable[MusicXmlNote]) -> list[list[MusicXmlNote]]:
+    notes_list = list(notes)
     groups = []
-    for group in _note_groups(notes):
+    for group in _note_groups(notes_list):
         first = group[0]
-        if first.grace or first.duration_divisions <= 0:
+        if first.grace:
+            if _find_host_note(first, notes_list) is None:
+                continue
+        elif first.duration_divisions <= 0:
             continue
         groups.append(group)
     return groups
@@ -2736,7 +2794,14 @@ def _musicxml_onset_groups(
         first = group[0]
         if first.is_rest:
             continue
-        onset_ticks, _ = first.onset_ticks(divisions)
+        if first.grace:
+            host_note = _find_host_note(first, measure.notes if measure is not None else [])
+            if host_note is not None:
+                onset_ticks, _ = host_note.onset_ticks(divisions)
+            else:
+                onset_ticks, _ = first.onset_ticks(divisions)
+        else:
+            onset_ticks, _ = first.onset_ticks(divisions)
         by_onset[onset_ticks].extend(note.id for note in group)
     return [
         MusicXmlOnsetGroupDiagnostics(
