@@ -430,3 +430,148 @@ def test_musicxml_tuplets_support(tmp_path) -> None:
     tuplet_errors = [issue for issue in issues if issue.code == "musicxml_tuplet_unsupported"]
     assert len(tuplet_errors) == 1
     assert tuplet_errors[0].measure_number == "2"
+
+
+def test_musicxml_grace_note_parsing_and_deduplication(tmp_path) -> None:
+    # 1. Create a synthetic MusicXML with notation & TAB grace notes in voice 1 and voice 5
+    musicxml_content = """<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1">
+      <part-name>Guitar</part-name>
+    </score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>2</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <!-- Voice 1: Grace Note -> Host Note -->
+      <note>
+        <grace slash="yes"/>
+        <pitch><step>E</step><octave>4</octave></pitch>
+        <voice>1</voice>
+        <type>eighth</type>
+      </note>
+      <note>
+        <pitch><step>G</step><octave>4</octave></pitch>
+        <duration>2</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+      </note>
+      <!-- Backup to Voice 5 (TAB representation) -->
+      <backup><duration>2</duration></backup>
+      <note>
+        <grace slash="yes"/>
+        <pitch><step>E</step><octave>4</octave></pitch>
+        <voice>5</voice>
+        <type>eighth</type>
+        <notations>
+          <technical>
+            <string>1</string>
+            <fret>0</fret>
+          </technical>
+        </notations>
+      </note>
+      <note>
+        <voice>5</voice>
+        <pitch><step>G</step><octave>4</octave></pitch>
+        <duration>2</duration>
+        <type>quarter</type>
+        <notations>
+          <technical>
+            <string>1</string>
+            <fret>3</fret>
+          </technical>
+        </notations>
+      </note>
+    </measure>
+  </part>
+</score-partwise>
+"""
+    xml_file = tmp_path / "grace_test.musicxml"
+    xml_file.write_text(musicxml_content, encoding="utf-8")
+
+    from score2gp.musicxml import parse_musicxml
+    imported = parse_musicxml(xml_file)
+    assert len(imported.parts[0].measures) == 1
+    measure = imported.parts[0].measures[0]
+
+    # We should have 4 notes parsed
+    assert len(measure.notes) == 4
+    n1, n2, n3, n4 = measure.notes
+    assert n1.grace is True
+    assert n1.grace_slash is True
+    assert n3.grace is True
+    assert n3.grace_slash is True
+
+    # Run deduplication
+    from score2gp.musicxml import deduplicate_suspected_staff_tab_voices
+    dedup_imported = deduplicate_suspected_staff_tab_voices(imported)
+    dedup_measure = dedup_imported.parts[0].measures[0]
+
+    # The duplicate TAB grace note (n3) and duplicate TAB host note (n4) should be suppressed
+    grace_notes = [n for n in dedup_measure.notes if n.grace]
+    assert len(grace_notes) == 2
+    # n3 should be suppressed
+    assert grace_notes[0].is_suppressed is False  # Voice 1 grace note
+    assert grace_notes[1].is_suppressed is True   # Voice 5 grace note
+
+    # Voice 1 grace note should have merged fret/string metadata
+    assert grace_notes[0].dedup_tab_note_id == grace_notes[1].id
+
+    # Build IR should align and compile them successfully
+    from score2gp.build_ir import build_ir_from_files
+    from score2gp.tabraw import TabRaw, TabCandidate
+
+    tabraw = TabRaw(
+        candidates=[
+            TabCandidate(
+                id="cand1",
+                page_index=1,
+                system_index=1,
+                bar_index=1,
+                parsed_fret=0,
+                string=1,
+                raw_text="0",
+                x=10.0,
+                source_stage="pdf-text",
+                confidence=0.9,
+                raw={"x": 10.0, "y": 100.0},
+            ),
+            TabCandidate(
+                id="cand2",
+                page_index=1,
+                system_index=1,
+                bar_index=1,
+                parsed_fret=3,
+                string=1,
+                raw_text="3",
+                x=20.0,
+                source_stage="pdf-text",
+                confidence=0.9,
+                raw={"x": 20.0, "y": 100.0},
+            ),
+        ]
+    )
+    tabraw_file = tmp_path / "tabraw.json"
+    tabraw.to_json_file(tabraw_file)
+    # Build IR
+    score = build_ir_from_files(xml_file, tabraw_file, allow_remediation=True)
+    assert len(score.bars) == 1
+    bar = score.bars[0]
+    # We should have 2 events: one grace note event (duration 0) and one host note event
+    assert len(bar.events) == 2
+    e1, e2 = bar.events
+    assert e1.timing.duration_ticks == 0
+    assert e1.timing.grace is not None
+    assert e1.timing.grace.slash is True
+    assert e1.timing.grace.duration == "eighth"
+    assert e1.notes[0].fret == 0
+    assert e1.notes[0].string == 1
+
+    assert e2.timing.duration_ticks == 960
+    assert e2.timing.grace is None
+    assert e2.notes[0].fret == 3
+    assert e2.notes[0].string == 1
