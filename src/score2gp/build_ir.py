@@ -1119,6 +1119,7 @@ def _apply_ascii_gate_refusal_details(details: dict[str, object], reason_codes: 
     deduped = _dedupe(reason_codes)
     primary = deduped[0] if deduped else "ascii_outside_tiny_gate_scope"
     candidate_count = _int_detail(details, "candidate_count")
+    remediation = _ascii_gate_remediation(primary)
     details.update(
         {
             "ascii_scoreir_gate_status": "refused",
@@ -1128,9 +1129,11 @@ def _apply_ascii_gate_refusal_details(details: dict[str, object], reason_codes: 
             "rejected_candidate_count": candidate_count,
             "output_event_count": 0,
             "scoreir_written": False,
-            "expected_next_remediation": _ascii_gate_remediation(primary),
+            "expected_next_remediation": remediation,
+            "remediation_hint": remediation,
         }
     )
+
 
 
 def _ascii_alignment_status_reason(status: str) -> str:
