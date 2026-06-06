@@ -658,10 +658,10 @@ Current status: implemented as a semantic summary comparison, not byte-for-byte 
 Intended command:
 
 ```powershell
-python -m score2gp.cli convert "fixtures/private/Derek Trucks BB King.pdf" `
+python -m score2gp.cli convert --pdf "fixtures/private/Derek Trucks BB King.pdf" `
   --template "fixtures/templates/minimal_gp7.gp" `
   --out "work/derek/output.gp" `
-  --workdir "work/derek"
+  --work-dir "work/derek"
 ```
 
 Current status: scaffold only. It writes diagnostics and a conversion report, but it does not yet produce a real PDF-derived GP file.
