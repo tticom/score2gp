@@ -271,3 +271,213 @@ def test_pdf_only_tab_json_report_fields(tmp_path) -> None:
     assert "semantic_comparison" in diagnostics
     assert "matches" in diagnostics["semantic_comparison"]
     assert "differences" in diagnostics["semantic_comparison"]
+
+
+def test_pdf_only_preserves_page_system_bar_order(tmp_path) -> None:
+    tabraw_data = {
+        "schema_version": "tabraw.v0.1",
+        "source_pdf": "test.pdf",
+        "pdf_layout_class": "drawn",
+        "pdf_layout_warnings": [],
+        "candidates": [
+            {
+                "id": "c-1",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "line_index": 1,
+                "string": 1,
+                "raw_text": "5",
+                "parsed_fret": 5,
+                "x": 10.0,
+                "y": 20.0,
+                "confidence": 0.9,
+            },
+            {
+                "id": "c-2",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 2,
+                "staff_index": 1,
+                "bar_index": 1,
+                "line_index": 1,
+                "string": 1,
+                "raw_text": "7",
+                "parsed_fret": 7,
+                "x": 10.0,
+                "y": 20.0,
+                "confidence": 0.9,
+            },
+            {
+                "id": "c-3",
+                "kind": "fret",
+                "page_index": 2,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "line_index": 1,
+                "string": 1,
+                "raw_text": "9",
+                "parsed_fret": 9,
+                "x": 10.0,
+                "y": 20.0,
+                "confidence": 0.9,
+            },
+        ],
+        "warnings": [],
+    }
+    tabraw_file = tmp_path / "tabraw_order.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+
+    score, diagnostics = build_ir_from_tabraw_only(tabraw_file)
+
+    assert len(score.bars) == 3
+    for b in score.bars:
+        for ev in b.events:
+            pages = {prov.page for prov in ev.provenance if prov.page is not None}
+            systems = {prov.system_id for prov in ev.provenance if prov.system_id is not None}
+            bars_local = {prov.bar_index for prov in ev.provenance if prov.bar_index is not None}
+            assert len(pages) <= 1
+            assert len(systems) <= 1
+            assert len(bars_local) <= 1
+
+
+def test_pdf_only_does_not_stack_same_x_across_pages(tmp_path) -> None:
+    tabraw_data = {
+        "schema_version": "tabraw.v0.1",
+        "source_pdf": "test.pdf",
+        "pdf_layout_class": "drawn",
+        "pdf_layout_warnings": [],
+        "candidates": [
+            {
+                "id": "c-1",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "line_index": 1,
+                "string": 1,
+                "raw_text": "5",
+                "parsed_fret": 5,
+                "x": 10.0,
+                "y": 20.0,
+                "confidence": 0.9,
+            },
+            {
+                "id": "c-2",
+                "kind": "fret",
+                "page_index": 2,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "line_index": 1,
+                "string": 2,
+                "raw_text": "7",
+                "parsed_fret": 7,
+                "x": 10.0,
+                "y": 20.0,
+                "confidence": 0.9,
+            },
+        ],
+        "warnings": [],
+    }
+    tabraw_file = tmp_path / "tabraw_x_pages.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+
+    score, diagnostics = build_ir_from_tabraw_only(tabraw_file)
+
+    assert len(score.bars) == 2
+    assert len(score.bars[0].events) == 1
+    assert len(score.bars[1].events) == 1
+
+
+def test_pdf_only_duplicate_string_same_event_split_or_refused(tmp_path) -> None:
+    tabraw_data = {
+        "schema_version": "tabraw.v0.1",
+        "source_pdf": "test.pdf",
+        "pdf_layout_class": "drawn",
+        "pdf_layout_warnings": [],
+        "candidates": [
+            {
+                "id": "c-1",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "line_index": 1,
+                "string": 1,
+                "raw_text": "5",
+                "parsed_fret": 5,
+                "x": 10.0,
+                "y": 20.0,
+                "confidence": 0.9,
+            },
+            {
+                "id": "c-2",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "line_index": 1,
+                "string": 1,
+                "raw_text": "7",
+                "parsed_fret": 7,
+                "x": 10.1,
+                "y": 20.0,
+                "confidence": 0.9,
+            },
+        ],
+        "warnings": [],
+    }
+    tabraw_file = tmp_path / "tabraw_dup_strings.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+
+    score, diagnostics = build_ir_from_tabraw_only(tabraw_file)
+
+    assert len(score.bars) == 1
+    assert len(score.bars[0].events) == 2
+    assert score.bars[0].events[0].notes[0].fret == 5
+    assert score.bars[0].events[1].notes[0].fret == 7
+
+
+def test_pdf_only_preserves_candidate_top_level_source_identity(tmp_path) -> None:
+    tabraw_data = {
+        "schema_version": "tabraw.v0.1",
+        "source_pdf": "test.pdf",
+        "pdf_layout_class": "drawn",
+        "pdf_layout_warnings": [],
+        "candidates": [
+            {
+                "id": "c-1",
+                "kind": "fret",
+                "page_index": 3,
+                "system_index": 4,
+                "staff_index": 1,
+                "bar_index": 2,
+                "line_index": 1,
+                "string": 1,
+                "raw_text": "5",
+                "parsed_fret": 5,
+                "x": 10.0,
+                "y": 20.0,
+                "confidence": 0.9,
+            }
+        ],
+        "warnings": [],
+    }
+    tabraw_file = tmp_path / "tabraw_identity.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+
+    score, diagnostics = build_ir_from_tabraw_only(tabraw_file)
+
+    assert len(score.bars) == 1
+    event = score.bars[0].events[0]
+    provenance = event.provenance[0]
+    assert provenance.page == 3
+    assert provenance.system_id == "system-4"
+    assert provenance.bar_index == 2
