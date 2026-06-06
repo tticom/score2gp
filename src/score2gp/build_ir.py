@@ -804,6 +804,14 @@ def _ascii_scoreir_gate(
             "reason_codes": ["ascii_alignment_stale_sidecar_hash"],
             "hash_diagnostics": hash_diagnostics,
         })
+        if active_pdf_hash and hash_diagnostics.get("pdf_hash_status") in {"missing", "malformed", "mismatch"}:
+            details["pdf_actual_hash"] = active_pdf_hash
+            if sidecar_pdf_hash:
+                details["pdf_expected_hash"] = sidecar_pdf_hash
+        if active_musicxml_hash and hash_diagnostics.get("musicxml_hash_status") in {"missing", "malformed", "mismatch"}:
+            details["musicxml_actual_hash"] = active_musicxml_hash
+            if sidecar_musicxml_hash:
+                details["musicxml_expected_hash"] = sidecar_musicxml_hash
         _apply_ascii_gate_refusal_details(details, ["ascii_alignment_stale_sidecar_hash"])
         return AsciiScoreIrGateDecision(
             allowed=False,
@@ -1119,6 +1127,34 @@ def _apply_ascii_gate_refusal_details(details: dict[str, object], reason_codes: 
     deduped = _dedupe(reason_codes)
     primary = deduped[0] if deduped else "ascii_outside_tiny_gate_scope"
     candidate_count = _int_detail(details, "candidate_count")
+    remediation = _ascii_gate_remediation(primary)
+    if primary == "ascii_alignment_stale_sidecar_hash":
+        hash_diags = details.get("hash_diagnostics", {})
+        pdf_status = hash_diags.get("pdf_hash_status")
+        mxml_status = hash_diags.get("musicxml_hash_status")
+
+        info_parts = []
+        if pdf_status in {"missing", "malformed", "mismatch"}:
+            pdf_actual = details.get("pdf_actual_hash")
+            if pdf_actual:
+                if pdf_status == "mismatch":
+                    pdf_expected = details.get("pdf_expected_hash")
+                    info_parts.append(f"Expected PDF hash {pdf_expected} in sidecar, but active file hash is {pdf_actual}")
+                else:
+                    info_parts.append(f"Active PDF file hash is {pdf_actual}")
+
+        if mxml_status in {"missing", "malformed", "mismatch"}:
+            mxml_actual = details.get("musicxml_actual_hash")
+            if mxml_actual:
+                if mxml_status == "mismatch":
+                    mxml_expected = details.get("musicxml_expected_hash")
+                    info_parts.append(f"Expected MusicXML hash {mxml_expected} in sidecar, but active file hash is {mxml_actual}")
+                else:
+                    info_parts.append(f"Active MusicXML file hash is {mxml_actual}")
+
+        if info_parts:
+            remediation = f"{remediation}. " + ". ".join(info_parts)
+
     details.update(
         {
             "ascii_scoreir_gate_status": "refused",
@@ -1128,9 +1164,11 @@ def _apply_ascii_gate_refusal_details(details: dict[str, object], reason_codes: 
             "rejected_candidate_count": candidate_count,
             "output_event_count": 0,
             "scoreir_written": False,
-            "expected_next_remediation": _ascii_gate_remediation(primary),
+            "expected_next_remediation": remediation,
+            "remediation_hint": remediation,
         }
     )
+
 
 
 def _ascii_alignment_status_reason(status: str) -> str:
