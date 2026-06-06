@@ -318,3 +318,120 @@ def test_existing_subcommands_still_work() -> None:
     result = CliRunner().invoke(app, ["export-schema", "--help"])
     assert result.exit_code == 0
     assert "--out" in clean_ansi(result.output)
+
+
+def test_cli_convert_hash_refusal_contains_specific_remediation_hint(tmp_path) -> None:
+    from unittest.mock import patch
+    from score2gp.ascii_alignment import align_ascii_musicxml_files, compute_sha256
+    from tests.test_ascii_scoreir_gate import ASCII_GATE_PDF, ASCII_GATE_MUSICXML
+
+    original_align = align_ascii_musicxml_files
+
+    def mock_align(*args, **kwargs):
+        alignment = original_align(*args, **kwargs)
+        # Mutate to force a stale hash mismatch refusal (using a 64-character mismatching hash)
+        alignment.source_pdf_hash = "a" * 64
+        if "out_dir" in kwargs and kwargs["out_dir"]:
+            out_path = Path(kwargs["out_dir"]) / "ascii_musicxml_alignment.json"
+            alignment.to_json_file(out_path)
+        return alignment
+
+    workdir = tmp_path / "workdir"
+    out_gp = tmp_path / "output.gp"
+    json_report = tmp_path / "report.json"
+
+    expected_pdf_hash = compute_sha256(ASCII_GATE_PDF)
+
+    with patch("score2gp.cli.align_ascii_musicxml_files", side_effect=mock_align):
+        result = CliRunner().invoke(
+            app,
+            [
+                "convert",
+                "--pdf",
+                str(ASCII_GATE_PDF),
+                "--musicxml",
+                str(ASCII_GATE_MUSICXML),
+                "--out",
+                str(out_gp),
+                "--work-dir",
+                str(workdir),
+                "--json-report",
+                str(json_report),
+                "--strict",
+            ],
+        )
+
+    assert result.exit_code == 4
+    assert not out_gp.exists()
+
+    # Verify specific remediation hint in stderr contains the correct active hash
+    assert "re-align the source PDF and MusicXML files to update the stale hashes" in result.stderr
+    assert f"Expected PDF hash {'a' * 64} in sidecar, but active file hash is {expected_pdf_hash}" in result.stderr
+
+    # Verify JSON report contains recommended_action
+    assert json_report.exists()
+    report = json.loads(json_report.read_text(encoding="utf-8"))
+    assert report["status"] == "refused"
+    assert report["exit_code"] == 4
+    assert report["refusal_code"] == "ascii_alignment_stale_sidecar_hash"
+    assert "re-align the source PDF and MusicXML files to update the stale hashes" in report["recommended_action"]
+    assert f"Expected PDF hash {'a' * 64} in sidecar, but active file hash is {expected_pdf_hash}" in report["recommended_action"]
+
+
+def test_cli_convert_hash_refusal_displays_correct_active_hash(tmp_path) -> None:
+    from unittest.mock import patch
+    from score2gp.ascii_alignment import align_ascii_musicxml_files, compute_sha256
+    from tests.test_ascii_scoreir_gate import ASCII_GATE_PDF, ASCII_GATE_MUSICXML
+
+    original_align = align_ascii_musicxml_files
+
+    def mock_align(*args, **kwargs):
+        alignment = original_align(*args, **kwargs)
+        # Mutate to force a stale hash mismatch refusal on both PDF and MusicXML (using 64-character hashes)
+        alignment.source_pdf_hash = "a" * 64
+        alignment.source_musicxml_hash = "b" * 64
+        if "out_dir" in kwargs and kwargs["out_dir"]:
+            out_path = Path(kwargs["out_dir"]) / "ascii_musicxml_alignment.json"
+            alignment.to_json_file(out_path)
+        return alignment
+
+    workdir = tmp_path / "workdir"
+    out_gp = tmp_path / "output.gp"
+    json_report = tmp_path / "report.json"
+
+    expected_pdf_hash = compute_sha256(ASCII_GATE_PDF)
+    expected_mxml_hash = compute_sha256(ASCII_GATE_MUSICXML)
+
+    with patch("score2gp.cli.align_ascii_musicxml_files", side_effect=mock_align):
+        result = CliRunner().invoke(
+            app,
+            [
+                "convert",
+                "--pdf",
+                str(ASCII_GATE_PDF),
+                "--musicxml",
+                str(ASCII_GATE_MUSICXML),
+                "--out",
+                str(out_gp),
+                "--work-dir",
+                str(workdir),
+                "--json-report",
+                str(json_report),
+                "--strict",
+            ],
+        )
+
+    assert result.exit_code == 4
+    assert not out_gp.exists()
+
+    expected_msg_pdf = f"Expected PDF hash {'a' * 64} in sidecar, but active file hash is {expected_pdf_hash}"
+    expected_msg_mxml = f"Expected MusicXML hash {'b' * 64} in sidecar, but active file hash is {expected_mxml_hash}"
+
+    assert expected_msg_pdf in result.stderr
+    assert expected_msg_mxml in result.stderr
+
+    assert json_report.exists()
+    report = json.loads(json_report.read_text(encoding="utf-8"))
+    assert report["refusal_code"] == "ascii_alignment_stale_sidecar_hash"
+    assert expected_msg_pdf in report["recommended_action"]
+    assert expected_msg_mxml in report["recommended_action"]
