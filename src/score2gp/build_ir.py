@@ -1628,6 +1628,379 @@ def build_ir_with_diagnostics_from_imports(
             )
     return score, diagnostics
 
+
+def build_ir_from_tabraw_only(
+    tabraw_path: str | Path,
+    *,
+    tempo_bpm: float = 120.0,
+) -> tuple[ScoreIR, BuildIrDiagnostics]:
+    tabraw = TabRaw.from_json_file(tabraw_path)
+
+    # Safety checks
+    if not tabraw.candidates:
+        raise BuildIrInputRiskError(
+            category="pdf_only_tab_grouping_unsafe",
+            stage="layout-gating",
+            message="PDF-only tab building refused: no candidates found in TabRaw.",
+        )
+
+    # 1. Check layout warnings
+    unsafe_warning_codes = {
+        # No systems
+        "pdf_no_systems_detected",
+        "pdf_input_class_no_extractable_tab_geometry",
+        "pdf_drawn_system_not_detected",
+        "pdf_candidates_unassigned_to_system",
+        # Missing string lines
+        "pdf_string_lines_missing",
+        "pdf_tab_staff_missing",
+        "pdf_tab_staff_incomplete",
+        "incomplete_tab_staff",
+        "pdf_candidates_unassigned_to_string",
+        # Missing bar boxes
+        "pdf_barlines_missing",
+        "pdf_bar_boxes_missing",
+        "missing_pdf_barlines",
+        "pdf_bar_box_construction_not_enough_for_build_ir",
+        "pdf_candidates_unassigned_to_bar",
+        "pdf_full_grouping_requires_all_systems_boxed",
+        # Ambiguous string assignment
+        "pdf_string_assignment_ambiguous",
+        "ambiguous_string_assignment",
+        "pdf_tab_staff_ambiguous",
+        # Ambiguous bar assignment
+        "pdf_barlines_ambiguous",
+        "ambiguous_bar_assignment",
+        "pdf_system_order_ambiguous",
+        "pdf_system_bbox_ambiguous",
+    }
+
+    found_unsafe = None
+    for warning_code in tabraw.pdf_layout_warnings:
+        if warning_code in unsafe_warning_codes:
+            found_unsafe = warning_code
+            break
+
+    if not found_unsafe:
+        for w in tabraw.warnings:
+            code = w.get("code")
+            if code in unsafe_warning_codes:
+                found_unsafe = code
+                break
+
+    if found_unsafe:
+        raise BuildIrInputRiskError(
+            category="pdf_only_tab_grouping_unsafe",
+            stage="layout-gating",
+            message=f"PDF-only tab building refused due to unsafe layout warning: {found_unsafe}",
+            details={"refusal_warning_code": found_unsafe},
+        )
+
+    fret_candidates = [c for c in tabraw.candidates if c.parsed_fret is not None and c.kind == "fret"]
+    if not fret_candidates:
+        raise BuildIrInputRiskError(
+            category="pdf_only_tab_grouping_unsafe",
+            stage="layout-gating",
+            message="PDF-only tab building refused: no playable fret candidates found.",
+        )
+
+    for candidate in fret_candidates:
+        if candidate.string is None or candidate.bar_index is None or candidate.system_index is None or candidate.x is None:
+            raise BuildIrInputRiskError(
+                category="pdf_only_tab_grouping_unsafe",
+                stage="layout-gating",
+                message=f"PDF-only tab building refused: candidate {candidate.id} has missing required layout fields (string={candidate.string}, bar_index={candidate.bar_index}, system_index={candidate.system_index}, x={candidate.x}).",
+            )
+
+    # 2. Rhythmic alignment & ScoreIR generation
+    _STRING_TO_BASE_PITCH = {
+        1: 64,  # E4
+        2: 59,  # B3
+        3: 55,  # G3
+        4: 50,  # D3
+        5: 45,  # A2
+        6: 40,  # E2
+    }
+
+    bars = []
+    max_bar = max(c.bar_index for c in fret_candidates if c.bar_index is not None)
+
+    for bar_idx in range(1, max_bar + 1):
+        bar_frets = [c for c in fret_candidates if c.bar_index == bar_idx]
+        if not bar_frets:
+            # Create a rest event filling the bar
+            rest_event = Event(
+                id=f"bar-{bar_idx}-rest",
+                track_id=TRACK_ID,
+                timing=Timing(
+                    bar_index=bar_idx,
+                    onset_ticks=0,
+                    duration_ticks=3840,
+                    ticks_per_quarter=DEFAULT_TICKS_PER_QUARTER,
+                    notated_duration=NotatedDuration(value="whole", dots=0),
+                ),
+                is_rest=True,
+                notes=[],
+                confidence=1.0,
+            )
+            bars.append(
+                Bar(
+                    index=bar_idx,
+                    time_signature=TimeSignature(numerator=4, denominator=4),
+                    events=[rest_event],
+                )
+            )
+            continue
+
+        # Group by x-position
+        x_groups = _candidate_x_groups(bar_frets, tolerance=1.5)
+        N = len(x_groups)
+        if N > 128:
+            raise BuildIrInputRiskError(
+                category="pdf_only_tab_grouping_unsafe",
+                stage="layout-gating",
+                message=f"PDF-only tab building refused: too many x-groups ({N}) in bar {bar_idx}.",
+            )
+
+        if N <= 8:
+            grid_spacing = 480
+            duration_name = "eighth"
+        elif N <= 16:
+            grid_spacing = 240
+            duration_name = "16th"
+        elif N <= 32:
+            grid_spacing = 120
+            duration_name = "32nd"
+        else:
+            grid_spacing = 60
+            duration_name = "64th"
+
+        id_to_cand = {c.id: c for c in bar_frets}
+        events = []
+        for i, group_diag in enumerate(x_groups):
+            onset_ticks = i * grid_spacing
+            duration_ticks = grid_spacing if i < N - 1 else 3840 - onset_ticks
+
+            group_candidates = [id_to_cand[cid] for cid in group_diag.candidate_ids if cid in id_to_cand]
+            if not group_candidates:
+                continue
+
+            notes = []
+            for candidate in group_candidates:
+                base_pitch = _STRING_TO_BASE_PITCH.get(candidate.string, 40)
+                pitch = base_pitch + (candidate.parsed_fret or 0)
+                notes.append(
+                    Note(
+                        string=candidate.string,
+                        fret=candidate.parsed_fret or 0,
+                        pitch=pitch,
+                        confidence=candidate.confidence,
+                        provenance=[candidate.to_provenance()],
+                    )
+                )
+
+            events.append(
+                Event(
+                    id=f"bar-{bar_idx}-event-{i+1}",
+                    track_id=TRACK_ID,
+                    timing=Timing(
+                        bar_index=bar_idx,
+                        onset_ticks=onset_ticks,
+                        duration_ticks=duration_ticks,
+                        ticks_per_quarter=DEFAULT_TICKS_PER_QUARTER,
+                        notated_duration=NotatedDuration(value=duration_name, dots=0),
+                    ),
+                    notes=notes,
+                    confidence=sum(c.confidence for c in group_candidates) / len(group_candidates),
+                    provenance=[c.to_provenance() for c in group_candidates],
+                )
+            )
+
+        bars.append(
+            Bar(
+                index=bar_idx,
+                time_signature=TimeSignature(numerator=4, denominator=4),
+                events=events,
+            )
+        )
+
+    # Create warnings and add timing inferred timing warning
+    warnings_list = [
+        WarningItem(
+            code="pdf_only_tab_inferred_timing",
+            message="Timing and rhythmic durations are approximate and inferred from PDF horizontal layout positioning, not source notation.",
+            severity="warning",
+        )
+    ]
+
+    for candidate in tabraw.candidates:
+        if candidate.kind in ("chord-symbol", "technique-text"):
+            warnings_list.append(
+                WarningItem(
+                    code=f"tabraw-{candidate.kind}-not-aligned",
+                    message=f"Tab candidate '{candidate.raw_text}' of kind '{candidate.kind}' is not yet aligned to score timeline.",
+                    severity="warning",
+                    provenance=[candidate.to_provenance()],
+                )
+            )
+
+    score = ScoreIR(
+        metadata=Metadata(
+            title="PDF-Only Inferred Score",
+            composer="Unknown Composer",
+            copyright="Unknown",
+            source=str(tabraw_path),
+        ),
+        conversion=ConversionInfo(
+            tool_name="score2gp",
+            tool_version=__version__,
+            conversion_timestamp=datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+            source_file_hash=None,
+        ),
+        tempo=Tempo(bpm=tempo_bpm),
+        tracks=[_standard_guitar_track()],
+        bars=bars,
+        warnings=warnings_list,
+    )
+
+    # Attach symbols and techniques
+    _attach_symbols_and_techniques(score, tabraw)
+
+    # Construct diagnostics
+    tabraw_candidates_loaded = len(tabraw.candidates)
+    tabraw_fret_candidate_count = len(fret_candidates)
+    tabraw_chord_symbol_candidate_count = sum(1 for c in tabraw.candidates if c.kind == "chord-symbol")
+    tabraw_technique_text_candidate_count = sum(1 for c in tabraw.candidates if c.kind == "technique-text")
+    tabraw_unknown_candidate_count = sum(1 for c in tabraw.candidates if c.kind not in ("fret", "chord-symbol", "technique-text"))
+    tabraw_non_fret_candidate_count = tabraw_candidates_loaded - tabraw_fret_candidate_count
+
+    tabraw_candidates_with_bbox = sum(1 for c in tabraw.candidates if c.bbox is not None)
+    tabraw_candidates_with_x = sum(1 for c in tabraw.candidates if c.x is not None)
+    tabraw_candidates_with_y = sum(1 for c in tabraw.candidates if c.y is not None)
+    tabraw_candidates_with_system = sum(1 for c in tabraw.candidates if c.system_index is not None)
+    tabraw_candidates_with_string = sum(1 for c in tabraw.candidates if c.string is not None)
+    tabraw_candidates_with_bar = sum(1 for c in tabraw.candidates if c.bar_index is not None)
+
+    matched_candidates_set = {
+        n.provenance[0].raw_token_id
+        for b in bars
+        for ev in b.events
+        if not ev.is_rest
+        for n in ev.notes
+        if n.provenance and n.provenance[0].raw_token_id
+    }
+    matched_candidate_count = len(matched_candidates_set)
+    unmatched_tabraw_candidate_count = tabraw_candidates_loaded - matched_candidate_count
+
+    per_bar_diagnostics = []
+    for b in bars:
+        bar_idx = b.index
+        bar_frets = [c for c in fret_candidates if c.bar_index == bar_idx]
+        if not bar_frets:
+            per_bar_diagnostics.append(
+                BarAlignmentDiagnostics(
+                    bar_index=bar_idx,
+                    musicxml_event_count=0,
+                    musicxml_pitched_event_count=0,
+                    musicxml_rest_event_count=0,
+                    scoreir_event_count=len(b.events),
+                    matched_candidate_count=0,
+                    unmatched_musicxml_event_count=0,
+                    unmatched_musicxml_note_count=0,
+                    unmatched_tabraw_candidate_count=0,
+                    chord_event_count=0,
+                    playable_candidate_count=0,
+                    playable_candidate_onset_group_count=0,
+                )
+            )
+        else:
+            bar_x_groups = _candidate_x_groups(bar_frets, tolerance=1.5)
+            per_bar_diagnostics.append(
+                BarAlignmentDiagnostics(
+                    bar_index=bar_idx,
+                    musicxml_event_count=0,
+                    musicxml_pitched_event_count=0,
+                    musicxml_rest_event_count=0,
+                    scoreir_event_count=len(b.events),
+                    matched_candidate_count=sum(len(ev.notes) for ev in b.events if not ev.is_rest),
+                    unmatched_musicxml_event_count=0,
+                    unmatched_musicxml_note_count=0,
+                    unmatched_tabraw_candidate_count=0,
+                    chord_event_count=sum(1 for g in bar_x_groups if g.is_chord_stack),
+                    playable_candidate_count=len(bar_frets),
+                    playable_candidate_onset_group_count=len(bar_x_groups),
+                    bar_x_min=min(c.x for c in bar_frets if c.x is not None),
+                    bar_x_max=max(c.x for c in bar_frets if c.x is not None),
+                    x_span=max(c.x for c in bar_frets if c.x is not None) - min(c.x for c in bar_frets if c.x is not None),
+                    candidate_x_positions=sorted([c.x for c in bar_frets if c.x is not None]),
+                    candidate_x_groups=bar_x_groups,
+                    has_chord_stack=any(g.is_chord_stack for g in bar_x_groups),
+                )
+            )
+
+    pdf_timing_mapping = {
+        "contract_version": "pdf-timing-mapping.v0.7",
+        "refinement_contract_version": PDF_TIMING_REFINEMENT_VERSION,
+        "input_class": "drawn_tab_candidate",
+        "grouping_status": "safe",
+        "grouping_safe": True,
+        "timing_source_safe": False,
+        "musicxml_timing_preflight_status": "not-applicable",
+        "whether_mapping_attempted": False,
+        "whether_mapping_refused": False,
+        "refusal_reason_codes": [],
+        "mapping_quality_classification": "inferred",
+        "refinement_reason_codes": [],
+        "safe_layout_evidence": True,
+        "partial_layout_evidence": False,
+        "ambiguous_layout_evidence": False,
+        "incompatible_layout_evidence": False,
+        "quality": "inferred",
+        "whether_scoreir_written": True,
+        "remediation_hint": "Timing is layout-inferred. No timing source sidecar was provided.",
+        "per_bar": [],
+        "matched_x_onset_group_count": 0,
+        "unmatched_x_group_count": 0,
+        "unmatched_onset_group_count": 0,
+        "mean_absolute_relative_error": None,
+        "max_relative_error": None,
+        "monotonic": None,
+        "ambiguity_count": 0,
+    }
+
+    diagnostics = BuildIrDiagnostics(
+        alignment_strategy="bar-x-order",
+        musicxml_source="none",
+        tabraw_source=str(tabraw_path),
+        musicxml_events_imported=0,
+        musicxml_pitched_events_imported=0,
+        musicxml_rest_events_imported=0,
+        tabraw_candidates_loaded=tabraw_candidates_loaded,
+        tabraw_fret_candidate_count=tabraw_fret_candidate_count,
+        tabraw_non_fret_candidate_count=tabraw_non_fret_candidate_count,
+        tabraw_chord_symbol_candidate_count=tabraw_chord_symbol_candidate_count,
+        tabraw_technique_text_candidate_count=tabraw_technique_text_candidate_count,
+        tabraw_unknown_candidate_count=tabraw_unknown_candidate_count,
+        tabraw_candidates_with_bbox=tabraw_candidates_with_bbox,
+        tabraw_candidates_with_x=tabraw_candidates_with_x,
+        tabraw_candidates_with_y=tabraw_candidates_with_y,
+        tabraw_candidates_with_system=tabraw_candidates_with_system,
+        tabraw_candidates_with_string=tabraw_candidates_with_string,
+        tabraw_candidates_with_bar=tabraw_candidates_with_bar,
+        matched_candidate_count=matched_candidate_count,
+        unmatched_musicxml_event_count=0,
+        unmatched_musicxml_note_count=0,
+        unmatched_tabraw_candidate_count=unmatched_tabraw_candidate_count,
+        ignored_non_playable_candidate_count=tabraw_non_fret_candidate_count,
+        warning_count=len(score.warnings),
+        warnings=[w.model_dump(mode="json", exclude_none=True) for w in score.warnings],
+        per_bar=per_bar_diagnostics,
+        pdf_timing_mapping=pdf_timing_mapping,
+    )
+
+    return score, diagnostics
+
+
 def _synchronize_skipped_system_measures(
     musicxml: MusicXmlImport,
     tabraw: TabRaw,

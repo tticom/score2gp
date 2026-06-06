@@ -303,12 +303,14 @@ def _convert_exit_code_for_error(exc: Exception) -> int:
     1: general parameter, missing input, path, or dependency failure
     2: PDF layout/grouping refusal (scanned PDF, missing barlines, unsupported layout)
     3: MusicXML timing or polyphony validation refusal
-    4: ASCII/MusicXML alignment compatibility refusal
+    4: ASCII/MusicXML alignment compatibility refusal or PDF-only unsafe grouping
     5: GP package writing or validation failure
     """
     if isinstance(exc, BuildIrInputRiskError):
         category = exc.category
-        if category.startswith("ascii_") or "ascii" in category:
+        if category == "pdf_only_tab_grouping_unsafe":
+            return 4
+        elif category.startswith("ascii_") or "ascii" in category:
             return 4
         elif category in {
             "pdf_input_class_scanned_pdf_unsupported",
@@ -338,6 +340,7 @@ def _write_convert_report(
     output_written: bool = False,
     strict: bool = True,
     summary_counts: Optional[dict] = None,
+    pdf_only_diagnostics: Optional[dict] = None,
 ) -> None:
     """Writes a consolidated, private-safe execution JSON report."""
     report = {
@@ -359,6 +362,8 @@ def _write_convert_report(
         "strict": strict,
         "summary_counts": summary_counts or {},
     }
+    if pdf_only_diagnostics is not None:
+        report["pdf_only_diagnostics"] = pdf_only_diagnostics
     try:
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
@@ -380,12 +385,16 @@ def convert_command(
     allow_skip_unboxed: bool = typer.Option(False, "--allow-skip-unboxed-systems"),
     optimize_fret_snapping: bool = typer.Option(False, "--optimize-fret-snapping", help="Enable Left-hand finger position/fret-snapping optimization"),
     pages: Optional[str] = typer.Option(None, "--pages", help="Explicit page range subset to process (e.g. '1-1' or '1-2')."),
+    pdf_only_tab: bool = typer.Option(False, "--pdf-only-tab", help="Enable direct PDF-to-GP conversion without a MusicXML timing source"),
+    ref_gp: Optional[Path] = typer.Option(None, "--ref-gp", help="Path to optional reference GP package for semantic comparison"),
 ) -> None:
     """Run the complete conversion pipeline: extraction, alignment, IR generation, and GP7 package writing."""
     actual_work_dir = work_dir or workdir
     if actual_work_dir is None:
         typer.echo("Error: --work-dir or --workdir option is required.", err=True)
         raise typer.Exit(1)
+
+    pdf_only_diag_payload = None
 
     # Validate PDF file existence early
     if not pdf.exists():
@@ -494,54 +503,55 @@ def convert_command(
             )
         raise typer.Exit(1)
     # Stage 2: Check for MusicXML sidecar requirement
-    if musicxml is None:
-        typer.echo("Error: MusicXML sidecar path must be provided via --musicxml or -m.", err=True)
-        warnings.append({
-            "code": "missing_musicxml",
-            "message": "MusicXML file is required for timing alignment and GP7 conversion.",
-            "severity": "warning",
-        })
-        summary["blocking_reason"] = "missing_musicxml"
-        write_warnings(actual_work_dir / "warnings.json", warnings)
-        write_conversion_report(actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary)
-        if json_report:
-            _write_convert_report(
-                report_path=json_report,
-                status="refused",
-                stage="orchestration-gate",
-                exit_code=1,
-                work_dir=actual_work_dir,
-                error_type="ValueError",
-                refusal_code="missing_musicxml",
-                recommended_action="Provide a matching MusicXML sidecar before attempting build-ir.",
-                output_written=False,
-                strict=strict,
-            )
-        raise typer.Exit(1)
+    if not pdf_only_tab:
+        if musicxml is None:
+            typer.echo("Error: MusicXML sidecar path must be provided via --musicxml or -m.", err=True)
+            warnings.append({
+                "code": "missing_musicxml",
+                "message": "MusicXML file is required for timing alignment and GP7 conversion.",
+                "severity": "warning",
+            })
+            summary["blocking_reason"] = "missing_musicxml"
+            write_warnings(actual_work_dir / "warnings.json", warnings)
+            write_conversion_report(actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary)
+            if json_report:
+                _write_convert_report(
+                    report_path=json_report,
+                    status="refused",
+                    stage="orchestration-gate",
+                    exit_code=1,
+                    work_dir=actual_work_dir,
+                    error_type="ValueError",
+                    refusal_code="missing_musicxml",
+                    recommended_action="Provide a matching MusicXML sidecar before attempting build-ir.",
+                    output_written=False,
+                    strict=strict,
+                )
+            raise typer.Exit(1)
 
-    if not musicxml.exists():
-        typer.echo(f"Error: MusicXML file not found at {musicxml}", err=True)
-        warnings.append({
-            "code": "musicxml_not_found",
-            "message": f"Provided MusicXML file not found: {musicxml}",
-            "severity": "error",
-        })
-        write_warnings(actual_work_dir / "warnings.json", warnings)
-        write_conversion_report(actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary)
-        if json_report:
-            _write_convert_report(
-                report_path=json_report,
-                status="failed",
-                stage="argument-validation",
-                exit_code=1,
-                work_dir=actual_work_dir,
-                error_type="FileNotFoundError",
-                refusal_code="musicxml_not_found",
-                recommended_action=f"Provide a valid MusicXML path. Checked path: {musicxml}",
-                output_written=False,
-                strict=strict,
-            )
-        raise typer.Exit(1)
+        if not musicxml.exists():
+            typer.echo(f"Error: MusicXML file not found at {musicxml}", err=True)
+            warnings.append({
+                "code": "musicxml_not_found",
+                "message": f"Provided MusicXML file not found: {musicxml}",
+                "severity": "error",
+            })
+            write_warnings(actual_work_dir / "warnings.json", warnings)
+            write_conversion_report(actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary)
+            if json_report:
+                _write_convert_report(
+                    report_path=json_report,
+                    status="failed",
+                    stage="argument-validation",
+                    exit_code=1,
+                    work_dir=actual_work_dir,
+                    error_type="FileNotFoundError",
+                    refusal_code="musicxml_not_found",
+                    recommended_action=f"Provide a valid MusicXML path. Checked path: {musicxml}",
+                    output_written=False,
+                    strict=strict,
+                )
+            raise typer.Exit(1)
 
     # Check if there are playable ASCII tab candidates in the TabRaw output
     has_ascii_candidates = any(
@@ -550,7 +560,7 @@ def convert_command(
     )
 
     alignment_path = None
-    if has_ascii_candidates:
+    if has_ascii_candidates and not pdf_only_tab:
         try:
             alignment_dir = actual_work_dir / "alignment"
             alignment = align_ascii_musicxml_files(
@@ -593,16 +603,23 @@ def convert_command(
     diagnostics_path = actual_work_dir / "diagnostics.json"
 
     try:
-        score, diagnostics = build_ir_with_diagnostics_from_files(
-            musicxml_path=musicxml,
-            tabraw_path=tabraw_path,
-            out_path=ir_path,
-            ascii_alignment_path=alignment_path,
-            allow_remediation=allow_remediation,
-            allow_skip_unboxed=allow_skip_unboxed,
-            optimize_fret_snapping=optimize_fret_snapping,
-            page_range=parse_page_range(pages),
-        )
+        if pdf_only_tab:
+            from .build_ir import build_ir_from_tabraw_only
+            score, diagnostics = build_ir_from_tabraw_only(
+                tabraw_path=tabraw_path,
+            )
+            score.to_json_file(ir_path)
+        else:
+            score, diagnostics = build_ir_with_diagnostics_from_files(
+                musicxml_path=musicxml,
+                tabraw_path=tabraw_path,
+                out_path=ir_path,
+                ascii_alignment_path=alignment_path,
+                allow_remediation=allow_remediation,
+                allow_skip_unboxed=allow_skip_unboxed,
+                optimize_fret_snapping=optimize_fret_snapping,
+                page_range=parse_page_range(pages),
+            )
         summary["build_ir"] = {
             "ran": True,
             "failed": False,
@@ -660,6 +677,12 @@ def convert_command(
         typer.echo(f"recommended_action: {recommended_action}", err=True)
 
         if json_report:
+            if pdf_only_tab:
+                pdf_only_diag_payload = {
+                    "pdf_grouping_status": "refused",
+                    "inferred_rhythm_status": None,
+                    "gp_package_written": False,
+                }
             _write_convert_report(
                 report_path=json_report,
                 status="refused",
@@ -674,7 +697,8 @@ def convert_command(
                 summary_counts={
                     "total_candidates": tab_summary.get("candidates_count", 0) if isinstance(tab_summary, dict) else 0,
                     "playable_candidates": sum(1 for c in tab_summary.get("candidates", []) if c.get("parsed_fret") is not None) if isinstance(tab_summary, dict) else 0
-                }
+                },
+                pdf_only_diagnostics=pdf_only_diag_payload
             )
 
         raise typer.Exit(exit_code)
@@ -683,6 +707,12 @@ def convert_command(
         write_warnings(actual_work_dir / "warnings.json", warnings)
         write_conversion_report(actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary)
         if json_report:
+            if pdf_only_tab:
+                pdf_only_diag_payload = {
+                    "pdf_grouping_status": "refused" if getattr(exc, "category", None) == "pdf_only_tab_grouping_unsafe" else "failed",
+                    "inferred_rhythm_status": None,
+                    "gp_package_written": False,
+                }
             _write_convert_report(
                 report_path=json_report,
                 status="failed",
@@ -694,6 +724,7 @@ def convert_command(
                 recommended_action=f"ScoreIR generation failed. Error: {str(exc)}",
                 output_written=False,
                 strict=strict,
+                pdf_only_diagnostics=pdf_only_diag_payload
             )
         raise typer.Exit(1)
 
@@ -728,6 +759,12 @@ def convert_command(
             write_warnings(actual_work_dir / "warnings.json", warnings)
             write_conversion_report(actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary)
             if json_report:
+                if pdf_only_tab:
+                    pdf_only_diag_payload = {
+                        "pdf_grouping_status": "safe",
+                        "inferred_rhythm_status": "applied",
+                        "gp_package_written": False,
+                    }
                 _write_convert_report(
                     report_path=json_report,
                     status="failed",
@@ -739,6 +776,7 @@ def convert_command(
                     recommended_action=f"Check the ScoreIR output and template validity. Error: {str(exc)}",
                     output_written=False,
                     strict=strict,
+                    pdf_only_diagnostics=pdf_only_diag_payload
                 )
             raise typer.Exit(5)
 
@@ -748,6 +786,25 @@ def convert_command(
 
     # Write successful JSON report
     if json_report:
+        if pdf_only_tab:
+            pdf_only_diag_payload = {
+                "pdf_grouping_status": "safe",
+                "inferred_rhythm_status": "applied",
+                "gp_package_written": True,
+            }
+            if ref_gp:
+                try:
+                    from .gp_package import compare_gp
+                    comp = compare_gp(ref_gp, out)
+                    pdf_only_diag_payload["semantic_comparison"] = {
+                        "matches": comp["matches"],
+                        "differences": comp["differences"],
+                    }
+                except Exception as exc:
+                    pdf_only_diag_payload["semantic_comparison"] = {
+                        "matches": False,
+                        "error": f"Semantic comparison failed: {exc}"
+                    }
         _write_convert_report(
             report_path=json_report,
             status="success",
@@ -764,7 +821,8 @@ def convert_command(
                 "matched_candidate_count": diagnostics.matched_candidate_count if diagnostics else 0,
                 "unmatched_musicxml_event_count": diagnostics.unmatched_musicxml_event_count if diagnostics else 0,
                 "unmatched_tabraw_candidate_count": diagnostics.unmatched_tabraw_candidate_count if diagnostics else 0,
-            }
+            },
+            pdf_only_diagnostics=pdf_only_diag_payload
         )
 
     typer.echo(f"Success: GP package written to {out}")
