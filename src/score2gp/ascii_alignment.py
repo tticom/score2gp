@@ -4,6 +4,7 @@ from fractions import Fraction
 import html
 import json
 from pathlib import Path
+import hashlib
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -21,6 +22,14 @@ from .tabraw import TabCandidate, TabRaw
 ALIGNMENT_SCHEMA_VERSION = "ascii-musicxml-alignment.v0.1"
 ALIGNMENT_TOLERANCE = 0.08
 AMBIGUOUS_DISTANCE_EPSILON = 0.015
+
+
+def compute_sha256(path: Path) -> str:
+    sha256 = hashlib.sha256()
+    with open(path, "rb") as f:
+        while chunk := f.read(65536):
+            sha256.update(chunk)
+    return sha256.hexdigest()
 
 
 class AsciiMusicXmlAlignmentWarning(BaseModel):
@@ -60,6 +69,8 @@ class AsciiMusicXmlAlignment(BaseModel):
     schema_version: Literal["ascii-musicxml-alignment.v0.1"] = ALIGNMENT_SCHEMA_VERSION
     source_tabraw_file: str | None = None
     source_musicxml_file: str
+    source_pdf_hash: str | None = None
+    source_musicxml_hash: str | None = None
     parser_versions: dict[str, str] = Field(default_factory=dict)
     tracks_considered: list[str] = Field(default_factory=list)
     parts_considered: list[str] = Field(default_factory=list)
@@ -327,9 +338,25 @@ def _alignment_payload(
     candidates = _playable_ascii_candidates(tabraw)
     part = musicxml.parts[0] if musicxml.parts else None
     summary_counts = _summary_counts(candidates, musicxml, candidate_mappings)
+
+    pdf_hash = None
+    if tabraw.source_pdf:
+        p_path = Path(tabraw.source_pdf)
+        if p_path.exists():
+            pdf_hash = compute_sha256(p_path)
+
+    mxml_hash = None
+    mxml_path_str = musicxml_source or musicxml.source_path
+    if mxml_path_str:
+        m_path = Path(mxml_path_str)
+        if m_path.exists():
+            mxml_hash = compute_sha256(m_path)
+
     return AsciiMusicXmlAlignment(
         source_tabraw_file=tabraw_source,
         source_musicxml_file=musicxml_source or musicxml.source_path,
+        source_pdf_hash=pdf_hash,
+        source_musicxml_hash=mxml_hash,
         parser_versions={
             "ascii_tab": "ascii-tab.v0.1",
             "ascii_timing": "ascii-timing.v0.1",
