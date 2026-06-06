@@ -8,7 +8,7 @@ from typing import Iterable, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .ascii_alignment import ALIGNMENT_SCHEMA_VERSION, AsciiMusicXmlAlignment
+from .ascii_alignment import ALIGNMENT_SCHEMA_VERSION, AsciiMusicXmlAlignment, compute_sha256
 from . import __version__
 from .ir import (
     DEFAULT_TICKS_PER_QUARTER,
@@ -748,8 +748,73 @@ def _ascii_scoreir_gate(
     timing_issues = analyze_musicxml_timing(musicxml)
     fatal_timing_issues = [issue for issue in timing_issues if issue.severity == "error"]
     playable = _ascii_gate_candidates(tabraw)
-    mappings_by_candidate = {mapping.candidate_id: mapping for mapping in alignment.candidate_mappings}
+
+    # Cryptographic SHA-256 Source Hash Validation
+    pdf_path_str = tabraw.source_pdf
+    musicxml_path_str = musicxml.source_path
+
+    active_pdf_hash = None
+    if pdf_path_str and Path(pdf_path_str).exists():
+        active_pdf_hash = compute_sha256(Path(pdf_path_str))
+
+    active_musicxml_hash = None
+    if musicxml_path_str and Path(musicxml_path_str).exists():
+        active_musicxml_hash = compute_sha256(Path(musicxml_path_str))
+
+    sidecar_pdf_hash = alignment.source_pdf_hash
+    sidecar_musicxml_hash = alignment.source_musicxml_hash
+
+    hash_diagnostics = {}
+    has_hash_error = False
+
+    # Check PDF hash
+    if not sidecar_pdf_hash or not isinstance(sidecar_pdf_hash, str) or len(sidecar_pdf_hash) != 64:
+        has_hash_error = True
+        hash_diagnostics["pdf_hash_status"] = "missing" if not sidecar_pdf_hash else "malformed"
+    elif not active_pdf_hash:
+        has_hash_error = True
+        hash_diagnostics["pdf_hash_status"] = "missing_active_file"
+    elif active_pdf_hash != sidecar_pdf_hash:
+        has_hash_error = True
+        hash_diagnostics["pdf_hash_status"] = "mismatch"
+
+    # Check MusicXML hash
+    if not sidecar_musicxml_hash or not isinstance(sidecar_musicxml_hash, str) or len(sidecar_musicxml_hash) != 64:
+        has_hash_error = True
+        hash_diagnostics["musicxml_hash_status"] = "missing" if not sidecar_musicxml_hash else "malformed"
+    elif not active_musicxml_hash:
+        has_hash_error = True
+        hash_diagnostics["musicxml_hash_status"] = "missing_active_file"
+    elif active_musicxml_hash != sidecar_musicxml_hash:
+        has_hash_error = True
+        hash_diagnostics["musicxml_hash_status"] = "mismatch"
+
+    if has_hash_error:
+        details = _ascii_scoreir_gate_details(
+            candidates=playable,
+            aligned_candidate_count=0,
+            alignment_sidecar_present=True,
+            alignment_status=alignment.overall_status,
+            musicxml_timing_safe=not fatal_timing_issues,
+            schema_version=alignment.schema_version,
+            alignment_path=str(ascii_alignment_path),
+        )
+        details.update({
+            "primary_reason_code": "ascii_alignment_stale_sidecar_hash",
+            "reason_codes": ["ascii_alignment_stale_sidecar_hash"],
+            "hash_diagnostics": hash_diagnostics,
+        })
+        _apply_ascii_gate_refusal_details(details, ["ascii_alignment_stale_sidecar_hash"])
+        return AsciiScoreIrGateDecision(
+            allowed=False,
+            category="ascii_alignment_stale_sidecar_hash",
+            message="ASCII alignment sidecar hashes are stale, missing, or mismatched.",
+            details=details,
+            timing_issues=timing_issues,
+        )
+
     compatible_mappings = [mapping for mapping in alignment.candidate_mappings if mapping.result == "compatible"]
+    mappings_by_candidate = {mapping.candidate_id: mapping for mapping in alignment.candidate_mappings}
     details = _ascii_scoreir_gate_details(
         candidates=playable,
         aligned_candidate_count=len(compatible_mappings),
@@ -1077,6 +1142,7 @@ def _ascii_alignment_status_reason(status: str) -> str:
 def _ascii_gate_remediation(reason_code: str) -> str:
     mapping = {
         "pdf_input_class_ascii_tab_requires_alignment": "provide compatible ascii-musicxml-alignment.v0.1 evidence",
+        "ascii_alignment_stale_sidecar_hash": "re-align the source PDF and MusicXML files to update the stale hashes",
         "ascii_alignment_status_unavailable": "provide ASCII timing evidence with usable measure segmentation",
         "ascii_alignment_status_partial": "resolve partial ASCII/MusicXML alignment before ScoreIR writing",
         "ascii_alignment_status_ambiguous": "resolve ambiguous ASCII/MusicXML mapping before ScoreIR writing",
