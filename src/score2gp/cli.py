@@ -308,7 +308,9 @@ def _convert_exit_code_for_error(exc: Exception) -> int:
     """
     if isinstance(exc, BuildIrInputRiskError):
         category = exc.category
-        if category in {
+        if category.startswith("ascii_") or "ascii" in category:
+            return 4
+        elif category in {
             "pdf_input_class_scanned_pdf_unsupported",
             "pdf_input_class_no_extractable_tab_geometry",
             "pdf_input_class_drawn_tab_requires_barlines",
@@ -320,8 +322,6 @@ def _convert_exit_code_for_error(exc: Exception) -> int:
             "musicxml_scoreir_polyphony_gate_refused",
         } or category.startswith("musicxml_"):
             return 3
-        elif category.startswith("ascii_") or "ascii" in category:
-            return 4
     return 1
 
 

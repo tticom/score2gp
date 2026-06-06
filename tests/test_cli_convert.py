@@ -302,6 +302,13 @@ def test_exit_code_mapping_helpers() -> None:
     e4 = BuildIrInputRiskError(category="ascii_alignment_status_unavailable", stage="ascii-scoreir-gate", message="ASCII gate")
     assert _convert_exit_code_for_error(e4) == 4
 
+    e_ascii_pdf_class = BuildIrInputRiskError(
+        category="pdf_input_class_ascii_tab_requires_alignment",
+        stage="layout-gating",
+        message="ASCII tab requires alignment",
+    )
+    assert _convert_exit_code_for_error(e_ascii_pdf_class) == 4
+
     e_other = ValueError("Some other error")
     assert _convert_exit_code_for_error(e_other) == 1
 
