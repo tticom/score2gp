@@ -174,7 +174,110 @@ def test_cli_convert_success(tmp_path) -> None:
     report = json.loads(json_report.read_text(encoding="utf-8"))
     assert report["status"] == "success"
     assert report["exit_code"] == 0
+    assert report["output_written"] is True
+    assert report["strict"] is True
+    assert "diagnostics_paths" in report
     assert report["summary_counts"]["bar_count"] > 0
+
+
+def test_cli_convert_no_strict_failure(tmp_path) -> None:
+    # Test that --no-strict still exits non-zero when no GP output is produced
+    workdir = tmp_path / "workdir"
+    out_gp = tmp_path / "output.gp"
+    json_report = tmp_path / "report.json"
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "convert",
+            "--pdf",
+            str(UNSTRUCTURED_PDF),
+            "--musicxml",
+            str(TINY_MUSICXML),
+            "--out",
+            str(out_gp),
+            "--work-dir",
+            str(workdir),
+            "--json-report",
+            str(json_report),
+            "--no-strict",
+        ],
+    )
+    assert result.exit_code != 0
+    assert not out_gp.exists()
+
+    report = json.loads(json_report.read_text(encoding="utf-8"))
+    assert report["status"] == "refused"
+    assert report["output_written"] is False
+    assert report["strict"] is False
+
+
+def test_cli_convert_preexisting_out_protection(tmp_path) -> None:
+    # Test that a pre-existing output file is not deleted when conversion fails
+    workdir = tmp_path / "workdir"
+    out_gp = tmp_path / "preexisting.gp"
+    out_gp.write_text("pre-existing user content", encoding="utf-8")
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "convert",
+            "--pdf",
+            str(UNSTRUCTURED_PDF),
+            "--musicxml",
+            str(TINY_MUSICXML),
+            "--out",
+            str(out_gp),
+            "--work-dir",
+            str(workdir),
+        ],
+    )
+    assert result.exit_code != 0
+    assert out_gp.exists()
+    assert out_gp.read_text(encoding="utf-8") == "pre-existing user content"
+
+
+def test_cli_convert_json_report_contract(tmp_path) -> None:
+    # Assert JSON report contract fields on failure/refusal
+    workdir = tmp_path / "workdir"
+    out_gp = tmp_path / "output.gp"
+    json_report = tmp_path / "report.json"
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "convert",
+            "--pdf",
+            str(UNSTRUCTURED_PDF),
+            "--musicxml",
+            str(TINY_MUSICXML),
+            "--out",
+            str(out_gp),
+            "--work-dir",
+            str(workdir),
+            "--json-report",
+            str(json_report),
+        ],
+    )
+    assert result.exit_code != 0
+    assert json_report.exists()
+
+    report = json.loads(json_report.read_text(encoding="utf-8"))
+    required_keys = {
+        "status",
+        "stage",
+        "exit_code",
+        "error_type",
+        "refusal_code",
+        "recommended_action",
+        "output_path",
+        "output_written",
+        "work_dir",
+        "diagnostics_paths",
+        "strict",
+    }
+    for key in required_keys:
+        assert key in report
 
 
 def test_exit_code_mapping_helpers() -> None:

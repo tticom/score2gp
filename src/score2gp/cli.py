@@ -331,9 +331,12 @@ def _write_convert_report(
     stage: str,
     exit_code: int,
     work_dir: Path,
+    error_type: Optional[str] = None,
     refusal_code: Optional[str] = None,
     recommended_action: Optional[str] = None,
     output_path: Optional[Path] = None,
+    output_written: bool = False,
+    strict: bool = True,
     summary_counts: Optional[dict] = None,
 ) -> None:
     """Writes a consolidated, private-safe execution JSON report."""
@@ -341,16 +344,19 @@ def _write_convert_report(
         "status": status,
         "stage": stage,
         "exit_code": exit_code,
+        "error_type": error_type,
         "refusal_code": refusal_code,
         "recommended_action": recommended_action,
         "output_path": str(output_path) if output_path else None,
+        "output_written": output_written,
         "work_dir": str(work_dir),
-        "diagnostics": {
+        "diagnostics_paths": {
             "warnings_json": str(work_dir / "warnings.json") if (work_dir / "warnings.json").exists() else None,
             "diagnostics_json": str(work_dir / "diagnostics.json") if (work_dir / "diagnostics.json").exists() else None,
             "grouping_diagnostics_html": str(work_dir / "grouping-diagnostics.html") if (work_dir / "grouping-diagnostics.html").exists() else None,
             "symbol_attachment_diagnostics_html": str(work_dir / "symbol-attachment-diagnostics.html") if (work_dir / "symbol-attachment-diagnostics.html").exists() else None,
         },
+        "strict": strict,
         "summary_counts": summary_counts or {},
     }
     try:
@@ -391,8 +397,11 @@ def convert_command(
                 stage="argument-validation",
                 exit_code=1,
                 work_dir=actual_work_dir,
+                error_type="FileNotFoundError",
                 refusal_code="pdf_not_found",
-                recommended_action=f"Provide a valid PDF path. Checked path: {pdf}"
+                recommended_action=f"Provide a valid PDF path. Checked path: {pdf}",
+                output_written=False,
+                strict=strict,
             )
         raise typer.Exit(1)
 
@@ -415,8 +424,11 @@ def convert_command(
                 stage="pdf-inspection",
                 exit_code=1,
                 work_dir=actual_work_dir,
+                error_type=type(exc).__name__,
                 refusal_code="pdf_inspect_failed",
-                recommended_action=f"Ensure the PDF is a valid born-digital document. Error: {str(exc)}"
+                recommended_action=f"Ensure the PDF is a valid born-digital document. Error: {str(exc)}",
+                output_written=False,
+                strict=strict,
             )
         raise typer.Exit(1)
 
@@ -474,8 +486,11 @@ def convert_command(
                 stage="tab-extraction",
                 exit_code=1,
                 work_dir=actual_work_dir,
+                error_type=type(exc).__name__,
                 refusal_code="tab_extraction_failed",
-                recommended_action=f"Ensure the PDF contains extractable vector tab geometry. Error: {str(exc)}"
+                recommended_action=f"Ensure the PDF contains extractable vector tab geometry. Error: {str(exc)}",
+                output_written=False,
+                strict=strict,
             )
         raise typer.Exit(1)
     # Stage 2: Check for MusicXML sidecar requirement
@@ -496,8 +511,11 @@ def convert_command(
                 stage="orchestration-gate",
                 exit_code=1,
                 work_dir=actual_work_dir,
+                error_type="ValueError",
                 refusal_code="missing_musicxml",
-                recommended_action="Provide a matching MusicXML sidecar before attempting build-ir."
+                recommended_action="Provide a matching MusicXML sidecar before attempting build-ir.",
+                output_written=False,
+                strict=strict,
             )
         raise typer.Exit(1)
 
@@ -517,8 +535,11 @@ def convert_command(
                 stage="argument-validation",
                 exit_code=1,
                 work_dir=actual_work_dir,
+                error_type="FileNotFoundError",
                 refusal_code="musicxml_not_found",
-                recommended_action=f"Provide a valid MusicXML path. Checked path: {musicxml}"
+                recommended_action=f"Provide a valid MusicXML path. Checked path: {musicxml}",
+                output_written=False,
+                strict=strict,
             )
         raise typer.Exit(1)
 
@@ -557,8 +578,11 @@ def convert_command(
                     stage="ascii-alignment",
                     exit_code=1,
                     work_dir=actual_work_dir,
+                    error_type=type(exc).__name__,
                     refusal_code="ascii_alignment_failed",
-                    recommended_action=f"Verify alignment parameters. Error: {str(exc)}"
+                    recommended_action=f"Verify alignment parameters. Error: {str(exc)}",
+                    output_written=False,
+                    strict=strict,
                 )
             raise typer.Exit(1)
 
@@ -619,7 +643,7 @@ def convert_command(
         write_warnings(actual_work_dir / "warnings.json", warnings)
         write_conversion_report(actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary)
 
-        exit_code = _convert_exit_code_for_error(exc) if strict else 0
+        exit_code = _convert_exit_code_for_error(exc)
         refusal_code = exc.category
 
         recommended_action = exc.details.get("remediation_hint")
@@ -642,25 +666,18 @@ def convert_command(
                 stage=exc.stage,
                 exit_code=exit_code,
                 work_dir=actual_work_dir,
+                error_type=type(exc).__name__,
                 refusal_code=refusal_code,
                 recommended_action=recommended_action,
+                output_written=False,
+                strict=strict,
                 summary_counts={
                     "total_candidates": tab_summary.get("candidates_count", 0) if isinstance(tab_summary, dict) else 0,
                     "playable_candidates": sum(1 for c in tab_summary.get("candidates", []) if c.get("parsed_fret") is not None) if isinstance(tab_summary, dict) else 0
                 }
             )
 
-        if out.exists():
-            try:
-                out.unlink()
-            except Exception:
-                pass
-
-        if strict:
-            raise typer.Exit(exit_code)
-        else:
-            typer.echo(json.dumps({"workdir": str(actual_work_dir), "warnings": warnings, "build_ir_failed": True}, indent=2))
-            return
+        raise typer.Exit(exit_code)
     except Exception as exc:
         warnings.append({"code": "build_ir_failed", "message": f"ScoreIR generation failed: {str(exc)}", "severity": "error"})
         write_warnings(actual_work_dir / "warnings.json", warnings)
@@ -672,8 +689,11 @@ def convert_command(
                 stage="build-ir",
                 exit_code=1,
                 work_dir=actual_work_dir,
+                error_type=type(exc).__name__,
                 refusal_code="build_ir_failed",
-                recommended_action=f"ScoreIR generation failed. Error: {str(exc)}"
+                recommended_action=f"ScoreIR generation failed. Error: {str(exc)}",
+                output_written=False,
+                strict=strict,
             )
         raise typer.Exit(1)
 
@@ -684,9 +704,20 @@ def convert_command(
 
     if score is not None:
         try:
-            gp_warnings = write_gp(score, out, template)
+            temp_out = actual_work_dir / "temp_output.gp"
+            gp_warnings = write_gp(score, temp_out, template)
             for w in gp_warnings:
                 warnings.append({"code": "gp_write_warning", "message": w, "severity": "warning"})
+
+            # Validate GP structure and GPIF XML well-formedness
+            validation = validate_gp(temp_out)
+            if validation["errors"]:
+                raise ValueError(f"GP package structure validation failed: {validation['errors']}")
+
+            # Move temp file to final output path atomically / cleanly
+            import shutil
+            shutil.move(str(temp_out), str(out))
+
             summary["gp_write"] = {
                 "succeeded": True,
                 "output_path": str(out),
@@ -703,14 +734,12 @@ def convert_command(
                     stage="gp-write",
                     exit_code=5,
                     work_dir=actual_work_dir,
+                    error_type=type(exc).__name__,
                     refusal_code="gp_write_failed",
-                    recommended_action=f"Check the ScoreIR output and template validity. Error: {str(exc)}"
+                    recommended_action=f"Check the ScoreIR output and template validity. Error: {str(exc)}",
+                    output_written=False,
+                    strict=strict,
                 )
-            if out.exists():
-                try:
-                    out.unlink()
-                except Exception:
-                    pass
             raise typer.Exit(5)
 
     # Write warnings and conversion-report
@@ -726,6 +755,8 @@ def convert_command(
             exit_code=0,
             work_dir=actual_work_dir,
             output_path=out,
+            output_written=True,
+            strict=strict,
             summary_counts={
                 "bar_count": len(score.bars) if score else 0,
                 "event_count": sum(len(bar.events) for bar in score.bars) if score else 0,
