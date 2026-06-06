@@ -332,12 +332,12 @@ def test_ascii_gate_refuses_unmapped_onset(tmp_path) -> None:
 
 def test_ascii_gate_refuses_missing_musicxml_duration_source(tmp_path) -> None:
     tabraw_path = _extract(ASCII_GATE_PDF, tmp_path)
-    alignment_path = _alignment_path(tabraw_path, ASCII_GATE_MUSICXML, tmp_path)
     risky_musicxml = tmp_path / "missing-duration-source.musicxml"
     risky_musicxml.write_text(
         ASCII_GATE_MUSICXML.read_text(encoding="utf-8").replace("<duration>2</duration>", "<duration>0</duration>", 1),
         encoding="utf-8",
     )
+    alignment_path = _alignment_path(tabraw_path, risky_musicxml, tmp_path)
     ir_path = tmp_path / "missing_duration_ascii.ir.json"
 
     with pytest.raises(BuildIrInputRiskError) as raised:
@@ -470,3 +470,105 @@ def test_ascii_gate_refusal_writes_html_diagnostics_report(tmp_path) -> None:
 
     # 9. Expected statement that refusal is expected for unsupported ASCII inputs
     assert "Refusal is expected behavior for unsupported ASCII inputs" in html_content
+
+
+def test_ascii_gate_refuses_missing_pdf_hash(tmp_path) -> None:
+    tabraw_path = _extract(ASCII_GATE_PDF, tmp_path)
+    alignment_path = _alignment_path(tabraw_path, ASCII_GATE_MUSICXML, tmp_path)
+    payload = _load_json(alignment_path)
+    payload["source_pdf_hash"] = None
+    _write_json(alignment_path, payload)
+    ir_path = tmp_path / "missing_pdf_hash.ir.json"
+
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(ASCII_GATE_MUSICXML, tabraw_path, ir_path, ascii_alignment_path=alignment_path)
+
+    assert not ir_path.exists()
+    _assert_gate_refusal(raised.value, "ascii_alignment_stale_sidecar_hash")
+    assert raised.value.details["hash_diagnostics"]["pdf_hash_status"] == "missing"
+
+
+def test_ascii_gate_refuses_missing_musicxml_hash(tmp_path) -> None:
+    tabraw_path = _extract(ASCII_GATE_PDF, tmp_path)
+    alignment_path = _alignment_path(tabraw_path, ASCII_GATE_MUSICXML, tmp_path)
+    payload = _load_json(alignment_path)
+    payload["source_musicxml_hash"] = None
+    _write_json(alignment_path, payload)
+    ir_path = tmp_path / "missing_musicxml_hash.ir.json"
+
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(ASCII_GATE_MUSICXML, tabraw_path, ir_path, ascii_alignment_path=alignment_path)
+
+    assert not ir_path.exists()
+    _assert_gate_refusal(raised.value, "ascii_alignment_stale_sidecar_hash")
+    assert raised.value.details["hash_diagnostics"]["musicxml_hash_status"] == "missing"
+
+
+def test_ascii_gate_refuses_mismatched_pdf_hash(tmp_path) -> None:
+    tabraw_path = _extract(ASCII_GATE_PDF, tmp_path)
+    alignment_path = _alignment_path(tabraw_path, ASCII_GATE_MUSICXML, tmp_path)
+    payload = _load_json(alignment_path)
+    payload["source_pdf_hash"] = "a" * 64
+    _write_json(alignment_path, payload)
+    ir_path = tmp_path / "mismatched_pdf_hash.ir.json"
+
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(ASCII_GATE_MUSICXML, tabraw_path, ir_path, ascii_alignment_path=alignment_path)
+
+    assert not ir_path.exists()
+    _assert_gate_refusal(raised.value, "ascii_alignment_stale_sidecar_hash")
+    assert raised.value.details["hash_diagnostics"]["pdf_hash_status"] == "mismatch"
+
+
+def test_ascii_gate_refuses_mismatched_musicxml_hash(tmp_path) -> None:
+    tabraw_path = _extract(ASCII_GATE_PDF, tmp_path)
+    alignment_path = _alignment_path(tabraw_path, ASCII_GATE_MUSICXML, tmp_path)
+    payload = _load_json(alignment_path)
+    payload["source_musicxml_hash"] = "b" * 64
+    _write_json(alignment_path, payload)
+    ir_path = tmp_path / "mismatched_musicxml_hash.ir.json"
+
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(ASCII_GATE_MUSICXML, tabraw_path, ir_path, ascii_alignment_path=alignment_path)
+
+    assert not ir_path.exists()
+    _assert_gate_refusal(raised.value, "ascii_alignment_stale_sidecar_hash")
+    assert raised.value.details["hash_diagnostics"]["musicxml_hash_status"] == "mismatch"
+
+
+def test_cli_exit_code_maps_stale_ascii_sidecar_to_4() -> None:
+    from score2gp.cli import _convert_exit_code_for_error
+    exc = BuildIrInputRiskError(
+        category="ascii_alignment_stale_sidecar_hash",
+        stage="ascii-scoreir-gate",
+        message="Stale hash refusal",
+        details={},
+    )
+    assert _convert_exit_code_for_error(exc) == 4
+
+
+def test_ascii_gate_accepts_matching_hashes(tmp_path) -> None:
+    tabraw_path = _extract(ASCII_GATE_PDF, tmp_path)
+    alignment_path = _alignment_path(tabraw_path, ASCII_GATE_MUSICXML, tmp_path)
+    ir_path = tmp_path / "valid_matching_hashes.ir.json"
+
+    build_ir_from_files(ASCII_GATE_MUSICXML, tabraw_path, ir_path, ascii_alignment_path=alignment_path)
+    assert ir_path.exists()
+
+
+def test_ascii_gate_refuses_malformed_hashes(tmp_path) -> None:
+    tabraw_path = _extract(ASCII_GATE_PDF, tmp_path)
+    alignment_path = _alignment_path(tabraw_path, ASCII_GATE_MUSICXML, tmp_path)
+    payload = _load_json(alignment_path)
+    payload["source_pdf_hash"] = "short-hash"
+    _write_json(alignment_path, payload)
+    ir_path = tmp_path / "malformed_hash.ir.json"
+
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(ASCII_GATE_MUSICXML, tabraw_path, ir_path, ascii_alignment_path=alignment_path)
+
+    assert not ir_path.exists()
+    _assert_gate_refusal(raised.value, "ascii_alignment_stale_sidecar_hash")
+    assert raised.value.details["hash_diagnostics"]["pdf_hash_status"] == "malformed"
+
+
