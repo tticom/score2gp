@@ -555,3 +555,20 @@ def test_ascii_gate_accepts_matching_hashes(tmp_path) -> None:
     build_ir_from_files(ASCII_GATE_MUSICXML, tabraw_path, ir_path, ascii_alignment_path=alignment_path)
     assert ir_path.exists()
 
+
+def test_ascii_gate_refuses_malformed_hashes(tmp_path) -> None:
+    tabraw_path = _extract(ASCII_GATE_PDF, tmp_path)
+    alignment_path = _alignment_path(tabraw_path, ASCII_GATE_MUSICXML, tmp_path)
+    payload = _load_json(alignment_path)
+    payload["source_pdf_hash"] = "short-hash"
+    _write_json(alignment_path, payload)
+    ir_path = tmp_path / "malformed_hash.ir.json"
+
+    with pytest.raises(BuildIrInputRiskError) as raised:
+        build_ir_from_files(ASCII_GATE_MUSICXML, tabraw_path, ir_path, ascii_alignment_path=alignment_path)
+
+    assert not ir_path.exists()
+    _assert_gate_refusal(raised.value, "ascii_alignment_stale_sidecar_hash")
+    assert raised.value.details["hash_diagnostics"]["pdf_hash_status"] == "malformed"
+
+
