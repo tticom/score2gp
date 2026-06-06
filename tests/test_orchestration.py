@@ -23,6 +23,7 @@ def test_orchestration_convert_success(tmp_path) -> None:
         app,
         [
             "convert",
+            "--pdf",
             str(ASCII_GATE_PDF),
             "--musicxml",
             str(ASCII_GATE_MUSICXML),
@@ -60,6 +61,7 @@ def test_orchestration_convert_missing_musicxml(tmp_path) -> None:
         app,
         [
             "convert",
+            "--pdf",
             str(ASCII_GATE_PDF),
             "--out",
             str(out_gp),
@@ -68,7 +70,7 @@ def test_orchestration_convert_missing_musicxml(tmp_path) -> None:
         ],
     )
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 1, result.output
 
     # GP file should not be created since it halts due to missing MusicXML
     assert not out_gp.exists()
