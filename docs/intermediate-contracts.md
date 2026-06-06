@@ -133,7 +133,7 @@ Per-bar x-to-onset diagnostics compare only playable fret candidates against Mus
 Produced by:
 
 ```powershell
-python -m score2gp.cli convert input.pdf --template fixtures/templates/minimal_gp7.gp --out output.gp --workdir work/run1
+python -m score2gp.cli convert --pdf input.pdf --template fixtures/templates/minimal_gp7.gp --out output.gp --work-dir work/run1
 ```
 
 Current files:
