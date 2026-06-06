@@ -1,0 +1,273 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typer.testing import CliRunner
+import pytest
+
+from score2gp.cli import app
+from score2gp.build_ir import build_ir_from_tabraw_only, BuildIrInputRiskError
+from score2gp.tabraw import TabRaw, TabCandidate
+from score2gp.gp_package import validate_gp
+
+# Public fixtures
+SIMPLE_PDF = Path("tests/fixtures/pdf/generated_pdf_fret_grouped_success.pdf")
+TEMPLATE_GP = Path("fixtures/templates/minimal_gp7.gp")
+
+
+def test_pdf_only_tab_refuses_unsafe_grouping(tmp_path) -> None:
+    # 1. Mock a TabRaw with a layout warning (e.g. pdf_no_systems_detected)
+    tabraw_data = {
+        "schema_version": "tabraw.v0.1",
+        "source_pdf": "test.pdf",
+        "pdf_layout_class": "drawn",
+        "pdf_layout_warnings": ["pdf_no_systems_detected"],
+        "candidates": [
+            {
+                "id": "c-0001",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "line_index": 1,
+                "string": 1,
+                "raw_text": "5",
+                "parsed_fret": 5,
+                "x": 10.0,
+                "y": 20.0,
+                "confidence": 0.9,
+            }
+        ],
+        "warnings": [],
+    }
+    tabraw_file = tmp_path / "tabraw_unsafe.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+
+    # Assert that direct build raises BuildIrInputRiskError with pdf_only_tab_grouping_unsafe
+    with pytest.raises(BuildIrInputRiskError) as exc_info:
+        build_ir_from_tabraw_only(tabraw_file)
+    assert exc_info.value.category == "pdf_only_tab_grouping_unsafe"
+    assert "pdf_no_systems_detected" in str(exc_info.value)
+
+    # Assert CLI convert returns exit code 4
+    out_gp = tmp_path / "output.gp"
+    workdir = tmp_path / "workdir"
+    json_report = tmp_path / "report.json"
+
+    # We manually override the generated tab_raw in workdir by running convert command,
+    # or we can mock extract_tab_file if we want, but actually running convert on
+    # generated_unstructured_tab_text.pdf (which has no systems/barlines) will refuse.
+    # Let's test using generated_unstructured_tab_text.pdf directly in the CLI!
+    unstructured_pdf = Path("tests/fixtures/pdf/generated_unstructured_tab_text.pdf")
+    result = CliRunner().invoke(
+        app,
+        [
+            "convert",
+            "--pdf",
+            str(unstructured_pdf),
+            "--pdf-only-tab",
+            "--out",
+            str(out_gp),
+            "--work-dir",
+            str(workdir),
+            "--json-report",
+            str(json_report),
+        ],
+    )
+    assert result.exit_code == 4
+    assert json_report.exists()
+    report = json.loads(json_report.read_text(encoding="utf-8"))
+    assert report["status"] == "refused"
+    assert report["exit_code"] == 4
+    assert report["refusal_code"] == "pdf_only_tab_grouping_unsafe"
+    assert report["pdf_only_diagnostics"]["pdf_grouping_status"] == "refused"
+
+
+def test_pdf_only_tab_rhythm_inference_policy(tmp_path) -> None:
+    # 2. Mock a TabRaw with a bar containing 4 x-groups to verify rhythm grid logic
+    tabraw_data = {
+        "schema_version": "tabraw.v0.1",
+        "source_pdf": "test.pdf",
+        "pdf_layout_class": "drawn",
+        "pdf_layout_warnings": [],
+        "candidates": [
+            # Event 1: x=10
+            {
+                "id": "c-0001",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "line_index": 1,
+                "string": 1,
+                "raw_text": "5",
+                "parsed_fret": 5,
+                "x": 10.0,
+                "y": 20.0,
+                "confidence": 0.9,
+            },
+            # Event 2: x=20
+            {
+                "id": "c-0002",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "line_index": 2,
+                "string": 2,
+                "raw_text": "7",
+                "parsed_fret": 7,
+                "x": 20.0,
+                "y": 20.0,
+                "confidence": 0.9,
+            },
+            # Event 3: x=30 (chord: 2 candidates sharing near-identical x-position)
+            {
+                "id": "c-0003",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "line_index": 3,
+                "string": 3,
+                "raw_text": "6",
+                "parsed_fret": 6,
+                "x": 30.0,
+                "y": 20.0,
+                "confidence": 0.9,
+            },
+            {
+                "id": "c-0004",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "line_index": 4,
+                "string": 4,
+                "raw_text": "7",
+                "parsed_fret": 7,
+                "x": 30.1,  # within 1.5 tolerance
+                "y": 20.0,
+                "confidence": 0.9,
+            },
+            # Event 4: x=40
+            {
+                "id": "c-0005",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "line_index": 5,
+                "string": 5,
+                "raw_text": "5",
+                "parsed_fret": 5,
+                "x": 40.0,
+                "y": 20.0,
+                "confidence": 0.9,
+            },
+        ],
+        "warnings": [],
+    }
+    tabraw_file = tmp_path / "tabraw_rhythm.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+
+    score, diagnostics = build_ir_from_tabraw_only(tabraw_file)
+
+    # 4 x-groups should lead to eighth notes (grid_spacing = 480)
+    assert len(score.bars) == 1
+    bar = score.bars[0]
+    # Onsets: 0, 480, 960, 1440
+    # Durations: 480, 480, 480, 2400 (filling to 3840)
+    events = bar.events
+    assert len(events) == 4
+
+    assert events[0].timing.onset_ticks == 0
+    assert events[0].timing.duration_ticks == 480
+    assert events[0].timing.notated_duration.value == "eighth"
+
+    assert events[1].timing.onset_ticks == 480
+    assert events[1].timing.duration_ticks == 480
+
+    # Event 3 is a chord (contains 2 notes)
+    assert events[2].timing.onset_ticks == 960
+    assert events[2].timing.duration_ticks == 480
+    assert len(events[2].notes) == 2
+
+    assert events[3].timing.onset_ticks == 1440
+    assert events[3].timing.duration_ticks == 2400  # 3840 - 1440
+
+    # Provenance warning indicating Timing layout inference is present
+    warning_codes = [w.code for w in score.warnings]
+    assert "pdf_only_tab_inferred_timing" in warning_codes
+
+
+def test_pdf_only_tab_succeeds_and_generates_valid_gp(tmp_path) -> None:
+    # 3. Successful conversion of a safe public PDF fixture directly without MusicXML
+    out_gp = tmp_path / "output.gp"
+    workdir = tmp_path / "workdir"
+    json_report = tmp_path / "report.json"
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "convert",
+            "--pdf",
+            str(SIMPLE_PDF),
+            "--pdf-only-tab",
+            "--out",
+            str(out_gp),
+            "--work-dir",
+            str(workdir),
+            "--json-report",
+            str(json_report),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert out_gp.exists()
+
+    # Structurally validate GP file
+    validation = validate_gp(out_gp)
+    assert not validation["errors"]
+
+
+def test_pdf_only_tab_json_report_fields(tmp_path) -> None:
+    # 4. Verify presence of grouping status, rhythm status, and comparison metrics in report
+    out_gp = tmp_path / "output.gp"
+    workdir = tmp_path / "workdir"
+    json_report = tmp_path / "report.json"
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "convert",
+            "--pdf",
+            str(SIMPLE_PDF),
+            "--pdf-only-tab",
+            "--out",
+            str(out_gp),
+            "--work-dir",
+            str(workdir),
+            "--json-report",
+            str(json_report),
+            "--ref-gp",
+            str(TEMPLATE_GP),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert json_report.exists()
+
+    report = json.loads(json_report.read_text(encoding="utf-8"))
+    assert "pdf_only_diagnostics" in report
+    diagnostics = report["pdf_only_diagnostics"]
+    assert diagnostics["pdf_grouping_status"] == "safe"
+    assert diagnostics["inferred_rhythm_status"] == "applied"
+    assert diagnostics["gp_package_written"] is True
+    assert "semantic_comparison" in diagnostics
+    assert "matches" in diagnostics["semantic_comparison"]
+    assert "differences" in diagnostics["semantic_comparison"]
