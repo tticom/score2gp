@@ -1722,18 +1722,50 @@ def build_ir_from_tabraw_only(
         6: 40,  # E2
     }
 
-    bars = []
-    max_bar = max(c.bar_index for c in fret_candidates if c.bar_index is not None)
+    def split_duplicate_strings(candidates: list[TabCandidate]) -> list[list[TabCandidate]]:
+        sorted_cands = sorted(candidates, key=lambda c: (c.x or 0.0, c.string or 0, c.id))
+        subgroups = []
+        current_subgroup = []
+        current_strings = set()
+        for c in sorted_cands:
+            if c.string in current_strings:
+                subgroups.append(current_subgroup)
+                current_subgroup = [c]
+                current_strings = {c.string} if c.string is not None else set()
+            else:
+                current_subgroup.append(c)
+                if c.string is not None:
+                    current_strings.add(c.string)
+        if current_subgroup:
+            subgroups.append(current_subgroup)
+        return subgroups
 
-    for bar_idx in range(1, max_bar + 1):
-        bar_frets = [c for c in fret_candidates if c.bar_index == bar_idx]
+    # Get unique source bar keys in stable reading order:
+    # (page_index, system_index, staff_index, bar_index)
+    source_bar_keys = sorted(list({(c.page_index or 1, c.system_index, c.staff_index or 1, c.bar_index) for c in fret_candidates}))
+
+    bars = []
+    output_bar_to_frets = {}
+
+    for output_bar_idx, source_bar_key in enumerate(source_bar_keys, start=1):
+        page_idx, sys_idx, staff_idx, local_bar_idx = source_bar_key
+        bar_frets = [
+            c for c in fret_candidates
+            if (c.page_index or 1) == page_idx
+            and c.system_index == sys_idx
+            and (c.staff_index or 1) == staff_idx
+            and c.bar_index == local_bar_idx
+        ]
+
+        output_bar_to_frets[output_bar_idx] = bar_frets
+
         if not bar_frets:
-            # Create a rest event filling the bar
+            # Create a rest event filling the bar (should be unreachable as keys are from fret_candidates)
             rest_event = Event(
-                id=f"bar-{bar_idx}-rest",
+                id=f"bar-{output_bar_idx}-rest",
                 track_id=TRACK_ID,
                 timing=Timing(
-                    bar_index=bar_idx,
+                    bar_index=output_bar_idx,
                     onset_ticks=0,
                     duration_ticks=3840,
                     ticks_per_quarter=DEFAULT_TICKS_PER_QUARTER,
@@ -1745,7 +1777,7 @@ def build_ir_from_tabraw_only(
             )
             bars.append(
                 Bar(
-                    index=bar_idx,
+                    index=output_bar_idx,
                     time_signature=TimeSignature(numerator=4, denominator=4),
                     events=[rest_event],
                 )
@@ -1754,12 +1786,23 @@ def build_ir_from_tabraw_only(
 
         # Group by x-position
         x_groups = _candidate_x_groups(bar_frets, tolerance=1.5)
-        N = len(x_groups)
-        if N > 128:
+
+        # Split duplicate strings to prevent false stacking
+        id_to_cand = {c.id: c for c in bar_frets}
+        event_subgroups = []
+        for group_diag in x_groups:
+            group_candidates = [id_to_cand[cid] for cid in group_diag.candidate_ids if cid in id_to_cand]
+            if not group_candidates:
+                continue
+            split_groups = split_duplicate_strings(group_candidates)
+            event_subgroups.extend(split_groups)
+
+        N = len(event_subgroups)
+        if N > 64:
             raise BuildIrInputRiskError(
                 category="pdf_only_tab_grouping_unsafe",
                 stage="layout-gating",
-                message=f"PDF-only tab building refused: too many x-groups ({N}) in bar {bar_idx}.",
+                message=f"PDF-only tab building refused: too many events ({N}) in bar {output_bar_idx}.",
             )
 
         if N <= 8:
@@ -1775,18 +1818,13 @@ def build_ir_from_tabraw_only(
             grid_spacing = 60
             duration_name = "64th"
 
-        id_to_cand = {c.id: c for c in bar_frets}
         events = []
-        for i, group_diag in enumerate(x_groups):
+        for i, subgroup_candidates in enumerate(event_subgroups):
             onset_ticks = i * grid_spacing
             duration_ticks = grid_spacing if i < N - 1 else 3840 - onset_ticks
 
-            group_candidates = [id_to_cand[cid] for cid in group_diag.candidate_ids if cid in id_to_cand]
-            if not group_candidates:
-                continue
-
             notes = []
-            for candidate in group_candidates:
+            for candidate in subgroup_candidates:
                 base_pitch = _STRING_TO_BASE_PITCH.get(candidate.string, 40)
                 pitch = base_pitch + (candidate.parsed_fret or 0)
                 notes.append(
@@ -1801,24 +1839,24 @@ def build_ir_from_tabraw_only(
 
             events.append(
                 Event(
-                    id=f"bar-{bar_idx}-event-{i+1}",
+                    id=f"bar-{output_bar_idx}-event-{i+1}",
                     track_id=TRACK_ID,
                     timing=Timing(
-                        bar_index=bar_idx,
+                        bar_index=output_bar_idx,
                         onset_ticks=onset_ticks,
                         duration_ticks=duration_ticks,
                         ticks_per_quarter=DEFAULT_TICKS_PER_QUARTER,
                         notated_duration=NotatedDuration(value=duration_name, dots=0),
                     ),
                     notes=notes,
-                    confidence=sum(c.confidence for c in group_candidates) / len(group_candidates),
-                    provenance=[c.to_provenance() for c in group_candidates],
+                    confidence=sum(c.confidence for c in subgroup_candidates) / len(subgroup_candidates),
+                    provenance=[c.to_provenance() for c in subgroup_candidates],
                 )
             )
 
         bars.append(
             Bar(
-                index=bar_idx,
+                index=output_bar_idx,
                 time_signature=TimeSignature(numerator=4, denominator=4),
                 events=events,
             )
@@ -1895,7 +1933,7 @@ def build_ir_from_tabraw_only(
     per_bar_diagnostics = []
     for b in bars:
         bar_idx = b.index
-        bar_frets = [c for c in fret_candidates if c.bar_index == bar_idx]
+        bar_frets = output_bar_to_frets.get(bar_idx, [])
         if not bar_frets:
             per_bar_diagnostics.append(
                 BarAlignmentDiagnostics(
