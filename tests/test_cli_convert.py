@@ -16,21 +16,29 @@ OVERFULL_MUSICXML = Path("tests/fixtures/musicxml/audiveris_like_overfull_bar.mu
 UNSTRUCTURED_PDF = Path("tests/fixtures/pdf/generated_unstructured_tab_text.pdf")
 
 
+import re
+
+def clean_ansi(text: str) -> str:
+    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+    return ansi_escape.sub('', text)
+
+
 def test_cli_help() -> None:
     # 1. CLI help includes convert
     result = CliRunner().invoke(app, ["--help"])
     assert result.exit_code == 0
-    assert "convert" in result.output
+    assert "convert" in clean_ansi(result.output)
 
     # 2. convert --help includes all required options
     result = CliRunner().invoke(app, ["convert", "--help"])
     assert result.exit_code == 0
-    assert "--pdf" in result.output
-    assert "--musicxml" in result.output
-    assert "--out" in result.output
-    assert "--work-dir" in result.output
-    assert "--json-report" in result.output
-    assert "--strict" in result.output
+    output = clean_ansi(result.output)
+    assert "--pdf" in output
+    assert "--musicxml" in output
+    assert "--out" in output
+    assert "--work-dir" in output
+    assert "--json-report" in output
+    assert "--strict" in output
 
 
 def test_cli_convert_missing_pdf(tmp_path) -> None:
@@ -302,4 +310,4 @@ def test_existing_subcommands_still_work() -> None:
     # 11. Existing CLI subcommands still work (e.g. export-schema or validate)
     result = CliRunner().invoke(app, ["export-schema", "--help"])
     assert result.exit_code == 0
-    assert "--out" in result.output
+    assert "--out" in clean_ansi(result.output)
