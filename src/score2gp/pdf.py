@@ -43,19 +43,6 @@ WARN_SCANNED_PDF_UNSUPPORTED = "pdf_input_class_scanned_pdf_unsupported"
 WARN_NO_EXTRACTABLE_TAB_GEOMETRY = "pdf_input_class_no_extractable_tab_geometry"
 
 
-def _detect_notation_staff_groups(page: Any) -> list[list[_LineSegment]]:
-    """Detect non-TAB 5-line staff groups on the page."""
-    notation_groups = []
-    segments = list(_drawing_segments(page.get_drawings()))
-    raw_horizontal = sorted((segment for segment in segments if segment.is_horizontal), key=lambda segment: segment.y0)
-    horizontal = sorted(merge_collinear_horizontal_segments(raw_horizontal), key=lambda segment: segment.y0)
-    for group in _tab_line_groups(horizontal):
-        classification = classify_staff_line_group(group, page)
-        if classification == "notation" and len(group) == 5:
-            notation_groups.append(group)
-    return notation_groups
-
-
 def inspect_pdf(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
     pdf_path = Path(path)
     out = Path(out_dir)
