@@ -703,3 +703,206 @@ def test_inspect_pdf_positive_control_notation_staff_detected(tmp_path) -> None:
     json_str = json.dumps(diags)
     assert "/home/tticom" not in json_str
     assert "fixtures/private" not in json_str
+
+
+def test_diagnostics_morphology_schema_serialization() -> None:
+    from score2gp.pdf_staff_geometry import NotationStaffMorphology, NotationStaffDiagnostics, NotationStaffGeometry, LocalPrimitivesSummary
+
+    geom = NotationStaffGeometry(
+        page_index=1,
+        system_index=1,
+        staff_index=1,
+        x0=50.0,
+        y0=100.0,
+        x1=500.0,
+        y1=132.0,
+        line_y_coords=[100.0, 108.0, 116.0, 124.0, 132.0]
+    )
+    primitives = LocalPrimitivesSummary(
+        line_count=5,
+        curve_count=0,
+        rect_count=0,
+        text_span_count_by_font={}
+    )
+
+    diag_legacy = NotationStaffDiagnostics(
+        staff=geom,
+        primitives=primitives
+    )
+    assert diag_legacy.morphology is None
+    dumped_legacy = diag_legacy.model_dump() if hasattr(diag_legacy, "model_dump") else diag_legacy.dict()
+    assert "morphology" in dumped_legacy
+    assert dumped_legacy["morphology"] is None
+
+    morph = NotationStaffMorphology(
+        staff_line_horizontal=5,
+        non_staff_horizontal=1,
+        vertical_stroke_candidate=2,
+        diagonal_stroke_candidate=1,
+        rectangle_candidate=1,
+        curve_candidate=1,
+        text_span_by_font={"TestFont": 2}
+    )
+    diag_full = NotationStaffDiagnostics(
+        staff=geom,
+        primitives=primitives,
+        morphology=morph
+    )
+    assert diag_full.morphology == morph
+    dumped_full = diag_full.model_dump() if hasattr(diag_full, "model_dump") else diag_full.dict()
+    assert dumped_full["morphology"]["staff_line_horizontal"] == 5
+    assert dumped_full["morphology"]["text_span_by_font"] == {"TestFont": 2}
+
+
+def test_diagnostics_morphology_classification_and_counting() -> None:
+    from score2gp.pdf_staff_notation_diagnostics import build_notation_diagnostics
+
+    class MockPoint:
+        def __init__(self, x: float, y: float):
+            self.x = x
+            self.y = y
+
+    class MockRect:
+        def __init__(self, x0: float, y0: float, x1: float, y1: float):
+            self.x0 = x0
+            self.y0 = y0
+            self.x1 = x1
+            self.y1 = y1
+
+    group = [
+        _LineSegment(50.0, 100.0, 500.0, 100.0),
+        _LineSegment(50.0, 108.0, 500.0, 108.0),
+        _LineSegment(50.0, 116.0, 500.0, 116.0),
+        _LineSegment(50.0, 124.0, 500.0, 124.0),
+        _LineSegment(50.0, 132.0, 500.0, 132.0),
+    ]
+
+    drawings = [
+        {
+            "rect": (40.0, 70.0, 510.0, 160.0),
+            "items": [
+                # 5 staff line horizontals
+                ("l", MockPoint(50.0, 100.0), MockPoint(500.0, 100.0)),
+                ("l", MockPoint(50.0, 108.0), MockPoint(500.0, 108.0)),
+                ("l", MockPoint(50.0, 116.0), MockPoint(500.0, 116.0)),
+                ("l", MockPoint(50.0, 124.0), MockPoint(500.0, 124.0)),
+                ("l", MockPoint(50.0, 132.0), MockPoint(500.0, 132.0)),
+                # 1 non-staff horizontal
+                ("l", MockPoint(100.0, 112.0), MockPoint(200.0, 112.0)),
+                # 1 vertical candidate
+                ("l", MockPoint(150.0, 100.0), MockPoint(150.0, 120.0)),
+                # 1 diagonal candidate
+                ("l", MockPoint(100.0, 100.0), MockPoint(110.0, 110.0)),
+                # 1 rectangle candidate
+                ("re", MockRect(120.0, 105.0, 140.0, 115.0)),
+                # 1 curve candidate
+                ("c", MockPoint(100.0, 100.0), MockPoint(105.0, 105.0), MockPoint(110.0, 105.0), MockPoint(115.0, 100.0)),
+                # 1 out of zone horizontal (ignored)
+                ("l", MockPoint(50.0, 40.0), MockPoint(500.0, 40.0))
+            ]
+        }
+    ]
+
+    text_dict = {
+        "blocks": [
+            {
+                "lines": [
+                    {
+                        "spans": [
+                            # Inside span
+                            {"text": "A", "font": "TestFont", "bbox": (100.0, 100.0, 110.0, 110.0)},
+                            # Out of zone span
+                            {"text": "B", "font": "TestFont", "bbox": (100.0, 40.0, 110.0, 50.0)},
+                            # Empty span
+                            {"text": "   ", "font": "TestFont", "bbox": (100.0, 100.0, 110.0, 110.0)}
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
+
+    class MockPage:
+        def get_drawings(self) -> list[dict]:
+            return drawings
+        def get_text(self, kind: str) -> dict | list:
+            if kind == "dict":
+                return text_dict
+            return []
+
+    page = MockPage()
+    notation_diags = build_notation_diagnostics(page, page_index=1, notation_groups=[group])
+
+    assert len(notation_diags.staves) == 1
+    diag = notation_diags.staves[0]
+    assert diag.morphology is not None
+
+    assert diag.morphology.staff_line_horizontal == 5
+    assert diag.morphology.non_staff_horizontal == 1
+    assert diag.morphology.vertical_stroke_candidate == 1
+    assert diag.morphology.diagonal_stroke_candidate == 1
+    assert diag.morphology.rectangle_candidate == 1
+    assert diag.morphology.curve_candidate == 1
+    assert diag.morphology.text_span_by_font == {"TestFont": 1}
+
+
+def test_diagnostics_morphology_privacy_gating() -> None:
+    from score2gp.pdf_staff_notation_diagnostics import build_notation_diagnostics
+
+    class MockPoint:
+        def __init__(self, x: float, y: float):
+            self.x = x
+            self.y = y
+
+    group = [
+        _LineSegment(50.0, 100.0, 500.0, 100.0),
+        _LineSegment(50.0, 108.0, 500.0, 108.0),
+        _LineSegment(50.0, 116.0, 500.0, 116.0),
+        _LineSegment(50.0, 124.0, 500.0, 124.0),
+        _LineSegment(50.0, 132.0, 500.0, 132.0),
+    ]
+
+    drawings = []
+    text_dict = {
+        "blocks": [
+            {
+                "lines": [
+                    {
+                        "spans": [
+                            # A span containing private/leaked string data and PUA glyphs
+                            {
+                                "text": "Sensitive data /home/user/private.pdf \ue001",
+                                "font": "LeakedFontName",
+                                "bbox": (100.0, 100.0, 200.0, 110.0)
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
+
+    class MockPage:
+        def get_drawings(self) -> list[dict]:
+            return drawings
+        def get_text(self, kind: str) -> dict | list:
+            if kind == "dict":
+                return text_dict
+            return []
+
+    page = MockPage()
+    notation_diags = build_notation_diagnostics(page, page_index=1, notation_groups=[group])
+
+    diag = notation_diags.staves[0]
+    dumped = diag.model_dump() if hasattr(diag, "model_dump") else diag.dict()
+
+    # Verify morphology has only font name count
+    assert dumped["morphology"]["text_span_by_font"] == {"LeakedFontName": 1}
+
+    # Serialize to JSON and run checks
+    json_str = json.dumps(dumped)
+    assert "/home/user" not in json_str
+    assert "Sensitive" not in json_str
+    assert "private.pdf" not in json_str
+    # Check that PUA characters are not serialized
+    assert "\ue001" not in json_str
