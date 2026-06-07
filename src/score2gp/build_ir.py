@@ -59,6 +59,7 @@ TRACK_ID = "gtr-1"
 DIAGNOSTICS_SCHEMA_VERSION = "build-ir-diagnostics.v0.1"
 ASCII_SCOREIR_GATE_VERSION = "ascii-scoreir-gate.v0.1"
 PDF_TIMING_REFINEMENT_VERSION = "pdf-timing-refinement.v1.0"
+PDF_ONLY_CHORD_X_TOLERANCE_PT = 10.0
 
 _MUSICXML_INVALID_TIMING_CODES = {
     "musicxml-overfull-bar",
@@ -1785,7 +1786,7 @@ def build_ir_from_tabraw_only(
             continue
 
         # Group by x-position
-        x_groups = _candidate_x_groups(bar_frets, tolerance=1.5)
+        x_groups = _candidate_x_groups(bar_frets, tolerance=PDF_ONLY_CHORD_X_TOLERANCE_PT)
 
         # Split duplicate strings to prevent false stacking
         id_to_cand = {c.id: c for c in bar_frets}
@@ -1952,7 +1953,7 @@ def build_ir_from_tabraw_only(
                 )
             )
         else:
-            bar_x_groups = _candidate_x_groups(bar_frets, tolerance=1.5)
+            bar_x_groups = _candidate_x_groups(bar_frets, tolerance=PDF_ONLY_CHORD_X_TOLERANCE_PT)
             per_bar_diagnostics.append(
                 BarAlignmentDiagnostics(
                     bar_index=bar_idx,
