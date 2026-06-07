@@ -43,6 +43,22 @@ WARN_SCANNED_PDF_UNSUPPORTED = "pdf_input_class_scanned_pdf_unsupported"
 WARN_NO_EXTRACTABLE_TAB_GEOMETRY = "pdf_input_class_no_extractable_tab_geometry"
 
 
+def _detect_notation_staff_groups(page: Any) -> list[list[_LineSegment]]:
+    """Detect non-TAB 5-line staff groups on the page."""
+    notation_groups = []
+    try:
+        segments = list(_drawing_segments(page.get_drawings()))
+        raw_horizontal = sorted((segment for segment in segments if segment.is_horizontal), key=lambda segment: segment.y0)
+        horizontal = sorted(merge_collinear_horizontal_segments(raw_horizontal), key=lambda segment: segment.y0)
+        for group in _tab_line_groups(horizontal):
+            classification = classify_staff_line_group(group, page)
+            if classification == "notation" and len(group) == 5:
+                notation_groups.append(group)
+    except Exception:
+        pass
+    return notation_groups
+
+
 def inspect_pdf(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
     pdf_path = Path(path)
     out = Path(out_dir)
@@ -98,6 +114,17 @@ def inspect_pdf(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
             pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
             image_path = pages_dir / f"page-{index:03d}.png"
             pix.save(image_path)
+            
+            # Collect notation staves for diagnostics
+            notation_groups = _detect_notation_staff_groups(page)
+
+            from .pdf_staff_notation_diagnostics import build_notation_diagnostics
+            try:
+                notation_diags = build_notation_diagnostics(page, index, notation_groups)
+                diags_dict = notation_diags.model_dump() if hasattr(notation_diags, "model_dump") else notation_diags.dict()
+            except Exception:
+                diags_dict = {"staves": []}
+
             page_info = {
                 "page": index,
                 "width": page.rect.width,
@@ -114,6 +141,7 @@ def inspect_pdf(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
                     for block in text_blocks
                     if block[4].strip()
                 ],
+                "pdf_staff_notation_diagnostics": diags_dict,
             }
             summary["pages"].append(page_info)
 
