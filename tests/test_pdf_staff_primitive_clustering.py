@@ -41,18 +41,18 @@ def test_cluster_ordering_is_deterministic_left_to_right() -> None:
 def test_wide_primitive_does_not_merge_far_compact_primitives() -> None:
     prims = [
         PrimitiveGeometry("line", 10.0, 100.0, 10.0, 110.0),
-        PrimitiveGeometry("slur", 10.0, 95.0, 50.0, 98.0), # wide
+        PrimitiveGeometry("wide_curve", 10.0, 95.0, 50.0, 98.0), # wide
         PrimitiveGeometry("line", 50.0, 100.0, 50.0, 110.0),
     ]
     # staff_space = 2.5
-    # The slur is wide (40.0 > 2.0 * 2.5 = 5.0)
-    # The two lines should NOT be merged into one cluster by the slur
+    # The wide curve-like primitive is wide (40.0 > 2.0 * 2.5 = 5.0)
+    # The two lines should NOT be merged into one cluster by the wide primitive
     clusters = cluster_x_aligned_primitives(prims, 2.5)
-    # Actually, the slur will cluster with the first line (since center 30 is too far, but dx overlap? No, overlap is ignored for wide primitives)
+    # Actually, the wide curve will cluster with the first line (since center 30 is too far, but dx overlap? No, overlap is ignored for wide primitives)
     # Wait, the rule is: `is_compact_prim = width <= 2.0 * staff_space`
-    # For slur, width is 40.0. `is_compact_prim` is False. So overlap is False.
+    # For wide_curve, width is 40.0. `is_compact_prim` is False. So overlap is False.
     # It will only cluster by center distance! Center is 30.
-    # Distance to 10 is 20 > 0.5*2.5. So slur is its own cluster.
+    # Distance to 10 is 20 > 0.5*2.5. So wide_curve is its own cluster.
     assert len(clusters) == 3
 
 def test_aggregate_counts_are_deterministic_and_correct() -> None:
