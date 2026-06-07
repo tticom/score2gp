@@ -98,6 +98,27 @@ def inspect_pdf(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
             pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
             image_path = pages_dir / f"page-{index:03d}.png"
             pix.save(image_path)
+            
+            # Collect notation staves for diagnostics
+            notation_groups = []
+            try:
+                segments = list(_drawing_segments(page.get_drawings()))
+                raw_horizontal = sorted((segment for segment in segments if segment.is_horizontal), key=lambda segment: segment.y0)
+                horizontal = sorted(merge_collinear_horizontal_segments(raw_horizontal), key=lambda segment: segment.y0)
+                for group in _tab_line_groups(horizontal):
+                    classification = classify_staff_line_group(group, page)
+                    if classification in ("notation", "ambiguous") and len(group) == 5:
+                        notation_groups.append(group)
+            except Exception:
+                pass
+
+            from .pdf_staff_notation_diagnostics import build_notation_diagnostics
+            try:
+                notation_diags = build_notation_diagnostics(page, index, notation_groups)
+                diags_dict = notation_diags.model_dump() if hasattr(notation_diags, "model_dump") else notation_diags.dict()
+            except Exception:
+                diags_dict = {"staves": []}
+
             page_info = {
                 "page": index,
                 "width": page.rect.width,
@@ -114,6 +135,7 @@ def inspect_pdf(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
                     for block in text_blocks
                     if block[4].strip()
                 ],
+                "pdf_staff_notation_diagnostics": diags_dict,
             }
             summary["pages"].append(page_info)
 
