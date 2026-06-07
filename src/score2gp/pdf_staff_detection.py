@@ -1,11 +1,13 @@
 from __future__ import annotations
 from typing import Any
 from .pdf import (
+    _tab_line_groups,
+    classify_staff_line_group,
+)
+from .pdf_geometry import (
     _LineSegment,
     _drawing_segments,
     merge_collinear_horizontal_segments,
-    _tab_line_groups,
-    classify_staff_line_group,
 )
 
 def _detect_notation_staff_groups(page: Any) -> list[list[_LineSegment]]:
