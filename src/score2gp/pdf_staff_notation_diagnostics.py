@@ -30,6 +30,7 @@ def build_notation_diagnostics(
         staff_geom = NotationStaffGeometry(
             page_index=page_index,
             system_index=system_idx,
+            staff_index=1,
             x0=round(x0, 3),
             y0=round(y0, 3),
             x1=round(x1, 3),

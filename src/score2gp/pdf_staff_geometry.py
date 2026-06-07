@@ -6,6 +6,7 @@ class NotationStaffGeometry(BaseModel):
 
     page_index: int = Field(ge=1)
     system_index: int = Field(ge=1)
+    staff_index: int = Field(default=1, ge=1)
     x0: float
     y0: float
     x1: float

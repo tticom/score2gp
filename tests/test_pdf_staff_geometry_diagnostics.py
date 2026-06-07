@@ -99,6 +99,7 @@ def test_build_notation_diagnostics_mock() -> None:
     
     assert diag.staff.page_index == 1
     assert diag.staff.system_index == 1
+    assert diag.staff.staff_index == 1
     assert diag.staff.x0 == 50.0
     assert diag.staff.y0 == 100.0
     assert diag.staff.x1 == 500.0
