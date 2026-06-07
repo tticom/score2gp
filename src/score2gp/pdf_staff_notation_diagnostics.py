@@ -94,3 +94,26 @@ def build_notation_diagnostics(
         )
         
     return PdfStaffNotationGeometryDiagnostics(staves=staves_diags)
+
+
+def extract_notation_diagnostics_dict(page: Any, page_index: int) -> dict[str, Any]:
+    """
+    Run standard-staff notation group detection and diagnostics building,
+    returning a private-safe serialized diagnostics dictionary.
+
+    On diagnostics failure, return the standard private-safe failure status
+    without leaking exception details, file paths, raw text, glyph content, or
+    coordinate dumps.
+    """
+    from .pdf import _detect_notation_staff_groups
+
+    try:
+        notation_groups = _detect_notation_staff_groups(page)
+        notation_diags = build_notation_diagnostics(page, page_index, notation_groups)
+        return (
+            notation_diags.model_dump()
+            if hasattr(notation_diags, "model_dump")
+            else notation_diags.dict()
+        )
+    except Exception:
+        return {"staves": [], "status": "pdf_notation_geometry_diagnostics_failed"}

@@ -113,13 +113,8 @@ def inspect_pdf(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
             pix.save(image_path)
             
             # Collect notation staves for diagnostics
-            from .pdf_staff_notation_diagnostics import build_notation_diagnostics
-            try:
-                notation_groups = _detect_notation_staff_groups(page)
-                notation_diags = build_notation_diagnostics(page, index, notation_groups)
-                diags_dict = notation_diags.model_dump() if hasattr(notation_diags, "model_dump") else notation_diags.dict()
-            except Exception:
-                diags_dict = {"staves": [], "status": "pdf_notation_geometry_diagnostics_failed"}
+            from .pdf_staff_notation_diagnostics import extract_notation_diagnostics_dict
+            diags_dict = extract_notation_diagnostics_dict(page, index)
 
             page_info = {
                 "page": index,
