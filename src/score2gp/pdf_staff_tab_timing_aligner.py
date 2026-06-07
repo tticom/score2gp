@@ -14,8 +14,8 @@ class PdfStaffTabAlignmentResult(BaseModel):
     unmatched_staff_events: list[PdfStaffTimingEvent] = Field(default_factory=list)
     unmatched_tab_groups: list[CandidateXGroupDiagnostics] = Field(default_factory=list)
     ambiguous_staff_events: list[PdfStaffTimingEvent] = Field(default_factory=list)
-    bars_using_staff_timing: list[tuple[int, int, int]] = Field(default_factory=list)
-    bars_using_fallback_timing: list[tuple[int, int, int]] = Field(default_factory=list)
+    bars_using_staff_timing: list[tuple[int, int, int, int]] = Field(default_factory=list)
+    bars_using_fallback_timing: list[tuple[int, int, int, int]] = Field(default_factory=list)
 
 
 class PdfStaffTabTimingAligner:
@@ -30,14 +30,14 @@ class PdfStaffTabTimingAligner:
     def align(
         self,
         staff_events: list[PdfStaffTimingEvent],
-        tab_groups_by_bar: dict[tuple[int, int, int], list[CandidateXGroupDiagnostics]],
+        tab_groups_by_bar: dict[tuple[int, int, int, int], list[CandidateXGroupDiagnostics]],
     ) -> PdfStaffTabAlignmentResult:
         result = PdfStaffTabAlignmentResult()
 
-        # Group staff events by bar key
+        # Group staff events by bar key (page_index, system_index, staff_index, local_bar_index)
         staff_by_bar = defaultdict(list)
         for ev in staff_events:
-            key = (ev.page_index, ev.system_index, ev.local_bar_index)
+            key = (ev.page_index, ev.system_index, ev.staff_index or 1, ev.local_bar_index)
             staff_by_bar[key].append(ev)
 
         # Collect all unique bar keys

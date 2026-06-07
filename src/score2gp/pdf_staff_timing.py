@@ -16,4 +16,3 @@ class PdfStaffTimingEvent(BaseModel):
     duration_ticks: int = Field(ge=0)
     is_rest: bool = False
     voice_index: int = 0
-
