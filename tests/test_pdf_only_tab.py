@@ -108,7 +108,7 @@ def test_pdf_only_tab_rhythm_inference_policy(tmp_path) -> None:
                 "y": 20.0,
                 "confidence": 0.9,
             },
-            # Event 2: x=20
+            # Event 2: x=30
             {
                 "id": "c-0002",
                 "kind": "fret",
@@ -120,11 +120,11 @@ def test_pdf_only_tab_rhythm_inference_policy(tmp_path) -> None:
                 "string": 2,
                 "raw_text": "7",
                 "parsed_fret": 7,
-                "x": 20.0,
+                "x": 30.0,
                 "y": 20.0,
                 "confidence": 0.9,
             },
-            # Event 3: x=30 (chord: 2 candidates sharing near-identical x-position)
+            # Event 3: x=50 (chord: 2 candidates sharing near-identical x-position)
             {
                 "id": "c-0003",
                 "kind": "fret",
@@ -136,7 +136,7 @@ def test_pdf_only_tab_rhythm_inference_policy(tmp_path) -> None:
                 "string": 3,
                 "raw_text": "6",
                 "parsed_fret": 6,
-                "x": 30.0,
+                "x": 50.0,
                 "y": 20.0,
                 "confidence": 0.9,
             },
@@ -151,11 +151,11 @@ def test_pdf_only_tab_rhythm_inference_policy(tmp_path) -> None:
                 "string": 4,
                 "raw_text": "7",
                 "parsed_fret": 7,
-                "x": 30.1,  # within 1.5 tolerance
+                "x": 50.1,  # within 10.0 tolerance
                 "y": 20.0,
                 "confidence": 0.9,
             },
-            # Event 4: x=40
+            # Event 4: x=70
             {
                 "id": "c-0005",
                 "kind": "fret",
@@ -167,7 +167,7 @@ def test_pdf_only_tab_rhythm_inference_policy(tmp_path) -> None:
                 "string": 5,
                 "raw_text": "5",
                 "parsed_fret": 5,
-                "x": 40.0,
+                "x": 70.0,
                 "y": 20.0,
                 "confidence": 0.9,
             },
@@ -481,3 +481,208 @@ def test_pdf_only_preserves_candidate_top_level_source_identity(tmp_path) -> Non
     assert provenance.page == 3
     assert provenance.system_id == "system-4"
     assert provenance.bar_index == 2
+
+
+def test_pdf_only_groups_small_x_offsets_across_strings_as_chord(tmp_path) -> None:
+    tabraw_data = {
+        "schema_version": "tabraw.v0.1",
+        "source_pdf": "test.pdf",
+        "pdf_layout_class": "drawn",
+        "pdf_layout_warnings": [],
+        "candidates": [
+            {
+                "id": "c-1",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "string": 1,
+                "raw_text": "5",
+                "parsed_fret": 5,
+                "x": 10.0,
+                "y": 20.0,
+                "confidence": 0.9,
+            },
+            {
+                "id": "c-2",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "string": 2,
+                "raw_text": "7",
+                "parsed_fret": 7,
+                "x": 19.0,  # 9.0 pt delta, within 10.0 tolerance
+                "y": 20.0,
+                "confidence": 0.9,
+            },
+        ],
+        "warnings": [],
+    }
+    tabraw_file = tmp_path / "tabraw_chord_grouped.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+
+    score, diagnostics = build_ir_from_tabraw_only(tabraw_file)
+
+    assert len(score.bars) == 1
+    # 2 candidates should group into a single chord event
+    assert len(score.bars[0].events) == 1
+    event = score.bars[0].events[0]
+    assert len(event.notes) == 2
+    notes_sorted = sorted(event.notes, key=lambda n: n.string)
+    assert notes_sorted[0].string == 1 and notes_sorted[0].fret == 5
+    assert notes_sorted[1].string == 2 and notes_sorted[1].fret == 7
+
+
+def test_pdf_only_keeps_sequential_notes_separate_when_x_gap_is_large(tmp_path) -> None:
+    tabraw_data = {
+        "schema_version": "tabraw.v0.1",
+        "source_pdf": "test.pdf",
+        "pdf_layout_class": "drawn",
+        "pdf_layout_warnings": [],
+        "candidates": [
+            {
+                "id": "c-1",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "string": 1,
+                "raw_text": "5",
+                "parsed_fret": 5,
+                "x": 10.0,
+                "y": 20.0,
+                "confidence": 0.9,
+            },
+            {
+                "id": "c-2",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "string": 2,
+                "raw_text": "7",
+                "parsed_fret": 7,
+                "x": 21.0,  # 11.0 pt delta, exceeds 10.0 tolerance
+                "y": 20.0,
+                "confidence": 0.9,
+            },
+        ],
+        "warnings": [],
+    }
+    tabraw_file = tmp_path / "tabraw_arpeggio.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+
+    score, diagnostics = build_ir_from_tabraw_only(tabraw_file)
+
+    assert len(score.bars) == 1
+    # 2 candidates should remain sequential
+    assert len(score.bars[0].events) == 2
+    assert score.bars[0].events[0].notes[0].fret == 5
+    assert score.bars[0].events[1].notes[0].fret == 7
+
+
+def test_pdf_only_does_not_group_duplicate_string_candidates_as_chord(tmp_path) -> None:
+    tabraw_data = {
+        "schema_version": "tabraw.v0.1",
+        "source_pdf": "test.pdf",
+        "pdf_layout_class": "drawn",
+        "pdf_layout_warnings": [],
+        "candidates": [
+            {
+                "id": "c-1",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "string": 1,
+                "raw_text": "5",
+                "parsed_fret": 5,
+                "x": 10.0,
+                "y": 20.0,
+                "confidence": 0.9,
+            },
+            {
+                "id": "c-2",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "string": 1,  # Same string
+                "raw_text": "7",
+                "parsed_fret": 7,
+                "x": 15.0,  # 5.0 pt delta (within 10.0), but same string
+                "y": 20.0,
+                "confidence": 0.9,
+            },
+        ],
+        "warnings": [],
+    }
+    tabraw_file = tmp_path / "tabraw_dup_string_check.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+
+    score, diagnostics = build_ir_from_tabraw_only(tabraw_file)
+
+    assert len(score.bars) == 1
+    # Must be split into 2 sequential events to protect duplicate string safety
+    assert len(score.bars[0].events) == 2
+    assert score.bars[0].events[0].notes[0].fret == 5
+    assert score.bars[0].events[1].notes[0].fret == 7
+
+
+def test_pdf_only_never_groups_chords_across_source_bar_identity(tmp_path) -> None:
+    tabraw_data = {
+        "schema_version": "tabraw.v0.1",
+        "source_pdf": "test.pdf",
+        "pdf_layout_class": "drawn",
+        "pdf_layout_warnings": [],
+        "candidates": [
+            {
+                "id": "c-1",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,  # Bar 1
+                "string": 1,
+                "raw_text": "5",
+                "parsed_fret": 5,
+                "x": 10.0,
+                "y": 20.0,
+                "confidence": 0.9,
+            },
+            {
+                "id": "c-2",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 2,  # Bar 2
+                "string": 2,
+                "raw_text": "7",
+                "parsed_fret": 7,
+                "x": 12.0,  # 2.0 pt delta, but different bars
+                "y": 20.0,
+                "confidence": 0.9,
+            },
+        ],
+        "warnings": [],
+    }
+    tabraw_file = tmp_path / "tabraw_bar_boundary.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+
+    score, diagnostics = build_ir_from_tabraw_only(tabraw_file)
+
+    # Must be 2 distinct bars, each with 1 event
+    assert len(score.bars) == 2
+    assert len(score.bars[0].events) == 1
+    assert score.bars[0].events[0].notes[0].fret == 5
+    assert len(score.bars[1].events) == 1
+    assert score.bars[1].events[0].notes[0].fret == 7
+
