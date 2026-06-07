@@ -589,3 +589,65 @@ def test_detect_notation_staff_groups_exception_handling(monkeypatch, tmp_path) 
     assert "RuntimeError" not in json_str
     assert "Failing" not in json_str
     assert "leak" not in json_str
+
+
+def test_extract_notation_diagnostics_dict_success(monkeypatch) -> None:
+    from score2gp.pdf_staff_notation_diagnostics import extract_notation_diagnostics_dict
+
+    # Mock page class
+    class MockPage:
+        def get_drawings(self) -> list:
+            return []
+        def get_text(self, kind: str) -> dict | list:
+            return {}
+
+    # Mock _detect_notation_staff_groups to return a group of 5 lines
+    group = [
+        _LineSegment(50.0, 100.0, 500.0, 100.0),
+        _LineSegment(50.0, 108.0, 500.0, 108.0),
+        _LineSegment(50.0, 116.0, 500.0, 116.0),
+        _LineSegment(50.0, 124.0, 500.0, 124.0),
+        _LineSegment(50.0, 132.0, 500.0, 132.0),
+    ]
+    monkeypatch.setattr("score2gp.pdf._detect_notation_staff_groups", lambda page: [group])
+
+    page = MockPage()
+    result = extract_notation_diagnostics_dict(page, page_index=1)
+
+    assert isinstance(result, dict)
+    assert result.get("status") == "success"
+    assert "staves" in result
+    assert isinstance(result["staves"], list)
+    assert len(result["staves"]) == 1
+
+    # Ensure expected staff/primitives structure is preserved
+    staff_diag = result["staves"][0]
+    assert "staff" in staff_diag
+    assert "primitives" in staff_diag
+    assert staff_diag["staff"]["page_index"] == 1
+    assert staff_diag["staff"]["line_y_coords"] == [100.0, 108.0, 116.0, 124.0, 132.0]
+
+
+def test_extract_notation_diagnostics_dict_exception(monkeypatch) -> None:
+    from score2gp.pdf_staff_notation_diagnostics import extract_notation_diagnostics_dict
+
+    # Make _detect_notation_staff_groups raise an exception
+    def failing_detect(*args, **kwargs):
+        raise ValueError("Critical parse exception at /user/home/local/leak")
+
+    monkeypatch.setattr("score2gp.pdf._detect_notation_staff_groups", failing_detect)
+
+    class MockPage:
+        pass
+
+    page = MockPage()
+    result = extract_notation_diagnostics_dict(page, page_index=1)
+
+    assert result == {"staves": [], "status": "pdf_notation_geometry_diagnostics_failed"}
+
+    # Ensure no traceback, exception message, local path, etc. is serialized
+    json_str = json.dumps(result)
+    assert "ValueError" not in json_str
+    assert "Critical" not in json_str
+    assert "leak" not in json_str
+    assert "user" not in json_str
