@@ -367,7 +367,7 @@ def test_inspect_pdf_integration_boundary(monkeypatch, tmp_path) -> None:
         _LineSegment(50.0, 132.0, 500.0, 132.0),
     ]
 
-    monkeypatch.setattr("score2gp.pdf._detect_notation_staff_groups", lambda page: [group])
+    monkeypatch.setattr("score2gp.pdf_staff_detection._detect_notation_staff_groups", lambda page: [group])
 
     # Mock page class
     class MockRect:
@@ -465,7 +465,7 @@ def test_silent_exception_handling_behavior(monkeypatch, tmp_path) -> None:
         _LineSegment(50.0, 132.0, 500.0, 132.0),
     ]
 
-    monkeypatch.setattr("score2gp.pdf._detect_notation_staff_groups", lambda page: [group])
+    monkeypatch.setattr("score2gp.pdf_staff_detection._detect_notation_staff_groups", lambda page: [group])
 
     # Make build_notation_diagnostics fail
     def failing_build_diagnostics(*args, **kwargs):
@@ -535,7 +535,7 @@ def test_detect_notation_staff_groups_exception_handling(monkeypatch, tmp_path) 
     def failing_detect_notation_staff_groups(*args, **kwargs):
         raise RuntimeError("Failing drawing retrieval with sensitive path /tmp/leak")
 
-    monkeypatch.setattr("score2gp.pdf._detect_notation_staff_groups", failing_detect_notation_staff_groups)
+    monkeypatch.setattr("score2gp.pdf_staff_detection._detect_notation_staff_groups", failing_detect_notation_staff_groups)
 
     # Mock page class
     class MockRect:
@@ -609,7 +609,7 @@ def test_extract_notation_diagnostics_dict_success(monkeypatch) -> None:
         _LineSegment(50.0, 124.0, 500.0, 124.0),
         _LineSegment(50.0, 132.0, 500.0, 132.0),
     ]
-    monkeypatch.setattr("score2gp.pdf._detect_notation_staff_groups", lambda page: [group])
+    monkeypatch.setattr("score2gp.pdf_staff_detection._detect_notation_staff_groups", lambda page: [group])
 
     page = MockPage()
     result = extract_notation_diagnostics_dict(page, page_index=1)
@@ -635,7 +635,7 @@ def test_extract_notation_diagnostics_dict_exception(monkeypatch) -> None:
     def failing_detect(*args, **kwargs):
         raise ValueError("Critical parse exception PRIVATE_SENTINEL")
 
-    monkeypatch.setattr("score2gp.pdf._detect_notation_staff_groups", failing_detect)
+    monkeypatch.setattr("score2gp.pdf_staff_detection._detect_notation_staff_groups", failing_detect)
 
     class MockPage:
         pass
