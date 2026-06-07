@@ -21,11 +21,23 @@ class LocalPrimitivesSummary(BaseModel):
     rect_count: int
     text_span_count_by_font: dict[str, int]
 
+class NotationStaffMorphology(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    staff_line_horizontal: int
+    non_staff_horizontal: int
+    vertical_stroke_candidate: int
+    diagonal_stroke_candidate: int
+    rectangle_candidate: int
+    curve_candidate: int
+    text_span_by_font: dict[str, int]
+
 class NotationStaffDiagnostics(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     staff: NotationStaffGeometry
     primitives: LocalPrimitivesSummary
+    morphology: NotationStaffMorphology | None = None
 
 class PdfStaffNotationGeometryDiagnostics(BaseModel):
     model_config = ConfigDict(frozen=True)
