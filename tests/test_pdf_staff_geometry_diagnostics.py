@@ -2,7 +2,7 @@ from __future__ import annotations
 import json
 from typing import Any
 import pytest
-from score2gp.pdf import _LineSegment
+from score2gp.pdf_geometry import _LineSegment
 from score2gp.pdf_staff_geometry import (
     NotationStaffGeometry,
     LocalPrimitivesSummary,
