@@ -469,7 +469,7 @@ def test_silent_exception_handling_behavior(monkeypatch, tmp_path) -> None:
 
     # Make build_notation_diagnostics fail
     def failing_build_diagnostics(*args, **kwargs):
-        raise ValueError("Simulated diagnostics builder failure")
+        raise ValueError("Simulated sensitive details: /user/local/secret_path and secret_note_content")
 
     monkeypatch.setattr("score2gp.pdf_staff_notation_diagnostics.build_notation_diagnostics", failing_build_diagnostics)
 
@@ -514,18 +514,78 @@ def test_silent_exception_handling_behavior(monkeypatch, tmp_path) -> None:
 
     result = inspect_pdf(dummy_pdf, out_dir)
 
-    # Ensure diagnostics silently failed and returned {"staves": []}
+    # Ensure diagnostics returns the private-safe status, and has no raw exception details or paths
     page_info = result["pages"][0]
-    assert page_info["pdf_staff_notation_diagnostics"] == {"staves": []}
+    diags = page_info["pdf_staff_notation_diagnostics"]
+    assert diags == {"staves": [], "status": "pdf_notation_geometry_diagnostics_failed"}
+
+    # Verify that no raw error details are leaked in the serialization dict
+    json_str = json.dumps(diags)
+    assert "ValueError" not in json_str
+    assert "sensitive" not in json_str
+    assert "secret" not in json_str
+    assert "local" not in json_str
 
 
-def test_detect_notation_staff_groups_exception_handling(monkeypatch) -> None:
-    from score2gp.pdf import _detect_notation_staff_groups
+def test_detect_notation_staff_groups_exception_handling(monkeypatch, tmp_path) -> None:
+    import fitz
+    from score2gp.pdf import inspect_pdf
+
+    # Make _detect_notation_staff_groups raise an exception
+    def failing_detect_notation_staff_groups(*args, **kwargs):
+        raise RuntimeError("Failing drawing retrieval with sensitive path /tmp/leak")
+
+    monkeypatch.setattr("score2gp.pdf._detect_notation_staff_groups", failing_detect_notation_staff_groups)
+
+    # Mock page class
+    class MockRect:
+        width = 600.0
+        height = 800.0
+
+    class MockPixmap:
+        def save(self, path) -> None:
+            with open(path, "wb") as f:
+                f.write(b"dummy png data")
 
     class MockPage:
+        rect = MockRect()
+        def get_text(self, kind: str) -> Any:
+            return []
         def get_drawings(self) -> list:
-            raise RuntimeError("Failing drawing retrieval")
+            return []
+        def get_images(self, full: bool) -> list:
+            return []
+        def get_pixmap(self, matrix=None, alpha=False) -> MockPixmap:
+            return MockPixmap()
 
-    page = MockPage()
-    # It catches exception internally and returns []
-    assert _detect_notation_staff_groups(page) == []
+    # Mock document context manager
+    class MockDoc:
+        page_count = 1
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+        def __enter__(self) -> MockDoc:
+            return self
+        def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+            pass
+        def __iter__(self) -> Any:
+            yield MockPage()
+
+    monkeypatch.setattr(fitz, "open", MockDoc)
+
+    dummy_pdf = tmp_path / "dummy.pdf"
+    dummy_pdf.write_text("dummy pdf content")
+    out_dir = tmp_path / "out"
+
+    # When run through inspect_pdf, the exception from _detect_notation_staff_groups should propagate
+    # to inspect_pdf and be handled as pdf_notation_geometry_diagnostics_failed status
+    result = inspect_pdf(dummy_pdf, out_dir)
+
+    page_info = result["pages"][0]
+    diags = page_info["pdf_staff_notation_diagnostics"]
+    assert diags == {"staves": [], "status": "pdf_notation_geometry_diagnostics_failed"}
+
+    # Ensure no details of the exception leak
+    json_str = json.dumps(diags)
+    assert "RuntimeError" not in json_str
+    assert "Failing" not in json_str
+    assert "leak" not in json_str

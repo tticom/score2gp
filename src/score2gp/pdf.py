@@ -46,16 +46,13 @@ WARN_NO_EXTRACTABLE_TAB_GEOMETRY = "pdf_input_class_no_extractable_tab_geometry"
 def _detect_notation_staff_groups(page: Any) -> list[list[_LineSegment]]:
     """Detect non-TAB 5-line staff groups on the page."""
     notation_groups = []
-    try:
-        segments = list(_drawing_segments(page.get_drawings()))
-        raw_horizontal = sorted((segment for segment in segments if segment.is_horizontal), key=lambda segment: segment.y0)
-        horizontal = sorted(merge_collinear_horizontal_segments(raw_horizontal), key=lambda segment: segment.y0)
-        for group in _tab_line_groups(horizontal):
-            classification = classify_staff_line_group(group, page)
-            if classification == "notation" and len(group) == 5:
-                notation_groups.append(group)
-    except Exception:
-        pass
+    segments = list(_drawing_segments(page.get_drawings()))
+    raw_horizontal = sorted((segment for segment in segments if segment.is_horizontal), key=lambda segment: segment.y0)
+    horizontal = sorted(merge_collinear_horizontal_segments(raw_horizontal), key=lambda segment: segment.y0)
+    for group in _tab_line_groups(horizontal):
+        classification = classify_staff_line_group(group, page)
+        if classification == "notation" and len(group) == 5:
+            notation_groups.append(group)
     return notation_groups
 
 
@@ -116,14 +113,13 @@ def inspect_pdf(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
             pix.save(image_path)
             
             # Collect notation staves for diagnostics
-            notation_groups = _detect_notation_staff_groups(page)
-
             from .pdf_staff_notation_diagnostics import build_notation_diagnostics
             try:
+                notation_groups = _detect_notation_staff_groups(page)
                 notation_diags = build_notation_diagnostics(page, index, notation_groups)
                 diags_dict = notation_diags.model_dump() if hasattr(notation_diags, "model_dump") else notation_diags.dict()
             except Exception:
-                diags_dict = {"staves": []}
+                diags_dict = {"staves": [], "status": "pdf_notation_geometry_diagnostics_failed"}
 
             page_info = {
                 "page": index,

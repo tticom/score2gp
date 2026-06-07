@@ -31,3 +31,4 @@ class PdfStaffNotationGeometryDiagnostics(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     staves: list[NotationStaffDiagnostics]
+    status: str | None = "success"
