@@ -633,7 +633,7 @@ def test_extract_notation_diagnostics_dict_exception(monkeypatch) -> None:
 
     # Make _detect_notation_staff_groups raise an exception
     def failing_detect(*args, **kwargs):
-        raise ValueError("Critical parse exception at /user/home/local/leak")
+        raise ValueError("Critical parse exception PRIVATE_SENTINEL")
 
     monkeypatch.setattr("score2gp.pdf._detect_notation_staff_groups", failing_detect)
 
@@ -649,5 +649,4 @@ def test_extract_notation_diagnostics_dict_exception(monkeypatch) -> None:
     json_str = json.dumps(result)
     assert "ValueError" not in json_str
     assert "Critical" not in json_str
-    assert "leak" not in json_str
-    assert "user" not in json_str
+    assert "PRIVATE_SENTINEL" not in json_str
