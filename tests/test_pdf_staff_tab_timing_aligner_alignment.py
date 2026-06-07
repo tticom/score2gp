@@ -218,3 +218,44 @@ def test_pdf_staff_tab_timing_aligner_reports_ambiguous_matches() -> None:
     assert len(result.ambiguous_staff_events) == 1
     assert result.ambiguous_staff_events[0].id == "s-1"
     assert len(result.unmatched_tab_groups) == 2
+
+
+def test_pdf_staff_tab_timing_aligner_tolerance_boundaries() -> None:
+    # Test exactly at 15.0 pt tolerance
+    staff_ev_1 = PdfStaffTimingEvent(
+        id="s-1",
+        page_index=1,
+        system_index=1,
+        local_bar_index=1,
+        x=100.0,
+        onset_ticks=0,
+        duration_ticks=480,
+    )
+    tab_grp_1 = CandidateXGroupDiagnostics(
+        x=115.0,  # exactly 15.0 pt difference
+        x_min=115.0,
+        x_max=115.0,
+        candidate_count=1,
+        candidate_ids=["c-1"],
+        strings=[1],
+    )
+    
+    aligner = PdfStaffTabTimingAligner(tolerance=15.0)
+    result_exact = aligner.align([staff_ev_1], {(1, 1, 1): [tab_grp_1]})
+    assert len(result_exact.aligned_pairs) == 1
+    assert result_exact.aligned_pairs[0][0].id == "s-1"
+    
+    # Test just over 15.0 pt tolerance
+    tab_grp_2 = CandidateXGroupDiagnostics(
+        x=115.1,  # 15.1 pt difference (just outside 15.0 pt tolerance)
+        x_min=115.1,
+        x_max=115.1,
+        candidate_count=1,
+        candidate_ids=["c-2"],
+        strings=[2],
+    )
+    result_outside = aligner.align([staff_ev_1], {(1, 1, 1): [tab_grp_2]})
+    assert len(result_outside.aligned_pairs) == 0
+    assert len(result_outside.unmatched_staff_events) == 1
+    assert len(result_outside.unmatched_tab_groups) == 1
+
