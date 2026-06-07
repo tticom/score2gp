@@ -52,7 +52,7 @@ def _detect_notation_staff_groups(page: Any) -> list[list[_LineSegment]]:
         horizontal = sorted(merge_collinear_horizontal_segments(raw_horizontal), key=lambda segment: segment.y0)
         for group in _tab_line_groups(horizontal):
             classification = classify_staff_line_group(group, page)
-            if classification in ("notation", "ambiguous") and len(group) == 5:
+            if classification == "notation" and len(group) == 5:
                 notation_groups.append(group)
     except Exception:
         pass

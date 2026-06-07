@@ -50,7 +50,7 @@ def build_notation_diagnostics(
             if draw_rect:
                 dx0, dy0, dx1, dy1 = draw_rect
                 h_overlap = not (dx1 < x0 or dx0 > x1)
-                v_overlap = not (dy1 < y0_padded or dy0 > y1_padded)
+                v_overlap = not (dy1 <= y0_padded or dy0 >= y1_padded)
                 if h_overlap and v_overlap:
                     for item in drawing.get("items", []):
                         if not item:
@@ -74,7 +74,7 @@ def build_notation_diagnostics(
                     if span_bbox:
                         sx0, sy0, sx1, sy1 = span_bbox
                         h_overlap = not (sx1 < x0 or sx0 > x1)
-                        v_overlap = not (sy1 < y0_padded or sy0 > y1_padded)
+                        v_overlap = not (sy1 <= y0_padded or sy0 >= y1_padded)
                         if h_overlap and v_overlap:
                             font_name = span.get("font", "unknown")
                             font_counts[font_name] = font_counts.get(font_name, 0) + 1
