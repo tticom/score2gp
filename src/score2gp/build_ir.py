@@ -54,12 +54,16 @@ from .musicxml import (
     parse_musicxml,
 )
 from .tabraw import TabCandidate, TabRaw
+from .pdf_only_chord_event_grouper import (
+    PDF_ONLY_CHORD_X_TOLERANCE_PT,
+    CandidateXGroupDiagnostics,
+    PdfOnlyChordEventGrouper,
+)
 
 TRACK_ID = "gtr-1"
 DIAGNOSTICS_SCHEMA_VERSION = "build-ir-diagnostics.v0.1"
 ASCII_SCOREIR_GATE_VERSION = "ascii-scoreir-gate.v0.1"
 PDF_TIMING_REFINEMENT_VERSION = "pdf-timing-refinement.v1.0"
-PDF_ONLY_CHORD_X_TOLERANCE_PT = 10.0
 
 _MUSICXML_INVALID_TIMING_CODES = {
     "musicxml-overfull-bar",
@@ -399,17 +403,6 @@ class BuildIrInputRiskError(ValueError):
 
         return payload
 
-
-class CandidateXGroupDiagnostics(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    x: float
-    x_min: float
-    x_max: float
-    candidate_count: int
-    candidate_ids: list[str] = Field(default_factory=list)
-    strings: list[int] = Field(default_factory=list)
-    is_chord_stack: bool = False
 
 
 class MusicXmlOnsetGroupDiagnostics(BaseModel):
@@ -1723,23 +1716,7 @@ def build_ir_from_tabraw_only(
         6: 40,  # E2
     }
 
-    def split_duplicate_strings(candidates: list[TabCandidate]) -> list[list[TabCandidate]]:
-        sorted_cands = sorted(candidates, key=lambda c: (c.x or 0.0, c.string or 0, c.id))
-        subgroups = []
-        current_subgroup = []
-        current_strings = set()
-        for c in sorted_cands:
-            if c.string in current_strings:
-                subgroups.append(current_subgroup)
-                current_subgroup = [c]
-                current_strings = {c.string} if c.string is not None else set()
-            else:
-                current_subgroup.append(c)
-                if c.string is not None:
-                    current_strings.add(c.string)
-        if current_subgroup:
-            subgroups.append(current_subgroup)
-        return subgroups
+
 
     # Get unique source bar keys in stable reading order:
     # (page_index, system_index, staff_index, bar_index)
@@ -1785,18 +1762,9 @@ def build_ir_from_tabraw_only(
             )
             continue
 
-        # Group by x-position
-        x_groups = _candidate_x_groups(bar_frets, tolerance=PDF_ONLY_CHORD_X_TOLERANCE_PT)
-
-        # Split duplicate strings to prevent false stacking
-        id_to_cand = {c.id: c for c in bar_frets}
-        event_subgroups = []
-        for group_diag in x_groups:
-            group_candidates = [id_to_cand[cid] for cid in group_diag.candidate_ids if cid in id_to_cand]
-            if not group_candidates:
-                continue
-            split_groups = split_duplicate_strings(group_candidates)
-            event_subgroups.extend(split_groups)
+        # Group candidates into sequential event subgroups using PdfOnlyChordEventGrouper
+        grouper = PdfOnlyChordEventGrouper(tolerance=PDF_ONLY_CHORD_X_TOLERANCE_PT)
+        event_subgroups = grouper.group_bar_candidates(bar_frets)
 
         N = len(event_subgroups)
         if N > 64:
@@ -1953,7 +1921,8 @@ def build_ir_from_tabraw_only(
                 )
             )
         else:
-            bar_x_groups = _candidate_x_groups(bar_frets, tolerance=PDF_ONLY_CHORD_X_TOLERANCE_PT)
+            grouper = PdfOnlyChordEventGrouper(tolerance=PDF_ONLY_CHORD_X_TOLERANCE_PT)
+            bar_x_groups = grouper.candidate_x_groups(bar_frets)
             per_bar_diagnostics.append(
                 BarAlignmentDiagnostics(
                     bar_index=bar_idx,
@@ -3238,31 +3207,7 @@ def _bar_x_to_onset_diagnostics(
 
 
 def _candidate_x_groups(candidates: list[TabCandidate], tolerance: float = 1.5) -> list[CandidateXGroupDiagnostics]:
-    groups: list[list[TabCandidate]] = []
-    for candidate in sorted(candidates, key=lambda item: (float("inf") if item.x is None else item.x, item.id)):
-        if candidate.x is None:
-            continue
-        if groups and abs(float(candidate.x) - _mean_x(groups[-1])) <= tolerance:
-            groups[-1].append(candidate)
-        else:
-            groups.append([candidate])
-
-    diagnostics = []
-    for group in groups:
-        xs = [float(candidate.x) for candidate in group if candidate.x is not None]
-        strings = sorted({candidate.string for candidate in group if candidate.string is not None})
-        diagnostics.append(
-            CandidateXGroupDiagnostics(
-                x=round(sum(xs) / len(xs), 3),
-                x_min=round(min(xs), 3),
-                x_max=round(max(xs), 3),
-                candidate_count=len(group),
-                candidate_ids=[candidate.id for candidate in group],
-                strings=strings,
-                is_chord_stack=len(group) > 1 and len(strings) > 1,
-            )
-        )
-    return diagnostics
+    return PdfOnlyChordEventGrouper(tolerance=tolerance).candidate_x_groups(candidates)
 
 
 def _musicxml_onset_groups(
@@ -3769,10 +3714,6 @@ def _relative_errors(left: list[float], right: list[float]) -> list[float]:
         return []
     return [abs(left_value - right_value) for left_value, right_value in zip(left, right)]
 
-
-def _mean_x(candidates: list[TabCandidate]) -> float:
-    values = [float(candidate.x) for candidate in candidates if candidate.x is not None]
-    return sum(values) / len(values)
 
 
 def _single_system_index(candidates: list[TabCandidate]) -> int | None:
