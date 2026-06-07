@@ -32,12 +32,30 @@ class NotationStaffMorphology(BaseModel):
     curve_candidate: int
     text_span_by_font: dict[str, int]
 
+class ClusterPrimitiveCountSummary(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    lines_total: int = Field(ge=0)
+    curves_total: int = Field(ge=0)
+    rects_total: int = Field(ge=0)
+    text_spans_total: int = Field(ge=0)
+
+class XAlignedClusterAggregateDiagnostics(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    x_aligned_cluster_count: int = Field(ge=0)
+    max_primitives_per_x_aligned_cluster: int = Field(ge=0)
+    clusters_with_vertical_stroke_candidate: int = Field(ge=0)
+    max_cluster_vertical_span_staff_spaces: float = Field(ge=0.0)
+    cluster_primitive_count_summary: ClusterPrimitiveCountSummary
+
 class NotationStaffDiagnostics(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     staff: NotationStaffGeometry
     primitives: LocalPrimitivesSummary
     morphology: NotationStaffMorphology | None = None
+    clustering: XAlignedClusterAggregateDiagnostics | None = None
 
 class PdfStaffNotationGeometryDiagnostics(BaseModel):
     model_config = ConfigDict(frozen=True)
