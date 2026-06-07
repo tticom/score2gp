@@ -27,6 +27,29 @@ class PdfStaffTabTimingAligner:
     def __init__(self, tolerance: float = PDF_STAFF_TAB_ALIGNMENT_X_TOLERANCE_PT) -> None:
         self.tolerance = tolerance
 
+    def _alignment_bar_key(
+        self,
+        page_index: int,
+        system_index: int,
+        staff_index: int | None,
+        local_bar_index: int,
+    ) -> tuple[int, int, int, int]:
+        """Normalize the bar key, mapping absolute staff index to a staff-pair index.
+
+        For the MVP:
+        - Notation staff (odd absolute index, e.g. 1) and TAB staff (even absolute index, e.g. 2)
+          map to staff_pair_index = 1.
+        - Notation staff index 3 and TAB staff index 4 map to staff_pair_index = 2.
+        """
+        if staff_index is None:
+            staff_pair_index = 1
+        elif staff_index % 2 == 1:
+            staff_pair_index = (staff_index + 1) // 2
+        else:
+            staff_pair_index = staff_index // 2
+
+        return (page_index, system_index, staff_pair_index, local_bar_index)
+
     def align(
         self,
         staff_events: list[PdfStaffTimingEvent],
@@ -34,18 +57,25 @@ class PdfStaffTabTimingAligner:
     ) -> PdfStaffTabAlignmentResult:
         result = PdfStaffTabAlignmentResult()
 
-        # Group staff events by bar key (page_index, system_index, staff_index, local_bar_index)
+        # Group staff events by normalized bar key (using staff_pair_index as the third element)
         staff_by_bar = defaultdict(list)
         for ev in staff_events:
-            key = (ev.page_index, ev.system_index, ev.staff_index or 1, ev.local_bar_index)
+            key = self._alignment_bar_key(ev.page_index, ev.system_index, ev.staff_index, ev.local_bar_index)
             staff_by_bar[key].append(ev)
 
+        # Group tab groups by normalized bar key (using staff_pair_index as the third element)
+        normalized_tab_groups_by_bar = defaultdict(list)
+        for original_key, groups in tab_groups_by_bar.items():
+            p_idx, sys_idx, st_idx, bar_idx = original_key
+            norm_key = self._alignment_bar_key(p_idx, sys_idx, st_idx, bar_idx)
+            normalized_tab_groups_by_bar[norm_key].extend(groups)
+
         # Collect all unique bar keys
-        all_bar_keys = set(staff_by_bar.keys()) | set(tab_groups_by_bar.keys())
+        all_bar_keys = set(staff_by_bar.keys()) | set(normalized_tab_groups_by_bar.keys())
 
         for bar_key in all_bar_keys:
             bar_staff_events = staff_by_bar[bar_key]
-            bar_tab_groups = tab_groups_by_bar.get(bar_key, [])
+            bar_tab_groups = normalized_tab_groups_by_bar.get(bar_key, [])
 
             if not bar_staff_events:
                 # No staff timing for this bar -> fallback timing
