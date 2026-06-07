@@ -49,6 +49,17 @@ class XAlignedClusterAggregateDiagnostics(BaseModel):
     max_cluster_vertical_span_staff_spaces: float = Field(ge=0.0)
     cluster_primitive_count_summary: ClusterPrimitiveCountSummary
 
+class StaffLeftMarginAggregateDiagnostics(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    margin_x_threshold_staff_spaces: float = Field(ge=0.0)
+    text_span_count: int = Field(ge=0)
+    distinct_font_count: int = Field(ge=0)
+    max_text_spans_for_single_font: int = Field(ge=0)
+    curve_candidate_count: int = Field(ge=0)
+    vertical_stroke_candidate_count: int = Field(ge=0)
+    rectangle_candidate_count: int = Field(ge=0)
+
 class NotationStaffDiagnostics(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -56,6 +67,7 @@ class NotationStaffDiagnostics(BaseModel):
     primitives: LocalPrimitivesSummary
     morphology: NotationStaffMorphology | None = None
     clustering: XAlignedClusterAggregateDiagnostics | None = None
+    left_margin: StaffLeftMarginAggregateDiagnostics | None = None
 
 class PdfStaffNotationGeometryDiagnostics(BaseModel):
     model_config = ConfigDict(frozen=True)

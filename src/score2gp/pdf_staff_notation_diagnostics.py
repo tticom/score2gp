@@ -7,7 +7,8 @@ from .pdf_staff_geometry import (
     PdfStaffNotationGeometryDiagnostics,
     NotationStaffMorphology,
     XAlignedClusterAggregateDiagnostics,
-    ClusterPrimitiveCountSummary
+    ClusterPrimitiveCountSummary,
+    StaffLeftMarginAggregateDiagnostics
 )
 from dataclasses import dataclass
 import statistics
@@ -229,6 +230,7 @@ def build_notation_diagnostics(
             staff_space = 0.0
 
         clustering_diags = None
+        left_margin_diags = None
         if staff_space > 0.0:
             clusters = cluster_x_aligned_primitives(primitives_for_clustering, staff_space)
             x_aligned_cluster_count = len(clusters)
@@ -298,12 +300,59 @@ def build_notation_diagnostics(
                 )
             )
 
+            margin_x_limit = staff_geom.x0 + (10.0 * staff_space)
+
+            margin_curves = 0
+            margin_vertical_strokes = 0
+            margin_rects = 0
+
+            for p in primitives_for_clustering:
+                if staff_geom.x0 <= p.center_x <= margin_x_limit:
+                    if p.type == "curve":
+                        margin_curves += 1
+                    elif p.type == "vertical_stroke_candidate":
+                        margin_vertical_strokes += 1
+                    elif p.type == "rect":
+                        margin_rects += 1
+
+            margin_font_counts = {}
+            for block in text_dict.get("blocks", []):
+                for line in block.get("lines", []):
+                    for span in line.get("spans", []):
+                        text = span.get("text", "")
+                        if not text.strip():
+                            continue
+                        span_bbox = span.get("bbox")
+                        if span_bbox:
+                            sx0, sy0, sx1, sy1 = span_bbox
+                            # strict containment check within notation staff box
+                            if sx0 >= x0_limit and sx1 <= x1_limit and sy0 >= y0_limit and sy1 <= y1_limit:
+                                center_x = (sx0 + sx1) / 2.0
+                                if staff_geom.x0 <= center_x <= margin_x_limit:
+                                    font_name = span.get("font", "unknown")
+                                    margin_font_counts[font_name] = margin_font_counts.get(font_name, 0) + 1
+
+            margin_text_span_count = sum(margin_font_counts.values())
+            distinct_font_count = len(margin_font_counts)
+            max_spans = max(margin_font_counts.values()) if margin_font_counts else 0
+
+            left_margin_diags = StaffLeftMarginAggregateDiagnostics(
+                margin_x_threshold_staff_spaces=10.0,
+                text_span_count=margin_text_span_count,
+                distinct_font_count=distinct_font_count,
+                max_text_spans_for_single_font=max_spans,
+                curve_candidate_count=margin_curves,
+                vertical_stroke_candidate_count=margin_vertical_strokes,
+                rectangle_candidate_count=margin_rects
+            )
+
         staves_diags.append(
             NotationStaffDiagnostics(
                 staff=staff_geom,
                 primitives=primitives_summary,
                 morphology=morphology,
-                clustering=clustering_diags
+                clustering=clustering_diags,
+                left_margin=left_margin_diags
             )
         )
 
