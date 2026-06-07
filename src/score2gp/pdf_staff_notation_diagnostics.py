@@ -105,7 +105,7 @@ def extract_notation_diagnostics_dict(page: Any, page_index: int) -> dict[str, A
     without leaking exception details, file paths, raw text, glyph content, or
     coordinate dumps.
     """
-    from .pdf import _detect_notation_staff_groups
+    from .pdf_staff_detection import _detect_notation_staff_groups
 
     try:
         notation_groups = _detect_notation_staff_groups(page)
