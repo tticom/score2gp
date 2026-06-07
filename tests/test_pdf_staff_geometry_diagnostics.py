@@ -650,3 +650,56 @@ def test_extract_notation_diagnostics_dict_exception(monkeypatch) -> None:
     assert "ValueError" not in json_str
     assert "Critical" not in json_str
     assert "PRIVATE_SENTINEL" not in json_str
+
+
+def test_inspect_pdf_positive_control_notation_staff_detected(tmp_path) -> None:
+    import fitz
+    from score2gp.pdf import inspect_pdf
+
+    # 1. Create a simple born-digital PDF containing one clear five-line standard notation staff
+    pdf_path = tmp_path / "positive_control.pdf"
+    doc = fitz.open()
+    page = doc.new_page(width=595.0, height=842.0) # A4 page
+
+    # Draw 5 horizontal lines with y-spacing = 8.0, x from 50 to 500
+    y_coords = [100.0, 108.0, 116.0, 124.0, 132.0]
+    for y in y_coords:
+        page.draw_line((50.0, y), (500.0, y), color=(0, 0, 0), width=0.5)
+
+    doc.save(pdf_path)
+    doc.close()
+
+    # 2. Run inspect_pdf against the generated PDF
+    out_dir = tmp_path / "out"
+    result = inspect_pdf(pdf_path, out_dir)
+
+    # 3. Locate the notation diagnostics payload
+    assert "pages" in result
+    assert len(result["pages"]) == 1
+    page_info = result["pages"][0]
+
+    assert "pdf_staff_notation_diagnostics" in page_info
+    diags = page_info["pdf_staff_notation_diagnostics"]
+
+    # 4. Perform assertions on diagnostics payload
+    assert diags.get("status") == "success"
+    assert "staves" in diags
+    assert isinstance(diags["staves"], list)
+    assert len(diags["staves"]) >= 1
+
+    staff_diag = diags["staves"][0]
+    assert "staff" in staff_diag
+    assert "primitives" in staff_diag
+
+    staff_geom = staff_diag["staff"]
+    assert staff_geom["page_index"] == 1
+    assert len(staff_geom["line_y_coords"]) == 5
+    assert staff_geom["line_y_coords"] == y_coords
+
+    primitives = staff_diag["primitives"]
+    assert primitives["line_count"] >= 5
+
+    # 5. Redaction checks
+    json_str = json.dumps(diags)
+    assert "/home/tticom" not in json_str
+    assert "fixtures/private" not in json_str
