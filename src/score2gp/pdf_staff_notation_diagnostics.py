@@ -13,7 +13,7 @@ from dataclasses import dataclass
 import statistics
 
 @dataclass(frozen=True)
-class _Primitive:
+class PrimitiveGeometry:
     type: str
     x0: float
     y0: float
@@ -24,15 +24,15 @@ class _Primitive:
     def center_x(self) -> float:
         return (self.x0 + self.x1) / 2.0
 
-def cluster_x_aligned_primitives(primitives: list[_Primitive], staff_space: float) -> list[list[_Primitive]]:
-    if not primitives:
+def cluster_x_aligned_primitives(primitives: list[PrimitiveGeometry], staff_space: float) -> list[list[PrimitiveGeometry]]:
+    if not primitives or staff_space <= 0.0:
         return []
 
     sorted_prims = sorted(primitives, key=lambda p: (p.center_x, min(p.y0, p.y1)))
     clusters = []
     current_cluster = [sorted_prims[0]]
 
-    def get_cluster_center_x(cluster: list[_Primitive]) -> float:
+    def get_cluster_center_x(cluster: list[PrimitiveGeometry]) -> float:
         return (min(p.x0 for p in cluster) + max(p.x1 for p in cluster)) / 2.0
 
     for prim in sorted_prims[1:]:
@@ -41,7 +41,13 @@ def cluster_x_aligned_primitives(primitives: list[_Primitive], staff_space: floa
 
         c_x0 = min(p.x0 for p in current_cluster)
         c_x1 = max(p.x1 for p in current_cluster)
-        overlap = not (prim.x1 < c_x0 - 0.5 * staff_space or prim.x0 > c_x1 + 0.5 * staff_space)
+
+        is_compact_prim = (prim.x1 - prim.x0) <= 2.0 * staff_space
+        is_compact_cluster = (c_x1 - c_x0) <= 2.0 * staff_space
+
+        overlap = False
+        if is_compact_prim and is_compact_cluster:
+            overlap = not (prim.x1 < c_x0 - 0.5 * staff_space or prim.x0 > c_x1 + 0.5 * staff_space)
 
         if dx_normalized <= 0.5 or overlap:
             current_cluster.append(prim)
@@ -156,7 +162,8 @@ def build_notation_diagnostics(
                         else:
                             diagonal_stroke_candidate += 1
                             ptype = "diagonal_stroke_candidate"
-                        primitives_for_clustering.append(_Primitive(ptype, ix0, iy0, ix1, iy1))
+                        if ptype != "staff_line_horizontal":
+                            primitives_for_clustering.append(PrimitiveGeometry(ptype, ix0, iy0, ix1, iy1))
                 elif itype == "re" and len(item) >= 2:
                     rect = item[1]
                     ix0 = min(rect.x0, rect.x1)
@@ -165,7 +172,7 @@ def build_notation_diagnostics(
                     iy1 = max(rect.y0, rect.y1)
                     if ix0 >= x0_limit and ix1 <= x1_limit and iy0 >= y0_limit and iy1 <= y1_limit:
                         rectangle_candidate += 1
-                        primitives_for_clustering.append(_Primitive("rect", ix0, iy0, ix1, iy1))
+                        primitives_for_clustering.append(PrimitiveGeometry("rect", ix0, iy0, ix1, iy1))
                 elif itype == "c" and len(item) >= 2:
                     pts = item[1:]
                     ix0 = min(p.x for p in pts)
@@ -174,7 +181,7 @@ def build_notation_diagnostics(
                     iy1 = max(p.y for p in pts)
                     if ix0 >= x0_limit and ix1 <= x1_limit and iy0 >= y0_limit and iy1 <= y1_limit:
                         curve_candidate += 1
-                        primitives_for_clustering.append(_Primitive("curve", ix0, iy0, ix1, iy1))
+                        primitives_for_clustering.append(PrimitiveGeometry("curve", ix0, iy0, ix1, iy1))
 
         font_counts = {}
         for block in text_dict.get("blocks", []):
@@ -196,7 +203,7 @@ def build_notation_diagnostics(
                         if sx0 >= x0_limit and sx1 <= x1_limit and sy0 >= y0_limit and sy1 <= y1_limit:
                             font_name = span.get("font", "unknown")
                             text_span_by_font[font_name] = text_span_by_font.get(font_name, 0) + 1
-                            primitives_for_clustering.append(_Primitive("text_span", sx0, sy0, sx1, sy1))
+                            primitives_for_clustering.append(PrimitiveGeometry("text_span", sx0, sy0, sx1, sy1))
 
         primitives_summary = LocalPrimitivesSummary(
             line_count=line_count,
@@ -219,67 +226,77 @@ def build_notation_diagnostics(
             gaps = [line_ys[i+1] - line_ys[i] for i in range(len(line_ys)-1)]
             staff_space = statistics.median(gaps)
         else:
-            staff_space = 10.0
+            staff_space = 0.0
 
-        clusters = cluster_x_aligned_primitives(primitives_for_clustering, staff_space)
-        x_aligned_cluster_count = len(clusters)
-        max_prims = 0
-        clusters_with_vertical = 0
-        max_vspan = 0.0
+        clustering_diags = None
+        if staff_space > 0.0:
+            clusters = cluster_x_aligned_primitives(primitives_for_clustering, staff_space)
+            x_aligned_cluster_count = len(clusters)
+            max_prims = 0
+            clusters_with_vertical = 0
+            max_vspan = 0.0
 
-        lines_total = 0
-        curves_total = 0
-        rects_total = 0
-        text_spans_total = 0
+            lines_total = 0
+            curves_total = 0
+            rects_total = 0
+            text_spans_total = 0
 
-        for cluster in clusters:
-            prim_count = len(cluster)
-            if prim_count > max_prims:
-                max_prims = prim_count
+            for cluster in clusters:
+                prim_count = len(cluster)
+                if prim_count > max_prims:
+                    max_prims = prim_count
 
-            c_x0 = min(p.x0 for p in cluster)
-            c_x1 = max(p.x1 for p in cluster)
-            c_y0 = min(p.y0 for p in cluster)
-            c_y1 = max(p.y1 for p in cluster)
-            cluster_center_x = (c_x0 + c_x1) / 2.0
-            vspan = (c_y1 - c_y0) / staff_space
-            if vspan > max_vspan:
-                max_vspan = vspan
+                c_x0 = min(p.x0 for p in cluster)
+                c_x1 = max(p.x1 for p in cluster)
+                c_y0 = min(p.y0 for p in cluster)
+                c_y1 = max(p.y1 for p in cluster)
+                vspan = (c_y1 - c_y0) / staff_space
+                if vspan > max_vspan:
+                    max_vspan = vspan
 
-            has_vertical = False
-            for p in cluster:
-                if "line" in p.type or "stroke" in p.type or "horizontal" in p.type:
-                    lines_total += 1
-                elif p.type == "curve":
-                    curves_total += 1
-                elif p.type == "rect":
-                    rects_total += 1
-                elif p.type == "text_span":
-                    text_spans_total += 1
+                has_vertical = False
+                compact_members = [p for p in cluster if p.type != "vertical_stroke_candidate"]
 
-                if not has_vertical and p.type == "vertical_stroke_candidate":
-                    dx_norm = abs(p.center_x - cluster_center_x) / staff_space
-                    x_overlap = not (p.x1 < c_x0 - staff_space or p.x0 > c_x1 + staff_space)
-                    y_overlap = not (p.y1 < c_y0 - staff_space or p.y0 > c_y1 + staff_space)
-                    height_norm = abs(p.y1 - p.y0) / staff_space
-                    if dx_norm <= 1.0 and x_overlap and y_overlap and height_norm >= 2.5:
-                        has_vertical = True
+                for p in cluster:
+                    if "line" in p.type or "stroke" in p.type or "horizontal" in p.type:
+                        lines_total += 1
+                    elif p.type == "curve":
+                        curves_total += 1
+                    elif p.type == "rect":
+                        rects_total += 1
+                    elif p.type == "text_span":
+                        text_spans_total += 1
 
-            if has_vertical:
-                clusters_with_vertical += 1
+                    if not has_vertical and p.type == "vertical_stroke_candidate":
+                        height_norm = abs(p.y1 - p.y0) / staff_space
+                        if compact_members and height_norm >= 2.5:
+                            cc_x0 = min(cm.x0 for cm in compact_members)
+                            cc_x1 = max(cm.x1 for cm in compact_members)
+                            cc_y0 = min(cm.y0 for cm in compact_members)
+                            cc_y1 = max(cm.y1 for cm in compact_members)
+                            cc_center_x = (cc_x0 + cc_x1) / 2.0
 
-        clustering_diags = XAlignedClusterAggregateDiagnostics(
-            x_aligned_cluster_count=x_aligned_cluster_count,
-            max_primitives_per_x_aligned_cluster=max_prims,
-            clusters_with_vertical_stroke_candidate=clusters_with_vertical,
-            max_cluster_vertical_span_staff_spaces=round(max_vspan, 3),
-            cluster_primitive_count_summary=ClusterPrimitiveCountSummary(
-                lines_total=lines_total,
-                curves_total=curves_total,
-                rects_total=rects_total,
-                text_spans_total=text_spans_total
+                            dx_norm = abs(p.center_x - cc_center_x) / staff_space
+                            x_overlap = not (p.x1 < cc_x0 - staff_space or p.x0 > cc_x1 + staff_space)
+                            y_overlap = not (p.y1 < cc_y0 - staff_space or p.y0 > cc_y1 + staff_space)
+                            if dx_norm <= 1.0 and x_overlap and y_overlap:
+                                has_vertical = True
+
+                if has_vertical:
+                    clusters_with_vertical += 1
+
+            clustering_diags = XAlignedClusterAggregateDiagnostics(
+                x_aligned_cluster_count=x_aligned_cluster_count,
+                max_primitives_per_x_aligned_cluster=max_prims,
+                clusters_with_vertical_stroke_candidate=clusters_with_vertical,
+                max_cluster_vertical_span_staff_spaces=round(max_vspan, 3),
+                cluster_primitive_count_summary=ClusterPrimitiveCountSummary(
+                    lines_total=lines_total,
+                    curves_total=curves_total,
+                    rects_total=rects_total,
+                    text_spans_total=text_spans_total
+                )
             )
-        )
 
         staves_diags.append(
             NotationStaffDiagnostics(

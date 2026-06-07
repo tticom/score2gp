@@ -35,18 +35,18 @@ class NotationStaffMorphology(BaseModel):
 class ClusterPrimitiveCountSummary(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    lines_total: int
-    curves_total: int
-    rects_total: int
-    text_spans_total: int
+    lines_total: int = Field(ge=0)
+    curves_total: int = Field(ge=0)
+    rects_total: int = Field(ge=0)
+    text_spans_total: int = Field(ge=0)
 
 class XAlignedClusterAggregateDiagnostics(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    x_aligned_cluster_count: int
-    max_primitives_per_x_aligned_cluster: int
-    clusters_with_vertical_stroke_candidate: int
-    max_cluster_vertical_span_staff_spaces: float
+    x_aligned_cluster_count: int = Field(ge=0)
+    max_primitives_per_x_aligned_cluster: int = Field(ge=0)
+    clusters_with_vertical_stroke_candidate: int = Field(ge=0)
+    max_cluster_vertical_span_staff_spaces: float = Field(ge=0.0)
     cluster_primitive_count_summary: ClusterPrimitiveCountSummary
 
 class NotationStaffDiagnostics(BaseModel):
