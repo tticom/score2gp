@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import statistics
 from typing import Any
 
 FRAGMENTED_STAFF_LINE_NEIGHBOR_MAX_GAP = 360.0
@@ -167,3 +168,54 @@ def merge_collinear_horizontal_segments(segments: list[_LineSegment], tolerance_
 
         merged.append(seg)
     return merged
+
+
+@dataclass(frozen=True)
+class StaffPositionIndex:
+    raw_position: float
+    nearest_index: int
+    snap_delta: float
+    is_snapped: bool
+
+
+def compute_staff_position_index(
+    y_coord: float,
+    line_y_coords: list[float],
+    tolerance: float = 0.25,
+) -> StaffPositionIndex:
+    if len(line_y_coords) != 5:
+        raise ValueError("Standard staff must have exactly 5 lines.")
+
+    if tolerance < 0.0:
+        raise ValueError("Tolerance must be non-negative.")
+
+    sorted_ys = sorted(line_y_coords)
+    gaps = [
+        sorted_ys[1] - sorted_ys[0],
+        sorted_ys[2] - sorted_ys[1],
+        sorted_ys[3] - sorted_ys[2],
+        sorted_ys[4] - sorted_ys[3],
+    ]
+
+    for gap in gaps:
+        if gap <= 0.0:
+            raise ValueError("Adjacent staff-line gaps must all be positive.")
+
+    staff_space = statistics.median(gaps)
+    if staff_space <= 0.0:
+        raise ValueError("Staff space must be positive.")
+
+    half_staff_space = staff_space / 2.0
+    top_line_y = sorted_ys[0]
+
+    raw_position = (y_coord - top_line_y) / half_staff_space
+    nearest_index = round(raw_position)
+    snap_delta = abs(raw_position - nearest_index)
+    is_snapped = snap_delta <= tolerance
+
+    return StaffPositionIndex(
+        raw_position=raw_position,
+        nearest_index=nearest_index,
+        snap_delta=snap_delta,
+        is_snapped=is_snapped,
+    )
