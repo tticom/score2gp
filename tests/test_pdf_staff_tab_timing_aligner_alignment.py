@@ -266,3 +266,109 @@ def test_pdf_staff_tab_timing_aligner_tolerance_boundaries() -> None:
     assert len(result_outside.aligned_pairs) == 0
     assert len(result_outside.unmatched_staff_events) == 1
     assert len(result_outside.unmatched_tab_groups) == 1
+
+
+def test_pdf_staff_tab_timing_aligner_regression_paired_staff_alignment() -> None:
+    # Regression test proving notation staff (absolute index 1) aligns to paired TAB staff (absolute index 2)
+    # on the same page, system, and local bar.
+    staff_ev = PdfStaffTimingEvent(
+        id="s-1",
+        page_index=1,
+        system_index=1,
+        staff_index=1,  # absolute notation staff index
+        local_bar_index=1,
+        x=100.0,
+        onset_ticks=0,
+        duration_ticks=480,
+    )
+
+    tab_grp = CandidateXGroupDiagnostics(
+        x=100.0,
+        x_min=100.0,
+        x_max=100.0,
+        candidate_count=1,
+        candidate_ids=["c-1"],
+        strings=[1],
+    )
+
+    aligner = PdfStaffTabTimingAligner(tolerance=15.0)
+    # The TAB group is keyed with absolute TAB staff index 2
+    result = aligner.align([staff_ev], {(1, 1, 2, 1): [tab_grp]})
+
+    assert len(result.aligned_pairs) == 1
+    assert result.aligned_pairs[0][0].id == "s-1"
+    assert result.aligned_pairs[0][1] is not None
+    assert result.aligned_pairs[0][1].candidate_ids == ["c-1"]
+    assert len(result.unmatched_staff_events) == 0
+    assert len(result.unmatched_tab_groups) == 0
+    # The public result should contain the normalized staff_pair_index (1)
+    assert result.bars_using_staff_timing == [(1, 1, 1, 1)]
+
+
+def test_pdf_staff_tab_timing_aligner_preserves_pair_separation() -> None:
+    # Test proving separation: different staff pairs do not merge.
+    # Pair 1 (notation staff_index=1, TAB staff_index=2)
+    # Pair 2 (notation staff_index=3, TAB staff_index=4)
+    # If they are on the same page, system, and local bar, they must remain separate.
+    staff_ev_pair1 = PdfStaffTimingEvent(
+        id="s-pair1",
+        page_index=1,
+        system_index=1,
+        staff_index=1,  # absolute index 1 -> pair 1
+        local_bar_index=1,
+        x=100.0,
+        onset_ticks=0,
+        duration_ticks=480,
+    )
+
+    staff_ev_pair2 = PdfStaffTimingEvent(
+        id="s-pair2",
+        page_index=1,
+        system_index=1,
+        staff_index=3,  # absolute index 3 -> pair 2
+        local_bar_index=1,
+        x=200.0,
+        onset_ticks=0,
+        duration_ticks=480,
+    )
+
+    tab_grp_pair1 = CandidateXGroupDiagnostics(
+        x=100.0,
+        x_min=100.0,
+        x_max=100.0,
+        candidate_count=1,
+        candidate_ids=["c-pair1"],
+        strings=[1],
+    )
+
+    tab_grp_pair2 = CandidateXGroupDiagnostics(
+        x=200.0,
+        x_min=200.0,
+        x_max=200.0,
+        candidate_count=1,
+        candidate_ids=["c-pair2"],
+        strings=[1],
+    )
+
+    aligner = PdfStaffTabTimingAligner(tolerance=15.0)
+    # TAB groups: one keyed with absolute index 2 (pair 1), one with absolute index 4 (pair 2)
+    result = aligner.align(
+        [staff_ev_pair1, staff_ev_pair2],
+        {
+            (1, 1, 2, 1): [tab_grp_pair1],
+            (1, 1, 4, 1): [tab_grp_pair2],
+        }
+    )
+
+    # Both should align within their respective pairs
+    assert len(result.aligned_pairs) == 2
+    # Find aligned pairs by ID
+    alignments = {pair[0].id: pair[1] for pair in result.aligned_pairs}
+    assert alignments["s-pair1"] is not None
+    assert alignments["s-pair1"].candidate_ids == ["c-pair1"]
+    assert alignments["s-pair2"] is not None
+    assert alignments["s-pair2"].candidate_ids == ["c-pair2"]
+
+    assert len(result.unmatched_staff_events) == 0
+    assert len(result.unmatched_tab_groups) == 0
+    assert sorted(result.bars_using_staff_timing) == [(1, 1, 1, 1), (1, 1, 2, 1)]
