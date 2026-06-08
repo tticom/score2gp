@@ -96,6 +96,19 @@ class NotationStaffDiagnostics(BaseModel):
     clustering: XAlignedClusterAggregateDiagnostics | None = None
     left_margin: StaffLeftMarginAggregateDiagnostics | None = None
 
+class SystemConnectorDiagnostics(BaseModel):
+    """
+    Geometry-only diagnostics for evidence connecting multiple staves into a system.
+    """
+    model_config = ConfigDict(frozen=True)
+
+    connected_staff_indices: list[int]
+    connector_kind: Literal["leading_barline", "bracket_curve", "brace_curve", "unknown_connector"]
+    x0: float
+    y0: float
+    x1: float
+    y1: float
+
 class PdfStaffNotationGeometryDiagnostics(BaseModel):
     """
     Top-level payload containing diagnostic details for all identified staves.
@@ -103,4 +116,5 @@ class PdfStaffNotationGeometryDiagnostics(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     staves: list[NotationStaffDiagnostics]
+    system_connectors: list[SystemConnectorDiagnostics] | None = None
     status: str | None = "success"
