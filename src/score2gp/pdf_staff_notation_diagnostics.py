@@ -61,13 +61,86 @@ def cluster_x_aligned_primitives(primitives: list[PrimitiveGeometry], staff_spac
 
     return clusters
 
+def _notation_group_bounds(group: list[Any]) -> dict[str, Any]:
+    line_ys = sorted([round((line.y0 + line.y1) / 2, 3) for line in group])
+    x0 = min(min(line.x0, line.x1) for line in group)
+    x1 = max(max(line.x0, line.x1) for line in group)
+    y0 = min(line_ys)
+    y1 = max(line_ys)
+    if len(line_ys) >= 2:
+        gaps = [line_ys[i+1] - line_ys[i] for i in range(len(line_ys)-1)]
+        staff_space = statistics.median(gaps)
+    else:
+        staff_space = 0.0
+    return {"line_ys": line_ys, "x0": x0, "x1": x1, "y0": y0, "y1": y1, "staff_space": staff_space}
+
+def _find_system_connector_between_groups(drawings: list[Any], g_prev: dict[str, Any], g_curr: dict[str, Any]) -> tuple[str, float, float, float, float] | None:
+    left_x = min(g_prev["x0"], g_curr["x0"])
+    for drawing in drawings:
+        draw_rect = drawing.get("rect")
+        if not draw_rect: continue
+        dx0, dy0, dx1, dy1 = draw_rect
+        if dx1 < left_x - 30 or dx0 > left_x + 10:
+            continue
+        if dy0 <= g_prev["y0"] + 5 and dy1 >= g_curr["y1"] - 5:
+            for item in drawing.get("items", []):
+                if not item: continue
+                itype = item[0]
+                if itype == "l" and len(item) >= 3:
+                    p0, p1 = item[1], item[2]
+                    ix0, ix1 = min(p0.x, p1.x), max(p0.x, p1.x)
+                    iy0, iy1 = min(p0.y, p1.y), max(p0.y, p1.y)
+                    if ix1 - ix0 <= 2.0 and iy1 - iy0 >= (g_curr["y1"] - g_prev["y0"]) - 10:
+                        return ("leading_barline", ix0, iy0, ix1, iy1)
+                elif itype == "c" and len(item) >= 2:
+                    pts = item[1:]
+                    iy0, iy1 = min(p.y for p in pts), max(p.y for p in pts)
+                    ix0, ix1 = min(p.x for p in pts), max(p.x for p in pts)
+                    if iy1 - iy0 >= (g_curr["y1"] - g_prev["y0"]) - 10:
+                        return ("brace_curve", ix0, iy0, ix1, iy1)
+    return None
+
+def _group_notation_groups_by_system_connectors(drawings: list[Any], group_bounds: list[dict[str, Any]]) -> tuple[list[list[int]], list[dict[str, Any]]]:
+    connected_systems = []
+    connectors_found = []
+    
+    i = 0
+    while i < len(group_bounds):
+        system_group_indices = [i]
+        j = i + 1
+        
+        system_connector = None
+        while j < len(group_bounds):
+            g_prev = group_bounds[j-1]
+            g_curr = group_bounds[j]
+            conn = _find_system_connector_between_groups(drawings, g_prev, g_curr)
+            if conn:
+                system_group_indices.append(j)
+                if not system_connector:
+                    system_connector = conn
+                j += 1
+            else:
+                break
+                
+        connected_systems.append(system_group_indices)
+        if len(system_group_indices) > 1 and system_connector:
+            connectors_found.append({
+                "indices": system_group_indices,
+                "connector_info": system_connector
+            })
+        i = j
+        
+    return connected_systems, connectors_found
 
 def build_notation_diagnostics(
     page: Any,
     page_index: int,
     notation_groups: list[list[Any]]
 ) -> PdfStaffNotationGeometryDiagnostics:
+    from .pdf_staff_geometry import SystemConnectorDiagnostics
+
     staves_diags = []
+    system_connectors = []
 
     drawings = page.get_drawings()
     try:
@@ -75,17 +148,51 @@ def build_notation_diagnostics(
     except Exception:
         text_dict = {}
 
-    for system_idx, group in enumerate(notation_groups, start=1):
-        line_ys = sorted([round((line.y0 + line.y1) / 2, 3) for line in group])
-        x0 = min(min(line.x0, line.x1) for line in group)
-        x1 = max(max(line.x0, line.x1) for line in group)
-        y0 = min(line_ys)
-        y1 = max(line_ys)
+    group_bounds = [_notation_group_bounds(g) for g in notation_groups]
+    connected_systems, connectors_found = _group_notation_groups_by_system_connectors(drawings, group_bounds)
+
+    group_system_mapping = {}
+    for system_idx, indices in enumerate(connected_systems, start=1):
+        for staff_idx_in_sys, idx in enumerate(indices, start=1):
+            group_system_mapping[idx] = {"system_index": system_idx, "staff_index": staff_idx_in_sys}
+
+    global_idx = 1
+    sys_to_global_indices = {}
+    for indices in connected_systems:
+        sys_to_global_indices[tuple(indices)] = [global_idx + k for k in range(len(indices))]
+        global_idx += len(indices)
+
+    for conn_data in connectors_found:
+        indices = conn_data["indices"]
+        conn_kind, cx0, cy0, cx1, cy1 = conn_data["connector_info"]
+        system_connectors.append(
+            SystemConnectorDiagnostics(
+                connected_staff_indices=sys_to_global_indices[tuple(indices)],
+                connector_kind=conn_kind, # type: ignore
+                x0=round(cx0, 3),
+                y0=round(cy0, 3),
+                x1=round(cx1, 3),
+                y1=round(cy1, 3)
+            )
+        )
+
+    for idx, group in enumerate(notation_groups):
+        mapping = group_system_mapping[idx]
+        system_idx = mapping["system_index"]
+        staff_idx = mapping["staff_index"]
+        gb = group_bounds[idx]
+
+        line_ys = gb["line_ys"]
+        x0 = gb["x0"]
+        x1 = gb["x1"]
+        y0 = gb["y0"]
+        y1 = gb["y1"]
+        staff_space = gb["staff_space"]
 
         staff_geom = NotationStaffGeometry(
             page_index=page_index,
             system_index=system_idx,
-            staff_index=1,
+            staff_index=staff_idx,
             x0=round(x0, 3),
             y0=round(y0, 3),
             x1=round(x1, 3),
@@ -356,7 +463,7 @@ def build_notation_diagnostics(
             )
         )
 
-    return PdfStaffNotationGeometryDiagnostics(staves=staves_diags)
+    return PdfStaffNotationGeometryDiagnostics(staves=staves_diags, system_connectors=system_connectors)
 
 
 def extract_notation_diagnostics_dict(page: Any, page_index: int) -> dict[str, Any]:
