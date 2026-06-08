@@ -59,3 +59,13 @@ class XAlignedPrimitiveCluster(BaseModel):
         if self.x0 > self.x1:
             raise ValueError("x0 must be <= x1")
         return self
+
+class GeometryCandidateSet(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    circular_markers: tuple[CircularMarkerCandidate, ...] = ()
+    vertical_strokes: tuple[VerticalStrokeCandidate, ...] = ()
+    horizontal_strokes: tuple[HorizontalStrokeCandidate, ...] = ()
+    curve_markers: tuple[CurveMarkerCandidate, ...] = ()
+    rectangle_markers: tuple[RectangleMarkerCandidate, ...] = ()
+    text_markers: tuple[TextMarkerCandidate, ...] = ()
+    clusters: tuple[XAlignedPrimitiveCluster, ...] = ()
