@@ -1,61 +1,61 @@
 {
+  "status": "success",
   "staves": [
     {
+      "clustering": {
+        "cluster_primitive_count_summary": {
+          "curves_total": 0,
+          "lines_total": 2,
+          "rects_total": 0,
+          "text_spans_total": 0
+        },
+        "clusters_with_vertical_stroke_candidate": 0,
+        "max_cluster_vertical_span_staff_spaces": 4.0,
+        "max_primitives_per_x_aligned_cluster": 1,
+        "x_aligned_cluster_count": 2
+      },
       "contract_version": "notation-diagnostics.v0.1",
+      "left_margin": {
+        "curve_candidate_count": 0,
+        "distinct_font_count": 0,
+        "margin_x_threshold_staff_spaces": 10.0,
+        "max_text_spans_for_single_font": 0,
+        "rectangle_candidate_count": 0,
+        "text_span_count": 0,
+        "vertical_stroke_candidate_count": 1
+      },
+      "morphology": {
+        "curve_candidate": 0,
+        "diagonal_stroke_candidate": 0,
+        "non_staff_horizontal": 0,
+        "rectangle_candidate": 0,
+        "staff_line_horizontal": 5,
+        "text_span_by_font": {},
+        "vertical_stroke_candidate": 2
+      },
+      "primitives": {
+        "curve_count": 0,
+        "line_count": 7,
+        "rect_count": 0,
+        "text_span_count_by_font": {}
+      },
       "staff": {
-        "page_index": 1,
-        "system_index": 1,
-        "staff_index": 1,
-        "x0": 80.0,
-        "y0": 100.0,
-        "x1": 575.0,
-        "y1": 134.0,
         "line_y_coords": [
           100.0,
           108.5,
           117.0,
           125.5,
           134.0
-        ]
-      },
-      "primitives": {
-        "line_count": 7,
-        "curve_count": 0,
-        "rect_count": 0,
-        "text_span_count_by_font": {}
-      },
-      "morphology": {
-        "staff_line_horizontal": 5,
-        "non_staff_horizontal": 0,
-        "vertical_stroke_candidate": 2,
-        "diagonal_stroke_candidate": 0,
-        "rectangle_candidate": 0,
-        "curve_candidate": 0,
-        "text_span_by_font": {}
-      },
-      "clustering": {
-        "x_aligned_cluster_count": 2,
-        "max_primitives_per_x_aligned_cluster": 1,
-        "clusters_with_vertical_stroke_candidate": 0,
-        "max_cluster_vertical_span_staff_spaces": 4.0,
-        "cluster_primitive_count_summary": {
-          "lines_total": 2,
-          "curves_total": 0,
-          "rects_total": 0,
-          "text_spans_total": 0
-        }
-      },
-      "left_margin": {
-        "margin_x_threshold_staff_spaces": 10.0,
-        "text_span_count": 0,
-        "distinct_font_count": 0,
-        "max_text_spans_for_single_font": 0,
-        "curve_candidate_count": 0,
-        "vertical_stroke_candidate_count": 1,
-        "rectangle_candidate_count": 0
+        ],
+        "page_index": 1,
+        "staff_index": 1,
+        "system_index": 1,
+        "x0": 80.0,
+        "x1": 575.0,
+        "y0": 100.0,
+        "y1": 134.0
       }
     }
   ],
-  "system_connectors": [],
-  "status": "success"
+  "system_connectors": []
 }
