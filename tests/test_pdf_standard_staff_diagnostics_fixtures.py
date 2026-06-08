@@ -150,3 +150,31 @@ def test_generated_dense_margin_fixture(tmp_path) -> None:
     assert lm["text_span_count"] >= 6
     assert lm["distinct_font_count"] == 1
     assert lm["max_text_spans_for_single_font"] >= 6
+
+def test_generated_sparse_fixture(tmp_path) -> None:
+    from score2gp.pdf import inspect_pdf
+    from pathlib import Path
+
+    pdf_path = Path(__file__).parent / "fixtures" / "pdf" / "generated_standard_staff_sparse.pdf"
+    out_dir = tmp_path / "out"
+
+    result = inspect_pdf(pdf_path, out_dir)
+
+    assert "pages" in result
+    assert len(result["pages"]) == 1
+    page_info = result["pages"][0]
+
+    diags = page_info["pdf_staff_notation_diagnostics"]
+    assert diags.get("status") == "success"
+
+    staves = diags.get("staves", [])
+    assert len(staves) == 1
+
+    staff_diag = staves[0]
+    lm = staff_diag.get("left_margin")
+    assert lm is not None
+
+    assert lm["text_span_count"] == 0
+    assert lm["distinct_font_count"] == 0
+    assert lm["max_text_spans_for_single_font"] == 0
+
