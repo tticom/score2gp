@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 class NotationStaffGeometry(BaseModel):
@@ -63,6 +64,7 @@ class StaffLeftMarginAggregateDiagnostics(BaseModel):
 class NotationStaffDiagnostics(BaseModel):
     model_config = ConfigDict(frozen=True)
 
+    contract_version: Literal["notation-diagnostics.v0.1"] = "notation-diagnostics.v0.1"
     staff: NotationStaffGeometry
     primitives: LocalPrimitivesSummary
     morphology: NotationStaffMorphology | None = None
