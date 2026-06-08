@@ -1,0 +1,60 @@
+{
+  "staves": [
+    {
+      "contract_version": "notation-diagnostics.v0.1",
+      "staff": {
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "x0": 80.0,
+        "y0": 100.0,
+        "x1": 575.0,
+        "y1": 134.0,
+        "line_y_coords": [
+          100.0,
+          108.5,
+          117.0,
+          125.5,
+          134.0
+        ]
+      },
+      "primitives": {
+        "line_count": 7,
+        "curve_count": 2,
+        "rect_count": 0,
+        "text_span_count_by_font": {}
+      },
+      "morphology": {
+        "staff_line_horizontal": 5,
+        "non_staff_horizontal": 0,
+        "vertical_stroke_candidate": 2,
+        "diagonal_stroke_candidate": 0,
+        "rectangle_candidate": 0,
+        "curve_candidate": 2,
+        "text_span_by_font": {}
+      },
+      "clustering": {
+        "x_aligned_cluster_count": 4,
+        "max_primitives_per_x_aligned_cluster": 1,
+        "clusters_with_vertical_stroke_candidate": 0,
+        "max_cluster_vertical_span_staff_spaces": 4.0,
+        "cluster_primitive_count_summary": {
+          "lines_total": 2,
+          "curves_total": 2,
+          "rects_total": 0,
+          "text_spans_total": 0
+        }
+      },
+      "left_margin": {
+        "margin_x_threshold_staff_spaces": 10.0,
+        "text_span_count": 0,
+        "distinct_font_count": 0,
+        "max_text_spans_for_single_font": 0,
+        "curve_candidate_count": 1,
+        "vertical_stroke_candidate_count": 1,
+        "rectangle_candidate_count": 0
+      }
+    }
+  ],
+  "status": "success"
+}
