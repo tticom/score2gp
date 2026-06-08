@@ -61,13 +61,15 @@ def cluster_x_aligned_primitives(primitives: list[PrimitiveGeometry], staff_spac
 
     return clusters
 
-
 def build_notation_diagnostics(
     page: Any,
     page_index: int,
     notation_groups: list[list[Any]]
 ) -> PdfStaffNotationGeometryDiagnostics:
+    from .pdf_staff_geometry import SystemConnectorDiagnostics
+
     staves_diags = []
+    system_connectors = []
 
     drawings = page.get_drawings()
     try:
@@ -75,17 +77,154 @@ def build_notation_diagnostics(
     except Exception:
         text_dict = {}
 
-    for system_idx, group in enumerate(notation_groups, start=1):
+    # Pre-calculate bounds for all notation groups
+    group_bounds = []
+    for group in notation_groups:
         line_ys = sorted([round((line.y0 + line.y1) / 2, 3) for line in group])
         x0 = min(min(line.x0, line.x1) for line in group)
         x1 = max(max(line.x0, line.x1) for line in group)
         y0 = min(line_ys)
         y1 = max(line_ys)
+        if len(line_ys) >= 2:
+            gaps = [line_ys[i+1] - line_ys[i] for i in range(len(line_ys)-1)]
+            staff_space = statistics.median(gaps)
+        else:
+            staff_space = 0.0
+        group_bounds.append({"line_ys": line_ys, "x0": x0, "x1": x1, "y0": y0, "y1": y1, "staff_space": staff_space})
+
+    # Detect connectors
+    # We look for vertical lines or curves near the left margin (x0 - 20 to x0 + 10) that span across multiple groups
+    group_system_mapping = {i: {"system_index": i + 1, "staff_index": 1} for i in range(len(notation_groups))}
+    current_system_idx = 1
+
+    # We will build connected systems
+    connected_systems = []
+    i = 0
+    while i < len(notation_groups):
+        system_group_indices = [i]
+        j = i + 1
+
+        while j < len(notation_groups):
+            # Check if there is a connector between group j-1 and group j
+            g_prev = group_bounds[j-1]
+            g_curr = group_bounds[j]
+
+            # Connector must be roughly at the left edge
+            left_x = min(g_prev["x0"], g_curr["x0"])
+
+            connector_found = False
+            connector_info = None
+
+            # Scan drawings for a vertical line or curve spanning from g_prev["y0"] to g_curr["y1"]
+            for drawing in drawings:
+                draw_rect = drawing.get("rect")
+                if not draw_rect: continue
+                dx0, dy0, dx1, dy1 = draw_rect
+
+                # Check if this drawing spans the two groups vertically and is at the left margin
+                if dx1 < left_x - 30 or dx0 > left_x + 10:
+                    continue
+
+                if dy0 <= g_prev["y0"] + 5 and dy1 >= g_curr["y1"] - 5:
+                    # It spans! Check primitive type
+                    for item in drawing.get("items", []):
+                        if not item: continue
+                        itype = item[0]
+                        if itype == "l" and len(item) >= 3:
+                            p0, p1 = item[1], item[2]
+                            ix0, ix1 = min(p0.x, p1.x), max(p0.x, p1.x)
+                            iy0, iy1 = min(p0.y, p1.y), max(p0.y, p1.y)
+                            if ix1 - ix0 <= 2.0 and iy1 - iy0 >= (g_curr["y1"] - g_prev["y0"]) - 10:
+                                connector_found = True
+                                connector_info = ("leading_barline", ix0, iy0, ix1, iy1)
+                                break
+                        elif itype == "c" and len(item) >= 2:
+                            pts = item[1:]
+                            iy0, iy1 = min(p.y for p in pts), max(p.y for p in pts)
+                            ix0, ix1 = min(p.x for p in pts), max(p.x for p in pts)
+                            if iy1 - iy0 >= (g_curr["y1"] - g_prev["y0"]) - 10:
+                                connector_found = True
+                                connector_info = ("brace_curve", ix0, iy0, ix1, iy1) # or bracket
+                                break
+
+                if connector_found:
+                    break
+
+            if connector_found:
+                system_group_indices.append(j)
+                # We could add to system_connectors here, but it's better to add one connector for the whole system later
+                j += 1
+            else:
+                break
+
+        connected_systems.append(system_group_indices)
+        i = j
+
+    global_staff_idx = 0
+    for system_idx, indices in enumerate(connected_systems, start=1):
+        if len(indices) > 1:
+            # We found a multi-staff system, let's find the bounding connector for the whole system
+            g_first = group_bounds[indices[0]]
+            g_last = group_bounds[indices[-1]]
+            left_x = min(group_bounds[idx]["x0"] for idx in indices)
+
+            best_connector = ("unknown_connector", left_x, g_first["y0"], left_x, g_last["y1"])
+            for drawing in drawings:
+                draw_rect = drawing.get("rect")
+                if not draw_rect: continue
+                dx0, dy0, dx1, dy1 = draw_rect
+                if dx1 < left_x - 30 or dx0 > left_x + 10: continue
+                if dy0 <= g_first["y0"] + 5 and dy1 >= g_last["y1"] - 5:
+                    for item in drawing.get("items", []):
+                        if not item: continue
+                        itype = item[0]
+                        if itype == "l" and len(item) >= 3:
+                            p0, p1 = item[1], item[2]
+                            ix0, ix1 = min(p0.x, p1.x), max(p0.x, p1.x)
+                            iy0, iy1 = min(p0.y, p1.y), max(p0.y, p1.y)
+                            if ix1 - ix0 <= 2.0 and iy1 - iy0 >= (g_last["y1"] - g_first["y0"]) - 10:
+                                best_connector = ("leading_barline", ix0, iy0, ix1, iy1)
+                                break
+                        elif itype == "c" and len(item) >= 2:
+                            pts = item[1:]
+                            iy0, iy1 = min(p.y for p in pts), max(p.y for p in pts)
+                            ix0, ix1 = min(p.x for p in pts), max(p.x for p in pts)
+                            if iy1 - iy0 >= (g_last["y1"] - g_first["y0"]) - 10:
+                                best_connector = ("brace_curve", ix0, iy0, ix1, iy1)
+                                break
+
+            system_connectors.append(
+                SystemConnectorDiagnostics(
+                    connected_staff_indices=[global_staff_idx + k + 1 for k in range(len(indices))],
+                    connector_kind=best_connector[0],
+                    x0=round(best_connector[1], 3),
+                    y0=round(best_connector[2], 3),
+                    x1=round(best_connector[3], 3),
+                    y1=round(best_connector[4], 3)
+                )
+            )
+
+        for staff_idx_in_sys, idx in enumerate(indices, start=1):
+            group_system_mapping[idx] = {"system_index": system_idx, "staff_index": staff_idx_in_sys}
+            global_staff_idx += 1
+
+    for idx, group in enumerate(notation_groups):
+        mapping = group_system_mapping[idx]
+        system_idx = mapping["system_index"]
+        staff_idx = mapping["staff_index"]
+        gb = group_bounds[idx]
+
+        line_ys = gb["line_ys"]
+        x0 = gb["x0"]
+        x1 = gb["x1"]
+        y0 = gb["y0"]
+        y1 = gb["y1"]
+        staff_space = gb["staff_space"]
 
         staff_geom = NotationStaffGeometry(
             page_index=page_index,
             system_index=system_idx,
-            staff_index=1,
+            staff_index=staff_idx,
             x0=round(x0, 3),
             y0=round(y0, 3),
             x1=round(x1, 3),
@@ -356,7 +495,7 @@ def build_notation_diagnostics(
             )
         )
 
-    return PdfStaffNotationGeometryDiagnostics(staves=staves_diags)
+    return PdfStaffNotationGeometryDiagnostics(staves=staves_diags, system_connectors=system_connectors)
 
 
 def extract_notation_diagnostics_dict(page: Any, page_index: int) -> dict[str, Any]:
