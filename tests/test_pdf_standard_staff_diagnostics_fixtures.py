@@ -127,7 +127,7 @@ def test_schema_snapshot_gate() -> None:
     from pathlib import Path
 
     schema_path = Path(__file__).parent.parent / "fixtures" / "public" / "pdf_staff_geometry_diagnostics_schema.json"
-    
+
     # Load the reference schema
     with open(schema_path, "r", encoding="utf-8") as f:
         reference_schema = json.load(f)
