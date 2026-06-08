@@ -303,8 +303,18 @@ def test_inspect_pdf_multi_staff_fixture(tmp_path: Any) -> None:
 
     connectors = diags.get("system_connectors", [])
     assert len(connectors) == 1
-    assert connectors[0]["connector_kind"] == "leading_barline"
-    assert connectors[0]["connected_staff_indices"] == [1, 2]
+
+    conn = connectors[0]
+    assert conn["connector_kind"] == "leading_barline"
+    assert conn["connected_staff_indices"] == [1, 2]
+
+    # Assert connector bounds match the actual geometry in generated_standard_staff_multi_staff.json
+    # x is 50.0, y_min is 100.0, y_max is 284.0
+    # PyMuPDF line bounds might include width/2
+    assert abs(conn["x0"] - 50.0) < 1.0
+    assert abs(conn["x1"] - 50.0) < 1.0
+    assert abs(conn["y0"] - 100.0) < 1.0
+    assert abs(conn["y1"] - 284.0) < 1.0
 
 def test_inspect_pdf_rectangle_positions_fixture(tmp_path: Any) -> None:
     from score2gp.pdf import inspect_pdf
