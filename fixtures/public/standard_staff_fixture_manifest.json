@@ -1,0 +1,52 @@
+{
+  "fixtures": [
+    {
+      "id": "dense-margin",
+      "json_path": "fixtures/public/generated_standard_staff_dense_margin.json",
+      "pdf_path": "tests/fixtures/pdf/generated_standard_staff_dense_margin.pdf",
+      "generator_script": "tests/fixtures/pdf/make_standard_staff_diagnostics_pdfs.py",
+      "expected_diagnostic_focus": "High count of margin symbols, text spans, and complex bounding boxes",
+      "synthetic": true,
+      "private": false,
+      "scanned": false,
+      "ocr": false,
+      "semantic_inference": false
+    },
+    {
+      "id": "sparse",
+      "json_path": "fixtures/public/generated_standard_staff_sparse.json",
+      "pdf_path": "tests/fixtures/pdf/generated_standard_staff_sparse.pdf",
+      "generator_script": "tests/fixtures/pdf/make_standard_staff_diagnostics_pdfs.py",
+      "expected_diagnostic_focus": "Minimal geometric shapes, ensuring baseline separation",
+      "synthetic": true,
+      "private": false,
+      "scanned": false,
+      "ocr": false,
+      "semantic_inference": false
+    },
+    {
+      "id": "wide-curves",
+      "json_path": "fixtures/public/generated_standard_staff_wide_curves.json",
+      "pdf_path": "tests/fixtures/pdf/generated_standard_staff_wide_curves.pdf",
+      "generator_script": "tests/fixtures/pdf/make_standard_staff_diagnostics_pdfs.py",
+      "expected_diagnostic_focus": "Wide spanning curve geometry bridging multiple positions",
+      "synthetic": true,
+      "private": false,
+      "scanned": false,
+      "ocr": false,
+      "semantic_inference": false
+    },
+    {
+      "id": "complex-cluster",
+      "json_path": "fixtures/public/generated_standard_staff_complex_cluster.json",
+      "pdf_path": "tests/fixtures/pdf/generated_standard_staff_complex_cluster.pdf",
+      "generator_script": "tests/fixtures/pdf/make_standard_staff_diagnostics_pdfs.py",
+      "expected_diagnostic_focus": "Dense overlapping vertical shape clusters",
+      "synthetic": true,
+      "private": false,
+      "scanned": false,
+      "ocr": false,
+      "semantic_inference": false
+    }
+  ]
+}
