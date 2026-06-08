@@ -274,3 +274,30 @@ def test_generated_complex_cluster_fixture(tmp_path) -> None:
     assert summary.get("lines_total", 0) >= 3
     assert summary.get("rects_total", 0) == 3
     assert summary.get("text_spans_total", 0) >= 1
+
+def test_inspect_pdf_multi_staff_fixture(tmp_path: Any) -> None:
+    from score2gp.pdf import inspect_pdf
+    from pathlib import Path
+
+    pdf_path = Path(__file__).parent / "fixtures" / "pdf" / "generated_standard_staff_multi_staff.pdf"
+    out_dir = tmp_path / "out"
+
+    result = inspect_pdf(pdf_path, out_dir)
+
+    assert "pages" in result
+    assert len(result["pages"]) == 1
+    page_info = result["pages"][0]
+
+    diags = page_info["pdf_staff_notation_diagnostics"]
+    assert diags.get("status") == "success"
+
+    staves = diags.get("staves", [])
+    assert len(staves) == 2
+
+    # Staff indexing behaviour should be tested
+    assert staves[0]["staff"]["staff_index"] == 1
+    assert staves[1]["staff"]["staff_index"] == 2
+
+    # Check independent diagnostics per staff
+    assert staves[0]["clustering"]["x_aligned_cluster_count"] == 1
+    assert staves[1]["clustering"]["x_aligned_cluster_count"] == 1

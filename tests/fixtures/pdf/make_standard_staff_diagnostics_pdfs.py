@@ -21,11 +21,15 @@ def build_pdf(json_name: str, pdf_name: str) -> None:
 
     page.insert_text((36, 40), f"Generated Standard Staff: {pdf_name}", fontsize=12, fontname="helv")
 
-    # Draw standard 5-line notation staff
-    not_data = data["notation_staff"]
-    not_ys = [not_data["y_start"] + i * not_data["line_gap"] for i in range(not_data["line_count"])]
-    for y in not_ys:
-        page.draw_line((not_data["x0"], y), (not_data["x1"], y), color=(0, 0, 0), width=0.5)
+    # Draw standard 5-line notation staff(s)
+    staves_data = data.get("notation_staves", [])
+    if "notation_staff" in data:
+        staves_data.append(data["notation_staff"])
+        
+    for not_data in staves_data:
+        not_ys = [not_data["y_start"] + i * not_data["line_gap"] for i in range(not_data["line_count"])]
+        for y in not_ys:
+            page.draw_line((not_data["x0"], y), (not_data["x1"], y), color=(0, 0, 0), width=0.5)
 
     # Draw true shared barlines
     for bar in data.get("barlines", []):
@@ -77,6 +81,7 @@ def main() -> None:
     build_pdf("generated_standard_staff_sparse.json", "generated_standard_staff_sparse.pdf")
     build_pdf("generated_standard_staff_wide_curves.json", "generated_standard_staff_wide_curves.pdf")
     build_pdf("generated_standard_staff_complex_cluster.json", "generated_standard_staff_complex_cluster.pdf")
+    build_pdf("generated_standard_staff_multi_staff.json", "generated_standard_staff_multi_staff.pdf")
 
 
 if __name__ == "__main__":
