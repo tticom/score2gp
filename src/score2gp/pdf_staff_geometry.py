@@ -3,6 +3,9 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 class NotationStaffGeometry(BaseModel):
+    """
+    Geometric bounding box and basic staff line coordinates for a single staff.
+    """
     model_config = ConfigDict(frozen=True)
 
     page_index: int = Field(ge=1)
@@ -15,6 +18,9 @@ class NotationStaffGeometry(BaseModel):
     line_y_coords: list[float]
 
 class LocalPrimitivesSummary(BaseModel):
+    """
+    Raw geometric primitive counts strictly within the staff bounding box.
+    """
     model_config = ConfigDict(frozen=True)
 
     line_count: int
@@ -23,6 +29,10 @@ class LocalPrimitivesSummary(BaseModel):
     text_span_count_by_font: dict[str, int]
 
 class NotationStaffMorphology(BaseModel):
+    """
+    Initial morphological classification of primitives into shapes like strokes,
+    rectangles, or curves, before any clustering occurs.
+    """
     model_config = ConfigDict(frozen=True)
 
     staff_line_horizontal: int
@@ -34,6 +44,10 @@ class NotationStaffMorphology(BaseModel):
     text_span_by_font: dict[str, int]
 
 class ClusterPrimitiveCountSummary(BaseModel):
+    """
+    Summary of all primitives contained within any x-aligned cluster.
+    Useful for asserting total geometric density of clusters.
+    """
     model_config = ConfigDict(frozen=True)
 
     lines_total: int = Field(ge=0)
@@ -42,6 +56,10 @@ class ClusterPrimitiveCountSummary(BaseModel):
     text_spans_total: int = Field(ge=0)
 
 class XAlignedClusterAggregateDiagnostics(BaseModel):
+    """
+    Geometric statistics for x-aligned clusters of primitives (e.g. circles grouped with stems).
+    This layer does not assign semantic meaning, only spatial grouping.
+    """
     model_config = ConfigDict(frozen=True)
 
     x_aligned_cluster_count: int = Field(ge=0)
@@ -51,6 +69,10 @@ class XAlignedClusterAggregateDiagnostics(BaseModel):
     cluster_primitive_count_summary: ClusterPrimitiveCountSummary
 
 class StaffLeftMarginAggregateDiagnostics(BaseModel):
+    """
+    Diagnostics for primitives falling within the extreme left margin of the staff,
+    typically used for initial margin marker shapes.
+    """
     model_config = ConfigDict(frozen=True)
 
     margin_x_threshold_staff_spaces: float = Field(ge=0.0)
@@ -62,6 +84,9 @@ class StaffLeftMarginAggregateDiagnostics(BaseModel):
     rectangle_candidate_count: int = Field(ge=0)
 
 class NotationStaffDiagnostics(BaseModel):
+    """
+    Comprehensive geometric diagnostics for a single notation staff.
+    """
     model_config = ConfigDict(frozen=True)
 
     contract_version: Literal["notation-diagnostics.v0.1"] = "notation-diagnostics.v0.1"
@@ -72,6 +97,9 @@ class NotationStaffDiagnostics(BaseModel):
     left_margin: StaffLeftMarginAggregateDiagnostics | None = None
 
 class PdfStaffNotationGeometryDiagnostics(BaseModel):
+    """
+    Top-level payload containing diagnostic details for all identified staves.
+    """
     model_config = ConfigDict(frozen=True)
 
     staves: list[NotationStaffDiagnostics]
