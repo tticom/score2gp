@@ -219,7 +219,7 @@ def test_generated_wide_curves_fixture(tmp_path) -> None:
     assert len(staves) == 1
 
     staff_diag = staves[0]
-    
+
     # Assert stable non-margin wide-curve diagnostic presence across the whole staff region
     prims = staff_diag.get("primitives", {})
     assert prims.get("curve_count", 0) == 2
@@ -275,6 +275,47 @@ def test_generated_complex_cluster_fixture(tmp_path) -> None:
     assert summary.get("rects_total", 0) == 3
     assert summary.get("text_spans_total", 0) >= 1
 
+def test_inspect_pdf_multi_staff_fixture(tmp_path: Any) -> None:
+    from score2gp.pdf import inspect_pdf
+    from pathlib import Path
+
+    pdf_path = Path(__file__).parent / "fixtures" / "pdf" / "generated_standard_staff_multi_staff.pdf"
+    out_dir = tmp_path / "out"
+
+    result = inspect_pdf(pdf_path, out_dir)
+
+    assert "pages" in result
+    assert len(result["pages"]) == 1
+    page_info = result["pages"][0]
+
+    diags = page_info["pdf_staff_notation_diagnostics"]
+    assert diags.get("status") == "success"
+
+    staves = diags.get("staves", [])
+    assert len(staves) == 2
+
+    # Verify that the two staves are correctly assigned to the same system
+    assert staves[0]["staff"]["system_index"] == 1
+    assert staves[1]["staff"]["system_index"] == 1
+
+    assert staves[0]["staff"]["staff_index"] == 1
+    assert staves[1]["staff"]["staff_index"] == 2
+
+    connectors = diags.get("system_connectors", [])
+    assert len(connectors) == 1
+
+    conn = connectors[0]
+    assert conn["connector_kind"] == "leading_barline"
+    assert conn["connected_staff_indices"] == [1, 2]
+
+    # Assert connector bounds match the actual geometry in generated_standard_staff_multi_staff.json
+    # x is 50.0, y_min is 100.0, y_max is 284.0
+    # PyMuPDF line bounds might include width/2
+    assert abs(conn["x0"] - 50.0) < 1.0
+    assert abs(conn["x1"] - 50.0) < 1.0
+    assert abs(conn["y0"] - 100.0) < 1.0
+    assert abs(conn["y1"] - 284.0) < 1.0
+
 def test_inspect_pdf_rectangle_positions_fixture(tmp_path: Any) -> None:
     from score2gp.pdf import inspect_pdf
     from pathlib import Path
@@ -295,11 +336,11 @@ def test_inspect_pdf_rectangle_positions_fixture(tmp_path: Any) -> None:
     assert len(staves) == 1
 
     staff_diag = staves[0]
-    
+
     # Primitives total rect count should be 2 (1 in margin, 1 in body)
     prims = staff_diag.get("primitives", {})
     assert prims.get("rect_count", 0) == 2
-    
+
     # Left margin should have 1 rectangle candidate
     left_margin = staff_diag.get("left_margin", {})
     assert left_margin.get("rectangle_candidate_count", 0) == 1
@@ -307,3 +348,32 @@ def test_inspect_pdf_rectangle_positions_fixture(tmp_path: Any) -> None:
     # Therefore, body rects = total - margin = 2 - 1 = 1
     body_rects = prims.get("rect_count", 0) - left_margin.get("rectangle_candidate_count", 0)
     assert body_rects == 1
+
+def test_inspect_pdf_multi_staff_unconnected_fixture(tmp_path: Any) -> None:
+    from score2gp.pdf import inspect_pdf
+    from pathlib import Path
+
+    pdf_path = Path(__file__).parent / "fixtures" / "pdf" / "generated_standard_staff_multi_staff_unconnected.pdf"
+    out_dir = tmp_path / "out"
+
+    result = inspect_pdf(pdf_path, out_dir)
+
+    assert "pages" in result
+    assert len(result["pages"]) == 1
+    page_info = result["pages"][0]
+
+    diags = page_info["pdf_staff_notation_diagnostics"]
+    assert diags.get("status") == "success"
+
+    staves = diags.get("staves", [])
+    assert len(staves) == 2
+
+    # Verify that the two staves are correctly assigned to DIFFERENT systems
+    assert staves[0]["staff"]["system_index"] == 1
+    assert staves[1]["staff"]["system_index"] == 2
+
+    assert staves[0]["staff"]["staff_index"] == 1
+    assert staves[1]["staff"]["staff_index"] == 1
+
+    connectors = diags.get("system_connectors", [])
+    assert len(connectors) == 0

@@ -274,6 +274,53 @@
       "title": "StaffLeftMarginAggregateDiagnostics",
       "type": "object"
     },
+    "SystemConnectorDiagnostics": {
+      "description": "Geometry-only diagnostics for evidence connecting multiple staves into a system.",
+      "properties": {
+        "connected_staff_indices": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Connected Staff Indices",
+          "type": "array"
+        },
+        "connector_kind": {
+          "enum": [
+            "leading_barline",
+            "bracket_curve",
+            "brace_curve"
+          ],
+          "title": "Connector Kind",
+          "type": "string"
+        },
+        "x0": {
+          "title": "X0",
+          "type": "number"
+        },
+        "y0": {
+          "title": "Y0",
+          "type": "number"
+        },
+        "x1": {
+          "title": "X1",
+          "type": "number"
+        },
+        "y1": {
+          "title": "Y1",
+          "type": "number"
+        }
+      },
+      "required": [
+        "connected_staff_indices",
+        "connector_kind",
+        "x0",
+        "y0",
+        "x1",
+        "y1"
+      ],
+      "title": "SystemConnectorDiagnostics",
+      "type": "object"
+    },
     "XAlignedClusterAggregateDiagnostics": {
       "description": "Geometric statistics for x-aligned clusters of primitives (e.g. circular markers grouped with vertical strokes).\nThis layer does not assign semantic meaning, only spatial grouping.",
       "properties": {
@@ -320,6 +367,21 @@
       },
       "title": "Staves",
       "type": "array"
+    },
+    "system_connectors": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/SystemConnectorDiagnostics"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "System Connectors"
     },
     "status": {
       "anyOf": [
