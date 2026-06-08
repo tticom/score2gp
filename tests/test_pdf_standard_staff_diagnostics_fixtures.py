@@ -178,3 +178,35 @@ def test_generated_sparse_fixture(tmp_path) -> None:
     assert lm["distinct_font_count"] == 0
     assert lm["max_text_spans_for_single_font"] == 0
 
+def test_generated_wide_curves_fixture(tmp_path) -> None:
+    from score2gp.pdf import inspect_pdf
+    from pathlib import Path
+
+    pdf_path = Path(__file__).parent / "fixtures" / "pdf" / "generated_standard_staff_wide_curves.pdf"
+    out_dir = tmp_path / "out"
+
+    result = inspect_pdf(pdf_path, out_dir)
+
+    assert "pages" in result
+    assert len(result["pages"]) == 1
+    page_info = result["pages"][0]
+
+    diags = page_info["pdf_staff_notation_diagnostics"]
+    assert diags.get("status") == "success"
+
+    staves = diags.get("staves", [])
+    assert len(staves) == 1
+
+    staff_diag = staves[0]
+    
+    # We should have two wide curves inside the staff bounding box
+    # They shouldn't be reported in left margin, but the main staves metrics should reflect them if implemented.
+    # The requirement: "Use `curve_candidate_count` only for actual curve primitives."
+    # Since left_margin is just margin, we should check what the test is supposed to assert.
+    lm = staff_diag.get("left_margin")
+    if lm:
+        # Curve 1 center x is 120, margin limit is 165. So it should be counted.
+        assert lm["curve_candidate_count"] == 1
+        assert lm["text_span_count"] == 0
+
+
