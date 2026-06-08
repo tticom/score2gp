@@ -377,3 +377,53 @@ def test_inspect_pdf_multi_staff_unconnected_fixture(tmp_path: Any) -> None:
 
     connectors = diags.get("system_connectors", [])
     assert len(connectors) == 0
+
+def test_inspect_pdf_text_font_diversity_fixture(tmp_path: Any) -> None:
+    from score2gp.pdf import inspect_pdf
+    from pathlib import Path
+    import json
+    import math
+
+    pdf_path = Path(__file__).parent / "fixtures" / "pdf" / "generated_standard_staff_text_font_diversity.pdf"
+    json_path = pdf_path.parents[3] / "fixtures" / "public" / "generated_standard_staff_text_font_diversity.json"
+    out_dir = tmp_path / "out"
+
+    result = inspect_pdf(pdf_path, out_dir)
+    assert "pages" in result
+    assert len(result["pages"]) == 1
+    page_info = result["pages"][0]
+
+    diags = page_info["pdf_staff_notation_diagnostics"]
+    assert diags.get("status") == "success"
+
+    staves = diags.get("staves", [])
+    assert len(staves) == 1
+
+    staff_diag = staves[0]
+    left_margin = staff_diag.get("left_margin", {})
+
+    with open(json_path, "r") as f:
+        fixture_data = json.load(f)
+
+    # Note cluster texts were put in the left margin
+    fixture_texts = fixture_data["note_clusters"][0]["texts"]
+
+    staff_geom = staff_diag["staff"]
+    staff_x0 = staff_geom["x0"]
+    staff_space = staff_geom["line_y_coords"][1] - staff_geom["line_y_coords"][0]
+    margin_threshold = staff_x0 + (10.0 * staff_space)
+
+    # Assert explicit coordinates and properties from fixture
+    for fixture_text in fixture_texts:
+        # Calculate center x (since fixture texts x is just the left edge, we approximate center_x as x + small width)
+        # Actually in the fixture we have "x" and "y" which are used to place the text.
+        # The margin threshold is staff_x0 + 10.0 * staff_space.
+        # staff_space = 8.5, margin = 100.0 + 85.0 = 185.0
+        # The fixture text "x" is 110.0, so the center will be roughly 115.0 which is <= 185.0
+        fixture_center_x = fixture_text["x"] + 5.0
+        assert staff_x0 <= fixture_center_x <= margin_threshold
+
+    # Assert diagnostics counts
+    assert left_margin.get("text_span_count", 0) == 3
+    assert left_margin.get("distinct_font_count", 0) == 2
+    assert left_margin.get("max_text_spans_for_single_font", 0) == 2
