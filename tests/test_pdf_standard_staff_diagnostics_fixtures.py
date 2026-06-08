@@ -209,4 +209,46 @@ def test_generated_wide_curves_fixture(tmp_path) -> None:
         assert lm["curve_candidate_count"] == 1
         assert lm["text_span_count"] == 0
 
+def test_generated_complex_cluster_fixture(tmp_path) -> None:
+    from score2gp.pdf import inspect_pdf
+    from pathlib import Path
+
+    pdf_path = Path(__file__).parent / "fixtures" / "pdf" / "generated_standard_staff_complex_cluster.pdf"
+    out_dir = tmp_path / "out"
+
+    result = inspect_pdf(pdf_path, out_dir)
+
+    assert "pages" in result
+    assert len(result["pages"]) == 1
+    page_info = result["pages"][0]
+
+    diags = page_info["pdf_staff_notation_diagnostics"]
+    assert diags.get("status") == "success"
+
+    staves = diags.get("staves", [])
+    assert len(staves) == 1
+
+    staff_diag = staves[0]
+    clustering = staff_diag.get("clustering")
+    assert clustering is not None
+
+    # The fixture has two note clusters
+    # Cluster 1: x around 200. Has 1 vertical stroke (stem), 1 rect (notehead), 1 text (#).
+    # Cluster 2: x around 300. Has 1 vertical stroke (stem), 2 rects (noteheads), 1 horizontal line (ledger).
+    # The fixture has two barlines, one separate text cluster, and two note clusters. Total = 5 clusters.
+    assert clustering["x_aligned_cluster_count"] == 5
+    
+    # max_primitives_per_x_aligned_cluster should be at least 4 for cluster 2 (1 vertical, 2 rects, 1 ledger)
+    assert clustering["max_primitives_per_x_aligned_cluster"] >= 3
+    
+    assert clustering["clusters_with_vertical_stroke_candidate"] >= 1
+    
+    summary = clustering.get("cluster_primitive_count_summary", {})
+    # lines_total: 1 vertical for cluster 1, 1 vertical and 1 horizontal for cluster 2 => 3 lines
+    # Wait, the vertical lines have dx=0. So they are lines.
+    assert summary.get("lines_total", 0) >= 3
+    assert summary.get("rects_total", 0) == 3
+    assert summary.get("text_spans_total", 0) >= 1
+
+
 
