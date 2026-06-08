@@ -242,17 +242,14 @@ def test_generated_complex_cluster_fixture(tmp_path) -> None:
     # Cluster 2: x around 300. Has 1 vertical stroke (stem), 2 rects (noteheads), 1 horizontal line (ledger).
     # The fixture has two barlines, one separate text cluster, and two note clusters. Total = 5 clusters.
     assert clustering["x_aligned_cluster_count"] == 5
-    
+
     # max_primitives_per_x_aligned_cluster should be at least 4 for cluster 2 (1 vertical, 2 rects, 1 ledger)
     assert clustering["max_primitives_per_x_aligned_cluster"] >= 4
-    
+
     assert clustering["clusters_with_vertical_stroke_candidate"] >= 1
-    
+
     summary = clustering.get("cluster_primitive_count_summary", {})
     # lines_total: 2 barlines + 1 vertical for cluster 1 + 1 vertical and 1 horizontal for cluster 2 => 5 lines
     assert summary.get("lines_total", 0) >= 3
     assert summary.get("rects_total", 0) == 3
     assert summary.get("text_spans_total", 0) >= 1
-
-
-
