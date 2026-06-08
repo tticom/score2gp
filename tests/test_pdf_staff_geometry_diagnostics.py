@@ -99,6 +99,7 @@ def test_build_notation_diagnostics_mock() -> None:
     assert len(notation_diags.staves) == 1
     diag = notation_diags.staves[0]
 
+    assert diag.contract_version == "notation-diagnostics.v0.1"
     assert diag.staff.page_index == 1
     assert diag.staff.system_index == 1
     assert diag.staff.staff_index == 1

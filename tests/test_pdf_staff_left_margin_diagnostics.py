@@ -68,6 +68,7 @@ def test_margin_filtering_counts_and_excludes() -> None:
     staff_groups = [[_LineSegment(10.0, y, 200.0, y) for y in [100.0, 110.0, 120.0, 130.0, 140.0]]]
     diags = build_notation_diagnostics(page, 1, staff_groups)
     assert len(diags.staves) == 1
+    assert diags.staves[0].contract_version == "notation-diagnostics.v0.1"
     lm = diags.staves[0].left_margin
     assert lm is not None
     assert lm.curve_candidate_count == 1
@@ -115,3 +116,8 @@ def test_schema_does_not_contain_semantic_names() -> None:
     schema_str = json.dumps(schema).lower()
     for forbidden in ["clef", "pitch", "time_signature", "key_signature", "notehead", "duration"]:
         assert forbidden not in schema_str
+
+    top_level_schema = NotationStaffDiagnostics.model_json_schema()
+    top_level_schema_str = json.dumps(top_level_schema).lower()
+    for forbidden in ["clef", "pitch", "time_signature", "key_signature", "notehead", "duration"]:
+        assert forbidden not in top_level_schema_str
