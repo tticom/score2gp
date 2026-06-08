@@ -104,6 +104,7 @@ def test_aggregate_counts_are_deterministic_and_correct() -> None:
     diags = build_notation_diagnostics(MockPage(), 1, [group])
 
     staff_diag = diags.staves[0]
+    assert staff_diag.contract_version == "notation-diagnostics.v0.1"
     clustering = staff_diag.clustering
 
     assert clustering is not None
