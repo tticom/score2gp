@@ -57,7 +57,7 @@ class ClusterPrimitiveCountSummary(BaseModel):
 
 class XAlignedClusterAggregateDiagnostics(BaseModel):
     """
-    Geometric statistics for x-aligned clusters of primitives (e.g. circles grouped with stems).
+    Geometric statistics for x-aligned clusters of primitives (e.g. circular markers grouped with vertical strokes).
     This layer does not assign semantic meaning, only spatial grouping.
     """
     model_config = ConfigDict(frozen=True)
@@ -71,7 +71,7 @@ class XAlignedClusterAggregateDiagnostics(BaseModel):
 class StaffLeftMarginAggregateDiagnostics(BaseModel):
     """
     Diagnostics for primitives falling within the extreme left margin of the staff,
-    typically used for initial margin marker shapes.
+    typically used for marker-like geometric shapes near the staff start.
     """
     model_config = ConfigDict(frozen=True)
 
