@@ -51,7 +51,7 @@ The schema for these diagnostics is tracked in `fixtures/public/pdf_staff_geomet
 A snapshot test asserts that this schema does not drift or unintentionally leak semantic names. 
 
 **How to update the schema snapshot intentionally:**
-If you make an approved geometric addition to the schema, you must intentionally update the snapshot by running the helper script:
+If you make an approved geometric addition to the schema, you must intentionally update the snapshot by running the helper script (available once Task 8 / PR #204 is merged):
 ```bash
 python tests/fixtures/pdf/make_pdf_staff_geometry_schema_snapshot.py
 ```
