@@ -35,6 +35,15 @@ def build_pdf(json_name: str, pdf_name: str) -> None:
     for txt in data.get("margin_text_clusters", []):
         page.insert_text((txt["x"], txt["y"]), txt["text"], fontsize=txt["fontsize"], fontname=txt["fontname"])
 
+    # Draw wide curves (Bezier)
+    for curve in data.get("wide_curves", []):
+        p0 = curve["p0"]
+        p1 = curve["p1"]
+        p2 = curve["p2"]
+        p3 = curve["p3"]
+        page.draw_bezier(p0, p1, p2, p3, color=(0, 0, 0), width=1.0)
+
+
     doc.save(pdf_path, garbage=4, deflate=True)
     doc.close()
     print(f"Compiled {pdf_path.name} successfully.")
@@ -42,6 +51,7 @@ def build_pdf(json_name: str, pdf_name: str) -> None:
 def main() -> None:
     build_pdf("generated_standard_staff_dense_margin.json", "generated_standard_staff_dense_margin.pdf")
     build_pdf("generated_standard_staff_sparse.json", "generated_standard_staff_sparse.pdf")
+    build_pdf("generated_standard_staff_wide_curves.json", "generated_standard_staff_wide_curves.pdf")
 
 
 if __name__ == "__main__":

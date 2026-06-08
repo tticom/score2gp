@@ -178,3 +178,40 @@ def test_generated_sparse_fixture(tmp_path) -> None:
     assert lm["distinct_font_count"] == 0
     assert lm["max_text_spans_for_single_font"] == 0
 
+def test_generated_wide_curves_fixture(tmp_path) -> None:
+    from score2gp.pdf import inspect_pdf
+    from pathlib import Path
+
+    pdf_path = Path(__file__).parent / "fixtures" / "pdf" / "generated_standard_staff_wide_curves.pdf"
+    out_dir = tmp_path / "out"
+
+    result = inspect_pdf(pdf_path, out_dir)
+
+    assert "pages" in result
+    assert len(result["pages"]) == 1
+    page_info = result["pages"][0]
+
+    diags = page_info["pdf_staff_notation_diagnostics"]
+    assert diags.get("status") == "success"
+
+    staves = diags.get("staves", [])
+    assert len(staves) == 1
+
+    staff_diag = staves[0]
+    
+    # Assert stable non-margin wide-curve diagnostic presence across the whole staff region
+    prims = staff_diag.get("primitives", {})
+    assert prims.get("curve_count", 0) == 2
+
+    morph = staff_diag.get("morphology", {})
+    if morph:
+        assert morph.get("curve_candidate", 0) == 2
+
+    # Since left-margin diagnostics also expose curve counts, assert only the one
+    # curve whose geometric centre falls inside the 10-staff-space left-margin window.
+    lm = staff_diag.get("left_margin")
+    if lm:
+        assert lm["curve_candidate_count"] == 1
+        assert lm["text_span_count"] == 0
+
+
