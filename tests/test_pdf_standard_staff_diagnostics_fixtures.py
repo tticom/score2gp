@@ -427,3 +427,71 @@ def test_inspect_pdf_text_font_diversity_fixture(tmp_path: Any) -> None:
     assert left_margin.get("text_span_count", 0) == 3
     assert left_margin.get("distinct_font_count", 0) == 2
     assert left_margin.get("max_text_spans_for_single_font", 0) == 2
+
+def test_inspect_pdf_left_margin_threshold_fixture(tmp_path: Any) -> None:
+    from score2gp.pdf import inspect_pdf
+    from pathlib import Path
+    import json
+
+    pdf_path = Path(__file__).parent / "fixtures" / "pdf" / "generated_standard_staff_left_margin_threshold.pdf"
+    json_path = pdf_path.parents[3] / "fixtures" / "public" / "generated_standard_staff_left_margin_threshold.json"
+    out_dir = tmp_path / "out"
+
+    result = inspect_pdf(pdf_path, out_dir)
+    assert "pages" in result
+    assert len(result["pages"]) == 1
+    page_info = result["pages"][0]
+
+    diags = page_info["pdf_staff_notation_diagnostics"]
+    assert diags.get("status") == "success"
+
+    staves = diags.get("staves", [])
+    assert len(staves) == 1
+
+    staff_diag = staves[0]
+    left_margin = staff_diag.get("left_margin", {})
+
+    with open(json_path, "r") as f:
+        fixture_data = json.load(f)
+
+    staff_geom = staff_diag["staff"]
+    staff_x0 = staff_geom["x0"]
+    staff_space = staff_geom["line_y_coords"][1] - staff_geom["line_y_coords"][0]
+    margin_threshold = staff_x0 + (10.0 * staff_space)
+
+    inside_cluster = fixture_data["note_clusters"][0]
+    outside_cluster = fixture_data["note_clusters"][1]
+    inside_curve = fixture_data["wide_curves"][0]
+    outside_curve = fixture_data["wide_curves"][1]
+    
+    # Assert Inside properties
+    inside_rect_center = (inside_cluster["rects"][0]["x0"] + inside_cluster["rects"][0]["x1"]) / 2.0
+    inside_line_center = (inside_cluster["lines"][0]["x0"] + inside_cluster["lines"][0]["x1"]) / 2.0
+    inside_text_center = inside_cluster["texts"][0]["x"] + 5.0
+    inside_curve_center = (inside_curve["p0"][0] + inside_curve["p3"][0]) / 2.0
+
+    assert staff_x0 <= inside_rect_center <= margin_threshold
+    assert staff_x0 <= inside_line_center <= margin_threshold
+    assert staff_x0 <= inside_text_center <= margin_threshold
+    assert staff_x0 <= inside_curve_center <= margin_threshold
+
+    # Assert Outside properties (should be outside margin threshold, but still inside staff box)
+    outside_rect_center = (outside_cluster["rects"][0]["x0"] + outside_cluster["rects"][0]["x1"]) / 2.0
+    outside_line_center = (outside_cluster["lines"][0]["x0"] + outside_cluster["lines"][0]["x1"]) / 2.0
+    outside_text_center = outside_cluster["texts"][0]["x"] + 5.0
+    outside_curve_center = (outside_curve["p0"][0] + outside_curve["p3"][0]) / 2.0
+
+    assert not (staff_x0 <= outside_rect_center <= margin_threshold)
+    assert not (staff_x0 <= outside_line_center <= margin_threshold)
+    assert not (staff_x0 <= outside_text_center <= margin_threshold)
+    assert not (staff_x0 <= outside_curve_center <= margin_threshold)
+    
+    assert staff_geom["x0"] <= outside_rect_center <= staff_geom["x1"]
+    assert staff_geom["x0"] <= outside_line_center <= staff_geom["x1"]
+    assert staff_geom["x0"] <= outside_text_center <= staff_geom["x1"]
+    assert staff_geom["x0"] <= outside_curve_center <= staff_geom["x1"]
+
+    assert left_margin.get("text_span_count", 0) == 1
+    assert left_margin.get("curve_candidate_count", 0) == 1
+    assert left_margin.get("vertical_stroke_candidate_count", 0) == 1
+    assert left_margin.get("rectangle_candidate_count", 0) == 1
