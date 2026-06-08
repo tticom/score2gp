@@ -116,3 +116,8 @@ def test_schema_does_not_contain_semantic_names() -> None:
     schema_str = json.dumps(schema).lower()
     for forbidden in ["clef", "pitch", "time_signature", "key_signature", "notehead", "duration"]:
         assert forbidden not in schema_str
+
+    top_level_schema = NotationStaffDiagnostics.model_json_schema()
+    top_level_schema_str = json.dumps(top_level_schema).lower()
+    for forbidden in ["clef", "pitch", "time_signature", "key_signature", "notehead", "duration"]:
+        assert forbidden not in top_level_schema_str
