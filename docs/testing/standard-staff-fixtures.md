@@ -27,16 +27,16 @@ To support the missing features, the JSON specification for our new fixtures sho
 * `wide_curves`: Array of `{"p0": [x,y], "p1": [x,y], "p2": [x,y], "p3": [x,y], "width": 0.5}` to draw bezier curves simulating slurs/ties.
 
 ## 4. Planned Fixtures
-We propose creating the following specific JSON fixtures in `tests/fixtures/public/` and compiling them to PDFs:
+We propose creating the following specific JSON fixtures in `fixtures/public/` and compiling them to PDFs:
 1. `generated_standard_staff_dense_margin.json`: Tests the left-margin density threshold logic against an oversized, dense left margin.
 2. `generated_standard_staff_complex_cluster.json`: Tests primitive clustering when multiple voices and accidentals share an X-coordinate.
 3. `generated_standard_staff_wide_curves.json`: Evaluates whether ties/slurs correctly fall outside the staff's standard primitive grouping without breaking the system alignment.
 4. `generated_standard_staff_sparse.json`: A minimalist staff with almost no primitives, to test fallback thresholds.
 
 ## 5. Implementation Steps
-1. Create the proposed `.json` files in `tests/fixtures/public/`.
+1. Create the proposed `.json` files in `fixtures/public/`.
 2. Author `tests/fixtures/pdf/make_standard_staff_diagnostics_pdfs.py` to parse these new JSON schemas and use `fitz` to render them into PDFs.
-3. Add corresponding unit tests in `tests/` that load these new PDFs and assert the `NotationStaffDiagnostics` outputs (e.g., verifying `left_margin.curve_candidate_count` correctly counts the dense margin).
+3. Add corresponding unit tests in `tests/` that load these new PDFs and assert the `NotationStaffDiagnostics` outputs (e.g., verifying `left_margin.text_span_count` or `left_margin.distinct_font_count` correctly evaluates the dense text margin).
 4. Do not include any pitch/clef semantic logic; all assertions must remain strictly geometric, preserving the semantic firewall.
 
 ## 6. Privacy & Architecture Adherence
