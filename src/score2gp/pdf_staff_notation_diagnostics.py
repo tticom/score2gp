@@ -75,7 +75,7 @@ def build_notation_diagnostics(
     except Exception:
         text_dict = {}
 
-    for system_idx, group in enumerate(notation_groups, start=1):
+    for staff_idx, group in enumerate(notation_groups, start=1):
         line_ys = sorted([round((line.y0 + line.y1) / 2, 3) for line in group])
         x0 = min(min(line.x0, line.x1) for line in group)
         x1 = max(max(line.x0, line.x1) for line in group)
@@ -84,8 +84,8 @@ def build_notation_diagnostics(
 
         staff_geom = NotationStaffGeometry(
             page_index=page_index,
-            system_index=system_idx,
-            staff_index=1,
+            system_index=1,
+            staff_index=staff_idx,
             x0=round(x0, 3),
             y0=round(y0, 3),
             x1=round(x1, 3),
