@@ -24,3 +24,15 @@ def extract_left_margin_geometry_candidates(staff_diagnostics: dict[str, Any]) -
         vertical_strokes=tuple(VerticalStrokeCandidate(x0=0.0, y0=0.0, x1=0.0, y1=0.0) for _ in range(lm.get("vertical_stroke_candidate_count", 0))),
         rectangle_markers=tuple(RectangleMarkerCandidate(x0=0.0, y0=0.0, x1=0.0, y1=0.0) for _ in range(lm.get("rectangle_candidate_count", 0))),
     )
+
+def extract_x_aligned_cluster_candidates(staff_diagnostics: dict[str, Any]) -> GeometryCandidateSet:
+    """
+    Extract geometry cluster candidates derived from XAlignedClusterAggregateDiagnostics.
+    Returns dummy bounding boxes populated according to aggregate counts.
+    """
+    clustering = staff_diagnostics.get("clustering") or {}
+    
+    from score2gp.pdf_geometry_candidates import XAlignedPrimitiveCluster
+    return GeometryCandidateSet(
+        clusters=tuple(XAlignedPrimitiveCluster(x0=0.0, x1=0.0) for _ in range(clustering.get("x_aligned_cluster_count", 0)))
+    )

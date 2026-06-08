@@ -44,3 +44,25 @@ def test_extract_left_margin_geometry_candidates_empty() -> None:
     assert len(candidates.curve_markers) == 0
     assert len(candidates.vertical_strokes) == 0
     assert len(candidates.rectangle_markers) == 0
+
+from score2gp.pdf_geometry_candidate_extraction import extract_x_aligned_cluster_candidates
+
+def test_extract_x_aligned_cluster_candidates() -> None:
+    diagnostics_dummy = {
+        "clustering": {
+            "x_aligned_cluster_count": 5
+        }
+    }
+    
+    candidates = extract_x_aligned_cluster_candidates(diagnostics_dummy)
+    
+    assert isinstance(candidates, GeometryCandidateSet)
+    assert len(candidates.clusters) == 5
+
+def test_extract_x_aligned_cluster_candidates_empty() -> None:
+    diagnostics_dummy = {}
+    
+    candidates = extract_x_aligned_cluster_candidates(diagnostics_dummy)
+    
+    assert isinstance(candidates, GeometryCandidateSet)
+    assert len(candidates.clusters) == 0
