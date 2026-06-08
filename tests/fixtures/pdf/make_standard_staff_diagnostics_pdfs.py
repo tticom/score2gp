@@ -77,6 +77,7 @@ def main() -> None:
     build_pdf("generated_standard_staff_sparse.json", "generated_standard_staff_sparse.pdf")
     build_pdf("generated_standard_staff_wide_curves.json", "generated_standard_staff_wide_curves.pdf")
     build_pdf("generated_standard_staff_complex_cluster.json", "generated_standard_staff_complex_cluster.pdf")
+    build_pdf("generated_standard_staff_rectangle_positions.json", "generated_standard_staff_rectangle_positions.pdf")
 
 
 if __name__ == "__main__":

@@ -274,3 +274,36 @@ def test_generated_complex_cluster_fixture(tmp_path) -> None:
     assert summary.get("lines_total", 0) >= 3
     assert summary.get("rects_total", 0) == 3
     assert summary.get("text_spans_total", 0) >= 1
+
+def test_inspect_pdf_rectangle_positions_fixture(tmp_path: Any) -> None:
+    from score2gp.pdf import inspect_pdf
+    from pathlib import Path
+
+    pdf_path = Path(__file__).parent / "fixtures" / "pdf" / "generated_standard_staff_rectangle_positions.pdf"
+    out_dir = tmp_path / "out"
+
+    result = inspect_pdf(pdf_path, out_dir)
+
+    assert "pages" in result
+    assert len(result["pages"]) == 1
+    page_info = result["pages"][0]
+
+    diags = page_info["pdf_staff_notation_diagnostics"]
+    assert diags.get("status") == "success"
+
+    staves = diags.get("staves", [])
+    assert len(staves) == 1
+
+    staff_diag = staves[0]
+    
+    # Primitives total rect count should be 2 (1 in margin, 1 in body)
+    prims = staff_diag.get("primitives", {})
+    assert prims.get("rect_count", 0) == 2
+    
+    # Left margin should have 1 rectangle candidate
+    left_margin = staff_diag.get("left_margin", {})
+    assert left_margin.get("rectangle_candidate_count", 0) == 1
+
+    # Therefore, body rects = total - margin = 2 - 1 = 1
+    body_rects = prims.get("rect_count", 0) - left_margin.get("rectangle_candidate_count", 0)
+    assert body_rects == 1
