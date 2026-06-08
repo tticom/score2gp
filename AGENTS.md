@@ -1,5 +1,37 @@
 # AGENTS.md
 
+## Product Agent Execution Gate
+
+This product repository must not be used as a standalone execution source.
+
+Agent governance truth lives in the external governance repository:
+
+`/home/tticom/work/score2gp-workspace/score2gp-agentops`
+
+Before doing any work, agents must read the governance control files:
+
+1. `projects/score2gp/AGENT_CONTROL.md`
+2. `projects/score2gp/ACTIVE_TASK.md`
+3. `projects/score2gp/TASKS.md`
+
+If `ACTIVE_TASK.md` says `NO_ACTIVE_TASK_APPROVED`, agents must stop after preflight and report.
+
+Agents must not:
+
+- push
+- create PRs
+- merge PRs
+- delete branches
+- run `gh pr merge`
+- run commands containing `--delete-branch`
+- run `hgh`
+- mark tasks complete
+
+Human performs push, PR creation, merge, and branch deletion.
+
+---
+
+
 This is the ScoreToGP product repository. It owns product truth: source code, tests, schemas, public fixtures, CLI behavior, and product documentation.
 
 Agent governance truth lives in the external governance repository:
@@ -55,4 +87,10 @@ fixtures/private/.gitkeep
 
 ## Branch Safety
 
-Never push directly to `main`. Use a branch and open a pull request.
+Never work directly on `main` for implementation changes.
+
+Agents must not push, open pull requests, merge pull requests, or delete branches.
+
+When agent work is approved, the human maintainer is responsible for creating or approving the branch, pushing any committed work, opening the pull request, merging, and deleting branches.
+
+Agents may report the branch name, changed files, validation evidence, and recommended PR title/body, but must not perform the human-only GitHub actions.
