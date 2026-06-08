@@ -199,13 +199,18 @@ def test_generated_wide_curves_fixture(tmp_path) -> None:
 
     staff_diag = staves[0]
     
-    # We should have two wide curves inside the staff bounding box
-    # They shouldn't be reported in left margin, but the main staves metrics should reflect them if implemented.
-    # The requirement: "Use `curve_candidate_count` only for actual curve primitives."
-    # Since left_margin is just margin, we should check what the test is supposed to assert.
+    # Assert stable non-margin wide-curve diagnostic presence across the whole staff region
+    prims = staff_diag.get("primitives", {})
+    assert prims.get("curve_count", 0) == 2
+
+    morph = staff_diag.get("morphology", {})
+    if morph:
+        assert morph.get("curve_candidate", 0) == 2
+
+    # Since left-margin diagnostics also expose curve counts, assert only the one
+    # curve whose geometric centre falls inside the 10-staff-space left-margin window.
     lm = staff_diag.get("left_margin")
     if lm:
-        # Curve 1 center x is 120, margin limit is 165. So it should be counted.
         assert lm["curve_candidate_count"] == 1
         assert lm["text_span_count"] == 0
 
