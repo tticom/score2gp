@@ -87,4 +87,10 @@ fixtures/private/.gitkeep
 
 ## Branch Safety
 
-Never push directly to `main`. Use a branch and open a pull request.
+Never work directly on `main` for implementation changes.
+
+Agents must not push, open pull requests, merge pull requests, or delete branches.
+
+When agent work is approved, the human maintainer is responsible for creating or approving the branch, pushing any committed work, opening the pull request, merging, and deleting branches.
+
+Agents may report the branch name, changed files, validation evidence, and recommended PR title/body, but must not perform the human-only GitHub actions.
