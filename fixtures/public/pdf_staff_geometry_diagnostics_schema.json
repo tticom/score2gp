@@ -1,0 +1,342 @@
+{
+  "$defs": {
+    "ClusterPrimitiveCountSummary": {
+      "description": "Summary of all primitives contained within any x-aligned cluster.\nUseful for asserting total geometric density of clusters.",
+      "properties": {
+        "lines_total": {
+          "minimum": 0,
+          "title": "Lines Total",
+          "type": "integer"
+        },
+        "curves_total": {
+          "minimum": 0,
+          "title": "Curves Total",
+          "type": "integer"
+        },
+        "rects_total": {
+          "minimum": 0,
+          "title": "Rects Total",
+          "type": "integer"
+        },
+        "text_spans_total": {
+          "minimum": 0,
+          "title": "Text Spans Total",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "lines_total",
+        "curves_total",
+        "rects_total",
+        "text_spans_total"
+      ],
+      "title": "ClusterPrimitiveCountSummary",
+      "type": "object"
+    },
+    "LocalPrimitivesSummary": {
+      "description": "Raw geometric primitive counts strictly within the staff bounding box.",
+      "properties": {
+        "line_count": {
+          "title": "Line Count",
+          "type": "integer"
+        },
+        "curve_count": {
+          "title": "Curve Count",
+          "type": "integer"
+        },
+        "rect_count": {
+          "title": "Rect Count",
+          "type": "integer"
+        },
+        "text_span_count_by_font": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Text Span Count By Font",
+          "type": "object"
+        }
+      },
+      "required": [
+        "line_count",
+        "curve_count",
+        "rect_count",
+        "text_span_count_by_font"
+      ],
+      "title": "LocalPrimitivesSummary",
+      "type": "object"
+    },
+    "NotationStaffDiagnostics": {
+      "description": "Comprehensive geometric diagnostics for a single notation staff.",
+      "properties": {
+        "contract_version": {
+          "const": "notation-diagnostics.v0.1",
+          "default": "notation-diagnostics.v0.1",
+          "title": "Contract Version",
+          "type": "string"
+        },
+        "staff": {
+          "$ref": "#/$defs/NotationStaffGeometry"
+        },
+        "primitives": {
+          "$ref": "#/$defs/LocalPrimitivesSummary"
+        },
+        "morphology": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NotationStaffMorphology"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "clustering": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/XAlignedClusterAggregateDiagnostics"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "left_margin": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StaffLeftMarginAggregateDiagnostics"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "staff",
+        "primitives"
+      ],
+      "title": "NotationStaffDiagnostics",
+      "type": "object"
+    },
+    "NotationStaffGeometry": {
+      "description": "Geometric bounding box and basic staff line coordinates for a single staff.",
+      "properties": {
+        "page_index": {
+          "minimum": 1,
+          "title": "Page Index",
+          "type": "integer"
+        },
+        "system_index": {
+          "minimum": 1,
+          "title": "System Index",
+          "type": "integer"
+        },
+        "staff_index": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Staff Index",
+          "type": "integer"
+        },
+        "x0": {
+          "title": "X0",
+          "type": "number"
+        },
+        "y0": {
+          "title": "Y0",
+          "type": "number"
+        },
+        "x1": {
+          "title": "X1",
+          "type": "number"
+        },
+        "y1": {
+          "title": "Y1",
+          "type": "number"
+        },
+        "line_y_coords": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Line Y Coords",
+          "type": "array"
+        }
+      },
+      "required": [
+        "page_index",
+        "system_index",
+        "x0",
+        "y0",
+        "x1",
+        "y1",
+        "line_y_coords"
+      ],
+      "title": "NotationStaffGeometry",
+      "type": "object"
+    },
+    "NotationStaffMorphology": {
+      "description": "Initial morphological classification of primitives into shapes like strokes,\nrectangles, or curves, before any clustering occurs.",
+      "properties": {
+        "staff_line_horizontal": {
+          "title": "Staff Line Horizontal",
+          "type": "integer"
+        },
+        "non_staff_horizontal": {
+          "title": "Non Staff Horizontal",
+          "type": "integer"
+        },
+        "vertical_stroke_candidate": {
+          "title": "Vertical Stroke Candidate",
+          "type": "integer"
+        },
+        "diagonal_stroke_candidate": {
+          "title": "Diagonal Stroke Candidate",
+          "type": "integer"
+        },
+        "rectangle_candidate": {
+          "title": "Rectangle Candidate",
+          "type": "integer"
+        },
+        "curve_candidate": {
+          "title": "Curve Candidate",
+          "type": "integer"
+        },
+        "text_span_by_font": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Text Span By Font",
+          "type": "object"
+        }
+      },
+      "required": [
+        "staff_line_horizontal",
+        "non_staff_horizontal",
+        "vertical_stroke_candidate",
+        "diagonal_stroke_candidate",
+        "rectangle_candidate",
+        "curve_candidate",
+        "text_span_by_font"
+      ],
+      "title": "NotationStaffMorphology",
+      "type": "object"
+    },
+    "StaffLeftMarginAggregateDiagnostics": {
+      "description": "Diagnostics for primitives falling within the extreme left margin of the staff,\ntypically used for marker-like geometric shapes near the staff start.",
+      "properties": {
+        "margin_x_threshold_staff_spaces": {
+          "minimum": 0.0,
+          "title": "Margin X Threshold Staff Spaces",
+          "type": "number"
+        },
+        "text_span_count": {
+          "minimum": 0,
+          "title": "Text Span Count",
+          "type": "integer"
+        },
+        "distinct_font_count": {
+          "minimum": 0,
+          "title": "Distinct Font Count",
+          "type": "integer"
+        },
+        "max_text_spans_for_single_font": {
+          "minimum": 0,
+          "title": "Max Text Spans For Single Font",
+          "type": "integer"
+        },
+        "curve_candidate_count": {
+          "minimum": 0,
+          "title": "Curve Candidate Count",
+          "type": "integer"
+        },
+        "vertical_stroke_candidate_count": {
+          "minimum": 0,
+          "title": "Vertical Stroke Candidate Count",
+          "type": "integer"
+        },
+        "rectangle_candidate_count": {
+          "minimum": 0,
+          "title": "Rectangle Candidate Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "margin_x_threshold_staff_spaces",
+        "text_span_count",
+        "distinct_font_count",
+        "max_text_spans_for_single_font",
+        "curve_candidate_count",
+        "vertical_stroke_candidate_count",
+        "rectangle_candidate_count"
+      ],
+      "title": "StaffLeftMarginAggregateDiagnostics",
+      "type": "object"
+    },
+    "XAlignedClusterAggregateDiagnostics": {
+      "description": "Geometric statistics for x-aligned clusters of primitives (e.g. circular markers grouped with vertical strokes).\nThis layer does not assign semantic meaning, only spatial grouping.",
+      "properties": {
+        "x_aligned_cluster_count": {
+          "minimum": 0,
+          "title": "X Aligned Cluster Count",
+          "type": "integer"
+        },
+        "max_primitives_per_x_aligned_cluster": {
+          "minimum": 0,
+          "title": "Max Primitives Per X Aligned Cluster",
+          "type": "integer"
+        },
+        "clusters_with_vertical_stroke_candidate": {
+          "minimum": 0,
+          "title": "Clusters With Vertical Stroke Candidate",
+          "type": "integer"
+        },
+        "max_cluster_vertical_span_staff_spaces": {
+          "minimum": 0.0,
+          "title": "Max Cluster Vertical Span Staff Spaces",
+          "type": "number"
+        },
+        "cluster_primitive_count_summary": {
+          "$ref": "#/$defs/ClusterPrimitiveCountSummary"
+        }
+      },
+      "required": [
+        "x_aligned_cluster_count",
+        "max_primitives_per_x_aligned_cluster",
+        "clusters_with_vertical_stroke_candidate",
+        "max_cluster_vertical_span_staff_spaces",
+        "cluster_primitive_count_summary"
+      ],
+      "title": "XAlignedClusterAggregateDiagnostics",
+      "type": "object"
+    }
+  },
+  "description": "Top-level payload containing diagnostic details for all identified staves.",
+  "properties": {
+    "staves": {
+      "items": {
+        "$ref": "#/$defs/NotationStaffDiagnostics"
+      },
+      "title": "Staves",
+      "type": "array"
+    },
+    "status": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": "success",
+      "title": "Status"
+    }
+  },
+  "required": [
+    "staves"
+  ],
+  "title": "PdfStaffNotationGeometryDiagnostics",
+  "type": "object"
+}
