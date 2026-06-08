@@ -6,12 +6,12 @@ from pathlib import Path
 import fitz  # type: ignore[import-not-found]
 
 
-def main() -> None:
+def build_pdf(json_name: str, pdf_name: str) -> None:
     pdf_dir = Path(__file__).parent
     fixtures_dir = pdf_dir.parents[2] / "fixtures" / "public"
 
-    json_path = fixtures_dir / "generated_standard_staff_dense_margin.json"
-    pdf_path = pdf_dir / "generated_standard_staff_dense_margin.pdf"
+    json_path = fixtures_dir / json_name
+    pdf_path = pdf_dir / pdf_name
 
     with open(json_path, encoding="utf-8") as f:
         data = json.load(f)
@@ -19,7 +19,7 @@ def main() -> None:
     doc = fitz.open()
     page = doc.new_page(width=data["page_width"], height=data["page_height"])
 
-    page.insert_text((36, 40), "Generated Standard Staff Dense Margin", fontsize=12, fontname="helv")
+    page.insert_text((36, 40), f"Generated Standard Staff: {pdf_name}", fontsize=12, fontname="helv")
 
     # Draw standard 5-line notation staff
     not_data = data["notation_staff"]
@@ -38,6 +38,10 @@ def main() -> None:
     doc.save(pdf_path, garbage=4, deflate=True)
     doc.close()
     print(f"Compiled {pdf_path.name} successfully.")
+
+def main() -> None:
+    build_pdf("generated_standard_staff_dense_margin.json", "generated_standard_staff_dense_margin.pdf")
+    build_pdf("generated_standard_staff_sparse.json", "generated_standard_staff_sparse.pdf")
 
 
 if __name__ == "__main__":
