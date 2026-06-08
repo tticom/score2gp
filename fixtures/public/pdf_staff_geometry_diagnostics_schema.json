@@ -288,8 +288,7 @@
           "enum": [
             "leading_barline",
             "bracket_curve",
-            "brace_curve",
-            "unknown_connector"
+            "brace_curve"
           ],
           "title": "Connector Kind",
           "type": "string"

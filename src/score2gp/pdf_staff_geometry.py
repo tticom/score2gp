@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 class NotationStaffGeometry(BaseModel):
     """
@@ -16,6 +16,12 @@ class NotationStaffGeometry(BaseModel):
     x1: float
     y1: float
     line_y_coords: list[float]
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> NotationStaffGeometry:
+        assert self.x0 <= self.x1, f"x0 ({self.x0}) must be <= x1 ({self.x1})"
+        assert self.y0 <= self.y1, f"y0 ({self.y0}) must be <= y1 ({self.y1})"
+        return self
 
 class LocalPrimitivesSummary(BaseModel):
     """
@@ -103,11 +109,17 @@ class SystemConnectorDiagnostics(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     connected_staff_indices: list[int]
-    connector_kind: Literal["leading_barline", "bracket_curve", "brace_curve", "unknown_connector"]
+    connector_kind: Literal["leading_barline", "bracket_curve", "brace_curve"]
     x0: float
     y0: float
     x1: float
     y1: float
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> SystemConnectorDiagnostics:
+        assert self.x0 <= self.x1, f"x0 ({self.x0}) must be <= x1 ({self.x1})"
+        assert self.y0 <= self.y1, f"y0 ({self.y0}) must be <= y1 ({self.y1})"
+        return self
 
 class PdfStaffNotationGeometryDiagnostics(BaseModel):
     """
