@@ -338,3 +338,32 @@ def test_inspect_pdf_rectangle_positions_fixture(tmp_path: Any) -> None:
     # Therefore, body rects = total - margin = 2 - 1 = 1
     body_rects = prims.get("rect_count", 0) - left_margin.get("rectangle_candidate_count", 0)
     assert body_rects == 1
+
+def test_inspect_pdf_multi_staff_unconnected_fixture(tmp_path: Any) -> None:
+    from score2gp.pdf import inspect_pdf
+    from pathlib import Path
+
+    pdf_path = Path(__file__).parent / "fixtures" / "pdf" / "generated_standard_staff_multi_staff_unconnected.pdf"
+    out_dir = tmp_path / "out"
+
+    result = inspect_pdf(pdf_path, out_dir)
+
+    assert "pages" in result
+    assert len(result["pages"]) == 1
+    page_info = result["pages"][0]
+
+    diags = page_info["pdf_staff_notation_diagnostics"]
+    assert diags.get("status") == "success"
+
+    staves = diags.get("staves", [])
+    assert len(staves) == 2
+
+    # Verify that the two staves are correctly assigned to DIFFERENT systems
+    assert staves[0]["staff"]["system_index"] == 1
+    assert staves[1]["staff"]["system_index"] == 2
+
+    assert staves[0]["staff"]["staff_index"] == 1
+    assert staves[1]["staff"]["staff_index"] == 1
+
+    connectors = diags.get("system_connectors", [])
+    assert len(connectors) == 0
