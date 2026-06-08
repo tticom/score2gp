@@ -122,6 +122,27 @@ def test_schema_does_not_contain_semantic_names() -> None:
     for forbidden in ["clef", "pitch", "time_signature", "key_signature", "notehead", "duration"]:
         assert forbidden not in top_level_schema_str
 
+def test_schema_snapshot_gate() -> None:
+    from score2gp.pdf_staff_geometry import PdfStaffNotationGeometryDiagnostics
+    from pathlib import Path
+
+    schema_path = Path(__file__).parent.parent / "fixtures" / "public" / "pdf_staff_geometry_diagnostics_schema.json"
+    
+    # Load the reference schema
+    with open(schema_path, "r", encoding="utf-8") as f:
+        reference_schema = json.load(f)
+
+    # Generate current schema
+    current_schema = PdfStaffNotationGeometryDiagnostics.model_json_schema()
+
+    # Compare. If this fails, it means a documented field was renamed or removed,
+    # or the schema drifted in a way that breaks the stability gate.
+    # To intentionally update the schema, developer must regenerate the fixture.
+    assert current_schema == reference_schema, (
+        "Geometry diagnostics schema has changed! "
+        "If intentional, regenerate fixtures/public/pdf_staff_geometry_diagnostics_schema.json"
+    )
+
 def test_generated_dense_margin_fixture(tmp_path) -> None:
     from score2gp.pdf import inspect_pdf
     from pathlib import Path
