@@ -43,6 +43,30 @@ def build_pdf(json_name: str, pdf_name: str) -> None:
         p3 = curve["p3"]
         page.draw_bezier(p0, p1, p2, p3, color=(0, 0, 0), width=1.0)
 
+    # Draw note clusters
+    for cluster in data.get("note_clusters", []):
+        for rect in cluster.get("rects", []):
+            page.draw_rect(
+                (rect["x0"], rect["y0"], rect["x1"], rect["y1"]),
+                color=(0, 0, 0),
+                fill=(0, 0, 0)
+            )
+        for line in cluster.get("lines", []):
+            page.draw_line(
+                (line["x0"], line["y0"]),
+                (line["x1"], line["y1"]),
+                color=(0, 0, 0),
+                width=1.0
+            )
+        for txt in cluster.get("texts", []):
+            page.insert_text(
+                (txt["x"], txt["y"]),
+                txt["text"],
+                fontsize=txt["fontsize"],
+                fontname=txt["fontname"]
+            )
+
+
 
     doc.save(pdf_path, garbage=4, deflate=True)
     doc.close()
@@ -52,6 +76,7 @@ def main() -> None:
     build_pdf("generated_standard_staff_dense_margin.json", "generated_standard_staff_dense_margin.pdf")
     build_pdf("generated_standard_staff_sparse.json", "generated_standard_staff_sparse.pdf")
     build_pdf("generated_standard_staff_wide_curves.json", "generated_standard_staff_wide_curves.pdf")
+    build_pdf("generated_standard_staff_complex_cluster.json", "generated_standard_staff_complex_cluster.pdf")
 
 
 if __name__ == "__main__":
