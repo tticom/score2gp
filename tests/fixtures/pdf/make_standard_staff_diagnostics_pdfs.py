@@ -83,7 +83,6 @@ def main() -> None:
     build_pdf("generated_standard_staff_multi_staff.json", "generated_standard_staff_multi_staff.pdf")
     build_pdf("generated_standard_staff_multi_staff_unconnected.json", "generated_standard_staff_multi_staff_unconnected.pdf")
     build_pdf("generated_standard_staff_rectangle_positions.json", "generated_standard_staff_rectangle_positions.pdf")
-
-
+    build_pdf("generated_standard_staff_text_font_diversity.json", "generated_standard_staff_text_font_diversity.pdf")
 if __name__ == "__main__":
     main()
