@@ -37,11 +37,11 @@ def build_pdf(json_name: str, pdf_name: str) -> None:
 
     # Draw wide curves (Bezier)
     for curve in data.get("wide_curves", []):
+        p0 = curve["p0"]
         p1 = curve["p1"]
         p2 = curve["p2"]
         p3 = curve["p3"]
-        p4 = curve["p4"]
-        page.draw_bezier(p1, p2, p3, p4, color=(0, 0, 0), width=1.0)
+        page.draw_bezier(p0, p1, p2, p3, color=(0, 0, 0), width=1.0)
 
 
     doc.save(pdf_path, garbage=4, deflate=True)
