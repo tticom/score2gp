@@ -18,16 +18,19 @@ If `ACTIVE_TASK.md` says `NO_ACTIVE_TASK_APPROVED`, agents must stop after prefl
 
 Agents must not:
 
-- push
-- create PRs
 - merge PRs
+- push directly to main
 - delete branches
+- force-push
 - run `gh pr merge`
 - run commands containing `--delete-branch`
 - run `hgh`
-- mark tasks complete
+- approve own PR
+- bypass failing checks
+- mark unmerged work as merged
+- start unrelated backlog tasks
 
-Human performs push, PR creation, merge, and branch deletion.
+Agents may push task branches and open PRs for human review if operating under Tier 2. Human performs merge and branch deletion.
 
 ---
 
@@ -89,8 +92,8 @@ fixtures/private/.gitkeep
 
 Never work directly on `main` for implementation changes.
 
-Agents must not push, open pull requests, merge pull requests, or delete branches.
+Agents must not merge pull requests, push directly to `main`, or delete branches.
 
-When agent work is approved, the human maintainer is responsible for creating or approving the branch, pushing any committed work, opening the pull request, merging, and deleting branches.
+When agent work is approved under Tier 2, agents may create a task branch, commit work, push the task branch, and open a pull request. Reviewer agents may review PRs, make comments on PRs, and review Architect and Developer outputs. The human maintainer retains exclusive authority for merging and branch deletion.
 
-Agents may report the branch name, changed files, validation evidence, and recommended PR title/body, but must not perform the human-only GitHub actions.
+Agents may report the branch name, changed files, validation evidence, and PR link. Merging and branch deletion remain strictly human-only GitHub actions.
