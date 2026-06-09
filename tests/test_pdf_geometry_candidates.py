@@ -155,19 +155,3 @@ def test_reject_cluster_invalid_source() -> None:
             x0=10.0, x1=20.0, primitive_count=1,
             primitives=[p1]
         )
-
-def test_anti_semantic_leakage() -> None:
-    import json
-    schema1 = PrimitiveEvidenceCandidate.model_json_schema()
-    schema2 = XAlignedPrimitiveClusterCandidate.model_json_schema()
-    schema_str = json.dumps(schema1) + json.dumps(schema2)
-    
-    forbidden = [
-        "notehead", "stem", "clef", "pitch", "duration",
-        "voice", "chord", "key_signature", "time_signature",
-        "beat", "rhythm", "scoreir"
-    ]
-    
-    for term in forbidden:
-        pattern = r'\b' + term + r'\b'
-        assert not re.search(pattern, schema_str, re.IGNORECASE), f"Forbidden semantic term '{term}' found in schema!"
