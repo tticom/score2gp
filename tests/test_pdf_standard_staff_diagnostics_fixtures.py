@@ -55,6 +55,7 @@ def test_margin_filtering_counts_and_excludes() -> None:
             (10.0, 140.0, 200.0, 140.0),
             (30.0, 100.0, 30.0, 140.0), # vertical stroke inside margin
             (150.0, 100.0, 150.0, 140.0), # vertical stroke outside margin
+            (30.0, 110.0, 40.0, 120.0), # diagonal stroke inside margin
         ],
         curves=[
             (20.0, 100.0, 40.0, 140.0),
@@ -74,6 +75,12 @@ def test_margin_filtering_counts_and_excludes() -> None:
     assert lm.curve_candidate_count == 1
     assert lm.vertical_stroke_candidate_count == 1
     assert lm.rectangle_candidate_count == 1
+    
+    evidence = lm.evidence
+    assert evidence is not None
+    assert len(evidence) == 4
+    kinds = [e.kind for e in evidence]
+    assert "diagonal_stroke" in kinds
 
 def test_invalid_staff_space_fallback() -> None:
     # 0 or 1 staff line yields staff_space = 0.0
@@ -274,6 +281,19 @@ def test_generated_complex_cluster_fixture(tmp_path) -> None:
     assert summary.get("lines_total", 0) >= 3
     assert summary.get("rects_total", 0) == 3
     assert summary.get("text_spans_total", 0) >= 1
+
+    evidence = clustering.get("evidence", [])
+    assert len(evidence) == clustering["x_aligned_cluster_count"]
+    
+    # Check cluster 2 logic: 1 vertical, 2 rects, 1 horizontal
+    cluster2 = next((e for e in evidence if e["primitive_count"] >= 4), None)
+    assert cluster2 is not None
+    assert cluster2["primitive_count"] == len(cluster2["primitives"])
+    
+    kinds = [p["kind"] for p in cluster2["primitives"]]
+    assert kinds.count("vertical_stroke") >= 1
+    assert kinds.count("rectangle") == 2
+    assert kinds.count("horizontal_stroke") >= 1
 
 def test_inspect_pdf_multi_staff_fixture(tmp_path: Any) -> None:
     from score2gp.pdf import inspect_pdf
@@ -495,3 +515,29 @@ def test_inspect_pdf_left_margin_threshold_fixture(tmp_path: Any) -> None:
     assert left_margin.get("curve_candidate_count", 0) == 1
     assert left_margin.get("vertical_stroke_candidate_count", 0) == 1
     assert left_margin.get("rectangle_candidate_count", 0) == 1
+
+    evidence = left_margin.get("evidence", [])
+    assert len(evidence) == 4
+    
+    rect_ev = next(e for e in evidence if e["kind"] == "rectangle")
+    assert abs(rect_ev["x0"] - inside_cluster["rects"][0]["x0"]) < 2.0
+    assert abs(rect_ev["x1"] - inside_cluster["rects"][0]["x1"]) < 2.0
+    assert abs(rect_ev["y0"] - inside_cluster["rects"][0]["y0"]) < 2.0
+    assert abs(rect_ev["y1"] - inside_cluster["rects"][0]["y1"]) < 2.0
+
+    stroke_ev = next(e for e in evidence if e["kind"] == "vertical_stroke")
+    assert abs(stroke_ev["x0"] - inside_cluster["lines"][0]["x0"]) < 2.0
+    assert abs(stroke_ev["x1"] - inside_cluster["lines"][0]["x1"]) < 2.0
+    assert abs(stroke_ev["y0"] - inside_cluster["lines"][0]["y0"]) < 2.0
+    assert abs(stroke_ev["y1"] - inside_cluster["lines"][0]["y1"]) < 2.0
+
+    curve_ev = next(e for e in evidence if e["kind"] == "curve")
+    assert abs(curve_ev["x0"] - inside_curve["p0"][0]) < 2.0
+    assert abs(curve_ev["y0"] - min(p[1] for p in [inside_curve["p0"], inside_curve["p1"], inside_curve["p2"], inside_curve["p3"]])) < 2.0
+    assert abs(curve_ev["y1"] - max(p[1] for p in [inside_curve["p0"], inside_curve["p1"], inside_curve["p2"], inside_curve["p3"]])) < 2.0
+
+    text_ev = next(e for e in evidence if e["kind"] == "text_span")
+    assert text_ev["font_name"] is not None
+    assert "helv" in text_ev["font_name"].lower()
+    assert text_ev["x0"] > 0.0 and text_ev["x1"] > text_ev["x0"]
+    assert text_ev["y0"] > 0.0 and text_ev["y1"] > text_ev["y0"]
