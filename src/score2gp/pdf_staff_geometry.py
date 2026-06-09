@@ -141,6 +141,8 @@ class NotationStaffDiagnostics(BaseModel):
     morphology: NotationStaffMorphology | None = None
     clustering: XAlignedClusterAggregateDiagnostics | None = None
     left_margin: StaffLeftMarginAggregateDiagnostics | None = None
+    left_margin_candidates: list[LeftMarginPrimitiveCandidate] | None = None
+    x_aligned_cluster_candidates: list[XAlignedPrimitiveClusterCandidate] | None = None
 
 class SystemConnectorDiagnostics(BaseModel):
     """
@@ -170,3 +172,9 @@ class PdfStaffNotationGeometryDiagnostics(BaseModel):
     staves: list[NotationStaffDiagnostics]
     system_connectors: list[SystemConnectorDiagnostics] | None = None
     status: str | None = "success"
+
+# Resolve forward references for candidate types used in NotationStaffDiagnostics.
+# This import is deferred to avoid any future circular-import risk.
+from score2gp.pdf_geometry_candidates import LeftMarginPrimitiveCandidate, XAlignedPrimitiveClusterCandidate  # noqa: E402
+NotationStaffDiagnostics.model_rebuild()
+
