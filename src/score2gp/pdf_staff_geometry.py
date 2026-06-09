@@ -71,9 +71,15 @@ class PrimitiveGeometryEvidence(BaseModel):
     y0: float
     x1: float
     y1: float
-    kind: Literal["text_span", "curve", "vertical_stroke", "horizontal_stroke", "rectangle", "circular_marker"]
+    kind: Literal["text_span", "curve", "vertical_stroke", "horizontal_stroke", "rectangle", "diagonal_stroke"]
     font_name: str | None = None
     font_size: float | None = None
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> PrimitiveGeometryEvidence:
+        assert self.x0 <= self.x1, f"x0 ({self.x0}) must be <= x1 ({self.x1})"
+        assert self.y0 <= self.y1, f"y0 ({self.y0}) must be <= y1 ({self.y1})"
+        return self
 
 class XAlignedPrimitiveClusterEvidence(BaseModel):
     """
@@ -85,6 +91,13 @@ class XAlignedPrimitiveClusterEvidence(BaseModel):
     x1: float
     primitive_count: int
     primitives: list[PrimitiveGeometryEvidence]
+
+    @model_validator(mode="after")
+    def validate_state(self) -> XAlignedPrimitiveClusterEvidence:
+        assert self.x0 <= self.x1, f"x0 ({self.x0}) must be <= x1 ({self.x1})"
+        assert self.primitive_count >= 0, "primitive_count must be non-negative"
+        assert self.primitive_count == len(self.primitives), "primitive_count must match length of primitives array"
+        return self
 
 class XAlignedClusterAggregateDiagnostics(BaseModel):
     """

@@ -249,7 +249,7 @@
             "vertical_stroke",
             "horizontal_stroke",
             "rectangle",
-            "circular_marker"
+            "diagonal_stroke"
           ],
           "title": "Kind",
           "type": "string"
