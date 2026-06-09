@@ -10,6 +10,124 @@
           "text_spans_total": 1
         },
         "clusters_with_vertical_stroke_candidate": 1,
+        "evidence": [
+          {
+            "primitive_count": 1,
+            "primitives": [
+              {
+                "font_name": null,
+                "font_size": null,
+                "kind": "vertical_stroke",
+                "x0": 80.0,
+                "x1": 80.0,
+                "y0": 100.0,
+                "y1": 134.0
+              }
+            ],
+            "x0": 80.0,
+            "x1": 80.0
+          },
+          {
+            "primitive_count": 2,
+            "primitives": [
+              {
+                "font_name": "Helvetica",
+                "font_size": 14.0,
+                "kind": "text_span",
+                "x0": 190.0,
+                "x1": 197.784,
+                "y0": 98.95,
+                "y1": 118.186
+              },
+              {
+                "font_name": null,
+                "font_size": null,
+                "kind": "rectangle",
+                "x0": 200.0,
+                "x1": 208.0,
+                "y0": 110.0,
+                "y1": 118.0
+              }
+            ],
+            "x0": 190.0,
+            "x1": 208.0
+          },
+          {
+            "primitive_count": 1,
+            "primitives": [
+              {
+                "font_name": null,
+                "font_size": null,
+                "kind": "vertical_stroke",
+                "x0": 208.0,
+                "x1": 208.0,
+                "y0": 90.0,
+                "y1": 114.0
+              }
+            ],
+            "x0": 208.0,
+            "x1": 208.0
+          },
+          {
+            "primitive_count": 4,
+            "primitives": [
+              {
+                "font_name": null,
+                "font_size": null,
+                "kind": "rectangle",
+                "x0": 300.0,
+                "x1": 308.0,
+                "y0": 90.0,
+                "y1": 98.0
+              },
+              {
+                "font_name": null,
+                "font_size": null,
+                "kind": "horizontal_stroke",
+                "x0": 298.0,
+                "x1": 310.0,
+                "y0": 94.0,
+                "y1": 94.0
+              },
+              {
+                "font_name": null,
+                "font_size": null,
+                "kind": "rectangle",
+                "x0": 300.0,
+                "x1": 308.0,
+                "y0": 130.0,
+                "y1": 138.0
+              },
+              {
+                "font_name": null,
+                "font_size": null,
+                "kind": "vertical_stroke",
+                "x0": 308.0,
+                "x1": 308.0,
+                "y0": 94.0,
+                "y1": 134.0
+              }
+            ],
+            "x0": 298.0,
+            "x1": 310.0
+          },
+          {
+            "primitive_count": 1,
+            "primitives": [
+              {
+                "font_name": null,
+                "font_size": null,
+                "kind": "vertical_stroke",
+                "x0": 575.0,
+                "x1": 575.0,
+                "y0": 100.0,
+                "y1": 134.0
+              }
+            ],
+            "x0": 575.0,
+            "x1": 575.0
+          }
+        ],
         "max_cluster_vertical_span_staff_spaces": 5.647,
         "max_primitives_per_x_aligned_cluster": 4,
         "x_aligned_cluster_count": 5
@@ -18,6 +136,17 @@
       "left_margin": {
         "curve_candidate_count": 0,
         "distinct_font_count": 0,
+        "evidence": [
+          {
+            "font_name": null,
+            "font_size": null,
+            "kind": "vertical_stroke",
+            "x0": 80.0,
+            "x1": 80.0,
+            "y0": 100.0,
+            "y1": 134.0
+          }
+        ],
         "margin_x_threshold_staff_spaces": 10.0,
         "max_text_spans_for_single_font": 0,
         "rectangle_candidate_count": 0,

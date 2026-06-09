@@ -8,7 +8,9 @@ from .pdf_staff_geometry import (
     NotationStaffMorphology,
     XAlignedClusterAggregateDiagnostics,
     ClusterPrimitiveCountSummary,
-    StaffLeftMarginAggregateDiagnostics
+    StaffLeftMarginAggregateDiagnostics,
+    PrimitiveGeometryEvidence,
+    XAlignedPrimitiveClusterEvidence
 )
 from dataclasses import dataclass
 import statistics
@@ -20,6 +22,8 @@ class PrimitiveGeometry:
     y0: float
     x1: float
     y1: float
+    font_name: str | None = None
+    font_size: float | None = None
 
     @property
     def center_x(self) -> float:
@@ -60,6 +64,27 @@ def cluster_x_aligned_primitives(primitives: list[PrimitiveGeometry], staff_spac
         clusters.append(current_cluster)
 
     return clusters
+
+def _to_evidence(p: PrimitiveGeometry) -> PrimitiveGeometryEvidence | None:
+    kind_map = {
+        "text_span": "text_span",
+        "curve": "curve",
+        "vertical_stroke_candidate": "vertical_stroke",
+        "non_staff_horizontal": "horizontal_stroke",
+        "rect": "rectangle"
+    }
+    k = kind_map.get(p.type)
+    if not k:
+        return None
+    return PrimitiveGeometryEvidence(
+        x0=round(p.x0, 3),
+        y0=round(p.y0, 3),
+        x1=round(p.x1, 3),
+        y1=round(p.y1, 3),
+        kind=k,  # type: ignore
+        font_name=p.font_name,
+        font_size=round(p.font_size, 3) if p.font_size is not None else None
+    )
 
 def _notation_group_bounds(group: list[Any]) -> dict[str, Any]:
     line_ys = sorted([round((line.y0 + line.y1) / 2, 3) for line in group])
@@ -310,8 +335,9 @@ def build_notation_diagnostics(
                         # strict containment check for morphology
                         if sx0 >= x0_limit and sx1 <= x1_limit and sy0 >= y0_limit and sy1 <= y1_limit:
                             font_name = span.get("font", "unknown")
+                            font_size = float(span.get("size", 0.0))
                             text_span_by_font[font_name] = text_span_by_font.get(font_name, 0) + 1
-                            primitives_for_clustering.append(PrimitiveGeometry("text_span", sx0, sy0, sx1, sy1))
+                            primitives_for_clustering.append(PrimitiveGeometry("text_span", sx0, sy0, sx1, sy1, font_name, font_size))
 
         primitives_summary = LocalPrimitivesSummary(
             line_count=line_count,
@@ -350,10 +376,28 @@ def build_notation_diagnostics(
             rects_total = 0
             text_spans_total = 0
 
+            cluster_evidence_list = []
+
             for cluster in clusters:
                 prim_count = len(cluster)
                 if prim_count > max_prims:
                     max_prims = prim_count
+
+                ev_prims = []
+                for p in cluster:
+                    ev = _to_evidence(p)
+                    if ev:
+                        ev_prims.append(ev)
+
+                c_x0 = min(p.x0 for p in cluster)
+                c_x1 = max(p.x1 for p in cluster)
+                if ev_prims:
+                    cluster_evidence_list.append(XAlignedPrimitiveClusterEvidence(
+                        x0=round(c_x0, 3),
+                        x1=round(c_x1, 3),
+                        primitive_count=len(ev_prims),
+                        primitives=ev_prims
+                    ))
 
                 c_x0 = min(p.x0 for p in cluster)
                 c_x1 = max(p.x1 for p in cluster)
@@ -404,7 +448,8 @@ def build_notation_diagnostics(
                     curves_total=curves_total,
                     rects_total=rects_total,
                     text_spans_total=text_spans_total
-                )
+                ),
+                evidence=cluster_evidence_list
             )
 
             margin_x_limit = staff_geom.x0 + (10.0 * staff_space)
@@ -412,9 +457,15 @@ def build_notation_diagnostics(
             margin_curves = 0
             margin_vertical_strokes = 0
             margin_rects = 0
+            
+            margin_evidence_list = []
 
             for p in primitives_for_clustering:
                 if staff_geom.x0 <= p.center_x <= margin_x_limit:
+                    ev = _to_evidence(p)
+                    if ev:
+                        margin_evidence_list.append(ev)
+
                     if p.type == "curve":
                         margin_curves += 1
                     elif p.type == "vertical_stroke_candidate":
@@ -450,7 +501,8 @@ def build_notation_diagnostics(
                 max_text_spans_for_single_font=max_spans,
                 curve_candidate_count=margin_curves,
                 vertical_stroke_candidate_count=margin_vertical_strokes,
-                rectangle_candidate_count=margin_rects
+                rectangle_candidate_count=margin_rects,
+                evidence=margin_evidence_list
             )
 
         staves_diags.append(
