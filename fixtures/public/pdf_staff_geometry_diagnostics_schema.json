@@ -33,6 +33,98 @@
       "title": "ClusterPrimitiveCountSummary",
       "type": "object"
     },
+    "LeftMarginPrimitiveCandidate": {
+      "properties": {
+        "page_index": {
+          "minimum": 1,
+          "title": "Page Index",
+          "type": "integer"
+        },
+        "system_index": {
+          "minimum": 1,
+          "title": "System Index",
+          "type": "integer"
+        },
+        "staff_index": {
+          "minimum": 1,
+          "title": "Staff Index",
+          "type": "integer"
+        },
+        "x0": {
+          "title": "X0",
+          "type": "number"
+        },
+        "y0": {
+          "title": "Y0",
+          "type": "number"
+        },
+        "x1": {
+          "title": "X1",
+          "type": "number"
+        },
+        "y1": {
+          "title": "Y1",
+          "type": "number"
+        },
+        "kind": {
+          "enum": [
+            "text_span",
+            "curve",
+            "vertical_stroke",
+            "horizontal_stroke",
+            "diagonal_stroke",
+            "rectangle"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "left_margin",
+            "x_aligned_cluster"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "font_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Font Name"
+        },
+        "font_size": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Font Size"
+        }
+      },
+      "required": [
+        "page_index",
+        "system_index",
+        "staff_index",
+        "x0",
+        "y0",
+        "x1",
+        "y1",
+        "kind",
+        "source"
+      ],
+      "title": "LeftMarginPrimitiveCandidate",
+      "type": "object"
+    },
     "LocalPrimitivesSummary": {
       "description": "Raw geometric primitive counts strictly within the staff bounding box.",
       "properties": {
@@ -112,6 +204,36 @@
             }
           ],
           "default": null
+        },
+        "left_margin_candidates": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/LeftMarginPrimitiveCandidate"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Left Margin Candidates"
+        },
+        "x_aligned_cluster_candidates": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/XAlignedPrimitiveClusterCandidate"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "X Aligned Cluster Candidates"
         }
       },
       "required": [
@@ -221,6 +343,98 @@
         "text_span_by_font"
       ],
       "title": "NotationStaffMorphology",
+      "type": "object"
+    },
+    "PrimitiveEvidenceCandidate": {
+      "properties": {
+        "page_index": {
+          "minimum": 1,
+          "title": "Page Index",
+          "type": "integer"
+        },
+        "system_index": {
+          "minimum": 1,
+          "title": "System Index",
+          "type": "integer"
+        },
+        "staff_index": {
+          "minimum": 1,
+          "title": "Staff Index",
+          "type": "integer"
+        },
+        "x0": {
+          "title": "X0",
+          "type": "number"
+        },
+        "y0": {
+          "title": "Y0",
+          "type": "number"
+        },
+        "x1": {
+          "title": "X1",
+          "type": "number"
+        },
+        "y1": {
+          "title": "Y1",
+          "type": "number"
+        },
+        "kind": {
+          "enum": [
+            "text_span",
+            "curve",
+            "vertical_stroke",
+            "horizontal_stroke",
+            "diagonal_stroke",
+            "rectangle"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "left_margin",
+            "x_aligned_cluster"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "font_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Font Name"
+        },
+        "font_size": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Font Size"
+        }
+      },
+      "required": [
+        "page_index",
+        "system_index",
+        "staff_index",
+        "x0",
+        "y0",
+        "x1",
+        "y1",
+        "kind",
+        "source"
+      ],
+      "title": "PrimitiveEvidenceCandidate",
       "type": "object"
     },
     "PrimitiveGeometryEvidence": {
@@ -452,6 +666,56 @@
         "cluster_primitive_count_summary"
       ],
       "title": "XAlignedClusterAggregateDiagnostics",
+      "type": "object"
+    },
+    "XAlignedPrimitiveClusterCandidate": {
+      "properties": {
+        "page_index": {
+          "minimum": 1,
+          "title": "Page Index",
+          "type": "integer"
+        },
+        "system_index": {
+          "minimum": 1,
+          "title": "System Index",
+          "type": "integer"
+        },
+        "staff_index": {
+          "minimum": 1,
+          "title": "Staff Index",
+          "type": "integer"
+        },
+        "x0": {
+          "title": "X0",
+          "type": "number"
+        },
+        "x1": {
+          "title": "X1",
+          "type": "number"
+        },
+        "primitive_count": {
+          "minimum": 1,
+          "title": "Primitive Count",
+          "type": "integer"
+        },
+        "primitives": {
+          "items": {
+            "$ref": "#/$defs/PrimitiveEvidenceCandidate"
+          },
+          "title": "Primitives",
+          "type": "array"
+        }
+      },
+      "required": [
+        "page_index",
+        "system_index",
+        "staff_index",
+        "x0",
+        "x1",
+        "primitive_count",
+        "primitives"
+      ],
+      "title": "XAlignedPrimitiveClusterCandidate",
       "type": "object"
     },
     "XAlignedPrimitiveClusterEvidence": {
