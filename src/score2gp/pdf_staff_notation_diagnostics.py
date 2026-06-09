@@ -70,12 +70,13 @@ def _to_evidence(p: PrimitiveGeometry) -> PrimitiveGeometryEvidence | None:
         "text_span": "text_span",
         "curve": "curve",
         "vertical_stroke_candidate": "vertical_stroke",
+        "diagonal_stroke_candidate": "diagonal_stroke",
         "non_staff_horizontal": "horizontal_stroke",
         "rect": "rectangle"
     }
     k = kind_map.get(p.type)
     if not k:
-        return None
+        raise ValueError(f"Primitive type {p.type} cannot be serialized to evidence")
     return PrimitiveGeometryEvidence(
         x0=round(p.x0, 3),
         y0=round(p.y0, 3),
