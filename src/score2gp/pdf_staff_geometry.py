@@ -61,6 +61,44 @@ class ClusterPrimitiveCountSummary(BaseModel):
     rects_total: int = Field(ge=0)
     text_spans_total: int = Field(ge=0)
 
+class PrimitiveGeometryEvidence(BaseModel):
+    """
+    Evidence array item for a single geometric primitive.
+    """
+    model_config = ConfigDict(frozen=True)
+
+    x0: float
+    y0: float
+    x1: float
+    y1: float
+    kind: Literal["text_span", "curve", "vertical_stroke", "horizontal_stroke", "rectangle", "diagonal_stroke"]
+    font_name: str | None = None
+    font_size: float | None = None
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> PrimitiveGeometryEvidence:
+        assert self.x0 <= self.x1, f"x0 ({self.x0}) must be <= x1 ({self.x1})"
+        assert self.y0 <= self.y1, f"y0 ({self.y0}) must be <= y1 ({self.y1})"
+        return self
+
+class XAlignedPrimitiveClusterEvidence(BaseModel):
+    """
+    Evidence array item for a cluster of horizontally-aligned primitives.
+    """
+    model_config = ConfigDict(frozen=True)
+
+    x0: float
+    x1: float
+    primitive_count: int
+    primitives: list[PrimitiveGeometryEvidence]
+
+    @model_validator(mode="after")
+    def validate_state(self) -> XAlignedPrimitiveClusterEvidence:
+        assert self.x0 <= self.x1, f"x0 ({self.x0}) must be <= x1 ({self.x1})"
+        assert self.primitive_count >= 0, "primitive_count must be non-negative"
+        assert self.primitive_count == len(self.primitives), "primitive_count must match length of primitives array"
+        return self
+
 class XAlignedClusterAggregateDiagnostics(BaseModel):
     """
     Geometric statistics for x-aligned clusters of primitives (e.g. circular markers grouped with vertical strokes).
@@ -73,6 +111,7 @@ class XAlignedClusterAggregateDiagnostics(BaseModel):
     clusters_with_vertical_stroke_candidate: int = Field(ge=0)
     max_cluster_vertical_span_staff_spaces: float = Field(ge=0.0)
     cluster_primitive_count_summary: ClusterPrimitiveCountSummary
+    evidence: list[XAlignedPrimitiveClusterEvidence] | None = None
 
 class StaffLeftMarginAggregateDiagnostics(BaseModel):
     """
@@ -88,6 +127,7 @@ class StaffLeftMarginAggregateDiagnostics(BaseModel):
     curve_candidate_count: int = Field(ge=0)
     vertical_stroke_candidate_count: int = Field(ge=0)
     rectangle_candidate_count: int = Field(ge=0)
+    evidence: list[PrimitiveGeometryEvidence] | None = None
 
 class NotationStaffDiagnostics(BaseModel):
     """
