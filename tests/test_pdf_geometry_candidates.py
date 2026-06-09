@@ -64,6 +64,36 @@ def test_left_margin_primitive_candidate() -> None:
     )
     assert p.kind == "curve"
 
+    with pytest.raises(ValueError, match="must have source"):
+        LeftMarginPrimitiveCandidate(
+            page_index=1, system_index=2, staff_index=3,
+            x0=10.0, y0=20.0, x1=30.0, y1=40.0,
+            kind="curve", source="x_aligned_cluster" # type: ignore
+        )
+
+def test_models_are_frozen() -> None:
+    from pydantic import ValidationError
+    p = PrimitiveEvidenceCandidate(
+        page_index=1, system_index=1, staff_index=1,
+        x0=10.0, y0=20.0, x1=30.0, y1=40.0,
+        kind="rectangle", source="left_margin"
+    )
+    with pytest.raises(ValidationError):
+        p.x0 = 50.0 # type: ignore
+
+    p_cluster = PrimitiveEvidenceCandidate(
+        page_index=1, system_index=1, staff_index=1,
+        x0=10.0, y0=20.0, x1=30.0, y1=40.0,
+        kind="rectangle", source="x_aligned_cluster"
+    )
+    c = XAlignedPrimitiveClusterCandidate(
+        page_index=1, system_index=1, staff_index=1,
+        x0=10.0, x1=30.0, primitive_count=1,
+        primitives=[p_cluster]
+    )
+    with pytest.raises(ValidationError):
+        c.x0 = 50.0 # type: ignore
+
 def test_x_aligned_cluster_candidate() -> None:
     p1 = PrimitiveEvidenceCandidate(
         page_index=1, system_index=1, staff_index=1,

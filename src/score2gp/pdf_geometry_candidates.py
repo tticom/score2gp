@@ -1,5 +1,5 @@
 from typing import Literal, Optional
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, ConfigDict
 
 PrimitiveEvidenceKind = Literal[
     "text_span",
@@ -13,6 +13,7 @@ PrimitiveEvidenceKind = Literal[
 PrimitiveEvidenceSource = Literal["left_margin", "x_aligned_cluster"]
 
 class PrimitiveEvidenceCandidate(BaseModel):
+    model_config = ConfigDict(frozen=True)
     page_index: int = Field(ge=1)
     system_index: int = Field(ge=1)
     staff_index: int = Field(ge=1)
@@ -39,9 +40,14 @@ class PrimitiveEvidenceCandidate(BaseModel):
         return self
 
 class LeftMarginPrimitiveCandidate(PrimitiveEvidenceCandidate):
-    pass
+    @model_validator(mode="after")
+    def validate_source(self) -> "LeftMarginPrimitiveCandidate":
+        if self.source != "left_margin":
+            raise ValueError("LeftMarginPrimitiveCandidate must have source 'left_margin'")
+        return self
 
 class XAlignedPrimitiveClusterCandidate(BaseModel):
+    model_config = ConfigDict(frozen=True)
     page_index: int = Field(ge=1)
     system_index: int = Field(ge=1)
     staff_index: int = Field(ge=1)
