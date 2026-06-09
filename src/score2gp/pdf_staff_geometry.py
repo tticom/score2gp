@@ -61,6 +61,31 @@ class ClusterPrimitiveCountSummary(BaseModel):
     rects_total: int = Field(ge=0)
     text_spans_total: int = Field(ge=0)
 
+class PrimitiveGeometryEvidence(BaseModel):
+    """
+    Evidence array item for a single geometric primitive.
+    """
+    model_config = ConfigDict(frozen=True)
+
+    x0: float
+    y0: float
+    x1: float
+    y1: float
+    kind: Literal["text_span", "curve", "vertical_stroke", "horizontal_stroke", "rectangle", "circular_marker"]
+    font_name: str | None = None
+    font_size: float | None = None
+
+class XAlignedPrimitiveClusterEvidence(BaseModel):
+    """
+    Evidence array item for a cluster of horizontally-aligned primitives.
+    """
+    model_config = ConfigDict(frozen=True)
+
+    x0: float
+    x1: float
+    primitive_count: int
+    primitives: list[PrimitiveGeometryEvidence]
+
 class XAlignedClusterAggregateDiagnostics(BaseModel):
     """
     Geometric statistics for x-aligned clusters of primitives (e.g. circular markers grouped with vertical strokes).
@@ -73,6 +98,7 @@ class XAlignedClusterAggregateDiagnostics(BaseModel):
     clusters_with_vertical_stroke_candidate: int = Field(ge=0)
     max_cluster_vertical_span_staff_spaces: float = Field(ge=0.0)
     cluster_primitive_count_summary: ClusterPrimitiveCountSummary
+    evidence: list[XAlignedPrimitiveClusterEvidence] | None = None
 
 class StaffLeftMarginAggregateDiagnostics(BaseModel):
     """
@@ -88,6 +114,7 @@ class StaffLeftMarginAggregateDiagnostics(BaseModel):
     curve_candidate_count: int = Field(ge=0)
     vertical_stroke_candidate_count: int = Field(ge=0)
     rectangle_candidate_count: int = Field(ge=0)
+    evidence: list[PrimitiveGeometryEvidence] | None = None
 
 class NotationStaffDiagnostics(BaseModel):
     """

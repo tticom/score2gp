@@ -10,6 +10,108 @@
           "text_spans_total": 6
         },
         "clusters_with_vertical_stroke_candidate": 0,
+        "evidence": [
+          {
+            "primitive_count": 3,
+            "primitives": [
+              {
+                "font_name": null,
+                "font_size": null,
+                "kind": "vertical_stroke",
+                "x0": 80.0,
+                "x1": 80.0,
+                "y0": 100.0,
+                "y1": 134.0
+              },
+              {
+                "font_name": "Helvetica",
+                "font_size": 18.0,
+                "kind": "text_span",
+                "x0": 82.0,
+                "x1": 92.008,
+                "y0": 84.65,
+                "y1": 109.382
+              },
+              {
+                "font_name": "Helvetica",
+                "font_size": 18.0,
+                "kind": "text_span",
+                "x0": 94.0,
+                "x1": 104.008,
+                "y0": 93.4,
+                "y1": 118.132
+              }
+            ],
+            "x0": 80.0,
+            "x1": 104.008
+          },
+          {
+            "primitive_count": 2,
+            "primitives": [
+              {
+                "font_name": "Helvetica",
+                "font_size": 18.0,
+                "kind": "text_span",
+                "x0": 100.0,
+                "x1": 116.008,
+                "y0": 80.65,
+                "y1": 113.882
+              },
+              {
+                "font_name": "Helvetica",
+                "font_size": 18.0,
+                "kind": "text_span",
+                "x0": 112.0,
+                "x1": 122.008,
+                "y0": 97.65,
+                "y1": 122.382
+              }
+            ],
+            "x0": 100.0,
+            "x1": 122.008
+          },
+          {
+            "primitive_count": 2,
+            "primitives": [
+              {
+                "font_name": "Helvetica",
+                "font_size": 18.0,
+                "kind": "text_span",
+                "x0": 118.0,
+                "x1": 133.0,
+                "y0": 84.9,
+                "y1": 109.882
+              },
+              {
+                "font_name": "Helvetica",
+                "font_size": 18.0,
+                "kind": "text_span",
+                "x0": 124.0,
+                "x1": 133.0,
+                "y0": 101.9,
+                "y1": 126.632
+              }
+            ],
+            "x0": 118.0,
+            "x1": 133.0
+          },
+          {
+            "primitive_count": 1,
+            "primitives": [
+              {
+                "font_name": null,
+                "font_size": null,
+                "kind": "vertical_stroke",
+                "x0": 575.0,
+                "x1": 575.0,
+                "y0": 100.0,
+                "y1": 134.0
+              }
+            ],
+            "x0": 575.0,
+            "x1": 575.0
+          }
+        ],
         "max_cluster_vertical_span_staff_spaces": 5.806,
         "max_primitives_per_x_aligned_cluster": 3,
         "x_aligned_cluster_count": 4
@@ -18,6 +120,71 @@
       "left_margin": {
         "curve_candidate_count": 0,
         "distinct_font_count": 1,
+        "evidence": [
+          {
+            "font_name": null,
+            "font_size": null,
+            "kind": "vertical_stroke",
+            "x0": 80.0,
+            "x1": 80.0,
+            "y0": 100.0,
+            "y1": 134.0
+          },
+          {
+            "font_name": "Helvetica",
+            "font_size": 18.0,
+            "kind": "text_span",
+            "x0": 82.0,
+            "x1": 92.008,
+            "y0": 84.65,
+            "y1": 109.382
+          },
+          {
+            "font_name": "Helvetica",
+            "font_size": 18.0,
+            "kind": "text_span",
+            "x0": 94.0,
+            "x1": 104.008,
+            "y0": 93.4,
+            "y1": 118.132
+          },
+          {
+            "font_name": "Helvetica",
+            "font_size": 18.0,
+            "kind": "text_span",
+            "x0": 100.0,
+            "x1": 116.008,
+            "y0": 80.65,
+            "y1": 113.882
+          },
+          {
+            "font_name": "Helvetica",
+            "font_size": 18.0,
+            "kind": "text_span",
+            "x0": 112.0,
+            "x1": 122.008,
+            "y0": 97.65,
+            "y1": 122.382
+          },
+          {
+            "font_name": "Helvetica",
+            "font_size": 18.0,
+            "kind": "text_span",
+            "x0": 118.0,
+            "x1": 133.0,
+            "y0": 84.9,
+            "y1": 109.882
+          },
+          {
+            "font_name": "Helvetica",
+            "font_size": 18.0,
+            "kind": "text_span",
+            "x0": 124.0,
+            "x1": 133.0,
+            "y0": 101.9,
+            "y1": 126.632
+          }
+        ],
         "margin_x_threshold_staff_spaces": 10.0,
         "max_text_spans_for_single_font": 6,
         "rectangle_candidate_count": 0,

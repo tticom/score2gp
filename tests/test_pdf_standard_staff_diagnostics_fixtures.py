@@ -495,3 +495,22 @@ def test_inspect_pdf_left_margin_threshold_fixture(tmp_path: Any) -> None:
     assert left_margin.get("curve_candidate_count", 0) == 1
     assert left_margin.get("vertical_stroke_candidate_count", 0) == 1
     assert left_margin.get("rectangle_candidate_count", 0) == 1
+
+    evidence = left_margin.get("evidence", [])
+    assert len(evidence) == 4
+    
+    rect_ev = next(e for e in evidence if e["kind"] == "rectangle")
+    assert abs(rect_ev["x0"] - inside_cluster["rects"][0]["x0"]) < 2.0
+    assert abs(rect_ev["x1"] - inside_cluster["rects"][0]["x1"]) < 2.0
+
+    stroke_ev = next(e for e in evidence if e["kind"] == "vertical_stroke")
+    assert abs(stroke_ev["x0"] - inside_cluster["lines"][0]["x0"]) < 2.0
+    assert abs(stroke_ev["x1"] - inside_cluster["lines"][0]["x1"]) < 2.0
+
+    curve_ev = next(e for e in evidence if e["kind"] == "curve")
+    assert abs(curve_ev["x0"] - inside_curve["p0"][0]) < 2.0
+
+    text_ev = next(e for e in evidence if e["kind"] == "text_span")
+    assert text_ev["font_name"] is not None
+    assert "helv" in text_ev["font_name"].lower()
+    assert text_ev["x0"] > 0.0 and text_ev["x1"] > text_ev["x0"]

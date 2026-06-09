@@ -223,6 +223,72 @@
       "title": "NotationStaffMorphology",
       "type": "object"
     },
+    "PrimitiveGeometryEvidence": {
+      "description": "Evidence array item for a single geometric primitive.",
+      "properties": {
+        "x0": {
+          "title": "X0",
+          "type": "number"
+        },
+        "y0": {
+          "title": "Y0",
+          "type": "number"
+        },
+        "x1": {
+          "title": "X1",
+          "type": "number"
+        },
+        "y1": {
+          "title": "Y1",
+          "type": "number"
+        },
+        "kind": {
+          "enum": [
+            "text_span",
+            "curve",
+            "vertical_stroke",
+            "horizontal_stroke",
+            "rectangle",
+            "circular_marker"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "font_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Font Name"
+        },
+        "font_size": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Font Size"
+        }
+      },
+      "required": [
+        "x0",
+        "y0",
+        "x1",
+        "y1",
+        "kind"
+      ],
+      "title": "PrimitiveGeometryEvidence",
+      "type": "object"
+    },
     "StaffLeftMarginAggregateDiagnostics": {
       "description": "Diagnostics for primitives falling within the extreme left margin of the staff,\ntypically used for marker-like geometric shapes near the staff start.",
       "properties": {
@@ -260,6 +326,21 @@
           "minimum": 0,
           "title": "Rectangle Candidate Count",
           "type": "integer"
+        },
+        "evidence": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/PrimitiveGeometryEvidence"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Evidence"
         }
       },
       "required": [
@@ -346,6 +427,21 @@
         },
         "cluster_primitive_count_summary": {
           "$ref": "#/$defs/ClusterPrimitiveCountSummary"
+        },
+        "evidence": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/XAlignedPrimitiveClusterEvidence"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Evidence"
         }
       },
       "required": [
@@ -356,6 +452,38 @@
         "cluster_primitive_count_summary"
       ],
       "title": "XAlignedClusterAggregateDiagnostics",
+      "type": "object"
+    },
+    "XAlignedPrimitiveClusterEvidence": {
+      "description": "Evidence array item for a cluster of horizontally-aligned primitives.",
+      "properties": {
+        "x0": {
+          "title": "X0",
+          "type": "number"
+        },
+        "x1": {
+          "title": "X1",
+          "type": "number"
+        },
+        "primitive_count": {
+          "title": "Primitive Count",
+          "type": "integer"
+        },
+        "primitives": {
+          "items": {
+            "$ref": "#/$defs/PrimitiveGeometryEvidence"
+          },
+          "title": "Primitives",
+          "type": "array"
+        }
+      },
+      "required": [
+        "x0",
+        "x1",
+        "primitive_count",
+        "primitives"
+      ],
+      "title": "XAlignedPrimitiveClusterEvidence",
       "type": "object"
     }
   },
