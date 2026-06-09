@@ -14,6 +14,7 @@ from .pdf_staff_geometry import (
 )
 from dataclasses import dataclass
 import statistics
+from .pdf_geometry_candidate_extractor import PdfGeometryCandidateExtractor
 
 @dataclass(frozen=True)
 class PrimitiveGeometry:
@@ -167,6 +168,7 @@ def build_notation_diagnostics(
 
     staves_diags = []
     system_connectors = []
+    extractor = PdfGeometryCandidateExtractor()
 
     drawings = page.get_drawings()
     try:
@@ -506,13 +508,29 @@ def build_notation_diagnostics(
                 evidence=margin_evidence_list
             )
 
+        # --- Candidate extraction (read-only, supplementary) ---
+        left_margin_candidates = None
+        x_aligned_cluster_candidates = None
+
+        if left_margin_diags is not None and left_margin_diags.evidence is not None:
+            left_margin_candidates = extractor.extract_left_margin_candidates(
+                page_index, system_idx, staff_idx, left_margin_diags.evidence
+            )
+
+        if clustering_diags is not None and clustering_diags.evidence is not None:
+            x_aligned_cluster_candidates = extractor.extract_x_aligned_cluster_candidates(
+                page_index, system_idx, staff_idx, clustering_diags.evidence
+            )
+
         staves_diags.append(
             NotationStaffDiagnostics(
                 staff=staff_geom,
                 primitives=primitives_summary,
                 morphology=morphology,
                 clustering=clustering_diags,
-                left_margin=left_margin_diags
+                left_margin=left_margin_diags,
+                left_margin_candidates=left_margin_candidates,
+                x_aligned_cluster_candidates=x_aligned_cluster_candidates,
             )
         )
 
