@@ -12,11 +12,6 @@ work/
 
 # Private PDFs, MusicXML/MXL exports, extracted TabRaw, generated IR,
 # diagnostics, and reports must stay local.
-fixtures/private/*
-!fixtures/private/.gitkeep
-tests/fixtures/private/
-work/private/
-work/private_diagnostics/
 
 scratch/
 
