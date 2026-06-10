@@ -271,6 +271,19 @@ def summarize_raster_treble_clef_diagnostics(diagnostics: dict) -> dict:
     and staff-level summaries without changing the underlying diagnostics or emitting
     semantic music objects like ScoreIR.
     """
+    if not isinstance(diagnostics, dict):
+        return {
+            "kind": "raster_treble_clef_diagnostics_summary",
+            "status": "unknown",
+            "page_index": -1,
+            "staff_count": 0,
+            "label_counts": {
+                "treble_clef_candidate": 0,
+                "unknown": 0,
+            },
+            "staffs": []
+        }
+
     summary = {
         "kind": "raster_treble_clef_diagnostics_summary",
         "status": "success",
