@@ -11,7 +11,10 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 import fitz  # type: ignore[import-not-found]
-from score2gp.pdf_raster_staff_diagnostics import build_raster_notation_diagnostics  # noqa: E402
+from score2gp.pdf_raster_staff_diagnostics import (  # noqa: E402
+    build_raster_notation_diagnostics,
+    summarize_raster_treble_clef_diagnostics,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -28,11 +31,14 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     results = []
+    summaries = []
     for index, page in enumerate(doc, start=1):
         diags = build_raster_notation_diagnostics(page, page_index=index, scale=2.0)
+        summary = summarize_raster_treble_clef_diagnostics(diags)
         results.append(diags)
+        summaries.append(summary)
 
-    print(json.dumps({"pages": results}, indent=2, sort_keys=True))
+    print(json.dumps({"pages": results, "summaries": summaries}, indent=2, sort_keys=True))
     return 0
 
 
