@@ -18,8 +18,7 @@ def flash_cards_path() -> Path:
 
 
 def test_build_raster_notation_diagnostics_on_treble_staff_paper(treble_staff_paper_path: Path):
-    if not treble_staff_paper_path.exists():
-        pytest.skip(f"Fixture {treble_staff_paper_path} not available.")
+    assert treble_staff_paper_path.exists(), f"Required fixture {treble_staff_paper_path} is missing."
 
     doc = fitz.open(treble_staff_paper_path)
     page = doc[0]
@@ -37,8 +36,12 @@ def test_build_raster_notation_diagnostics_on_treble_staff_paper(treble_staff_pa
 
     cand = first_staff["raster_opening_symbol_candidate"]
     assert cand["kind"] == "raster_opening_symbol_candidate"
-    assert cand["width"] > 0
-    assert cand["height"] > 0
+    assert cand["width"] >= first_staff["spacing"] * 1.5
+    
+    staff_height = first_staff["y_coords"][4] - first_staff["y_coords"][0]
+    # Verify the candidate is not just staff lines: a treble clef is taller than the staff itself.
+    assert cand["height"] > staff_height
+    assert cand["height"] >= first_staff["spacing"] * 3.5
 
     # The candidate should be near the left margin
     x0 = cand["bbox"][0]
@@ -47,8 +50,7 @@ def test_build_raster_notation_diagnostics_on_treble_staff_paper(treble_staff_pa
 
 
 def test_build_raster_notation_diagnostics_on_flash_cards(flash_cards_path: Path):
-    if not flash_cards_path.exists():
-        pytest.skip(f"Fixture {flash_cards_path} not available.")
+    assert flash_cards_path.exists(), f"Required fixture {flash_cards_path} is missing."
 
     doc = fitz.open(flash_cards_path)
     page = doc[0]
@@ -65,5 +67,9 @@ def test_build_raster_notation_diagnostics_on_flash_cards(flash_cards_path: Path
 
     cand = first_staff["raster_opening_symbol_candidate"]
     assert cand["kind"] == "raster_opening_symbol_candidate"
-    assert cand["width"] > 0
-    assert cand["height"] > 0
+    assert cand["width"] >= first_staff["spacing"] * 1.5
+    
+    staff_height = first_staff["y_coords"][4] - first_staff["y_coords"][0]
+    # Verify the candidate is not just staff lines: a treble clef is taller than the staff itself.
+    assert cand["height"] > staff_height
+    assert cand["height"] >= first_staff["spacing"] * 3.5
