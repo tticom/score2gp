@@ -263,3 +263,67 @@ def build_raster_notation_diagnostics(page: fitz.Page, page_index: int, scale: f
         "threshold": threshold,
         "staffs": candidates
     }
+
+
+def summarize_raster_treble_clef_diagnostics(diagnostics: dict) -> dict:
+    """
+    Consumes existing raster diagnostics output and reports aggregate diagnostic counts
+    and staff-level summaries without changing the underlying diagnostics or emitting
+    semantic music objects like ScoreIR.
+    """
+    summary = {
+        "kind": "raster_treble_clef_diagnostics_summary",
+        "status": "success",
+        "page_index": diagnostics.get("page_index", -1),
+        "staff_count": 0,
+        "label_counts": {
+            "treble_clef_candidate": 0,
+            "unknown": 0,
+        },
+        "staffs": []
+    }
+    
+    staffs = diagnostics.get("staffs")
+    if not isinstance(staffs, list):
+        summary["status"] = "unknown"
+        return summary
+        
+    summary["staff_count"] = len(staffs)
+    
+    for staff in staffs:
+        if not isinstance(staff, dict):
+            summary["label_counts"]["unknown"] += 1
+            summary["staffs"].append({
+                "staff_index": -1,
+                "label": "unknown",
+                "reason": "Staff entry is malformed or missing",
+                "features": {},
+                "has_opening_symbol_candidate": False
+            })
+            continue
+            
+        staff_index = staff.get("staff_index", -1)
+        has_cand = staff.get("raster_opening_symbol_candidate") is not None
+        
+        classification = staff.get("raster_opening_symbol_classification")
+        if not isinstance(classification, dict):
+            label = "unknown"
+            reason = "Missing or malformed classification data"
+            features = {}
+        else:
+            label = classification.get("label", "unknown")
+            if label not in ("treble_clef_candidate", "unknown"):
+                label = "unknown"
+            reason = classification.get("reason", "")
+            features = classification.get("features", {})
+            
+        summary["label_counts"][label] += 1
+        summary["staffs"].append({
+            "staff_index": staff_index,
+            "label": label,
+            "reason": reason,
+            "features": features,
+            "has_opening_symbol_candidate": has_cand
+        })
+        
+    return summary
