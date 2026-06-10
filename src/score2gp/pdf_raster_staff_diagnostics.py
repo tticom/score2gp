@@ -96,7 +96,8 @@ def classify_raster_opening_symbol_candidate(staff: dict) -> dict:
     }
 
     # Conservative heuristic check for treble clef
-    if height_to_spacing >= 3.5 and width_to_spacing >= 1.5 and height_to_staff_height > 1.0:
+    # A true treble clef must be significantly taller than the staff lines alone.
+    if height_to_spacing >= 3.5 and width_to_spacing >= 1.5 and height_to_staff_height > 1.2:
         label = "treble_clef_candidate"
         reason = "Candidate matches proportional heuristics for a treble clef"
     else:
