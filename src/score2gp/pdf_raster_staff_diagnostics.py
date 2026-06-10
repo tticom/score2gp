@@ -328,7 +328,7 @@ def summarize_raster_treble_clef_diagnostics(diagnostics: dict) -> dict:
             if label not in ("treble_clef_candidate", "unknown"):
                 label = "unknown"
             reason = classification.get("reason", "")
-            features = classification.get("features", {})
+            features = dict(classification.get("features", {}))
             
         summary["label_counts"][label] += 1
         summary["staffs"].append({

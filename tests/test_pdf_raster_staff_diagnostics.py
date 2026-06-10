@@ -315,13 +315,17 @@ def test_summarize_raster_treble_clef_diagnostics_no_mutation():
                     "kind": "treble_clef_candidate_classifier",
                     "label": "treble_clef_candidate",
                     "reason": "Test",
-                    "features": {}
+                    "features": {"height_to_spacing": 4.0}
                 }
             }
         ]
     }
     diags_copy = copy.deepcopy(diags)
     
-    summarize_raster_treble_clef_diagnostics(diags)
+    summary = summarize_raster_treble_clef_diagnostics(diags)
+    
+    # Mutate the returned summary to prove it doesn't affect diags
+    summary["staffs"][0]["features"]["height_to_spacing"] = 9.9
+    summary["label_counts"]["unknown"] = 99
     
     assert diags == diags_copy
