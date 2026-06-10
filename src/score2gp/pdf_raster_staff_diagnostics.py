@@ -3,6 +3,115 @@ from __future__ import annotations
 import fitz  # type: ignore[import-not-found]
 from PIL import Image
 
+def classify_raster_opening_symbol_candidate(staff: dict) -> dict:
+    """
+    Diagnostic-only read-only classifier to check if the raster_opening_symbol_candidate
+    matches simple proportional heuristics for a treble clef.
+    """
+    if not isinstance(staff, dict):
+        return {
+            "kind": "treble_clef_candidate_classifier",
+            "label": "unknown",
+            "reason": "Malformed staff: not a dict",
+            "features": {}
+        }
+
+    cand = staff.get("raster_opening_symbol_candidate")
+    if not cand:
+        return {
+            "kind": "treble_clef_candidate_classifier",
+            "label": "unknown",
+            "reason": "Missing candidate evidence",
+            "features": {}
+        }
+
+    if not isinstance(cand, dict):
+        return {
+            "kind": "treble_clef_candidate_classifier",
+            "label": "unknown",
+            "reason": "Malformed candidate: not a dict",
+            "features": {}
+        }
+
+    y_coords = staff.get("y_coords", [])
+    if not isinstance(y_coords, list) or len(y_coords) != 5 or not all(isinstance(y, (int, float)) for y in y_coords):
+        return {
+            "kind": "treble_clef_candidate_classifier",
+            "label": "unknown",
+            "reason": "Malformed staff y_coords",
+            "features": {}
+        }
+
+    spacing = staff.get("spacing", 0.0)
+    if not isinstance(spacing, (int, float)) or spacing <= 0.0:
+        return {
+            "kind": "treble_clef_candidate_classifier",
+            "label": "unknown",
+            "reason": "Invalid staff spacing",
+            "features": {}
+        }
+
+    staff_height = float(y_coords[4] - y_coords[0])
+    if staff_height <= 0.0:
+        return {
+            "kind": "treble_clef_candidate_classifier",
+            "label": "unknown",
+            "reason": "Invalid staff height",
+            "features": {}
+        }
+
+    c_height = cand.get("height", 0.0)
+    c_width = cand.get("width", 0.0)
+    if not isinstance(c_height, (int, float)) or c_height <= 0.0 or not isinstance(c_width, (int, float)) or c_width <= 0.0:
+        return {
+            "kind": "treble_clef_candidate_classifier",
+            "label": "unknown",
+            "reason": "Malformed candidate dimensions",
+            "features": {}
+        }
+
+    bbox = cand.get("bbox", [])
+    if not isinstance(bbox, (list, tuple)) or len(bbox) < 4 or not all(isinstance(b, (int, float)) for b in bbox):
+        return {
+            "kind": "treble_clef_candidate_classifier",
+            "label": "unknown",
+            "reason": "Malformed candidate bbox",
+            "features": {}
+        }
+
+    staff_x0 = staff.get("x0", 0.0)
+    if not isinstance(staff_x0, (int, float)):
+        staff_x0 = 0.0
+
+    height_to_spacing = float(c_height) / float(spacing)
+    width_to_spacing = float(c_width) / float(spacing)
+    height_to_staff_height = float(c_height) / staff_height
+    x0_offset = float(bbox[0]) - float(staff_x0)
+
+    features = {
+        "height_to_spacing": round(height_to_spacing, 3),
+        "width_to_spacing": round(width_to_spacing, 3),
+        "height_to_staff_height": round(height_to_staff_height, 3),
+        "x0_offset_from_staff_x0": round(x0_offset, 3)
+    }
+
+    # Conservative heuristic check for treble clef
+    # A true treble clef must be significantly taller than the staff lines alone.
+    if height_to_spacing >= 3.5 and width_to_spacing >= 1.5 and height_to_staff_height > 1.2:
+        label = "treble_clef_candidate"
+        reason = "Candidate matches proportional heuristics for a treble clef"
+    else:
+        label = "unknown"
+        reason = "Evidence is ambiguous or does not strongly match treble clef heuristics"
+
+    return {
+        "kind": "treble_clef_candidate_classifier",
+        "label": label,
+        "reason": reason,
+        "features": features
+    }
+
+
 def build_raster_notation_diagnostics(page: fitz.Page, page_index: int, scale: float = 2.0) -> dict:
     """
     Detects 5-line standard notation staffs and left-margin opening-symbol
@@ -144,6 +253,7 @@ def build_raster_notation_diagnostics(page: fitz.Page, page_index: int, scale: f
             "spacing": round(s['spacing'], 3),
             "raster_opening_symbol_candidate": cand
         }
+        staff_data["raster_opening_symbol_classification"] = classify_raster_opening_symbol_candidate(staff_data)
         candidates.append(staff_data)
         
     return {
