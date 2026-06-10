@@ -181,3 +181,22 @@ def test_classify_raster_opening_symbol_non_numeric_dimensions():
     assert result["kind"] == "treble_clef_candidate_classifier"
     assert result["label"] == "unknown"
     assert "Malformed candidate dimensions" in result["reason"]
+
+
+def test_classify_raster_opening_symbol_staff_lines_only():
+    from score2gp.pdf_raster_staff_diagnostics import classify_raster_opening_symbol_candidate
+    staff = {
+        "staff_index": 1,
+        "y_coords": [10.0, 20.0, 30.0, 40.0, 50.0],
+        "x0": 10.0,
+        "spacing": 10.0,
+        "raster_opening_symbol_candidate": {
+            "bbox": [10.0, 9.0, 30.0, 51.0],
+            "width": 20.0,
+            "height": 42.0 # Height is slightly more than staff_height (40.0) but not a full clef
+        }
+    }
+    result = classify_raster_opening_symbol_candidate(staff)
+    assert result["kind"] == "treble_clef_candidate_classifier"
+    assert result["label"] == "unknown"
+    assert result["features"]["height_to_staff_height"] == 1.05
