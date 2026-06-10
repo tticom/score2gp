@@ -8,6 +8,14 @@ def classify_raster_opening_symbol_candidate(staff: dict) -> dict:
     Diagnostic-only read-only classifier to check if the raster_opening_symbol_candidate
     matches simple proportional heuristics for a treble clef.
     """
+    if not isinstance(staff, dict):
+        return {
+            "kind": "treble_clef_candidate_classifier",
+            "label": "unknown",
+            "reason": "Malformed staff: not a dict",
+            "features": {}
+        }
+
     cand = staff.get("raster_opening_symbol_candidate")
     if not cand:
         return {
@@ -17,8 +25,16 @@ def classify_raster_opening_symbol_candidate(staff: dict) -> dict:
             "features": {}
         }
 
+    if not isinstance(cand, dict):
+        return {
+            "kind": "treble_clef_candidate_classifier",
+            "label": "unknown",
+            "reason": "Malformed candidate: not a dict",
+            "features": {}
+        }
+
     y_coords = staff.get("y_coords", [])
-    if len(y_coords) != 5:
+    if not isinstance(y_coords, list) or len(y_coords) != 5 or not all(isinstance(y, (int, float)) for y in y_coords):
         return {
             "kind": "treble_clef_candidate_classifier",
             "label": "unknown",
@@ -27,7 +43,7 @@ def classify_raster_opening_symbol_candidate(staff: dict) -> dict:
         }
 
     spacing = staff.get("spacing", 0.0)
-    if spacing <= 0.0:
+    if not isinstance(spacing, (int, float)) or spacing <= 0.0:
         return {
             "kind": "treble_clef_candidate_classifier",
             "label": "unknown",
@@ -35,15 +51,42 @@ def classify_raster_opening_symbol_candidate(staff: dict) -> dict:
             "features": {}
         }
 
-    staff_height = y_coords[4] - y_coords[0]
+    staff_height = float(y_coords[4] - y_coords[0])
+    if staff_height <= 0.0:
+        return {
+            "kind": "treble_clef_candidate_classifier",
+            "label": "unknown",
+            "reason": "Invalid staff height",
+            "features": {}
+        }
+
     c_height = cand.get("height", 0.0)
     c_width = cand.get("width", 0.0)
-    bbox = cand.get("bbox", [0.0, 0.0, 0.0, 0.0])
+    if not isinstance(c_height, (int, float)) or c_height <= 0.0 or not isinstance(c_width, (int, float)) or c_width <= 0.0:
+        return {
+            "kind": "treble_clef_candidate_classifier",
+            "label": "unknown",
+            "reason": "Malformed candidate dimensions",
+            "features": {}
+        }
 
-    height_to_spacing = c_height / spacing
-    width_to_spacing = c_width / spacing
-    height_to_staff_height = c_height / staff_height if staff_height > 0 else 0.0
-    x0_offset = bbox[0] - staff.get("x0", 0.0)
+    bbox = cand.get("bbox", [])
+    if not isinstance(bbox, (list, tuple)) or len(bbox) < 4 or not all(isinstance(b, (int, float)) for b in bbox):
+        return {
+            "kind": "treble_clef_candidate_classifier",
+            "label": "unknown",
+            "reason": "Malformed candidate bbox",
+            "features": {}
+        }
+
+    staff_x0 = staff.get("x0", 0.0)
+    if not isinstance(staff_x0, (int, float)):
+        staff_x0 = 0.0
+
+    height_to_spacing = float(c_height) / float(spacing)
+    width_to_spacing = float(c_width) / float(spacing)
+    height_to_staff_height = float(c_height) / staff_height
+    x0_offset = float(bbox[0]) - float(staff_x0)
 
     features = {
         "height_to_spacing": round(height_to_spacing, 3),

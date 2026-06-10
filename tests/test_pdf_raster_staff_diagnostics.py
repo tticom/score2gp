@@ -128,3 +128,56 @@ def test_classify_raster_opening_symbol_insufficient_evidence():
     assert result["label"] == "unknown"
     assert "reason" in result
     assert result["features"]["height_to_spacing"] == 1.0
+
+
+def test_classify_raster_opening_symbol_malformed_bbox():
+    from score2gp.pdf_raster_staff_diagnostics import classify_raster_opening_symbol_candidate
+    staff = {
+        "staff_index": 1,
+        "y_coords": [10.0, 20.0, 30.0, 40.0, 50.0],
+        "x0": 10.0,
+        "spacing": 10.0,
+        "raster_opening_symbol_candidate": {
+            "bbox": [10.0, 20.0],  # malformed bbox (only 2 elements)
+            "width": 10.0,
+            "height": 40.0
+        }
+    }
+    result = classify_raster_opening_symbol_candidate(staff)
+    assert result["kind"] == "treble_clef_candidate_classifier"
+    assert result["label"] == "unknown"
+    assert "Malformed candidate bbox" in result["reason"]
+
+
+def test_classify_raster_opening_symbol_non_dict_candidate():
+    from score2gp.pdf_raster_staff_diagnostics import classify_raster_opening_symbol_candidate
+    staff = {
+        "staff_index": 1,
+        "y_coords": [10.0, 20.0, 30.0, 40.0, 50.0],
+        "x0": 10.0,
+        "spacing": 10.0,
+        "raster_opening_symbol_candidate": "not a dict"
+    }
+    result = classify_raster_opening_symbol_candidate(staff)
+    assert result["kind"] == "treble_clef_candidate_classifier"
+    assert result["label"] == "unknown"
+    assert "Malformed candidate: not a dict" in result["reason"]
+
+
+def test_classify_raster_opening_symbol_non_numeric_dimensions():
+    from score2gp.pdf_raster_staff_diagnostics import classify_raster_opening_symbol_candidate
+    staff = {
+        "staff_index": 1,
+        "y_coords": [10.0, 20.0, 30.0, 40.0, 50.0],
+        "x0": 10.0,
+        "spacing": 10.0,
+        "raster_opening_symbol_candidate": {
+            "bbox": [10.0, 10.0, 20.0, 20.0],
+            "width": "10.0", # not numeric
+            "height": 40.0
+        }
+    }
+    result = classify_raster_opening_symbol_candidate(staff)
+    assert result["kind"] == "treble_clef_candidate_classifier"
+    assert result["label"] == "unknown"
+    assert "Malformed candidate dimensions" in result["reason"]
