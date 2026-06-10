@@ -48,6 +48,16 @@ def test_build_raster_notation_diagnostics_on_treble_staff_paper(treble_staff_pa
     staff_x0 = first_staff["x0"]
     assert x0 >= staff_x0 - 20  # Roughly inside or slightly left of the left margin
 
+    # Check classifier output
+    assert "raster_opening_symbol_classification" in first_staff
+    cls = first_staff["raster_opening_symbol_classification"]
+    assert cls["kind"] == "treble_clef_candidate_classifier"
+    assert cls["label"] in ("treble_clef_candidate", "unknown")
+    assert "reason" in cls
+    assert "features" in cls
+    assert "score_ir" not in first_staff
+    assert "clef" not in first_staff
+
 
 def test_build_raster_notation_diagnostics_on_flash_cards(flash_cards_path: Path):
     assert flash_cards_path.exists(), f"Required fixture {flash_cards_path} is missing."
@@ -73,3 +83,48 @@ def test_build_raster_notation_diagnostics_on_flash_cards(flash_cards_path: Path
     # Verify the candidate is not just staff lines: a treble clef is taller than the staff itself.
     assert cand["height"] > staff_height
     assert cand["height"] >= first_staff["spacing"] * 3.5
+
+    # Check classifier output
+    assert "raster_opening_symbol_classification" in first_staff
+    cls = first_staff["raster_opening_symbol_classification"]
+    assert cls["kind"] == "treble_clef_candidate_classifier"
+    assert cls["label"] in ("treble_clef_candidate", "unknown")
+    assert "reason" in cls
+    assert "features" in cls
+    assert "score_ir" not in first_staff
+    assert "clef" not in first_staff
+
+
+def test_classify_raster_opening_symbol_missing_candidate():
+    from score2gp.pdf_raster_staff_diagnostics import classify_raster_opening_symbol_candidate
+    staff = {
+        "staff_index": 1,
+        "y_coords": [10.0, 20.0, 30.0, 40.0, 50.0],
+        "x0": 10.0,
+        "spacing": 10.0,
+        # missing candidate
+    }
+    result = classify_raster_opening_symbol_candidate(staff)
+    assert result["kind"] == "treble_clef_candidate_classifier"
+    assert result["label"] == "unknown"
+    assert "reason" in result
+
+
+def test_classify_raster_opening_symbol_insufficient_evidence():
+    from score2gp.pdf_raster_staff_diagnostics import classify_raster_opening_symbol_candidate
+    staff = {
+        "staff_index": 1,
+        "y_coords": [10.0, 20.0, 30.0, 40.0, 50.0],
+        "x0": 10.0,
+        "spacing": 10.0,
+        "raster_opening_symbol_candidate": {
+            "bbox": [10.0, 10.0, 20.0, 20.0],
+            "width": 10.0,
+            "height": 10.0 # Height is only 1x spacing, not a treble clef
+        }
+    }
+    result = classify_raster_opening_symbol_candidate(staff)
+    assert result["kind"] == "treble_clef_candidate_classifier"
+    assert result["label"] == "unknown"
+    assert "reason" in result
+    assert result["features"]["height_to_spacing"] == 1.0
