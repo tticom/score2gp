@@ -200,3 +200,132 @@ def test_classify_raster_opening_symbol_staff_lines_only():
     assert result["kind"] == "treble_clef_candidate_classifier"
     assert result["label"] == "unknown"
     assert result["features"]["height_to_staff_height"] == 1.05
+
+
+def test_summarize_raster_treble_clef_diagnostics_on_treble_staff_paper(treble_staff_paper_path: Path):
+    from score2gp.pdf_raster_staff_diagnostics import summarize_raster_treble_clef_diagnostics
+    assert treble_staff_paper_path.exists(), f"Required fixture {treble_staff_paper_path} is missing."
+
+    doc = fitz.open(treble_staff_paper_path)
+    page = doc[0]
+
+    diags = build_raster_notation_diagnostics(page, page_index=1, scale=2.0)
+    summary = summarize_raster_treble_clef_diagnostics(diags)
+
+    assert summary["kind"] == "raster_treble_clef_diagnostics_summary"
+    assert summary["status"] == "success"
+    assert summary["page_index"] == 1
+    assert summary["staff_count"] == len(diags["staffs"])
+    assert "treble_clef_candidate" in summary["label_counts"]
+    assert "unknown" in summary["label_counts"]
+    
+    # Check that staff summaries preserve staff index and label, and no ScoreIR fields leaked
+    assert len(summary["staffs"]) == summary["staff_count"]
+    for s in summary["staffs"]:
+        assert "staff_index" in s
+        assert s["label"] in ("treble_clef_candidate", "unknown")
+        assert "has_opening_symbol_candidate" in s
+        assert "score_ir" not in s
+        assert "clef" not in s
+        assert "pitch" not in s
+        assert "rhythm" not in s
+        assert "key_signature" not in s
+        assert "time_signature" not in s
+        assert "notes" not in s
+        assert "rests" not in s
+        assert "voices" not in s
+
+
+def test_summarize_raster_treble_clef_diagnostics_on_flash_cards(flash_cards_path: Path):
+    from score2gp.pdf_raster_staff_diagnostics import summarize_raster_treble_clef_diagnostics
+    assert flash_cards_path.exists(), f"Required fixture {flash_cards_path} is missing."
+
+    doc = fitz.open(flash_cards_path)
+    page = doc[0]
+
+    diags = build_raster_notation_diagnostics(page, page_index=1, scale=2.0)
+    summary = summarize_raster_treble_clef_diagnostics(diags)
+
+    assert summary["kind"] == "raster_treble_clef_diagnostics_summary"
+    assert summary["status"] == "success"
+    assert summary["page_index"] == 1
+    assert summary["staff_count"] == len(diags["staffs"])
+    assert "treble_clef_candidate" in summary["label_counts"]
+    assert "unknown" in summary["label_counts"]
+
+
+def test_summarize_raster_treble_clef_diagnostics_missing_classification():
+    from score2gp.pdf_raster_staff_diagnostics import summarize_raster_treble_clef_diagnostics
+    diags = {
+        "status": "success",
+        "page_index": 2,
+        "staffs": [
+            {
+                "staff_index": 0,
+                "raster_opening_symbol_candidate": {},
+                # missing classification
+            }
+        ]
+    }
+    summary = summarize_raster_treble_clef_diagnostics(diags)
+    assert summary["status"] == "success"
+    assert summary["label_counts"]["unknown"] == 1
+    assert summary["staffs"][0]["label"] == "unknown"
+
+
+def test_summarize_raster_treble_clef_diagnostics_malformed_top_level():
+    from score2gp.pdf_raster_staff_diagnostics import summarize_raster_treble_clef_diagnostics
+    for malformed in [None, "malformed", 123, []]:
+        summary = summarize_raster_treble_clef_diagnostics(malformed)
+        assert summary["kind"] == "raster_treble_clef_diagnostics_summary"
+        assert summary["status"] == "unknown"
+        assert summary["page_index"] == -1
+        assert summary["staff_count"] == 0
+        assert "treble_clef_candidate" in summary["label_counts"]
+        assert "unknown" in summary["label_counts"]
+        assert len(summary["staffs"]) == 0
+
+
+def test_summarize_raster_treble_clef_diagnostics_malformed_staffs():
+    from score2gp.pdf_raster_staff_diagnostics import summarize_raster_treble_clef_diagnostics
+    diags = {
+        "status": "success",
+        "page_index": 1,
+        # staffs is not a list
+        "staffs": "malformed"
+    }
+    summary = summarize_raster_treble_clef_diagnostics(diags)
+    assert summary["status"] == "unknown"
+    assert summary["staff_count"] == 0
+    assert len(summary["staffs"]) == 0
+
+
+def test_summarize_raster_treble_clef_diagnostics_no_mutation():
+    from score2gp.pdf_raster_staff_diagnostics import summarize_raster_treble_clef_diagnostics
+    import copy
+    
+    diags = {
+        "status": "success",
+        "page_index": 1,
+        "staffs": [
+            {
+                "staff_index": 0,
+                "raster_opening_symbol_candidate": {"bbox": [1, 2, 3, 4]},
+                "raster_opening_symbol_classification": {
+                    "kind": "treble_clef_candidate_classifier",
+                    "label": "treble_clef_candidate",
+                    "reason": "Test",
+                    "features": {"height_to_spacing": 4.0}
+                }
+            }
+        ]
+    }
+    diags_copy = copy.deepcopy(diags)
+    
+    summary = summarize_raster_treble_clef_diagnostics(diags)
+    
+    # Mutate the returned summary to prove it doesn't affect diags
+    summary["staffs"][0]["features"]["height_to_spacing"] = 9.9
+    summary["label_counts"]["unknown"] = 99
+    
+    assert diags == diags_copy
