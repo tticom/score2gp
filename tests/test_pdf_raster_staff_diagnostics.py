@@ -273,6 +273,19 @@ def test_summarize_raster_treble_clef_diagnostics_missing_classification():
     assert summary["staffs"][0]["label"] == "unknown"
 
 
+def test_summarize_raster_treble_clef_diagnostics_malformed_top_level():
+    from score2gp.pdf_raster_staff_diagnostics import summarize_raster_treble_clef_diagnostics
+    for malformed in [None, "malformed", 123, []]:
+        summary = summarize_raster_treble_clef_diagnostics(malformed)
+        assert summary["kind"] == "raster_treble_clef_diagnostics_summary"
+        assert summary["status"] == "unknown"
+        assert summary["page_index"] == -1
+        assert summary["staff_count"] == 0
+        assert "treble_clef_candidate" in summary["label_counts"]
+        assert "unknown" in summary["label_counts"]
+        assert len(summary["staffs"]) == 0
+
+
 def test_summarize_raster_treble_clef_diagnostics_malformed_staffs():
     from score2gp.pdf_raster_staff_diagnostics import summarize_raster_treble_clef_diagnostics
     diags = {
