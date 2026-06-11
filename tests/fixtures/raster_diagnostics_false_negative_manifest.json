@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "source": {
+    "task": 69,
+    "based_on_product_pr": 240,
+    "based_on_merge_commit": "94ba76a4f9ce0a184f81d35711bf989ba83f8753"
+  },
+  "false_negative_cases": [
+    {
+      "case_id": "fn_private_positive_001",
+      "source_group": "positive_private",
+      "expected_positive": true,
+      "safe_category": "currently_verified_false_negative",
+      "privacy": "private_fixture_anonymised",
+      "file_sha256": "53785c550a699cab31aa973e4278c086050ac7ac8b030a8edcbc00aa3942300e",
+      "notes": "Verified by Task 67 gate report; no private fixture name or content recorded."
+    },
+    {
+      "case_id": "fn_private_positive_002",
+      "source_group": "positive_private",
+      "expected_positive": true,
+      "safe_category": "currently_verified_false_negative",
+      "privacy": "private_fixture_anonymised",
+      "file_sha256": "f2326734f47ab5483691b504aa2e6827970d10d6d97b5a8eb691db9a0897ab8e",
+      "notes": "Verified by Task 67 gate report; no private fixture name or content recorded."
+    }
+  ]
+}
