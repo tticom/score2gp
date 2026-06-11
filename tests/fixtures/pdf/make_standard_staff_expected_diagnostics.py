@@ -9,7 +9,10 @@ def main() -> None:
         "dense_margin",
         "sparse",
         "wide_curves",
-        "complex_cluster"
+        "complex_cluster",
+        "negative_tab",
+        "negative_blank",
+        "negative_noise"
     ]
     
     # Run from anywhere, resolve paths relative to this script
