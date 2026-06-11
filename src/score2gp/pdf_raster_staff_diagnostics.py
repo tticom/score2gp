@@ -191,15 +191,27 @@ def build_raster_notation_diagnostics(page: fitz.Page, page_index: int, scale: f
         
         # Staff lines should be roughly evenly spaced
         if avg_spacing > 5.0 and all(abs(s - avg_spacing) < avg_spacing * 0.35 for s in spacings):
-            min_x1 = min(g['x1'] for g in group)
-            max_x0 = max(g['x0'] for g in group)
-            if min_x1 - max_x0 > width * 0.35:
-                staffs.append({
-                    'y_coords': [round(y, 3) for y in y_coords],
-                    'x0': float(max_x0),
-                    'x1': float(min_x1),
-                    'spacing': float(avg_spacing)
-                })
+            # Check for adjacent lines that imply a >5 line staff (e.g. 6-line TAB)
+            is_part_of_larger_staff = False
+            if i > 0:
+                prev_spacing = y_coords[0] - merged_lines[i-1]['y']
+                if abs(prev_spacing - avg_spacing) < avg_spacing * 0.35:
+                    is_part_of_larger_staff = True
+            if i + 5 < len(merged_lines):
+                next_spacing = merged_lines[i+5]['y'] - y_coords[4]
+                if abs(next_spacing - avg_spacing) < avg_spacing * 0.35:
+                    is_part_of_larger_staff = True
+
+            if not is_part_of_larger_staff:
+                min_x1 = min(g['x1'] for g in group)
+                max_x0 = max(g['x0'] for g in group)
+                if min_x1 - max_x0 > width * 0.35:
+                    staffs.append({
+                        'y_coords': [round(y, 3) for y in y_coords],
+                        'x0': float(max_x0),
+                        'x1': float(min_x1),
+                        'spacing': float(avg_spacing)
+                    })
                 
     # Remove overlapping staffs (greedy approach)
     final_staffs = []
