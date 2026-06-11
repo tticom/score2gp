@@ -10,14 +10,17 @@ from score2gp.pdf_raster_staff_diagnostics import (
 )
 
 
-def run_diagnostics_on_file(pdf_path: Path):
+def run_diagnostics_on_file(pdf_path: Path, display_label: str = None):
     if not pdf_path.exists():
         return None
 
     try:
         doc = fitz.open(pdf_path)
     except Exception as e:
-        print(f"Error opening {pdf_path}: {e}", file=sys.stderr)
+        if display_label:
+            print(f"Error opening {display_label}: PDF could not be opened", file=sys.stderr)
+        else:
+            print(f"Error opening {pdf_path.name}: {e}", file=sys.stderr)
         return None
 
     total_staff_count = 0
@@ -43,6 +46,19 @@ def run_diagnostics_on_file(pdf_path: Path):
     }
 
 
+import json
+import hashlib
+
+def compute_sha256(filepath: Path) -> str:
+    h = hashlib.sha256()
+    try:
+        with open(filepath, 'rb') as f:
+            while chunk := f.read(8192):
+                h.update(chunk)
+    except Exception:
+        return ""
+    return h.hexdigest()
+
 def generate_report():
     manifest = [
         {
@@ -60,17 +76,47 @@ def generate_report():
             "category": "negative_noise",
             "expected_positive": False,
         },
-        {
-            "path": "fixtures/private/raster-treble-clef/treble-staff-paper.pdf",
-            "category": "positive_private",
-            "expected_positive": True,
-        },
-        {
-            "path": "fixtures/private/raster-treble-clef/FlashCardsValues.pdf",
-            "category": "positive_private",
-            "expected_positive": True,
-        },
     ]
+
+    # Load false negative manifest first
+    fn_manifest_path = Path("tests/fixtures/raster_diagnostics_false_negative_manifest.json")
+    expected_fns = {}  # sha256 -> case_id
+    if fn_manifest_path.exists():
+        try:
+            with open(fn_manifest_path, "r") as f:
+                data = json.load(f)
+                for entry in data.get("false_negative_cases", []):
+                    case_id = entry.get("case_id")
+                    file_sha256 = entry.get("file_sha256")
+                    if case_id and file_sha256:
+                        expected_fns[file_sha256] = case_id
+        except Exception as e:
+            print(f"Warning: Could not load false negative manifest: {e}", file=sys.stderr)
+
+    found_case_ids = set()
+    private_dir = Path("fixtures/private/raster-treble-clef")
+    if private_dir.exists():
+        for p in private_dir.glob("*.pdf"):
+            h = compute_sha256(p)
+            if h in expected_fns:
+                case_id = expected_fns[h]
+                manifest.append({
+                    "path": str(p),
+                    "category": "positive_private",
+                    "expected_positive": True,
+                    "case_id": case_id
+                })
+                found_case_ids.add(case_id)
+
+    # Add dummy entries for missing private fixtures so they are reported as skipped
+    for file_sha256, case_id in expected_fns.items():
+        if case_id not in found_case_ids:
+            manifest.append({
+                "path": f"missing_private_fixture_{case_id}.pdf",
+                "category": "positive_private",
+                "expected_positive": True,
+                "case_id": case_id
+            })
 
     results = {
         "negative_blank": {"cases_run": 0, "false_positives": 0, "unknowns": 0},
@@ -95,14 +141,16 @@ def generate_report():
         p = Path(item["path"])
         if not p.exists():
             if item["category"] == "positive_private":
-                print(f"Skipping missing optional private fixture: {p.name}")
+                display = item.get("case_id", "anonymised_private_fixture")
+                print(f"Skipping missing optional private fixture: {display}")
             else:
                 print(f"Warning: Expected fixture missing: {p.name}", file=sys.stderr)
             continue
 
-        res = run_diagnostics_on_file(p)
+        display_name = item.get("case_id", "anonymised_private_fixture") if item["category"] == "positive_private" else p.name
+        res = run_diagnostics_on_file(p, display_label=display_name)
         if not res:
-            print(f"Error processing {p.name}", file=sys.stderr)
+            print(f"Error processing {display_name}", file=sys.stderr)
             continue
 
         cat = item["category"]
@@ -114,11 +162,10 @@ def generate_report():
         totals["total_staves"] += res["staff_count"]
         totals["unknowns"] += res["unknown"]
 
+        is_fn = False
         if item["expected_positive"]:
-            # If we expect a positive but get none, it's a false negative (for the document)
-            # Alternatively, if we expected staves but got no treble clefs on them, count missing.
-            # Here we simplify: if expected positive and 0 treble candidates found overall -> false negative
             if res["treble_clef_candidate"] == 0:
+                is_fn = True
                 results[cat]["false_negatives"] += 1
                 totals["false_negatives"] += 1
         else:
@@ -126,11 +173,19 @@ def generate_report():
                 results[cat]["false_positives"] += res["treble_clef_candidate"]
                 totals["false_positives"] += res["treble_clef_candidate"]
 
-        print(f"Processed: {p.name} [{cat}]")
+        print(f"Processed: {display_name} [{cat}]")
         print(f"  Pages: {res['pages']}")
         print(f"  Staves Detected: {res['staff_count']}")
         print(f"  Treble Candidates: {res['treble_clef_candidate']}")
         print(f"  Unknowns: {res['unknown']}")
+
+        if is_fn:
+            case_id = item.get("case_id", display_name)
+            if case_id in found_case_ids:
+                print(f"  -> MATCHED KNOWN FALSE NEGATIVE MANIFEST ENTRY: {case_id}")
+            else:
+                print(f"  -> UNEXPECTED FALSE NEGATIVE: {case_id}")
+
         print("-" * 60)
 
     print("\nAggregate Report")
