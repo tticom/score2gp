@@ -8,7 +8,10 @@ def test_standard_staff_diagnostics_snapshots() -> None:
         "dense_margin",
         "sparse",
         "wide_curves",
-        "complex_cluster"
+        "complex_cluster",
+        "negative_tab",
+        "negative_blank",
+        "negative_noise"
     ]
 
     for f in fixtures:
