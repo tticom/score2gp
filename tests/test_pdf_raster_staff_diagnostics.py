@@ -329,3 +329,68 @@ def test_summarize_raster_treble_clef_diagnostics_no_mutation():
     summary["label_counts"]["unknown"] = 99
     
     assert diags == diags_copy
+
+
+@pytest.fixture
+def negative_blank_path() -> Path:
+    return Path("tests/fixtures/pdf/generated_standard_staff_negative_blank.pdf")
+
+
+@pytest.fixture
+def negative_tab_path() -> Path:
+    return Path("tests/fixtures/pdf/generated_standard_staff_negative_tab.pdf")
+
+
+@pytest.fixture
+def negative_noise_path() -> Path:
+    return Path("tests/fixtures/pdf/generated_standard_staff_negative_noise.pdf")
+
+
+def test_raster_treble_clef_diagnostics_reject_blank_staff(negative_blank_path: Path):
+    from score2gp.pdf_raster_staff_diagnostics import summarize_raster_treble_clef_diagnostics
+    assert negative_blank_path.exists()
+    doc = fitz.open(negative_blank_path)
+    
+    diags = build_raster_notation_diagnostics(doc[0], page_index=1, scale=2.0)
+    summary = summarize_raster_treble_clef_diagnostics(diags)
+
+    assert summary["status"] == "success"
+    # Blank standard staff is detected as 1 staff, but lacking a clef candidate it must be 'unknown'
+    assert summary["staff_count"] == 1
+    assert summary["label_counts"].get("treble_clef_candidate", 0) == 0
+    assert summary["label_counts"].get("unknown", 0) == 1
+    
+    s = summary["staffs"][0]
+    assert s["label"] == "unknown"
+    assert "score_ir" not in s
+    assert "clef" not in s
+    for forbidden in ["pitch", "rhythm", "key_signature", "time_signature", "notes", "rests", "voices"]:
+        assert forbidden not in s
+
+
+def test_raster_treble_clef_diagnostics_reject_tab_staff(negative_tab_path: Path):
+    from score2gp.pdf_raster_staff_diagnostics import summarize_raster_treble_clef_diagnostics
+    assert negative_tab_path.exists()
+    doc = fitz.open(negative_tab_path)
+    
+    diags = build_raster_notation_diagnostics(doc[0], page_index=1, scale=2.0)
+    summary = summarize_raster_treble_clef_diagnostics(diags)
+
+    assert summary["status"] == "success"
+    # A TAB staff (6 lines) does not yield a valid 5-line notation staff for this diagnostic pass
+    assert summary["staff_count"] == 0
+    assert summary["label_counts"].get("treble_clef_candidate", 0) == 0
+
+
+def test_raster_treble_clef_diagnostics_reject_noise(negative_noise_path: Path):
+    from score2gp.pdf_raster_staff_diagnostics import summarize_raster_treble_clef_diagnostics
+    assert negative_noise_path.exists()
+    doc = fitz.open(negative_noise_path)
+    
+    diags = build_raster_notation_diagnostics(doc[0], page_index=1, scale=2.0)
+    summary = summarize_raster_treble_clef_diagnostics(diags)
+
+    assert summary["status"] == "success"
+    # Random noise / text without lines does not yield any staves
+    assert summary["staff_count"] == 0
+    assert summary["label_counts"].get("treble_clef_candidate", 0) == 0

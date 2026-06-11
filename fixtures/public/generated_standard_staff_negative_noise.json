@@ -1,0 +1,18 @@
+{
+  "page_width": 595.0,
+  "page_height": 842.0,
+  "margin_text_clusters": [
+    {"x": 100.0, "y": 200.0, "text": "This is just some noise text on a page", "fontsize": 24.0, "fontname": "times-roman"},
+    {"x": 100.0, "y": 250.0, "text": "with no staff lines around.", "fontsize": 18.0, "fontname": "times-italic"}
+  ],
+  "note_clusters": [
+    {
+      "rects": [
+        {"x0": 100.0, "y0": 300.0, "x1": 150.0, "y1": 350.0}
+      ],
+      "lines": [
+        {"x0": 200.0, "y0": 300.0, "x1": 300.0, "y1": 350.0}
+      ]
+    }
+  ]
+}
