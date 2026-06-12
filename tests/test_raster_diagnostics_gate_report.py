@@ -633,7 +633,78 @@ def test_subprocess_json_check_mode_review_with_test_manifest(tmp_path):
     assert data["gate_status"] == "REVIEW"
     assert data["totals"]["unexpected_false_negatives"] == 1
 
-    # Verify privacy
     assert "pytest-of" not in result.stdout
     assert str(tmp_path) not in result.stdout
+
+
+def test_subprocess_test_manifest_rejects_private_without_leaking(tmp_path):
+    script_path = Path(__file__).parent.parent / "scripts" / "raster_diagnostics_gate_report.py"
+
+    manifest_path = tmp_path / "test_manifest.json"
+    private_path = "fixtures/private/some_secret.pdf"
+    manifest_data = [
+        {
+            "path": private_path,
+            "category": "test_category",
+            "expected_positive": True,
+            "known_false_negative": False,
+            "case_id": "test_private"
+        }
+    ]
+    with open(manifest_path, "w") as f:
+        json.dump(manifest_data, f)
+
+    result = subprocess.run(
+        [sys.executable, str(script_path), "--test-manifest", str(manifest_path)],
+        capture_output=True,
+        text=True
+    )
+
+    assert "Warning: Rejecting unsafe test manifest path" in result.stderr
+    assert private_path not in result.stderr
+    assert private_path not in result.stdout
+
+def test_subprocess_test_manifest_rejects_absolute_without_leaking(tmp_path):
+    script_path = Path(__file__).parent.parent / "scripts" / "raster_diagnostics_gate_report.py"
+
+    manifest_path = tmp_path / "test_manifest.json"
+    abs_path = "/etc/passwd"
+    manifest_data = [
+        {
+            "path": abs_path,
+            "category": "test_category",
+            "expected_positive": True,
+            "known_false_negative": False,
+            "case_id": "test_abs"
+        }
+    ]
+    with open(manifest_path, "w") as f:
+        json.dump(manifest_data, f)
+
+    result = subprocess.run(
+        [sys.executable, str(script_path), "--test-manifest", str(manifest_path)],
+        capture_output=True,
+        text=True
+    )
+
+    assert "Warning: Rejecting unsafe test manifest path" in result.stderr
+    assert abs_path not in result.stderr
+    assert abs_path not in result.stdout
+
+def test_subprocess_test_manifest_bad_json_without_leaking(tmp_path):
+    script_path = Path(__file__).parent.parent / "scripts" / "raster_diagnostics_gate_report.py"
+
+    manifest_path = tmp_path / "test_manifest.json"
+    with open(manifest_path, "w") as f:
+        f.write("{ bad json }")
+
+    result = subprocess.run(
+        [sys.executable, str(script_path), "--test-manifest", str(manifest_path)],
+        capture_output=True,
+        text=True
+    )
+
+    assert result.returncode == 1
+    assert "Error loading test manifest: Invalid or missing manifest" in result.stderr
+    assert str(manifest_path) not in result.stderr
 
