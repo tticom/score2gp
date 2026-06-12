@@ -39,11 +39,32 @@ def test_raster_diagnostics_gate_report_whole_note() -> None:
 
     locations = res.get("whole_note_candidate_locations", [])
     assert len(locations) == 2
+
     loc1 = locations[0]
+    loc2 = locations[1]
+
+    # Assert candidate ID presence
+    assert loc1["candidate_id"] == "whole_note_candidate_001"
+    assert loc2["candidate_id"] == "whole_note_candidate_002"
+
+    # Assert correct structure
     assert loc1["page_index"] == 1
     assert len(loc1["bbox"]) == 4
     assert "pitch" not in loc1
     assert "duration" not in loc1
+
+    # Assert sorting (top coordinate first, then left)
+    # y0 for loc1 should be <= y0 for loc2
+    if loc1["bbox"][1] == loc2["bbox"][1]:
+        assert loc1["bbox"][0] <= loc2["bbox"][0]
+    else:
+        assert loc1["bbox"][1] < loc2["bbox"][1]
+
+def test_deterministic_candidate_ids_across_runs() -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
+    res1 = gate_run_diagnostics_on_file(pdf_path)
+    res2 = gate_run_diagnostics_on_file(pdf_path)
+    assert res1["whole_note_candidate_locations"] == res2["whole_note_candidate_locations"]
 
 def test_raster_diagnostics_gate_report_half_note() -> None:
     pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_half_note.pdf")
