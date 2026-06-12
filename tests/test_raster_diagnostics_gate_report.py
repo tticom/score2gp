@@ -85,6 +85,12 @@ def test_gate_report_aggregation_and_privacy(capsys):
                 "file_sha256": sha_true_pos,
                 "expected_positive": True,
                 "safe_category": "currently_verified_true_positive"
+            },
+            {
+                "case_id": "case_skipped",
+                "file_sha256": "hash_skipped",
+                "expected_positive": True,
+                "safe_category": "currently_verified_true_positive"
             }
         ]
     }
@@ -157,7 +163,7 @@ def test_gate_report_aggregation_and_privacy(capsys):
             return [
                 Path("fixtures/private/raster-treble-clef/fake_known_fn.pdf"),
                 Path("fixtures/private/raster-treble-clef/fake_unexpected_fn.pdf"),
-                # Omitting fake_true_pos.pdf so it acts as skipped_optional_private_fixtures
+                Path("fixtures/private/raster-treble-clef/fake_true_pos.pdf"),
                 Path("fixtures/private/raster-treble-clef/extra_private_not_in_manifest.pdf"),
             ]
         return orig_glob(self, pattern)
@@ -179,7 +185,8 @@ def test_gate_report_aggregation_and_privacy(capsys):
     assert totals["false_positives"] == 1
     assert totals["known_false_negatives"] == 1
     assert totals["unexpected_false_negatives"] == 1
-    assert totals["total_cases_inspected"] == 5  # 3 negative + 2 private found
+    assert totals["true_positives"] == 1
+    assert totals["total_cases_inspected"] == 6
     assert totals["skipped_optional_private_fixtures"] == 1
     assert totals["negative_fixture_outcomes"] == 2
 
@@ -193,7 +200,9 @@ def test_gate_report_aggregation_and_privacy(capsys):
 
     assert "MATCHED KNOWN FALSE NEGATIVE MANIFEST ENTRY: case_known_fn" in captured.out
     assert "UNEXPECTED FALSE NEGATIVE: case_unexpected_fn" in captured.out
-    assert "Skipping missing optional private fixture: case_true_pos" in captured.out
+    assert "Skipping missing optional private fixture: case_skipped" in captured.out
+    assert "True Positives             : 1" in captured.out
+    assert "Gate Status: REVIEW" in captured.out
 
 def test_unreadable_private_fixture(capsys):
     gate_report = load_script()
@@ -248,3 +257,37 @@ def test_run_diagnostics_on_file_privacy(capsys):
     assert "fixtures/private/raster-treble-clef/secret_path.pdf" not in captured.err
     assert "secret_path.pdf" not in captured.err
     assert "safe_label" in captured.err
+
+def test_gate_status_pass(capsys):
+    gate_report = load_script()
+
+    # Create a perfectly clean scenario
+    mock_returns = {
+        "generated_standard_staff_negative_blank.pdf": {
+            "staff_count": 1, "treble_clef_candidate": 0, "unknown": 0, "pages": 1,
+        },
+        "generated_standard_staff_negative_tab.pdf": {
+            "staff_count": 1, "treble_clef_candidate": 0, "unknown": 0, "pages": 1,
+        },
+        "generated_standard_staff_negative_noise.pdf": {
+            "staff_count": 1, "treble_clef_candidate": 0, "unknown": 0, "pages": 1,
+        }
+    }
+
+    def mock_run(path: Path, display_label=None):
+        return mock_returns.get(path.name)
+
+    orig_exists = Path.exists
+    def custom_exists(self):
+        # Prevent picking up real private fixtures
+        if self.name == "raster-treble-clef": return False
+        if self.name == "raster_diagnostics_false_negative_manifest.json": return False
+        if self.name in mock_returns: return True
+        return orig_exists(self)
+
+    with patch("gate_report.run_diagnostics_on_file", side_effect=mock_run):
+        with patch.object(Path, "exists", autospec=True, side_effect=custom_exists):
+            gate_report.generate_report()
+
+    captured = capsys.readouterr()
+    assert "Gate Status: PASS" in captured.out
