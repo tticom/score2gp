@@ -84,9 +84,24 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
                 data = json.load(f)
                 for entry in data:
                     path_str = entry.get("path", "")
-                    if "fixtures/private" in path_str or ".." in path_str or path_str.startswith("/"):
+                    p = Path(path_str)
+
+                    if ".." in path_str or p.is_absolute():
                         print(f"Warning: Rejecting unsafe test manifest path: {path_str}", file=sys.stderr)
                         continue
+
+                    try:
+                        res_parts = p.resolve().parts
+                        is_private = False
+                        for i in range(len(res_parts) - 1):
+                            if res_parts[i] == "fixtures" and res_parts[i+1] == "private":
+                                is_private = True
+                                break
+                        if is_private:
+                            print(f"Warning: Rejecting unsafe test manifest path: {path_str}", file=sys.stderr)
+                            continue
+                    except Exception:
+                        pass
 
                     manifest.append({
                         "path": path_str,
