@@ -87,7 +87,7 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
                     p = Path(path_str)
 
                     if ".." in path_str or p.is_absolute():
-                        print(f"Warning: Rejecting unsafe test manifest path: {path_str}", file=sys.stderr)
+                        print("Warning: Rejecting unsafe test manifest path", file=sys.stderr)
                         continue
 
                     try:
@@ -98,7 +98,7 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
                                 is_private = True
                                 break
                         if is_private:
-                            print(f"Warning: Rejecting unsafe test manifest path: {path_str}", file=sys.stderr)
+                            print("Warning: Rejecting unsafe test manifest path", file=sys.stderr)
                             continue
                     except Exception:
                         pass
@@ -111,8 +111,8 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
                         "is_missing": False,
                         "case_id": entry.get("case_id", Path(path_str).name)
                     })
-        except Exception as e:
-            print(f"Error loading test manifest: {e}", file=sys.stderr)
+        except Exception:
+            print("Error loading test manifest: Invalid or missing manifest", file=sys.stderr)
             sys.exit(1)
     else:
         manifest = [
