@@ -10,7 +10,6 @@ def test_extract_notation_diagnostics_dict_whole_note() -> None:
     doc = fitz.open(pdf_path)
     page = doc[0]
     diags = extract_notation_diagnostics_dict(page, page_index=1)
-
     assert diags["status"] == "success"
     cands = diags.get("whole_note_candidates")
     assert cands is not None
@@ -22,7 +21,6 @@ def test_extract_notation_diagnostics_dict_half_note() -> None:
     doc = fitz.open(pdf_path)
     page = doc[0]
     diags = extract_notation_diagnostics_dict(page, page_index=1)
-
     assert diags["status"] == "success"
     cands = diags.get("whole_note_candidates")
     assert cands is None or len(cands) == 0
