@@ -69,6 +69,28 @@ def build_pdf(json_name: str, pdf_name: str) -> None:
                 fontname=txt["fontname"]
             )
 
+    # Draw whole notes (hollow ovals)
+    for wn in data.get("whole_notes", []):
+        page.draw_oval(
+            fitz.Rect(wn["x0"], wn["y0"], wn["x1"], wn["y1"]),
+            color=(0, 0, 0),
+            width=1.5
+        )
+
+    # Draw half notes (hollow ovals with a stem)
+    for hn in data.get("half_notes", []):
+        page.draw_oval(
+            fitz.Rect(hn["x0"], hn["y0"], hn["x1"], hn["y1"]),
+            color=(0, 0, 0),
+            width=1.5
+        )
+        page.draw_line(
+            (hn["stem_x0"], hn["stem_y0"]),
+            (hn["stem_x1"], hn["stem_y1"]),
+            color=(0, 0, 0),
+            width=1.0
+        )
+
 
 
     doc.save(pdf_path, garbage=4, deflate=True)
@@ -88,5 +110,7 @@ def main() -> None:
     build_pdf("generated_standard_staff_negative_tab.json", "generated_standard_staff_negative_tab.pdf")
     build_pdf("generated_standard_staff_negative_blank.json", "generated_standard_staff_negative_blank.pdf")
     build_pdf("generated_standard_staff_negative_noise.json", "generated_standard_staff_negative_noise.pdf")
+    build_pdf("generated_standard_staff_whole_note.json", "generated_standard_staff_whole_note.pdf")
+    build_pdf("generated_standard_staff_half_note.json", "generated_standard_staff_half_note.pdf")
 if __name__ == "__main__":
     main()
