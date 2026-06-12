@@ -155,6 +155,7 @@ def generate_report():
     }
 
     totals = {
+        "true_positives": 0,
         "false_positives": 0,
         "known_false_negatives": 0,
         "unexpected_false_negatives": 0,
@@ -210,7 +211,7 @@ def generate_report():
         elif outcome == "true_negative":
             totals["negative_fixture_outcomes"] += 1
         elif outcome == "true_positive":
-            pass # Currently no explicit tracking of true positives, but we could add it
+            totals["true_positives"] += 1
 
         print(f"Processed: {display_name} [{cat}]")
         print(f"  Pages: {res['pages']}")
@@ -244,12 +245,16 @@ def generate_report():
     print(f"  Total Cases Inspected      : {totals['total_cases_inspected']}")
     print(f"  Total Pages Inspected      : {totals['total_pages']}")
     print(f"  Total Staves Detected      : {totals['total_staves']}")
+    print(f"  True Positives             : {totals['true_positives']}")
     print(f"  Total False Positives      : {totals['false_positives']}")
     print(f"  Known False Negatives      : {totals['known_false_negatives']}")
     print(f"  Unexpected False Negatives : {totals['unexpected_false_negatives']}")
     print(f"  Total Unknowns             : {totals['unknowns']}")
     print(f"  Skipped Private Fixtures   : {totals['skipped_optional_private_fixtures']}")
     print(f"  Negative Fixture Outcomes  : {totals['negative_fixture_outcomes']}")
+
+    gate_status = "PASS" if totals["false_positives"] == 0 and totals["unexpected_false_negatives"] == 0 else "REVIEW"
+    print(f"\nGate Status: {gate_status}")
 
     return totals
 
