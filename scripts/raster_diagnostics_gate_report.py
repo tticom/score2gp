@@ -26,12 +26,16 @@ def run_diagnostics_on_file(pdf_path: Path, display_label: str = None):
 
     total_staff_count = 0
     total_treble_candidates = 0
+    total_whole_notes = 0
     total_unknowns = 0
+
+    from score2gp.pdf_staff_notation_diagnostics import extract_notation_diagnostics_dict
 
     for i in range(len(doc)):
         page = doc[i]
         diags = build_raster_notation_diagnostics(page, page_index=i + 1, scale=2.0)
         summary = summarize_raster_treble_clef_diagnostics(diags)
+        vector_diags = extract_notation_diagnostics_dict(page, i + 1)
 
         if summary.get("status") == "success":
             total_staff_count += summary.get("staff_count", 0)
@@ -39,9 +43,12 @@ def run_diagnostics_on_file(pdf_path: Path, display_label: str = None):
             total_treble_candidates += counts.get("treble_clef_candidate", 0)
             total_unknowns += counts.get("unknown", 0)
 
+        total_whole_notes += len(vector_diags.get("whole_note_candidates") or [])
+
     return {
         "staff_count": total_staff_count,
         "treble_clef_candidate": total_treble_candidates,
+        "whole_note_candidate": total_whole_notes,
         "unknown": total_unknowns,
         "pages": len(doc),
     }
@@ -265,6 +272,7 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
             "pages": res['pages'],
             "staff_count": res['staff_count'],
             "treble_clef_candidate": res['treble_clef_candidate'],
+            "whole_note_candidate": res.get("whole_note_candidate", 0),
             "unknown": res['unknown']
         })
 
@@ -273,6 +281,7 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
             print(f"  Pages: {res['pages']}")
             print(f"  Staves Detected: {res['staff_count']}")
             print(f"  Treble Candidates: {res['treble_clef_candidate']}")
+            print(f"  Whole Note Candidates: {res.get('whole_note_candidate', 0)}")
             print(f"  Unknowns: {res['unknown']}")
 
             if outcome == "known_false_negative":
