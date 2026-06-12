@@ -73,80 +73,119 @@ def classify_case_result(expected_positive: bool, known_false_negative: bool, ca
         else:
             return "true_negative"
 
-def generate_report(json_mode: bool = False):
-    manifest = [
-        {
-            "path": "tests/fixtures/pdf/generated_standard_staff_negative_blank.pdf",
-            "category": "negative_blank",
-            "expected_positive": False,
-            "known_false_negative": False,
-            "is_missing": False,
-        },
-        {
-            "path": "tests/fixtures/pdf/generated_standard_staff_negative_tab.pdf",
-            "category": "negative_tab",
-            "expected_positive": False,
-            "known_false_negative": False,
-            "is_missing": False,
-        },
-        {
-            "path": "tests/fixtures/pdf/generated_standard_staff_negative_noise.pdf",
-            "category": "negative_noise",
-            "expected_positive": False,
-            "known_false_negative": False,
-            "is_missing": False,
-        },
-    ]
-
-    # Load expected cases from manifest
-    manifest_path = Path("tests/fixtures/raster_diagnostics_false_negative_manifest.json")
-    manifest_cases = {}  # sha256 -> dict
-    if manifest_path.exists():
-        try:
-            with open(manifest_path, "r") as f:
-                data = json.load(f)
-                for entry in data.get("false_negative_cases", []):
-                    case_id = entry.get("case_id")
-                    file_sha256 = entry.get("file_sha256")
-                    is_expected_positive = entry.get("expected_positive", True)
-                    is_known_fn = entry.get("safe_category") == "currently_verified_false_negative"
-                    if case_id and file_sha256:
-                        manifest_cases[file_sha256] = {
-                            "case_id": case_id,
-                            "expected_positive": is_expected_positive,
-                            "known_false_negative": is_known_fn
-                        }
-        except Exception as e:
-            print(f"Warning: Could not load manifest: {e}", file=sys.stderr)
-
+def generate_report(json_mode: bool = False, test_manifest: str = None):
+    manifest = []
+    manifest_cases = {}
     found_case_ids = set()
-    private_dir = Path("fixtures/private/raster-treble-clef")
-    if private_dir.exists():
-        for p in private_dir.glob("*.pdf"):
-            h = compute_sha256(p)
-            if h in manifest_cases:
-                mc = manifest_cases[h]
+
+    if test_manifest:
+        try:
+            with open(test_manifest, "r") as f:
+                data = json.load(f)
+                for entry in data:
+                    path_str = entry.get("path", "")
+                    p = Path(path_str)
+
+                    if ".." in path_str or p.is_absolute():
+                        print("Warning: Rejecting unsafe test manifest path", file=sys.stderr)
+                        continue
+
+                    try:
+                        res_parts = p.resolve().parts
+                        is_private = False
+                        for i in range(len(res_parts) - 1):
+                            if res_parts[i] == "fixtures" and res_parts[i+1] == "private":
+                                is_private = True
+                                break
+                        if is_private:
+                            print("Warning: Rejecting unsafe test manifest path", file=sys.stderr)
+                            continue
+                    except Exception:
+                        pass
+
+                    manifest.append({
+                        "path": path_str,
+                        "category": entry.get("category", "test_category"),
+                        "expected_positive": entry.get("expected_positive", False),
+                        "known_false_negative": entry.get("known_false_negative", False),
+                        "is_missing": False,
+                        "case_id": entry.get("case_id", Path(path_str).name)
+                    })
+        except Exception:
+            print("Error loading test manifest: Invalid or missing manifest", file=sys.stderr)
+            sys.exit(1)
+    else:
+        manifest = [
+            {
+                "path": "tests/fixtures/pdf/generated_standard_staff_negative_blank.pdf",
+                "category": "negative_blank",
+                "expected_positive": False,
+                "known_false_negative": False,
+                "is_missing": False,
+            },
+            {
+                "path": "tests/fixtures/pdf/generated_standard_staff_negative_tab.pdf",
+                "category": "negative_tab",
+                "expected_positive": False,
+                "known_false_negative": False,
+                "is_missing": False,
+            },
+            {
+                "path": "tests/fixtures/pdf/generated_standard_staff_negative_noise.pdf",
+                "category": "negative_noise",
+                "expected_positive": False,
+                "known_false_negative": False,
+                "is_missing": False,
+            },
+        ]
+
+        # Load expected cases from manifest
+        manifest_path = Path("tests/fixtures/raster_diagnostics_false_negative_manifest.json")
+        if manifest_path.exists():
+            try:
+                with open(manifest_path, "r") as f:
+                    data = json.load(f)
+                    for entry in data.get("false_negative_cases", []):
+                        case_id = entry.get("case_id")
+                        file_sha256 = entry.get("file_sha256")
+                        is_expected_positive = entry.get("expected_positive", True)
+                        is_known_fn = entry.get("safe_category") == "currently_verified_false_negative"
+                        if case_id and file_sha256:
+                            manifest_cases[file_sha256] = {
+                                "case_id": case_id,
+                                "expected_positive": is_expected_positive,
+                                "known_false_negative": is_known_fn
+                            }
+            except Exception as e:
+                print(f"Warning: Could not load manifest: {e}", file=sys.stderr)
+
+        private_dir = Path("fixtures/private/raster-treble-clef")
+        if private_dir.exists():
+            for p in private_dir.glob("*.pdf"):
+                h = compute_sha256(p)
+                if h in manifest_cases:
+                    mc = manifest_cases[h]
+                    manifest.append({
+                        "path": str(p),
+                        "category": "positive_private",
+                        "expected_positive": mc["expected_positive"],
+                        "known_false_negative": mc["known_false_negative"],
+                        "case_id": mc["case_id"],
+                        "is_missing": False
+                    })
+                    found_case_ids.add(mc["case_id"])
+
+        # Add dummy entries for missing private fixtures so they are reported as skipped
+        for file_sha256, mc in manifest_cases.items():
+            if mc["case_id"] not in found_case_ids:
                 manifest.append({
-                    "path": str(p),
+                    "path": f"missing_private_fixture_{mc['case_id']}.pdf",
                     "category": "positive_private",
                     "expected_positive": mc["expected_positive"],
                     "known_false_negative": mc["known_false_negative"],
                     "case_id": mc["case_id"],
-                    "is_missing": False
+                    "is_missing": True
                 })
-                found_case_ids.add(mc["case_id"])
-
-    # Add dummy entries for missing private fixtures so they are reported as skipped
-    for file_sha256, mc in manifest_cases.items():
-        if mc["case_id"] not in found_case_ids:
-            manifest.append({
-                "path": f"missing_private_fixture_{mc['case_id']}.pdf",
-                "category": "positive_private",
-                "expected_positive": mc["expected_positive"],
-                "known_false_negative": mc["known_false_negative"],
-                "case_id": mc["case_id"],
-                "is_missing": True
-            })
 
     results = {
         "negative_blank": {"cases_run": 0, "false_positives": 0, "unknowns": 0},
@@ -194,6 +233,7 @@ def generate_report(json_mode: bool = False):
             continue
 
         cat = item["category"]
+        results.setdefault(cat, {"cases_run": 0, "false_positives": 0, "false_negatives": 0, "unknowns": 0})
         results[cat]["cases_run"] += 1
         results[cat]["unknowns"] += res["unknown"]
 
@@ -289,9 +329,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Raster Diagnostics Gate Report")
     parser.add_argument("--json", action="store_true", help="Emit ONLY valid JSON to stdout")
     parser.add_argument("--check", action="store_true", help="Exit 0 if PASS, 1 if REVIEW")
+    parser.add_argument("--test-manifest", type=str, help="Path to override manifest for safe testing seam")
     args = parser.parse_args()
 
-    gate_status, totals = generate_report(json_mode=args.json)
+    gate_status, totals = generate_report(json_mode=args.json, test_manifest=args.test_manifest)
 
     if args.check:
         if gate_status == "PASS":
