@@ -44,23 +44,61 @@ def test_manifest_schema_and_safety():
         seen_ids.add(case_id)
         assert "file_sha256" in case
 
+def test_classify_case_result():
+    gate_report = load_script()
+    helper = gate_report.classify_case_result
+
+    # Expected positive cases
+    assert helper(expected_positive=True, known_false_negative=False, candidates=1) == "true_positive"
+    assert helper(expected_positive=True, known_false_negative=True, candidates=1) == "true_positive"
+    assert helper(expected_positive=True, known_false_negative=True, candidates=0) == "known_false_negative"
+    assert helper(expected_positive=True, known_false_negative=False, candidates=0) == "unexpected_false_negative"
+
+    # Expected negative cases
+    assert helper(expected_positive=False, known_false_negative=False, candidates=0) == "true_negative"
+    assert helper(expected_positive=False, known_false_negative=False, candidates=1) == "false_positive"
+
 def test_gate_report_aggregation_and_privacy(capsys):
+    import builtins
     gate_report = load_script()
 
-    # The actual SHA256 of the two verified private fixtures
-    sha1 = "53785c550a699cab31aa973e4278c086050ac7ac8b030a8edcbc00aa3942300e"
-    sha2 = "f2326734f47ab5483691b504aa2e6827970d10d6d97b5a8eb691db9a0897ab8e"
+    sha_known_fn = "hash_known_fn"
+    sha_unexpected_fn = "hash_unexpected_fn"
+    sha_true_pos = "hash_true_pos"
+
+    mock_manifest_json = {
+        "false_negative_cases": [
+            {
+                "case_id": "case_known_fn",
+                "file_sha256": sha_known_fn,
+                "expected_positive": True,
+                "safe_category": "currently_verified_false_negative"
+            },
+            {
+                "case_id": "case_unexpected_fn",
+                "file_sha256": sha_unexpected_fn,
+                "expected_positive": True,
+                "safe_category": "currently_verified_true_positive"
+            },
+            {
+                "case_id": "case_true_pos",
+                "file_sha256": sha_true_pos,
+                "expected_positive": True,
+                "safe_category": "currently_verified_true_positive"
+            }
+        ]
+    }
 
     mock_returns = {
         "generated_standard_staff_negative_blank.pdf": {
             "staff_count": 1,
-            "treble_clef_candidate": 0,
+            "treble_clef_candidate": 0, # TN
             "unknown": 1,
             "pages": 1,
         },
         "generated_standard_staff_negative_tab.pdf": {
             "staff_count": 0,
-            "treble_clef_candidate": 0,
+            "treble_clef_candidate": 0, # TN
             "unknown": 0,
             "pages": 1,
         },
@@ -70,21 +108,27 @@ def test_gate_report_aggregation_and_privacy(capsys):
             "unknown": 0,
             "pages": 1,
         },
-        "fake_private_1.pdf": {
-            "staff_count": 10,
-            "treble_clef_candidate": 0, # Fake false negative for sha1
-            "unknown": 10,
+        "fake_known_fn.pdf": {
+            "staff_count": 1,
+            "treble_clef_candidate": 0, # Known FN
+            "unknown": 0,
             "pages": 1,
         },
-        "fake_private_2.pdf": {
+        "fake_unexpected_fn.pdf": {
             "staff_count": 1,
-            "treble_clef_candidate": 1, # Fake true positive for sha2
+            "treble_clef_candidate": 0, # Unexpected FN!
             "unknown": 0,
-            "pages": 11,
+            "pages": 1,
+        },
+        "fake_true_pos.pdf": {
+            "staff_count": 1,
+            "treble_clef_candidate": 1, # True Positive
+            "unknown": 0,
+            "pages": 1,
         },
         "extra_private_not_in_manifest.pdf": {
             "staff_count": 1,
-            "treble_clef_candidate": 0, # FN but not in manifest
+            "treble_clef_candidate": 0,
             "unknown": 0,
             "pages": 1,
         }
@@ -94,13 +138,15 @@ def test_gate_report_aggregation_and_privacy(capsys):
         return mock_returns.get(path.name)
 
     def mock_compute_sha256(path: Path):
-        if path.name == "fake_private_1.pdf": return sha1
-        if path.name == "fake_private_2.pdf": return sha2
+        if path.name == "fake_known_fn.pdf": return sha_known_fn
+        if path.name == "fake_unexpected_fn.pdf": return sha_unexpected_fn
+        if path.name == "fake_true_pos.pdf": return sha_true_pos
         if path.name == "extra_private_not_in_manifest.pdf": return "dummy_hash"
         return "other_hash"
 
     orig_exists = Path.exists
     def custom_exists(self):
+        if self.name == "raster_diagnostics_false_negative_manifest.json": return True
         if self.name == "raster-treble-clef": return True
         if self.name in mock_returns: return True
         return orig_exists(self)
@@ -109,38 +155,45 @@ def test_gate_report_aggregation_and_privacy(capsys):
     def custom_glob(self, pattern):
         if self.name == "raster-treble-clef":
             return [
-                Path("fixtures/private/raster-treble-clef/fake_private_1.pdf"),
-                Path("fixtures/private/raster-treble-clef/fake_private_2.pdf"),
+                Path("fixtures/private/raster-treble-clef/fake_known_fn.pdf"),
+                Path("fixtures/private/raster-treble-clef/fake_unexpected_fn.pdf"),
+                # Omitting fake_true_pos.pdf so it acts as skipped_optional_private_fixtures
                 Path("fixtures/private/raster-treble-clef/extra_private_not_in_manifest.pdf"),
             ]
         return orig_glob(self, pattern)
+
+    orig_open = builtins.open
+    def custom_open(file, *args, **kwargs):
+        if str(file).endswith("raster_diagnostics_false_negative_manifest.json"):
+            import io
+            return io.StringIO(json.dumps(mock_manifest_json))
+        return orig_open(file, *args, **kwargs)
 
     with patch("gate_report.run_diagnostics_on_file", side_effect=mock_run):
         with patch("gate_report.compute_sha256", side_effect=mock_compute_sha256):
             with patch.object(Path, "exists", autospec=True, side_effect=custom_exists):
                 with patch.object(Path, "glob", autospec=True, side_effect=custom_glob):
-                    totals = gate_report.generate_report()
+                    with patch("builtins.open", side_effect=custom_open):
+                        totals = gate_report.generate_report()
 
-    # We expect cases_inspected = 5 (the 3 negative + 2 mapped private fixtures).
-    # The extra_private_not_in_manifest.pdf should NOT be in the manifest so it won't be run by the gate report!
     assert totals["false_positives"] == 1
-    assert totals["false_negatives"] == 1
-    assert totals["total_cases_inspected"] == 5
-    assert totals["total_pages"] == 15
-    assert totals["total_staves"] == 12
-    assert totals["unknowns"] == 11
+    assert totals["known_false_negatives"] == 1
+    assert totals["unexpected_false_negatives"] == 1
+    assert totals["total_cases_inspected"] == 5  # 3 negative + 2 private found
+    assert totals["skipped_optional_private_fixtures"] == 1
+    assert totals["negative_fixture_outcomes"] == 2
 
     captured = capsys.readouterr()
 
     # Check that anonymised case IDs are logged, not the raw filenames
-    assert "fake_private_1.pdf" not in captured.out
-    assert "fake_private_2.pdf" not in captured.out
+    assert "fake_known_fn.pdf" not in captured.out
+    assert "fake_unexpected_fn.pdf" not in captured.out
+    assert "fake_true_pos.pdf" not in captured.out
     assert "extra_private_not_in_manifest.pdf" not in captured.out
 
-    # The extra private fixture should not be processed at all
-    assert "UNEXPECTED FALSE NEGATIVE" not in captured.out
-
-    assert "MATCHED KNOWN FALSE NEGATIVE MANIFEST ENTRY: fn_private_positive_001" in captured.out
+    assert "MATCHED KNOWN FALSE NEGATIVE MANIFEST ENTRY: case_known_fn" in captured.out
+    assert "UNEXPECTED FALSE NEGATIVE: case_unexpected_fn" in captured.out
+    assert "Skipping missing optional private fixture: case_true_pos" in captured.out
 
 def test_unreadable_private_fixture(capsys):
     gate_report = load_script()
