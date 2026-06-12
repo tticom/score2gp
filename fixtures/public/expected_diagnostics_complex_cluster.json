@@ -374,5 +374,6 @@
       ]
     }
   ],
-  "system_connectors": []
+  "system_connectors": [],
+  "whole_note_candidates": []
 }

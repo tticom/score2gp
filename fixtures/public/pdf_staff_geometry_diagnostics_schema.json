@@ -616,6 +616,38 @@
       "title": "SystemConnectorDiagnostics",
       "type": "object"
     },
+    "WholeNoteCandidateDiagnostics": {
+      "description": "Candidate whole-note bounding box extracted directly from vector shapes, independent of\nsemantic staff processing. Follows proportional heuristics to exclude stems.",
+      "properties": {
+        "bbox": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Bbox",
+          "type": "array"
+        },
+        "width": {
+          "title": "Width",
+          "type": "number"
+        },
+        "height": {
+          "title": "Height",
+          "type": "number"
+        },
+        "aspect_ratio": {
+          "title": "Aspect Ratio",
+          "type": "number"
+        }
+      },
+      "required": [
+        "bbox",
+        "width",
+        "height",
+        "aspect_ratio"
+      ],
+      "title": "WholeNoteCandidateDiagnostics",
+      "type": "object"
+    },
     "XAlignedClusterAggregateDiagnostics": {
       "description": "Geometric statistics for x-aligned clusters of primitives (e.g. circular markers grouped with vertical strokes).\nThis layer does not assign semantic meaning, only spatial grouping.",
       "properties": {
@@ -774,6 +806,21 @@
       ],
       "default": null,
       "title": "System Connectors"
+    },
+    "whole_note_candidates": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/WholeNoteCandidateDiagnostics"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Whole Note Candidates"
     },
     "status": {
       "anyOf": [

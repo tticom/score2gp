@@ -171,7 +171,21 @@ class PdfStaffNotationGeometryDiagnostics(BaseModel):
 
     staves: list[NotationStaffDiagnostics]
     system_connectors: list[SystemConnectorDiagnostics] | None = None
+    whole_note_candidates: list[WholeNoteCandidateDiagnostics] | None = None
     status: str | None = "success"
+
+class WholeNoteCandidateDiagnostics(BaseModel):
+    """
+    Candidate whole-note bounding box extracted directly from vector shapes, independent of
+    semantic staff processing. Follows proportional heuristics to exclude stems.
+    """
+    model_config = ConfigDict(frozen=True)
+
+    bbox: list[float]
+    width: float
+    height: float
+    aspect_ratio: float
+
 
 # Resolve forward references for candidate types used in NotationStaffDiagnostics.
 # This import is deferred to avoid any future circular-import risk.
