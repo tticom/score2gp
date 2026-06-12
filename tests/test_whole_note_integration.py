@@ -32,9 +32,33 @@ def test_raster_diagnostics_gate_report_whole_note() -> None:
     assert res is not None
     assert res["whole_note_candidate"] == 2
 
+    pages = res.get("whole_note_candidate_pages", [])
+    assert len(pages) == 1
+    assert pages[0]["page_index"] == 1
+    assert pages[0]["whole_note_candidate"] == 2
+
+    locations = res.get("whole_note_candidate_locations", [])
+    assert len(locations) == 2
+    loc1 = locations[0]
+    assert loc1["page_index"] == 1
+    assert len(loc1["bbox"]) == 4
+    assert "pitch" not in loc1
+    assert "duration" not in loc1
+
 def test_raster_diagnostics_gate_report_half_note() -> None:
     pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_half_note.pdf")
     assert pdf_path.exists()
     res = gate_run_diagnostics_on_file(pdf_path)
     assert res is not None
     assert res["whole_note_candidate"] == 0
+    assert len(res.get("whole_note_candidate_pages", [])) == 0
+    assert len(res.get("whole_note_candidate_locations", [])) == 0
+
+def test_raster_diagnostics_gate_report_negative_noise() -> None:
+    pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_negative_noise.pdf")
+    assert pdf_path.exists()
+    res = gate_run_diagnostics_on_file(pdf_path)
+    assert res is not None
+    assert res["whole_note_candidate"] == 0
+    assert len(res.get("whole_note_candidate_pages", [])) == 0
+    assert len(res.get("whole_note_candidate_locations", [])) == 0
