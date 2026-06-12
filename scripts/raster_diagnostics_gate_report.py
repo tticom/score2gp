@@ -282,12 +282,19 @@ def generate_report(json_mode: bool = False):
         print(f"  Negative Fixture Outcomes  : {totals['negative_fixture_outcomes']}")
         print(f"\nGate Status: {gate_status}")
 
-    return totals
+    return gate_status, totals
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Raster Diagnostics Gate Report")
     parser.add_argument("--json", action="store_true", help="Emit ONLY valid JSON to stdout")
+    parser.add_argument("--check", action="store_true", help="Exit 0 if PASS, 1 if REVIEW")
     args = parser.parse_args()
-    
-    generate_report(json_mode=args.json)
+
+    gate_status, totals = generate_report(json_mode=args.json)
+
+    if args.check:
+        if gate_status == "PASS":
+            sys.exit(0)
+        else:
+            sys.exit(1)
