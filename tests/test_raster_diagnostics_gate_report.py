@@ -168,6 +168,7 @@ def test_gate_report_aggregation_and_privacy(capsys):
             ]
         return orig_glob(self, pattern)
 
+    import builtins
     orig_open = builtins.open
     def custom_open(file, *args, **kwargs):
         if str(file).endswith("raster_diagnostics_false_negative_manifest.json"):
@@ -291,3 +292,150 @@ def test_gate_status_pass(capsys):
 
     captured = capsys.readouterr()
     assert "Gate Status: PASS" in captured.out
+
+def test_gate_status_json_mode(capsys):
+    gate_report = load_script()
+    import json
+
+    # Create a perfectly clean scenario
+    mock_returns = {
+        "generated_standard_staff_negative_blank.pdf": {
+            "staff_count": 1, "treble_clef_candidate": 0, "unknown": 0, "pages": 1,
+        },
+        "generated_standard_staff_negative_tab.pdf": {
+            "staff_count": 1, "treble_clef_candidate": 0, "unknown": 0, "pages": 1,
+        },
+        "generated_standard_staff_negative_noise.pdf": {
+            "staff_count": 1, "treble_clef_candidate": 0, "unknown": 0, "pages": 1,
+        }
+    }
+
+    def mock_run(path: Path, display_label=None):
+        return mock_returns.get(path.name)
+
+    orig_exists = Path.exists
+    def custom_exists(self):
+        if self.name == "raster-treble-clef": return False
+        if self.name == "raster_diagnostics_false_negative_manifest.json": return False
+        if self.name in mock_returns: return True
+        return orig_exists(self)
+
+    with patch("gate_report.run_diagnostics_on_file", side_effect=mock_run):
+        with patch.object(Path, "exists", autospec=True, side_effect=custom_exists):
+            gate_report.generate_report(json_mode=True)
+
+    captured = capsys.readouterr()
+    assert "Gate Status: PASS" not in captured.out
+    assert "Raster Diagnostics Gate Report" not in captured.out
+    
+    # Verify it is parseable JSON
+    output_json = json.loads(captured.out)
+    assert output_json["schema_version"] == 1
+    assert output_json["gate_status"] == "PASS"
+    assert "totals" in output_json
+    assert "categories" in output_json
+    assert "cases" in output_json
+    
+    assert output_json["totals"]["false_positives"] == 0
+    assert output_json["totals"]["unexpected_false_negatives"] == 0
+    assert len(output_json["cases"]) == 3
+    
+    for case in output_json["cases"]:
+        assert "case_id" in case
+        assert "pdf" in case["case_id"] # for standard negative tests, it's the filename
+
+def test_gate_status_json_mode_review_and_privacy(capsys):
+    gate_report = load_script()
+    import json
+
+    mock_manifest_json = {
+        "schema_version": 1,
+        "false_negative_cases": [
+            {
+                "case_id": "case_known_fn",
+                "file_sha256": "sha_known_fn",
+                "safe_category": "currently_verified_false_negative",
+                "expected_positive": True
+            },
+            {
+                "case_id": "case_unexpected_fn",
+                "file_sha256": "sha_unexpected_fn",
+                "safe_category": "unrelated",
+                "expected_positive": True
+            }
+        ]
+    }
+
+    mock_returns = {
+        "generated_standard_staff_negative_blank.pdf": {
+            "staff_count": 1, "treble_clef_candidate": 0, "unknown": 0, "pages": 1,
+        },
+        "generated_standard_staff_negative_tab.pdf": {
+            "staff_count": 1, "treble_clef_candidate": 0, "unknown": 0, "pages": 1,
+        },
+        "generated_standard_staff_negative_noise.pdf": {
+            "staff_count": 1, "treble_clef_candidate": 0, "unknown": 0, "pages": 1,
+        },
+        "fake_known_fn.pdf": {
+            "staff_count": 1, "treble_clef_candidate": 0, "unknown": 0, "pages": 1,
+        },
+        "fake_unexpected_fn.pdf": {
+            "staff_count": 1, "treble_clef_candidate": 0, "unknown": 0, "pages": 1,
+        }
+    }
+
+    def mock_run(path: Path, display_label=None):
+        return mock_returns.get(path.name)
+
+    def mock_compute_sha256(path: Path):
+        if path.name == "fake_known_fn.pdf": return "sha_known_fn"
+        if path.name == "fake_unexpected_fn.pdf": return "sha_unexpected_fn"
+        return "other_hash"
+
+    orig_exists = Path.exists
+    def custom_exists(self):
+        if self.name == "raster_diagnostics_false_negative_manifest.json": return True
+        if self.name == "raster-treble-clef": return True
+        if self.name in mock_returns: return True
+        return orig_exists(self)
+
+    orig_glob = Path.glob
+    def custom_glob(self, pattern):
+        if self.name == "raster-treble-clef":
+            return [
+                Path("fixtures/private/raster-treble-clef/fake_known_fn.pdf"),
+                Path("fixtures/private/raster-treble-clef/fake_unexpected_fn.pdf"),
+            ]
+        return orig_glob(self, pattern)
+
+    import builtins
+    orig_open = builtins.open
+    def custom_open(file, *args, **kwargs):
+        if str(file).endswith("raster_diagnostics_false_negative_manifest.json"):
+            import io
+            return io.StringIO(json.dumps(mock_manifest_json))
+        return orig_open(file, *args, **kwargs)
+
+    with patch("gate_report.run_diagnostics_on_file", side_effect=mock_run):
+        with patch("gate_report.compute_sha256", side_effect=mock_compute_sha256):
+            with patch.object(Path, "exists", autospec=True, side_effect=custom_exists):
+                with patch.object(Path, "glob", autospec=True, side_effect=custom_glob):
+                    with patch("builtins.open", side_effect=custom_open):
+                        gate_report.generate_report(json_mode=True)
+
+    captured = capsys.readouterr()
+    output_json = json.loads(captured.out)
+    
+    assert output_json["gate_status"] == "REVIEW"
+    assert output_json["totals"]["known_false_negatives"] == 1
+    assert output_json["totals"]["unexpected_false_negatives"] == 1
+    
+    # Verify privacy
+    raw_str = captured.out
+    assert "fake_known_fn.pdf" not in raw_str
+    assert "fake_unexpected_fn.pdf" not in raw_str
+    assert "raster-treble-clef" not in raw_str
+    
+    # Check that case_id is an anonymized string or case_id
+    case_ids = [c["case_id"] for c in output_json["cases"]]
+    assert "case_known_fn" in case_ids

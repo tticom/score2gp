@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import sys
+import argparse
 from pathlib import Path
 
 import fitz
@@ -72,7 +73,7 @@ def classify_case_result(expected_positive: bool, known_false_negative: bool, ca
         else:
             return "true_negative"
 
-def generate_report():
+def generate_report(json_mode: bool = False):
     manifest = [
         {
             "path": "tests/fixtures/pdf/generated_standard_staff_negative_blank.pdf",
@@ -167,8 +168,11 @@ def generate_report():
         "total_cases_inspected": 0,
     }
 
-    print("Raster Diagnostics Gate Report")
-    print("=" * 60)
+    if not json_mode:
+        print("Raster Diagnostics Gate Report")
+        print("=" * 60)
+
+    json_cases = []
 
     for item in manifest:
         is_missing = item.get("is_missing", False)
@@ -176,7 +180,8 @@ def generate_report():
         if is_missing or not p.exists():
             if item["category"] == "positive_private":
                 display = item.get("case_id", "anonymised_private_fixture")
-                print(f"Skipping missing optional private fixture: {display}")
+                if not json_mode:
+                    print(f"Skipping missing optional private fixture: {display}")
                 totals["skipped_optional_private_fixtures"] += 1
             else:
                 print(f"Warning: Expected fixture missing: {p.name}", file=sys.stderr)
@@ -213,51 +218,76 @@ def generate_report():
         elif outcome == "true_positive":
             totals["true_positives"] += 1
 
-        print(f"Processed: {display_name} [{cat}]")
-        print(f"  Pages: {res['pages']}")
-        print(f"  Staves Detected: {res['staff_count']}")
-        print(f"  Treble Candidates: {res['treble_clef_candidate']}")
-        print(f"  Unknowns: {res['unknown']}")
+        json_cases.append({
+            "case_id": item.get("case_id", display_name),
+            "category": cat,
+            "outcome": outcome,
+            "pages": res['pages'],
+            "staff_count": res['staff_count'],
+            "treble_clef_candidate": res['treble_clef_candidate'],
+            "unknown": res['unknown']
+        })
 
-        if outcome == "known_false_negative":
-            case_id = item.get("case_id", display_name)
-            print(f"  -> MATCHED KNOWN FALSE NEGATIVE MANIFEST ENTRY: {case_id}")
-        elif outcome == "unexpected_false_negative":
-            case_id = item.get("case_id", display_name)
-            print(f"  -> UNEXPECTED FALSE NEGATIVE: {case_id}")
+        if not json_mode:
+            print(f"Processed: {display_name} [{cat}]")
+            print(f"  Pages: {res['pages']}")
+            print(f"  Staves Detected: {res['staff_count']}")
+            print(f"  Treble Candidates: {res['treble_clef_candidate']}")
+            print(f"  Unknowns: {res['unknown']}")
 
-        print("-" * 60)
+            if outcome == "known_false_negative":
+                case_id = item.get("case_id", display_name)
+                print(f"  -> MATCHED KNOWN FALSE NEGATIVE MANIFEST ENTRY: {case_id}")
+            elif outcome == "unexpected_false_negative":
+                case_id = item.get("case_id", display_name)
+                print(f"  -> UNEXPECTED FALSE NEGATIVE: {case_id}")
 
-    print("\nAggregate Report")
-    print("=" * 60)
-    for cat, data in results.items():
-        if data["cases_run"] > 0:
-            print(f"Category: {cat}")
-            print(f"  Cases Run: {data['cases_run']}")
-            if "false_positives" in data:
-                print(f"  False Positives: {data['false_positives']}")
-            if "false_negatives" in data:
-                print(f"  False Negatives: {data['false_negatives']}")
-            print(f"  Unknowns: {data['unknowns']}")
-            print("-" * 30)
-
-    print("\nGrand Totals:")
-    print(f"  Total Cases Inspected      : {totals['total_cases_inspected']}")
-    print(f"  Total Pages Inspected      : {totals['total_pages']}")
-    print(f"  Total Staves Detected      : {totals['total_staves']}")
-    print(f"  True Positives             : {totals['true_positives']}")
-    print(f"  Total False Positives      : {totals['false_positives']}")
-    print(f"  Known False Negatives      : {totals['known_false_negatives']}")
-    print(f"  Unexpected False Negatives : {totals['unexpected_false_negatives']}")
-    print(f"  Total Unknowns             : {totals['unknowns']}")
-    print(f"  Skipped Private Fixtures   : {totals['skipped_optional_private_fixtures']}")
-    print(f"  Negative Fixture Outcomes  : {totals['negative_fixture_outcomes']}")
+            print("-" * 60)
 
     gate_status = "PASS" if totals["false_positives"] == 0 and totals["unexpected_false_negatives"] == 0 else "REVIEW"
-    print(f"\nGate Status: {gate_status}")
+
+    if json_mode:
+        json_output = {
+            "schema_version": 1,
+            "gate_status": gate_status,
+            "totals": totals,
+            "categories": results,
+            "cases": json_cases
+        }
+        print(json.dumps(json_output, indent=2))
+    else:
+        print("\nAggregate Report")
+        print("=" * 60)
+        for cat, data in results.items():
+            if data["cases_run"] > 0:
+                print(f"Category: {cat}")
+                print(f"  Cases Run: {data['cases_run']}")
+                if "false_positives" in data:
+                    print(f"  False Positives: {data['false_positives']}")
+                if "false_negatives" in data:
+                    print(f"  False Negatives: {data['false_negatives']}")
+                print(f"  Unknowns: {data['unknowns']}")
+                print("-" * 30)
+
+        print("\nGrand Totals:")
+        print(f"  Total Cases Inspected      : {totals['total_cases_inspected']}")
+        print(f"  Total Pages Inspected      : {totals['total_pages']}")
+        print(f"  Total Staves Detected      : {totals['total_staves']}")
+        print(f"  True Positives             : {totals['true_positives']}")
+        print(f"  Total False Positives      : {totals['false_positives']}")
+        print(f"  Known False Negatives      : {totals['known_false_negatives']}")
+        print(f"  Unexpected False Negatives : {totals['unexpected_false_negatives']}")
+        print(f"  Total Unknowns             : {totals['unknowns']}")
+        print(f"  Skipped Private Fixtures   : {totals['skipped_optional_private_fixtures']}")
+        print(f"  Negative Fixture Outcomes  : {totals['negative_fixture_outcomes']}")
+        print(f"\nGate Status: {gate_status}")
 
     return totals
 
 
 if __name__ == "__main__":
-    generate_report()
+    parser = argparse.ArgumentParser(description="Raster Diagnostics Gate Report")
+    parser.add_argument("--json", action="store_true", help="Emit ONLY valid JSON to stdout")
+    args = parser.parse_args()
+    
+    generate_report(json_mode=args.json)
