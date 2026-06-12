@@ -521,3 +521,55 @@ def test_cli_check_mode_review(monkeypatch, capsys):
             output_json = json.loads(captured.out)
             assert output_json["gate_status"] == "REVIEW"
             assert output_json["totals"]["false_positives"] == 1
+
+import subprocess
+
+def test_subprocess_human_mode_pass():
+    script_path = Path(__file__).parent.parent / "scripts" / "raster_diagnostics_gate_report.py"
+    result = subprocess.run(
+        [sys.executable, str(script_path)],
+        capture_output=True,
+        text=True
+    )
+    assert result.returncode == 0
+    assert "Gate Status: PASS" in result.stdout
+    assert "Raster Diagnostics Gate Report" in result.stdout
+
+def test_subprocess_json_mode_pass():
+    script_path = Path(__file__).parent.parent / "scripts" / "raster_diagnostics_gate_report.py"
+    result = subprocess.run(
+        [sys.executable, str(script_path), "--json"],
+        capture_output=True,
+        text=True
+    )
+    assert result.returncode == 0
+    
+    # Should be valid JSON
+    data = json.loads(result.stdout)
+    assert data["gate_status"] == "PASS"
+    assert data["schema_version"] == 1
+    assert "Raster Diagnostics Gate Report" not in result.stdout
+
+def test_subprocess_check_mode_pass():
+    script_path = Path(__file__).parent.parent / "scripts" / "raster_diagnostics_gate_report.py"
+    result = subprocess.run(
+        [sys.executable, str(script_path), "--check"],
+        capture_output=True,
+        text=True
+    )
+    assert result.returncode == 0
+    assert "Gate Status: PASS" in result.stdout
+
+def test_subprocess_json_check_mode_pass():
+    script_path = Path(__file__).parent.parent / "scripts" / "raster_diagnostics_gate_report.py"
+    result = subprocess.run(
+        [sys.executable, str(script_path), "--json", "--check"],
+        capture_output=True,
+        text=True
+    )
+    assert result.returncode == 0
+    
+    # Should be valid JSON
+    data = json.loads(result.stdout)
+    assert data["gate_status"] == "PASS"
+
