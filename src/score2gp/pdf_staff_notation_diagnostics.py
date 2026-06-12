@@ -10,11 +10,76 @@ from .pdf_staff_geometry import (
     ClusterPrimitiveCountSummary,
     StaffLeftMarginAggregateDiagnostics,
     PrimitiveGeometryEvidence,
-    XAlignedPrimitiveClusterEvidence
+    XAlignedPrimitiveClusterEvidence,
+    WholeNoteCandidateDiagnostics
 )
 from dataclasses import dataclass
 import statistics
 from .pdf_geometry_candidate_extractor import PdfGeometryCandidateExtractor
+
+def _extract_whole_note_candidates(page: Any) -> list[WholeNoteCandidateDiagnostics]:
+    candidates = []
+    drawings = page.get_drawings()
+
+    vertical_lines = []
+    for draw in drawings:
+        for item in draw.get("items", []):
+            if item[0] == 'l':
+                p0, p1 = item[1], item[2]
+                dx = abs(p0.x - p1.x)
+                dy = abs(p0.y - p1.y)
+                if dy >= 5.0 and dx <= 2.0:
+                    vertical_lines.append({
+                        "x0": min(p0.x, p1.x),
+                        "y0": min(p0.y, p1.y),
+                        "x1": max(p0.x, p1.x),
+                        "y1": max(p0.y, p1.y)
+                    })
+
+    for draw in drawings:
+        rect = draw.get("rect")
+        if not rect:
+            continue
+
+        if hasattr(rect, "x0"):
+            x0, y0, x1, y1 = rect.x0, rect.y0, rect.x1, rect.y1
+        elif isinstance(rect, tuple) and len(rect) == 4:
+            x0, y0, x1, y1 = rect
+        else:
+            continue
+
+        w = x1 - x0
+        h = y1 - y0
+        if h == 0 or w == 0:
+            continue
+
+        aspect = w / h
+
+        items = draw.get("items", [])
+        c_count = sum(1 for item in items if item[0] == 'c')
+
+        if 1.2 <= aspect <= 2.0 and c_count >= 2:
+            is_hollow = not draw.get("fill")
+            if is_hollow:
+                has_stem = False
+                margin_x = 3.0
+                margin_y = 5.0
+                for line in vertical_lines:
+                    near_left = abs(line["x0"] - x0) <= margin_x
+                    near_right = abs(line["x0"] - x1) <= margin_x
+                    if near_left or near_right:
+                        if not (line["y1"] < y0 - margin_y or line["y0"] > y1 + margin_y):
+                            has_stem = True
+                            break
+
+                if not has_stem:
+                    candidates.append(WholeNoteCandidateDiagnostics(
+                        bbox=[round(x0, 3), round(y0, 3), round(x1, 3), round(y1, 3)],
+                        width=round(w, 3),
+                        height=round(h, 3),
+                        aspect_ratio=round(aspect, 3)
+                    ))
+    return candidates
 
 @dataclass(frozen=True)
 class PrimitiveGeometry:
@@ -534,7 +599,11 @@ def build_notation_diagnostics(
             )
         )
 
-    return PdfStaffNotationGeometryDiagnostics(staves=staves_diags, system_connectors=system_connectors)
+    return PdfStaffNotationGeometryDiagnostics(
+        staves=staves_diags,
+        system_connectors=system_connectors,
+        whole_note_candidates=_extract_whole_note_candidates(page)
+    )
 
 
 def extract_notation_diagnostics_dict(page: Any, page_index: int) -> dict[str, Any]:

@@ -342,6 +342,7 @@ def test_gate_status_json_mode(capsys):
 
     for case in output_json["cases"]:
         assert "case_id" in case
+        assert "whole_note_candidate" in case
         assert "pdf" in case["case_id"] # for standard negative tests, it's the filename
 
 def test_gate_status_json_mode_review_and_privacy(capsys):
@@ -439,6 +440,7 @@ def test_gate_status_json_mode_review_and_privacy(capsys):
     # Check that case_id is an anonymized string or case_id
     case_ids = [c["case_id"] for c in output_json["cases"]]
     assert "case_known_fn" in case_ids
+    assert "whole_note_candidate" in output_json["cases"][0]
 
 
 def test_cli_check_mode_pass(monkeypatch, capsys):
