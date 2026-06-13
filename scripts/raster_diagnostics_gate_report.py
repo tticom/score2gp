@@ -191,6 +191,20 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
                 "known_false_negative": False,
                 "is_missing": False,
             },
+            {
+                "path": "tests/fixtures/pdf/generated_standard_staff_whole_note.pdf",
+                "category": "positive_whole_note",
+                "expected_positive": False,
+                "known_false_negative": False,
+                "is_missing": False,
+            },
+            {
+                "path": "tests/fixtures/pdf/generated_standard_staff_half_note.pdf",
+                "category": "half_note",
+                "expected_positive": False,
+                "known_false_negative": False,
+                "is_missing": False,
+            },
         ]
 
         # Load expected cases from manifest
@@ -245,6 +259,8 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
         "negative_blank": {"cases_run": 0, "false_positives": 0, "unknowns": 0},
         "negative_tab": {"cases_run": 0, "false_positives": 0, "unknowns": 0},
         "negative_noise": {"cases_run": 0, "false_positives": 0, "unknowns": 0},
+        "positive_whole_note": {"cases_run": 0, "false_positives": 0, "false_negatives": 0, "unknowns": 0},
+        "half_note": {"cases_run": 0, "false_positives": 0, "false_negatives": 0, "unknowns": 0},
         "positive_private": {"cases_run": 0, "false_negatives": 0, "unknowns": 0},
     }
 

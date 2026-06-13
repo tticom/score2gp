@@ -272,6 +272,12 @@ def test_gate_status_pass(capsys):
         },
         "generated_standard_staff_negative_noise.pdf": {
             "staff_count": 1, "treble_clef_candidate": 0, "unknown": 0, "pages": 1,
+        },
+        "generated_standard_staff_whole_note.pdf": {
+            "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 1, "whole_note_candidate_summary": {"total_count": 1}, "unknown": 0, "pages": 1,
+        },
+        "generated_standard_staff_half_note.pdf": {
+            "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 0, "whole_note_candidate_summary": {"total_count": 0}, "unknown": 0, "pages": 1,
         }
     }
 
@@ -315,27 +321,7 @@ def test_classify_whole_note_outcome():
     assert helper("positive_private", "file.pdf", 1) == "whole_note_not_applicable"
     assert helper("positive_private", "file.pdf", 0) == "whole_note_not_applicable"
 
-def test_classify_whole_note_outcome():
-    gate_report = load_script()
-    helper = gate_report.classify_whole_note_outcome
 
-    # Positive
-    assert helper("positive_whole_note", "file.pdf", 1) == "whole_note_true_positive"
-    assert helper("positive_whole_note", "file.pdf", 0) == "whole_note_false_negative"
-    assert helper("other_category", "whole_note_file.pdf", 1) == "whole_note_true_positive"
-
-    # Half note
-    assert helper("half_note", "file.pdf", 0) == "whole_note_true_negative"
-    assert helper("half_note", "file.pdf", 1) == "whole_note_false_positive"
-    assert helper("other_category", "half_note_file.pdf", 0) == "whole_note_true_negative"
-
-    # Negative/noise
-    assert helper("negative_blank", "file.pdf", 0) == "whole_note_true_negative"
-    assert helper("negative_noise", "file.pdf", 1) == "whole_note_false_positive"
-
-    # Not applicable
-    assert helper("positive_private", "file.pdf", 1) == "whole_note_not_applicable"
-    assert helper("positive_private", "file.pdf", 0) == "whole_note_not_applicable"
 
 def test_gate_status_json_mode(capsys):
     gate_report = load_script()
@@ -351,6 +337,12 @@ def test_gate_status_json_mode(capsys):
         },
         "generated_standard_staff_negative_noise.pdf": {
             "staff_count": 1, "treble_clef_candidate": 0, "unknown": 0, "pages": 1,
+        },
+        "generated_standard_staff_whole_note.pdf": {
+            "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 1, "whole_note_candidate_summary": {"total_count": 1}, "unknown": 0, "pages": 1,
+        },
+        "generated_standard_staff_half_note.pdf": {
+            "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 0, "whole_note_candidate_summary": {"total_count": 0}, "unknown": 0, "pages": 1,
         }
     }
 
@@ -382,14 +374,16 @@ def test_gate_status_json_mode(capsys):
 
     assert output_json["totals"]["false_positives"] == 0
     assert output_json["totals"]["unexpected_false_negatives"] == 0
-    assert len(output_json["cases"]) == 3
+    assert len(output_json["cases"]) == 5
 
     assert "whole_note_fixture_outcome_summary" in output_json
     wn_summary = output_json["whole_note_fixture_outcome_summary"]
     assert wn_summary["negative_noise_fixtures_evaluated"] == 3
     assert wn_summary["negative_noise_fixtures_with_false_positive_candidates"] == 0
-    assert wn_summary["positive_fixtures_evaluated"] == 0
-    assert wn_summary["half_note_fixtures_evaluated"] == 0
+    assert wn_summary["positive_fixtures_evaluated"] == 1
+    assert wn_summary["positive_fixtures_with_candidates"] == 1
+    assert wn_summary["half_note_fixtures_evaluated"] == 1
+    assert wn_summary["half_note_fixtures_with_false_positive_candidates"] == 0
 
     for case in output_json["cases"]:
         assert "case_id" in case
@@ -501,6 +495,12 @@ def test_cli_check_mode_pass(monkeypatch, capsys):
     mock_returns = {
         "generated_standard_staff_negative_blank.pdf": {
             "staff_count": 1, "treble_clef_candidate": 0, "unknown": 0, "pages": 1,
+        },
+        "generated_standard_staff_whole_note.pdf": {
+            "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 1, "whole_note_candidate_summary": {"total_count": 1}, "unknown": 0, "pages": 1,
+        },
+        "generated_standard_staff_half_note.pdf": {
+            "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 0, "whole_note_candidate_summary": {"total_count": 0}, "unknown": 0, "pages": 1,
         }
     }
 
@@ -541,6 +541,12 @@ def test_cli_check_mode_review(monkeypatch, capsys):
     mock_returns = {
         "generated_standard_staff_negative_blank.pdf": {
             "staff_count": 1, "treble_clef_candidate": 1, "unknown": 0, "pages": 1,
+        },
+        "generated_standard_staff_whole_note.pdf": {
+            "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 1, "whole_note_candidate_summary": {"total_count": 1}, "unknown": 0, "pages": 1,
+        },
+        "generated_standard_staff_half_note.pdf": {
+            "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 0, "whole_note_candidate_summary": {"total_count": 0}, "unknown": 0, "pages": 1,
         }
     }
 
