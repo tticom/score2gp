@@ -1,15 +1,22 @@
 import json
 import subprocess
+import os
+import sys
 from pathlib import Path
+
+def _get_subprocess_env():
+    env = os.environ.copy()
+    src_path = str(Path.cwd() / "src")
+    existing_pythonpath = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = src_path if not existing_pythonpath else f"{src_path}{os.pathsep}{existing_pythonpath}"
+    return env
 
 def test_installed_cli_whole_note_recognition_report(tmp_path):
     # Test that the installed CLI path works directly
     fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
     
-    # We call 'score2gp whole-note-recognition --pdf ...'
-    import sys
     cmd = [sys.executable, "-m", "score2gp.cli", "whole-note-recognition", "--pdf", str(fixture_path), "--json"]
-    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=_get_subprocess_env())
     
     output = json.loads(result.stdout)
     assert output["source"] == fixture_path.name
@@ -35,9 +42,8 @@ def test_installed_cli_whole_note_recognition_nested_path_sanitisation(tmp_path)
     custom_pdf_path = nested_dir / "custom_test_file.pdf"
     shutil.copy(fixture_path, custom_pdf_path)
     
-    import sys
     cmd = [sys.executable, "-m", "score2gp.cli", "whole-note-recognition", "--pdf", str(custom_pdf_path), "--json"]
-    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=_get_subprocess_env())
     
     output = json.loads(result.stdout)
     
