@@ -175,6 +175,21 @@ def extract_tab_command(input_pdf: Path, out: Path = typer.Option(...)) -> None:
     typer.echo(json.dumps(extract_tab_file(input_pdf, out), indent=2))
 
 
+@app.command("whole-note-recognition")
+def whole_note_recognition_command(
+    pdf: Path = typer.Option(..., "--pdf", help="Path to the PDF fixture"),
+    json_out: bool = typer.Option(False, "--json", help="Output machine-checkable JSON")
+) -> None:
+    """Expose read-only whole-note recognition outcomes."""
+    from .whole_note_recogniser import run_recognition_on_file
+    res = run_recognition_on_file(pdf)
+    if not res:
+        raise typer.Exit(1)
+
+    # Even if json_out is False, we print JSON because the report script does so.
+    typer.echo(json.dumps(res, indent=2))
+
+
 @app.command("omr")
 def omr_command(input_pdf: Path, out: Path = typer.Option(...), audiveris: Optional[Path] = typer.Option(None)) -> None:
     """Run optional Audiveris OMR if configured."""

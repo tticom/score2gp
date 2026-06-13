@@ -1,0 +1,45 @@
+import json
+import subprocess
+from pathlib import Path
+
+def test_installed_cli_whole_note_recognition_report(tmp_path):
+    # Test that the installed CLI path works directly
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
+    
+    # We call 'score2gp whole-note-recognition --pdf ...'
+    cmd = ["score2gp", "whole-note-recognition", "--pdf", str(fixture_path), "--json"]
+    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    
+    output = json.loads(result.stdout)
+    assert output["source"] == fixture_path.name
+    assert output["recognition_mode"] == "read_only_diagnostic_derived"
+    
+    outcomes = output["read_only_recognition_outcomes"]
+    assert len(outcomes) == 2
+    
+    for outcome in outcomes:
+        assert outcome["symbol_type"] == "whole_note_candidate"
+        assert outcome["source"] == "diagnostic_candidate_evidence"
+        assert "candidate_id" in outcome
+        assert "bbox" in outcome
+        assert "page_index" in outcome
+
+def test_installed_cli_whole_note_recognition_nested_path_sanitisation(tmp_path):
+    import shutil
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
+    
+    # Create a nested path in tmp_path
+    nested_dir = tmp_path / "deeply" / "nested" / "private_lookalike"
+    nested_dir.mkdir(parents=True)
+    custom_pdf_path = nested_dir / "custom_test_file.pdf"
+    shutil.copy(fixture_path, custom_pdf_path)
+    
+    cmd = ["score2gp", "whole-note-recognition", "--pdf", str(custom_pdf_path), "--json"]
+    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    
+    output = json.loads(result.stdout)
+    
+    assert output["source"] == "custom_test_file.pdf"
+    assert "tmp_path" not in output["source"]
+    assert "private_lookalike" not in output["source"]
+    assert "deeply" not in output["source"]
