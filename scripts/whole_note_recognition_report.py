@@ -45,7 +45,7 @@ def run_recognition_on_file(pdf_path: Path):
     outcomes = map_whole_note_candidates_to_read_only_outcomes(whole_note_locations)
 
     return {
-        "source": str(pdf_path),
+        "source": pdf_path.name,
         "recognition_mode": "read_only_diagnostic_derived",
         "read_only_recognition_outcomes": outcomes
     }
