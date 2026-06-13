@@ -199,7 +199,8 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
                         "expected_positive": entry.get("expected_positive", False),
                         "known_false_negative": entry.get("known_false_negative", False),
                         "is_missing": False,
-                        "case_id": entry.get("case_id", Path(path_str).name)
+                        "case_id": entry.get("case_id", Path(path_str).name),
+                        "expected_whole_note_candidate_count": entry.get("expected_whole_note_candidate_count")
                     })
         except Exception:
             print("Error loading test manifest: Invalid or missing manifest", file=sys.stderr)
@@ -212,6 +213,7 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
                 "expected_positive": False,
                 "known_false_negative": False,
                 "is_missing": False,
+                "expected_whole_note_candidate_count": 0,
             },
             {
                 "path": "tests/fixtures/pdf/generated_standard_staff_negative_tab.pdf",
@@ -219,6 +221,7 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
                 "expected_positive": False,
                 "known_false_negative": False,
                 "is_missing": False,
+                "expected_whole_note_candidate_count": 0,
             },
             {
                 "path": "tests/fixtures/pdf/generated_standard_staff_negative_noise.pdf",
@@ -226,6 +229,7 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
                 "expected_positive": False,
                 "known_false_negative": False,
                 "is_missing": False,
+                "expected_whole_note_candidate_count": 0,
             },
             {
                 "path": "tests/fixtures/pdf/generated_standard_staff_whole_note.pdf",
@@ -233,6 +237,7 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
                 "expected_positive": False,
                 "known_false_negative": False,
                 "is_missing": False,
+                "expected_whole_note_candidate_count": 2,
             },
             {
                 "path": "tests/fixtures/pdf/generated_standard_staff_half_note.pdf",
@@ -240,6 +245,7 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
                 "expected_positive": False,
                 "known_false_negative": False,
                 "is_missing": False,
+                "expected_whole_note_candidate_count": 0,
             },
         ]
 
@@ -324,6 +330,10 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
         "cases": []
     }
 
+    wn_count_mismatches = 0
+    wn_count_cases_evaluated = 0
+    wn_count_reasons = []
+
     if not json_mode:
         print("Raster Diagnostics Gate Report")
         print("=" * 60)
@@ -403,7 +413,21 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
                 if wn_candidates > 0:
                     wn_summary["negative_noise_fixtures_with_false_positive_candidates"] += 1
 
-        json_cases.append({
+        expected_wn_count = item.get("expected_whole_note_candidate_count")
+        wn_count_matches = None
+        if expected_wn_count is not None:
+            wn_count_matches = (expected_wn_count == wn_candidates)
+            wn_count_cases_evaluated += 1
+            if not wn_count_matches:
+                wn_count_mismatches += 1
+                if expected_wn_count == 0 and wn_candidates > 0:
+                    wn_count_reasons.append(f"unexpected_candidates_in_{cat}")
+                elif expected_wn_count > 0 and wn_candidates < expected_wn_count:
+                    wn_count_reasons.append(f"missing_candidates_in_{cat}")
+                elif expected_wn_count > 0 and wn_candidates > expected_wn_count:
+                    wn_count_reasons.append(f"too_many_candidates_in_{cat}")
+
+        json_case = {
             "case_id": item.get("case_id", display_name),
             "category": cat,
             "outcome": outcome,
@@ -415,7 +439,14 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
             "whole_note_candidate_locations": res.get("whole_note_candidate_locations", []),
             "whole_note_candidate_summary": res.get("whole_note_candidate_summary", {}),
             "unknown": res['unknown']
-        })
+        }
+        
+        if expected_wn_count is not None:
+            json_case["expected_whole_note_candidate_count"] = expected_wn_count
+            json_case["actual_whole_note_candidate_count"] = wn_candidates
+            json_case["whole_note_candidate_count_matches_expected"] = wn_count_matches
+            
+        json_cases.append(json_case)
 
         if not json_mode:
             print(f"Processed: {display_name} [{cat}]")
@@ -456,9 +487,18 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
     else:
         wn_gate_status = "PASS"
 
-    if treble_gate_status == "PASS" and wn_gate_status == "PASS":
+    wn_count_gate_status = "PASS"
+    wn_count_gate_reasons_dedup = list(dict.fromkeys(wn_count_reasons)) # preserve order, dedup
+    if wn_count_mismatches > 0:
+        wn_count_gate_status = "FAIL"
+        if not wn_count_gate_reasons_dedup:
+            wn_count_gate_reasons_dedup.append("count_mismatch")
+    else:
+        wn_count_gate_reasons_dedup = ["counts_match"]
+
+    if treble_gate_status == "PASS" and wn_gate_status == "PASS" and wn_count_gate_status == "PASS":
         gate_status = "PASS"
-    elif wn_gate_status == "FAIL":
+    elif wn_gate_status == "FAIL" or wn_count_gate_status == "FAIL":
         gate_status = "FAIL"
     else:
         gate_status = "REVIEW"
@@ -468,6 +508,10 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
             "schema_version": 1,
             "gate_status": gate_status,
             "whole_note_detection_gate_status": wn_gate_status,
+            "whole_note_candidate_count_gate_status": wn_count_gate_status,
+            "whole_note_candidate_count_gate_reasons": wn_count_gate_reasons_dedup,
+            "whole_note_candidate_count_mismatches": wn_count_mismatches,
+            "whole_note_candidate_count_cases_evaluated": wn_count_cases_evaluated,
             "totals": totals,
             "categories": results,
             "whole_note_detection_status": wn_status,
