@@ -29,8 +29,12 @@ def run_diagnostics_on_file(pdf_path: Path, display_label: str = None):
     total_treble_candidates = 0
     total_whole_notes = 0
     total_unknowns = 0
+    total_unknowns = 0
     whole_note_locations = []
     whole_note_pages = []
+    total_half_notes = 0
+    half_note_locations = []
+    half_note_pages = []
 
     from score2gp.pdf_staff_notation_diagnostics import extract_notation_diagnostics_dict
 
@@ -47,15 +51,21 @@ def run_diagnostics_on_file(pdf_path: Path, display_label: str = None):
             total_unknowns += counts.get("unknown", 0)
 
         page_whole_notes = vector_diags.get("whole_note_candidates") or []
+        page_half_notes = vector_diags.get("half_note_candidates") or []
 
-        from score2gp.whole_note_recogniser import shape_whole_note_candidate_evidence
-        shaped_candidates = shape_whole_note_candidate_evidence(
+        from score2gp.whole_note_recogniser import shape_whole_note_candidate_evidence, shape_half_note_candidate_evidence
+        shaped_whole_candidates = shape_whole_note_candidate_evidence(
             page_whole_notes,
             page_index=i + 1,
             start_index=len(whole_note_locations) + 1
         )
+        shaped_half_candidates = shape_half_note_candidate_evidence(
+            page_half_notes,
+            page_index=i + 1,
+            start_index=len(half_note_locations) + 1
+        )
 
-        page_count = len(shaped_candidates)
+        page_count = len(shaped_whole_candidates)
         total_whole_notes += page_count
 
         if page_count > 0:
@@ -64,13 +74,31 @@ def run_diagnostics_on_file(pdf_path: Path, display_label: str = None):
                 "whole_note_candidate": page_count
             })
 
-        whole_note_locations.extend(shaped_candidates)
+        whole_note_locations.extend(shaped_whole_candidates)
+
+        half_page_count = len(shaped_half_candidates)
+        total_half_notes += half_page_count
+
+        if half_page_count > 0:
+            half_note_pages.append({
+                "page_index": i + 1,
+                "half_note_candidate": half_page_count
+            })
+
+        half_note_locations.extend(shaped_half_candidates)
 
     whole_note_candidate_summary = {
         "total_count": len(whole_note_locations),
         "pages_with_candidates": [p["page_index"] for p in whole_note_pages],
         "candidate_ids": [loc["candidate_id"] for loc in whole_note_locations],
         "candidate_count_by_page": {str(p["page_index"]): p["whole_note_candidate"] for p in whole_note_pages}
+    }
+
+    half_note_candidate_summary = {
+        "total_count": len(half_note_locations),
+        "pages_with_candidates": [p["page_index"] for p in half_note_pages],
+        "candidate_ids": [loc["candidate_id"] for loc in half_note_locations],
+        "candidate_count_by_page": {str(p["page_index"]): p["half_note_candidate"] for p in half_note_pages}
     }
 
     return {
@@ -80,6 +108,10 @@ def run_diagnostics_on_file(pdf_path: Path, display_label: str = None):
         "whole_note_candidate_pages": whole_note_pages,
         "whole_note_candidate_locations": whole_note_locations,
         "whole_note_candidate_summary": whole_note_candidate_summary,
+        "half_note_candidate": total_half_notes,
+        "half_note_candidate_pages": half_note_pages,
+        "half_note_candidate_locations": half_note_locations,
+        "half_note_candidate_summary": half_note_candidate_summary,
         "unknown": total_unknowns,
         "pages": len(doc),
     }
