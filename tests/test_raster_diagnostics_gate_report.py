@@ -272,6 +272,12 @@ def test_gate_status_pass(capsys):
         },
         "generated_standard_staff_negative_noise.pdf": {
             "staff_count": 1, "treble_clef_candidate": 0, "unknown": 0, "pages": 1,
+        },
+        "generated_standard_staff_whole_note.pdf": {
+            "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 1, "whole_note_candidate_summary": {"total_count": 1}, "unknown": 0, "pages": 1,
+        },
+        "generated_standard_staff_half_note.pdf": {
+            "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 0, "whole_note_candidate_summary": {"total_count": 0}, "unknown": 0, "pages": 1,
         }
     }
 
@@ -293,6 +299,30 @@ def test_gate_status_pass(capsys):
     captured = capsys.readouterr()
     assert "Gate Status: PASS" in captured.out
 
+def test_classify_whole_note_outcome():
+    gate_report = load_script()
+    helper = gate_report.classify_whole_note_outcome
+
+    # Positive
+    assert helper("positive_whole_note", "file.pdf", 1) == "whole_note_true_positive"
+    assert helper("positive_whole_note", "file.pdf", 0) == "whole_note_false_negative"
+    assert helper("other_category", "whole_note_file.pdf", 1) == "whole_note_true_positive"
+
+    # Half note
+    assert helper("half_note", "file.pdf", 0) == "whole_note_true_negative"
+    assert helper("half_note", "file.pdf", 1) == "whole_note_false_positive"
+    assert helper("other_category", "half_note_file.pdf", 0) == "whole_note_true_negative"
+
+    # Negative/noise
+    assert helper("negative_blank", "file.pdf", 0) == "whole_note_true_negative"
+    assert helper("negative_noise", "file.pdf", 1) == "whole_note_false_positive"
+
+    # Not applicable
+    assert helper("positive_private", "file.pdf", 1) == "whole_note_not_applicable"
+    assert helper("positive_private", "file.pdf", 0) == "whole_note_not_applicable"
+
+
+
 def test_gate_status_json_mode(capsys):
     gate_report = load_script()
     import json
@@ -307,6 +337,12 @@ def test_gate_status_json_mode(capsys):
         },
         "generated_standard_staff_negative_noise.pdf": {
             "staff_count": 1, "treble_clef_candidate": 0, "unknown": 0, "pages": 1,
+        },
+        "generated_standard_staff_whole_note.pdf": {
+            "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 1, "whole_note_candidate_summary": {"total_count": 1}, "unknown": 0, "pages": 1,
+        },
+        "generated_standard_staff_half_note.pdf": {
+            "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 0, "whole_note_candidate_summary": {"total_count": 0}, "unknown": 0, "pages": 1,
         }
     }
 
@@ -338,7 +374,16 @@ def test_gate_status_json_mode(capsys):
 
     assert output_json["totals"]["false_positives"] == 0
     assert output_json["totals"]["unexpected_false_negatives"] == 0
-    assert len(output_json["cases"]) == 3
+    assert len(output_json["cases"]) == 5
+
+    assert "whole_note_fixture_outcome_summary" in output_json
+    wn_summary = output_json["whole_note_fixture_outcome_summary"]
+    assert wn_summary["negative_noise_fixtures_evaluated"] == 3
+    assert wn_summary["negative_noise_fixtures_with_false_positive_candidates"] == 0
+    assert wn_summary["positive_fixtures_evaluated"] == 1
+    assert wn_summary["positive_fixtures_with_candidates"] == 1
+    assert wn_summary["half_note_fixtures_evaluated"] == 1
+    assert wn_summary["half_note_fixtures_with_false_positive_candidates"] == 0
 
     for case in output_json["cases"]:
         assert "case_id" in case
@@ -450,6 +495,12 @@ def test_cli_check_mode_pass(monkeypatch, capsys):
     mock_returns = {
         "generated_standard_staff_negative_blank.pdf": {
             "staff_count": 1, "treble_clef_candidate": 0, "unknown": 0, "pages": 1,
+        },
+        "generated_standard_staff_whole_note.pdf": {
+            "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 1, "whole_note_candidate_summary": {"total_count": 1}, "unknown": 0, "pages": 1,
+        },
+        "generated_standard_staff_half_note.pdf": {
+            "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 0, "whole_note_candidate_summary": {"total_count": 0}, "unknown": 0, "pages": 1,
         }
     }
 
@@ -490,6 +541,12 @@ def test_cli_check_mode_review(monkeypatch, capsys):
     mock_returns = {
         "generated_standard_staff_negative_blank.pdf": {
             "staff_count": 1, "treble_clef_candidate": 1, "unknown": 0, "pages": 1,
+        },
+        "generated_standard_staff_whole_note.pdf": {
+            "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 1, "whole_note_candidate_summary": {"total_count": 1}, "unknown": 0, "pages": 1,
+        },
+        "generated_standard_staff_half_note.pdf": {
+            "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 0, "whole_note_candidate_summary": {"total_count": 0}, "unknown": 0, "pages": 1,
         }
     }
 
@@ -710,3 +767,79 @@ def test_subprocess_test_manifest_bad_json_without_leaking(tmp_path):
     assert "Error loading test manifest: Invalid or missing manifest" in result.stderr
     assert str(manifest_path) not in result.stderr
 
+def test_whole_note_fixture_outcome_summary_json(tmp_path):
+    import json
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    script_path = Path(__file__).parent.parent / "scripts" / "raster_diagnostics_gate_report.py"
+
+    manifest_path = tmp_path / "test_manifest.json"
+    manifest_data = [
+        {
+            "path": "tests/fixtures/pdf/generated_standard_staff_whole_note.pdf",
+            "category": "positive_whole_note",
+            "expected_positive": False,
+            "known_false_negative": False,
+            "case_id": "generated_standard_staff_whole_note.pdf"
+        },
+        {
+            "path": "tests/fixtures/pdf/generated_standard_staff_half_note.pdf",
+            "category": "half_note",
+            "expected_positive": False,
+            "known_false_negative": False,
+            "case_id": "generated_standard_staff_half_note.pdf"
+        },
+        {
+            "path": "tests/fixtures/pdf/generated_standard_staff_negative_noise.pdf",
+            "category": "negative_noise",
+            "expected_positive": False,
+            "known_false_negative": False,
+            "case_id": "generated_standard_staff_negative_noise.pdf"
+        }
+    ]
+    with open(manifest_path, "w") as f:
+        json.dump(manifest_data, f)
+
+    result = subprocess.run(
+        [sys.executable, str(script_path), "--json", "--test-manifest", str(manifest_path)],
+        capture_output=True,
+        text=True
+    )
+
+    assert result.returncode == 0
+    data = json.loads(result.stdout)
+    assert "whole_note_fixture_outcome_summary" in data
+    summary = data["whole_note_fixture_outcome_summary"]
+
+    assert summary["positive_fixtures_evaluated"] == 1
+    assert summary["positive_fixtures_with_candidates"] == 1
+    assert summary["positive_fixtures_without_candidates"] == 0
+
+    assert summary["half_note_fixtures_evaluated"] == 1
+    assert summary["half_note_fixtures_with_false_positive_candidates"] == 0
+
+    assert summary["negative_noise_fixtures_evaluated"] == 1
+    assert summary["negative_noise_fixtures_with_false_positive_candidates"] == 0
+
+    cases = {c["case_id"]: c for c in summary["cases"]}
+
+    assert cases["generated_standard_staff_whole_note.pdf"]["whole_note_outcome"] == "whole_note_true_positive"
+    assert cases["generated_standard_staff_half_note.pdf"]["whole_note_outcome"] == "whole_note_true_negative"
+    assert cases["generated_standard_staff_negative_noise.pdf"]["whole_note_outcome"] == "whole_note_true_negative"
+
+    raw_cases = {c["case_id"]: c for c in data["cases"]}
+    for case_id, raw_case in raw_cases.items():
+        wn_summary = raw_case.get("whole_note_candidate_summary", {})
+        total_count = wn_summary.get("total_count", 0)
+        assert cases[case_id]["whole_note_candidate_summary_total_count"] == total_count
+
+    json_str = result.stdout.lower()
+    assert "scoreir" not in json_str
+    assert "gp_output" not in json_str
+    assert "guitar_pro" not in json_str
+    assert "pitch" not in json_str
+    assert "duration" not in json_str
+    assert "ocr" not in json_str
+    assert "full_notation" not in json_str

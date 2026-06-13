@@ -111,6 +111,22 @@ def classify_case_result(expected_positive: bool, known_false_negative: bool, ca
         else:
             return "true_negative"
 
+
+def classify_whole_note_outcome(category: str, case_id: str, candidates: int) -> str:
+    """Pure helper to classify a whole-note case outcome."""
+    is_positive = "whole_note" in category or "whole_note" in case_id
+    is_half_note = "half_note" in category or "half_note" in case_id
+    is_negative = category in ["negative_blank", "negative_tab", "negative_noise"] or "negative" in category
+
+    if is_positive:
+        return "whole_note_true_positive" if candidates > 0 else "whole_note_false_negative"
+    elif is_half_note:
+        return "whole_note_false_positive" if candidates > 0 else "whole_note_true_negative"
+    elif is_negative:
+        return "whole_note_false_positive" if candidates > 0 else "whole_note_true_negative"
+    else:
+        return "whole_note_not_applicable"
+
 def generate_report(json_mode: bool = False, test_manifest: str = None):
     manifest = []
     manifest_cases = {}
@@ -175,6 +191,20 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
                 "known_false_negative": False,
                 "is_missing": False,
             },
+            {
+                "path": "tests/fixtures/pdf/generated_standard_staff_whole_note.pdf",
+                "category": "positive_whole_note",
+                "expected_positive": False,
+                "known_false_negative": False,
+                "is_missing": False,
+            },
+            {
+                "path": "tests/fixtures/pdf/generated_standard_staff_half_note.pdf",
+                "category": "half_note",
+                "expected_positive": False,
+                "known_false_negative": False,
+                "is_missing": False,
+            },
         ]
 
         # Load expected cases from manifest
@@ -229,6 +259,8 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
         "negative_blank": {"cases_run": 0, "false_positives": 0, "unknowns": 0},
         "negative_tab": {"cases_run": 0, "false_positives": 0, "unknowns": 0},
         "negative_noise": {"cases_run": 0, "false_positives": 0, "unknowns": 0},
+        "positive_whole_note": {"cases_run": 0, "false_positives": 0, "false_negatives": 0, "unknowns": 0},
+        "half_note": {"cases_run": 0, "false_positives": 0, "false_negatives": 0, "unknowns": 0},
         "positive_private": {"cases_run": 0, "false_negatives": 0, "unknowns": 0},
     }
 
@@ -243,6 +275,17 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
         "total_staves": 0,
         "total_pages": 0,
         "total_cases_inspected": 0,
+    }
+
+    wn_summary = {
+        "positive_fixtures_evaluated": 0,
+        "positive_fixtures_with_candidates": 0,
+        "positive_fixtures_without_candidates": 0,
+        "half_note_fixtures_evaluated": 0,
+        "half_note_fixtures_with_false_positive_candidates": 0,
+        "negative_noise_fixtures_evaluated": 0,
+        "negative_noise_fixtures_with_false_positive_candidates": 0,
+        "cases": []
     }
 
     if not json_mode:
@@ -293,8 +336,36 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
             results[cat]["false_positives"] += res["treble_clef_candidate"]
         elif outcome == "true_negative":
             totals["negative_fixture_outcomes"] += 1
-        elif outcome == "true_positive":
+        if outcome == "true_positive":
             totals["true_positives"] += 1
+
+        wn_candidates = res.get("whole_note_candidate_summary", {}).get("total_count", 0)
+        wn_outcome = classify_whole_note_outcome(cat, item.get("case_id", display_name), wn_candidates)
+
+        wn_summary["cases"].append({
+            "case_id": item.get("case_id", display_name),
+            "category": cat,
+            "whole_note_candidate": res.get("whole_note_candidate", 0),
+            "whole_note_candidate_summary_total_count": wn_candidates,
+            "whole_note_outcome": wn_outcome
+        })
+
+        if wn_outcome in ["whole_note_true_positive", "whole_note_false_negative"]:
+            wn_summary["positive_fixtures_evaluated"] += 1
+            if wn_candidates > 0:
+                wn_summary["positive_fixtures_with_candidates"] += 1
+            else:
+                wn_summary["positive_fixtures_without_candidates"] += 1
+        elif wn_outcome in ["whole_note_true_negative", "whole_note_false_positive"]:
+            is_half = "half_note" in cat or "half_note" in item.get("case_id", display_name)
+            if is_half:
+                wn_summary["half_note_fixtures_evaluated"] += 1
+                if wn_candidates > 0:
+                    wn_summary["half_note_fixtures_with_false_positive_candidates"] += 1
+            else:
+                wn_summary["negative_noise_fixtures_evaluated"] += 1
+                if wn_candidates > 0:
+                    wn_summary["negative_noise_fixtures_with_false_positive_candidates"] += 1
 
         json_cases.append({
             "case_id": item.get("case_id", display_name),
@@ -346,6 +417,7 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
             "gate_status": gate_status,
             "totals": totals,
             "categories": results,
+            "whole_note_fixture_outcome_summary": wn_summary,
             "cases": json_cases
         }
         print(json.dumps(json_output, indent=2))
