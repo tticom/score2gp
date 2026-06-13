@@ -422,6 +422,16 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
         }
         print(json.dumps(json_output, indent=2))
     else:
+        print("\nWhole-note fixture outcome summary")
+        print("-" * 34)
+        print(f"Positive whole-note fixtures evaluated: {wn_summary['positive_fixtures_evaluated']}")
+        print(f"Positive fixtures with candidates: {wn_summary['positive_fixtures_with_candidates']}")
+        print(f"Positive fixtures without candidates: {wn_summary['positive_fixtures_without_candidates']}")
+        print(f"Half-note fixtures evaluated: {wn_summary['half_note_fixtures_evaluated']}")
+        print(f"Half-note fixtures with false-positive whole-note candidates: {wn_summary['half_note_fixtures_with_false_positive_candidates']}")
+        print(f"Negative/noise fixtures evaluated: {wn_summary['negative_noise_fixtures_evaluated']}")
+        print(f"Negative/noise fixtures with false-positive whole-note candidates: {wn_summary['negative_noise_fixtures_with_false_positive_candidates']}")
+
         print("\nAggregate Report")
         print("=" * 60)
         for cat, data in results.items():
