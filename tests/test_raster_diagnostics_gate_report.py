@@ -1237,3 +1237,38 @@ def test_cli_check_mode_wn_count_unexpected_negative(monkeypatch, capsys):
             assert output_json["whole_note_candidate_count_gate_status"] == "FAIL"
             assert "unexpected_candidates_in_negative_noise" in output_json["whole_note_candidate_count_gate_reasons"]
             assert output_json["whole_note_candidate_count_mismatches"] > 0
+
+def test_subprocess_json_read_only_recognition_outcomes_custom_case_id(tmp_path):
+    script_path = Path(__file__).parent.parent / "scripts" / "raster_diagnostics_gate_report.py"
+
+    manifest_path = tmp_path / "test_manifest.json"
+    manifest_data = [
+        {
+            "path": "tests/fixtures/pdf/generated_standard_staff_whole_note.pdf",
+            "category": "positive_whole_note",
+            "expected_positive": False,
+            "known_false_negative": False,
+            "case_id": "custom_whole_note_fixture_alias"
+        }
+    ]
+    with open(manifest_path, "w") as f:
+        json.dump(manifest_data, f)
+
+    result = subprocess.run(
+        [sys.executable, str(script_path), "--json", "--test-manifest", str(manifest_path)],
+        capture_output=True,
+        text=True
+    )
+
+    assert result.returncode == 0
+    data = json.loads(result.stdout)
+    
+    cases = data.get("cases", [])
+    assert len(cases) == 1
+    
+    custom_case = cases[0]
+    assert custom_case["case_id"] == "custom_whole_note_fixture_alias"
+    assert "read_only_recognition_outcomes" in custom_case
+    outcomes = custom_case["read_only_recognition_outcomes"]
+    assert len(outcomes) == 2
+    assert outcomes[0]["symbol_type"] == "whole_note_candidate"
