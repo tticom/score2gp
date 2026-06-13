@@ -33,6 +33,38 @@
       "title": "ClusterPrimitiveCountSummary",
       "type": "object"
     },
+    "HalfNoteCandidateDiagnostics": {
+      "description": "Candidate half-note bounding box extracted directly from vector shapes, independent of\nsemantic staff processing. Follows proportional heuristics to require an open notehead with a stem.",
+      "properties": {
+        "bbox": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Bbox",
+          "type": "array"
+        },
+        "width": {
+          "title": "Width",
+          "type": "number"
+        },
+        "height": {
+          "title": "Height",
+          "type": "number"
+        },
+        "aspect_ratio": {
+          "title": "Aspect Ratio",
+          "type": "number"
+        }
+      },
+      "required": [
+        "bbox",
+        "width",
+        "height",
+        "aspect_ratio"
+      ],
+      "title": "HalfNoteCandidateDiagnostics",
+      "type": "object"
+    },
     "LeftMarginPrimitiveCandidate": {
       "properties": {
         "page_index": {
@@ -821,6 +853,21 @@
       ],
       "default": null,
       "title": "Whole Note Candidates"
+    },
+    "half_note_candidates": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/HalfNoteCandidateDiagnostics"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Half Note Candidates"
     },
     "status": {
       "anyOf": [
