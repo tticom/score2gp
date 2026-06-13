@@ -127,6 +127,42 @@ def classify_whole_note_outcome(category: str, case_id: str, candidates: int) ->
     else:
         return "whole_note_not_applicable"
 
+def summarize_whole_note_detection_status(summary: dict) -> tuple[str, list[str]]:
+    """Derive readiness status and reason codes from whole-note fixture outcomes."""
+    if not summary:
+        return "review", ["summary_missing_or_incomplete"]
+
+    pos_eval = summary.get("positive_fixtures_evaluated", 0)
+    pos_cand = summary.get("positive_fixtures_with_candidates", 0)
+    half_fp = summary.get("half_note_fixtures_with_false_positive_candidates", 0)
+    neg_fp = summary.get("negative_noise_fixtures_with_false_positive_candidates", 0)
+
+    reasons = []
+    status = "pass"
+
+    if pos_eval == 0:
+        reasons.append("positive_fixtures_missing")
+        status = "review"
+    elif pos_cand < pos_eval:
+        reasons.append("positive_candidates_missing")
+        status = "review"
+    else:
+        reasons.append("positive_candidates_complete")
+
+    has_fp = False
+    if half_fp > 0:
+        reasons.append("half_note_false_positives_present")
+        has_fp = True
+    if neg_fp > 0:
+        reasons.append("negative_noise_false_positives_present")
+        has_fp = True
+    if has_fp:
+        status = "fail"
+    else:
+        reasons.append("no_false_positive_candidates")
+
+    return status, reasons
+
 def generate_report(json_mode: bool = False, test_manifest: str = None):
     manifest = []
     manifest_cases = {}
@@ -411,12 +447,16 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
 
     gate_status = "PASS" if totals["false_positives"] == 0 and totals["unexpected_false_negatives"] == 0 else "REVIEW"
 
+    wn_status, wn_reasons = summarize_whole_note_detection_status(wn_summary)
+
     if json_mode:
         json_output = {
             "schema_version": 1,
             "gate_status": gate_status,
             "totals": totals,
             "categories": results,
+            "whole_note_detection_status": wn_status,
+            "whole_note_detection_status_reasons": wn_reasons,
             "whole_note_fixture_outcome_summary": wn_summary,
             "cases": json_cases
         }
@@ -424,6 +464,8 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
     else:
         print("\nWhole-note fixture outcome summary")
         print("-" * 34)
+        print(f"Whole-note detection status: {wn_status}")
+        print(f"Whole-note detection status reasons: {', '.join(wn_reasons)}")
         print(f"Positive whole-note fixtures evaluated: {wn_summary['positive_fixtures_evaluated']}")
         print(f"Positive fixtures with candidates: {wn_summary['positive_fixtures_with_candidates']}")
         print(f"Positive fixtures without candidates: {wn_summary['positive_fixtures_without_candidates']}")
