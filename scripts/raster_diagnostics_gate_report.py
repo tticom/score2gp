@@ -9,6 +9,7 @@ from score2gp.pdf_raster_staff_diagnostics import (
     build_raster_notation_diagnostics,
     summarize_raster_treble_clef_diagnostics,
 )
+from score2gp.whole_note_recogniser import map_whole_note_candidates_to_read_only_outcomes
 
 
 def run_diagnostics_on_file(pdf_path: Path, display_label: str = None):
@@ -440,12 +441,15 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
             "whole_note_candidate_summary": res.get("whole_note_candidate_summary", {}),
             "unknown": res['unknown']
         }
-        
+
         if expected_wn_count is not None:
             json_case["expected_whole_note_candidate_count"] = expected_wn_count
             json_case["actual_whole_note_candidate_count"] = wn_candidates
             json_case["whole_note_candidate_count_matches_expected"] = wn_count_matches
-            
+
+        if item.get("case_id", display_name) == "generated_standard_staff_whole_note.pdf":
+            json_case["read_only_recognition_outcomes"] = map_whole_note_candidates_to_read_only_outcomes(res.get("whole_note_candidate_locations", []))
+
         json_cases.append(json_case)
 
         if not json_mode:
@@ -465,6 +469,14 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
                 for loc in locations:
                     cid = loc.get('candidate_id', 'unknown_id')
                     print(f"    - [{cid}] Page {loc['page_index']}: bbox={loc['bbox']}")
+
+            if item.get("case_id", display_name) == "generated_standard_staff_whole_note.pdf":
+                outcomes = map_whole_note_candidates_to_read_only_outcomes(locations)
+                if outcomes:
+                    print(f"  Read-only Recognition Outcomes: {len(outcomes)}")
+                    for out in outcomes:
+                        print(f"    - [{out['candidate_id']}] {out['symbol_type']}")
+
             print(f"  Unknowns: {res['unknown']}")
 
             if outcome == "known_false_negative":
