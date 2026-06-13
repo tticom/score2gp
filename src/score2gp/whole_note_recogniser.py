@@ -1,3 +1,34 @@
+from typing import Any, Iterable
+
+def shape_whole_note_candidate_evidence(
+    raw_candidates: Iterable[Any],
+    page_index: int,
+    start_index: int = 1
+) -> list[dict]:
+    """
+    Takes raw diagnostic candidates (objects or dicts) for a single page, sorts them
+    geometrically, and shapes them into deterministic read-only candidate evidence
+    with stable IDs.
+
+    Returns the shaped candidates.
+    """
+    def get_bbox(c: Any) -> list[float]:
+        return c["bbox"] if isinstance(c, dict) else c.bbox
+
+    candidates = list(raw_candidates)
+    # Sort geometrically: top, left, bottom, right
+    candidates.sort(key=lambda c: (get_bbox(c)[1], get_bbox(c)[0], get_bbox(c)[3], get_bbox(c)[2]))
+
+    shaped = []
+    for i, cand in enumerate(candidates):
+        candidate_id = f"whole_note_candidate_{start_index + i:03d}"
+        shaped.append({
+            "candidate_id": candidate_id,
+            "page_index": page_index,
+            "bbox": get_bbox(cand)
+        })
+    return shaped
+
 def map_whole_note_candidates_to_read_only_outcomes(candidate_locations: list[dict]) -> list[dict]:
     """
     Consumes diagnostic whole-note candidate evidence and produces a read-only
@@ -37,16 +68,12 @@ def run_recognition_on_file(pdf_path) -> dict | None:
         page_index = i + 1
         candidates_objs = _extract_whole_note_candidates(page)
 
-        # Sort geometrically: top, left, bottom, right
-        candidates_objs.sort(key=lambda c: (c.bbox[1], c.bbox[0], c.bbox[3], c.bbox[2]))
-
-        for cand in candidates_objs:
-            candidate_id = f"whole_note_candidate_{len(whole_note_locations) + 1:03d}"
-            whole_note_locations.append({
-                "candidate_id": candidate_id,
-                "page_index": page_index,
-                "bbox": cand.bbox
-            })
+        shaped_candidates = shape_whole_note_candidate_evidence(
+            candidates_objs,
+            page_index=page_index,
+            start_index=len(whole_note_locations) + 1
+        )
+        whole_note_locations.extend(shaped_candidates)
 
     outcomes = map_whole_note_candidates_to_read_only_outcomes(whole_note_locations)
 

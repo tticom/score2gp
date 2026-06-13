@@ -47,10 +47,15 @@ def run_diagnostics_on_file(pdf_path: Path, display_label: str = None):
             total_unknowns += counts.get("unknown", 0)
 
         page_whole_notes = vector_diags.get("whole_note_candidates") or []
-        # Sort geometrically: top, left, bottom, right
-        page_whole_notes.sort(key=lambda c: (c["bbox"][1], c["bbox"][0], c["bbox"][3], c["bbox"][2]))
 
-        page_count = len(page_whole_notes)
+        from score2gp.whole_note_recogniser import shape_whole_note_candidate_evidence
+        shaped_candidates = shape_whole_note_candidate_evidence(
+            page_whole_notes,
+            page_index=i + 1,
+            start_index=len(whole_note_locations) + 1
+        )
+
+        page_count = len(shaped_candidates)
         total_whole_notes += page_count
 
         if page_count > 0:
@@ -59,13 +64,7 @@ def run_diagnostics_on_file(pdf_path: Path, display_label: str = None):
                 "whole_note_candidate": page_count
             })
 
-        for cand in page_whole_notes:
-            candidate_id = f"whole_note_candidate_{len(whole_note_locations) + 1:03d}"
-            whole_note_locations.append({
-                "candidate_id": candidate_id,
-                "page_index": i + 1,
-                "bbox": cand["bbox"]
-            })
+        whole_note_locations.extend(shaped_candidates)
 
     whole_note_candidate_summary = {
         "total_count": len(whole_note_locations),
