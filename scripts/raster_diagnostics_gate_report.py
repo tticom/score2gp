@@ -66,12 +66,20 @@ def run_diagnostics_on_file(pdf_path: Path, display_label: str = None):
                 "bbox": cand["bbox"]
             })
 
+    whole_note_candidate_summary = {
+        "total_count": len(whole_note_locations),
+        "pages_with_candidates": [p["page_index"] for p in whole_note_pages],
+        "candidate_ids": [loc["candidate_id"] for loc in whole_note_locations],
+        "candidate_count_by_page": {str(p["page_index"]): p["whole_note_candidate"] for p in whole_note_pages}
+    }
+
     return {
         "staff_count": total_staff_count,
         "treble_clef_candidate": total_treble_candidates,
         "whole_note_candidate": total_whole_notes,
         "whole_note_candidate_pages": whole_note_pages,
         "whole_note_candidate_locations": whole_note_locations,
+        "whole_note_candidate_summary": whole_note_candidate_summary,
         "unknown": total_unknowns,
         "pages": len(doc),
     }
@@ -298,6 +306,7 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
             "whole_note_candidate": res.get("whole_note_candidate", 0),
             "whole_note_candidate_pages": res.get("whole_note_candidate_pages", []),
             "whole_note_candidate_locations": res.get("whole_note_candidate_locations", []),
+            "whole_note_candidate_summary": res.get("whole_note_candidate_summary", {}),
             "unknown": res['unknown']
         })
 

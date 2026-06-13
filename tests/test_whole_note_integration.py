@@ -60,6 +60,13 @@ def test_raster_diagnostics_gate_report_whole_note() -> None:
     else:
         assert loc1["bbox"][1] < loc2["bbox"][1]
 
+    # Assert summary
+    summary = res.get("whole_note_candidate_summary", {})
+    assert summary.get("total_count") == 2
+    assert summary.get("pages_with_candidates") == [p["page_index"] for p in pages]
+    assert summary.get("candidate_ids") == [loc["candidate_id"] for loc in locations]
+    assert summary.get("candidate_count_by_page") == {str(p["page_index"]): p["whole_note_candidate"] for p in pages}
+
 def test_deterministic_candidate_ids_across_runs() -> None:
     pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
     res1 = gate_run_diagnostics_on_file(pdf_path)
@@ -75,6 +82,12 @@ def test_raster_diagnostics_gate_report_half_note() -> None:
     assert len(res.get("whole_note_candidate_pages", [])) == 0
     assert len(res.get("whole_note_candidate_locations", [])) == 0
 
+    summary = res.get("whole_note_candidate_summary", {})
+    assert summary.get("total_count") == 0
+    assert summary.get("pages_with_candidates") == []
+    assert summary.get("candidate_ids") == []
+    assert summary.get("candidate_count_by_page") == {}
+
 def test_raster_diagnostics_gate_report_negative_noise() -> None:
     pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_negative_noise.pdf")
     assert pdf_path.exists()
@@ -83,3 +96,9 @@ def test_raster_diagnostics_gate_report_negative_noise() -> None:
     assert res["whole_note_candidate"] == 0
     assert len(res.get("whole_note_candidate_pages", [])) == 0
     assert len(res.get("whole_note_candidate_locations", [])) == 0
+
+    summary = res.get("whole_note_candidate_summary", {})
+    assert summary.get("total_count") == 0
+    assert summary.get("pages_with_candidates") == []
+    assert summary.get("candidate_ids") == []
+    assert summary.get("candidate_count_by_page") == {}
