@@ -8,6 +8,11 @@ import argparse
 import json
 from pathlib import Path
 
+# Make the script runnable from source checkouts
+src_path = Path(__file__).resolve().parent.parent / "src"
+if src_path.is_dir() and str(src_path) not in sys.path:
+    sys.path.insert(0, str(src_path))
+
 from score2gp.whole_note_recogniser import run_recognition_on_file
 
 def main():
