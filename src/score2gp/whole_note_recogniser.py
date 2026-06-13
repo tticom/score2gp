@@ -1,8 +1,9 @@
 from typing import Any, Iterable
 
-def shape_whole_note_candidate_evidence(
+def shape_candidate_evidence(
     raw_candidates: Iterable[Any],
     page_index: int,
+    candidate_prefix: str,
     start_index: int = 1
 ) -> list[dict]:
     """
@@ -21,13 +22,27 @@ def shape_whole_note_candidate_evidence(
 
     shaped = []
     for i, cand in enumerate(candidates):
-        candidate_id = f"whole_note_candidate_{start_index + i:03d}"
+        candidate_id = f"{candidate_prefix}_{start_index + i:03d}"
         shaped.append({
             "candidate_id": candidate_id,
             "page_index": page_index,
             "bbox": get_bbox(cand)
         })
     return shaped
+
+def shape_whole_note_candidate_evidence(
+    raw_candidates: Iterable[Any],
+    page_index: int,
+    start_index: int = 1
+) -> list[dict]:
+    return shape_candidate_evidence(raw_candidates, page_index, "whole_note_candidate", start_index)
+
+def shape_half_note_candidate_evidence(
+    raw_candidates: Iterable[Any],
+    page_index: int,
+    start_index: int = 1
+) -> list[dict]:
+    return shape_candidate_evidence(raw_candidates, page_index, "half_note_candidate", start_index)
 
 def map_whole_note_candidates_to_read_only_outcomes(candidate_locations: list[dict]) -> list[dict]:
     """
