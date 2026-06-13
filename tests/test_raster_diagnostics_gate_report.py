@@ -274,7 +274,7 @@ def test_gate_status_pass(capsys):
             "staff_count": 1, "treble_clef_candidate": 0, "unknown": 0, "pages": 1,
         },
         "generated_standard_staff_whole_note.pdf": {
-            "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 1, "whole_note_candidate_summary": {"total_count": 1}, "unknown": 0, "pages": 1,
+            "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 2, "whole_note_candidate_summary": {"total_count": 2}, "unknown": 0, "pages": 1,
         },
         "generated_standard_staff_half_note.pdf": {
             "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 0, "whole_note_candidate_summary": {"total_count": 0}, "unknown": 0, "pages": 1,
@@ -346,7 +346,7 @@ def test_gate_status_json_mode(capsys):
             "staff_count": 1, "treble_clef_candidate": 0, "unknown": 0, "pages": 1,
         },
         "generated_standard_staff_whole_note.pdf": {
-            "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 1, "whole_note_candidate_summary": {"total_count": 1}, "unknown": 0, "pages": 1,
+            "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 2, "whole_note_candidate_summary": {"total_count": 2}, "unknown": 0, "pages": 1,
         },
         "generated_standard_staff_half_note.pdf": {
             "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 0, "whole_note_candidate_summary": {"total_count": 0}, "unknown": 0, "pages": 1,
@@ -508,7 +508,7 @@ def test_cli_check_mode_pass(monkeypatch, capsys):
             "staff_count": 1, "treble_clef_candidate": 0, "unknown": 0, "pages": 1,
         },
         "generated_standard_staff_whole_note.pdf": {
-            "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 1, "whole_note_candidate_summary": {"total_count": 1}, "unknown": 0, "pages": 1,
+            "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 2, "whole_note_candidate_summary": {"total_count": 2}, "unknown": 0, "pages": 1,
         },
         "generated_standard_staff_half_note.pdf": {
             "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 0, "whole_note_candidate_summary": {"total_count": 0}, "unknown": 0, "pages": 1,
@@ -554,7 +554,7 @@ def test_cli_check_mode_review(monkeypatch, capsys):
             "staff_count": 1, "treble_clef_candidate": 1, "unknown": 0, "pages": 1,
         },
         "generated_standard_staff_whole_note.pdf": {
-            "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 1, "whole_note_candidate_summary": {"total_count": 1}, "unknown": 0, "pages": 1,
+            "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 2, "whole_note_candidate_summary": {"total_count": 2}, "unknown": 0, "pages": 1,
         },
         "generated_standard_staff_half_note.pdf": {
             "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 0, "whole_note_candidate_summary": {"total_count": 0}, "unknown": 0, "pages": 1,
@@ -600,9 +600,10 @@ def test_cli_check_mode_wn_review(monkeypatch, capsys):
         "generated_standard_staff_negative_blank.pdf": {
             "staff_count": 1, "treble_clef_candidate": 0, "unknown": 0, "pages": 1,
         },
-        "generated_standard_staff_whole_note.pdf": {
-            "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 0, "whole_note_candidate_summary": {"total_count": 0}, "unknown": 0, "pages": 1,
-        },
+        # Drop the positive fixture to simulate missing positive fixture -> REVIEW
+        # "generated_standard_staff_whole_note.pdf": {
+        #     "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 0, "whole_note_candidate_summary": {"total_count": 0}, "unknown": 0, "pages": 1,
+        # },
         "generated_standard_staff_half_note.pdf": {
             "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 0, "whole_note_candidate_summary": {"total_count": 0}, "unknown": 0, "pages": 1,
         }
