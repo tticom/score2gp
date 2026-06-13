@@ -298,6 +298,11 @@ def test_gate_status_pass(capsys):
 
     captured = capsys.readouterr()
     assert "Gate Status: PASS" in captured.out
+    assert "Whole-note fixture outcome summary" in captured.out
+    assert "Positive whole-note fixtures evaluated: 1" in captured.out
+    assert "Positive fixtures with candidates: 1" in captured.out
+    assert "Half-note fixtures evaluated: 1" in captured.out
+    assert "Half-note fixtures with false-positive whole-note candidates: 0" in captured.out
 
 def test_classify_whole_note_outcome():
     gate_report = load_script()
@@ -593,6 +598,9 @@ def test_subprocess_human_mode_pass():
     assert result.returncode == 0
     assert "Gate Status: PASS" in result.stdout
     assert "Raster Diagnostics Gate Report" in result.stdout
+    assert "Whole-note fixture outcome summary" in result.stdout
+    assert "Positive whole-note fixtures evaluated: 1" in result.stdout
+    assert "Half-note fixtures evaluated: 1" in result.stdout
 
 def test_subprocess_json_mode_pass():
     script_path = Path(__file__).parent.parent / "scripts" / "raster_diagnostics_gate_report.py"
