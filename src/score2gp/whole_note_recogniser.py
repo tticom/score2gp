@@ -61,10 +61,26 @@ def map_whole_note_candidates_to_read_only_outcomes(candidate_locations: list[di
         })
     return outcomes
 
+def map_half_note_candidates_to_read_only_outcomes(candidate_locations: list[dict]) -> list[dict]:
+    """
+    Consumes diagnostic half-note candidate evidence and produces a read-only
+    recognition outcome without inferring broad musical semantics like pitch, rhythm, or staff position.
+    """
+    outcomes = []
+    for cand in candidate_locations:
+        outcomes.append({
+            "symbol_type": "half_note_candidate",
+            "candidate_id": cand.get("candidate_id"),
+            "bbox": cand.get("bbox"),
+            "page_index": cand.get("page_index"),
+            "source": "diagnostic_candidate_evidence"
+        })
+    return outcomes
+
 def run_recognition_on_file(pdf_path) -> dict | None:
     import sys
     import fitz  # type: ignore
-    from score2gp.pdf_staff_notation_diagnostics import _extract_whole_note_candidates
+    from score2gp.pdf_staff_notation_diagnostics import _extract_whole_note_candidates, _extract_half_note_candidates
 
     if not pdf_path.exists():
         print(f"Error: File {pdf_path} not found", file=sys.stderr)
@@ -77,20 +93,30 @@ def run_recognition_on_file(pdf_path) -> dict | None:
         return None
 
     whole_note_locations = []
+    half_note_locations = []
 
     for i in range(len(doc)):
         page = doc[i]
         page_index = i + 1
-        candidates_objs = _extract_whole_note_candidates(page)
 
-        shaped_candidates = shape_whole_note_candidate_evidence(
-            candidates_objs,
+        whole_cands = _extract_whole_note_candidates(page)
+        shaped_whole = shape_whole_note_candidate_evidence(
+            whole_cands,
             page_index=page_index,
             start_index=len(whole_note_locations) + 1
         )
-        whole_note_locations.extend(shaped_candidates)
+        whole_note_locations.extend(shaped_whole)
+
+        half_cands = _extract_half_note_candidates(page)
+        shaped_half = shape_half_note_candidate_evidence(
+            half_cands,
+            page_index=page_index,
+            start_index=len(half_note_locations) + 1
+        )
+        half_note_locations.extend(shaped_half)
 
     outcomes = map_whole_note_candidates_to_read_only_outcomes(whole_note_locations)
+    outcomes.extend(map_half_note_candidates_to_read_only_outcomes(half_note_locations))
 
     return {
         "source": pdf_path.name,
