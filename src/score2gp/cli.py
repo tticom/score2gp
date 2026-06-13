@@ -180,13 +180,27 @@ def whole_note_recognition_command(
     pdf: Path = typer.Option(..., "--pdf", help="Path to the PDF fixture"),
     json_out: bool = typer.Option(False, "--json", help="Output machine-checkable JSON")
 ) -> None:
-    """Expose read-only whole-note recognition outcomes."""
+    """Expose read-only whole-note recognition outcomes. (Compatibility alias)"""
     from .whole_note_recogniser import run_recognition_on_file
     res = run_recognition_on_file(pdf)
     if not res:
         raise typer.Exit(1)
 
     # Even if json_out is False, we print JSON because the report script does so.
+    typer.echo(json.dumps(res, indent=2))
+
+
+@app.command("note-candidate-recognition")
+def note_candidate_recognition_command(
+    pdf: Path = typer.Option(..., "--pdf", help="Path to the PDF fixture"),
+    json_out: bool = typer.Option(False, "--json", help="Output machine-checkable JSON")
+) -> None:
+    """Expose generic read-only note-candidate recognition outcomes."""
+    from .whole_note_recogniser import run_recognition_on_file
+    res = run_recognition_on_file(pdf)
+    if not res:
+        raise typer.Exit(1)
+
     typer.echo(json.dumps(res, indent=2))
 
 
