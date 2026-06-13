@@ -7,7 +7,8 @@ def test_installed_cli_whole_note_recognition_report(tmp_path):
     fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
     
     # We call 'score2gp whole-note-recognition --pdf ...'
-    cmd = ["score2gp", "whole-note-recognition", "--pdf", str(fixture_path), "--json"]
+    import sys
+    cmd = [sys.executable, "-m", "score2gp.cli", "whole-note-recognition", "--pdf", str(fixture_path), "--json"]
     result = subprocess.run(cmd, capture_output=True, text=True, check=True)
     
     output = json.loads(result.stdout)
@@ -34,7 +35,8 @@ def test_installed_cli_whole_note_recognition_nested_path_sanitisation(tmp_path)
     custom_pdf_path = nested_dir / "custom_test_file.pdf"
     shutil.copy(fixture_path, custom_pdf_path)
     
-    cmd = ["score2gp", "whole-note-recognition", "--pdf", str(custom_pdf_path), "--json"]
+    import sys
+    cmd = [sys.executable, "-m", "score2gp.cli", "whole-note-recognition", "--pdf", str(custom_pdf_path), "--json"]
     result = subprocess.run(cmd, capture_output=True, text=True, check=True)
     
     output = json.loads(result.stdout)
