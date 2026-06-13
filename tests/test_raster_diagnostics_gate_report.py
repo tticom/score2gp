@@ -299,6 +299,8 @@ def test_gate_status_pass(capsys):
     captured = capsys.readouterr()
     assert "Gate Status: PASS" in captured.out
     assert "Whole-note fixture outcome summary" in captured.out
+    assert "Whole-note detection status: pass" in captured.out
+    assert "Whole-note detection status reasons: positive_candidates_complete, no_false_positive_candidates" in captured.out
     assert "Positive whole-note fixtures evaluated: 1" in captured.out
     assert "Positive fixtures with candidates: 1" in captured.out
     assert "Half-note fixtures evaluated: 1" in captured.out
@@ -376,6 +378,10 @@ def test_gate_status_json_mode(capsys):
     assert "totals" in output_json
     assert "categories" in output_json
     assert "cases" in output_json
+    assert "whole_note_detection_status" in output_json
+    assert output_json["whole_note_detection_status"] == "pass"
+    assert "whole_note_detection_status_reasons" in output_json
+    assert output_json["whole_note_detection_status_reasons"] == ["positive_candidates_complete", "no_false_positive_candidates"]
 
     assert output_json["totals"]["false_positives"] == 0
     assert output_json["totals"]["unexpected_false_negatives"] == 0
@@ -599,6 +605,8 @@ def test_subprocess_human_mode_pass():
     assert "Gate Status: PASS" in result.stdout
     assert "Raster Diagnostics Gate Report" in result.stdout
     assert "Whole-note fixture outcome summary" in result.stdout
+    assert "Whole-note detection status: pass" in result.stdout
+    assert "Whole-note detection status reasons: positive_candidates_complete, no_false_positive_candidates" in result.stdout
     assert "Positive whole-note fixtures evaluated: 1" in result.stdout
     assert "Half-note fixtures evaluated: 1" in result.stdout
 
@@ -851,3 +859,69 @@ def test_whole_note_fixture_outcome_summary_json(tmp_path):
     assert "duration" not in json_str
     assert "ocr" not in json_str
     assert "full_notation" not in json_str
+
+    assert "whole_note_detection_status" in data
+    assert data["whole_note_detection_status"] == "pass"
+    assert "whole_note_detection_status_reasons" in data
+    assert "positive_candidates_complete" in data["whole_note_detection_status_reasons"]
+    assert "no_false_positive_candidates" in data["whole_note_detection_status_reasons"]
+
+def test_summarize_whole_note_detection_status():
+    gate_report = load_script()
+    helper = gate_report.summarize_whole_note_detection_status
+
+    # Empty summary
+    status, reasons = helper({})
+    assert status == "review"
+    assert "summary_missing_or_incomplete" in reasons
+
+    # Pass scenario
+    status, reasons = helper({
+        "positive_fixtures_evaluated": 2,
+        "positive_fixtures_with_candidates": 2,
+        "half_note_fixtures_with_false_positive_candidates": 0,
+        "negative_noise_fixtures_with_false_positive_candidates": 0
+    })
+    assert status == "pass"
+    assert "positive_candidates_complete" in reasons
+    assert "no_false_positive_candidates" in reasons
+
+    # Review scenario: positive fixtures missing
+    status, reasons = helper({
+        "positive_fixtures_evaluated": 0,
+        "positive_fixtures_with_candidates": 0,
+        "half_note_fixtures_with_false_positive_candidates": 0,
+        "negative_noise_fixtures_with_false_positive_candidates": 0
+    })
+    assert status == "review"
+    assert "positive_fixtures_missing" in reasons
+
+    # Review scenario: positive candidates missing
+    status, reasons = helper({
+        "positive_fixtures_evaluated": 2,
+        "positive_fixtures_with_candidates": 1,
+        "half_note_fixtures_with_false_positive_candidates": 0,
+        "negative_noise_fixtures_with_false_positive_candidates": 0
+    })
+    assert status == "review"
+    assert "positive_candidates_missing" in reasons
+
+    # Fail scenario: half note false positives
+    status, reasons = helper({
+        "positive_fixtures_evaluated": 2,
+        "positive_fixtures_with_candidates": 2,
+        "half_note_fixtures_with_false_positive_candidates": 1,
+        "negative_noise_fixtures_with_false_positive_candidates": 0
+    })
+    assert status == "fail"
+    assert "half_note_false_positives_present" in reasons
+
+    # Fail scenario: negative noise false positives
+    status, reasons = helper({
+        "positive_fixtures_evaluated": 2,
+        "positive_fixtures_with_candidates": 2,
+        "half_note_fixtures_with_false_positive_candidates": 0,
+        "negative_noise_fixtures_with_false_positive_candidates": 1
+    })
+    assert status == "fail"
+    assert "negative_noise_false_positives_present" in reasons
