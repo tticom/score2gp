@@ -17,8 +17,9 @@ from dataclasses import dataclass
 import statistics
 from .pdf_geometry_candidate_extractor import PdfGeometryCandidateExtractor
 
-def _extract_whole_note_candidates(page: Any) -> list[WholeNoteCandidateDiagnostics]:
-    candidates = []
+def _extract_note_candidates(page: Any) -> tuple[list[WholeNoteCandidateDiagnostics], list[HalfNoteCandidateDiagnostics]]:
+    whole_candidates = []
+    half_candidates = []
     drawings = page.get_drawings()
 
     vertical_lines = []
@@ -73,13 +74,26 @@ def _extract_whole_note_candidates(page: Any) -> list[WholeNoteCandidateDiagnost
                             break
 
                 if not has_stem:
-                    candidates.append(WholeNoteCandidateDiagnostics(
+                    whole_candidates.append(WholeNoteCandidateDiagnostics(
                         bbox=[round(x0, 3), round(y0, 3), round(x1, 3), round(y1, 3)],
                         width=round(w, 3),
                         height=round(h, 3),
                         aspect_ratio=round(aspect, 3)
                     ))
-    return candidates
+                else:
+                    half_candidates.append(HalfNoteCandidateDiagnostics(
+                        bbox=[round(x0, 3), round(y0, 3), round(x1, 3), round(y1, 3)],
+                        width=round(w, 3),
+                        height=round(h, 3),
+                        aspect_ratio=round(aspect, 3)
+                    ))
+    return whole_candidates, half_candidates
+
+def _extract_whole_note_candidates(page: Any) -> list[WholeNoteCandidateDiagnostics]:
+    return _extract_note_candidates(page)[0]
+
+def _extract_half_note_candidates(page: Any) -> list[HalfNoteCandidateDiagnostics]:
+    return _extract_note_candidates(page)[1]
 
 @dataclass(frozen=True)
 class PrimitiveGeometry:
@@ -599,10 +613,12 @@ def build_notation_diagnostics(
             )
         )
 
+    notes = _extract_note_candidates(page)
     return PdfStaffNotationGeometryDiagnostics(
         staves=staves_diags,
         system_connectors=system_connectors,
-        whole_note_candidates=_extract_whole_note_candidates(page)
+        whole_note_candidates=notes[0],
+        half_note_candidates=notes[1]
     )
 
 

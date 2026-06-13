@@ -172,7 +172,20 @@ class PdfStaffNotationGeometryDiagnostics(BaseModel):
     staves: list[NotationStaffDiagnostics]
     system_connectors: list[SystemConnectorDiagnostics] | None = None
     whole_note_candidates: list[WholeNoteCandidateDiagnostics] | None = None
+    half_note_candidates: list[HalfNoteCandidateDiagnostics] | None = None
     status: str | None = "success"
+
+class HalfNoteCandidateDiagnostics(BaseModel):
+    """
+    Candidate half-note bounding box extracted directly from vector shapes, independent of
+    semantic staff processing. Follows proportional heuristics to require an open notehead with a stem.
+    """
+    model_config = ConfigDict(frozen=True)
+
+    bbox: list[float]
+    width: float
+    height: float
+    aspect_ratio: float
 
 class WholeNoteCandidateDiagnostics(BaseModel):
     """
