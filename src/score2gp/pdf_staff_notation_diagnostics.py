@@ -11,7 +11,8 @@ from .pdf_staff_geometry import (
     StaffLeftMarginAggregateDiagnostics,
     PrimitiveGeometryEvidence,
     XAlignedPrimitiveClusterEvidence,
-    WholeNoteCandidateDiagnostics
+    WholeNoteCandidateDiagnostics,
+    HalfNoteCandidateDiagnostics
 )
 from dataclasses import dataclass
 import statistics
