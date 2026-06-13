@@ -447,7 +447,8 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
             json_case["actual_whole_note_candidate_count"] = wn_candidates
             json_case["whole_note_candidate_count_matches_expected"] = wn_count_matches
 
-        if item.get("case_id", display_name) == "generated_standard_staff_whole_note.pdf":
+        is_authorized_whole_note = Path(item["path"]).name == "generated_standard_staff_whole_note.pdf" or cat == "positive_whole_note"
+        if is_authorized_whole_note:
             json_case["read_only_recognition_outcomes"] = map_whole_note_candidates_to_read_only_outcomes(res.get("whole_note_candidate_locations", []))
 
         json_cases.append(json_case)
@@ -470,7 +471,7 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
                     cid = loc.get('candidate_id', 'unknown_id')
                     print(f"    - [{cid}] Page {loc['page_index']}: bbox={loc['bbox']}")
 
-            if item.get("case_id", display_name) == "generated_standard_staff_whole_note.pdf":
+            if is_authorized_whole_note:
                 outcomes = map_whole_note_candidates_to_read_only_outcomes(locations)
                 if outcomes:
                     print(f"  Read-only Recognition Outcomes: {len(outcomes)}")
