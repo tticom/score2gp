@@ -445,14 +445,29 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
 
             print("-" * 60)
 
-    gate_status = "PASS" if totals["false_positives"] == 0 and totals["unexpected_false_negatives"] == 0 else "REVIEW"
+    treble_gate_status = "PASS" if totals["false_positives"] == 0 and totals["unexpected_false_negatives"] == 0 else "REVIEW"
 
     wn_status, wn_reasons = summarize_whole_note_detection_status(wn_summary)
+
+    if wn_status == "fail":
+        wn_gate_status = "FAIL"
+    elif wn_status == "review":
+        wn_gate_status = "REVIEW"
+    else:
+        wn_gate_status = "PASS"
+
+    if treble_gate_status == "PASS" and wn_gate_status == "PASS":
+        gate_status = "PASS"
+    elif wn_gate_status == "FAIL":
+        gate_status = "FAIL"
+    else:
+        gate_status = "REVIEW"
 
     if json_mode:
         json_output = {
             "schema_version": 1,
             "gate_status": gate_status,
+            "whole_note_detection_gate_status": wn_gate_status,
             "totals": totals,
             "categories": results,
             "whole_note_detection_status": wn_status,

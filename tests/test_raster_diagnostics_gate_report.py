@@ -592,6 +592,96 @@ def test_cli_check_mode_review(monkeypatch, capsys):
             assert output_json["gate_status"] == "REVIEW"
             assert output_json["totals"]["false_positives"] == 1
 
+def test_cli_check_mode_wn_review(monkeypatch, capsys):
+    gate_report = load_script()
+
+    # Create a scenario where treble passes but wn forces REVIEW
+    mock_returns = {
+        "generated_standard_staff_negative_blank.pdf": {
+            "staff_count": 1, "treble_clef_candidate": 0, "unknown": 0, "pages": 1,
+        },
+        "generated_standard_staff_whole_note.pdf": {
+            "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 0, "whole_note_candidate_summary": {"total_count": 0}, "unknown": 0, "pages": 1,
+        },
+        "generated_standard_staff_half_note.pdf": {
+            "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 0, "whole_note_candidate_summary": {"total_count": 0}, "unknown": 0, "pages": 1,
+        }
+    }
+
+    def mock_run(path: Path, display_label=None):
+        return mock_returns.get(path.name)
+
+    orig_exists = Path.exists
+    def custom_exists(self):
+        if self.name == "raster-treble-clef": return False
+        if self.name == "raster_diagnostics_false_negative_manifest.json": return False
+        if self.name in mock_returns: return True
+        return orig_exists(self)
+
+    with patch("gate_report.run_diagnostics_on_file", side_effect=mock_run):
+        with patch.object(Path, "exists", autospec=True, side_effect=custom_exists):
+            parser = gate_report.argparse.ArgumentParser()
+            parser.add_argument("--json", action="store_true")
+            parser.add_argument("--check", action="store_true")
+            args = parser.parse_args(["--check", "--json"])
+
+            with patch("sys.exit") as mock_exit:
+                status, totals = gate_report.generate_report(json_mode=args.json)
+                if args.check:
+                    mock_exit(0 if status == "PASS" else 1)
+
+                mock_exit.assert_called_once_with(1)
+
+            captured = capsys.readouterr()
+            output_json = json.loads(captured.out)
+            assert output_json["gate_status"] == "REVIEW"
+            assert output_json["whole_note_detection_gate_status"] == "REVIEW"
+
+def test_cli_check_mode_wn_fail(monkeypatch, capsys):
+    gate_report = load_script()
+
+    # Create a scenario where treble passes but wn forces FAIL (false positive)
+    mock_returns = {
+        "generated_standard_staff_negative_blank.pdf": {
+            "staff_count": 1, "treble_clef_candidate": 0, "unknown": 0, "pages": 1,
+        },
+        "generated_standard_staff_whole_note.pdf": {
+            "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 1, "whole_note_candidate_summary": {"total_count": 1}, "unknown": 0, "pages": 1,
+        },
+        "generated_standard_staff_half_note.pdf": {
+            "staff_count": 1, "treble_clef_candidate": 0, "whole_note_candidate": 1, "whole_note_candidate_summary": {"total_count": 1}, "unknown": 0, "pages": 1,
+        }
+    }
+
+    def mock_run(path: Path, display_label=None):
+        return mock_returns.get(path.name)
+
+    orig_exists = Path.exists
+    def custom_exists(self):
+        if self.name == "raster-treble-clef": return False
+        if self.name == "raster_diagnostics_false_negative_manifest.json": return False
+        if self.name in mock_returns: return True
+        return orig_exists(self)
+
+    with patch("gate_report.run_diagnostics_on_file", side_effect=mock_run):
+        with patch.object(Path, "exists", autospec=True, side_effect=custom_exists):
+            parser = gate_report.argparse.ArgumentParser()
+            parser.add_argument("--json", action="store_true")
+            parser.add_argument("--check", action="store_true")
+            args = parser.parse_args(["--check", "--json"])
+
+            with patch("sys.exit") as mock_exit:
+                status, totals = gate_report.generate_report(json_mode=args.json)
+                if args.check:
+                    mock_exit(0 if status == "PASS" else 1)
+
+                mock_exit.assert_called_once_with(1)
+
+            captured = capsys.readouterr()
+            output_json = json.loads(captured.out)
+            assert output_json["gate_status"] == "FAIL"
+            assert output_json["whole_note_detection_gate_status"] == "FAIL"
+
 import subprocess
 
 def test_subprocess_human_mode_pass():
