@@ -51,6 +51,36 @@ def shape_quarter_note_candidate_evidence(
 ) -> list[dict]:
     return shape_candidate_evidence(raw_candidates, page_index, "quarter_note_candidate", start_index)
 
+def shape_x_aligned_cluster_candidate_evidence(
+    raw_candidates: Iterable[Any],
+    page_index: int,
+    start_index: int = 1
+) -> list[dict]:
+    candidates = list(raw_candidates)
+
+    def get_sort_key(c: Any):
+        c_dict = c if isinstance(c, dict) else (c.model_dump() if hasattr(c, "model_dump") else c.dict())
+        return (c_dict.get("system_index", 0), c_dict.get("staff_index", 0), c_dict.get("x0", 0.0), c_dict.get("x1", 0.0))
+
+    candidates.sort(key=get_sort_key)
+
+    shaped = []
+    for i, cand in enumerate(candidates):
+        candidate_id = f"x_aligned_cluster_candidate_{start_index + i:03d}"
+        c_dict = cand if isinstance(cand, dict) else (cand.model_dump() if hasattr(cand, "model_dump") else cand.dict())
+
+        shaped.append({
+            "candidate_id": candidate_id,
+            "page_index": page_index,
+            "system_index": c_dict.get("system_index"),
+            "staff_index": c_dict.get("staff_index"),
+            "x0": c_dict.get("x0"),
+            "x1": c_dict.get("x1"),
+            "primitive_count": c_dict.get("primitive_count"),
+            "primitives": c_dict.get("primitives", [])
+        })
+    return shaped
+
 def map_whole_note_candidates_to_read_only_outcomes(candidate_locations: list[dict]) -> list[dict]:
     """
     Consumes diagnostic whole-note candidate evidence and produces a read-only
@@ -100,10 +130,32 @@ def map_quarter_note_candidates_to_read_only_outcomes(candidate_locations: list[
         })
     return outcomes
 
+def map_x_aligned_cluster_candidates_to_read_only_outcomes(candidate_locations: list[dict]) -> list[dict]:
+    outcomes = []
+    for cand in candidate_locations:
+        outcomes.append({
+            "symbol_type": "x_aligned_cluster_candidate",
+            "candidate_id": cand.get("candidate_id"),
+            "page_index": cand.get("page_index"),
+            "system_index": cand.get("system_index"),
+            "staff_index": cand.get("staff_index"),
+            "x0": cand.get("x0"),
+            "x1": cand.get("x1"),
+            "primitive_count": cand.get("primitive_count"),
+            "primitives": cand.get("primitives"),
+            "source": "diagnostic_candidate_evidence"
+        })
+    return outcomes
+
 def run_recognition_on_file(pdf_path) -> dict | None:
     import sys
     import fitz  # type: ignore
-    from score2gp.pdf_staff_notation_diagnostics import _extract_whole_note_candidates, _extract_half_note_candidates, _extract_quarter_note_candidates
+    from score2gp.pdf_staff_notation_diagnostics import (
+        _extract_whole_note_candidates,
+        _extract_half_note_candidates,
+        _extract_quarter_note_candidates,
+        extract_notation_diagnostics_dict
+    )
 
     if not pdf_path.exists():
         print(f"Error: File {pdf_path} not found", file=sys.stderr)
@@ -118,6 +170,7 @@ def run_recognition_on_file(pdf_path) -> dict | None:
     whole_note_locations = []
     half_note_locations = []
     quarter_note_locations = []
+    x_aligned_cluster_locations = []
 
     for i in range(len(doc)):
         page = doc[i]
@@ -147,9 +200,23 @@ def run_recognition_on_file(pdf_path) -> dict | None:
         )
         quarter_note_locations.extend(shaped_quarter)
 
+        page_diags = extract_notation_diagnostics_dict(page, page_index)
+        x_aligned_cands = []
+        for staff in page_diags.get("staves", []):
+            if staff.get("x_aligned_cluster_candidates"):
+                x_aligned_cands.extend(staff["x_aligned_cluster_candidates"])
+
+        shaped_x_aligned = shape_x_aligned_cluster_candidate_evidence(
+            x_aligned_cands,
+            page_index=page_index,
+            start_index=len(x_aligned_cluster_locations) + 1
+        )
+        x_aligned_cluster_locations.extend(shaped_x_aligned)
+
     outcomes = map_whole_note_candidates_to_read_only_outcomes(whole_note_locations)
     outcomes.extend(map_half_note_candidates_to_read_only_outcomes(half_note_locations))
     outcomes.extend(map_quarter_note_candidates_to_read_only_outcomes(quarter_note_locations))
+    outcomes.extend(map_x_aligned_cluster_candidates_to_read_only_outcomes(x_aligned_cluster_locations))
 
     return {
         "source": pdf_path.name,
