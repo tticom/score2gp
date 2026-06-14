@@ -44,6 +44,13 @@ def shape_half_note_candidate_evidence(
 ) -> list[dict]:
     return shape_candidate_evidence(raw_candidates, page_index, "half_note_candidate", start_index)
 
+def shape_quarter_note_candidate_evidence(
+    raw_candidates: Iterable[Any],
+    page_index: int,
+    start_index: int = 1
+) -> list[dict]:
+    return shape_candidate_evidence(raw_candidates, page_index, "quarter_note_candidate", start_index)
+
 def map_whole_note_candidates_to_read_only_outcomes(candidate_locations: list[dict]) -> list[dict]:
     """
     Consumes diagnostic whole-note candidate evidence and produces a read-only
@@ -77,10 +84,26 @@ def map_half_note_candidates_to_read_only_outcomes(candidate_locations: list[dic
         })
     return outcomes
 
+def map_quarter_note_candidates_to_read_only_outcomes(candidate_locations: list[dict]) -> list[dict]:
+    """
+    Consumes diagnostic quarter-note candidate evidence and produces a read-only
+    recognition outcome without inferring broad musical semantics like pitch, rhythm, or staff position.
+    """
+    outcomes = []
+    for cand in candidate_locations:
+        outcomes.append({
+            "symbol_type": "quarter_note_candidate",
+            "candidate_id": cand.get("candidate_id"),
+            "bbox": cand.get("bbox"),
+            "page_index": cand.get("page_index"),
+            "source": "diagnostic_candidate_evidence"
+        })
+    return outcomes
+
 def run_recognition_on_file(pdf_path) -> dict | None:
     import sys
     import fitz  # type: ignore
-    from score2gp.pdf_staff_notation_diagnostics import _extract_whole_note_candidates, _extract_half_note_candidates
+    from score2gp.pdf_staff_notation_diagnostics import _extract_whole_note_candidates, _extract_half_note_candidates, _extract_quarter_note_candidates
 
     if not pdf_path.exists():
         print(f"Error: File {pdf_path} not found", file=sys.stderr)
@@ -94,6 +117,7 @@ def run_recognition_on_file(pdf_path) -> dict | None:
 
     whole_note_locations = []
     half_note_locations = []
+    quarter_note_locations = []
 
     for i in range(len(doc)):
         page = doc[i]
@@ -115,8 +139,17 @@ def run_recognition_on_file(pdf_path) -> dict | None:
         )
         half_note_locations.extend(shaped_half)
 
+        quarter_cands = _extract_quarter_note_candidates(page)
+        shaped_quarter = shape_quarter_note_candidate_evidence(
+            quarter_cands,
+            page_index=page_index,
+            start_index=len(quarter_note_locations) + 1
+        )
+        quarter_note_locations.extend(shaped_quarter)
+
     outcomes = map_whole_note_candidates_to_read_only_outcomes(whole_note_locations)
     outcomes.extend(map_half_note_candidates_to_read_only_outcomes(half_note_locations))
+    outcomes.extend(map_quarter_note_candidates_to_read_only_outcomes(quarter_note_locations))
 
     return {
         "source": pdf_path.name,
