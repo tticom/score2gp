@@ -907,3 +907,88 @@ def test_diagnostics_morphology_privacy_gating() -> None:
     assert "private.pdf" not in json_str
     # Check that PUA characters are not serialized
     assert "\ue001" not in json_str
+
+
+def test_extract_flag_beam_candidate_diagnostics() -> None:
+    group = [
+        _LineSegment(50.0, 100.0, 500.0, 100.0),
+        _LineSegment(50.0, 108.0, 500.0, 108.0),
+        _LineSegment(50.0, 116.0, 500.0, 116.0),
+        _LineSegment(50.0, 124.0, 500.0, 124.0),
+        _LineSegment(50.0, 132.0, 500.0, 132.0),
+    ]
+
+    class MockPoint:
+        def __init__(self, x: float, y: float) -> None:
+            self.x = x
+            self.y = y
+
+    # Beam-like primitive (non_staff_horizontal)
+    beam_draw = {
+        "rect": (200.0, 80.0, 250.0, 81.0),
+        "items": [
+            ("l", MockPoint(200.0, 80.5), MockPoint(250.0, 80.5))
+        ]
+    }
+
+    # Flag-like primitive (curve)
+    flag_draw = {
+        "rect": (300.0, 100.0, 310.0, 115.0),
+        "items": [
+            ("c", MockPoint(300.0, 100.0), MockPoint(305.0, 105.0), MockPoint(310.0, 115.0))
+        ]
+    }
+
+    class MockPage:
+        def get_drawings(self) -> list[dict]:
+            return [beam_draw, flag_draw]
+        def get_text(self, kind: str) -> dict | list:
+            return {}
+
+    page = MockPage()
+    notation_diags = build_notation_diagnostics(page, page_index=1, notation_groups=[group])
+
+    diag = notation_diags.staves[0]
+
+    assert diag.flag_beam_candidates is not None
+    assert len(diag.flag_beam_candidates.beams) == 1
+    assert len(diag.flag_beam_candidates.flags) == 1
+
+    beam = diag.flag_beam_candidates.beams[0]
+    assert beam.primitive_kind == "non_staff_horizontal"
+    assert beam.width == 50.0
+
+    flag = diag.flag_beam_candidates.flags[0]
+    assert flag.primitive_kind == "curve"
+    assert flag.width == 10.0
+
+
+def test_square_rectangles_not_emitted_as_beams() -> None:
+    group = [
+        _LineSegment(50.0, 100.0, 500.0, 100.0),
+        _LineSegment(50.0, 108.0, 500.0, 108.0),
+        _LineSegment(50.0, 116.0, 500.0, 116.0),
+        _LineSegment(50.0, 124.0, 500.0, 124.0),
+        _LineSegment(50.0, 132.0, 500.0, 132.0),
+    ]
+
+    # Square rectangle (8x8)
+    square_draw = {
+        "rect": (200.0, 80.0, 208.0, 88.0),
+        "items": [
+            ("re", type("MockRect", (), {"x0": 200.0, "y0": 80.0, "x1": 208.0, "y1": 88.0}))
+        ]
+    }
+
+    class MockPage:
+        def get_drawings(self) -> list[dict]:
+            return [square_draw]
+        def get_text(self, kind: str) -> dict | list:
+            return {}
+
+    page = MockPage()
+    notation_diags = build_notation_diagnostics(page, page_index=1, notation_groups=[group])
+    diag = notation_diags.staves[0]
+
+    # flag_beam_candidates should be None because no valid flags or beams were extracted
+    assert diag.flag_beam_candidates is None
