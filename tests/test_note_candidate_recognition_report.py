@@ -25,6 +25,9 @@ def test_note_candidate_recognition_report_public_fixture():
     whole_notes = [o for o in outcomes if o["symbol_type"] == "whole_note_candidate"]
     assert len(whole_notes) == 2
 
+    eighth_notes = [o for o in outcomes if o["symbol_type"] == "eighth_note_candidate"]
+    assert len(eighth_notes) == 0
+
     cand1 = whole_notes[0]
     assert cand1["symbol_type"] == "whole_note_candidate"
     assert cand1["system_index"] is not None
@@ -49,6 +52,9 @@ def test_note_candidate_recognition_report_half_note_fixture():
 
     half_notes = [o for o in outcomes if o["symbol_type"] == "half_note_candidate"]
     assert len(half_notes) == 2
+
+    eighth_notes = [o for o in outcomes if o["symbol_type"] == "eighth_note_candidate"]
+    assert len(eighth_notes) == 0
     for cand in half_notes:
         assert cand["system_index"] is not None
         assert cand["staff_index"] is not None
@@ -72,6 +78,9 @@ def test_note_candidate_recognition_report_quarter_note_fixture():
 
     quarter_notes = [o for o in outcomes if o["symbol_type"] == "quarter_note_candidate"]
     assert len(quarter_notes) == 2
+
+    eighth_notes = [o for o in outcomes if o["symbol_type"] == "eighth_note_candidate"]
+    assert len(eighth_notes) == 0
     for cand in quarter_notes:
         assert cand["system_index"] is not None
         assert cand["staff_index"] is not None
@@ -157,6 +166,9 @@ def test_note_candidate_recognition_report_x_aligned_cluster_fixture():
     x_aligned_clusters = [o for o in outcomes if o["symbol_type"] == "x_aligned_cluster_candidate"]
     assert len(x_aligned_clusters) == 5
 
+    eighth_notes = [o for o in outcomes if o["symbol_type"] == "eighth_note_candidate"]
+    assert len(eighth_notes) == 0
+
 def test_note_candidate_recognition_report_left_margin_candidate_fixture():
     script_path = Path("scripts/note_candidate_recognition_report.py")
     fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_complex_cluster.pdf")
@@ -176,6 +188,9 @@ def test_note_candidate_recognition_report_left_margin_candidate_fixture():
 
     left_margin_candidates = [o for o in outcomes if o["symbol_type"] == "left_margin_candidate"]
     assert len(left_margin_candidates) == 1
+
+    eighth_notes = [o for o in outcomes if o["symbol_type"] == "eighth_note_candidate"]
+    assert len(eighth_notes) == 0
 
 def test_note_candidate_recognition_report_flag_beam_candidates():
     script_path = Path("scripts/note_candidate_recognition_report.py")
@@ -198,6 +213,9 @@ def test_note_candidate_recognition_report_flag_beam_candidates():
     beams = [o for o in outcomes if o["symbol_type"] == "beam_candidate"]
 
     assert len(beams) > 0
+
+    eighth_notes = [o for o in outcomes if o["symbol_type"] == "eighth_note_candidate"]
+    assert len(eighth_notes) == 0
 
     for outcome in flags:
         assert outcome["page_index"] == 1
