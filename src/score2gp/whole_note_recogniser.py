@@ -397,13 +397,17 @@ def run_recognition_on_file(
             for staff in page_diags.get("staves", []):
                 fb = staff.get("flag_beam_candidates")
                 if fb:
+                    staff_geom = staff.get("staff", {})
+                    sys_idx = staff_geom.get("system_index")
+                    staff_idx = staff_geom.get("staff_index")
+
                     flags = fb.get("flags", [])
                     if flags:
                         shaped_flags = shape_flag_candidate_evidence(
                             flags,
                             page_index=page_index,
-                            system_index=staff.get("system_index"),
-                            staff_index=staff.get("staff_index"),
+                            system_index=sys_idx,
+                            staff_index=staff_idx,
                             start_index=len(flag_locations) + 1
                         )
                         flag_locations.extend(shaped_flags)
@@ -413,8 +417,8 @@ def run_recognition_on_file(
                         shaped_beams = shape_beam_candidate_evidence(
                             beams,
                             page_index=page_index,
-                            system_index=staff.get("system_index"),
-                            staff_index=staff.get("staff_index"),
+                            system_index=sys_idx,
+                            staff_index=staff_idx,
                             start_index=len(beam_locations) + 1
                         )
                         beam_locations.extend(shaped_beams)

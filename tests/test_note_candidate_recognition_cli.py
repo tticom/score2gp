@@ -149,9 +149,9 @@ def test_installed_cli_note_candidate_recognition_with_flag_beam_candidates(tmp_
     for outcome in flags:
         assert outcome["source"] == "diagnostic_candidate_evidence"
         assert "candidate_id" in outcome
-        assert "page_index" in outcome
-        assert "system_index" in outcome
-        assert "staff_index" in outcome
+        assert outcome["page_index"] == 1
+        assert outcome["system_index"] == 1
+        assert outcome["staff_index"] == 1
         assert "bbox" in outcome
         assert "primitive_kind" in outcome
         assert "width" in outcome
@@ -160,9 +160,9 @@ def test_installed_cli_note_candidate_recognition_with_flag_beam_candidates(tmp_
     for outcome in beams:
         assert outcome["source"] == "diagnostic_candidate_evidence"
         assert "candidate_id" in outcome
-        assert "page_index" in outcome
-        assert "system_index" in outcome
-        assert "staff_index" in outcome
+        assert outcome["page_index"] == 1
+        assert outcome["system_index"] == 1
+        assert outcome["staff_index"] == 1
         assert "bbox" in outcome
         assert "primitive_kind" in outcome
         assert "width" in outcome
