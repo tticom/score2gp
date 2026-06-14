@@ -315,7 +315,8 @@ def _associate_staves(shaped_candidates: list[dict], staves: list[dict]) -> None
         bbox = cand.get("bbox")
         if not bbox or len(bbox) < 4:
             continue
-        c_y = (bbox[1] + bbox[3]) / 2.0
+        c_x0, c_y0, c_x1, c_y1 = bbox
+        c_y = (c_y0 + c_y1) / 2.0
         best_staff = None
         best_dist = float('inf')
         for staff_dict in staves:
@@ -324,13 +325,20 @@ def _associate_staves(shaped_candidates: list[dict], staves: list[dict]) -> None
                 continue
             s_y0 = staff.get("y0", 0.0)
             s_y1 = staff.get("y1", 0.0)
+            s_x0 = staff.get("x0", 0.0)
+            s_x1 = staff.get("x1", 0.0)
             s_y = (s_y0 + s_y1) / 2.0
 
             staff_height = s_y1 - s_y0
             staff_space = staff_height / 4.0 if staff_height > 0 else 10.0
-            margin = 6.0 * staff_space
 
-            if (s_y0 - margin) <= c_y <= (s_y1 + margin):
+            vertical_margin = 6.0 * staff_space
+            horizontal_margin = 1.0 * staff_space
+
+            vertical_ok = (s_y0 - vertical_margin) <= c_y <= (s_y1 + vertical_margin)
+            horizontal_ok = c_x1 >= (s_x0 - horizontal_margin) and c_x0 <= (s_x1 + horizontal_margin)
+
+            if vertical_ok and horizontal_ok:
                 dist = abs(c_y - s_y)
                 if dist < best_dist:
                     best_dist = dist
