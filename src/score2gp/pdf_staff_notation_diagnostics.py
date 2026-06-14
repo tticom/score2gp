@@ -618,10 +618,20 @@ def build_notation_diagnostics(
                             width=round(w, 3),
                             height=round(h, 3)
                         ))
-                elif p.type in ("non_staff_horizontal", "rect"):
+                elif p.type == "non_staff_horizontal":
                     w = abs(p.x1 - p.x0)
                     h = abs(p.y1 - p.y0)
                     if w >= 0.5 * staff_space:
+                        beam_candidates.append(BeamPrimitiveCandidateDiagnostics(
+                            bbox=[round(p.x0, 3), round(p.y0, 3), round(p.x1, 3), round(p.y1, 3)],
+                            primitive_kind=p.type,
+                            width=round(w, 3),
+                            height=round(h, 3)
+                        ))
+                elif p.type == "rect":
+                    w = abs(p.x1 - p.x0)
+                    h = abs(p.y1 - p.y0)
+                    if h > 0 and (w / h) >= 3.0 and h <= 1.5 * staff_space and w >= 0.5 * staff_space:
                         beam_candidates.append(BeamPrimitiveCandidateDiagnostics(
                             bbox=[round(p.x0, 3), round(p.y0, 3), round(p.x1, 3), round(p.y1, 3)],
                             primitive_kind=p.type,

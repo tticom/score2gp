@@ -376,39 +376,6 @@
         "beams": [
           {
             "bbox": [
-              200.0,
-              110.0,
-              208.0,
-              118.0
-            ],
-            "primitive_kind": "rect",
-            "width": 8.0,
-            "height": 8.0
-          },
-          {
-            "bbox": [
-              300.0,
-              90.0,
-              308.0,
-              98.0
-            ],
-            "primitive_kind": "rect",
-            "width": 8.0,
-            "height": 8.0
-          },
-          {
-            "bbox": [
-              300.0,
-              130.0,
-              308.0,
-              138.0
-            ],
-            "primitive_kind": "rect",
-            "width": 8.0,
-            "height": 8.0
-          },
-          {
-            "bbox": [
               298.0,
               94.0,
               310.0,
