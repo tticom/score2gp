@@ -535,6 +535,38 @@
       "title": "PrimitiveGeometryEvidence",
       "type": "object"
     },
+    "QuarterNoteCandidateDiagnostics": {
+      "description": "Candidate quarter-note bounding box extracted directly from vector shapes, independent of\nsemantic staff processing. Follows proportional heuristics to require a filled notehead with a stem.",
+      "properties": {
+        "bbox": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Bbox",
+          "type": "array"
+        },
+        "width": {
+          "title": "Width",
+          "type": "number"
+        },
+        "height": {
+          "title": "Height",
+          "type": "number"
+        },
+        "aspect_ratio": {
+          "title": "Aspect Ratio",
+          "type": "number"
+        }
+      },
+      "required": [
+        "bbox",
+        "width",
+        "height",
+        "aspect_ratio"
+      ],
+      "title": "QuarterNoteCandidateDiagnostics",
+      "type": "object"
+    },
     "StaffLeftMarginAggregateDiagnostics": {
       "description": "Diagnostics for primitives falling within the extreme left margin of the staff,\ntypically used for marker-like geometric shapes near the staff start.",
       "properties": {
@@ -868,6 +900,21 @@
       ],
       "default": null,
       "title": "Half Note Candidates"
+    },
+    "quarter_note_candidates": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/QuarterNoteCandidateDiagnostics"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Quarter Note Candidates"
     },
     "status": {
       "anyOf": [

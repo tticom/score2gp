@@ -91,6 +91,20 @@ def build_pdf(json_name: str, pdf_name: str) -> None:
             width=1.0
         )
 
+    # Draw quarter notes (filled ovals with a stem)
+    for qn in data.get("quarter_notes", []):
+        page.draw_oval(
+            fitz.Rect(qn["x0"], qn["y0"], qn["x1"], qn["y1"]),
+            color=(0, 0, 0),
+            fill=(0, 0, 0),
+            width=1.5
+        )
+        page.draw_line(
+            (qn["stem_x0"], qn["stem_y0"]),
+            (qn["stem_x1"], qn["stem_y1"]),
+            color=(0, 0, 0),
+            width=1.0
+        )
 
 
     doc.save(pdf_path, garbage=4, deflate=True)
@@ -112,5 +126,6 @@ def main() -> None:
     build_pdf("generated_standard_staff_negative_noise.json", "generated_standard_staff_negative_noise.pdf")
     build_pdf("generated_standard_staff_whole_note.json", "generated_standard_staff_whole_note.pdf")
     build_pdf("generated_standard_staff_half_note.json", "generated_standard_staff_half_note.pdf")
+    build_pdf("generated_standard_staff_quarter_note.json", "generated_standard_staff_quarter_note.pdf")
 if __name__ == "__main__":
     main()
