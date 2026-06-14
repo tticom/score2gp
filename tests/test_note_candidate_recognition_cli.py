@@ -26,6 +26,9 @@ def test_installed_cli_note_candidate_recognition_report(tmp_path):
     whole_notes = [o for o in outcomes if o["symbol_type"] == "whole_note_candidate"]
     assert len(whole_notes) == 2
 
+    eighth_notes = [o for o in outcomes if o["symbol_type"] == "eighth_note_candidate"]
+    assert len(eighth_notes) == 0
+
     for outcome in whole_notes:
         assert outcome["symbol_type"] == "whole_note_candidate"
         assert outcome["source"] == "diagnostic_candidate_evidence"
@@ -49,6 +52,9 @@ def test_installed_cli_note_candidate_recognition_with_half_notes(tmp_path):
     half_notes = [o for o in outcomes if o["symbol_type"] == "half_note_candidate"]
     assert len(half_notes) == 2
 
+    eighth_notes = [o for o in outcomes if o["symbol_type"] == "eighth_note_candidate"]
+    assert len(eighth_notes) == 0
+
     for outcome in half_notes:
         assert outcome["source"] == "diagnostic_candidate_evidence"
         assert "candidate_id" in outcome
@@ -70,6 +76,9 @@ def test_installed_cli_note_candidate_recognition_with_quarter_notes(tmp_path):
     outcomes = output["read_only_recognition_outcomes"]
     quarter_notes = [o for o in outcomes if o["symbol_type"] == "quarter_note_candidate"]
     assert len(quarter_notes) == 2
+
+    eighth_notes = [o for o in outcomes if o["symbol_type"] == "eighth_note_candidate"]
+    assert len(eighth_notes) == 0
 
     for outcome in quarter_notes:
         assert outcome["source"] == "diagnostic_candidate_evidence"
@@ -94,6 +103,9 @@ def test_installed_cli_note_candidate_recognition_with_x_aligned_clusters(tmp_pa
 
     # We expect 5 clusters based on expected_diagnostics_complex_cluster.json
     assert len(x_aligned_clusters) == 5
+
+    eighth_notes = [o for o in outcomes if o["symbol_type"] == "eighth_note_candidate"]
+    assert len(eighth_notes) == 0
 
     for outcome in x_aligned_clusters:
         assert outcome["source"] == "diagnostic_candidate_evidence"
@@ -121,6 +133,9 @@ def test_installed_cli_note_candidate_recognition_with_left_margin_candidates(tm
 
     # We expect 1 left margin candidate based on expected_diagnostics_complex_cluster.json
     assert len(left_margin_candidates) == 1
+
+    eighth_notes = [o for o in outcomes if o["symbol_type"] == "eighth_note_candidate"]
+    assert len(eighth_notes) == 0
 
     for outcome in left_margin_candidates:
         assert outcome["source"] == "diagnostic_candidate_evidence"
@@ -153,6 +168,9 @@ def test_installed_cli_note_candidate_recognition_with_flag_beam_candidates(tmp_
     # We expect some beams based on expected_diagnostics_complex_cluster.json
     assert len(beams) > 0
 
+    eighth_notes = [o for o in outcomes if o["symbol_type"] == "eighth_note_candidate"]
+    assert len(eighth_notes) == 0
+
     for outcome in flags:
         assert outcome["source"] == "diagnostic_candidate_evidence"
         assert "candidate_id" in outcome
@@ -174,3 +192,27 @@ def test_installed_cli_note_candidate_recognition_with_flag_beam_candidates(tmp_
         assert "primitive_kind" in outcome
         assert "width" in outcome
         assert "height" in outcome
+
+def test_installed_cli_note_candidate_recognition_with_eighth_notes(tmp_path):
+    # Test that the generic CLI path exposes eighth notes properly
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_eighth_notes.pdf")
+
+    cmd = [sys.executable, "-m", "score2gp.cli", "note-candidate-recognition", "--pdf", str(fixture_path), "--json"]
+    result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=_get_subprocess_env())
+
+    output = json.loads(result.stdout)
+    assert output["source"] == fixture_path.name
+
+    outcomes = output["read_only_recognition_outcomes"]
+    eighth_notes = [o for o in outcomes if o["symbol_type"] == "eighth_note_candidate"]
+
+    assert len(eighth_notes) >= 3
+
+    for outcome in eighth_notes:
+        assert outcome["source"] == "diagnostic_candidate_evidence"
+        assert "candidate_id" in outcome
+        assert "page_index" in outcome
+        assert "system_index" in outcome
+        assert "staff_index" in outcome
+        assert "quarter_component_id" in outcome
+        assert "modifier_component_id" in outcome
