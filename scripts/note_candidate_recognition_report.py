@@ -22,7 +22,7 @@ def main():
     args = parser.parse_args()
 
     pdf_path = Path(args.pdf)
-    res = run_recognition_on_file(pdf_path)
+    res = run_recognition_on_file(pdf_path, include_x_aligned_clusters=True)
     if not res:
         sys.exit(1)
 

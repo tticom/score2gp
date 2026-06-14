@@ -147,7 +147,7 @@ def map_x_aligned_cluster_candidates_to_read_only_outcomes(candidate_locations: 
         })
     return outcomes
 
-def run_recognition_on_file(pdf_path) -> dict | None:
+def run_recognition_on_file(pdf_path, include_x_aligned_clusters: bool = False) -> dict | None:
     import sys
     import fitz  # type: ignore
     from score2gp.pdf_staff_notation_diagnostics import (
@@ -200,23 +200,26 @@ def run_recognition_on_file(pdf_path) -> dict | None:
         )
         quarter_note_locations.extend(shaped_quarter)
 
-        page_diags = extract_notation_diagnostics_dict(page, page_index)
-        x_aligned_cands = []
-        for staff in page_diags.get("staves", []):
-            if staff.get("x_aligned_cluster_candidates"):
-                x_aligned_cands.extend(staff["x_aligned_cluster_candidates"])
+        if include_x_aligned_clusters:
+            page_diags = extract_notation_diagnostics_dict(page, page_index)
+            x_aligned_cands = []
+            for staff in page_diags.get("staves", []):
+                if staff.get("x_aligned_cluster_candidates"):
+                    x_aligned_cands.extend(staff["x_aligned_cluster_candidates"])
 
-        shaped_x_aligned = shape_x_aligned_cluster_candidate_evidence(
-            x_aligned_cands,
-            page_index=page_index,
-            start_index=len(x_aligned_cluster_locations) + 1
-        )
-        x_aligned_cluster_locations.extend(shaped_x_aligned)
+            shaped_x_aligned = shape_x_aligned_cluster_candidate_evidence(
+                x_aligned_cands,
+                page_index=page_index,
+                start_index=len(x_aligned_cluster_locations) + 1
+            )
+            x_aligned_cluster_locations.extend(shaped_x_aligned)
 
     outcomes = map_whole_note_candidates_to_read_only_outcomes(whole_note_locations)
     outcomes.extend(map_half_note_candidates_to_read_only_outcomes(half_note_locations))
     outcomes.extend(map_quarter_note_candidates_to_read_only_outcomes(quarter_note_locations))
-    outcomes.extend(map_x_aligned_cluster_candidates_to_read_only_outcomes(x_aligned_cluster_locations))
+
+    if include_x_aligned_clusters:
+        outcomes.extend(map_x_aligned_cluster_candidates_to_read_only_outcomes(x_aligned_cluster_locations))
 
     return {
         "source": pdf_path.name,
