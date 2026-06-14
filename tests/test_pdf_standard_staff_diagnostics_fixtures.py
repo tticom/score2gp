@@ -198,7 +198,6 @@ def test_quarter_note_candidate_diagnostics() -> None:
     assert cands[0]["width"] > 0
     assert cands[0]["height"] > 0
 
-
 def test_generated_sparse_fixture(tmp_path) -> None:
     from score2gp.pdf import inspect_pdf
     from pathlib import Path
