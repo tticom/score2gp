@@ -89,3 +89,19 @@ def test_installed_cli_whole_note_recognition_no_x_aligned_clusters(tmp_path):
 
     left_margin_candidates = [o for o in outcomes if o["symbol_type"] == "left_margin_candidate"]
     assert len(left_margin_candidates) == 0
+
+def test_installed_cli_whole_note_recognition_does_not_emit_flags_or_beams(tmp_path):
+    # Test that the specific whole_note_recognition path does NOT emit flags or beams
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_complex_cluster.pdf")
+
+    cmd = [sys.executable, "-m", "score2gp.cli", "whole-note-recognition", "--pdf", str(fixture_path), "--json"]
+    result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=_get_subprocess_env())
+
+    output = json.loads(result.stdout)
+
+    outcomes = output["read_only_recognition_outcomes"]
+    flags = [o for o in outcomes if o["symbol_type"] == "flag_candidate"]
+    beams = [o for o in outcomes if o["symbol_type"] == "beam_candidate"]
+
+    assert len(flags) == 0
+    assert len(beams) == 0

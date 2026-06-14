@@ -200,7 +200,8 @@ def note_candidate_recognition_command(
     res = run_recognition_on_file(
         pdf,
         include_x_aligned_clusters=True,
-        include_left_margin_candidates=True
+        include_left_margin_candidates=True,
+        include_flag_beam_candidates=True
     )
     if not res:
         raise typer.Exit(1)

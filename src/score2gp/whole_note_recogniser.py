@@ -202,10 +202,111 @@ def map_left_margin_candidates_to_read_only_outcomes(candidate_locations: list[d
         })
     return outcomes
 
+def shape_flag_candidate_evidence(
+    raw_candidates: Iterable[Any],
+    page_index: int,
+    system_index: int,
+    staff_index: int,
+    start_index: int = 1
+) -> list[dict]:
+    candidates = list(raw_candidates)
+
+    def get_sort_key(c: Any):
+        c_dict = c if isinstance(c, dict) else (c.model_dump() if hasattr(c, "model_dump") else c.dict())
+        bbox = c_dict.get("bbox", [0.0, 0.0, 0.0, 0.0])
+        return (bbox[0], bbox[1])
+
+    candidates.sort(key=get_sort_key)
+
+    shaped = []
+    for i, cand in enumerate(candidates):
+        candidate_id = f"flag_candidate_{start_index + i:03d}"
+        c_dict = cand if isinstance(cand, dict) else (cand.model_dump() if hasattr(cand, "model_dump") else cand.dict())
+
+        shaped.append({
+            "candidate_id": candidate_id,
+            "page_index": page_index,
+            "system_index": system_index,
+            "staff_index": staff_index,
+            "bbox": c_dict.get("bbox"),
+            "primitive_kind": c_dict.get("primitive_kind"),
+            "width": c_dict.get("width"),
+            "height": c_dict.get("height")
+        })
+    return shaped
+
+def shape_beam_candidate_evidence(
+    raw_candidates: Iterable[Any],
+    page_index: int,
+    system_index: int,
+    staff_index: int,
+    start_index: int = 1
+) -> list[dict]:
+    candidates = list(raw_candidates)
+
+    def get_sort_key(c: Any):
+        c_dict = c if isinstance(c, dict) else (c.model_dump() if hasattr(c, "model_dump") else c.dict())
+        bbox = c_dict.get("bbox", [0.0, 0.0, 0.0, 0.0])
+        return (bbox[0], bbox[1])
+
+    candidates.sort(key=get_sort_key)
+
+    shaped = []
+    for i, cand in enumerate(candidates):
+        candidate_id = f"beam_candidate_{start_index + i:03d}"
+        c_dict = cand if isinstance(cand, dict) else (cand.model_dump() if hasattr(cand, "model_dump") else cand.dict())
+
+        shaped.append({
+            "candidate_id": candidate_id,
+            "page_index": page_index,
+            "system_index": system_index,
+            "staff_index": staff_index,
+            "bbox": c_dict.get("bbox"),
+            "primitive_kind": c_dict.get("primitive_kind"),
+            "width": c_dict.get("width"),
+            "height": c_dict.get("height")
+        })
+    return shaped
+
+def map_flag_candidates_to_read_only_outcomes(candidate_locations: list[dict]) -> list[dict]:
+    outcomes = []
+    for cand in candidate_locations:
+        outcomes.append({
+            "symbol_type": "flag_candidate",
+            "candidate_id": cand.get("candidate_id"),
+            "page_index": cand.get("page_index"),
+            "system_index": cand.get("system_index"),
+            "staff_index": cand.get("staff_index"),
+            "bbox": cand.get("bbox"),
+            "primitive_kind": cand.get("primitive_kind"),
+            "width": cand.get("width"),
+            "height": cand.get("height"),
+            "source": "diagnostic_candidate_evidence"
+        })
+    return outcomes
+
+def map_beam_candidates_to_read_only_outcomes(candidate_locations: list[dict]) -> list[dict]:
+    outcomes = []
+    for cand in candidate_locations:
+        outcomes.append({
+            "symbol_type": "beam_candidate",
+            "candidate_id": cand.get("candidate_id"),
+            "page_index": cand.get("page_index"),
+            "system_index": cand.get("system_index"),
+            "staff_index": cand.get("staff_index"),
+            "bbox": cand.get("bbox"),
+            "primitive_kind": cand.get("primitive_kind"),
+            "width": cand.get("width"),
+            "height": cand.get("height"),
+            "source": "diagnostic_candidate_evidence"
+        })
+    return outcomes
+
 def run_recognition_on_file(
     pdf_path,
     include_x_aligned_clusters: bool = False,
-    include_left_margin_candidates: bool = False
+    include_left_margin_candidates: bool = False,
+    include_flag_beam_candidates: bool = False
 ) -> dict | None:
     import sys
     import fitz  # type: ignore
@@ -231,6 +332,8 @@ def run_recognition_on_file(
     quarter_note_locations = []
     x_aligned_cluster_locations = []
     left_margin_locations = []
+    flag_locations = []
+    beam_locations = []
 
     for i in range(len(doc)):
         page = doc[i]
@@ -261,7 +364,7 @@ def run_recognition_on_file(
         quarter_note_locations.extend(shaped_quarter)
 
         page_diags = None
-        if include_x_aligned_clusters or include_left_margin_candidates:
+        if include_x_aligned_clusters or include_left_margin_candidates or include_flag_beam_candidates:
             page_diags = extract_notation_diagnostics_dict(page, page_index)
 
         if include_x_aligned_clusters:
@@ -290,6 +393,32 @@ def run_recognition_on_file(
             )
             left_margin_locations.extend(shaped_left_margin)
 
+        if include_flag_beam_candidates:
+            for staff in page_diags.get("staves", []):
+                fb = staff.get("flag_beam_candidates")
+                if fb:
+                    flags = fb.get("flags", [])
+                    if flags:
+                        shaped_flags = shape_flag_candidate_evidence(
+                            flags,
+                            page_index=page_index,
+                            system_index=staff.get("system_index"),
+                            staff_index=staff.get("staff_index"),
+                            start_index=len(flag_locations) + 1
+                        )
+                        flag_locations.extend(shaped_flags)
+
+                    beams = fb.get("beams", [])
+                    if beams:
+                        shaped_beams = shape_beam_candidate_evidence(
+                            beams,
+                            page_index=page_index,
+                            system_index=staff.get("system_index"),
+                            staff_index=staff.get("staff_index"),
+                            start_index=len(beam_locations) + 1
+                        )
+                        beam_locations.extend(shaped_beams)
+
     outcomes = map_whole_note_candidates_to_read_only_outcomes(whole_note_locations)
     outcomes.extend(map_half_note_candidates_to_read_only_outcomes(half_note_locations))
     outcomes.extend(map_quarter_note_candidates_to_read_only_outcomes(quarter_note_locations))
@@ -299,6 +428,10 @@ def run_recognition_on_file(
 
     if include_left_margin_candidates:
         outcomes.extend(map_left_margin_candidates_to_read_only_outcomes(left_margin_locations))
+
+    if include_flag_beam_candidates:
+        outcomes.extend(map_flag_candidates_to_read_only_outcomes(flag_locations))
+        outcomes.extend(map_beam_candidates_to_read_only_outcomes(beam_locations))
 
     return {
         "source": pdf_path.name,
