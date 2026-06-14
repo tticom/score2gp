@@ -360,6 +360,13 @@ def compose_eighth_note_candidates(outcomes: list[dict]) -> list[dict]:
                     b1[3] < b2[1] - y_margin or
                     b1[1] > b2[3] + y_margin)
 
+    def bboxes_strictly_overlap(b1, b2):
+        # True if bboxes overlap in both dimensions without just touching edges
+        return not (b1[2] <= b2[0] or
+                    b1[0] >= b2[2] or
+                    b1[3] <= b2[1] or
+                    b1[1] >= b2[3])
+
     def bbox_union(b1, b2):
         return [
             min(b1[0], b2[0]),
@@ -367,6 +374,17 @@ def compose_eighth_note_candidates(outcomes: list[dict]) -> list[dict]:
             max(b1[2], b2[2]),
             max(b1[3], b2[3])
         ]
+
+    def is_valid_bbox(bbox):
+        if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
+            return False
+        try:
+            x0, y0, x1, y1 = [float(v) for v in bbox]
+            if x0 > x1 or y0 > y1:
+                return False
+            return True
+        except (TypeError, ValueError):
+            return False
 
     eighth_notes = []
     eighth_idx = 1
@@ -377,18 +395,18 @@ def compose_eighth_note_candidates(outcomes: list[dict]) -> list[dict]:
         q_staff = q.get("staff_index")
         q_bbox = q.get("bbox")
 
-        if q_page is None or q_sys is None or q_staff is None or q_bbox is None:
+        if q_page is None or q_sys is None or q_staff is None or not is_valid_bbox(q_bbox):
             continue
 
         composed = False
 
         # Check flags
         for f in flags:
-            if f.get("page_index") == q_page and f.get("system_index") == q_sys and f.get("staff_index") == q_staff and f.get("bbox") is not None:
-                # Ignore notehead quadrants incorrectly extracted as flag candidates
-                # A real flag will have a significant height (> 10.0)
-                f_bbox = f["bbox"]
-                if f_bbox[3] - f_bbox[1] < 10.0:
+            f_bbox = f.get("bbox")
+            if f.get("page_index") == q_page and f.get("system_index") == q_sys and f.get("staff_index") == q_staff and is_valid_bbox(f_bbox):
+                # Ignore notehead quadrants incorrectly extracted as flag candidates.
+                # A real flag does not strictly overlap the quarter notehead.
+                if bboxes_strictly_overlap(q_bbox, f_bbox):
                     continue
 
                 if bboxes_intersect(q_bbox, f_bbox, x_margin=5.0, y_margin=40.0):
@@ -413,15 +431,16 @@ def compose_eighth_note_candidates(outcomes: list[dict]) -> list[dict]:
 
         # Check beams
         for b in beams:
-            if b.get("page_index") == q_page and b.get("system_index") == q_sys and b.get("staff_index") == q_staff and b.get("bbox") is not None:
-                if bboxes_intersect(q_bbox, b["bbox"], x_margin=5.0, y_margin=40.0):
+            b_bbox = b.get("bbox")
+            if b.get("page_index") == q_page and b.get("system_index") == q_sys and b.get("staff_index") == q_staff and is_valid_bbox(b_bbox):
+                if bboxes_intersect(q_bbox, b_bbox, x_margin=5.0, y_margin=40.0):
                     eighth_notes.append({
                         "candidate_id": f"eighth_note_candidate_{eighth_idx:03d}",
                         "symbol_type": "eighth_note_candidate",
                         "page_index": q_page,
                         "system_index": q_sys,
                         "staff_index": q_staff,
-                        "bbox": bbox_union(q_bbox, b["bbox"]),
+                        "bbox": bbox_union(q_bbox, b_bbox),
                         "source": q.get("source"),
                         "quarter_component_id": q.get("candidate_id"),
                         "modifier_component_id": b.get("candidate_id"),

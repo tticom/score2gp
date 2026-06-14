@@ -362,7 +362,75 @@ def test_compose_eighth_note_candidates_negative_boundaries():
         "bbox": [400.0, 185.0, 410.0, 210.0] # Too far!
     }
 
-    outcomes = [q1, f1, q2, b1, q3, f2]
+    # Notehead quadrant (strictly overlaps quarter notehead)
+    q4 = {
+        "candidate_id": "q4",
+        "symbol_type": "quarter_note_candidate",
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "bbox": [500.0, 210.0, 515.0, 220.0]
+    }
+    f3 = {
+        "candidate_id": "f3",
+        "symbol_type": "flag_candidate",
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "bbox": [500.0, 210.0, 507.5, 215.0] # quadrant inside notehead
+    }
+
+    # Malformed bbox
+    q5 = {
+        "candidate_id": "q5",
+        "symbol_type": "quarter_note_candidate",
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "bbox": [600.0, 185.0] # short bbox
+    }
+    f4 = {
+        "candidate_id": "f4",
+        "symbol_type": "flag_candidate",
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "bbox": [615.0, 185.0, 625.0, 210.0]
+    }
+    q6 = {
+        "candidate_id": "q6",
+        "symbol_type": "quarter_note_candidate",
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "bbox": [700.0, 185.0, 715.0, 220.0]
+    }
+    f5 = {
+        "candidate_id": "f5",
+        "symbol_type": "flag_candidate",
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "bbox": "invalid" # wrong type
+    }
+    q7 = {
+        "candidate_id": "q7",
+        "symbol_type": "quarter_note_candidate",
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "bbox": [815.0, 185.0, 800.0, 220.0] # invalid coordinates x0 > x1
+    }
+    f6 = {
+        "candidate_id": "f6",
+        "symbol_type": "flag_candidate",
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "bbox": [815.0, 185.0, 825.0, 210.0]
+    }
+
+    outcomes = [q1, f1, q2, b1, q3, f2, q4, f3, q5, f4, q6, f5, q7, f6]
     eighths = compose_eighth_note_candidates(outcomes)
 
     assert len(eighths) == 0
