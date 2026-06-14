@@ -86,3 +86,23 @@ def test_note_candidate_recognition_report_x_aligned_cluster_fixture():
 
     x_aligned_clusters = [o for o in outcomes if o["symbol_type"] == "x_aligned_cluster_candidate"]
     assert len(x_aligned_clusters) == 5
+
+def test_note_candidate_recognition_report_left_margin_candidate_fixture():
+    script_path = Path("scripts/note_candidate_recognition_report.py")
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_complex_cluster.pdf")
+
+    assert script_path.exists()
+    assert fixture_path.exists()
+
+    result = subprocess.run(
+        [sys.executable, str(script_path), "--pdf", str(fixture_path), "--json"],
+        capture_output=True,
+        text=True,
+        check=True
+    )
+
+    data = json.loads(result.stdout)
+    outcomes = data["read_only_recognition_outcomes"]
+
+    left_margin_candidates = [o for o in outcomes if o["symbol_type"] == "left_margin_candidate"]
+    assert len(left_margin_candidates) == 1

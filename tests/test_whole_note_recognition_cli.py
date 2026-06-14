@@ -85,5 +85,7 @@ def test_installed_cli_whole_note_recognition_no_x_aligned_clusters(tmp_path):
 
     outcomes = output["read_only_recognition_outcomes"]
     x_aligned_clusters = [o for o in outcomes if o["symbol_type"] == "x_aligned_cluster_candidate"]
-
     assert len(x_aligned_clusters) == 0
+
+    left_margin_candidates = [o for o in outcomes if o["symbol_type"] == "left_margin_candidate"]
+    assert len(left_margin_candidates) == 0
