@@ -51,3 +51,23 @@ def test_installed_cli_note_candidate_recognition_with_half_notes(tmp_path):
         assert "candidate_id" in outcome
         assert "bbox" in outcome
         assert "page_index" in outcome
+
+def test_installed_cli_note_candidate_recognition_with_quarter_notes(tmp_path):
+    # Test that the generic CLI path exposes quarter notes properly
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_quarter_note.pdf")
+
+    cmd = [sys.executable, "-m", "score2gp.cli", "note-candidate-recognition", "--pdf", str(fixture_path), "--json"]
+    result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=_get_subprocess_env())
+
+    output = json.loads(result.stdout)
+    assert output["source"] == fixture_path.name
+
+    outcomes = output["read_only_recognition_outcomes"]
+    quarter_notes = [o for o in outcomes if o["symbol_type"] == "quarter_note_candidate"]
+    assert len(quarter_notes) == 2
+
+    for outcome in quarter_notes:
+        assert outcome["source"] == "diagnostic_candidate_evidence"
+        assert "candidate_id" in outcome
+        assert "bbox" in outcome
+        assert "page_index" in outcome
