@@ -128,3 +128,42 @@ def test_installed_cli_note_candidate_recognition_with_left_margin_candidates(tm
         assert "kind" in outcome
         assert "font_name" in outcome
         assert "font_size" in outcome
+
+def test_installed_cli_note_candidate_recognition_with_flag_beam_candidates(tmp_path):
+    # Test that the generic CLI path exposes flag_candidate and beam_candidate properly
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_complex_cluster.pdf")
+
+    cmd = [sys.executable, "-m", "score2gp.cli", "note-candidate-recognition", "--pdf", str(fixture_path), "--json"]
+    result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=_get_subprocess_env())
+
+    output = json.loads(result.stdout)
+    assert output["source"] == fixture_path.name
+
+    outcomes = output["read_only_recognition_outcomes"]
+    flags = [o for o in outcomes if o["symbol_type"] == "flag_candidate"]
+    beams = [o for o in outcomes if o["symbol_type"] == "beam_candidate"]
+
+    # We expect some beams based on expected_diagnostics_complex_cluster.json
+    assert len(beams) > 0
+
+    for outcome in flags:
+        assert outcome["source"] == "diagnostic_candidate_evidence"
+        assert "candidate_id" in outcome
+        assert outcome["page_index"] == 1
+        assert outcome["system_index"] == 1
+        assert outcome["staff_index"] == 1
+        assert "bbox" in outcome
+        assert "primitive_kind" in outcome
+        assert "width" in outcome
+        assert "height" in outcome
+
+    for outcome in beams:
+        assert outcome["source"] == "diagnostic_candidate_evidence"
+        assert "candidate_id" in outcome
+        assert outcome["page_index"] == 1
+        assert outcome["system_index"] == 1
+        assert outcome["staff_index"] == 1
+        assert "bbox" in outcome
+        assert "primitive_kind" in outcome
+        assert "width" in outcome
+        assert "height" in outcome
