@@ -129,6 +129,34 @@ class StaffLeftMarginAggregateDiagnostics(BaseModel):
     rectangle_candidate_count: int = Field(ge=0)
     evidence: list[PrimitiveGeometryEvidence] | None = None
 
+class FlagPrimitiveCandidateDiagnostics(BaseModel):
+    """
+    Geometric bounding box for a flag-like primitive extracted directly from curves or strokes.
+    """
+    model_config = ConfigDict(frozen=True)
+    bbox: list[float]
+    primitive_kind: str
+    width: float
+    height: float
+
+class BeamPrimitiveCandidateDiagnostics(BaseModel):
+    """
+    Geometric bounding box for a beam-like primitive extracted from non-staff horizontal strokes.
+    """
+    model_config = ConfigDict(frozen=True)
+    bbox: list[float]
+    primitive_kind: str
+    width: float
+    height: float
+
+class StaffFlagBeamCandidateDiagnostics(BaseModel):
+    """
+    Diagnostic wrapper for flag and beam candidates.
+    """
+    model_config = ConfigDict(frozen=True)
+    flags: list[FlagPrimitiveCandidateDiagnostics]
+    beams: list[BeamPrimitiveCandidateDiagnostics]
+
 class NotationStaffDiagnostics(BaseModel):
     """
     Comprehensive geometric diagnostics for a single notation staff.
@@ -143,6 +171,7 @@ class NotationStaffDiagnostics(BaseModel):
     left_margin: StaffLeftMarginAggregateDiagnostics | None = None
     left_margin_candidates: list[LeftMarginPrimitiveCandidate] | None = None
     x_aligned_cluster_candidates: list[XAlignedPrimitiveClusterCandidate] | None = None
+    flag_beam_candidates: StaffFlagBeamCandidateDiagnostics | None = None
 
 class SystemConnectorDiagnostics(BaseModel):
     """

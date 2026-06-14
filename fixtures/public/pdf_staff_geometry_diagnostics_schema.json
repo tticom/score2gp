@@ -1,5 +1,37 @@
 {
   "$defs": {
+    "BeamPrimitiveCandidateDiagnostics": {
+      "description": "Geometric bounding box for a beam-like primitive extracted from non-staff horizontal strokes.",
+      "properties": {
+        "bbox": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Bbox",
+          "type": "array"
+        },
+        "primitive_kind": {
+          "title": "Primitive Kind",
+          "type": "string"
+        },
+        "width": {
+          "title": "Width",
+          "type": "number"
+        },
+        "height": {
+          "title": "Height",
+          "type": "number"
+        }
+      },
+      "required": [
+        "bbox",
+        "primitive_kind",
+        "width",
+        "height"
+      ],
+      "title": "BeamPrimitiveCandidateDiagnostics",
+      "type": "object"
+    },
     "ClusterPrimitiveCountSummary": {
       "description": "Summary of all primitives contained within any x-aligned cluster.\nUseful for asserting total geometric density of clusters.",
       "properties": {
@@ -31,6 +63,38 @@
         "text_spans_total"
       ],
       "title": "ClusterPrimitiveCountSummary",
+      "type": "object"
+    },
+    "FlagPrimitiveCandidateDiagnostics": {
+      "description": "Geometric bounding box for a flag-like primitive extracted directly from curves or strokes.",
+      "properties": {
+        "bbox": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Bbox",
+          "type": "array"
+        },
+        "primitive_kind": {
+          "title": "Primitive Kind",
+          "type": "string"
+        },
+        "width": {
+          "title": "Width",
+          "type": "number"
+        },
+        "height": {
+          "title": "Height",
+          "type": "number"
+        }
+      },
+      "required": [
+        "bbox",
+        "primitive_kind",
+        "width",
+        "height"
+      ],
+      "title": "FlagPrimitiveCandidateDiagnostics",
       "type": "object"
     },
     "HalfNoteCandidateDiagnostics": {
@@ -266,6 +330,17 @@
           ],
           "default": null,
           "title": "X Aligned Cluster Candidates"
+        },
+        "flag_beam_candidates": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StaffFlagBeamCandidateDiagnostics"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -565,6 +640,31 @@
         "aspect_ratio"
       ],
       "title": "QuarterNoteCandidateDiagnostics",
+      "type": "object"
+    },
+    "StaffFlagBeamCandidateDiagnostics": {
+      "description": "Diagnostic wrapper for flag and beam candidates.",
+      "properties": {
+        "flags": {
+          "items": {
+            "$ref": "#/$defs/FlagPrimitiveCandidateDiagnostics"
+          },
+          "title": "Flags",
+          "type": "array"
+        },
+        "beams": {
+          "items": {
+            "$ref": "#/$defs/BeamPrimitiveCandidateDiagnostics"
+          },
+          "title": "Beams",
+          "type": "array"
+        }
+      },
+      "required": [
+        "flags",
+        "beams"
+      ],
+      "title": "StaffFlagBeamCandidateDiagnostics",
       "type": "object"
     },
     "StaffLeftMarginAggregateDiagnostics": {
