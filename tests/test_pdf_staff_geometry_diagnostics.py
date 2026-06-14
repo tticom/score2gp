@@ -961,3 +961,34 @@ def test_extract_flag_beam_candidate_diagnostics() -> None:
     flag = diag.flag_beam_candidates.flags[0]
     assert flag.primitive_kind == "curve"
     assert flag.width == 10.0
+
+
+def test_square_rectangles_not_emitted_as_beams() -> None:
+    group = [
+        _LineSegment(50.0, 100.0, 500.0, 100.0),
+        _LineSegment(50.0, 108.0, 500.0, 108.0),
+        _LineSegment(50.0, 116.0, 500.0, 116.0),
+        _LineSegment(50.0, 124.0, 500.0, 124.0),
+        _LineSegment(50.0, 132.0, 500.0, 132.0),
+    ]
+
+    # Square rectangle (8x8)
+    square_draw = {
+        "rect": (200.0, 80.0, 208.0, 88.0),
+        "items": [
+            ("re", type("MockRect", (), {"x0": 200.0, "y0": 80.0, "x1": 208.0, "y1": 88.0}))
+        ]
+    }
+
+    class MockPage:
+        def get_drawings(self) -> list[dict]:
+            return [square_draw]
+        def get_text(self, kind: str) -> dict | list:
+            return {}
+
+    page = MockPage()
+    notation_diags = build_notation_diagnostics(page, page_index=1, notation_groups=[group])
+    diag = notation_diags.staves[0]
+
+    # flag_beam_candidates should be None because no valid flags or beams were extracted
+    assert diag.flag_beam_candidates is None
