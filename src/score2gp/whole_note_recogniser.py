@@ -129,6 +129,8 @@ def map_whole_note_candidates_to_read_only_outcomes(candidate_locations: list[di
             "candidate_id": cand.get("candidate_id"),
             "bbox": cand.get("bbox"),
             "page_index": cand.get("page_index"),
+            "system_index": cand.get("system_index"),
+            "staff_index": cand.get("staff_index"),
             "source": "diagnostic_candidate_evidence"
         })
     return outcomes
@@ -145,6 +147,8 @@ def map_half_note_candidates_to_read_only_outcomes(candidate_locations: list[dic
             "candidate_id": cand.get("candidate_id"),
             "bbox": cand.get("bbox"),
             "page_index": cand.get("page_index"),
+            "system_index": cand.get("system_index"),
+            "staff_index": cand.get("staff_index"),
             "source": "diagnostic_candidate_evidence"
         })
     return outcomes
@@ -161,6 +165,8 @@ def map_quarter_note_candidates_to_read_only_outcomes(candidate_locations: list[
             "candidate_id": cand.get("candidate_id"),
             "bbox": cand.get("bbox"),
             "page_index": cand.get("page_index"),
+            "system_index": cand.get("system_index"),
+            "staff_index": cand.get("staff_index"),
             "source": "diagnostic_candidate_evidence"
         })
     return outcomes
@@ -302,6 +308,45 @@ def map_beam_candidates_to_read_only_outcomes(candidate_locations: list[dict]) -
         })
     return outcomes
 
+def _associate_staves(shaped_candidates: list[dict], staves: list[dict]) -> None:
+    if not staves:
+        return
+    for cand in shaped_candidates:
+        bbox = cand.get("bbox")
+        if not bbox or len(bbox) < 4:
+            continue
+        c_x0, c_y0, c_x1, c_y1 = bbox
+        c_y = (c_y0 + c_y1) / 2.0
+        best_staff = None
+        best_dist = float('inf')
+        for staff_dict in staves:
+            staff = staff_dict.get("staff", {})
+            if not staff:
+                continue
+            s_y0 = staff.get("y0", 0.0)
+            s_y1 = staff.get("y1", 0.0)
+            s_x0 = staff.get("x0", 0.0)
+            s_x1 = staff.get("x1", 0.0)
+            s_y = (s_y0 + s_y1) / 2.0
+
+            staff_height = s_y1 - s_y0
+            staff_space = staff_height / 4.0 if staff_height > 0 else 10.0
+
+            vertical_margin = 6.0 * staff_space
+            horizontal_margin = 1.0 * staff_space
+
+            vertical_ok = (s_y0 - vertical_margin) <= c_y <= (s_y1 + vertical_margin)
+            horizontal_ok = c_x1 >= (s_x0 - horizontal_margin) and c_x0 <= (s_x1 + horizontal_margin)
+
+            if vertical_ok and horizontal_ok:
+                dist = abs(c_y - s_y)
+                if dist < best_dist:
+                    best_dist = dist
+                    best_staff = staff
+        if best_staff:
+            cand["system_index"] = best_staff.get("system_index")
+            cand["staff_index"] = best_staff.get("staff_index")
+
 def run_recognition_on_file(
     pdf_path,
     include_x_aligned_clusters: bool = False,
@@ -339,12 +384,16 @@ def run_recognition_on_file(
         page = doc[i]
         page_index = i + 1
 
+        page_diags = extract_notation_diagnostics_dict(page, page_index)
+        staves = page_diags.get("staves", [])
+
         whole_cands = _extract_whole_note_candidates(page)
         shaped_whole = shape_whole_note_candidate_evidence(
             whole_cands,
             page_index=page_index,
             start_index=len(whole_note_locations) + 1
         )
+        _associate_staves(shaped_whole, staves)
         whole_note_locations.extend(shaped_whole)
 
         half_cands = _extract_half_note_candidates(page)
@@ -353,6 +402,7 @@ def run_recognition_on_file(
             page_index=page_index,
             start_index=len(half_note_locations) + 1
         )
+        _associate_staves(shaped_half, staves)
         half_note_locations.extend(shaped_half)
 
         quarter_cands = _extract_quarter_note_candidates(page)
@@ -361,11 +411,8 @@ def run_recognition_on_file(
             page_index=page_index,
             start_index=len(quarter_note_locations) + 1
         )
+        _associate_staves(shaped_quarter, staves)
         quarter_note_locations.extend(shaped_quarter)
-
-        page_diags = None
-        if include_x_aligned_clusters or include_left_margin_candidates or include_flag_beam_candidates:
-            page_diags = extract_notation_diagnostics_dict(page, page_index)
 
         if include_x_aligned_clusters:
             x_aligned_cands = []
