@@ -98,3 +98,33 @@ def test_installed_cli_note_candidate_recognition_with_x_aligned_clusters(tmp_pa
         assert "x1" in outcome
         assert "primitive_count" in outcome
         assert "primitives" in outcome
+
+def test_installed_cli_note_candidate_recognition_with_left_margin_candidates(tmp_path):
+    # Test that the generic CLI path exposes left_margin_candidates properly
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_complex_cluster.pdf")
+
+    cmd = [sys.executable, "-m", "score2gp.cli", "note-candidate-recognition", "--pdf", str(fixture_path), "--json"]
+    result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=_get_subprocess_env())
+
+    output = json.loads(result.stdout)
+    assert output["source"] == fixture_path.name
+
+    outcomes = output["read_only_recognition_outcomes"]
+    left_margin_candidates = [o for o in outcomes if o["symbol_type"] == "left_margin_candidate"]
+
+    # We expect 1 left margin candidate based on expected_diagnostics_complex_cluster.json
+    assert len(left_margin_candidates) == 1
+
+    for outcome in left_margin_candidates:
+        assert outcome["source"] == "diagnostic_candidate_evidence"
+        assert "candidate_id" in outcome
+        assert "page_index" in outcome
+        assert "system_index" in outcome
+        assert "staff_index" in outcome
+        assert "x0" in outcome
+        assert "y0" in outcome
+        assert "x1" in outcome
+        assert "y1" in outcome
+        assert "kind" in outcome
+        assert "font_name" in outcome
+        assert "font_size" in outcome

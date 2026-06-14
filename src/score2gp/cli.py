@@ -197,7 +197,11 @@ def note_candidate_recognition_command(
 ) -> None:
     """Expose generic read-only note-candidate recognition outcomes."""
     from .whole_note_recogniser import run_recognition_on_file
-    res = run_recognition_on_file(pdf, include_x_aligned_clusters=True)
+    res = run_recognition_on_file(
+        pdf,
+        include_x_aligned_clusters=True,
+        include_left_margin_candidates=True
+    )
     if not res:
         raise typer.Exit(1)
 
