@@ -13,7 +13,10 @@ from .pdf_staff_geometry import (
     XAlignedPrimitiveClusterEvidence,
     WholeNoteCandidateDiagnostics,
     HalfNoteCandidateDiagnostics,
-    QuarterNoteCandidateDiagnostics
+    QuarterNoteCandidateDiagnostics,
+    FlagPrimitiveCandidateDiagnostics,
+    BeamPrimitiveCandidateDiagnostics,
+    StaffFlagBeamCandidateDiagnostics
 )
 from dataclasses import dataclass
 import statistics
@@ -601,6 +604,48 @@ def build_notation_diagnostics(
                 evidence=margin_evidence_list
             )
 
+        flag_candidates = []
+        beam_candidates = []
+        if staff_space > 0.0:
+            for p in primitives_for_clustering:
+                if p.type in ("curve", "diagonal_stroke_candidate"):
+                    w = abs(p.x1 - p.x0)
+                    h = abs(p.y1 - p.y0)
+                    if h < 4.0 * staff_space and w < 3.0 * staff_space:
+                        flag_candidates.append(FlagPrimitiveCandidateDiagnostics(
+                            bbox=[round(p.x0, 3), round(p.y0, 3), round(p.x1, 3), round(p.y1, 3)],
+                            primitive_kind=p.type,
+                            width=round(w, 3),
+                            height=round(h, 3)
+                        ))
+                elif p.type == "non_staff_horizontal":
+                    w = abs(p.x1 - p.x0)
+                    h = abs(p.y1 - p.y0)
+                    if w >= 0.5 * staff_space:
+                        beam_candidates.append(BeamPrimitiveCandidateDiagnostics(
+                            bbox=[round(p.x0, 3), round(p.y0, 3), round(p.x1, 3), round(p.y1, 3)],
+                            primitive_kind=p.type,
+                            width=round(w, 3),
+                            height=round(h, 3)
+                        ))
+                elif p.type == "rect":
+                    w = abs(p.x1 - p.x0)
+                    h = abs(p.y1 - p.y0)
+                    if h > 0 and (w / h) >= 3.0 and h <= 1.5 * staff_space and w >= 0.5 * staff_space:
+                        beam_candidates.append(BeamPrimitiveCandidateDiagnostics(
+                            bbox=[round(p.x0, 3), round(p.y0, 3), round(p.x1, 3), round(p.y1, 3)],
+                            primitive_kind=p.type,
+                            width=round(w, 3),
+                            height=round(h, 3)
+                        ))
+
+        flag_beam_diags = None
+        if flag_candidates or beam_candidates:
+            flag_beam_diags = StaffFlagBeamCandidateDiagnostics(
+                flags=flag_candidates,
+                beams=beam_candidates
+            )
+
         # --- Candidate extraction (read-only, supplementary) ---
         left_margin_candidates = None
         x_aligned_cluster_candidates = None
@@ -624,6 +669,7 @@ def build_notation_diagnostics(
                 left_margin=left_margin_diags,
                 left_margin_candidates=left_margin_candidates,
                 x_aligned_cluster_candidates=x_aligned_cluster_candidates,
+                flag_beam_candidates=flag_beam_diags,
             )
         )
 

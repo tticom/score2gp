@@ -370,7 +370,23 @@
             }
           ]
         }
-      ]
+      ],
+      "flag_beam_candidates": {
+        "flags": [],
+        "beams": [
+          {
+            "bbox": [
+              298.0,
+              94.0,
+              310.0,
+              94.0
+            ],
+            "primitive_kind": "non_staff_horizontal",
+            "width": 12.0,
+            "height": 0.0
+          }
+        ]
+      }
     }
   ],
   "system_connectors": [],
