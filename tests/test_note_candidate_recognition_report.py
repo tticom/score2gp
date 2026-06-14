@@ -128,3 +128,13 @@ def test_note_candidate_recognition_report_flag_beam_candidates():
     beams = [o for o in outcomes if o["symbol_type"] == "beam_candidate"]
 
     assert len(beams) > 0
+
+    for outcome in flags:
+        assert outcome["page_index"] == 1
+        assert outcome["system_index"] == 1
+        assert outcome["staff_index"] == 1
+
+    for outcome in beams:
+        assert outcome["page_index"] == 1
+        assert outcome["system_index"] == 1
+        assert outcome["staff_index"] == 1
