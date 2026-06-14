@@ -99,6 +99,19 @@ def test_note_candidate_recognition_report_eighth_note_fixture():
     flags = [o for o in outcomes if o["symbol_type"] == "flag_candidate"]
     assert len(flags) > 0
 
+    explicit_flag_found = False
+    for f in flags:
+        bbox = f["bbox"]
+        # Intended explicit wide-curve flag is at x=115..125, y=185..210.
+        # Allow +/- 5 margin for pdf bounds extraction rounding.
+        # Y must be < 210 to avoid accepting lower notehead quadrants which sit at y=210..220.
+        if (110.0 <= bbox[0] and bbox[2] <= 130.0 and
+            180.0 <= bbox[1] and bbox[3] <= 215.0 and
+            (bbox[3] - bbox[1]) >= 15.0): # must have height similar to the full stem/flag (25)
+            explicit_flag_found = True
+            break
+    assert explicit_flag_found, "Intended explicit flag bbox not found"
+
     beams = [o for o in outcomes if o["symbol_type"] == "beam_candidate"]
     assert len(beams) > 0
 
