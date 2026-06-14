@@ -260,8 +260,11 @@ def run_recognition_on_file(
         )
         quarter_note_locations.extend(shaped_quarter)
 
-        if include_x_aligned_clusters:
+        page_diags = None
+        if include_x_aligned_clusters or include_left_margin_candidates:
             page_diags = extract_notation_diagnostics_dict(page, page_index)
+
+        if include_x_aligned_clusters:
             x_aligned_cands = []
             for staff in page_diags.get("staves", []):
                 if staff.get("x_aligned_cluster_candidates"):
@@ -275,7 +278,6 @@ def run_recognition_on_file(
             x_aligned_cluster_locations.extend(shaped_x_aligned)
 
         if include_left_margin_candidates:
-            page_diags = extract_notation_diagnostics_dict(page, page_index)
             left_margin_cands = []
             for staff in page_diags.get("staves", []):
                 if staff.get("left_margin_candidates"):
