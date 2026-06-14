@@ -347,6 +347,92 @@ def _associate_staves(shaped_candidates: list[dict], staves: list[dict]) -> None
             cand["system_index"] = best_staff.get("system_index")
             cand["staff_index"] = best_staff.get("staff_index")
 
+def compose_eighth_note_candidates(outcomes: list[dict]) -> list[dict]:
+    quarters = [o for o in outcomes if o.get("symbol_type") == "quarter_note_candidate"]
+    flags = [o for o in outcomes if o.get("symbol_type") == "flag_candidate"]
+    beams = [o for o in outcomes if o.get("symbol_type") == "beam_candidate"]
+
+    def bboxes_intersect(b1, b2, x_margin=5.0, y_margin=40.0):
+        # We need a large vertical margin to allow the beam to connect to the quarter notehead
+        # across the height of the stem. Stem is roughly 30-35 points.
+        return not (b1[2] < b2[0] - x_margin or
+                    b1[0] > b2[2] + x_margin or
+                    b1[3] < b2[1] - y_margin or
+                    b1[1] > b2[3] + y_margin)
+
+    def bbox_union(b1, b2):
+        return [
+            min(b1[0], b2[0]),
+            min(b1[1], b2[1]),
+            max(b1[2], b2[2]),
+            max(b1[3], b2[3])
+        ]
+
+    eighth_notes = []
+    eighth_idx = 1
+
+    for q in quarters:
+        q_page = q.get("page_index")
+        q_sys = q.get("system_index")
+        q_staff = q.get("staff_index")
+        q_bbox = q.get("bbox")
+
+        if q_page is None or q_sys is None or q_staff is None or q_bbox is None:
+            continue
+
+        composed = False
+
+        # Check flags
+        for f in flags:
+            if f.get("page_index") == q_page and f.get("system_index") == q_sys and f.get("staff_index") == q_staff and f.get("bbox") is not None:
+                # Ignore notehead quadrants incorrectly extracted as flag candidates
+                # A real flag will have a significant height (> 10.0)
+                f_bbox = f["bbox"]
+                if f_bbox[3] - f_bbox[1] < 10.0:
+                    continue
+
+                if bboxes_intersect(q_bbox, f_bbox, x_margin=5.0, y_margin=40.0):
+                    eighth_notes.append({
+                        "candidate_id": f"eighth_note_candidate_{eighth_idx:03d}",
+                        "symbol_type": "eighth_note_candidate",
+                        "page_index": q_page,
+                        "system_index": q_sys,
+                        "staff_index": q_staff,
+                        "bbox": bbox_union(q_bbox, f_bbox),
+                        "source": q.get("source"),
+                        "quarter_component_id": q.get("candidate_id"),
+                        "modifier_component_id": f.get("candidate_id"),
+                        "modifier_type": "flag_candidate"
+                    })
+                    eighth_idx += 1
+                    composed = True
+                    break
+
+        if composed:
+            continue
+
+        # Check beams
+        for b in beams:
+            if b.get("page_index") == q_page and b.get("system_index") == q_sys and b.get("staff_index") == q_staff and b.get("bbox") is not None:
+                if bboxes_intersect(q_bbox, b["bbox"], x_margin=5.0, y_margin=40.0):
+                    eighth_notes.append({
+                        "candidate_id": f"eighth_note_candidate_{eighth_idx:03d}",
+                        "symbol_type": "eighth_note_candidate",
+                        "page_index": q_page,
+                        "system_index": q_sys,
+                        "staff_index": q_staff,
+                        "bbox": bbox_union(q_bbox, b["bbox"]),
+                        "source": q.get("source"),
+                        "quarter_component_id": q.get("candidate_id"),
+                        "modifier_component_id": b.get("candidate_id"),
+                        "modifier_type": "beam_candidate"
+                    })
+                    eighth_idx += 1
+                    composed = True
+                    break
+
+    return eighth_notes
+
 def run_recognition_on_file(
     pdf_path,
     include_x_aligned_clusters: bool = False,
@@ -483,6 +569,9 @@ def run_recognition_on_file(
     if include_flag_beam_candidates:
         outcomes.extend(map_flag_candidates_to_read_only_outcomes(flag_locations))
         outcomes.extend(map_beam_candidates_to_read_only_outcomes(beam_locations))
+
+        eighth_notes = compose_eighth_note_candidates(outcomes)
+        outcomes.extend(eighth_notes)
 
     return {
         "source": pdf_path.name,
