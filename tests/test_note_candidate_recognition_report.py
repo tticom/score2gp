@@ -76,6 +76,37 @@ def test_note_candidate_recognition_report_quarter_note_fixture():
         assert cand["system_index"] is not None
         assert cand["staff_index"] is not None
 
+def test_note_candidate_recognition_report_eighth_note_fixture():
+    script_path = Path("scripts/note_candidate_recognition_report.py")
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_eighth_notes.pdf")
+
+    assert script_path.exists()
+    assert fixture_path.exists()
+
+    result = subprocess.run(
+        [sys.executable, str(script_path), "--pdf", str(fixture_path), "--json"],
+        capture_output=True,
+        text=True,
+        check=True
+    )
+
+    data = json.loads(result.stdout)
+    outcomes = data["read_only_recognition_outcomes"]
+
+    quarter_notes = [o for o in outcomes if o["symbol_type"] == "quarter_note_candidate"]
+    assert len(quarter_notes) >= 3
+
+    flags = [o for o in outcomes if o["symbol_type"] == "flag_candidate"]
+    assert len(flags) > 0
+
+    beams = [o for o in outcomes if o["symbol_type"] == "beam_candidate"]
+    assert len(beams) > 0
+
+    for cand in quarter_notes + flags + beams:
+        assert cand["system_index"] is not None
+        assert cand["staff_index"] is not None
+        assert cand["bbox"] is not None
+
 def test_note_candidate_recognition_report_x_aligned_cluster_fixture():
     script_path = Path("scripts/note_candidate_recognition_report.py")
     fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_complex_cluster.pdf")
