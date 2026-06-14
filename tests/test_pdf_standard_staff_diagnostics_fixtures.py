@@ -179,6 +179,26 @@ def test_generated_dense_margin_fixture(tmp_path) -> None:
     assert lm["distinct_font_count"] == 1
     assert lm["max_text_spans_for_single_font"] >= 6
 
+def test_quarter_note_candidate_diagnostics() -> None:
+    import fitz
+    from pathlib import Path
+    from score2gp.pdf_staff_notation_diagnostics import extract_notation_diagnostics_dict
+
+    pdf_path = Path(__file__).parent / "fixtures" / "pdf" / "generated_standard_staff_quarter_note.pdf"
+    assert pdf_path.exists(), f"Missing fixture: {pdf_path}"
+
+    with fitz.open(pdf_path) as doc:
+        page = doc[0]
+        diags = extract_notation_diagnostics_dict(page, 1)
+
+    cands = diags.get("quarter_note_candidates", [])
+    assert cands is not None
+    assert len(cands) == 2
+    assert cands[0]["aspect_ratio"] >= 1.2
+    assert cands[0]["width"] > 0
+    assert cands[0]["height"] > 0
+
+
 def test_generated_sparse_fixture(tmp_path) -> None:
     from score2gp.pdf import inspect_pdf
     from pathlib import Path

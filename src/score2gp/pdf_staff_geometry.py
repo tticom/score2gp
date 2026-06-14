@@ -173,6 +173,7 @@ class PdfStaffNotationGeometryDiagnostics(BaseModel):
     system_connectors: list[SystemConnectorDiagnostics] | None = None
     whole_note_candidates: list[WholeNoteCandidateDiagnostics] | None = None
     half_note_candidates: list[HalfNoteCandidateDiagnostics] | None = None
+    quarter_note_candidates: list[QuarterNoteCandidateDiagnostics] | None = None
     status: str | None = "success"
 
 class HalfNoteCandidateDiagnostics(BaseModel):
@@ -191,6 +192,18 @@ class WholeNoteCandidateDiagnostics(BaseModel):
     """
     Candidate whole-note bounding box extracted directly from vector shapes, independent of
     semantic staff processing. Follows proportional heuristics to exclude stems.
+    """
+    model_config = ConfigDict(frozen=True)
+
+    bbox: list[float]
+    width: float
+    height: float
+    aspect_ratio: float
+
+class QuarterNoteCandidateDiagnostics(BaseModel):
+    """
+    Candidate quarter-note bounding box extracted directly from vector shapes, independent of
+    semantic staff processing. Follows proportional heuristics to require a filled notehead with a stem.
     """
     model_config = ConfigDict(frozen=True)
 

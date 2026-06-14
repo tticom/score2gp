@@ -12,15 +12,17 @@ from .pdf_staff_geometry import (
     PrimitiveGeometryEvidence,
     XAlignedPrimitiveClusterEvidence,
     WholeNoteCandidateDiagnostics,
-    HalfNoteCandidateDiagnostics
+    HalfNoteCandidateDiagnostics,
+    QuarterNoteCandidateDiagnostics
 )
 from dataclasses import dataclass
 import statistics
 from .pdf_geometry_candidate_extractor import PdfGeometryCandidateExtractor
 
-def _extract_note_candidates(page: Any) -> tuple[list[WholeNoteCandidateDiagnostics], list[HalfNoteCandidateDiagnostics]]:
+def _extract_note_candidates(page: Any) -> tuple[list[WholeNoteCandidateDiagnostics], list[HalfNoteCandidateDiagnostics], list[QuarterNoteCandidateDiagnostics]]:
     whole_candidates = []
     half_candidates = []
+    quarter_candidates = []
     drawings = page.get_drawings()
 
     vertical_lines = []
@@ -62,18 +64,18 @@ def _extract_note_candidates(page: Any) -> tuple[list[WholeNoteCandidateDiagnost
 
         if 1.2 <= aspect <= 2.0 and c_count >= 2:
             is_hollow = not draw.get("fill")
-            if is_hollow:
-                has_stem = False
-                margin_x = 3.0
-                margin_y = 5.0
-                for line in vertical_lines:
-                    near_left = abs(line["x0"] - x0) <= margin_x
-                    near_right = abs(line["x0"] - x1) <= margin_x
-                    if near_left or near_right:
-                        if not (line["y1"] < y0 - margin_y or line["y0"] > y1 + margin_y):
-                            has_stem = True
-                            break
+            has_stem = False
+            margin_x = 3.0
+            margin_y = 5.0
+            for line in vertical_lines:
+                near_left = abs(line["x0"] - x0) <= margin_x
+                near_right = abs(line["x0"] - x1) <= margin_x
+                if near_left or near_right:
+                    if not (line["y1"] < y0 - margin_y or line["y0"] > y1 + margin_y):
+                        has_stem = True
+                        break
 
+            if is_hollow:
                 if not has_stem:
                     whole_candidates.append(WholeNoteCandidateDiagnostics(
                         bbox=[round(x0, 3), round(y0, 3), round(x1, 3), round(y1, 3)],
@@ -88,13 +90,24 @@ def _extract_note_candidates(page: Any) -> tuple[list[WholeNoteCandidateDiagnost
                         height=round(h, 3),
                         aspect_ratio=round(aspect, 3)
                     ))
-    return whole_candidates, half_candidates
+            else:
+                if has_stem:
+                    quarter_candidates.append(QuarterNoteCandidateDiagnostics(
+                        bbox=[round(x0, 3), round(y0, 3), round(x1, 3), round(y1, 3)],
+                        width=round(w, 3),
+                        height=round(h, 3),
+                        aspect_ratio=round(aspect, 3)
+                    ))
+    return whole_candidates, half_candidates, quarter_candidates
 
 def _extract_whole_note_candidates(page: Any) -> list[WholeNoteCandidateDiagnostics]:
     return _extract_note_candidates(page)[0]
 
 def _extract_half_note_candidates(page: Any) -> list[HalfNoteCandidateDiagnostics]:
     return _extract_note_candidates(page)[1]
+
+def _extract_quarter_note_candidates(page: Any) -> list[QuarterNoteCandidateDiagnostics]:
+    return _extract_note_candidates(page)[2]
 
 @dataclass(frozen=True)
 class PrimitiveGeometry:
@@ -619,7 +632,8 @@ def build_notation_diagnostics(
         staves=staves_diags,
         system_connectors=system_connectors,
         whole_note_candidates=notes[0],
-        half_note_candidates=notes[1]
+        half_note_candidates=notes[1],
+        quarter_note_candidates=notes[2]
     )
 
 
