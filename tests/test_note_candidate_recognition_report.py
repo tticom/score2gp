@@ -103,6 +103,7 @@ def test_note_candidate_recognition_report_eighth_note_fixture():
     assert len(beams) > 0
 
     for cand in quarter_notes + flags + beams:
+        assert cand["page_index"] is not None
         assert cand["system_index"] is not None
         assert cand["staff_index"] is not None
         assert cand["bbox"] is not None
