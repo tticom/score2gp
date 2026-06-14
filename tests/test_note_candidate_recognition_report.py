@@ -121,6 +121,22 @@ def test_note_candidate_recognition_report_eighth_note_fixture():
         assert cand["staff_index"] is not None
         assert cand["bbox"] is not None
 
+    eighth_notes = [o for o in outcomes if o["symbol_type"] == "eighth_note_candidate"]
+    assert len(eighth_notes) >= 3
+
+    flagged = [e for e in eighth_notes if e["modifier_type"] == "flag_candidate"]
+    beamed = [e for e in eighth_notes if e["modifier_type"] == "beam_candidate"]
+
+    assert len(flagged) >= 1
+    assert len(beamed) >= 2
+
+    for cand in eighth_notes:
+        assert cand["page_index"] == 1
+        assert cand["system_index"] is not None
+        assert cand["staff_index"] is not None
+        assert cand["quarter_component_id"] is not None
+        assert cand["modifier_component_id"] is not None
+
 def test_note_candidate_recognition_report_x_aligned_cluster_fixture():
     script_path = Path("scripts/note_candidate_recognition_report.py")
     fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_complex_cluster.pdf")
@@ -223,3 +239,198 @@ def test_associate_staves_horizontal_boundary():
     assert cand_outside_left.get("staff_index") is None
     assert cand_outside_right.get("system_index") is None
     assert cand_outside_right.get("staff_index") is None
+
+def test_compose_eighth_note_candidates_positive_boundaries():
+    from score2gp.whole_note_recogniser import compose_eighth_note_candidates
+
+    # Matching staff, page, system, and touching bbox
+    q1 = {
+        "candidate_id": "q1",
+        "symbol_type": "quarter_note_candidate",
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "bbox": [100.0, 185.0, 115.0, 220.0],
+        "source": "test"
+    }
+    f1 = {
+        "candidate_id": "f1",
+        "symbol_type": "flag_candidate",
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "bbox": [115.0, 185.0, 125.0, 210.0]
+    }
+
+    # Beam touches multiple quarters
+    q2 = {
+        "candidate_id": "q2",
+        "symbol_type": "quarter_note_candidate",
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "bbox": [200.0, 185.0, 215.0, 220.0],
+        "source": "test"
+    }
+    q3 = {
+        "candidate_id": "q3",
+        "symbol_type": "quarter_note_candidate",
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "bbox": [250.0, 185.0, 265.0, 220.0],
+        "source": "test"
+    }
+    b1 = {
+        "candidate_id": "b1",
+        "symbol_type": "beam_candidate",
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "bbox": [215.0, 185.0, 265.0, 190.0]
+    }
+
+    outcomes = [q1, q2, q3, f1, b1]
+    eighths = compose_eighth_note_candidates(outcomes)
+
+    assert len(eighths) == 3
+
+    flagged = [e for e in eighths if e["modifier_type"] == "flag_candidate"]
+    assert len(flagged) == 1
+    assert flagged[0]["quarter_component_id"] == "q1"
+    assert flagged[0]["modifier_component_id"] == "f1"
+
+    beamed = [e for e in eighths if e["modifier_type"] == "beam_candidate"]
+    assert len(beamed) == 2
+    assert beamed[0]["quarter_component_id"] == "q2"
+    assert beamed[1]["quarter_component_id"] == "q3"
+
+def test_compose_eighth_note_candidates_negative_boundaries():
+    from score2gp.whole_note_recogniser import compose_eighth_note_candidates
+
+    # Different staff
+    q1 = {
+        "candidate_id": "q1",
+        "symbol_type": "quarter_note_candidate",
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "bbox": [100.0, 185.0, 115.0, 220.0]
+    }
+    f1 = {
+        "candidate_id": "f1",
+        "symbol_type": "flag_candidate",
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 2, # Different staff
+        "bbox": [115.0, 185.0, 125.0, 210.0]
+    }
+
+    # Different page
+    q2 = {
+        "candidate_id": "q2",
+        "symbol_type": "quarter_note_candidate",
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "bbox": [200.0, 185.0, 215.0, 220.0]
+    }
+    b1 = {
+        "candidate_id": "b1",
+        "symbol_type": "beam_candidate",
+        "page_index": 2, # Different page
+        "system_index": 1,
+        "staff_index": 1,
+        "bbox": [215.0, 185.0, 265.0, 190.0]
+    }
+
+    # Missing bbox logic (too loose relationship)
+    q3 = {
+        "candidate_id": "q3",
+        "symbol_type": "quarter_note_candidate",
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "bbox": [300.0, 185.0, 315.0, 220.0]
+    }
+    f2 = {
+        "candidate_id": "f2",
+        "symbol_type": "flag_candidate",
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "bbox": [400.0, 185.0, 410.0, 210.0] # Too far!
+    }
+
+    # Notehead quadrant (strictly overlaps quarter notehead)
+    q4 = {
+        "candidate_id": "q4",
+        "symbol_type": "quarter_note_candidate",
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "bbox": [500.0, 210.0, 515.0, 220.0]
+    }
+    f3 = {
+        "candidate_id": "f3",
+        "symbol_type": "flag_candidate",
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "bbox": [500.0, 210.0, 507.5, 215.0] # quadrant inside notehead
+    }
+
+    # Malformed bbox
+    q5 = {
+        "candidate_id": "q5",
+        "symbol_type": "quarter_note_candidate",
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "bbox": [600.0, 185.0] # short bbox
+    }
+    f4 = {
+        "candidate_id": "f4",
+        "symbol_type": "flag_candidate",
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "bbox": [615.0, 185.0, 625.0, 210.0]
+    }
+    q6 = {
+        "candidate_id": "q6",
+        "symbol_type": "quarter_note_candidate",
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "bbox": [700.0, 185.0, 715.0, 220.0]
+    }
+    f5 = {
+        "candidate_id": "f5",
+        "symbol_type": "flag_candidate",
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "bbox": "invalid" # wrong type
+    }
+    q7 = {
+        "candidate_id": "q7",
+        "symbol_type": "quarter_note_candidate",
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "bbox": [815.0, 185.0, 800.0, 220.0] # invalid coordinates x0 > x1
+    }
+    f6 = {
+        "candidate_id": "f6",
+        "symbol_type": "flag_candidate",
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "bbox": [815.0, 185.0, 825.0, 210.0]
+    }
+
+    outcomes = [q1, f1, q2, b1, q3, f2, q4, f3, q5, f4, q6, f5, q7, f6]
+    eighths = compose_eighth_note_candidates(outcomes)
+
+    assert len(eighths) == 0
