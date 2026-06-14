@@ -261,7 +261,8 @@
             }
           ]
         }
-      ]
+      ],
+      "flag_beam_candidates": null
     }
   ],
   "system_connectors": [],
