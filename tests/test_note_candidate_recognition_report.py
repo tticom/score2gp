@@ -76,6 +76,51 @@ def test_note_candidate_recognition_report_quarter_note_fixture():
         assert cand["system_index"] is not None
         assert cand["staff_index"] is not None
 
+def test_note_candidate_recognition_report_eighth_note_fixture():
+    script_path = Path("scripts/note_candidate_recognition_report.py")
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_eighth_notes.pdf")
+
+    assert script_path.exists()
+    assert fixture_path.exists()
+
+    result = subprocess.run(
+        [sys.executable, str(script_path), "--pdf", str(fixture_path), "--json"],
+        capture_output=True,
+        text=True,
+        check=True
+    )
+
+    data = json.loads(result.stdout)
+    outcomes = data["read_only_recognition_outcomes"]
+
+    quarter_notes = [o for o in outcomes if o["symbol_type"] == "quarter_note_candidate"]
+    assert len(quarter_notes) >= 3
+
+    flags = [o for o in outcomes if o["symbol_type"] == "flag_candidate"]
+    assert len(flags) > 0
+
+    explicit_flag_found = False
+    for f in flags:
+        bbox = f["bbox"]
+        # Intended explicit wide-curve flag is at x=115..125, y=185..210.
+        # Allow +/- 5 margin for pdf bounds extraction rounding.
+        # Y must be < 210 to avoid accepting lower notehead quadrants which sit at y=210..220.
+        if (110.0 <= bbox[0] and bbox[2] <= 130.0 and
+            180.0 <= bbox[1] and bbox[3] <= 215.0 and
+            (bbox[3] - bbox[1]) >= 15.0): # must have height similar to the full stem/flag (25)
+            explicit_flag_found = True
+            break
+    assert explicit_flag_found, "Intended explicit flag bbox not found"
+
+    beams = [o for o in outcomes if o["symbol_type"] == "beam_candidate"]
+    assert len(beams) > 0
+
+    for cand in quarter_notes + flags + beams:
+        assert cand["page_index"] is not None
+        assert cand["system_index"] is not None
+        assert cand["staff_index"] is not None
+        assert cand["bbox"] is not None
+
 def test_note_candidate_recognition_report_x_aligned_cluster_fixture():
     script_path = Path("scripts/note_candidate_recognition_report.py")
     fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_complex_cluster.pdf")
