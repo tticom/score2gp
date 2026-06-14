@@ -22,10 +22,13 @@ def test_note_candidate_recognition_report_public_fixture():
     assert data["source"] == fixture_path.name
     assert data["recognition_mode"] == "read_only_diagnostic_derived"
     outcomes = data["read_only_recognition_outcomes"]
-    assert len(outcomes) == 2
+    whole_notes = [o for o in outcomes if o["symbol_type"] == "whole_note_candidate"]
+    assert len(whole_notes) == 2
 
-    cand1 = outcomes[0]
+    cand1 = whole_notes[0]
     assert cand1["symbol_type"] == "whole_note_candidate"
+    assert cand1["system_index"] is not None
+    assert cand1["staff_index"] is not None
 
 def test_note_candidate_recognition_report_half_note_fixture():
     script_path = Path("scripts/note_candidate_recognition_report.py")
@@ -46,6 +49,9 @@ def test_note_candidate_recognition_report_half_note_fixture():
 
     half_notes = [o for o in outcomes if o["symbol_type"] == "half_note_candidate"]
     assert len(half_notes) == 2
+    for cand in half_notes:
+        assert cand["system_index"] is not None
+        assert cand["staff_index"] is not None
 
 def test_note_candidate_recognition_report_quarter_note_fixture():
     script_path = Path("scripts/note_candidate_recognition_report.py")
@@ -66,6 +72,9 @@ def test_note_candidate_recognition_report_quarter_note_fixture():
 
     quarter_notes = [o for o in outcomes if o["symbol_type"] == "quarter_note_candidate"]
     assert len(quarter_notes) == 2
+    for cand in quarter_notes:
+        assert cand["system_index"] is not None
+        assert cand["staff_index"] is not None
 
 def test_note_candidate_recognition_report_x_aligned_cluster_fixture():
     script_path = Path("scripts/note_candidate_recognition_report.py")

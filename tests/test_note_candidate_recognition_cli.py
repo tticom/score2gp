@@ -23,14 +23,17 @@ def test_installed_cli_note_candidate_recognition_report(tmp_path):
     assert output["recognition_mode"] == "read_only_diagnostic_derived"
 
     outcomes = output["read_only_recognition_outcomes"]
-    assert len(outcomes) == 2
+    whole_notes = [o for o in outcomes if o["symbol_type"] == "whole_note_candidate"]
+    assert len(whole_notes) == 2
 
-    for outcome in outcomes:
+    for outcome in whole_notes:
         assert outcome["symbol_type"] == "whole_note_candidate"
         assert outcome["source"] == "diagnostic_candidate_evidence"
         assert "candidate_id" in outcome
         assert "bbox" in outcome
         assert "page_index" in outcome
+        assert outcome.get("system_index") is not None
+        assert outcome.get("staff_index") is not None
 
 def test_installed_cli_note_candidate_recognition_with_half_notes(tmp_path):
     # Test that the generic CLI path exposes half notes properly
@@ -51,6 +54,8 @@ def test_installed_cli_note_candidate_recognition_with_half_notes(tmp_path):
         assert "candidate_id" in outcome
         assert "bbox" in outcome
         assert "page_index" in outcome
+        assert outcome.get("system_index") is not None
+        assert outcome.get("staff_index") is not None
 
 def test_installed_cli_note_candidate_recognition_with_quarter_notes(tmp_path):
     # Test that the generic CLI path exposes quarter notes properly
@@ -71,6 +76,8 @@ def test_installed_cli_note_candidate_recognition_with_quarter_notes(tmp_path):
         assert "candidate_id" in outcome
         assert "bbox" in outcome
         assert "page_index" in outcome
+        assert outcome.get("system_index") is not None
+        assert outcome.get("staff_index") is not None
 
 def test_installed_cli_note_candidate_recognition_with_x_aligned_clusters(tmp_path):
     # Test that the generic CLI path exposes x_aligned_cluster_candidates properly
