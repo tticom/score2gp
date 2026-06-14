@@ -31,6 +31,8 @@ def test_installed_cli_whole_note_recognition_report(tmp_path):
         assert "candidate_id" in outcome
         assert "bbox" in outcome
         assert "page_index" in outcome
+        assert outcome.get("system_index") is not None
+        assert outcome.get("staff_index") is not None
 
 def test_installed_cli_whole_note_recognition_nested_path_sanitisation(tmp_path):
     import shutil
@@ -72,6 +74,8 @@ def test_installed_cli_recognition_report_with_half_notes(tmp_path):
         assert "candidate_id" in outcome
         assert "bbox" in outcome
         assert "page_index" in outcome
+        assert outcome.get("system_index") is not None
+        assert outcome.get("staff_index") is not None
 
 def test_installed_cli_whole_note_recognition_no_x_aligned_clusters(tmp_path):
     # Test that the legacy CLI path DOES NOT expose x_aligned_cluster_candidates

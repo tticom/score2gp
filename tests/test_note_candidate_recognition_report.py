@@ -22,10 +22,13 @@ def test_note_candidate_recognition_report_public_fixture():
     assert data["source"] == fixture_path.name
     assert data["recognition_mode"] == "read_only_diagnostic_derived"
     outcomes = data["read_only_recognition_outcomes"]
-    assert len(outcomes) == 2
+    whole_notes = [o for o in outcomes if o["symbol_type"] == "whole_note_candidate"]
+    assert len(whole_notes) == 2
 
-    cand1 = outcomes[0]
+    cand1 = whole_notes[0]
     assert cand1["symbol_type"] == "whole_note_candidate"
+    assert cand1["system_index"] is not None
+    assert cand1["staff_index"] is not None
 
 def test_note_candidate_recognition_report_half_note_fixture():
     script_path = Path("scripts/note_candidate_recognition_report.py")
@@ -46,6 +49,9 @@ def test_note_candidate_recognition_report_half_note_fixture():
 
     half_notes = [o for o in outcomes if o["symbol_type"] == "half_note_candidate"]
     assert len(half_notes) == 2
+    for cand in half_notes:
+        assert cand["system_index"] is not None
+        assert cand["staff_index"] is not None
 
 def test_note_candidate_recognition_report_quarter_note_fixture():
     script_path = Path("scripts/note_candidate_recognition_report.py")
@@ -66,6 +72,9 @@ def test_note_candidate_recognition_report_quarter_note_fixture():
 
     quarter_notes = [o for o in outcomes if o["symbol_type"] == "quarter_note_candidate"]
     assert len(quarter_notes) == 2
+    for cand in quarter_notes:
+        assert cand["system_index"] is not None
+        assert cand["staff_index"] is not None
 
 def test_note_candidate_recognition_report_x_aligned_cluster_fixture():
     script_path = Path("scripts/note_candidate_recognition_report.py")
@@ -138,3 +147,34 @@ def test_note_candidate_recognition_report_flag_beam_candidates():
         assert outcome["page_index"] == 1
         assert outcome["system_index"] == 1
         assert outcome["staff_index"] == 1
+
+
+def test_associate_staves_horizontal_boundary():
+    from score2gp.whole_note_recogniser import _associate_staves
+
+    staves = [{
+        "staff": {
+            "x0": 50.0,
+            "x1": 550.0,
+            "y0": 200.0,
+            "y1": 240.0,
+            "system_index": 0,
+            "staff_index": 0
+        }
+    }]
+
+    cand_inside = {"bbox": [100.0, 210.0, 115.0, 220.0]}
+    cand_outside_left = {"bbox": [10.0, 210.0, 25.0, 220.0]}
+    cand_outside_right = {"bbox": [600.0, 210.0, 615.0, 220.0]}
+
+    candidates = [cand_inside, cand_outside_left, cand_outside_right]
+
+    _associate_staves(candidates, staves)
+
+    assert cand_inside.get("system_index") == 0
+    assert cand_inside.get("staff_index") == 0
+
+    assert cand_outside_left.get("system_index") is None
+    assert cand_outside_left.get("staff_index") is None
+    assert cand_outside_right.get("system_index") is None
+    assert cand_outside_right.get("staff_index") is None
