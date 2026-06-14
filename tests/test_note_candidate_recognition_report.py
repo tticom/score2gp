@@ -147,3 +147,34 @@ def test_note_candidate_recognition_report_flag_beam_candidates():
         assert outcome["page_index"] == 1
         assert outcome["system_index"] == 1
         assert outcome["staff_index"] == 1
+
+
+def test_associate_staves_horizontal_boundary():
+    from score2gp.whole_note_recogniser import _associate_staves
+
+    staves = [{
+        "staff": {
+            "x0": 50.0,
+            "x1": 550.0,
+            "y0": 200.0,
+            "y1": 240.0,
+            "system_index": 0,
+            "staff_index": 0
+        }
+    }]
+
+    cand_inside = {"bbox": [100.0, 210.0, 115.0, 220.0]}
+    cand_outside_left = {"bbox": [10.0, 210.0, 25.0, 220.0]}
+    cand_outside_right = {"bbox": [600.0, 210.0, 615.0, 220.0]}
+
+    candidates = [cand_inside, cand_outside_left, cand_outside_right]
+
+    _associate_staves(candidates, staves)
+
+    assert cand_inside.get("system_index") == 0
+    assert cand_inside.get("staff_index") == 0
+
+    assert cand_outside_left.get("system_index") is None
+    assert cand_outside_left.get("staff_index") is None
+    assert cand_outside_right.get("system_index") is None
+    assert cand_outside_right.get("staff_index") is None
