@@ -81,6 +81,41 @@ def shape_x_aligned_cluster_candidate_evidence(
         })
     return shaped
 
+def shape_left_margin_candidate_evidence(
+    raw_candidates: Iterable[Any],
+    page_index: int,
+    start_index: int = 1
+) -> list[dict]:
+    candidates = list(raw_candidates)
+
+    def get_sort_key(c: Any):
+        c_dict = c if isinstance(c, dict) else (c.model_dump() if hasattr(c, "model_dump") else c.dict())
+        return (c_dict.get("system_index", 0), c_dict.get("staff_index", 0), c_dict.get("x0", 0.0), c_dict.get("y0", 0.0))
+
+    candidates.sort(key=get_sort_key)
+
+    shaped = []
+    for i, cand in enumerate(candidates):
+        candidate_id = f"left_margin_candidate_{start_index + i:03d}"
+        c_dict = cand if isinstance(cand, dict) else (cand.model_dump() if hasattr(cand, "model_dump") else cand.dict())
+
+        shaped.append({
+            "candidate_id": candidate_id,
+            "page_index": page_index,
+            "system_index": c_dict.get("system_index"),
+            "staff_index": c_dict.get("staff_index"),
+            "x0": c_dict.get("x0"),
+            "y0": c_dict.get("y0"),
+            "x1": c_dict.get("x1"),
+            "y1": c_dict.get("y1"),
+            "kind": c_dict.get("kind"),
+            "source": c_dict.get("source"),
+            "font_name": c_dict.get("font_name"),
+            "font_size": c_dict.get("font_size")
+        })
+    return shaped
+
+
 def map_whole_note_candidates_to_read_only_outcomes(candidate_locations: list[dict]) -> list[dict]:
     """
     Consumes diagnostic whole-note candidate evidence and produces a read-only
@@ -147,7 +182,31 @@ def map_x_aligned_cluster_candidates_to_read_only_outcomes(candidate_locations: 
         })
     return outcomes
 
-def run_recognition_on_file(pdf_path, include_x_aligned_clusters: bool = False) -> dict | None:
+def map_left_margin_candidates_to_read_only_outcomes(candidate_locations: list[dict]) -> list[dict]:
+    outcomes = []
+    for cand in candidate_locations:
+        outcomes.append({
+            "symbol_type": "left_margin_candidate",
+            "candidate_id": cand.get("candidate_id"),
+            "page_index": cand.get("page_index"),
+            "system_index": cand.get("system_index"),
+            "staff_index": cand.get("staff_index"),
+            "x0": cand.get("x0"),
+            "y0": cand.get("y0"),
+            "x1": cand.get("x1"),
+            "y1": cand.get("y1"),
+            "kind": cand.get("kind"),
+            "source": "diagnostic_candidate_evidence",
+            "font_name": cand.get("font_name"),
+            "font_size": cand.get("font_size")
+        })
+    return outcomes
+
+def run_recognition_on_file(
+    pdf_path,
+    include_x_aligned_clusters: bool = False,
+    include_left_margin_candidates: bool = False
+) -> dict | None:
     import sys
     import fitz  # type: ignore
     from score2gp.pdf_staff_notation_diagnostics import (
@@ -171,6 +230,7 @@ def run_recognition_on_file(pdf_path, include_x_aligned_clusters: bool = False) 
     half_note_locations = []
     quarter_note_locations = []
     x_aligned_cluster_locations = []
+    left_margin_locations = []
 
     for i in range(len(doc)):
         page = doc[i]
@@ -214,12 +274,29 @@ def run_recognition_on_file(pdf_path, include_x_aligned_clusters: bool = False) 
             )
             x_aligned_cluster_locations.extend(shaped_x_aligned)
 
+        if include_left_margin_candidates:
+            page_diags = extract_notation_diagnostics_dict(page, page_index)
+            left_margin_cands = []
+            for staff in page_diags.get("staves", []):
+                if staff.get("left_margin_candidates"):
+                    left_margin_cands.extend(staff["left_margin_candidates"])
+
+            shaped_left_margin = shape_left_margin_candidate_evidence(
+                left_margin_cands,
+                page_index=page_index,
+                start_index=len(left_margin_locations) + 1
+            )
+            left_margin_locations.extend(shaped_left_margin)
+
     outcomes = map_whole_note_candidates_to_read_only_outcomes(whole_note_locations)
     outcomes.extend(map_half_note_candidates_to_read_only_outcomes(half_note_locations))
     outcomes.extend(map_quarter_note_candidates_to_read_only_outcomes(quarter_note_locations))
 
     if include_x_aligned_clusters:
         outcomes.extend(map_x_aligned_cluster_candidates_to_read_only_outcomes(x_aligned_cluster_locations))
+
+    if include_left_margin_candidates:
+        outcomes.extend(map_left_margin_candidates_to_read_only_outcomes(left_margin_locations))
 
     return {
         "source": pdf_path.name,
