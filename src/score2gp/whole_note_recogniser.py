@@ -543,7 +543,7 @@ def map_staff_position_to_read_only_outcomes(outcomes: list[dict], staff_geometr
 
     for cand in outcomes:
         st_type = cand.get("symbol_type")
-        if st_type not in ("whole_note_candidate", "half_note_candidate", "quarter_note_candidate", "eighth_note_candidate"):
+        if st_type not in ("whole_note_candidate", "half_note_candidate", "quarter_note_candidate", "eighth_note_candidate", "ledger_line_candidate"):
             continue
 
         sg_key = (cand.get("page_index"), cand.get("system_index"), cand.get("staff_index"))
@@ -595,6 +595,8 @@ def map_staff_position_to_read_only_outcomes(outcomes: list[dict], staff_geometr
 def map_assumed_treble_pitch_to_read_only_outcomes(outcomes: list[dict]) -> None:
     pitches = ["F5", "E5", "D5", "C5", "B4", "A4", "G4", "F4", "E4"]
     for cand in outcomes:
+        if cand.get("symbol_type") == "ledger_line_candidate":
+            continue
         pos_idx = cand.get("staff_position_index")
         if type(pos_idx) is int and 0 <= pos_idx <= 8:
             cand["assumed_treble_pitch"] = pitches[pos_idx]
