@@ -528,6 +528,10 @@ def test_map_staff_position_to_read_only_outcomes_malformed_inputs():
         {"symbol_type": "whole_note_candidate", "bbox": [10, 20, 5, 30], "page_index": 1, "system_index": 1, "staff_index": 1},
         # reversed bbox y
         {"symbol_type": "whole_note_candidate", "bbox": [5, 30, 10, 20], "page_index": 1, "system_index": 1, "staff_index": 1},
+        # bbox is an integer
+        {"symbol_type": "whole_note_candidate", "bbox": 123, "page_index": 1, "system_index": 1, "staff_index": 1},
+        # bbox is None
+        {"symbol_type": "whole_note_candidate", "bbox": None, "page_index": 1, "system_index": 1, "staff_index": 1},
         # no matching staff geometry
         {"symbol_type": "whole_note_candidate", "bbox": [1, 2, 3, 4], "page_index": 2, "system_index": 1, "staff_index": 1},
         # eighth note missing quarter id

@@ -513,8 +513,7 @@ def map_staff_position_to_read_only_outcomes(outcomes: list[dict], staff_geometr
             bbox = q_cand.get("bbox")
         else:
             bbox = cand.get("bbox")
-
-        if not bbox or len(bbox) != 4:
+        if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
             continue
 
         try:
