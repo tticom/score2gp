@@ -115,6 +115,50 @@ def shape_left_margin_candidate_evidence(
         })
     return shaped
 
+def shape_ledger_line_candidate_evidence(
+    raw_clusters: Iterable[Any],
+    page_index: int,
+    start_index: int = 1
+) -> list[dict]:
+    candidates = []
+
+    clusters = list(raw_clusters)
+    def get_sort_key(c: Any):
+        c_dict = c if isinstance(c, dict) else (c.model_dump() if hasattr(c, "model_dump") else c.dict())
+        return (c_dict.get("system_index", 0), c_dict.get("staff_index", 0), c_dict.get("x0", 0.0), c_dict.get("x1", 0.0))
+    clusters.sort(key=get_sort_key)
+
+    for cluster in clusters:
+        c_dict = cluster if isinstance(cluster, dict) else (cluster.model_dump() if hasattr(cluster, "model_dump") else cluster.dict())
+        primitives = c_dict.get("primitives", [])
+
+        prims = [p if isinstance(p, dict) else (p.model_dump() if hasattr(p, "model_dump") else p.dict()) for p in primitives]
+        horizontals = [p for p in prims if p.get("kind") == "horizontal_stroke"]
+        cores = [p for p in prims if p.get("kind") in ("rectangle", "vertical_stroke", "curve")]
+
+        horizontals.sort(key=lambda p: (p.get("y0", 0.0), p.get("x0", 0.0)))
+
+        for h in horizontals:
+            overlap = False
+            for co in cores:
+                hx0, hy0, hx1, hy1 = h.get("x0", 0), h.get("y0", 0), h.get("x1", 0), h.get("y1", 0)
+                cx0, cy0, cx1, cy1 = co.get("x0", 0), co.get("y0", 0), co.get("x1", 0), co.get("y1", 0)
+                if not (hx1 < cx0 or hx0 > cx1 or hy1 < cy0 or hy0 > cy1):
+                    overlap = True
+                    break
+            if overlap:
+                candidates.append({
+                    "page_index": page_index,
+                    "system_index": c_dict.get("system_index"),
+                    "staff_index": c_dict.get("staff_index"),
+                    "bbox": [h.get("x0"), h.get("y0"), h.get("x1"), h.get("y1")]
+                })
+
+    for i, cand in enumerate(candidates):
+        cand["candidate_id"] = f"ledger_line_candidate_{start_index + i:03d}"
+
+    return candidates
+
 
 def map_whole_note_candidates_to_read_only_outcomes(candidate_locations: list[dict]) -> list[dict]:
     """
@@ -205,6 +249,20 @@ def map_left_margin_candidates_to_read_only_outcomes(candidate_locations: list[d
             "source": "diagnostic_candidate_evidence",
             "font_name": cand.get("font_name"),
             "font_size": cand.get("font_size")
+        })
+    return outcomes
+
+def map_ledger_line_candidates_to_read_only_outcomes(candidate_locations: list[dict]) -> list[dict]:
+    outcomes = []
+    for cand in candidate_locations:
+        outcomes.append({
+            "symbol_type": "ledger_line_candidate",
+            "candidate_id": cand.get("candidate_id"),
+            "page_index": cand.get("page_index"),
+            "system_index": cand.get("system_index"),
+            "staff_index": cand.get("staff_index"),
+            "bbox": cand.get("bbox"),
+            "source": "diagnostic_candidate_evidence"
         })
     return outcomes
 
@@ -546,7 +604,8 @@ def run_recognition_on_file(
     include_x_aligned_clusters: bool = False,
     include_left_margin_candidates: bool = False,
     include_flag_beam_candidates: bool = False,
-    assume_treble_clef: bool = False
+    assume_treble_clef: bool = False,
+    include_ledger_line_candidates: bool = False
 ) -> dict | None:
     import sys
     import fitz  # type: ignore
@@ -574,6 +633,7 @@ def run_recognition_on_file(
     left_margin_locations = []
     flag_locations = []
     beam_locations = []
+    ledger_line_locations = []
 
     all_staff_geometries = []
 
@@ -639,7 +699,25 @@ def run_recognition_on_file(
             )
             left_margin_locations.extend(shaped_left_margin)
 
+        if include_ledger_line_candidates:
+            x_aligned_cands_for_ledger = []
+            for staff in page_diags.get("staves", []):
+                if staff.get("x_aligned_cluster_candidates"):
+                    x_aligned_cands_for_ledger.extend(staff["x_aligned_cluster_candidates"])
+
+            ledger_cands = shape_ledger_line_candidate_evidence(
+                x_aligned_cands_for_ledger,
+                page_index=page_index,
+                start_index=len(ledger_line_locations) + 1
+            )
+            ledger_line_locations.extend(ledger_cands)
+
         if include_flag_beam_candidates:
+            ledger_suppression_keys = {
+                (l.get("page_index"), l.get("system_index"), l.get("staff_index"), tuple(l["bbox"]))
+                for l in ledger_line_locations
+            } if include_ledger_line_candidates else set()
+
             for staff in page_diags.get("staves", []):
                 fb = staff.get("flag_beam_candidates")
                 if fb:
@@ -660,8 +738,15 @@ def run_recognition_on_file(
 
                     beams = fb.get("beams", [])
                     if beams:
+                        filtered_beams = []
+                        for b in beams:
+                            b_dict = b if isinstance(b, dict) else (b.model_dump() if hasattr(b, "model_dump") else b.dict())
+                            key = (page_index, sys_idx, staff_idx, tuple(b_dict["bbox"]))
+                            if key not in ledger_suppression_keys:
+                                filtered_beams.append(b)
+
                         shaped_beams = shape_beam_candidate_evidence(
-                            beams,
+                            filtered_beams,
                             page_index=page_index,
                             system_index=sys_idx,
                             staff_index=staff_idx,
@@ -678,6 +763,9 @@ def run_recognition_on_file(
 
     if include_left_margin_candidates:
         outcomes.extend(map_left_margin_candidates_to_read_only_outcomes(left_margin_locations))
+
+    if include_ledger_line_candidates:
+        outcomes.extend(map_ledger_line_candidates_to_read_only_outcomes(ledger_line_locations))
 
     if include_flag_beam_candidates:
         outcomes.extend(map_flag_candidates_to_read_only_outcomes(flag_locations))

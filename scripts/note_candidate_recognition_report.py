@@ -28,7 +28,8 @@ def main():
         include_x_aligned_clusters=True,
         include_left_margin_candidates=True,
         include_flag_beam_candidates=True,
-        assume_treble_clef=args.assume_treble_clef
+        assume_treble_clef=args.assume_treble_clef,
+        include_ledger_line_candidates=True
     )
     if not res:
         sys.exit(1)
