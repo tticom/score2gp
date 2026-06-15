@@ -582,21 +582,54 @@ def test_assume_treble_clef_enabled_public_fixture():
     assert cand2["assumed_treble_pitch"] == "B4"
 
 def test_assume_treble_clef_out_of_bounds():
-    from score2gp.whole_note_recogniser import map_staff_position_to_read_only_outcomes
+    from score2gp.whole_note_recogniser import map_assumed_treble_pitch_to_read_only_outcomes
 
     outcomes = [
-        {"symbol_type": "whole_note_candidate", "bbox": [100, 10, 110, 20], "page_index": 1, "system_index": 1, "staff_index": 1},
-        {"symbol_type": "whole_note_candidate", "bbox": [100, 90, 110, 100], "page_index": 1, "system_index": 1, "staff_index": 1},
+        {"staff_position_index": -1},
+        {"staff_position_index": 9},
+        {"staff_position_index": -3},
+        {"staff_position_index": 13},
     ]
 
-    staff_geometries = [
-        {"page_index": 1, "system_index": 1, "staff_index": 1, "line_y_coords": [30, 40, 50, 60, 70]},
+    map_assumed_treble_pitch_to_read_only_outcomes(outcomes)
+
+    for cand in outcomes:
+        assert "assumed_treble_pitch" not in cand
+
+def test_assume_treble_clef_malformed_and_missing():
+    from score2gp.whole_note_recogniser import map_assumed_treble_pitch_to_read_only_outcomes
+
+    outcomes = [
+        {},
+        {"staff_position_index": None},
+        {"staff_position_index": "4"},
+        {"staff_position_index": 4.0},
+        {"staff_position_index": []},
+        {"staff_position_index": {}},
     ]
 
-    map_staff_position_to_read_only_outcomes(outcomes, staff_geometries, assume_treble_clef=True)
+    map_assumed_treble_pitch_to_read_only_outcomes(outcomes)
 
-    assert outcomes[0]["staff_position_index"] == -3
-    assert "assumed_treble_pitch" not in outcomes[0]
+    for cand in outcomes:
+        assert "assumed_treble_pitch" not in cand
 
-    assert outcomes[1]["staff_position_index"] == 13
-    assert "assumed_treble_pitch" not in outcomes[1]
+def test_assume_treble_clef_exact_mapping():
+    from score2gp.whole_note_recogniser import map_assumed_treble_pitch_to_read_only_outcomes
+
+    outcomes = [
+        {"staff_position_index": 0},
+        {"staff_position_index": 1},
+        {"staff_position_index": 2},
+        {"staff_position_index": 3},
+        {"staff_position_index": 4},
+        {"staff_position_index": 5},
+        {"staff_position_index": 6},
+        {"staff_position_index": 7},
+        {"staff_position_index": 8},
+    ]
+
+    map_assumed_treble_pitch_to_read_only_outcomes(outcomes)
+
+    expected = ["F5", "E5", "D5", "C5", "B4", "A4", "G4", "F4", "E4"]
+    for i, cand in enumerate(outcomes):
+        assert cand["assumed_treble_pitch"] == expected[i]

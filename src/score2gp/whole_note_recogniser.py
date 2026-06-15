@@ -475,7 +475,7 @@ def compose_eighth_note_candidates(outcomes: list[dict]) -> list[dict]:
 
     return eighth_notes
 
-def map_staff_position_to_read_only_outcomes(outcomes: list[dict], staff_geometries: list[dict], assume_treble_clef: bool = False) -> None:
+def map_staff_position_to_read_only_outcomes(outcomes: list[dict], staff_geometries: list[dict]) -> None:
     staff_geom_lookup = {}
     for sg in staff_geometries:
         key = (sg.get("page_index"), sg.get("system_index"), sg.get("staff_index"))
@@ -532,11 +532,13 @@ def map_staff_position_to_read_only_outcomes(outcomes: list[dict], staff_geometr
             continue
 
         pos_float = (notehead_y - line_y_coords[0]) / (staff_space / 2.0)
-        pos_idx = int(round(pos_float))
-        cand["staff_position_index"] = pos_idx
+        cand["staff_position_index"] = int(round(pos_float))
 
-        if assume_treble_clef and 0 <= pos_idx <= 8:
-            pitches = ["F5", "E5", "D5", "C5", "B4", "A4", "G4", "F4", "E4"]
+def map_assumed_treble_pitch_to_read_only_outcomes(outcomes: list[dict]) -> None:
+    pitches = ["F5", "E5", "D5", "C5", "B4", "A4", "G4", "F4", "E4"]
+    for cand in outcomes:
+        pos_idx = cand.get("staff_position_index")
+        if type(pos_idx) is int and 0 <= pos_idx <= 8:
             cand["assumed_treble_pitch"] = pitches[pos_idx]
 
 def run_recognition_on_file(
@@ -684,7 +686,9 @@ def run_recognition_on_file(
         eighth_notes = compose_eighth_note_candidates(outcomes)
         outcomes.extend(eighth_notes)
 
-    map_staff_position_to_read_only_outcomes(outcomes, all_staff_geometries, assume_treble_clef=assume_treble_clef)
+    map_staff_position_to_read_only_outcomes(outcomes, all_staff_geometries)
+    if assume_treble_clef:
+        map_assumed_treble_pitch_to_read_only_outcomes(outcomes)
 
     return {
         "source": pdf_path.name,
