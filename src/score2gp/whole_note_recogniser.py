@@ -475,6 +475,65 @@ def compose_eighth_note_candidates(outcomes: list[dict]) -> list[dict]:
 
     return eighth_notes
 
+def map_staff_position_to_read_only_outcomes(outcomes: list[dict], staff_geometries: list[dict]) -> None:
+    staff_geom_lookup = {}
+    for sg in staff_geometries:
+        key = (sg.get("page_index"), sg.get("system_index"), sg.get("staff_index"))
+        staff_geom_lookup[key] = sg
+
+    candidate_lookup = {c.get("candidate_id"): c for c in outcomes if c.get("candidate_id")}
+
+    for cand in outcomes:
+        st_type = cand.get("symbol_type")
+        if st_type not in ("whole_note_candidate", "half_note_candidate", "quarter_note_candidate", "eighth_note_candidate"):
+            continue
+
+        sg_key = (cand.get("page_index"), cand.get("system_index"), cand.get("staff_index"))
+        sg = staff_geom_lookup.get(sg_key)
+        if not sg:
+            continue
+
+        line_y_coords = sg.get("line_y_coords")
+        if not line_y_coords or not isinstance(line_y_coords, list) or len(line_y_coords) != 5:
+            continue
+
+        try:
+            line_y_coords = [float(y) for y in line_y_coords]
+        except (TypeError, ValueError):
+            continue
+
+        notehead_y = None
+        if st_type == "eighth_note_candidate":
+            q_id = cand.get("quarter_component_id")
+            if not q_id:
+                continue
+            q_cand = candidate_lookup.get(q_id)
+            if not q_cand:
+                continue
+            bbox = q_cand.get("bbox")
+        else:
+            bbox = cand.get("bbox")
+        if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
+            continue
+
+        try:
+            x0, y0, x1, y1 = [float(v) for v in bbox]
+            if x0 > x1 or y0 > y1:
+                continue
+            notehead_y = (y0 + y1) / 2.0
+        except (TypeError, ValueError):
+            continue
+
+        if notehead_y is None:
+            continue
+
+        staff_space = (line_y_coords[-1] - line_y_coords[0]) / 4.0
+        if staff_space <= 0:
+            continue
+
+        pos_float = (notehead_y - line_y_coords[0]) / (staff_space / 2.0)
+        cand["staff_position_index"] = int(round(pos_float))
+
 def run_recognition_on_file(
     pdf_path,
     include_x_aligned_clusters: bool = False,
@@ -618,6 +677,8 @@ def run_recognition_on_file(
 
         eighth_notes = compose_eighth_note_candidates(outcomes)
         outcomes.extend(eighth_notes)
+
+    map_staff_position_to_read_only_outcomes(outcomes, all_staff_geometries)
 
     return {
         "source": pdf_path.name,
