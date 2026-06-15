@@ -32,6 +32,8 @@ def test_note_candidate_recognition_report_public_fixture():
     assert cand1["symbol_type"] == "whole_note_candidate"
     assert cand1["system_index"] is not None
     assert cand1["staff_index"] is not None
+    assert "staff_position_index" in cand1
+    assert isinstance(cand1["staff_position_index"], int)
 
 def test_note_candidate_recognition_report_half_note_fixture():
     script_path = Path("scripts/note_candidate_recognition_report.py")
@@ -58,6 +60,8 @@ def test_note_candidate_recognition_report_half_note_fixture():
     for cand in half_notes:
         assert cand["system_index"] is not None
         assert cand["staff_index"] is not None
+        assert "staff_position_index" in cand
+        assert isinstance(cand["staff_position_index"], int)
 
 def test_note_candidate_recognition_report_quarter_note_fixture():
     script_path = Path("scripts/note_candidate_recognition_report.py")
@@ -84,6 +88,8 @@ def test_note_candidate_recognition_report_quarter_note_fixture():
     for cand in quarter_notes:
         assert cand["system_index"] is not None
         assert cand["staff_index"] is not None
+        assert "staff_position_index" in cand
+        assert isinstance(cand["staff_position_index"], int)
 
 def test_note_candidate_recognition_report_eighth_note_fixture():
     script_path = Path("scripts/note_candidate_recognition_report.py")
@@ -145,6 +151,8 @@ def test_note_candidate_recognition_report_eighth_note_fixture():
         assert cand["staff_index"] is not None
         assert cand["quarter_component_id"] is not None
         assert cand["modifier_component_id"] is not None
+        assert "staff_position_index" in cand
+        assert isinstance(cand["staff_position_index"], int)
 
 def test_note_candidate_recognition_report_x_aligned_cluster_fixture():
     script_path = Path("scripts/note_candidate_recognition_report.py")
@@ -498,3 +506,32 @@ def test_note_candidate_recognition_report_staff_geometry_exposure():
             join_success = True
 
     assert join_success, "Could not join note candidate to staff geometry by page, system, and staff index."
+
+def test_map_staff_position_to_read_only_outcomes_malformed_inputs():
+    from score2gp.whole_note_recogniser import map_staff_position_to_read_only_outcomes
+    outcomes = [
+        # missing bbox
+        {"symbol_type": "whole_note_candidate", "page_index": 1, "system_index": 1, "staff_index": 1},
+        # malformed bbox
+        {"symbol_type": "quarter_note_candidate", "bbox": [1, 2, 3], "page_index": 1, "system_index": 1, "staff_index": 1},
+        # string bbox
+        {"symbol_type": "half_note_candidate", "bbox": "invalid", "page_index": 1, "system_index": 1, "staff_index": 1},
+        # no matching staff geometry
+        {"symbol_type": "whole_note_candidate", "bbox": [1, 2, 3, 4], "page_index": 2, "system_index": 1, "staff_index": 1},
+        # eighth note missing quarter id
+        {"symbol_type": "eighth_note_candidate", "bbox": [1, 2, 3, 4], "page_index": 1, "system_index": 1, "staff_index": 1},
+        # eighth note missing quarter candidate
+        {"symbol_type": "eighth_note_candidate", "quarter_component_id": "q1", "bbox": [1, 2, 3, 4], "page_index": 1, "system_index": 1, "staff_index": 1},
+        # whole note malformed line_y_coords
+        {"symbol_type": "whole_note_candidate", "bbox": [1, 2, 3, 4], "page_index": 3, "system_index": 1, "staff_index": 1},
+    ]
+
+    staff_geometries = [
+        {"page_index": 1, "system_index": 1, "staff_index": 1, "line_y_coords": [10, 20, 30, 40, 50]},
+        {"page_index": 3, "system_index": 1, "staff_index": 1, "line_y_coords": [10, 20, 30, 40]}, # Only 4 lines
+    ]
+
+    map_staff_position_to_read_only_outcomes(outcomes, staff_geometries)
+
+    for cand in outcomes:
+        assert "staff_position_index" not in cand
