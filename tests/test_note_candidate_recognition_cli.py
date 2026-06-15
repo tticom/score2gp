@@ -316,3 +316,9 @@ def test_installed_cli_note_candidate_recognition_with_ledger_lines(tmp_path):
         assert "page_index" in outcome
         assert outcome.get("system_index") is not None
         assert outcome.get("staff_index") is not None
+        assert "staff_position_index" in outcome
+        assert "assumed_treble_pitch" not in outcome
+
+    positions = [o["staff_position_index"] for o in ledger_lines]
+    assert any(p < 0 for p in positions)
+    assert any(p > 8 for p in positions)
