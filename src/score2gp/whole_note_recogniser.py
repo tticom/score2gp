@@ -518,7 +518,9 @@ def map_staff_position_to_read_only_outcomes(outcomes: list[dict], staff_geometr
             continue
 
         try:
-            _, y0, _, y1 = [float(v) for v in bbox]
+            x0, y0, x1, y1 = [float(v) for v in bbox]
+            if x0 > x1 or y0 > y1:
+                continue
             notehead_y = (y0 + y1) / 2.0
         except (TypeError, ValueError):
             continue
