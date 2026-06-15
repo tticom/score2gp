@@ -254,3 +254,33 @@ def test_installed_cli_note_candidate_recognition_staff_geometry_exposure(tmp_pa
             join_success = True
 
     assert join_success, "Could not join note candidate to staff geometry by page, system, and staff index."
+
+def test_installed_cli_note_candidate_recognition_assume_treble_clef_default_disabled(tmp_path):
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
+    cmd = [sys.executable, "-m", "score2gp.cli", "note-candidate-recognition", "--pdf", str(fixture_path), "--json"]
+    result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=_get_subprocess_env())
+
+    output = json.loads(result.stdout)
+    outcomes = output["read_only_recognition_outcomes"]
+    whole_notes = [o for o in outcomes if o["symbol_type"] == "whole_note_candidate"]
+    assert len(whole_notes) == 2
+    for cand in outcomes:
+        assert "assumed_treble_pitch" not in cand
+
+def test_installed_cli_note_candidate_recognition_assume_treble_clef_enabled(tmp_path):
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
+    cmd = [sys.executable, "-m", "score2gp.cli", "note-candidate-recognition", "--pdf", str(fixture_path), "--json", "--assume-treble-clef"]
+    result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=_get_subprocess_env())
+
+    output = json.loads(result.stdout)
+    outcomes = output["read_only_recognition_outcomes"]
+    whole_notes = [o for o in outcomes if o["symbol_type"] == "whole_note_candidate"]
+    assert len(whole_notes) == 2
+
+    cand1 = whole_notes[0]
+    assert cand1["staff_position_index"] == 2
+    assert cand1["assumed_treble_pitch"] == "D5"
+
+    cand2 = whole_notes[1]
+    assert cand2["staff_position_index"] == 4
+    assert cand2["assumed_treble_pitch"] == "B4"
