@@ -35,10 +35,12 @@ def test_note_candidate_recognition_report_public_fixture():
     assert "staff_position_index" in cand1
     assert isinstance(cand1["staff_position_index"], int)
     assert cand1["staff_position_index"] == 2
+    assert "assumed_treble_pitch" not in cand1
 
     cand2 = whole_notes[1]
     assert "staff_position_index" in cand2
     assert cand2["staff_position_index"] == 4
+    assert "assumed_treble_pitch" not in cand2
 
 def test_note_candidate_recognition_report_half_note_fixture():
     script_path = Path("scripts/note_candidate_recognition_report.py")
@@ -551,3 +553,83 @@ def test_map_staff_position_to_read_only_outcomes_malformed_inputs():
 
     for cand in outcomes:
         assert "staff_position_index" not in cand
+
+def test_assume_treble_clef_enabled_public_fixture():
+    script_path = Path("scripts/note_candidate_recognition_report.py")
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
+
+    assert script_path.exists()
+    assert fixture_path.exists()
+
+    result = subprocess.run(
+        [sys.executable, str(script_path), "--pdf", str(fixture_path), "--json", "--assume-treble-clef"],
+        capture_output=True,
+        text=True,
+        check=True
+    )
+
+    data = json.loads(result.stdout)
+    outcomes = data["read_only_recognition_outcomes"]
+    whole_notes = [o for o in outcomes if o["symbol_type"] == "whole_note_candidate"]
+    assert len(whole_notes) == 2
+
+    cand1 = whole_notes[0]
+    assert cand1["staff_position_index"] == 2
+    assert cand1["assumed_treble_pitch"] == "D5"
+
+    cand2 = whole_notes[1]
+    assert cand2["staff_position_index"] == 4
+    assert cand2["assumed_treble_pitch"] == "B4"
+
+def test_assume_treble_clef_out_of_bounds():
+    from score2gp.whole_note_recogniser import map_assumed_treble_pitch_to_read_only_outcomes
+
+    outcomes = [
+        {"staff_position_index": -1},
+        {"staff_position_index": 9},
+        {"staff_position_index": -3},
+        {"staff_position_index": 13},
+    ]
+
+    map_assumed_treble_pitch_to_read_only_outcomes(outcomes)
+
+    for cand in outcomes:
+        assert "assumed_treble_pitch" not in cand
+
+def test_assume_treble_clef_malformed_and_missing():
+    from score2gp.whole_note_recogniser import map_assumed_treble_pitch_to_read_only_outcomes
+
+    outcomes = [
+        {},
+        {"staff_position_index": None},
+        {"staff_position_index": "4"},
+        {"staff_position_index": 4.0},
+        {"staff_position_index": []},
+        {"staff_position_index": {}},
+    ]
+
+    map_assumed_treble_pitch_to_read_only_outcomes(outcomes)
+
+    for cand in outcomes:
+        assert "assumed_treble_pitch" not in cand
+
+def test_assume_treble_clef_exact_mapping():
+    from score2gp.whole_note_recogniser import map_assumed_treble_pitch_to_read_only_outcomes
+
+    outcomes = [
+        {"staff_position_index": 0},
+        {"staff_position_index": 1},
+        {"staff_position_index": 2},
+        {"staff_position_index": 3},
+        {"staff_position_index": 4},
+        {"staff_position_index": 5},
+        {"staff_position_index": 6},
+        {"staff_position_index": 7},
+        {"staff_position_index": 8},
+    ]
+
+    map_assumed_treble_pitch_to_read_only_outcomes(outcomes)
+
+    expected = ["F5", "E5", "D5", "C5", "B4", "A4", "G4", "F4", "E4"]
+    for i, cand in enumerate(outcomes):
+        assert cand["assumed_treble_pitch"] == expected[i]

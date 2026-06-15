@@ -193,7 +193,8 @@ def whole_note_recognition_command(
 @app.command("note-candidate-recognition")
 def note_candidate_recognition_command(
     pdf: Path = typer.Option(..., "--pdf", help="Path to the PDF fixture"),
-    json_out: bool = typer.Option(False, "--json", help="Output machine-checkable JSON")
+    json_out: bool = typer.Option(False, "--json", help="Output machine-checkable JSON"),
+    assume_treble_clef: bool = typer.Option(False, "--assume-treble-clef", help="Opt-in to assumed-treble pitch mapping")
 ) -> None:
     """Expose generic read-only note-candidate recognition outcomes."""
     from .whole_note_recogniser import run_recognition_on_file
@@ -201,7 +202,8 @@ def note_candidate_recognition_command(
         pdf,
         include_x_aligned_clusters=True,
         include_left_margin_candidates=True,
-        include_flag_beam_candidates=True
+        include_flag_beam_candidates=True,
+        assume_treble_clef=assume_treble_clef
     )
     if not res:
         raise typer.Exit(1)
