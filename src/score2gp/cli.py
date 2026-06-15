@@ -203,6 +203,7 @@ def note_candidate_recognition_command(
         include_x_aligned_clusters=True,
         include_left_margin_candidates=True,
         include_flag_beam_candidates=True,
+        include_ledger_line_candidates=True,
         assume_treble_clef=assume_treble_clef
     )
     if not res:
