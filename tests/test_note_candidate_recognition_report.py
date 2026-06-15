@@ -287,6 +287,21 @@ def test_note_candidate_recognition_report_ledger_lines():
     assert any(p < 0 for p in positions)
     assert any(p > 8 for p in positions)
 
+    notes = [o for o in outcomes if o["symbol_type"] == "quarter_note_candidate"]
+    assert len(notes) == 2
+
+    above_note = next(n for n in notes if n["staff_position_index"] < 0)
+    below_note = next(n for n in notes if n["staff_position_index"] > 8)
+
+    above_ledger = next(l for l in ledger_lines if l["staff_position_index"] < 0)
+    below_ledger = next(l for l in ledger_lines if l["staff_position_index"] > 8)
+
+    assert "attached_ledger_line_candidate_ids" in above_note
+    assert above_note["attached_ledger_line_candidate_ids"] == [above_ledger["candidate_id"]]
+
+    assert "attached_ledger_line_candidate_ids" in below_note
+    assert below_note["attached_ledger_line_candidate_ids"] == [below_ledger["candidate_id"]]
+
 def test_associate_staves_horizontal_boundary():
     from score2gp.whole_note_recogniser import _associate_staves
 
@@ -674,6 +689,79 @@ def test_map_staff_position_to_read_only_outcomes_malformed_inputs():
 
     for cand in outcomes:
         assert "staff_position_index" not in cand
+
+def test_map_ledger_lines_to_note_candidates_edge_cases():
+    from score2gp.whole_note_recogniser import map_ledger_lines_to_note_candidates
+
+    outcomes = [
+        # Note inside staff (0..8) should not attach ledgers
+        {"candidate_id": "q1", "symbol_type": "quarter_note_candidate", "staff_position_index": 4, "bbox": [10, 10, 20, 20], "page_index": 1, "system_index": 1, "staff_index": 1},
+        {"candidate_id": "l1", "symbol_type": "ledger_line_candidate", "staff_position_index": 4, "bbox": [8, 15, 22, 17], "page_index": 1, "system_index": 1, "staff_index": 1},
+
+        # Whole note below staff gets attached lines
+        {"candidate_id": "w1", "symbol_type": "whole_note_candidate", "staff_position_index": 10, "bbox": [150, 150, 160, 160], "page_index": 1, "system_index": 1, "staff_index": 1},
+        {"candidate_id": "l11", "symbol_type": "ledger_line_candidate", "staff_position_index": 10, "bbox": [148, 155, 162, 157], "page_index": 1, "system_index": 1, "staff_index": 1},
+
+        # Half note above staff gets attached lines
+        {"candidate_id": "h1", "symbol_type": "half_note_candidate", "staff_position_index": -4, "bbox": [170, 170, 180, 180], "page_index": 1, "system_index": 1, "staff_index": 1},
+        {"candidate_id": "l12", "symbol_type": "ledger_line_candidate", "staff_position_index": -2, "bbox": [168, 175, 182, 177], "page_index": 1, "system_index": 1, "staff_index": 1},
+
+        # Unrelated ledger line (different page)
+        {"candidate_id": "q2", "symbol_type": "quarter_note_candidate", "staff_position_index": -2, "bbox": [30, 30, 40, 40], "page_index": 1, "system_index": 1, "staff_index": 1},
+        {"candidate_id": "l2", "symbol_type": "ledger_line_candidate", "staff_position_index": -2, "bbox": [28, 35, 42, 37], "page_index": 2, "system_index": 1, "staff_index": 1},
+
+        # Ambiguous/unrelated geometric bounds (no horizontal overlap)
+        {"candidate_id": "l3", "symbol_type": "ledger_line_candidate", "staff_position_index": -2, "bbox": [500, 35, 510, 37], "page_index": 1, "system_index": 1, "staff_index": 1},
+
+        # Missing staff index on note
+        {"candidate_id": "q3", "symbol_type": "quarter_note_candidate", "staff_position_index": -2, "bbox": [50, 50, 60, 60], "page_index": 1, "system_index": 1},
+        {"candidate_id": "l4", "symbol_type": "ledger_line_candidate", "staff_position_index": -2, "bbox": [48, 55, 62, 57], "page_index": 1, "system_index": 1, "staff_index": 1},
+
+        # Missing/malformed geometry on ledger line
+        {"candidate_id": "q4", "symbol_type": "quarter_note_candidate", "staff_position_index": -2, "bbox": [70, 70, 80, 80], "page_index": 1, "system_index": 1, "staff_index": 1},
+        {"candidate_id": "l5", "symbol_type": "ledger_line_candidate", "staff_position_index": -2, "bbox": [70, 70], "page_index": 1, "system_index": 1, "staff_index": 1},
+
+        # Missing staff index on ledger line
+        {"candidate_id": "q5", "symbol_type": "quarter_note_candidate", "staff_position_index": -2, "bbox": [90, 90, 100, 100], "page_index": 1, "system_index": 1, "staff_index": 1},
+        {"candidate_id": "l6", "symbol_type": "ledger_line_candidate", "staff_position_index": -2, "bbox": [88, 95, 102, 97], "page_index": 1, "system_index": 1},
+
+        # Eighth note with missing quarter_component_id lookup
+        {"candidate_id": "e1", "symbol_type": "eighth_note_candidate", "quarter_component_id": "missing_q", "staff_position_index": -2, "page_index": 1, "system_index": 1, "staff_index": 1},
+        {"candidate_id": "l7", "symbol_type": "ledger_line_candidate", "staff_position_index": -2, "bbox": [8, 15, 22, 17], "page_index": 1, "system_index": 1, "staff_index": 1},
+
+        # Note below staff logically skips above-staff ledgers
+        {"candidate_id": "q6", "symbol_type": "quarter_note_candidate", "staff_position_index": 10, "bbox": [110, 110, 120, 120], "page_index": 1, "system_index": 1, "staff_index": 1},
+        {"candidate_id": "l8", "symbol_type": "ledger_line_candidate", "staff_position_index": -2, "bbox": [108, 115, 122, 117], "page_index": 1, "system_index": 1, "staff_index": 1},
+
+        # Duplicate/ambiguous lines should both attach if geometry allows, but unrelated don't.
+        {"candidate_id": "q7", "symbol_type": "quarter_note_candidate", "staff_position_index": -4, "bbox": [130, 130, 140, 140], "page_index": 1, "system_index": 1, "staff_index": 1},
+        {"candidate_id": "l9", "symbol_type": "ledger_line_candidate", "staff_position_index": -2, "bbox": [128, 135, 142, 137], "page_index": 1, "system_index": 1, "staff_index": 1},
+        {"candidate_id": "l10", "symbol_type": "ledger_line_candidate", "staff_position_index": -4, "bbox": [128, 130, 142, 132], "page_index": 1, "system_index": 1, "staff_index": 1},
+
+        # Valid eighth note candidate attaching ledger line IDs through a valid quarter_component_id
+        {"candidate_id": "e2", "symbol_type": "eighth_note_candidate", "quarter_component_id": "q8", "staff_position_index": -2, "page_index": 1, "system_index": 1, "staff_index": 1},
+        {"candidate_id": "q8", "symbol_type": "quarter_note_candidate", "staff_position_index": -2, "bbox": [200, 200, 210, 210], "page_index": 1, "system_index": 1, "staff_index": 1},
+        {"candidate_id": "l13", "symbol_type": "ledger_line_candidate", "staff_position_index": -2, "bbox": [198, 205, 212, 207], "page_index": 1, "system_index": 1, "staff_index": 1},
+    ]
+
+    map_ledger_lines_to_note_candidates(outcomes)
+
+    for cand in outcomes:
+        st_type = cand.get("symbol_type")
+        if st_type and "note" in st_type:
+            # Only q7, w1, h1, e2, and q8 should have attachments
+            if cand.get("candidate_id") == "q7":
+                assert cand.get("attached_ledger_line_candidate_ids") == ["l10", "l9"]
+            elif cand.get("candidate_id") == "w1":
+                assert cand.get("attached_ledger_line_candidate_ids") == ["l11"]
+            elif cand.get("candidate_id") == "h1":
+                assert cand.get("attached_ledger_line_candidate_ids") == ["l12"]
+            elif cand.get("candidate_id") == "e2":
+                assert cand.get("attached_ledger_line_candidate_ids") == ["l13"]
+            elif cand.get("candidate_id") == "q8":
+                assert cand.get("attached_ledger_line_candidate_ids") == ["l13"]
+            else:
+                assert "attached_ledger_line_candidate_ids" not in cand
 
 def test_assume_treble_clef_enabled_public_fixture():
     script_path = Path("scripts/note_candidate_recognition_report.py")
