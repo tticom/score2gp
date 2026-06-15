@@ -216,3 +216,41 @@ def test_installed_cli_note_candidate_recognition_with_eighth_notes(tmp_path):
         assert "staff_index" in outcome
         assert "quarter_component_id" in outcome
         assert "modifier_component_id" in outcome
+
+def test_installed_cli_note_candidate_recognition_staff_geometry_exposure(tmp_path):
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
+
+    cmd = [sys.executable, "-m", "score2gp.cli", "note-candidate-recognition", "--pdf", str(fixture_path), "--json"]
+    result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=_get_subprocess_env())
+
+    output = json.loads(result.stdout)
+    assert "staff_geometry" in output
+
+    staff_geometry = output["staff_geometry"]
+    assert isinstance(staff_geometry, list)
+    assert len(staff_geometry) > 0
+
+    outcomes = output["read_only_recognition_outcomes"]
+    assert len(outcomes) > 0
+    note_candidate = outcomes[0]
+
+    join_success = False
+
+    for geom in staff_geometry:
+        assert "page_index" in geom
+        assert "system_index" in geom
+        assert "staff_index" in geom
+        assert "bbox" in geom
+        assert "line_y_coords" in geom
+
+        assert len(geom["bbox"]) == 4
+        assert len(geom["line_y_coords"]) == 5
+        for y in geom["line_y_coords"]:
+            assert isinstance(y, (int, float))
+
+        if (geom["page_index"] == note_candidate["page_index"] and
+            geom["system_index"] == note_candidate["system_index"] and
+            geom["staff_index"] == note_candidate["staff_index"]):
+            join_success = True
+
+    assert join_success, "Could not join note candidate to staff geometry by page, system, and staff index."

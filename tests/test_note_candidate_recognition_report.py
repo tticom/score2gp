@@ -452,3 +452,49 @@ def test_compose_eighth_note_candidates_negative_boundaries():
     eighths = compose_eighth_note_candidates(outcomes)
 
     assert len(eighths) == 0
+
+def test_note_candidate_recognition_report_staff_geometry_exposure():
+    script_path = Path("scripts/note_candidate_recognition_report.py")
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
+
+    assert script_path.exists()
+    assert fixture_path.exists()
+
+    result = subprocess.run(
+        [sys.executable, str(script_path), "--pdf", str(fixture_path), "--json"],
+        capture_output=True,
+        text=True,
+        check=True
+    )
+
+    data = json.loads(result.stdout)
+    assert "staff_geometry" in data
+
+    staff_geometry = data["staff_geometry"]
+    assert isinstance(staff_geometry, list)
+    assert len(staff_geometry) > 0
+
+    outcomes = data["read_only_recognition_outcomes"]
+    assert len(outcomes) > 0
+    note_candidate = outcomes[0]
+
+    join_success = False
+
+    for geom in staff_geometry:
+        assert "page_index" in geom
+        assert "system_index" in geom
+        assert "staff_index" in geom
+        assert "bbox" in geom
+        assert "line_y_coords" in geom
+
+        assert len(geom["bbox"]) == 4
+        assert len(geom["line_y_coords"]) == 5
+        for y in geom["line_y_coords"]:
+            assert isinstance(y, (int, float))
+
+        if (geom["page_index"] == note_candidate["page_index"] and
+            geom["system_index"] == note_candidate["system_index"] and
+            geom["staff_index"] == note_candidate["staff_index"]):
+            join_success = True
+
+    assert join_success, "Could not join note candidate to staff geometry by page, system, and staff index."
