@@ -610,12 +610,19 @@ def map_ledger_lines_to_note_candidates(outcomes: list[dict]) -> None:
     for cand in outcomes:
         st_type = cand.get("symbol_type")
         if st_type == "ledger_line_candidate":
-            if "staff_position_index" not in cand:
+            pos = cand.get("staff_position_index")
+            if type(pos) is not int:
                 continue
             bbox = cand.get("bbox")
             if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
                 continue
+            try:
+                float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3])
+            except (TypeError, ValueError):
+                continue
             if cand.get("page_index") is None or cand.get("system_index") is None or cand.get("staff_index") is None:
+                continue
+            if not cand.get("candidate_id"):
                 continue
             valid_ledgers.append(cand)
         elif st_type in ("whole_note_candidate", "half_note_candidate", "quarter_note_candidate", "eighth_note_candidate"):
@@ -623,7 +630,7 @@ def map_ledger_lines_to_note_candidates(outcomes: list[dict]) -> None:
 
     for note in notes:
         n_pos = note.get("staff_position_index")
-        if n_pos is None or 0 <= n_pos <= 8:
+        if type(n_pos) is not int or 0 <= n_pos <= 8:
             continue
 
         n_page = note.get("page_index")
@@ -644,8 +651,10 @@ def map_ledger_lines_to_note_candidates(outcomes: list[dict]) -> None:
 
         if not isinstance(n_bbox, (list, tuple)) or len(n_bbox) != 4:
             continue
-
-        nx0, ny0, nx1, ny1 = n_bbox
+        try:
+            nx0, ny0, nx1, ny1 = [float(v) for v in n_bbox]
+        except (TypeError, ValueError):
+            continue
 
         attached = []
         for l in valid_ledgers:
@@ -658,7 +667,7 @@ def map_ledger_lines_to_note_candidates(outcomes: list[dict]) -> None:
             if n_pos > 8 and (l_pos <= 8 or l_pos > n_pos):
                 continue
 
-            lx0, ly0, lx1, ly1 = l["bbox"]
+            lx0, ly0, lx1, ly1 = [float(v) for v in l["bbox"]]
             if max(nx0, lx0) <= min(nx1, lx1):
                 attached.append(l.get("candidate_id"))
 

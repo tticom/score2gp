@@ -329,8 +329,11 @@ def test_installed_cli_note_candidate_recognition_with_ledger_lines(tmp_path):
     above_note = next(n for n in notes if n["staff_position_index"] < 0)
     below_note = next(n for n in notes if n["staff_position_index"] > 8)
 
+    above_ledger = next(l for l in ledger_lines if l["staff_position_index"] < 0)
+    below_ledger = next(l for l in ledger_lines if l["staff_position_index"] > 8)
+
     assert "attached_ledger_line_candidate_ids" in above_note
-    assert len(above_note["attached_ledger_line_candidate_ids"]) == 1
+    assert above_note["attached_ledger_line_candidate_ids"] == [above_ledger["candidate_id"]]
 
     assert "attached_ledger_line_candidate_ids" in below_note
-    assert len(below_note["attached_ledger_line_candidate_ids"]) == 1
+    assert below_note["attached_ledger_line_candidate_ids"] == [below_ledger["candidate_id"]]
