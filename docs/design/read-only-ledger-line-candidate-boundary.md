@@ -29,7 +29,9 @@ To support pitch inference for notes outside the staff, we must eventually extra
 2. **Filtering:** Ledger lines are not filtered out. They successfully make it to the `x_aligned_cluster_candidate` outcomes.
 3. **Representation:** They are currently available as raw `horizontal_stroke` primitives within `x_aligned_cluster_candidates` (alongside notehead rects and vertical stem strokes).
 4. **Association:** They are implicitly associated with `page_index`, `system_index`, and `staff_index` via their parent cluster. They are **not** explicitly associated with `note_candidate` outcomes.
-5. **Distinguishability:** They are highly distinguishable. Staff lines are filtered as `staff_line_horizontal`, beams are captured separately as `beam_candidate`, and stems are `vertical_stroke_candidate`. Ledger lines naturally remain as `horizontal_stroke` primitives inside note clusters.
+5. **Distinguishability:** Ledger lines are available as candidate evidence but are ambiguous with beam-like horizontal strokes until disambiguated. Current `non_staff_horizontal` primitives have two exposure paths:
+   - `horizontal_stroke` evidence inside `x_aligned_cluster_candidate`;
+   - `beam_candidate` through `flag_beam_candidates` when the stroke is wide enough.
 6. **Fixture Support:** Current public fixtures (e.g., `generated_standard_staff_complex_cluster.json`) contain primitives that represent ledger lines above the staff. Additional fixtures will be needed for multiple stacked ledger lines.
 
 ## Recommended Boundary Shape
@@ -55,6 +57,7 @@ Ledger lines should be represented as standalone **generic read-only candidates*
 ## Proposed Fail-Closed Behaviour
 * Do not emit `ledger_line_candidate` if a `horizontal_stroke` is suspiciously wide, thick, or does not horizontally overlap with a known notehead primitive.
 * Ambiguous lines should remain as `x_aligned_cluster_candidate` primitives and not be promoted.
+* **Beam Avoidance:** The implementation task must avoid double-emitting the same primitive as both `beam_candidate` and `ledger_line_candidate`. The recommended approach is to suppress matching beam candidates when a stroke is successfully promoted to `ledger_line_candidate`, or classify/reclassify the horizontal primitive before beam shaping.
 
 ## Fixtures Needed for Implementation
 A new `generated_standard_staff_ledger_lines.json` fixture is required to test stacked ledger lines above and below the staff, ensuring bounding boxes are accurately reported and separated from standard staff lines.
@@ -90,10 +93,13 @@ Scope:
 - Work in `tticom/score2gp`.
 - Create a new public fixture with stacked ledger lines (e.g. `generated_standard_staff_ledger_lines.pdf/json`).
 - Update the candidate shaping logic in `src/score2gp/whole_note_recogniser.py` to identify `horizontal_stroke` primitives inside note clusters and emit them as `ledger_line_candidate` objects.
+- Ensure the implementation avoids double-emitting the same primitive as both `beam_candidate` and `ledger_line_candidate` (e.g. by duplicate suppression or reclassification against existing `beam_candidate` output).
 - Use the schema defined in `docs/design/read-only-ledger-line-candidate-boundary.md`.
 - `associated_note_candidate_ids` is optional.
 - Ensure the reporting script `scripts/note_candidate_recognition_report.py` correctly passes through the new candidate.
 - Add tests to `tests/test_note_candidate_recognition_report.py` proving ledger lines are successfully emitted.
+- Add tests proving a ledger-line primitive is not also emitted as a beam candidate.
+- Add tests proving eighth-note composition is not changed by ledger-line promotion.
 
 Fail-Closed Rules:
 - If a horizontal stroke does not overlap with a notehead or stem, do not emit it as a ledger line.
