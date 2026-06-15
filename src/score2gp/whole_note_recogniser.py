@@ -534,11 +534,19 @@ def map_staff_position_to_read_only_outcomes(outcomes: list[dict], staff_geometr
         pos_float = (notehead_y - line_y_coords[0]) / (staff_space / 2.0)
         cand["staff_position_index"] = int(round(pos_float))
 
+def map_assumed_treble_pitch_to_read_only_outcomes(outcomes: list[dict]) -> None:
+    pitches = ["F5", "E5", "D5", "C5", "B4", "A4", "G4", "F4", "E4"]
+    for cand in outcomes:
+        pos_idx = cand.get("staff_position_index")
+        if type(pos_idx) is int and 0 <= pos_idx <= 8:
+            cand["assumed_treble_pitch"] = pitches[pos_idx]
+
 def run_recognition_on_file(
     pdf_path,
     include_x_aligned_clusters: bool = False,
     include_left_margin_candidates: bool = False,
-    include_flag_beam_candidates: bool = False
+    include_flag_beam_candidates: bool = False,
+    assume_treble_clef: bool = False
 ) -> dict | None:
     import sys
     import fitz  # type: ignore
@@ -679,6 +687,8 @@ def run_recognition_on_file(
         outcomes.extend(eighth_notes)
 
     map_staff_position_to_read_only_outcomes(outcomes, all_staff_geometries)
+    if assume_treble_clef:
+        map_assumed_treble_pitch_to_read_only_outcomes(outcomes)
 
     return {
         "source": pdf_path.name,
