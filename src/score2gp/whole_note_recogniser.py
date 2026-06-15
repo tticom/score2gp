@@ -601,6 +601,70 @@ def map_assumed_treble_pitch_to_read_only_outcomes(outcomes: list[dict]) -> None
         if type(pos_idx) is int and 0 <= pos_idx <= 8:
             cand["assumed_treble_pitch"] = pitches[pos_idx]
 
+def map_ledger_lines_to_note_candidates(outcomes: list[dict]) -> None:
+    candidate_lookup = {c.get("candidate_id"): c for c in outcomes if c.get("candidate_id")}
+
+    valid_ledgers = []
+    notes = []
+
+    for cand in outcomes:
+        st_type = cand.get("symbol_type")
+        if st_type == "ledger_line_candidate":
+            if "staff_position_index" not in cand:
+                continue
+            bbox = cand.get("bbox")
+            if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
+                continue
+            if cand.get("page_index") is None or cand.get("system_index") is None or cand.get("staff_index") is None:
+                continue
+            valid_ledgers.append(cand)
+        elif st_type in ("whole_note_candidate", "half_note_candidate", "quarter_note_candidate", "eighth_note_candidate"):
+            notes.append(cand)
+
+    for note in notes:
+        n_pos = note.get("staff_position_index")
+        if n_pos is None or 0 <= n_pos <= 8:
+            continue
+
+        n_page = note.get("page_index")
+        n_sys = note.get("system_index")
+        n_staff = note.get("staff_index")
+        if n_page is None or n_sys is None or n_staff is None:
+            continue
+
+        n_bbox = None
+        if note.get("symbol_type") == "eighth_note_candidate":
+            q_id = note.get("quarter_component_id")
+            if q_id:
+                q_cand = candidate_lookup.get(q_id)
+                if q_cand:
+                    n_bbox = q_cand.get("bbox")
+        else:
+            n_bbox = note.get("bbox")
+
+        if not isinstance(n_bbox, (list, tuple)) or len(n_bbox) != 4:
+            continue
+
+        nx0, ny0, nx1, ny1 = n_bbox
+
+        attached = []
+        for l in valid_ledgers:
+            if l.get("page_index") != n_page or l.get("system_index") != n_sys or l.get("staff_index") != n_staff:
+                continue
+
+            l_pos = l.get("staff_position_index")
+            if n_pos < 0 and (l_pos >= 0 or l_pos < n_pos):
+                continue
+            if n_pos > 8 and (l_pos <= 8 or l_pos > n_pos):
+                continue
+
+            lx0, ly0, lx1, ly1 = l["bbox"]
+            if max(nx0, lx0) <= min(nx1, lx1):
+                attached.append(l.get("candidate_id"))
+
+        if attached:
+            note["attached_ledger_line_candidate_ids"] = sorted(attached)
+
 def run_recognition_on_file(
     pdf_path,
     include_x_aligned_clusters: bool = False,
@@ -777,6 +841,8 @@ def run_recognition_on_file(
         outcomes.extend(eighth_notes)
 
     map_staff_position_to_read_only_outcomes(outcomes, all_staff_geometries)
+    if include_ledger_line_candidates:
+        map_ledger_lines_to_note_candidates(outcomes)
     if assume_treble_clef:
         map_assumed_treble_pitch_to_read_only_outcomes(outcomes)
 

@@ -287,6 +287,18 @@ def test_note_candidate_recognition_report_ledger_lines():
     assert any(p < 0 for p in positions)
     assert any(p > 8 for p in positions)
 
+    notes = [o for o in outcomes if o["symbol_type"] == "quarter_note_candidate"]
+    assert len(notes) == 2
+
+    above_note = next(n for n in notes if n["staff_position_index"] < 0)
+    below_note = next(n for n in notes if n["staff_position_index"] > 8)
+
+    assert "attached_ledger_line_candidate_ids" in above_note
+    assert len(above_note["attached_ledger_line_candidate_ids"]) == 1
+
+    assert "attached_ledger_line_candidate_ids" in below_note
+    assert len(below_note["attached_ledger_line_candidate_ids"]) == 1
+
 def test_associate_staves_horizontal_boundary():
     from score2gp.whole_note_recogniser import _associate_staves
 
