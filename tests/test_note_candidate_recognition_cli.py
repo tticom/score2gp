@@ -165,8 +165,12 @@ def test_installed_cli_note_candidate_recognition_with_flag_beam_candidates(tmp_
     flags = [o for o in outcomes if o["symbol_type"] == "flag_candidate"]
     beams = [o for o in outcomes if o["symbol_type"] == "beam_candidate"]
 
-    # We expect some beams based on expected_diagnostics_complex_cluster.json
-    assert len(beams) > 0
+    ledger_lines = [o for o in outcomes if o["symbol_type"] == "ledger_line_candidate"]
+
+    # The primitive previously extracted as a beam is now safely promoted to a ledger line
+    # and suppressed from the beam candidate pool to prevent double emission.
+    assert len(beams) == 0
+    assert len(ledger_lines) > 0
 
     eighth_notes = [o for o in outcomes if o["symbol_type"] == "eighth_note_candidate"]
     assert len(eighth_notes) == 0
@@ -284,3 +288,31 @@ def test_installed_cli_note_candidate_recognition_assume_treble_clef_enabled(tmp
     cand2 = whole_notes[1]
     assert cand2["staff_position_index"] == 4
     assert cand2["assumed_treble_pitch"] == "B4"
+
+def test_installed_cli_note_candidate_recognition_with_ledger_lines(tmp_path):
+    # Test that the generic CLI path exposes ledger line candidates properly
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_ledger_lines.pdf")
+
+    cmd = [sys.executable, "-m", "score2gp.cli", "note-candidate-recognition", "--pdf", str(fixture_path), "--json"]
+    result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=_get_subprocess_env())
+
+    output = json.loads(result.stdout)
+    assert output["source"] == fixture_path.name
+
+    outcomes = output["read_only_recognition_outcomes"]
+    ledger_lines = [o for o in outcomes if o["symbol_type"] == "ledger_line_candidate"]
+    beams = [o for o in outcomes if o["symbol_type"] == "beam_candidate"]
+
+    assert len(ledger_lines) == 2
+    assert len(beams) == 0
+
+    eighth_notes = [o for o in outcomes if o["symbol_type"] == "eighth_note_candidate"]
+    assert len(eighth_notes) == 0
+
+    for outcome in ledger_lines:
+        assert outcome["source"] == "diagnostic_candidate_evidence"
+        assert "candidate_id" in outcome
+        assert "bbox" in outcome
+        assert "page_index" in outcome
+        assert outcome.get("system_index") is not None
+        assert outcome.get("staff_index") is not None

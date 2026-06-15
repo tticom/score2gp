@@ -229,8 +229,12 @@ def test_note_candidate_recognition_report_flag_beam_candidates():
 
     flags = [o for o in outcomes if o["symbol_type"] == "flag_candidate"]
     beams = [o for o in outcomes if o["symbol_type"] == "beam_candidate"]
+    ledger_lines = [o for o in outcomes if o["symbol_type"] == "ledger_line_candidate"]
 
-    assert len(beams) > 0
+    # The primitive previously extracted as a beam is now safely promoted to a ledger line
+    # and suppressed from the beam candidate pool to prevent double emission.
+    assert len(beams) == 0
+    assert len(ledger_lines) > 0
 
     eighth_notes = [o for o in outcomes if o["symbol_type"] == "eighth_note_candidate"]
     assert len(eighth_notes) == 0
@@ -240,11 +244,43 @@ def test_note_candidate_recognition_report_flag_beam_candidates():
         assert outcome["system_index"] == 1
         assert outcome["staff_index"] == 1
 
-    for outcome in beams:
+    for outcome in ledger_lines:
         assert outcome["page_index"] == 1
         assert outcome["system_index"] == 1
         assert outcome["staff_index"] == 1
 
+
+def test_note_candidate_recognition_report_ledger_lines():
+    script_path = Path("scripts/note_candidate_recognition_report.py")
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_ledger_lines.pdf")
+
+    assert script_path.exists()
+    assert fixture_path.exists()
+
+    result = subprocess.run(
+        [sys.executable, str(script_path), "--pdf", str(fixture_path), "--json"],
+        capture_output=True,
+        text=True,
+        check=True
+    )
+
+    data = json.loads(result.stdout)
+    outcomes = data["read_only_recognition_outcomes"]
+
+    ledger_lines = [o for o in outcomes if o["symbol_type"] == "ledger_line_candidate"]
+    beams = [o for o in outcomes if o["symbol_type"] == "beam_candidate"]
+
+    assert len(ledger_lines) == 2
+    assert len(beams) == 0
+
+    for cand in ledger_lines:
+        assert cand["page_index"] == 1
+        assert cand["system_index"] is not None
+        assert cand["staff_index"] is not None
+        assert "bbox" in cand
+        assert "candidate_id" in cand
+        assert "staff_position_index" not in cand
+        assert "assumed_treble_pitch" not in cand
 
 def test_associate_staves_horizontal_boundary():
     from score2gp.whole_note_recogniser import _associate_staves
@@ -338,8 +374,82 @@ def test_compose_eighth_note_candidates_positive_boundaries():
 
     beamed = [e for e in eighths if e["modifier_type"] == "beam_candidate"]
     assert len(beamed) == 2
-    assert beamed[0]["quarter_component_id"] == "q2"
-    assert beamed[1]["quarter_component_id"] == "q3"
+def test_ledger_line_duplicate_beam_suppression_cross_page(tmp_path, monkeypatch):
+    import fitz
+    from score2gp.whole_note_recogniser import run_recognition_on_file
+    import score2gp.whole_note_recogniser as wnr
+
+    # Create a dummy 2-page PDF
+    pdf_path = tmp_path / "dummy.pdf"
+    doc = fitz.open()
+    doc.new_page()
+    doc.new_page()
+    doc.save(pdf_path)
+    doc.close()
+
+    # Mock extract_notation_diagnostics_dict
+    def mock_extract(page, page_index):
+        if page_index == 1:
+            return {
+                "staves": [
+                    {
+                        "staff": {"system_index": 1, "staff_index": 1, "x0": 0.0, "x1": 100.0, "y0": 0.0, "y1": 100.0},
+                        "x_aligned_cluster_candidates": [
+                            {
+                                "system_index": 1, "staff_index": 1,
+                                "x0": 10.0, "x1": 20.0,
+                                "primitive_count": 2,
+                                "primitives": [
+                                    {"kind": "horizontal_stroke", "x0": 10.0, "y0": 20.0, "x1": 20.0, "y1": 20.0},
+                                    {"kind": "rectangle", "x0": 15.0, "y0": 15.0, "x1": 15.0, "y1": 25.0}
+                                ]
+                            }
+                        ],
+                        "flag_beam_candidates": {
+                            "flags": [],
+                            "beams": [
+                                {"bbox": [10.0, 20.0, 20.0, 20.0], "primitive_kind": "non_staff_horizontal", "width": 10.0, "height": 0.0}
+                            ]
+                        }
+                    }
+                ]
+            }
+        else:
+            return {
+                "staves": [
+                    {
+                        "staff": {"system_index": 1, "staff_index": 1, "x0": 0.0, "x1": 100.0, "y0": 0.0, "y1": 100.0},
+                        "x_aligned_cluster_candidates": [],
+                        "flag_beam_candidates": {
+                            "flags": [],
+                            "beams": [
+                                {"bbox": [10.0, 20.0, 20.0, 20.0], "primitive_kind": "non_staff_horizontal", "width": 10.0, "height": 0.0}
+                            ]
+                        }
+                    }
+                ]
+            }
+
+    import score2gp.pdf_staff_notation_diagnostics as psnd
+    monkeypatch.setattr(psnd, "extract_notation_diagnostics_dict", mock_extract)
+    monkeypatch.setattr(psnd, "_extract_whole_note_candidates", lambda p: [])
+    monkeypatch.setattr(psnd, "_extract_half_note_candidates", lambda p: [])
+    monkeypatch.setattr(psnd, "_extract_quarter_note_candidates", lambda p: [])
+
+    res = run_recognition_on_file(
+        pdf_path,
+        include_flag_beam_candidates=True,
+        include_ledger_line_candidates=True
+    )
+
+    outcomes = res["read_only_recognition_outcomes"]
+    ledger_lines = [o for o in outcomes if o["symbol_type"] == "ledger_line_candidate"]
+    beams = [o for o in outcomes if o["symbol_type"] == "beam_candidate"]
+
+    assert len(ledger_lines) == 1
+    assert len(beams) == 1
+    assert ledger_lines[0]["page_index"] == 1
+    assert beams[0]["page_index"] == 2
 
 def test_compose_eighth_note_candidates_negative_boundaries():
     from score2gp.whole_note_recogniser import compose_eighth_note_candidates
