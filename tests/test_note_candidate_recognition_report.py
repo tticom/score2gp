@@ -279,8 +279,13 @@ def test_note_candidate_recognition_report_ledger_lines():
         assert cand["staff_index"] is not None
         assert "bbox" in cand
         assert "candidate_id" in cand
-        assert "staff_position_index" not in cand
+        assert "staff_position_index" in cand
         assert "assumed_treble_pitch" not in cand
+
+    positions = [c["staff_position_index"] for c in ledger_lines]
+    # One is above the staff, one is below the staff.
+    assert any(p < 0 for p in positions)
+    assert any(p > 8 for p in positions)
 
 def test_associate_staves_horizontal_boundary():
     from score2gp.whole_note_recogniser import _associate_staves
@@ -652,6 +657,12 @@ def test_map_staff_position_to_read_only_outcomes_malformed_inputs():
         {"symbol_type": "eighth_note_candidate", "quarter_component_id": "q1", "bbox": [1, 2, 3, 4], "page_index": 1, "system_index": 1, "staff_index": 1},
         # whole note malformed line_y_coords
         {"symbol_type": "whole_note_candidate", "bbox": [1, 2, 3, 4], "page_index": 3, "system_index": 1, "staff_index": 1},
+        # ledger line missing bbox
+        {"symbol_type": "ledger_line_candidate", "page_index": 1, "system_index": 1, "staff_index": 1},
+        # ledger line malformed bbox
+        {"symbol_type": "ledger_line_candidate", "bbox": [1, 2], "page_index": 1, "system_index": 1, "staff_index": 1},
+        # ledger line missing staff geometry
+        {"symbol_type": "ledger_line_candidate", "bbox": [1, 2, 3, 4], "page_index": 9, "system_index": 9, "staff_index": 9},
     ]
 
     staff_geometries = [
