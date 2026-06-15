@@ -737,6 +737,11 @@ def test_map_ledger_lines_to_note_candidates_edge_cases():
         {"candidate_id": "q7", "symbol_type": "quarter_note_candidate", "staff_position_index": -4, "bbox": [130, 130, 140, 140], "page_index": 1, "system_index": 1, "staff_index": 1},
         {"candidate_id": "l9", "symbol_type": "ledger_line_candidate", "staff_position_index": -2, "bbox": [128, 135, 142, 137], "page_index": 1, "system_index": 1, "staff_index": 1},
         {"candidate_id": "l10", "symbol_type": "ledger_line_candidate", "staff_position_index": -4, "bbox": [128, 130, 142, 132], "page_index": 1, "system_index": 1, "staff_index": 1},
+
+        # Valid eighth note candidate attaching ledger line IDs through a valid quarter_component_id
+        {"candidate_id": "e2", "symbol_type": "eighth_note_candidate", "quarter_component_id": "q8", "staff_position_index": -2, "page_index": 1, "system_index": 1, "staff_index": 1},
+        {"candidate_id": "q8", "symbol_type": "quarter_note_candidate", "staff_position_index": -2, "bbox": [200, 200, 210, 210], "page_index": 1, "system_index": 1, "staff_index": 1},
+        {"candidate_id": "l13", "symbol_type": "ledger_line_candidate", "staff_position_index": -2, "bbox": [198, 205, 212, 207], "page_index": 1, "system_index": 1, "staff_index": 1},
     ]
 
     map_ledger_lines_to_note_candidates(outcomes)
@@ -744,13 +749,17 @@ def test_map_ledger_lines_to_note_candidates_edge_cases():
     for cand in outcomes:
         st_type = cand.get("symbol_type")
         if st_type and "note" in st_type:
-            # Only q7, w1, and h1 should have attachments
+            # Only q7, w1, h1, e2, and q8 should have attachments
             if cand.get("candidate_id") == "q7":
                 assert cand.get("attached_ledger_line_candidate_ids") == ["l10", "l9"]
             elif cand.get("candidate_id") == "w1":
                 assert cand.get("attached_ledger_line_candidate_ids") == ["l11"]
             elif cand.get("candidate_id") == "h1":
                 assert cand.get("attached_ledger_line_candidate_ids") == ["l12"]
+            elif cand.get("candidate_id") == "e2":
+                assert cand.get("attached_ledger_line_candidate_ids") == ["l13"]
+            elif cand.get("candidate_id") == "q8":
+                assert cand.get("attached_ledger_line_candidate_ids") == ["l13"]
             else:
                 assert "attached_ledger_line_candidate_ids" not in cand
 
