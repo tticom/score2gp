@@ -35,10 +35,12 @@ def test_note_candidate_recognition_report_public_fixture():
     assert "staff_position_index" in cand1
     assert isinstance(cand1["staff_position_index"], int)
     assert cand1["staff_position_index"] == 2
+    assert "assumed_treble_pitch" not in cand1
 
     cand2 = whole_notes[1]
     assert "staff_position_index" in cand2
     assert cand2["staff_position_index"] == 4
+    assert "assumed_treble_pitch" not in cand2
 
 def test_note_candidate_recognition_report_half_note_fixture():
     script_path = Path("scripts/note_candidate_recognition_report.py")
@@ -551,3 +553,50 @@ def test_map_staff_position_to_read_only_outcomes_malformed_inputs():
 
     for cand in outcomes:
         assert "staff_position_index" not in cand
+
+def test_assume_treble_clef_enabled_public_fixture():
+    script_path = Path("scripts/note_candidate_recognition_report.py")
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
+
+    assert script_path.exists()
+    assert fixture_path.exists()
+
+    result = subprocess.run(
+        [sys.executable, str(script_path), "--pdf", str(fixture_path), "--json", "--assume-treble-clef"],
+        capture_output=True,
+        text=True,
+        check=True
+    )
+
+    data = json.loads(result.stdout)
+    outcomes = data["read_only_recognition_outcomes"]
+    whole_notes = [o for o in outcomes if o["symbol_type"] == "whole_note_candidate"]
+    assert len(whole_notes) == 2
+
+    cand1 = whole_notes[0]
+    assert cand1["staff_position_index"] == 2
+    assert cand1["assumed_treble_pitch"] == "D5"
+
+    cand2 = whole_notes[1]
+    assert cand2["staff_position_index"] == 4
+    assert cand2["assumed_treble_pitch"] == "B4"
+
+def test_assume_treble_clef_out_of_bounds():
+    from score2gp.whole_note_recogniser import map_staff_position_to_read_only_outcomes
+
+    outcomes = [
+        {"symbol_type": "whole_note_candidate", "bbox": [100, 10, 110, 20], "page_index": 1, "system_index": 1, "staff_index": 1},
+        {"symbol_type": "whole_note_candidate", "bbox": [100, 90, 110, 100], "page_index": 1, "system_index": 1, "staff_index": 1},
+    ]
+
+    staff_geometries = [
+        {"page_index": 1, "system_index": 1, "staff_index": 1, "line_y_coords": [30, 40, 50, 60, 70]},
+    ]
+
+    map_staff_position_to_read_only_outcomes(outcomes, staff_geometries, assume_treble_clef=True)
+
+    assert outcomes[0]["staff_position_index"] == -3
+    assert "assumed_treble_pitch" not in outcomes[0]
+
+    assert outcomes[1]["staff_position_index"] == 13
+    assert "assumed_treble_pitch" not in outcomes[1]

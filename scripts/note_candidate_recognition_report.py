@@ -19,6 +19,7 @@ def main():
     parser = argparse.ArgumentParser(description="Read-Only Note-Candidate Recognition Report")
     parser.add_argument("--pdf", type=str, default="tests/fixtures/pdf/generated_standard_staff_whole_note.pdf", help="Path to the PDF fixture")
     parser.add_argument("--json", action="store_true", help="Output machine-checkable JSON")
+    parser.add_argument("--assume-treble-clef", action="store_true", help="Explicit opt-in to map read-only pitch using an assumed treble clef")
     args = parser.parse_args()
 
     pdf_path = Path(args.pdf)
@@ -26,7 +27,8 @@ def main():
         pdf_path,
         include_x_aligned_clusters=True,
         include_left_margin_candidates=True,
-        include_flag_beam_candidates=True
+        include_flag_beam_candidates=True,
+        assume_treble_clef=args.assume_treble_clef
     )
     if not res:
         sys.exit(1)
