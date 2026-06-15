@@ -34,6 +34,11 @@ def test_note_candidate_recognition_report_public_fixture():
     assert cand1["staff_index"] is not None
     assert "staff_position_index" in cand1
     assert isinstance(cand1["staff_position_index"], int)
+    assert cand1["staff_position_index"] == 2
+
+    cand2 = whole_notes[1]
+    assert "staff_position_index" in cand2
+    assert cand2["staff_position_index"] == 4
 
 def test_note_candidate_recognition_report_half_note_fixture():
     script_path = Path("scripts/note_candidate_recognition_report.py")
@@ -62,6 +67,7 @@ def test_note_candidate_recognition_report_half_note_fixture():
         assert cand["staff_index"] is not None
         assert "staff_position_index" in cand
         assert isinstance(cand["staff_position_index"], int)
+        assert cand["staff_position_index"] == 4
 
 def test_note_candidate_recognition_report_quarter_note_fixture():
     script_path = Path("scripts/note_candidate_recognition_report.py")
@@ -90,6 +96,7 @@ def test_note_candidate_recognition_report_quarter_note_fixture():
         assert cand["staff_index"] is not None
         assert "staff_position_index" in cand
         assert isinstance(cand["staff_position_index"], int)
+        assert cand["staff_position_index"] == 4
 
 def test_note_candidate_recognition_report_eighth_note_fixture():
     script_path = Path("scripts/note_candidate_recognition_report.py")
@@ -153,6 +160,7 @@ def test_note_candidate_recognition_report_eighth_note_fixture():
         assert cand["modifier_component_id"] is not None
         assert "staff_position_index" in cand
         assert isinstance(cand["staff_position_index"], int)
+        assert cand["staff_position_index"] == 4
 
 def test_note_candidate_recognition_report_x_aligned_cluster_fixture():
     script_path = Path("scripts/note_candidate_recognition_report.py")
@@ -512,10 +520,14 @@ def test_map_staff_position_to_read_only_outcomes_malformed_inputs():
     outcomes = [
         # missing bbox
         {"symbol_type": "whole_note_candidate", "page_index": 1, "system_index": 1, "staff_index": 1},
-        # malformed bbox
+        # malformed bbox (not 4 elements)
         {"symbol_type": "quarter_note_candidate", "bbox": [1, 2, 3], "page_index": 1, "system_index": 1, "staff_index": 1},
         # string bbox
         {"symbol_type": "half_note_candidate", "bbox": "invalid", "page_index": 1, "system_index": 1, "staff_index": 1},
+        # reversed bbox x
+        {"symbol_type": "whole_note_candidate", "bbox": [10, 20, 5, 30], "page_index": 1, "system_index": 1, "staff_index": 1},
+        # reversed bbox y
+        {"symbol_type": "whole_note_candidate", "bbox": [5, 30, 10, 20], "page_index": 1, "system_index": 1, "staff_index": 1},
         # no matching staff geometry
         {"symbol_type": "whole_note_candidate", "bbox": [1, 2, 3, 4], "page_index": 2, "system_index": 1, "staff_index": 1},
         # eighth note missing quarter id
