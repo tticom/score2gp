@@ -308,6 +308,29 @@ def map_beam_candidates_to_read_only_outcomes(candidate_locations: list[dict]) -
         })
     return outcomes
 
+def map_staff_geometry_to_read_only_report(staves_diags: list[dict]) -> list[dict]:
+    staff_geometries = []
+    for staff_diag in staves_diags:
+        staff = staff_diag.get("staff", {})
+        if not staff:
+            continue
+        try:
+            bbox = [staff["x0"], staff["y0"], staff["x1"], staff["y1"]]
+            page_index = staff["page_index"]
+            system_index = staff["system_index"]
+            staff_index = staff["staff_index"]
+            line_y_coords = staff["line_y_coords"]
+            staff_geometries.append({
+                "page_index": page_index,
+                "system_index": system_index,
+                "staff_index": staff_index,
+                "bbox": bbox,
+                "line_y_coords": line_y_coords
+            })
+        except KeyError:
+            continue
+    return staff_geometries
+
 def _associate_staves(shaped_candidates: list[dict], staves: list[dict]) -> None:
     if not staves:
         return
@@ -485,12 +508,16 @@ def run_recognition_on_file(
     flag_locations = []
     beam_locations = []
 
+    all_staff_geometries = []
+
     for i in range(len(doc)):
         page = doc[i]
         page_index = i + 1
 
         page_diags = extract_notation_diagnostics_dict(page, page_index)
         staves = page_diags.get("staves", [])
+
+        all_staff_geometries.extend(map_staff_geometry_to_read_only_report(staves))
 
         whole_cands = _extract_whole_note_candidates(page)
         shaped_whole = shape_whole_note_candidate_evidence(
@@ -595,5 +622,6 @@ def run_recognition_on_file(
     return {
         "source": pdf_path.name,
         "recognition_mode": "read_only_diagnostic_derived",
+        "staff_geometry": all_staff_geometries,
         "read_only_recognition_outcomes": outcomes
     }
