@@ -842,8 +842,13 @@ def build_clef_resolved_pitch_coverage_report(outcomes: list[dict]) -> dict:
         "sample_diagnostics": []
     }
 
+    if not isinstance(outcomes, list):
+        return report
+
     clef_policy = {}
     for cand in outcomes:
+        if not isinstance(cand, dict):
+            continue
         if cand.get("symbol_type") == "treble_clef_candidate":
             cand_id = cand.get("candidate_id")
             if not isinstance(cand_id, str) or not cand_id:
@@ -862,6 +867,8 @@ def build_clef_resolved_pitch_coverage_report(outcomes: list[dict]) -> dict:
     note_types = ("whole_note_candidate", "half_note_candidate", "quarter_note_candidate", "eighth_note_candidate")
 
     for cand in outcomes:
+        if not isinstance(cand, dict):
+            continue
         if cand.get("symbol_type") not in note_types:
             continue
 
@@ -907,9 +914,14 @@ def build_clef_resolved_pitch_coverage_report(outcomes: list[dict]) -> dict:
                 report["skipped_staff_position_malformed"] += 1
                 reason = "malformed_staff_position"
             else:
-                if type(pos) is int and (pos < 0 or pos > 8):
-                    report["skipped_missing_required_ledger_support"] += 1
-                    reason = "missing_required_ledger_support"
+                if type(pos) is int:
+                    if pos < -7 or pos > 15:
+                        reason = "pitch_out_of_range_or_unsupported"
+                    elif pos < 0 or pos > 8:
+                        report["skipped_missing_required_ledger_support"] += 1
+                        reason = "missing_required_ledger_support"
+                    else:
+                        reason = "pitch_out_of_range_or_unsupported"
                 else:
                     reason = "pitch_out_of_range_or_unsupported"
 

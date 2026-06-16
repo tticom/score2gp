@@ -1136,3 +1136,63 @@ def test_clef_resolved_pitch_coverage_report_unit():
     assert "n5" in sample_ids
     assert "n6" in sample_ids
     assert "n7" in sample_ids
+
+def test_clef_resolved_pitch_coverage_report_malformed_outcomes():
+    from score2gp.whole_note_recogniser import build_clef_resolved_pitch_coverage_report
+
+    # Test non-list inputs
+    assert build_clef_resolved_pitch_coverage_report(None)["total_note_candidates_in_scope"] == 0
+    assert build_clef_resolved_pitch_coverage_report("invalid")["total_note_candidates_in_scope"] == 0
+    assert build_clef_resolved_pitch_coverage_report({})["total_note_candidates_in_scope"] == 0
+
+    # Test empty list
+    assert build_clef_resolved_pitch_coverage_report([])["total_note_candidates_in_scope"] == 0
+
+    # Test list with non-dict elements and missing attributes
+    outcomes = [
+        "not_a_dict",
+        None,
+        123,
+        {"symbol_type": "treble_clef_candidate", "candidate_id": "clef_1", "page_index": 1, "system_index": 1, "staff_index": 1, "source": "diagnostic_candidate_evidence"},
+        {"symbol_type": "quarter_note_candidate", "candidate_id": "n1", "page_index": 1, "system_index": 1, "staff_index": 1, "staff_position_index": 4, "clef_resolved_staff_pitch": "B4"}
+    ]
+
+    report = build_clef_resolved_pitch_coverage_report(outcomes)
+    assert report["total_note_candidates_in_scope"] == 1
+    assert report["note_candidates_with_clef_resolved_staff_pitch"] == 1
+
+
+def test_clef_resolved_pitch_coverage_report_out_of_range_positions():
+    from score2gp.whole_note_recogniser import build_clef_resolved_pitch_coverage_report
+
+    outcomes = [
+        {"symbol_type": "treble_clef_candidate", "candidate_id": "clef_1", "page_index": 1, "system_index": 1, "staff_index": 1, "source": "diagnostic_candidate_evidence"},
+
+        # Out of range position: -8
+        {"symbol_type": "quarter_note_candidate", "candidate_id": "n_out_1", "page_index": 1, "system_index": 1, "staff_index": 1, "staff_position_index": -8},
+        # Out of range position: 16
+        {"symbol_type": "quarter_note_candidate", "candidate_id": "n_out_2", "page_index": 1, "system_index": 1, "staff_index": 1, "staff_position_index": 16},
+        # Extreme position
+        {"symbol_type": "quarter_note_candidate", "candidate_id": "n_out_3", "page_index": 1, "system_index": 1, "staff_index": 1, "staff_position_index": 100},
+        
+        # Valid missing ledger line support: -7
+        {"symbol_type": "quarter_note_candidate", "candidate_id": "n_ledger_1", "page_index": 1, "system_index": 1, "staff_index": 1, "staff_position_index": -7},
+        # Valid missing ledger line support: 15
+        {"symbol_type": "quarter_note_candidate", "candidate_id": "n_ledger_2", "page_index": 1, "system_index": 1, "staff_index": 1, "staff_position_index": 15},
+    ]
+
+    report = build_clef_resolved_pitch_coverage_report(outcomes)
+
+    assert report["total_note_candidates_in_scope"] == 5
+    assert report["note_candidates_with_staff_position_index"] == 5
+    assert report["note_candidates_on_staves_with_valid_clef"] == 5
+    assert report["note_candidates_with_clef_resolved_staff_pitch"] == 0
+    assert report["skipped_missing_required_ledger_support"] == 2 # Only -7 and 15
+
+    # Check reasons in sample diagnostics
+    sample_reasons = {d["candidate_id"]: d["skip_reason"] for d in report["sample_diagnostics"]}
+    assert sample_reasons["n_out_1"] == "pitch_out_of_range_or_unsupported"
+    assert sample_reasons["n_out_2"] == "pitch_out_of_range_or_unsupported"
+    assert sample_reasons["n_out_3"] == "pitch_out_of_range_or_unsupported"
+    assert sample_reasons["n_ledger_1"] == "missing_required_ledger_support"
+    assert sample_reasons["n_ledger_2"] == "missing_required_ledger_support"
