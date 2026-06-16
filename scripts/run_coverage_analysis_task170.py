@@ -15,6 +15,27 @@ if src_path.is_dir() and str(src_path) not in sys.path:
 
 from score2gp.whole_note_recogniser import run_recognition_on_file
 
+def determine_dominant_blocker(aggregate):
+    skip_reasons = {
+        "missing clef evidence": aggregate.get("skipped_clef_missing", 0),
+        "missing ledger support": aggregate.get("skipped_missing_required_ledger_support", 0),
+        "ambiguous clef evidence": aggregate.get("skipped_clef_ambiguous", 0),
+        "malformed staff association": aggregate.get("skipped_staff_association_malformed", 0),
+        "malformed staff position": aggregate.get("skipped_staff_position_malformed", 0)
+    }
+    
+    dominant_blocker = max(skip_reasons, key=skip_reasons.get)
+    
+    if dominant_blocker == "ambiguous clef evidence":
+        recommendation = "Product Task 171 should implement clef disambiguation to resolve ambiguous clefs."
+    elif dominant_blocker == "missing ledger support":
+        recommendation = "Product Task 171 should improve ledger line extraction or matching."
+    else:
+        dominant_blocker = "missing clef evidence"
+        recommendation = "Product Task 171 should bridge logical clef candidate evidence to fill in missing clefs."
+        
+    return dominant_blocker, recommendation
+
 def main():
     repo_root = Path(__file__).resolve().parent.parent
     fixtures_dir = repo_root / "tests" / "fixtures" / "pdf"
@@ -73,18 +94,7 @@ def main():
 
     total_candidates = aggregate["total_note_candidates_in_scope"]
     
-    missing_clef = aggregate["skipped_clef_missing"]
-    missing_ledger = aggregate["skipped_missing_required_ledger_support"]
-    
-    if missing_clef > missing_ledger and missing_clef > aggregate["skipped_clef_ambiguous"]:
-        dominant_blocker = "missing clef evidence"
-        recommendation = "Product Task 171 should bridge logical clef candidate evidence to fill in missing clefs."
-    elif missing_ledger > missing_clef:
-        dominant_blocker = "missing ledger support"
-        recommendation = "Product Task 171 should improve ledger line extraction or matching."
-    else:
-        dominant_blocker = "missing clef evidence"
-        recommendation = "Product Task 171 should bridge logical clef candidate evidence to fill in missing clefs."
+    dominant_blocker, recommendation = determine_dominant_blocker(aggregate)
 
     md_content = f"""# Clef-Resolved Pitch Coverage Analysis (2026-06-16)
 
