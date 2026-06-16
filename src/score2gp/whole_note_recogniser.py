@@ -30,6 +30,19 @@ def shape_candidate_evidence(
         })
     return shaped
 
+def extract_treble_clef_candidate_evidence(
+    staves_diags: list[dict],
+    page_index: int,
+    start_index: int = 1
+) -> list[dict]:
+    """
+    Extracts deterministic read-only treble clef candidate evidence.
+    Currently returns an empty list because there is no deterministic existing clef evidence
+    available in the standard geometry pipeline. This acts as a safe diagnostic boundary
+    to prevent guessing.
+    """
+    return []
+
 def shape_whole_note_candidate_evidence(
     raw_candidates: Iterable[Any],
     page_index: int,
@@ -159,6 +172,51 @@ def shape_ledger_line_candidate_evidence(
 
     return candidates
 
+
+def map_treble_clef_candidates_to_read_only_outcomes(candidate_locations: list[dict]) -> list[dict]:
+    """
+    Consumes diagnostic treble clef candidate evidence and produces a read-only recognition outcome.
+    """
+    outcomes = []
+    seen_ids = set()
+    for cand in candidate_locations:
+        candidate_id = cand.get("candidate_id")
+        page_index = cand.get("page_index")
+        system_index = cand.get("system_index")
+        staff_index = cand.get("staff_index")
+        bbox = cand.get("bbox")
+
+        if not candidate_id or not isinstance(candidate_id, str):
+            continue
+        if candidate_id in seen_ids:
+            continue
+
+        if type(page_index) is not int:
+            continue
+        if type(system_index) is not int:
+            continue
+        if type(staff_index) is not int:
+            continue
+
+        if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
+            continue
+
+        try:
+            x0, y0, x1, y1 = [float(v) for v in bbox]
+        except (TypeError, ValueError):
+            continue
+
+        seen_ids.add(candidate_id)
+        outcomes.append({
+            "symbol_type": "treble_clef_candidate",
+            "candidate_id": candidate_id,
+            "page_index": page_index,
+            "system_index": system_index,
+            "staff_index": staff_index,
+            "bbox": [x0, y0, x1, y1],
+            "source": "diagnostic_candidate_evidence"
+        })
+    return outcomes
 
 def map_whole_note_candidates_to_read_only_outcomes(candidate_locations: list[dict]) -> list[dict]:
     """
@@ -752,6 +810,7 @@ def run_recognition_on_file(
     flag_locations = []
     beam_locations = []
     ledger_line_locations = []
+    clef_locations = []
 
     all_staff_geometries = []
 
@@ -763,6 +822,13 @@ def run_recognition_on_file(
         staves = page_diags.get("staves", [])
 
         all_staff_geometries.extend(map_staff_geometry_to_read_only_report(staves))
+
+        clef_cands = extract_treble_clef_candidate_evidence(
+            staves,
+            page_index=page_index,
+            start_index=len(clef_locations) + 1
+        )
+        clef_locations.extend(clef_cands)
 
         whole_cands = _extract_whole_note_candidates(page)
         shaped_whole = shape_whole_note_candidate_evidence(
@@ -875,6 +941,7 @@ def run_recognition_on_file(
     outcomes = map_whole_note_candidates_to_read_only_outcomes(whole_note_locations)
     outcomes.extend(map_half_note_candidates_to_read_only_outcomes(half_note_locations))
     outcomes.extend(map_quarter_note_candidates_to_read_only_outcomes(quarter_note_locations))
+    outcomes.extend(map_treble_clef_candidates_to_read_only_outcomes(clef_locations))
 
     if include_x_aligned_clusters:
         outcomes.extend(map_x_aligned_cluster_candidates_to_read_only_outcomes(x_aligned_cluster_locations))

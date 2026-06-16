@@ -894,3 +894,134 @@ def test_map_clef_resolved_staff_pitch():
     assert "clef_resolved_staff_pitch" not in outcomes[13]
     assert "clef_resolved_staff_pitch" not in outcomes[14]
     assert outcomes[15].get("clef_resolved_staff_pitch") == "B4"
+
+def test_extract_treble_clef_candidate_evidence_fails_closed():
+    from score2gp.whole_note_recogniser import extract_treble_clef_candidate_evidence
+    # Provide dummy diagnostic data
+    staves_diags = [{"staff": {"system_index": 1, "staff_index": 1}}]
+    # Should fail closed and return empty since no deterministic evidence exists yet
+    cands = extract_treble_clef_candidate_evidence(staves_diags, page_index=1)
+    assert cands == []
+
+def test_map_treble_clef_candidates_to_read_only_outcomes():
+    from score2gp.whole_note_recogniser import map_treble_clef_candidates_to_read_only_outcomes
+
+    locations = [
+        {
+            "candidate_id": "treble_001",
+            "page_index": 1,
+            "system_index": 1,
+            "staff_index": 1,
+            "bbox": [10.0, 20.0, 30.0, 40.0]
+        }
+    ]
+
+    outcomes = map_treble_clef_candidates_to_read_only_outcomes(locations)
+    assert len(outcomes) == 1
+    assert outcomes[0]["symbol_type"] == "treble_clef_candidate"
+    assert outcomes[0]["candidate_id"] == "treble_001"
+    assert outcomes[0]["page_index"] == 1
+    assert outcomes[0]["system_index"] == 1
+    assert outcomes[0]["staff_index"] == 1
+    assert outcomes[0]["bbox"] == [10.0, 20.0, 30.0, 40.0]
+    assert outcomes[0]["source"] == "diagnostic_candidate_evidence"
+
+
+def test_map_treble_clef_candidates_to_read_only_outcomes_fails_closed():
+    from score2gp.whole_note_recogniser import map_treble_clef_candidates_to_read_only_outcomes
+
+    locations = [
+        # Valid
+        {
+            "candidate_id": "treble_001",
+            "page_index": 1,
+            "system_index": 1,
+            "staff_index": 1,
+            "bbox": [10.0, 20.0, 30.0, 40.0]
+        },
+        # Missing candidate_id
+        {
+            "page_index": 1,
+            "system_index": 1,
+            "staff_index": 1,
+            "bbox": [10.0, 20.0, 30.0, 40.0]
+        },
+        # Empty candidate_id
+        {
+            "candidate_id": "",
+            "page_index": 1,
+            "system_index": 1,
+            "staff_index": 1,
+            "bbox": [10.0, 20.0, 30.0, 40.0]
+        },
+        # Missing page_index
+        {
+            "candidate_id": "treble_002",
+            "system_index": 1,
+            "staff_index": 1,
+            "bbox": [10.0, 20.0, 30.0, 40.0]
+        },
+        # Malformed non-integer page_index
+        {
+            "candidate_id": "treble_003",
+            "page_index": "1",
+            "system_index": 1,
+            "staff_index": 1,
+            "bbox": [10.0, 20.0, 30.0, 40.0]
+        },
+        # Missing system_index
+        {
+            "candidate_id": "treble_004",
+            "page_index": 1,
+            "staff_index": 1,
+            "bbox": [10.0, 20.0, 30.0, 40.0]
+        },
+        # Missing bbox
+        {
+            "candidate_id": "treble_005",
+            "page_index": 1,
+            "system_index": 1,
+            "staff_index": 1
+        },
+        # Malformed bbox
+        {
+            "candidate_id": "treble_006",
+            "page_index": 1,
+            "system_index": 1,
+            "staff_index": 1,
+            "bbox": "invalid"
+        },
+        # Wrong length bbox
+        {
+            "candidate_id": "treble_007",
+            "page_index": 1,
+            "system_index": 1,
+            "staff_index": 1,
+            "bbox": [10.0, 20.0, 30.0]
+        },
+        # Non-numeric bbox
+        {
+            "candidate_id": "treble_008",
+            "page_index": 1,
+            "system_index": 1,
+            "staff_index": 1,
+            "bbox": [10.0, "x", 30.0, 40.0]
+        },
+        # Duplicate candidate_id
+        {
+            "candidate_id": "treble_001",
+            "page_index": 2,
+            "system_index": 2,
+            "staff_index": 2,
+            "bbox": [50.0, 60.0, 70.0, 80.0]
+        }
+    ]
+
+    outcomes = map_treble_clef_candidates_to_read_only_outcomes(locations)
+    assert len(outcomes) == 1
+    assert outcomes[0]["candidate_id"] == "treble_001"
+    assert outcomes[0]["page_index"] == 1
+    assert outcomes[0]["system_index"] == 1
+    assert outcomes[0]["staff_index"] == 1
+    assert outcomes[0]["bbox"] == [10.0, 20.0, 30.0, 40.0]
+
