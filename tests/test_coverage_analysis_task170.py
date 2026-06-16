@@ -51,3 +51,31 @@ def test_determine_dominant_blocker_ledger_lines():
     
     assert dominant_blocker == "missing ledger support"
     assert "ledger line" in recommendation.lower()
+
+def test_determine_dominant_blocker_malformed_staff_association():
+    aggregate = {
+        "skipped_clef_ambiguous": 10,
+        "skipped_clef_missing": 10,
+        "skipped_missing_required_ledger_support": 5,
+        "skipped_staff_association_malformed": 100,
+        "skipped_staff_position_malformed": 2
+    }
+
+    dominant_blocker, recommendation = run_coverage_analysis_task170.determine_dominant_blocker(aggregate)
+
+    assert dominant_blocker == "malformed staff association"
+    assert "staff association" in recommendation.lower()
+
+def test_determine_dominant_blocker_malformed_staff_position():
+    aggregate = {
+        "skipped_clef_ambiguous": 10,
+        "skipped_clef_missing": 10,
+        "skipped_missing_required_ledger_support": 5,
+        "skipped_staff_association_malformed": 2,
+        "skipped_staff_position_malformed": 100
+    }
+
+    dominant_blocker, recommendation = run_coverage_analysis_task170.determine_dominant_blocker(aggregate)
+
+    assert dominant_blocker == "malformed staff position"
+    assert "staff position" in recommendation.lower()

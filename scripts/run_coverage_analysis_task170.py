@@ -30,6 +30,10 @@ def determine_dominant_blocker(aggregate):
         recommendation = "Product Task 171 should implement clef disambiguation to resolve ambiguous clefs."
     elif dominant_blocker == "missing ledger support":
         recommendation = "Product Task 171 should improve ledger line extraction or matching."
+    elif dominant_blocker == "malformed staff association":
+        recommendation = "Product Task 171 should robustly handle malformed staff associations."
+    elif dominant_blocker == "malformed staff position":
+        recommendation = "Product Task 171 should fix malformed staff position metrics."
     else:
         dominant_blocker = "missing clef evidence"
         recommendation = "Product Task 171 should bridge logical clef candidate evidence to fill in missing clefs."
@@ -58,7 +62,6 @@ def main():
         "skipped_clef_ambiguous": 0,
         "skipped_staff_association_malformed": 0,
         "skipped_staff_position_malformed": 0,
-        "pitch_out_of_range_or_unsupported": 0,
     }
 
     files_processed = 0
@@ -82,11 +85,6 @@ def main():
         for k in aggregate:
             if k in cov:
                 aggregate[k] += cov[k]
-                
-        # Derive out-of-range metric if present in samples
-        for sample in cov.get("sample_diagnostics", []):
-            if sample.get("skip_reason") == "pitch_out_of_range_or_unsupported":
-                aggregate["pitch_out_of_range_or_unsupported"] += 1
 
     report_dir = repo_root / "reports" / "clef_resolved_pitch_coverage"
     report_dir.mkdir(parents=True, exist_ok=True)
