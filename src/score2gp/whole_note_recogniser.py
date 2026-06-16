@@ -52,26 +52,21 @@ def extract_treble_clef_candidate_evidence(
     if raster_diags.get("status") != "success":
         return []
 
-    scale = raster_diags.get("render_scale", 2.0)
+    scale = raster_diags.get("render_scale")
+    if not isinstance(scale, (int, float)) or scale <= 0:
+        return []
 
-    raster_staffs = {
-        s.get("staff_index"): s for s in raster_diags.get("staffs", [])
-        if "staff_index" in s
-    }
+    raster_staffs = raster_diags.get("staffs")
+    if not isinstance(raster_staffs, list):
+        return []
 
-    shaped = []
-    current_id = start_index
+    # Deterministic association logic:
+    # Match raster staffs to geometry staffs using y_coords (unscaled).
+    # Must fail closed if ambiguous.
+    matched_candidates = []
 
-    for geom_staff in staves_diags:
-        s_info = geom_staff.get("staff", {})
-        s_idx = s_info.get("staff_index")
-        sys_idx = s_info.get("system_index")
-
-        if s_idx is None or sys_idx is None:
-            continue
-
-        r_staff = raster_staffs.get(s_idx)
-        if not r_staff:
+    for r_staff in raster_staffs:
+        if not isinstance(r_staff, dict):
             continue
 
         clf = r_staff.get("raster_opening_symbol_classification", {})
@@ -80,19 +75,67 @@ def extract_treble_clef_candidate_evidence(
 
         cand = r_staff.get("raster_opening_symbol_candidate", {})
         bbox = cand.get("bbox")
-        if not bbox or len(bbox) != 4:
+        if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
             continue
 
-        geom_bbox = [float(b) / scale for b in bbox]
+        y_coords = r_staff.get("y_coords")
+        if not isinstance(y_coords, list) or len(y_coords) != 5:
+            continue
 
-        shaped.append({
-            "candidate_id": f"treble_{current_id:03d}",
+        try:
+            geom_bbox = [float(b) / scale for b in bbox]
+            r_y0 = float(y_coords[0]) / scale
+            r_y1 = float(y_coords[4]) / scale
+        except (TypeError, ValueError, ZeroDivisionError):
+            continue
+
+        # Find matching geometry staves
+        matching_geom = []
+        for g_staff in staves_diags:
+            info = g_staff.get("staff", {})
+            g_y0 = info.get("y0")
+            g_y1 = info.get("y1")
+
+            if not isinstance(g_y0, (int, float)) or not isinstance(g_y1, (int, float)):
+                continue
+
+            # Within 10 points (approx 2 staff spaces)
+            if abs(g_y0 - r_y0) <= 10.0 and abs(g_y1 - r_y1) <= 10.0:
+                matching_geom.append(info)
+
+        # Fail closed if ambiguous or missing
+        if len(matching_geom) != 1:
+            continue
+
+        info = matching_geom[0]
+        sys_idx = info.get("system_index")
+        s_idx = info.get("staff_index")
+
+        if sys_idx is None or s_idx is None:
+            continue
+
+        matched_candidates.append({
             "system_index": sys_idx,
             "staff_index": s_idx,
             "page_index": page_index,
             "bbox": geom_bbox,
             "source": "raster_diagnostic_candidate_evidence"
         })
+
+    # Fail closed if any geometry staff is matched by multiple raster staffs
+    geom_seen = set()
+    for m in matched_candidates:
+        key = (m["system_index"], m["staff_index"])
+        if key in geom_seen:
+            # Ambiguous mapping: multiple raster staffs map to the same geom staff
+            return []
+        geom_seen.add(key)
+
+    shaped = []
+    current_id = start_index
+    for m in matched_candidates:
+        m["candidate_id"] = f"treble_{current_id:03d}"
+        shaped.append(m)
         current_id += 1
 
     return shaped
