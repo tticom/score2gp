@@ -826,6 +826,113 @@ def map_clef_resolved_staff_pitch(outcomes: list[dict], explicit_clef: str | Non
 
         cand["clef_resolved_staff_pitch"] = pitch
 
+def build_clef_resolved_pitch_coverage_report(outcomes: list[dict]) -> dict:
+    report = {
+        "total_note_candidates_in_scope": 0,
+        "note_candidates_with_staff_position_index": 0,
+        "note_candidates_on_staves_with_valid_clef": 0,
+        "note_candidates_with_clef_resolved_staff_pitch": 0,
+        "in_staff_mapped_notes": 0,
+        "out_of_staff_mapped_notes": 0,
+        "skipped_missing_required_ledger_support": 0,
+        "skipped_clef_missing": 0,
+        "skipped_clef_ambiguous": 0,
+        "skipped_staff_association_malformed": 0,
+        "skipped_staff_position_malformed": 0,
+        "sample_diagnostics": []
+    }
+
+    if not isinstance(outcomes, list):
+        return report
+
+    clef_policy = {}
+    for cand in outcomes:
+        if not isinstance(cand, dict):
+            continue
+        if cand.get("symbol_type") == "treble_clef_candidate":
+            cand_id = cand.get("candidate_id")
+            if not isinstance(cand_id, str) or not cand_id:
+                continue
+            source = cand.get("source")
+            if source not in ("diagnostic_candidate_evidence", "raster_diagnostic_candidate_evidence"):
+                continue
+            page = cand.get("page_index")
+            sys_idx = cand.get("system_index")
+            staff_idx = cand.get("staff_index")
+            if type(page) is not int or type(sys_idx) is not int or type(staff_idx) is not int:
+                continue
+            key = (page, sys_idx, staff_idx)
+            clef_policy[key] = clef_policy.get(key, 0) + 1
+
+    note_types = ("whole_note_candidate", "half_note_candidate", "quarter_note_candidate", "eighth_note_candidate")
+
+    for cand in outcomes:
+        if not isinstance(cand, dict):
+            continue
+        if cand.get("symbol_type") not in note_types:
+            continue
+
+        report["total_note_candidates_in_scope"] += 1
+
+        pos = cand.get("staff_position_index")
+        has_pos = (type(pos) is int)
+        if has_pos:
+            report["note_candidates_with_staff_position_index"] += 1
+
+        page = cand.get("page_index")
+        sys_idx = cand.get("system_index")
+        staff_idx = cand.get("staff_index")
+
+        malformed_staff = (type(page) is not int or type(sys_idx) is not int or type(staff_idx) is not int)
+
+        clef_count = 0
+        if not malformed_staff:
+            key = (page, sys_idx, staff_idx)
+            clef_count = clef_policy.get(key, 0)
+
+        if clef_count == 1:
+            report["note_candidates_on_staves_with_valid_clef"] += 1
+
+        if cand.get("clef_resolved_staff_pitch"):
+            report["note_candidates_with_clef_resolved_staff_pitch"] += 1
+            if type(pos) is int and 0 <= pos <= 8:
+                report["in_staff_mapped_notes"] += 1
+            else:
+                report["out_of_staff_mapped_notes"] += 1
+        else:
+            reason = None
+            if malformed_staff:
+                report["skipped_staff_association_malformed"] += 1
+                reason = "malformed_staff_association"
+            elif clef_count == 0:
+                report["skipped_clef_missing"] += 1
+                reason = "missing_clef_evidence"
+            elif clef_count > 1:
+                report["skipped_clef_ambiguous"] += 1
+                reason = "ambiguous_clef_evidence"
+            elif not has_pos:
+                report["skipped_staff_position_malformed"] += 1
+                reason = "malformed_staff_position"
+            else:
+                if type(pos) is int:
+                    if pos < -7 or pos > 15:
+                        reason = "pitch_out_of_range_or_unsupported"
+                    elif pos < 0 or pos > 8:
+                        report["skipped_missing_required_ledger_support"] += 1
+                        reason = "missing_required_ledger_support"
+                    else:
+                        reason = "pitch_out_of_range_or_unsupported"
+                else:
+                    reason = "pitch_out_of_range_or_unsupported"
+
+            if reason and len(report["sample_diagnostics"]) < 5:
+                report["sample_diagnostics"].append({
+                    "candidate_id": cand.get("candidate_id"),
+                    "skip_reason": reason
+                })
+
+    return report
+
 
 def map_ledger_lines_to_note_candidates(outcomes: list[dict]) -> None:
     candidate_lookup = {c.get("candidate_id"): c for c in outcomes if c.get("candidate_id")}
@@ -1092,10 +1199,12 @@ def run_recognition_on_file(
         map_assumed_treble_pitch_to_read_only_outcomes(outcomes)
 
     map_clef_resolved_staff_pitch(outcomes)
+    coverage_report = build_clef_resolved_pitch_coverage_report(outcomes)
 
     return {
         "source": pdf_path.name,
         "recognition_mode": "read_only_diagnostic_derived",
         "staff_geometry": all_staff_geometries,
-        "read_only_recognition_outcomes": outcomes
+        "read_only_recognition_outcomes": outcomes,
+        "clef_resolved_pitch_coverage": coverage_report
     }
