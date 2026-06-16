@@ -758,8 +758,23 @@ def map_assumed_treble_pitch_to_read_only_outcomes(outcomes: list[dict]) -> None
             cand["assumed_treble_pitch"] = pitches[pos_idx]
 
 def map_clef_resolved_staff_pitch(outcomes: list[dict], explicit_clef: str | None = None) -> None:
-    if not explicit_clef or explicit_clef != "treble":
-        return
+    clef_policy = {}
+    if explicit_clef is None:
+        for cand in outcomes:
+            if cand.get("symbol_type") == "treble_clef_candidate":
+                cand_id = cand.get("candidate_id")
+                if not isinstance(cand_id, str) or not cand_id:
+                    continue
+                source = cand.get("source")
+                if source not in ("diagnostic_candidate_evidence", "raster_diagnostic_candidate_evidence"):
+                    continue
+                page = cand.get("page_index")
+                sys_idx = cand.get("system_index")
+                staff_idx = cand.get("staff_index")
+                if type(page) is not int or type(sys_idx) is not int or type(staff_idx) is not int:
+                    continue
+                key = (page, sys_idx, staff_idx)
+                clef_policy[key] = clef_policy.get(key, 0) + 1
 
     pitches = [
         "F6", "E6", "D6", "C6", "B5", "A5", "G5", # -7 to -1
@@ -771,6 +786,18 @@ def map_clef_resolved_staff_pitch(outcomes: list[dict], explicit_clef: str | Non
         st_type = cand.get("symbol_type")
         if st_type not in ("whole_note_candidate", "half_note_candidate", "quarter_note_candidate", "eighth_note_candidate"):
             continue
+
+        if explicit_clef is not None:
+            if explicit_clef != "treble":
+                continue
+        else:
+            page = cand.get("page_index")
+            sys_idx = cand.get("system_index")
+            staff_idx = cand.get("staff_index")
+            if type(page) is not int or type(sys_idx) is not int or type(staff_idx) is not int:
+                continue
+            if clef_policy.get((page, sys_idx, staff_idx), 0) != 1:
+                continue
 
         pos = cand.get("staff_position_index")
         if type(pos) is not int:
@@ -1063,6 +1090,8 @@ def run_recognition_on_file(
         map_ledger_lines_to_note_candidates(outcomes)
     if assume_treble_clef:
         map_assumed_treble_pitch_to_read_only_outcomes(outcomes)
+
+    map_clef_resolved_staff_pitch(outcomes)
 
     return {
         "source": pdf_path.name,

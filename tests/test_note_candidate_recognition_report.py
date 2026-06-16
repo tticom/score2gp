@@ -895,6 +895,70 @@ def test_map_clef_resolved_staff_pitch():
     assert "clef_resolved_staff_pitch" not in outcomes[14]
     assert outcomes[15].get("clef_resolved_staff_pitch") == "B4"
 
+def test_map_clef_resolved_staff_pitch_policy():
+    from score2gp.whole_note_recogniser import map_clef_resolved_staff_pitch
+
+    outcomes = [
+        # Staff 1: exactly 1 valid treble clef
+        {"symbol_type": "treble_clef_candidate", "candidate_id": "c1", "source": "diagnostic_candidate_evidence", "page_index": 1, "system_index": 1, "staff_index": 1},
+        {"symbol_type": "quarter_note_candidate", "page_index": 1, "system_index": 1, "staff_index": 1, "staff_position_index": 4}, # 1: mapped (B4)
+
+        # Staff 2: 0 treble clefs
+        {"symbol_type": "quarter_note_candidate", "page_index": 1, "system_index": 1, "staff_index": 2, "staff_position_index": 4}, # 2: not mapped
+
+        # Staff 3: multiple treble clefs
+        {"symbol_type": "treble_clef_candidate", "candidate_id": "c2", "source": "raster_diagnostic_candidate_evidence", "page_index": 1, "system_index": 2, "staff_index": 1},
+        {"symbol_type": "treble_clef_candidate", "candidate_id": "c3", "source": "raster_diagnostic_candidate_evidence", "page_index": 1, "system_index": 2, "staff_index": 1},
+        {"symbol_type": "quarter_note_candidate", "page_index": 1, "system_index": 2, "staff_index": 1, "staff_position_index": 4}, # 5: not mapped
+
+        # Staff 4: malformed clef evidence (missing staff_index)
+        {"symbol_type": "treble_clef_candidate", "candidate_id": "c4", "source": "diagnostic_candidate_evidence", "page_index": 2, "system_index": 1},
+        {"symbol_type": "quarter_note_candidate", "page_index": 2, "system_index": 1, "staff_index": 1, "staff_position_index": 4}, # 7: not mapped
+
+        # Staff 5: missing candidate_id
+        {"symbol_type": "treble_clef_candidate", "source": "diagnostic_candidate_evidence", "page_index": 2, "system_index": 2, "staff_index": 1},
+        {"symbol_type": "quarter_note_candidate", "page_index": 2, "system_index": 2, "staff_index": 1, "staff_position_index": 4}, # 9: not mapped
+
+        # Staff 6: empty candidate_id
+        {"symbol_type": "treble_clef_candidate", "candidate_id": "", "source": "diagnostic_candidate_evidence", "page_index": 2, "system_index": 3, "staff_index": 1},
+        {"symbol_type": "quarter_note_candidate", "page_index": 2, "system_index": 3, "staff_index": 1, "staff_position_index": 4}, # 11: not mapped
+
+        # Staff 7: boolean indexes
+        {"symbol_type": "treble_clef_candidate", "candidate_id": "c5", "source": "diagnostic_candidate_evidence", "page_index": True, "system_index": 1, "staff_index": 1},
+        {"symbol_type": "quarter_note_candidate", "page_index": True, "system_index": 1, "staff_index": 1, "staff_position_index": 4}, # 13: not mapped
+
+        # Staff 8: missing/invalid source
+        {"symbol_type": "treble_clef_candidate", "candidate_id": "c6", "source": "some_other_source", "page_index": 3, "system_index": 1, "staff_index": 1},
+        {"symbol_type": "quarter_note_candidate", "page_index": 3, "system_index": 1, "staff_index": 1, "staff_position_index": 4}, # 15: not mapped
+
+        # Staff 1: malformed note staff lookup
+        {"symbol_type": "quarter_note_candidate", "page_index": 1, "system_index": True, "staff_index": 1, "staff_position_index": 4}, # 16: not mapped
+
+        # Staff 1: out-of-staff mapped (0 ledgers needed)
+        {"symbol_type": "quarter_note_candidate", "page_index": 1, "system_index": 1, "staff_index": 1, "staff_position_index": -1}, # 17: mapped (G5)
+
+        # Staff 1: out-of-staff mapped (1 ledger needed)
+        {"symbol_type": "quarter_note_candidate", "page_index": 1, "system_index": 1, "staff_index": 1, "staff_position_index": -2, "attached_ledger_line_candidate_ids": ["l1"]}, # 18: mapped (A5)
+
+        # Staff 1: out-of-staff missing ledger
+        {"symbol_type": "quarter_note_candidate", "page_index": 1, "system_index": 1, "staff_index": 1, "staff_position_index": -2}, # 19: not mapped
+    ]
+
+    map_clef_resolved_staff_pitch(outcomes)
+
+    assert outcomes[1].get("clef_resolved_staff_pitch") == "B4"
+    assert "clef_resolved_staff_pitch" not in outcomes[2]
+    assert "clef_resolved_staff_pitch" not in outcomes[5]
+    assert "clef_resolved_staff_pitch" not in outcomes[7]
+    assert "clef_resolved_staff_pitch" not in outcomes[9]
+    assert "clef_resolved_staff_pitch" not in outcomes[11]
+    assert "clef_resolved_staff_pitch" not in outcomes[13]
+    assert "clef_resolved_staff_pitch" not in outcomes[15]
+    assert "clef_resolved_staff_pitch" not in outcomes[16]
+    assert outcomes[17].get("clef_resolved_staff_pitch") == "G5"
+    assert outcomes[18].get("clef_resolved_staff_pitch") == "A5"
+    assert "clef_resolved_staff_pitch" not in outcomes[19]
+
 def test_extract_treble_clef_candidate_evidence_fails_closed():
     from score2gp.whole_note_recogniser import extract_treble_clef_candidate_evidence
     # Provide dummy diagnostic data
