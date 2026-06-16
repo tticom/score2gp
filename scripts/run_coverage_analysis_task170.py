@@ -34,9 +34,10 @@ def determine_dominant_blocker(aggregate):
         recommendation = "Product Task 171 should robustly handle malformed staff associations."
     elif dominant_blocker == "malformed staff position":
         recommendation = "Product Task 171 should fix malformed staff position metrics."
-    else:
-        dominant_blocker = "missing clef evidence"
+    elif dominant_blocker == "missing clef evidence":
         recommendation = "Product Task 171 should bridge logical clef candidate evidence to fill in missing clefs."
+    else:
+        raise ValueError(f"Unknown dominant blocker: {dominant_blocker}")
         
     return dominant_blocker, recommendation
 
