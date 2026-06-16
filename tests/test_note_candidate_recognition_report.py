@@ -842,3 +842,45 @@ def test_assume_treble_clef_exact_mapping():
     expected = ["F5", "E5", "D5", "C5", "B4", "A4", "G4", "F4", "E4"]
     for i, cand in enumerate(outcomes):
         assert cand["assumed_treble_pitch"] == expected[i]
+
+def test_map_clef_resolved_staff_pitch():
+    from score2gp.whole_note_recogniser import map_clef_resolved_staff_pitch
+
+    outcomes = [
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": 4}, # B4 inside staff
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": -1}, # G5 above staff, 0 ledgers
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": 9}, # D4 below staff, 0 ledgers
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": -2, "attached_ledger_line_candidate_ids": ["l1"]}, # A5, 1 ledger
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": 10, "attached_ledger_line_candidate_ids": ["l2"]}, # C4, 1 ledger
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": -4, "attached_ledger_line_candidate_ids": ["l1", "l2"]}, # C6, 2 ledgers
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": -2}, # missing ledger -> fail
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": -2, "attached_ledger_line_candidate_ids": ["l1", "l2"]}, # ambiguous (too many) -> fail
+        {"symbol_type": "ledger_line_candidate", "staff_position_index": 4}, # ignore non-notes
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": None}, # malformed
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": -8}, # out of mapped bounds
+    ]
+
+    # Test wrong clef
+    map_clef_resolved_staff_pitch(outcomes, explicit_clef="bass")
+    for cand in outcomes:
+        assert "clef_resolved_staff_pitch" not in cand
+
+    # Test no clef
+    map_clef_resolved_staff_pitch(outcomes, explicit_clef=None)
+    for cand in outcomes:
+        assert "clef_resolved_staff_pitch" not in cand
+
+    # Test valid clef
+    map_clef_resolved_staff_pitch(outcomes, explicit_clef="treble")
+
+    assert outcomes[0].get("clef_resolved_staff_pitch") == "B4"
+    assert outcomes[1].get("clef_resolved_staff_pitch") == "G5"
+    assert outcomes[2].get("clef_resolved_staff_pitch") == "D4"
+    assert outcomes[3].get("clef_resolved_staff_pitch") == "A5"
+    assert outcomes[4].get("clef_resolved_staff_pitch") == "C4"
+    assert outcomes[5].get("clef_resolved_staff_pitch") == "C6"
+    assert "clef_resolved_staff_pitch" not in outcomes[6]
+    assert "clef_resolved_staff_pitch" not in outcomes[7]
+    assert "clef_resolved_staff_pitch" not in outcomes[8]
+    assert "clef_resolved_staff_pitch" not in outcomes[9]
+    assert "clef_resolved_staff_pitch" not in outcomes[10]
