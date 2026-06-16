@@ -842,3 +842,55 @@ def test_assume_treble_clef_exact_mapping():
     expected = ["F5", "E5", "D5", "C5", "B4", "A4", "G4", "F4", "E4"]
     for i, cand in enumerate(outcomes):
         assert cand["assumed_treble_pitch"] == expected[i]
+
+def test_map_clef_resolved_staff_pitch():
+    from score2gp.whole_note_recogniser import map_clef_resolved_staff_pitch
+
+    outcomes = [
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": 4}, # 0: B4 inside staff
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": -1}, # 1: G5 above staff, 0 ledgers, no attached field
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": 9, "attached_ledger_line_candidate_ids": []}, # 2: D4 below staff, 0 ledgers, empty list
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": -2, "attached_ledger_line_candidate_ids": ["l1"]}, # 3: A5, 1 ledger
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": 10, "attached_ledger_line_candidate_ids": ["l2"]}, # 4: C4, 1 ledger
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": -4, "attached_ledger_line_candidate_ids": ["l1", "l2"]}, # 5: C6, 2 ledgers
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": -2}, # 6: missing ledger -> fail
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": -2, "attached_ledger_line_candidate_ids": ["l1", "l2"]}, # 7: ambiguous (too many) -> fail
+        {"symbol_type": "ledger_line_candidate", "staff_position_index": 4}, # 8: ignore non-notes
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": None}, # 9: malformed
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": -8}, # 10: out of mapped bounds
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": -1, "attached_ledger_line_candidate_ids": ["l1"]}, # 11: 0 ledger required but 1 given -> fail
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": 9, "attached_ledger_line_candidate_ids": ["l2"]}, # 12: 0 ledger required but 1 given -> fail
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": -1, "attached_ledger_line_candidate_ids": "malformed"}, # 13: 0 ledger required but malformed -> fail
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": 9, "attached_ledger_line_candidate_ids": "malformed"}, # 14: 0 ledger required but malformed -> fail
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": 4, "attached_ledger_line_candidate_ids": ["l1"]}, # 15: inside staff ignores attached ledgers
+    ]
+
+    # Test wrong clef
+    map_clef_resolved_staff_pitch(outcomes, explicit_clef="bass")
+    for cand in outcomes:
+        assert "clef_resolved_staff_pitch" not in cand
+
+    # Test no clef
+    map_clef_resolved_staff_pitch(outcomes, explicit_clef=None)
+    for cand in outcomes:
+        assert "clef_resolved_staff_pitch" not in cand
+
+    # Test valid clef
+    map_clef_resolved_staff_pitch(outcomes, explicit_clef="treble")
+
+    assert outcomes[0].get("clef_resolved_staff_pitch") == "B4"
+    assert outcomes[1].get("clef_resolved_staff_pitch") == "G5"
+    assert outcomes[2].get("clef_resolved_staff_pitch") == "D4"
+    assert outcomes[3].get("clef_resolved_staff_pitch") == "A5"
+    assert outcomes[4].get("clef_resolved_staff_pitch") == "C4"
+    assert outcomes[5].get("clef_resolved_staff_pitch") == "C6"
+    assert "clef_resolved_staff_pitch" not in outcomes[6]
+    assert "clef_resolved_staff_pitch" not in outcomes[7]
+    assert "clef_resolved_staff_pitch" not in outcomes[8]
+    assert "clef_resolved_staff_pitch" not in outcomes[9]
+    assert "clef_resolved_staff_pitch" not in outcomes[10]
+    assert "clef_resolved_staff_pitch" not in outcomes[11]
+    assert "clef_resolved_staff_pitch" not in outcomes[12]
+    assert "clef_resolved_staff_pitch" not in outcomes[13]
+    assert "clef_resolved_staff_pitch" not in outcomes[14]
+    assert outcomes[15].get("clef_resolved_staff_pitch") == "B4"

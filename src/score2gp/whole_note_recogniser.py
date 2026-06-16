@@ -601,6 +601,49 @@ def map_assumed_treble_pitch_to_read_only_outcomes(outcomes: list[dict]) -> None
         if type(pos_idx) is int and 0 <= pos_idx <= 8:
             cand["assumed_treble_pitch"] = pitches[pos_idx]
 
+def map_clef_resolved_staff_pitch(outcomes: list[dict], explicit_clef: str | None = None) -> None:
+    if not explicit_clef or explicit_clef != "treble":
+        return
+
+    pitches = [
+        "F6", "E6", "D6", "C6", "B5", "A5", "G5", # -7 to -1
+        "F5", "E5", "D5", "C5", "B4", "A4", "G4", "F4", "E4", # 0 to 8
+        "D4", "C4", "B3", "A3", "G3", "F3", "E3" # 9 to 15
+    ]
+
+    for cand in outcomes:
+        st_type = cand.get("symbol_type")
+        if st_type not in ("whole_note_candidate", "half_note_candidate", "quarter_note_candidate", "eighth_note_candidate"):
+            continue
+
+        pos = cand.get("staff_position_index")
+        if type(pos) is not int:
+            continue
+
+        idx = pos + 7
+        if idx < 0 or idx >= len(pitches):
+            continue
+
+        pitch = pitches[idx]
+
+        if pos < 0 or pos > 8:
+            required_ledgers = 0
+            if pos < 0:
+                required_ledgers = abs(pos) // 2
+            elif pos > 8:
+                required_ledgers = (pos - 8) // 2
+
+            if "attached_ledger_line_candidate_ids" in cand:
+                attached = cand["attached_ledger_line_candidate_ids"]
+                if type(attached) is not list or len(attached) != required_ledgers:
+                    continue
+            else:
+                if required_ledgers > 0:
+                    continue
+
+        cand["clef_resolved_staff_pitch"] = pitch
+
+
 def map_ledger_lines_to_note_candidates(outcomes: list[dict]) -> None:
     candidate_lookup = {c.get("candidate_id"): c for c in outcomes if c.get("candidate_id")}
 
