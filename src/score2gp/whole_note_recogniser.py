@@ -33,15 +33,69 @@ def shape_candidate_evidence(
 def extract_treble_clef_candidate_evidence(
     staves_diags: list[dict],
     page_index: int,
-    start_index: int = 1
+    start_index: int = 1,
+    page: Any = None
 ) -> list[dict]:
     """
-    Extracts deterministic read-only treble clef candidate evidence.
-    Currently returns an empty list because there is no deterministic existing clef evidence
-    available in the standard geometry pipeline. This acts as a safe diagnostic boundary
-    to prevent guessing.
+    Extracts deterministic read-only treble clef candidate evidence by bridging
+    existing raster diagnostics.
     """
-    return []
+    if page is None:
+        return []
+
+    from .pdf_raster_staff_diagnostics import build_raster_notation_diagnostics
+    try:
+        raster_diags = build_raster_notation_diagnostics(page, page_index, scale=2.0)
+    except Exception:
+        return []
+
+    if raster_diags.get("status") != "success":
+        return []
+
+    scale = raster_diags.get("render_scale", 2.0)
+
+    raster_staffs = {
+        s.get("staff_index"): s for s in raster_diags.get("staffs", [])
+        if "staff_index" in s
+    }
+
+    shaped = []
+    current_id = start_index
+
+    for geom_staff in staves_diags:
+        s_info = geom_staff.get("staff", {})
+        s_idx = s_info.get("staff_index")
+        sys_idx = s_info.get("system_index")
+
+        if s_idx is None or sys_idx is None:
+            continue
+
+        r_staff = raster_staffs.get(s_idx)
+        if not r_staff:
+            continue
+
+        clf = r_staff.get("raster_opening_symbol_classification", {})
+        if clf.get("label") != "treble_clef_candidate":
+            continue
+
+        cand = r_staff.get("raster_opening_symbol_candidate", {})
+        bbox = cand.get("bbox")
+        if not bbox or len(bbox) != 4:
+            continue
+
+        geom_bbox = [float(b) / scale for b in bbox]
+
+        shaped.append({
+            "candidate_id": f"treble_{current_id:03d}",
+            "system_index": sys_idx,
+            "staff_index": s_idx,
+            "page_index": page_index,
+            "bbox": geom_bbox,
+            "source": "raster_diagnostic_candidate_evidence"
+        })
+        current_id += 1
+
+    return shaped
 
 def shape_whole_note_candidate_evidence(
     raw_candidates: Iterable[Any],
@@ -207,6 +261,7 @@ def map_treble_clef_candidates_to_read_only_outcomes(candidate_locations: list[d
             continue
 
         seen_ids.add(candidate_id)
+        source = cand.get("source", "diagnostic_candidate_evidence")
         outcomes.append({
             "symbol_type": "treble_clef_candidate",
             "candidate_id": candidate_id,
@@ -214,7 +269,7 @@ def map_treble_clef_candidates_to_read_only_outcomes(candidate_locations: list[d
             "system_index": system_index,
             "staff_index": staff_index,
             "bbox": [x0, y0, x1, y1],
-            "source": "diagnostic_candidate_evidence"
+            "source": source
         })
     return outcomes
 
@@ -826,7 +881,8 @@ def run_recognition_on_file(
         clef_cands = extract_treble_clef_candidate_evidence(
             staves,
             page_index=page_index,
-            start_index=len(clef_locations) + 1
+            start_index=len(clef_locations) + 1,
+            page=page
         )
         clef_locations.extend(clef_cands)
 
