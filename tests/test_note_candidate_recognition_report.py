@@ -1089,3 +1089,50 @@ def test_map_treble_clef_candidates_to_read_only_outcomes_fails_closed():
     assert outcomes[0]["staff_index"] == 1
     assert outcomes[0]["bbox"] == [10.0, 20.0, 30.0, 40.0]
 
+
+def test_clef_resolved_pitch_coverage_report_unit():
+    from score2gp.whole_note_recogniser import build_clef_resolved_pitch_coverage_report
+
+    outcomes = [
+        # 1. Valid treble clef
+        {"symbol_type": "treble_clef_candidate", "candidate_id": "clef_1", "page_index": 1, "system_index": 1, "staff_index": 1, "source": "raster_diagnostic_candidate_evidence"},
+        # 2. Ambiguous clefs (two on same staff)
+        {"symbol_type": "treble_clef_candidate", "candidate_id": "clef_2", "page_index": 1, "system_index": 1, "staff_index": 2, "source": "diagnostic_candidate_evidence"},
+        {"symbol_type": "treble_clef_candidate", "candidate_id": "clef_3", "page_index": 1, "system_index": 1, "staff_index": 2, "source": "raster_diagnostic_candidate_evidence"},
+
+        # In scope valid note with pitch (in staff)
+        {"symbol_type": "quarter_note_candidate", "candidate_id": "n1", "page_index": 1, "system_index": 1, "staff_index": 1, "staff_position_index": 4, "clef_resolved_staff_pitch": "B4"},
+        # In scope valid note with pitch (out of staff)
+        {"symbol_type": "quarter_note_candidate", "candidate_id": "n2", "page_index": 1, "system_index": 1, "staff_index": 1, "staff_position_index": 10, "clef_resolved_staff_pitch": "G3"},
+        # Skipped due to missing ledger line support (no pitch mapped, valid clef)
+        {"symbol_type": "quarter_note_candidate", "candidate_id": "n3", "page_index": 1, "system_index": 1, "staff_index": 1, "staff_position_index": 10},
+        # Skipped due to missing clef (staff 3)
+        {"symbol_type": "quarter_note_candidate", "candidate_id": "n4", "page_index": 1, "system_index": 1, "staff_index": 3, "staff_position_index": 4},
+        # Skipped due to ambiguous clef (staff 2)
+        {"symbol_type": "quarter_note_candidate", "candidate_id": "n5", "page_index": 1, "system_index": 1, "staff_index": 2, "staff_position_index": 4},
+        # Skipped due to malformed staff position (missing)
+        {"symbol_type": "quarter_note_candidate", "candidate_id": "n6", "page_index": 1, "system_index": 1, "staff_index": 1},
+        # Skipped due to malformed staff association (missing system_index)
+        {"symbol_type": "eighth_note_candidate", "candidate_id": "n7", "page_index": 1, "staff_index": 1, "staff_position_index": 4},
+    ]
+
+    report = build_clef_resolved_pitch_coverage_report(outcomes)
+
+    assert report["total_note_candidates_in_scope"] == 7
+    assert report["note_candidates_with_staff_position_index"] == 6 # n6 missing
+    assert report["note_candidates_on_staves_with_valid_clef"] == 4 # n1, n2, n3, n6 (n7 has no valid staff to map to clef)
+    assert report["note_candidates_with_clef_resolved_staff_pitch"] == 2
+    assert report["in_staff_mapped_notes"] == 1
+    assert report["out_of_staff_mapped_notes"] == 1
+    assert report["skipped_missing_required_ledger_support"] == 1
+    assert report["skipped_clef_missing"] == 1
+    assert report["skipped_clef_ambiguous"] == 1
+    assert report["skipped_staff_association_malformed"] == 1
+    assert report["skipped_staff_position_malformed"] == 1
+
+    sample_ids = [d["candidate_id"] for d in report["sample_diagnostics"]]
+    assert "n3" in sample_ids
+    assert "n4" in sample_ids
+    assert "n5" in sample_ids
+    assert "n6" in sample_ids
+    assert "n7" in sample_ids
