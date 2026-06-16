@@ -626,16 +626,20 @@ def map_clef_resolved_staff_pitch(outcomes: list[dict], explicit_clef: str | Non
 
         pitch = pitches[idx]
 
-        required_ledgers = 0
-        if pos < 0:
-            required_ledgers = abs(pos) // 2
-        elif pos > 8:
-            required_ledgers = (pos - 8) // 2
+        if pos < 0 or pos > 8:
+            required_ledgers = 0
+            if pos < 0:
+                required_ledgers = abs(pos) // 2
+            elif pos > 8:
+                required_ledgers = (pos - 8) // 2
 
-        if required_ledgers > 0:
-            attached = cand.get("attached_ledger_line_candidate_ids")
-            if type(attached) is not list or len(attached) != required_ledgers:
-                continue
+            if "attached_ledger_line_candidate_ids" in cand:
+                attached = cand["attached_ledger_line_candidate_ids"]
+                if type(attached) is not list or len(attached) != required_ledgers:
+                    continue
+            else:
+                if required_ledgers > 0:
+                    continue
 
         cand["clef_resolved_staff_pitch"] = pitch
 
