@@ -40,17 +40,18 @@ def extract_treble_clef_candidate_evidence(
     Extracts deterministic read-only treble clef candidate evidence by bridging
     existing raster diagnostics and logical clef candidate evidence.
     """
-    from .pdf_raster_staff_diagnostics import build_raster_notation_diagnostics
     from .logical_clef_candidate_classifier import classify_logical_clef_candidate
     from .pdf_geometry_candidates import LeftMarginPrimitiveCandidate
 
     raster_staffs = []
     if page is not None:
         try:
+            from .pdf_raster_staff_diagnostics import build_raster_notation_diagnostics
             raster_diags = build_raster_notation_diagnostics(page, page_index, scale=2.0)
             if raster_diags.get("status") == "success":
-                raster_staffs = raster_diags.get("staffs", [])
-                scale = raster_diags.get("render_scale", 2.0)
+                scale = raster_diags.get("render_scale")
+                if type(scale) in (int, float) and scale > 0.0:
+                    raster_staffs = raster_diags.get("staffs", [])
         except Exception:
             pass
 
@@ -903,7 +904,12 @@ def build_clef_resolved_pitch_coverage_report(outcomes: list[dict]) -> dict:
             if not isinstance(cand_id, str) or not cand_id:
                 continue
             source = cand.get("source")
-            if source not in ("diagnostic_candidate_evidence", "raster_diagnostic_candidate_evidence"):
+            if source not in (
+                "diagnostic_candidate_evidence",
+                "raster_diagnostic_candidate_evidence",
+                "logical_diagnostic_candidate_evidence",
+                "unified_diagnostic_candidate_evidence"
+            ):
                 continue
             page = cand.get("page_index")
             sys_idx = cand.get("system_index")
