@@ -131,6 +131,10 @@ def extract_treble_clef_candidate_evidence(
         logical_bbox = None
         lm_cands_raw = g_staff.get("left_margin_candidates")
         line_ys = info.get("line_y_coords", [])
+        staff_spacing = 10.0
+        if len(line_ys) == 5:
+            staff_spacing = float(line_ys[-1] - line_ys[0]) / 4.0
+
         if lm_cands_raw and len(line_ys) == 5:
             lm_cands = []
             for c in lm_cands_raw:
@@ -140,7 +144,6 @@ def extract_treble_clef_candidate_evidence(
                     pass
 
             staff_height = float(line_ys[-1] - line_ys[0])
-            staff_spacing = staff_height / 4.0
             staff_x0 = float(info.get("x0", 0.0))
 
             clf = classify_logical_clef_candidate(lm_cands, staff_spacing, staff_height, staff_x0)
@@ -150,6 +153,19 @@ def extract_treble_clef_candidate_evidence(
         if raster_bbox or logical_bbox:
             final_bbox = logical_bbox if logical_bbox else raster_bbox
             if logical_bbox and raster_bbox:
+                # Verify spatial compatibility before unifying
+                rx0, ry0, rx1, ry1 = raster_bbox
+                lx0, ly0, lx1, ly1 = logical_bbox
+
+                # Use a tolerance of 1 staff space
+                tol = staff_spacing * 1.0
+                overlap_x = max(0, min(rx1 + tol, lx1 + tol) - max(rx0 - tol, lx0 - tol))
+                overlap_y = max(0, min(ry1 + tol, ly1 + tol) - max(ry0 - tol, ly0 - tol))
+
+                if overlap_x <= 0 or overlap_y <= 0:
+                    # Conflicting evidence -> fail closed
+                    continue
+
                 source = "unified_diagnostic_candidate_evidence"
             elif logical_bbox:
                 source = "logical_diagnostic_candidate_evidence"
