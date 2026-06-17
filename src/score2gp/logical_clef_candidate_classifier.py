@@ -122,7 +122,8 @@ def classify_logical_clef_candidate(
                 "height_to_spacing": round(height_to_spacing, 3),
                 "width_to_spacing": round(width_to_spacing, 3),
                 "height_to_staff_height": round(height_to_staff_height, 3),
-                "x0_offset_from_staff_x0": round(x0_offset, 3)
+                "x0_offset_from_staff_x0": round(x0_offset, 3),
+                "bbox": [float(bbox.x0), float(bbox.y0), float(bbox.x1), float(bbox.y1)]
             })
 
     if len(valid_candidates) == 1:

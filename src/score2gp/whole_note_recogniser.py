@@ -38,105 +38,150 @@ def extract_treble_clef_candidate_evidence(
 ) -> list[dict]:
     """
     Extracts deterministic read-only treble clef candidate evidence by bridging
-    existing raster diagnostics.
+    existing raster diagnostics and logical clef candidate evidence.
     """
-    if page is None:
-        return []
+    from .logical_clef_candidate_classifier import classify_logical_clef_candidate
+    from .pdf_geometry_candidates import LeftMarginPrimitiveCandidate
 
-    from .pdf_raster_staff_diagnostics import build_raster_notation_diagnostics
-    try:
-        raster_diags = build_raster_notation_diagnostics(page, page_index, scale=2.0)
-    except Exception:
-        return []
-
-    if raster_diags.get("status") != "success":
-        return []
-
-    scale = raster_diags.get("render_scale")
-    if not isinstance(scale, (int, float)) or scale <= 0:
-        return []
-
-    raster_staffs = raster_diags.get("staffs")
-    if not isinstance(raster_staffs, list):
-        return []
-
-    # Deterministic association logic:
-    # Match raster staffs to geometry staffs using y_coords (unscaled).
-    # Must fail closed if ambiguous.
-    matched_candidates = []
-
-    for r_staff in raster_staffs:
-        if not isinstance(r_staff, dict):
-            continue
-
-        clf = r_staff.get("raster_opening_symbol_classification", {})
-        if clf.get("label") != "treble_clef_candidate":
-            continue
-
-        cand = r_staff.get("raster_opening_symbol_candidate", {})
-        bbox = cand.get("bbox")
-        if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
-            continue
-
-        y_coords = r_staff.get("y_coords")
-        if not isinstance(y_coords, list) or len(y_coords) != 5:
-            continue
-
+    raster_staffs = []
+    if page is not None:
         try:
-            geom_bbox = [float(b) / scale for b in bbox]
-            r_y0 = float(y_coords[0]) / scale
-            r_y1 = float(y_coords[4]) / scale
-        except (TypeError, ValueError, ZeroDivisionError):
-            continue
+            from .pdf_raster_staff_diagnostics import build_raster_notation_diagnostics
+            raster_diags = build_raster_notation_diagnostics(page, page_index, scale=2.0)
+            if raster_diags.get("status") == "success":
+                scale = raster_diags.get("render_scale")
+                if type(scale) in (int, float) and scale > 0.0:
+                    raster_staffs = raster_diags.get("staffs", [])
+        except Exception:
+            pass
 
-        # Find matching geometry staves
-        matching_geom = []
-        for g_staff in staves_diags:
-            info = g_staff.get("staff", {})
-            g_y0 = info.get("y0")
-            g_y1 = info.get("y1")
-
-            if not isinstance(g_y0, (int, float)) or not isinstance(g_y1, (int, float)):
+    # Build raster matches
+    raster_matched_bboxes = {}
+    if raster_staffs:
+        for r_staff in raster_staffs:
+            if not isinstance(r_staff, dict):
                 continue
 
-            # Within 10 points (approx 2 staff spaces)
-            if abs(g_y0 - r_y0) <= 10.0 and abs(g_y1 - r_y1) <= 10.0:
-                matching_geom.append(info)
+            clf = r_staff.get("raster_opening_symbol_classification", {})
+            if clf.get("label") != "treble_clef_candidate":
+                continue
 
-        # Fail closed if ambiguous or missing
-        if len(matching_geom) != 1:
-            continue
+            cand = r_staff.get("raster_opening_symbol_candidate", {})
+            bbox = cand.get("bbox")
+            if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
+                continue
 
-        info = matching_geom[0]
-        sys_idx = info.get("system_index")
-        s_idx = info.get("staff_index")
+            y_coords = r_staff.get("y_coords")
+            if not isinstance(y_coords, list) or len(y_coords) != 5:
+                continue
 
-        if sys_idx is None or s_idx is None:
-            continue
+            try:
+                geom_bbox = [float(b) / scale for b in bbox]
+                r_y0 = float(y_coords[0]) / scale
+                r_y1 = float(y_coords[4]) / scale
+            except (TypeError, ValueError, ZeroDivisionError):
+                continue
 
-        matched_candidates.append({
-            "system_index": sys_idx,
-            "staff_index": s_idx,
-            "page_index": page_index,
-            "bbox": geom_bbox,
-            "source": "raster_diagnostic_candidate_evidence"
-        })
+            # Find matching geometry staves
+            matching_geom = []
+            for g_staff in staves_diags:
+                info = g_staff.get("staff", {})
+                g_y0 = info.get("y0")
+                g_y1 = info.get("y1")
 
-    # Fail closed if any geometry staff is matched by multiple raster staffs
-    geom_seen = set()
-    for m in matched_candidates:
-        key = (m["system_index"], m["staff_index"])
-        if key in geom_seen:
-            # Ambiguous mapping: multiple raster staffs map to the same geom staff
-            return []
-        geom_seen.add(key)
+                if not isinstance(g_y0, (int, float)) or not isinstance(g_y1, (int, float)):
+                    continue
+
+                # Within 10 points (approx 2 staff spaces)
+                if abs(g_y0 - r_y0) <= 10.0 and abs(g_y1 - r_y1) <= 10.0:
+                    matching_geom.append(info)
+
+            # Fail closed if ambiguous or missing
+            if len(matching_geom) != 1:
+                continue
+
+            info = matching_geom[0]
+            sys_idx = info.get("system_index")
+            s_idx = info.get("staff_index")
+
+            if sys_idx is None or s_idx is None:
+                continue
+
+            key = (sys_idx, s_idx)
+            if key in raster_matched_bboxes:
+                raster_matched_bboxes[key] = "AMBIGUOUS"
+            else:
+                raster_matched_bboxes[key] = geom_bbox
 
     shaped = []
     current_id = start_index
-    for m in matched_candidates:
-        m["candidate_id"] = f"treble_{current_id:03d}"
-        shaped.append(m)
-        current_id += 1
+
+    for g_staff in staves_diags:
+        info = g_staff.get("staff", {})
+        sys_idx = info.get("system_index")
+        s_idx = info.get("staff_index")
+        if sys_idx is None or s_idx is None:
+            continue
+
+        key = (sys_idx, s_idx)
+        raster_bbox = raster_matched_bboxes.get(key)
+        if raster_bbox == "AMBIGUOUS":
+            continue
+
+        # Evaluate logical clef evidence
+        logical_bbox = None
+        lm_cands_raw = g_staff.get("left_margin_candidates")
+        line_ys = info.get("line_y_coords", [])
+        staff_spacing = 10.0
+        if len(line_ys) == 5:
+            staff_spacing = float(line_ys[-1] - line_ys[0]) / 4.0
+
+        if lm_cands_raw and len(line_ys) == 5:
+            lm_cands = []
+            for c in lm_cands_raw:
+                try:
+                    lm_cands.append(LeftMarginPrimitiveCandidate(**c))
+                except Exception:
+                    pass
+
+            staff_height = float(line_ys[-1] - line_ys[0])
+            staff_x0 = float(info.get("x0", 0.0))
+
+            clf = classify_logical_clef_candidate(lm_cands, staff_spacing, staff_height, staff_x0)
+            if clf.get("label") == "treble_clef_candidate":
+                logical_bbox = clf.get("features", {}).get("bbox")
+
+        if raster_bbox or logical_bbox:
+            final_bbox = logical_bbox if logical_bbox else raster_bbox
+            if logical_bbox and raster_bbox:
+                # Verify spatial compatibility before unifying
+                rx0, ry0, rx1, ry1 = raster_bbox
+                lx0, ly0, lx1, ly1 = logical_bbox
+
+                # Use a tolerance of 1 staff space
+                tol = staff_spacing * 1.0
+                overlap_x = max(0, min(rx1 + tol, lx1 + tol) - max(rx0 - tol, lx0 - tol))
+                overlap_y = max(0, min(ry1 + tol, ly1 + tol) - max(ry0 - tol, ly0 - tol))
+
+                if overlap_x <= 0 or overlap_y <= 0:
+                    # Conflicting evidence -> fail closed
+                    continue
+
+                source = "unified_diagnostic_candidate_evidence"
+            elif logical_bbox:
+                source = "logical_diagnostic_candidate_evidence"
+            else:
+                source = "raster_diagnostic_candidate_evidence"
+
+            shaped.append({
+                "system_index": sys_idx,
+                "staff_index": s_idx,
+                "page_index": page_index,
+                "bbox": final_bbox,
+                "source": source,
+                "candidate_id": f"treble_{current_id:03d}"
+            })
+            current_id += 1
 
     return shaped
 
@@ -766,7 +811,12 @@ def map_clef_resolved_staff_pitch(outcomes: list[dict], explicit_clef: str | Non
                 if not isinstance(cand_id, str) or not cand_id:
                     continue
                 source = cand.get("source")
-                if source not in ("diagnostic_candidate_evidence", "raster_diagnostic_candidate_evidence"):
+                if source not in (
+                    "diagnostic_candidate_evidence",
+                    "raster_diagnostic_candidate_evidence",
+                    "logical_diagnostic_candidate_evidence",
+                    "unified_diagnostic_candidate_evidence"
+                ):
                     continue
                 page = cand.get("page_index")
                 sys_idx = cand.get("system_index")
@@ -854,7 +904,12 @@ def build_clef_resolved_pitch_coverage_report(outcomes: list[dict]) -> dict:
             if not isinstance(cand_id, str) or not cand_id:
                 continue
             source = cand.get("source")
-            if source not in ("diagnostic_candidate_evidence", "raster_diagnostic_candidate_evidence"):
+            if source not in (
+                "diagnostic_candidate_evidence",
+                "raster_diagnostic_candidate_evidence",
+                "logical_diagnostic_candidate_evidence",
+                "unified_diagnostic_candidate_evidence"
+            ):
                 continue
             page = cand.get("page_index")
             sys_idx = cand.get("system_index")
