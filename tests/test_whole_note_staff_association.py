@@ -83,3 +83,30 @@ def test_regression_half_and_quarter_notes_staff_association():
     assert half_cands[0].get("association_status") == "success"
     assert half_cands[0].get("system_index") == 1
     assert half_cands[0].get("staff_index") == 1
+
+def test_compact_staff_nearest_association():
+    staves = [
+        {"staff": {"system_index": 1, "staff_index": 1, "x0": 50.0, "y0": 100.0, "x1": 500.0, "y1": 140.0}},
+        {"staff": {"system_index": 1, "staff_index": 2, "x0": 50.0, "y0": 180.0, "x1": 500.0, "y1": 220.0}},
+    ]
+    
+    cand_near_1 = [{"bbox": [100.0, 125.0, 110.0, 135.0]}]
+    _associate_staves(cand_near_1, staves)
+    assert cand_near_1[0].get("association_status") == "success"
+    assert cand_near_1[0].get("staff_index") == 1
+    
+    cand_near_2 = [{"bbox": [100.0, 185.0, 110.0, 195.0]}]
+    _associate_staves(cand_near_2, staves)
+    assert cand_near_2[0].get("association_status") == "success"
+    assert cand_near_2[0].get("staff_index") == 2
+
+def test_ambiguous_equidistant_association():
+    staves = [
+        {"staff": {"system_index": 1, "staff_index": 1, "x0": 50.0, "y0": 100.0, "x1": 500.0, "y1": 140.0}},
+        {"staff": {"system_index": 1, "staff_index": 2, "x0": 50.0, "y0": 180.0, "x1": 500.0, "y1": 220.0}},
+    ]
+    
+    cand_equidistant = [{"bbox": [100.0, 155.0, 110.0, 165.0]}]
+    _associate_staves(cand_equidistant, staves)
+    assert cand_equidistant[0].get("association_status") == "failed"
+    assert cand_equidistant[0].get("association_reason") == "ambiguous_staff_match"

@@ -635,10 +635,16 @@ def _associate_staves(shaped_candidates: list[dict], staves: list[dict]) -> None
             horizontal_ok = c_x1 >= (s_x0 - horizontal_margin) and c_x0 <= (s_x1 + horizontal_margin)
 
             if vertical_ok and horizontal_ok:
-                matched_staves.append(staff)
+                staff_center_y = (s_y0 + s_y1) / 2.0
+                dist = abs(c_y - staff_center_y)
+                matched_staves.append({
+                    "staff": staff,
+                    "dist": dist,
+                    "staff_space": staff_space
+                })
                 
         if len(matched_staves) == 1:
-            best_staff = matched_staves[0]
+            best_staff = matched_staves[0]["staff"]
             cand["system_index"] = best_staff.get("system_index")
             cand["staff_index"] = best_staff.get("staff_index")
             cand["association_status"] = "success"
@@ -646,8 +652,19 @@ def _associate_staves(shaped_candidates: list[dict], staves: list[dict]) -> None
             cand["association_status"] = "failed"
             cand["association_reason"] = "outside_staff_bounds"
         else:
-            cand["association_status"] = "failed"
-            cand["association_reason"] = "ambiguous_staff_match"
+            matched_staves.sort(key=lambda x: x["dist"])
+            nearest = matched_staves[0]
+            second_nearest = matched_staves[1]
+            
+            ambiguity_threshold = 1.0 * nearest["staff_space"]
+            if (second_nearest["dist"] - nearest["dist"]) <= ambiguity_threshold:
+                cand["association_status"] = "failed"
+                cand["association_reason"] = "ambiguous_staff_match"
+            else:
+                best_staff = nearest["staff"]
+                cand["system_index"] = best_staff.get("system_index")
+                cand["staff_index"] = best_staff.get("staff_index")
+                cand["association_status"] = "success"
 
 def compose_eighth_note_candidates(outcomes: list[dict]) -> list[dict]:
     quarters = [o for o in outcomes if o.get("symbol_type") == "quarter_note_candidate"]
