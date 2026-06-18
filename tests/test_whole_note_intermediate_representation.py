@@ -57,6 +57,8 @@ def test_map_whole_note_failure_modes():
     notes = map_whole_note_candidates_to_intermediate_notes(outcomes)
     assert notes[0]["mapping_status"] == "failed"
     assert "invalid_association_status" in notes[0]["mapping_reason"]
+    assert notes[0]["symbol_type"] == "whole_note_mapping_failure"
+    assert "note_kind" not in notes[0]
 
     # 2. Failed association_status
     outcomes = [{
@@ -68,6 +70,7 @@ def test_map_whole_note_failure_modes():
     }]
     notes = map_whole_note_candidates_to_intermediate_notes(outcomes)
     assert notes[0]["mapping_status"] == "failed"
+    assert notes[0]["symbol_type"] == "whole_note_mapping_failure"
 
     # 3. Missing staff_position_index
     outcomes = [{
@@ -82,6 +85,7 @@ def test_map_whole_note_failure_modes():
     notes = map_whole_note_candidates_to_intermediate_notes(outcomes)
     assert notes[0]["mapping_status"] == "failed"
     assert notes[0]["mapping_reason"] == "missing_or_invalid_staff_position_index"
+    assert notes[0]["symbol_type"] == "whole_note_mapping_failure"
 
     # 4. Missing page/system/staff
     outcomes = [{
@@ -94,6 +98,7 @@ def test_map_whole_note_failure_modes():
     notes = map_whole_note_candidates_to_intermediate_notes(outcomes)
     assert notes[0]["mapping_status"] == "failed"
     assert notes[0]["mapping_reason"] == "missing_staff_indices"
+    assert notes[0]["symbol_type"] == "whole_note_mapping_failure"
 
     # 5. Malformed bbox
     outcomes = [{
@@ -109,3 +114,4 @@ def test_map_whole_note_failure_modes():
     notes = map_whole_note_candidates_to_intermediate_notes(outcomes)
     assert notes[0]["mapping_status"] == "failed"
     assert notes[0]["mapping_reason"] == "missing_or_malformed_bbox"
+    assert notes[0]["symbol_type"] == "whole_note_mapping_failure"

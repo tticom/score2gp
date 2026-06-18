@@ -396,16 +396,14 @@ def map_whole_note_candidates_to_intermediate_notes(outcomes: list[dict]) -> lis
             continue
             
         intermediate_note = {
-            "symbol_type": "whole_note",
             "source_candidate_id": cand.get("candidate_id"),
             "bbox": cand.get("bbox"),
-            "note_kind": "whole_note",
-            "duration_kind": "whole",
             "source": cand.get("source", "intermediate_representation")
         }
         
         # We need successful staff association
         if cand.get("association_status") != "success":
+            intermediate_note["symbol_type"] = "whole_note_mapping_failure"
             intermediate_note["mapping_status"] = "failed"
             intermediate_note["mapping_reason"] = f"invalid_association_status: {cand.get('association_status')}"
             intermediate_notes.append(intermediate_note)
@@ -418,23 +416,29 @@ def map_whole_note_candidates_to_intermediate_notes(outcomes: list[dict]) -> lis
         bbox = cand.get("bbox")
         
         if page_index is None or system_index is None or staff_index is None:
+            intermediate_note["symbol_type"] = "whole_note_mapping_failure"
             intermediate_note["mapping_status"] = "failed"
             intermediate_note["mapping_reason"] = "missing_staff_indices"
             intermediate_notes.append(intermediate_note)
             continue
             
         if type(staff_position_index) is not int:
+            intermediate_note["symbol_type"] = "whole_note_mapping_failure"
             intermediate_note["mapping_status"] = "failed"
             intermediate_note["mapping_reason"] = "missing_or_invalid_staff_position_index"
             intermediate_notes.append(intermediate_note)
             continue
             
         if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
+            intermediate_note["symbol_type"] = "whole_note_mapping_failure"
             intermediate_note["mapping_status"] = "failed"
             intermediate_note["mapping_reason"] = "missing_or_malformed_bbox"
             intermediate_notes.append(intermediate_note)
             continue
             
+        intermediate_note["symbol_type"] = "whole_note"
+        intermediate_note["note_kind"] = "whole_note"
+        intermediate_note["duration_kind"] = "whole"
         intermediate_note["page_index"] = page_index
         intermediate_note["system_index"] = system_index
         intermediate_note["staff_index"] = staff_index
