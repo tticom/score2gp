@@ -7,19 +7,14 @@ class MockPage:
     def __init__(self, fret_evidence: bool):
         self.fret_evidence = fret_evidence
         
-    def get_text(self, kind: str) -> dict:
-        if kind == "dict":
+    def get_text(self, kind: str) -> list | dict:
+        if kind == "words":
             if self.fret_evidence:
-                return {
-                    "blocks": [{
-                        "lines": [{
-                            "spans": [{
-                                "text": "3",
-                                "bbox": [150.0, 105.0, 160.0, 115.0]
-                            }]
-                        }]
-                    }]
-                }
+                return [
+                    (150.0, 105.0, 160.0, 115.0, "3", 0, 0, 0)
+                ]
+            return []
+        if kind == "dict":
             return {"blocks": []}
         return {}
 
@@ -76,3 +71,18 @@ def test_six_line_tab_behaviour_unchanged() -> None:
     # 6-line groups with spacing 6.0 evaluate as 'tab'
     assert classify_staff_line_group(groups[0], page=MockPage(fret_evidence=False)) == "tab"
     assert classify_staff_line_group(groups[0], page=MockPage(fret_evidence=True)) == "tab"
+
+def test_compact_six_line_rejected_to_prevent_ambiguous_grouping_corruption() -> None:
+    lines = []
+    y_start = 100.0
+    spacing = 4.3
+    for i in range(6):
+        lines.append(_LineSegment(100.0, y_start + i * spacing, 600.0, y_start + i * spacing))
+    
+    groups = _tab_line_groups(lines)
+    assert len(groups) == 1
+    assert len(groups[0]) == 6
+    
+    # Codex fix: explicitly reject compact 6-line groups so they aren't mistaken for notation partners
+    assert classify_staff_line_group(groups[0], page=MockPage(fret_evidence=False)) == "rejected"
+

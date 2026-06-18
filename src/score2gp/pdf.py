@@ -3422,6 +3422,8 @@ def classify_staff_line_group(group: list[_LineSegment], page: Any = None) -> st
             return "tab"
         elif 15.0 < median_gap <= 32.0 and _is_coherent_large_tab_group(group):
             return "tab"
+        elif median_gap < 5.5:
+            return "rejected"
         else:
             return "ambiguous"
     elif len(group) == 5:
