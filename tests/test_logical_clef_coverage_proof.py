@@ -1,7 +1,7 @@
 def test_logical_clef_backed_staff_pitch_mapping_coverage_proof():
     from score2gp.whole_note_recogniser import (
         map_treble_clef_candidates_to_read_only_outcomes,
-        map_whole_note_candidates_to_read_only_outcomes,
+        map_quarter_note_candidates_to_read_only_outcomes,
         map_staff_position_to_read_only_outcomes,
         map_clef_resolved_staff_pitch,
         build_clef_resolved_pitch_coverage_report
@@ -19,10 +19,10 @@ def test_logical_clef_backed_staff_pitch_mapping_coverage_proof():
         }
     ]
 
-    # 2. Provide synthetic whole note candidate evidence on the same staff
+    # 2. Provide synthetic quarter note candidate evidence on the same staff
     note_diags = [
         {
-            "candidate_id": "whole_note_001",
+            "candidate_id": "quarter_note_001",
             "page_index": 1,
             "system_index": 1,
             "staff_index": 1,
@@ -45,13 +45,13 @@ def test_logical_clef_backed_staff_pitch_mapping_coverage_proof():
     # Map to read-only outcomes
     outcomes = []
     outcomes.extend(map_treble_clef_candidates_to_read_only_outcomes(clef_diags))
-    outcomes.extend(map_whole_note_candidates_to_read_only_outcomes(note_diags))
+    outcomes.extend(map_quarter_note_candidates_to_read_only_outcomes(note_diags))
 
     # Map staff position (y=223.0, line[0]=200, space/2 = 5) -> pos = (223-200)/5 = 4.6 -> 5
     map_staff_position_to_read_only_outcomes(outcomes, staff_geometries)
 
     # Note candidate should have staff_position_index = 5 (A4)
-    note_outcome = next(o for o in outcomes if o["symbol_type"] == "whole_note_candidate")
+    note_outcome = next(o for o in outcomes if o["symbol_type"] == "quarter_note_candidate")
     assert note_outcome["staff_position_index"] == 5
 
     # Run pitch mapping

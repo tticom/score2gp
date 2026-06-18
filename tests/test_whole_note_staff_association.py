@@ -16,11 +16,17 @@ def test_whole_note_staff_association_on_fixture():
     
     assert len(whole_notes) == 2, f"Expected 2 whole notes, got {len(whole_notes)}"
     
+    # Assert exact expected indexes matching the PR evidence table
+    cand1 = next(wn for wn in whole_notes if wn["candidate_id"] == "whole_note_candidate_001")
+    assert cand1.get("staff_position_index") == 2
+
+    cand2 = next(wn for wn in whole_notes if wn["candidate_id"] == "whole_note_candidate_002")
+    assert cand2.get("staff_position_index") == 4
+    
     for wn in whole_notes:
         assert wn.get("association_status") == "success"
         assert wn.get("system_index") == 1
         assert wn.get("staff_index") == 1
-        assert type(wn.get("staff_position_index")) is int
         
         # Ensure no pitch was named
         assert "assumed_treble_pitch" not in wn
