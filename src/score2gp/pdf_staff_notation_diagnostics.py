@@ -67,6 +67,27 @@ def _extract_note_candidates(page: Any) -> tuple[list[WholeNoteCandidateDiagnost
 
         if 1.2 <= aspect <= 2.0 and c_count >= 2:
             is_hollow = not draw.get("fill")
+            if not is_hollow and c_count >= 8:
+                pts = []
+                for item in items:
+                    if item[0] == 'l':
+                        pts.extend([item[1], item[2]])
+                    elif item[0] == 'c':
+                        pts.extend([item[1], item[3]])
+                if pts:
+                    min_x = min(p.x for p in pts)
+                    max_x = max(p.x for p in pts)
+                    min_y = min(p.y for p in pts)
+                    max_y = max(p.y for p in pts)
+                    max_dist = 0.0
+                    for p in pts:
+                        dx = min(p.x - min_x, max_x - p.x)
+                        dy = min(p.y - min_y, max_y - p.y)
+                        dist = min(dx, dy)
+                        if dist > max_dist:
+                            max_dist = dist
+                    if max_dist > min(w, h) * 0.2:
+                        is_hollow = True
             has_stem = False
             margin_x = 3.0
             margin_y = 5.0
