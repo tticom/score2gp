@@ -938,9 +938,12 @@ class ScoreIR(BaseModel):
                 bar_length = _bar_length_ticks(bar.time_signature, event.timing.ticks_per_quarter)
                 event_end = event.timing.onset_ticks + event.timing.duration_ticks
                 if event.timing.grace is None and event_end > bar_length:
-                    errors.append(
-                        f"event '{event.id}' exceeds bar {bar.index}: ends at tick {event_end}, bar length is {bar_length}"
-                    )
+                    # Allow overfilled bars if this is an editable draft
+                    is_editable_draft = any(w.code == "pdf_editable_draft" for w in self.warnings)
+                    if not is_editable_draft:
+                        errors.append(
+                            f"event '{event.id}' exceeds bar {bar.index}: ends at tick {event_end}, bar length is {bar_length}"
+                        )
 
                 track = track_map[event.track_id]
                 for note in event.notes:

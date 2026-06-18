@@ -1627,6 +1627,7 @@ def build_ir_from_tabraw_only(
     tabraw_path: str | Path,
     *,
     tempo_bpm: float = 120.0,
+    editable_draft: bool = False,
 ) -> tuple[ScoreIR, BuildIrDiagnostics]:
     tabraw = TabRaw.from_json_file(tabraw_path)
 
@@ -1774,23 +1775,30 @@ def build_ir_from_tabraw_only(
                 message=f"PDF-only tab building refused: too many events ({N}) in bar {output_bar_idx}.",
             )
 
-        if N <= 8:
-            grid_spacing = 480
-            duration_name = "eighth"
-        elif N <= 16:
-            grid_spacing = 240
-            duration_name = "16th"
-        elif N <= 32:
-            grid_spacing = 120
-            duration_name = "32nd"
+        if editable_draft:
+            grid_spacing = 960
+            duration_name = "quarter"
         else:
-            grid_spacing = 60
-            duration_name = "64th"
+            if N <= 8:
+                grid_spacing = 480
+                duration_name = "eighth"
+            elif N <= 16:
+                grid_spacing = 240
+                duration_name = "16th"
+            elif N <= 32:
+                grid_spacing = 120
+                duration_name = "32nd"
+            else:
+                grid_spacing = 60
+                duration_name = "64th"
 
         events = []
         for i, subgroup_candidates in enumerate(event_subgroups):
             onset_ticks = i * grid_spacing
-            duration_ticks = grid_spacing if i < N - 1 else 3840 - onset_ticks
+            if editable_draft:
+                duration_ticks = grid_spacing
+            else:
+                duration_ticks = grid_spacing if i < N - 1 else 3840 - onset_ticks
 
             notes = []
             for candidate in subgroup_candidates:
@@ -1806,6 +1814,18 @@ def build_ir_from_tabraw_only(
                     )
                 )
 
+            event_text = None
+            if editable_draft and output_bar_idx == 1 and i == 0:
+                event_text = (
+                    "Editable draft generated from PDF tablature. "
+                    "Rhythms defaulted to quarter notes; timing was not recognised. "
+                    "Tuning defaulted to E Standard unless corrected by the user. "
+                    "Time signature defaulted to 4/4. "
+                    "Tempo defaulted to 120 bpm. "
+                    "Standard notation and notation/tab alignment were skipped. "
+                    "Rests/silence may be omitted."
+                )
+
             events.append(
                 Event(
                     id=f"bar-{output_bar_idx}-event-{i+1}",
@@ -1818,6 +1838,7 @@ def build_ir_from_tabraw_only(
                         notated_duration=NotatedDuration(value=duration_name, dots=0),
                     ),
                     notes=notes,
+                    text=event_text,
                     confidence=sum(c.confidence for c in subgroup_candidates) / len(subgroup_candidates),
                     provenance=[c.to_provenance() for c in subgroup_candidates],
                 )
@@ -1839,6 +1860,15 @@ def build_ir_from_tabraw_only(
             severity="warning",
         )
     ]
+
+    if editable_draft:
+        warnings_list.append(
+            WarningItem(
+                code="pdf_editable_draft",
+                message="Editable GP draft generated. Tuning, rhythm, tempo, and time signature are explicit defaults.",
+                severity="warning",
+            )
+        )
 
     for candidate in tabraw.candidates:
         if candidate.kind in ("chord-symbol", "technique-text"):
