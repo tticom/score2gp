@@ -384,6 +384,67 @@ def map_whole_note_candidates_to_read_only_outcomes(candidate_locations: list[di
         outcomes.append(outcome)
     return outcomes
 
+def map_whole_note_candidates_to_intermediate_notes(outcomes: list[dict]) -> list[dict]:
+    """
+    Consumes read-only recognition outcomes and emits whole-note intermediate representations
+    for valid staff-associated whole note candidates.
+    """
+    intermediate_notes = []
+    
+    for cand in outcomes:
+        if cand.get("symbol_type") != "whole_note_candidate":
+            continue
+            
+        intermediate_note = {
+            "symbol_type": "whole_note",
+            "source_candidate_id": cand.get("candidate_id"),
+            "bbox": cand.get("bbox"),
+            "note_kind": "whole_note",
+            "duration_kind": "whole",
+            "source": cand.get("source", "intermediate_representation")
+        }
+        
+        # We need successful staff association
+        if cand.get("association_status") != "success":
+            intermediate_note["mapping_status"] = "failed"
+            intermediate_note["mapping_reason"] = f"invalid_association_status: {cand.get('association_status')}"
+            intermediate_notes.append(intermediate_note)
+            continue
+            
+        page_index = cand.get("page_index")
+        system_index = cand.get("system_index")
+        staff_index = cand.get("staff_index")
+        staff_position_index = cand.get("staff_position_index")
+        bbox = cand.get("bbox")
+        
+        if page_index is None or system_index is None or staff_index is None:
+            intermediate_note["mapping_status"] = "failed"
+            intermediate_note["mapping_reason"] = "missing_staff_indices"
+            intermediate_notes.append(intermediate_note)
+            continue
+            
+        if type(staff_position_index) is not int:
+            intermediate_note["mapping_status"] = "failed"
+            intermediate_note["mapping_reason"] = "missing_or_invalid_staff_position_index"
+            intermediate_notes.append(intermediate_note)
+            continue
+            
+        if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
+            intermediate_note["mapping_status"] = "failed"
+            intermediate_note["mapping_reason"] = "missing_or_malformed_bbox"
+            intermediate_notes.append(intermediate_note)
+            continue
+            
+        intermediate_note["page_index"] = page_index
+        intermediate_note["system_index"] = system_index
+        intermediate_note["staff_index"] = staff_index
+        intermediate_note["staff_position_index"] = staff_position_index
+        intermediate_note["mapping_status"] = "success"
+        
+        intermediate_notes.append(intermediate_note)
+        
+    return intermediate_notes
+
 def map_half_note_candidates_to_read_only_outcomes(candidate_locations: list[dict]) -> list[dict]:
     """
     Consumes diagnostic half-note candidate evidence and produces a read-only
