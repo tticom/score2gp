@@ -3430,7 +3430,7 @@ def classify_staff_line_group(group: list[_LineSegment], page: Any = None) -> st
                 return "incomplete_tab_candidate"
             else:
                 return "ambiguous"
-        elif 7.8 <= median_gap <= 9.2:
+        elif (3.5 <= median_gap < 5.5) or (7.8 <= median_gap <= 9.2):
             if not has_fret:
                 return "notation"
             else:
@@ -3942,7 +3942,7 @@ def _tab_line_groups(lines: list[_LineSegment]) -> list[list[_LineSegment]]:
             y0 = (sorted_lines[i0].y0 + sorted_lines[i0].y1) / 2
             y1 = (sorted_lines[i1].y0 + sorted_lines[i1].y1) / 2
             gap = y1 - y0
-            if gap < 6.0 or gap > 32.0:
+            if gap < 3.5 or gap > 32.0:
                 continue
 
             group_indices = [i0, i1]
@@ -4009,7 +4009,7 @@ def _tab_line_groups(lines: list[_LineSegment]) -> list[list[_LineSegment]]:
             y0 = (sorted_lines[i0].y0 + sorted_lines[i0].y1) / 2
             y1 = (sorted_lines[i1].y0 + sorted_lines[i1].y1) / 2
             gap = y1 - y0
-            if gap < 6.0 or gap > 24.0:
+            if gap < 3.5 or gap > 24.0:
                 continue
 
             group_indices = [i0, i1]
@@ -4162,7 +4162,7 @@ def _looks_like_tab_line_group(group: list[_LineSegment]) -> bool:
         return False
     ys = [round((line.y0 + line.y1) / 2, 3) for line in group]
     gaps = [right - left for left, right in zip(ys, ys[1:])]
-    if any(gap < 6.0 or gap > 24.0 for gap in gaps):
+    if any(gap < 3.5 or gap > 24.0 for gap in gaps):
         return False
     average = sum(gaps) / len(gaps)
     return all(abs(gap - average) <= 2.5 for gap in gaps)
