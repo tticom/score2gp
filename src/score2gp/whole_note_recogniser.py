@@ -369,15 +369,19 @@ def map_whole_note_candidates_to_read_only_outcomes(candidate_locations: list[di
     """
     outcomes = []
     for cand in candidate_locations:
-        outcomes.append({
+        outcome = {
             "symbol_type": "whole_note_candidate",
             "candidate_id": cand.get("candidate_id"),
             "bbox": cand.get("bbox"),
             "page_index": cand.get("page_index"),
             "system_index": cand.get("system_index"),
             "staff_index": cand.get("staff_index"),
+            "association_status": cand.get("association_status"),
             "source": "diagnostic_candidate_evidence"
-        })
+        }
+        if "association_reason" in cand:
+            outcome["association_reason"] = cand.get("association_reason")
+        outcomes.append(outcome)
     return outcomes
 
 def map_half_note_candidates_to_read_only_outcomes(candidate_locations: list[dict]) -> list[dict]:
@@ -592,27 +596,37 @@ def map_staff_geometry_to_read_only_report(staves_diags: list[dict]) -> list[dic
 
 def _associate_staves(shaped_candidates: list[dict], staves: list[dict]) -> None:
     if not staves:
+        for cand in shaped_candidates:
+            cand["association_status"] = "failed"
+            cand["association_reason"] = "missing_staff_geometry"
         return
     for cand in shaped_candidates:
         bbox = cand.get("bbox")
         if not bbox or len(bbox) < 4:
+            cand["association_status"] = "failed"
+            cand["association_reason"] = "malformed_candidate_bbox"
             continue
         c_x0, c_y0, c_x1, c_y1 = bbox
         c_y = (c_y0 + c_y1) / 2.0
-        best_staff = None
-        best_dist = float('inf')
+        
+        matched_staves = []
         for staff_dict in staves:
             staff = staff_dict.get("staff", {})
             if not staff:
                 continue
-            s_y0 = staff.get("y0", 0.0)
-            s_y1 = staff.get("y1", 0.0)
-            s_x0 = staff.get("x0", 0.0)
-            s_x1 = staff.get("x1", 0.0)
-            s_y = (s_y0 + s_y1) / 2.0
-
+            s_y0 = staff.get("y0")
+            s_y1 = staff.get("y1")
+            s_x0 = staff.get("x0")
+            s_x1 = staff.get("x1")
+            
+            if s_y0 is None or s_y1 is None or s_x0 is None or s_x1 is None:
+                continue
+                
             staff_height = s_y1 - s_y0
-            staff_space = staff_height / 4.0 if staff_height > 0 else 10.0
+            if staff_height <= 0:
+                continue
+                
+            staff_space = staff_height / 4.0
 
             vertical_margin = 6.0 * staff_space
             horizontal_margin = 1.0 * staff_space
@@ -621,13 +635,36 @@ def _associate_staves(shaped_candidates: list[dict], staves: list[dict]) -> None
             horizontal_ok = c_x1 >= (s_x0 - horizontal_margin) and c_x0 <= (s_x1 + horizontal_margin)
 
             if vertical_ok and horizontal_ok:
-                dist = abs(c_y - s_y)
-                if dist < best_dist:
-                    best_dist = dist
-                    best_staff = staff
-        if best_staff:
+                staff_center_y = (s_y0 + s_y1) / 2.0
+                dist = abs(c_y - staff_center_y)
+                matched_staves.append({
+                    "staff": staff,
+                    "dist": dist,
+                    "staff_space": staff_space
+                })
+                
+        if len(matched_staves) == 1:
+            best_staff = matched_staves[0]["staff"]
             cand["system_index"] = best_staff.get("system_index")
             cand["staff_index"] = best_staff.get("staff_index")
+            cand["association_status"] = "success"
+        elif len(matched_staves) == 0:
+            cand["association_status"] = "failed"
+            cand["association_reason"] = "outside_staff_bounds"
+        else:
+            matched_staves.sort(key=lambda x: x["dist"])
+            nearest = matched_staves[0]
+            second_nearest = matched_staves[1]
+            
+            ambiguity_threshold = 1.0 * nearest["staff_space"]
+            if (second_nearest["dist"] - nearest["dist"]) <= ambiguity_threshold:
+                cand["association_status"] = "failed"
+                cand["association_reason"] = "ambiguous_staff_match"
+            else:
+                best_staff = nearest["staff"]
+                cand["system_index"] = best_staff.get("system_index")
+                cand["staff_index"] = best_staff.get("staff_index")
+                cand["association_status"] = "success"
 
 def compose_eighth_note_candidates(outcomes: list[dict]) -> list[dict]:
     quarters = [o for o in outcomes if o.get("symbol_type") == "quarter_note_candidate"]
@@ -747,18 +784,27 @@ def map_staff_position_to_read_only_outcomes(outcomes: list[dict], staff_geometr
         if st_type not in ("whole_note_candidate", "half_note_candidate", "quarter_note_candidate", "eighth_note_candidate", "ledger_line_candidate"):
             continue
 
+        if cand.get("association_status") == "failed":
+            continue
+
         sg_key = (cand.get("page_index"), cand.get("system_index"), cand.get("staff_index"))
         sg = staff_geom_lookup.get(sg_key)
         if not sg:
+            cand["association_status"] = "failed"
+            cand["association_reason"] = "missing_staff_geometry"
             continue
 
         line_y_coords = sg.get("line_y_coords")
         if not line_y_coords or not isinstance(line_y_coords, list) or len(line_y_coords) != 5:
+            cand["association_status"] = "failed"
+            cand["association_reason"] = "missing_staff_line_coordinates"
             continue
 
         try:
             line_y_coords = [float(y) for y in line_y_coords]
         except (TypeError, ValueError):
+            cand["association_status"] = "failed"
+            cand["association_reason"] = "malformed_staff_line_coordinates"
             continue
 
         notehead_y = None
@@ -788,15 +834,18 @@ def map_staff_position_to_read_only_outcomes(outcomes: list[dict], staff_geometr
 
         staff_space = (line_y_coords[-1] - line_y_coords[0]) / 4.0
         if staff_space <= 0:
+            cand["association_status"] = "failed"
+            cand["association_reason"] = "malformed_staff_spacing"
             continue
 
         pos_float = (notehead_y - line_y_coords[0]) / (staff_space / 2.0)
         cand["staff_position_index"] = int(round(pos_float))
+        cand["association_status"] = "success"
 
 def map_assumed_treble_pitch_to_read_only_outcomes(outcomes: list[dict]) -> None:
     pitches = ["F5", "E5", "D5", "C5", "B4", "A4", "G4", "F4", "E4"]
     for cand in outcomes:
-        if cand.get("symbol_type") == "ledger_line_candidate":
+        if cand.get("symbol_type") in ("ledger_line_candidate", "whole_note_candidate"):
             continue
         pos_idx = cand.get("staff_position_index")
         if type(pos_idx) is int and 0 <= pos_idx <= 8:
@@ -834,7 +883,7 @@ def map_clef_resolved_staff_pitch(outcomes: list[dict], explicit_clef: str | Non
 
     for cand in outcomes:
         st_type = cand.get("symbol_type")
-        if st_type not in ("whole_note_candidate", "half_note_candidate", "quarter_note_candidate", "eighth_note_candidate"):
+        if st_type not in ("half_note_candidate", "quarter_note_candidate", "eighth_note_candidate"):
             continue
 
         if explicit_clef is not None:
