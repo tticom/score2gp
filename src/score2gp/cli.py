@@ -423,6 +423,7 @@ def convert_command(
     optimize_fret_snapping: bool = typer.Option(False, "--optimize-fret-snapping", help="Enable Left-hand finger position/fret-snapping optimization"),
     pages: Optional[str] = typer.Option(None, "--pages", help="Explicit page range subset to process (e.g. '1-1' or '1-2')."),
     pdf_only_tab: bool = typer.Option(False, "--pdf-only-tab", help="Enable direct PDF-to-GP conversion without a MusicXML timing source"),
+    editable_draft: bool = typer.Option(False, "--editable-draft", help="Generate an editable GP draft with defaulted rhythms and tuning from PDF tab extraction."),
     ref_gp: Optional[Path] = typer.Option(None, "--ref-gp", help="Path to optional reference GP package for semantic comparison"),
 ) -> None:
     """Run the complete conversion pipeline: extraction, alignment, IR generation, and GP7 package writing."""
@@ -540,7 +541,7 @@ def convert_command(
             )
         raise typer.Exit(1)
     # Stage 2: Check for MusicXML sidecar requirement
-    if not pdf_only_tab:
+    if not pdf_only_tab and not editable_draft:
         if musicxml is None:
             typer.echo("Error: MusicXML sidecar path must be provided via --musicxml or -m.", err=True)
             warnings.append({
@@ -597,7 +598,7 @@ def convert_command(
     )
 
     alignment_path = None
-    if has_ascii_candidates and not pdf_only_tab:
+    if has_ascii_candidates and not (pdf_only_tab or editable_draft):
         try:
             alignment_dir = actual_work_dir / "alignment"
             alignment = align_ascii_musicxml_files(
@@ -640,10 +641,11 @@ def convert_command(
     diagnostics_path = actual_work_dir / "diagnostics.json"
 
     try:
-        if pdf_only_tab:
+        if pdf_only_tab or editable_draft:
             from .build_ir import build_ir_from_tabraw_only
             score, diagnostics = build_ir_from_tabraw_only(
                 tabraw_path=tabraw_path,
+                editable_draft=editable_draft,
             )
             score.to_json_file(ir_path)
         else:
@@ -714,7 +716,7 @@ def convert_command(
         typer.echo(f"recommended_action: {recommended_action}", err=True)
 
         if json_report:
-            if pdf_only_tab:
+            if pdf_only_tab or editable_draft:
                 pdf_only_diag_payload = {
                     "pdf_grouping_status": "refused",
                     "inferred_rhythm_status": None,
@@ -744,7 +746,7 @@ def convert_command(
         write_warnings(actual_work_dir / "warnings.json", warnings)
         write_conversion_report(actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary)
         if json_report:
-            if pdf_only_tab:
+            if pdf_only_tab or editable_draft:
                 pdf_only_diag_payload = {
                     "pdf_grouping_status": "refused" if getattr(exc, "category", None) == "pdf_only_tab_grouping_unsafe" else "failed",
                     "inferred_rhythm_status": None,
@@ -796,10 +798,10 @@ def convert_command(
             write_warnings(actual_work_dir / "warnings.json", warnings)
             write_conversion_report(actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary)
             if json_report:
-                if pdf_only_tab:
+                if pdf_only_tab or editable_draft:
                     pdf_only_diag_payload = {
                         "pdf_grouping_status": "safe",
-                        "inferred_rhythm_status": "applied",
+                        "inferred_rhythm_status": "defaulted_placeholder" if editable_draft else "applied",
                         "gp_package_written": False,
                     }
                 _write_convert_report(
@@ -823,10 +825,10 @@ def convert_command(
 
     # Write successful JSON report
     if json_report:
-        if pdf_only_tab:
+        if pdf_only_tab or editable_draft:
             pdf_only_diag_payload = {
                 "pdf_grouping_status": "safe",
-                "inferred_rhythm_status": "applied",
+                "inferred_rhythm_status": "defaulted_placeholder" if editable_draft else "applied",
                 "gp_package_written": True,
             }
             if ref_gp:

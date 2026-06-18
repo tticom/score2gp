@@ -426,3 +426,98 @@ def test_cli_convert_hash_refusal_does_not_print_full_hashes_in_remediation(tmp_
     report = json.loads(json_report.read_text(encoding="utf-8"))
     assert report["refusal_code"] == "ascii_alignment_stale_sidecar_hash"
     assert report["recommended_action"] == "re-align the source PDF and MusicXML files to update the stale hashes"
+
+def _read_score_gpif(gp_path) -> str:
+    import zipfile
+    with zipfile.ZipFile(gp_path) as package:
+        return package.read("Content/score.gpif").decode("utf-8")
+
+def test_cli_convert_editable_draft_success(tmp_path) -> None:
+    workdir = tmp_path / "workdir"
+    out_gp = tmp_path / "output.gp"
+    json_report = tmp_path / "report.json"
+    
+    result = CliRunner().invoke(
+        app,
+        [
+            "convert",
+            "--pdf",
+            str(TINY_PDF),
+            "--editable-draft",
+            "--out",
+            str(out_gp),
+            "--work-dir",
+            str(workdir),
+            "--json-report",
+            str(json_report),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert out_gp.exists()
+    assert json_report.exists()
+    import json
+    report = json.loads(json_report.read_text(encoding="utf-8"))
+    assert report.get("pdf_only_diagnostics", {}).get("inferred_rhythm_status") == "defaulted_placeholder"
+
+    
+    gpif_content = _read_score_gpif(out_gp)
+    assert "Editable draft generated from PDF tablature" in gpif_content
+    assert "Rhythms defaulted to quarter notes" in gpif_content
+    assert "timing was not recognised" in gpif_content
+    assert "Tuning defaulted to E Standard" in gpif_content
+    assert "Time signature defaulted to 4/4" in gpif_content
+    assert "Tempo defaulted to 120 bpm" in gpif_content
+    assert "Standard notation and notation/tab alignment were skipped" in gpif_content
+    assert "Rests/silence may be omitted" in gpif_content
+
+def test_cli_convert_editable_draft_dense_bar(tmp_path) -> None:
+    # Use a synthetic dense bar mock in TabRaw
+    from score2gp.tabraw import TabRaw, TabCandidate
+    from score2gp.ir import BoundingBox
+    import json
+    
+    tabraw = TabRaw(
+        candidates=[
+            TabCandidate(
+                id=f"c-{i}",
+                kind="fret",
+                raw_text="0",
+                parsed_fret=0,
+                x=10.0 + i * 5.0,
+                y=10.0,
+                string=1,
+                bar_index=1,
+                system_index=1,
+                staff_index=1,
+                page_index=1,
+                bbox=BoundingBox(page=1, x0=10.0 + i * 5.0, y0=10.0, x1=15.0 + i * 5.0, y1=15.0)
+            ) for i in range(20) # 20 events in 1 bar
+        ]
+    )
+    
+    workdir = tmp_path / "workdir"
+    out_gp = tmp_path / "output.gp"
+    from unittest.mock import patch
+    with patch("score2gp.cli.extract_tab_file", side_effect=lambda *args, **kwargs: {"candidates_count": 20}):
+        with patch("score2gp.cli.inspect_pdf_file", side_effect=lambda *args, **kwargs: {}):
+            with patch("score2gp.build_ir.TabRaw.from_json_file", return_value=tabraw):
+                result = CliRunner().invoke(
+                    app,
+                    [
+                        "convert",
+                        "--pdf",
+                        str(TINY_PDF),
+                        "--editable-draft",
+                        "--out",
+                        str(out_gp),
+                        "--work-dir",
+                        str(workdir),
+                    ],
+                )
+                assert result.exit_code == 0, result.output
+                assert out_gp.exists()
+                
+                import re
+                gpif_content = _read_score_gpif(out_gp)
+                notes_count = len(re.findall(r'<Note\b', gpif_content))
+                assert notes_count >= 20, f"Expected at least 20 notes, found {notes_count}"
