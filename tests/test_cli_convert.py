@@ -427,6 +427,11 @@ def test_cli_convert_hash_refusal_does_not_print_full_hashes_in_remediation(tmp_
     assert report["refusal_code"] == "ascii_alignment_stale_sidecar_hash"
     assert report["recommended_action"] == "re-align the source PDF and MusicXML files to update the stale hashes"
 
+def _read_score_gpif(gp_path) -> str:
+    import zipfile
+    with zipfile.ZipFile(gp_path) as package:
+        return package.read("Content/score.gpif").decode("utf-8")
+
 def test_cli_convert_editable_draft_success(tmp_path) -> None:
     workdir = tmp_path / "workdir"
     out_gp = tmp_path / "output.gp"
@@ -446,6 +451,16 @@ def test_cli_convert_editable_draft_success(tmp_path) -> None:
     )
     assert result.exit_code == 0, result.output
     assert out_gp.exists()
+    
+    gpif_content = _read_score_gpif(out_gp)
+    assert "Editable draft generated from PDF tablature" in gpif_content
+    assert "Rhythms defaulted to quarter notes" in gpif_content
+    assert "timing was not recognised" in gpif_content
+    assert "Tuning defaulted to E Standard" in gpif_content
+    assert "Time signature defaulted to 4/4" in gpif_content
+    assert "Tempo defaulted to 120 bpm" in gpif_content
+    assert "Standard notation and notation/tab alignment were skipped" in gpif_content
+    assert "Rests/silence may be omitted" in gpif_content
 
 def test_cli_convert_editable_draft_dense_bar(tmp_path) -> None:
     # Use a synthetic dense bar mock in TabRaw
@@ -493,3 +508,8 @@ def test_cli_convert_editable_draft_dense_bar(tmp_path) -> None:
                 )
                 assert result.exit_code == 0, result.output
                 assert out_gp.exists()
+                
+                import re
+                gpif_content = _read_score_gpif(out_gp)
+                notes_count = len(re.findall(r'<Note\b', gpif_content))
+                assert notes_count >= 20, f"Expected at least 20 notes, found {notes_count}"
