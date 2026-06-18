@@ -435,6 +435,7 @@ def _read_score_gpif(gp_path) -> str:
 def test_cli_convert_editable_draft_success(tmp_path) -> None:
     workdir = tmp_path / "workdir"
     out_gp = tmp_path / "output.gp"
+    json_report = tmp_path / "report.json"
     
     result = CliRunner().invoke(
         app,
@@ -447,10 +448,17 @@ def test_cli_convert_editable_draft_success(tmp_path) -> None:
             str(out_gp),
             "--work-dir",
             str(workdir),
+            "--json-report",
+            str(json_report),
         ],
     )
     assert result.exit_code == 0, result.output
     assert out_gp.exists()
+    assert json_report.exists()
+    import json
+    report = json.loads(json_report.read_text(encoding="utf-8"))
+    assert report.get("pdf_only_diagnostics", {}).get("inferred_rhythm_status") == "defaulted_placeholder"
+
     
     gpif_content = _read_score_gpif(out_gp)
     assert "Editable draft generated from PDF tablature" in gpif_content

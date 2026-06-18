@@ -798,10 +798,10 @@ def convert_command(
             write_warnings(actual_work_dir / "warnings.json", warnings)
             write_conversion_report(actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary)
             if json_report:
-                if pdf_only_tab:
+                if pdf_only_tab or editable_draft:
                     pdf_only_diag_payload = {
                         "pdf_grouping_status": "safe",
-                        "inferred_rhythm_status": "applied",
+                        "inferred_rhythm_status": "defaulted_placeholder" if editable_draft else "applied",
                         "gp_package_written": False,
                     }
                 _write_convert_report(
@@ -828,7 +828,7 @@ def convert_command(
         if pdf_only_tab or editable_draft:
             pdf_only_diag_payload = {
                 "pdf_grouping_status": "safe",
-                "inferred_rhythm_status": "applied",
+                "inferred_rhythm_status": "defaulted_placeholder" if editable_draft else "applied",
                 "gp_package_written": True,
             }
             if ref_gp:
