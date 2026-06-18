@@ -390,17 +390,17 @@ def map_whole_note_candidates_to_intermediate_notes(outcomes: list[dict]) -> lis
     for valid staff-associated whole note candidates.
     """
     intermediate_notes = []
-    
+
     for cand in outcomes:
         if cand.get("symbol_type") != "whole_note_candidate":
             continue
-            
+
         intermediate_note = {
             "source_candidate_id": cand.get("candidate_id"),
             "bbox": cand.get("bbox"),
             "source": cand.get("source", "intermediate_representation")
         }
-        
+
         # We need successful staff association
         if cand.get("association_status") != "success":
             intermediate_note["symbol_type"] = "whole_note_mapping_failure"
@@ -408,34 +408,34 @@ def map_whole_note_candidates_to_intermediate_notes(outcomes: list[dict]) -> lis
             intermediate_note["mapping_reason"] = f"invalid_association_status: {cand.get('association_status')}"
             intermediate_notes.append(intermediate_note)
             continue
-            
+
         page_index = cand.get("page_index")
         system_index = cand.get("system_index")
         staff_index = cand.get("staff_index")
         staff_position_index = cand.get("staff_position_index")
         bbox = cand.get("bbox")
-        
+
         if page_index is None or system_index is None or staff_index is None:
             intermediate_note["symbol_type"] = "whole_note_mapping_failure"
             intermediate_note["mapping_status"] = "failed"
             intermediate_note["mapping_reason"] = "missing_staff_indices"
             intermediate_notes.append(intermediate_note)
             continue
-            
+
         if type(staff_position_index) is not int:
             intermediate_note["symbol_type"] = "whole_note_mapping_failure"
             intermediate_note["mapping_status"] = "failed"
             intermediate_note["mapping_reason"] = "missing_or_invalid_staff_position_index"
             intermediate_notes.append(intermediate_note)
             continue
-            
+
         if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
             intermediate_note["symbol_type"] = "whole_note_mapping_failure"
             intermediate_note["mapping_status"] = "failed"
             intermediate_note["mapping_reason"] = "missing_or_malformed_bbox"
             intermediate_notes.append(intermediate_note)
             continue
-            
+
         intermediate_note["symbol_type"] = "whole_note"
         intermediate_note["note_kind"] = "whole_note"
         intermediate_note["duration_kind"] = "whole"
@@ -444,9 +444,9 @@ def map_whole_note_candidates_to_intermediate_notes(outcomes: list[dict]) -> lis
         intermediate_note["staff_index"] = staff_index
         intermediate_note["staff_position_index"] = staff_position_index
         intermediate_note["mapping_status"] = "success"
-        
+
         intermediate_notes.append(intermediate_note)
-        
+
     return intermediate_notes
 
 def map_half_note_candidates_to_read_only_outcomes(candidate_locations: list[dict]) -> list[dict]:
@@ -673,7 +673,7 @@ def _associate_staves(shaped_candidates: list[dict], staves: list[dict]) -> None
             continue
         c_x0, c_y0, c_x1, c_y1 = bbox
         c_y = (c_y0 + c_y1) / 2.0
-        
+
         matched_staves = []
         for staff_dict in staves:
             staff = staff_dict.get("staff", {})
@@ -683,14 +683,14 @@ def _associate_staves(shaped_candidates: list[dict], staves: list[dict]) -> None
             s_y1 = staff.get("y1")
             s_x0 = staff.get("x0")
             s_x1 = staff.get("x1")
-            
+
             if s_y0 is None or s_y1 is None or s_x0 is None or s_x1 is None:
                 continue
-                
+
             staff_height = s_y1 - s_y0
             if staff_height <= 0:
                 continue
-                
+
             staff_space = staff_height / 4.0
 
             vertical_margin = 6.0 * staff_space
@@ -707,7 +707,7 @@ def _associate_staves(shaped_candidates: list[dict], staves: list[dict]) -> None
                     "dist": dist,
                     "staff_space": staff_space
                 })
-                
+
         if len(matched_staves) == 1:
             best_staff = matched_staves[0]["staff"]
             cand["system_index"] = best_staff.get("system_index")
@@ -720,7 +720,7 @@ def _associate_staves(shaped_candidates: list[dict], staves: list[dict]) -> None
             matched_staves.sort(key=lambda x: x["dist"])
             nearest = matched_staves[0]
             second_nearest = matched_staves[1]
-            
+
             ambiguity_threshold = 1.0 * nearest["staff_space"]
             if (second_nearest["dist"] - nearest["dist"]) <= ambiguity_threshold:
                 cand["association_status"] = "failed"

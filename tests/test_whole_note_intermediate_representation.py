@@ -7,10 +7,10 @@ WHOLE_NOTE_PDF = FIXTURES_DIR / "generated_standard_staff_whole_note.pdf"
 
 def test_map_whole_note_fixture_to_intermediate_representation():
     assert WHOLE_NOTE_PDF.exists()
-    
+
     result = run_recognition_on_file(WHOLE_NOTE_PDF)
     outcomes = result.get("read_only_recognition_outcomes", [])
-    
+
     # Verify prior state is unchanged
     whole_note_cands = [o for o in outcomes if o.get("symbol_type") == "whole_note_candidate"]
     assert len(whole_note_cands) == 2
@@ -18,15 +18,15 @@ def test_map_whole_note_fixture_to_intermediate_representation():
         assert cand.get("association_status") == "success"
         assert "assumed_treble_pitch" not in cand
         assert "clef_resolved_staff_pitch" not in cand
-        
+
     # Map to intermediate notes
     intermediate_notes = map_whole_note_candidates_to_intermediate_notes(outcomes)
-    
+
     assert len(intermediate_notes) == 2
-    
+
     # Sort them by staff position index (2 and 4 expected from PR #296)
     intermediate_notes.sort(key=lambda n: n.get("staff_position_index", 0))
-    
+
     note1 = intermediate_notes[0]
     assert note1.get("symbol_type") == "whole_note"
     assert note1.get("note_kind") == "whole_note"
@@ -41,12 +41,12 @@ def test_map_whole_note_fixture_to_intermediate_representation():
     assert note1.get("mapping_status") == "success"
     assert "assumed_treble_pitch" not in note1
     assert "clef_resolved_staff_pitch" not in note1
-    
+
     note2 = intermediate_notes[1]
     assert note2.get("source_candidate_id") == "whole_note_candidate_002"
     assert note2.get("staff_position_index") == 4
     assert note2.get("mapping_status") == "success"
-    
+
 def test_map_whole_note_failure_modes():
     # 1. Missing association_status
     outcomes = [{
