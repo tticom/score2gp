@@ -85,4 +85,5 @@ def test_compact_six_line_rejected_to_prevent_ambiguous_grouping_corruption() ->
     
     # Codex fix: explicitly reject compact 6-line groups so they aren't mistaken for notation partners
     assert classify_staff_line_group(groups[0], page=MockPage(fret_evidence=False)) == "rejected"
+    assert classify_staff_line_group(groups[0], page=MockPage(fret_evidence=True)) == "rejected"
 
