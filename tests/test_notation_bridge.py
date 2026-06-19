@@ -1,5 +1,5 @@
 import pytest
-from score2gp.notation_bridge import build_ir_from_notation_outcomes
+from score2gp.notation_bridge import build_ir_from_notation_outcomes, NotationBridgeInputError
 from score2gp.ir import DEFAULT_TICKS_PER_QUARTER
 
 def test_build_ir_from_whole_note_outcome_yields_valid_scoreir():
@@ -46,8 +46,8 @@ def test_notation_bridge_skips_missing_pitch_from_tab_like_outcome():
             "clef_resolved_staff_pitch": None,
         }
     ]
-    score = build_ir_from_notation_outcomes(outcomes)
-    assert len(score.bars[0].events) == 0
+    with pytest.raises(NotationBridgeInputError, match="no_valid_notation_outcomes_found"):
+        build_ir_from_notation_outcomes(outcomes)
 
 def test_notation_bridge_rejects_failed_association():
     outcomes = [
@@ -58,8 +58,8 @@ def test_notation_bridge_rejects_failed_association():
             "clef_resolved_staff_pitch": "B4",
         }
     ]
-    score = build_ir_from_notation_outcomes(outcomes)
-    assert len(score.bars[0].events) == 0
+    with pytest.raises(NotationBridgeInputError, match="no_valid_notation_outcomes_found"):
+        build_ir_from_notation_outcomes(outcomes)
 
 def test_notation_bridge_rejects_rests_and_unsupported_symbols():
     outcomes = [
@@ -70,8 +70,8 @@ def test_notation_bridge_rejects_rests_and_unsupported_symbols():
             "clef_resolved_staff_pitch": "B4",
         }
     ]
-    score = build_ir_from_notation_outcomes(outcomes)
-    assert len(score.bars[0].events) == 0
+    with pytest.raises(NotationBridgeInputError, match="no_valid_notation_outcomes_found"):
+        build_ir_from_notation_outcomes(outcomes)
 
 def test_notation_bridge_rejects_unsupported_duration():
     outcomes = [
@@ -82,8 +82,26 @@ def test_notation_bridge_rejects_unsupported_duration():
             "clef_resolved_staff_pitch": "B4",
         }
     ]
-    score = build_ir_from_notation_outcomes(outcomes)
-    assert len(score.bars[0].events) == 0
+    with pytest.raises(NotationBridgeInputError, match="no_valid_notation_outcomes_found"):
+        build_ir_from_notation_outcomes(outcomes)
+
+def test_notation_bridge_rejects_multiple_valid_outcomes():
+    outcomes = [
+        {
+            "symbol_type": "whole_note_candidate",
+            "association_status": "success",
+            "duration": "whole",
+            "clef_resolved_staff_pitch": "B4",
+        },
+        {
+            "symbol_type": "whole_note_candidate",
+            "association_status": "success",
+            "duration": "whole",
+            "clef_resolved_staff_pitch": "G4",
+        }
+    ]
+    with pytest.raises(NotationBridgeInputError, match="multiple_valid_notation_outcomes_unsupported"):
+        build_ir_from_notation_outcomes(outcomes)
 
 def test_notation_bridge_preserves_scoreir_semantic_validation():
     outcomes = [
@@ -98,3 +116,4 @@ def test_notation_bridge_preserves_scoreir_semantic_validation():
     # The ScoreIR root model_validator semantic_contract_is_valid will run automatically if we use model_validate,
     # but score.semantic_errors() provides explicit proof.
     assert score.semantic_errors() == []
+

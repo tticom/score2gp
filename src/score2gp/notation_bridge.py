@@ -15,6 +15,9 @@ from .ir import (
 )
 from .build_ir import _standard_guitar_tuning
 
+class NotationBridgeInputError(Exception):
+    pass
+
 def _parse_pitch_to_midi(pitch_str: str) -> int:
     """
     Parse a simple pitch string like 'B4' into a written MIDI pitch.
@@ -74,6 +77,11 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
             confidence=1.0,
         ))
 
+    if len(notes) == 0:
+        raise NotationBridgeInputError("no_valid_notation_outcomes_found")
+    if len(notes) > 1:
+        raise NotationBridgeInputError("multiple_valid_notation_outcomes_unsupported")
+
     events = []
     if notes:
         events.append(Event(
@@ -106,3 +114,4 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
             )
         ]
     )
+
