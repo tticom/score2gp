@@ -78,7 +78,7 @@ def test_notation_bridge_rejects_unsupported_duration():
         {
             "symbol_type": "whole_note_candidate",
             "association_status": "success",
-            "duration": "half",
+            "duration": "quarter",
             "clef_resolved_staff_pitch": "B4",
         }
     ]
@@ -103,6 +103,56 @@ def test_notation_bridge_rejects_multiple_valid_outcomes():
     with pytest.raises(NotationBridgeInputError, match="multiple_valid_notation_outcomes_unsupported"):
         build_ir_from_notation_outcomes(outcomes)
 
+def test_notation_bridge_rejects_multiple_mixed_valid_outcomes():
+    outcomes = [
+        {
+            "symbol_type": "whole_note_candidate",
+            "association_status": "success",
+            "duration": "whole",
+            "clef_resolved_staff_pitch": "B4",
+        },
+        {
+            "symbol_type": "half_note_candidate",
+            "association_status": "success",
+            "duration": "half",
+            "clef_resolved_staff_pitch": "G4",
+        }
+    ]
+    with pytest.raises(NotationBridgeInputError, match="multiple_valid_notation_outcomes_unsupported"):
+        build_ir_from_notation_outcomes(outcomes)
+
+def test_build_ir_from_half_note_outcome_yields_valid_scoreir():
+    outcomes = [
+        {
+            "symbol_type": "half_note_candidate",
+            "association_status": "success",
+            "duration": "half",
+            "clef_resolved_staff_pitch": "B4",
+        }
+    ]
+    
+    score = build_ir_from_notation_outcomes(outcomes)
+    
+    assert score is not None
+    assert len(score.tracks) == 1
+    assert len(score.bars) == 1
+    
+    bar = score.bars[0]
+    assert len(bar.events) == 1
+    
+    event = bar.events[0]
+    assert event.timing.duration_ticks == 2 * DEFAULT_TICKS_PER_QUARTER
+    assert event.timing.notated_duration is not None
+    assert event.timing.notated_duration.value == "half"
+    
+    assert len(event.notes) == 1
+    note = event.notes[0]
+    
+    assert note.pitch == 59
+    assert note.string == 2
+    assert note.fret == 0
+    assert score.semantic_errors() == []
+
 def test_notation_bridge_preserves_scoreir_semantic_validation():
     outcomes = [
         {
@@ -116,4 +166,5 @@ def test_notation_bridge_preserves_scoreir_semantic_validation():
     # The ScoreIR root model_validator semantic_contract_is_valid will run automatically if we use model_validate,
     # but score.semantic_errors() provides explicit proof.
     assert score.semantic_errors() == []
+
 
