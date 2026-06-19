@@ -9,12 +9,12 @@ from score2gp.pdf_raster_staff_diagnostics import build_raster_notation_diagnost
 
 @pytest.fixture
 def treble_staff_paper_path() -> Path:
-    return Path("fixtures/private/raster-treble-clef/treble-staff-paper.pdf")
+    return Path("fixtures/public/generated_simple/raster-treble-clef/treble-staff-paper.pdf")
 
 
 @pytest.fixture
 def flash_cards_path() -> Path:
-    return Path("fixtures/private/raster-treble-clef/FlashCardsValues.pdf")
+    return Path("fixtures/public/generated_simple/raster-treble-clef/FlashCardsValues.pdf")
 
 
 def test_build_raster_notation_diagnostics_on_treble_staff_paper(treble_staff_paper_path: Path):
