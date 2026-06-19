@@ -24,7 +24,7 @@ def test_notation_whole_note_export_success(tmp_path):
 
     with patch("score2gp.whole_note_recogniser.run_recognition_on_file") as mock_recognise:
         mock_recognise.return_value = mock_recognition_result
-        
+
         result = runner.invoke(app, [
             "notation-whole-note-export",
             "--pdf", str(pdf_path),
@@ -44,7 +44,7 @@ def test_notation_whole_note_export_fails_on_no_outcomes(tmp_path):
 
     with patch("score2gp.whole_note_recogniser.run_recognition_on_file") as mock_recognise:
         mock_recognise.return_value = mock_recognition_result
-        
+
         result = runner.invoke(app, [
             "notation-whole-note-export",
             "--pdf", str(pdf_path),

@@ -423,19 +423,19 @@ def notation_whole_note_export_command(
     if not result:
         typer.echo("Error: Recognition failed or returned no results.", err=True)
         raise typer.Exit(1)
-    
+
     outcomes = result.get("read_only_recognition_outcomes", [])
-    
+
     try:
         score_ir = build_ir_from_notation_outcomes(outcomes)
     except NotationBridgeInputError as e:
         typer.echo(f"NotationBridgeInputError: {e}", err=True)
         raise typer.Exit(1)
-        
+
     if ir_out:
         ir_out.parent.mkdir(parents=True, exist_ok=True)
         ir_out.write_text(score_ir.model_dump_json(indent=2))
-        
+
     out.parent.mkdir(parents=True, exist_ok=True)
     try:
         warnings = write_gp(score_ir, out)
