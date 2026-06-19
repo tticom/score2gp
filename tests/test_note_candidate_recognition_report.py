@@ -36,11 +36,13 @@ def test_note_candidate_recognition_report_public_fixture():
     assert isinstance(cand1["staff_position_index"], int)
     assert cand1["staff_position_index"] == 2
     assert "assumed_treble_pitch" not in cand1
+    assert cand1["duration"] == "whole"
 
     cand2 = whole_notes[1]
     assert "staff_position_index" in cand2
     assert cand2["staff_position_index"] == 4
     assert "assumed_treble_pitch" not in cand2
+    assert cand2["duration"] == "whole"
 
 def test_note_candidate_recognition_report_half_note_fixture():
     script_path = Path("scripts/note_candidate_recognition_report.py")
@@ -70,6 +72,7 @@ def test_note_candidate_recognition_report_half_note_fixture():
         assert "staff_position_index" in cand
         assert isinstance(cand["staff_position_index"], int)
         assert cand["staff_position_index"] == 4
+        assert cand["duration"] == "half"
 
 def test_note_candidate_recognition_report_quarter_note_fixture():
     script_path = Path("scripts/note_candidate_recognition_report.py")
@@ -863,6 +866,8 @@ def test_map_clef_resolved_staff_pitch():
         {"symbol_type": "quarter_note_candidate", "staff_position_index": -1, "attached_ledger_line_candidate_ids": "malformed"}, # 13: 0 ledger required but malformed -> fail
         {"symbol_type": "quarter_note_candidate", "staff_position_index": 9, "attached_ledger_line_candidate_ids": "malformed"}, # 14: 0 ledger required but malformed -> fail
         {"symbol_type": "quarter_note_candidate", "staff_position_index": 4, "attached_ledger_line_candidate_ids": ["l1"]}, # 15: inside staff ignores attached ledgers
+        {"symbol_type": "whole_note_candidate", "staff_position_index": 4}, # 16: whole note mapped
+        {"symbol_type": "half_note_candidate", "staff_position_index": 4}, # 17: half note mapped
     ]
 
     # Test wrong clef
@@ -894,6 +899,8 @@ def test_map_clef_resolved_staff_pitch():
     assert "clef_resolved_staff_pitch" not in outcomes[13]
     assert "clef_resolved_staff_pitch" not in outcomes[14]
     assert outcomes[15].get("clef_resolved_staff_pitch") == "B4"
+    assert outcomes[16].get("clef_resolved_staff_pitch") == "B4"
+    assert outcomes[17].get("clef_resolved_staff_pitch") == "B4"
 
 def test_map_clef_resolved_staff_pitch_policy():
     from score2gp.whole_note_recogniser import map_clef_resolved_staff_pitch
