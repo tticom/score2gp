@@ -377,6 +377,7 @@ def map_whole_note_candidates_to_read_only_outcomes(candidate_locations: list[di
             "system_index": cand.get("system_index"),
             "staff_index": cand.get("staff_index"),
             "association_status": cand.get("association_status"),
+            "duration": "whole",
             "source": "diagnostic_candidate_evidence"
         }
         if "association_reason" in cand:
@@ -463,6 +464,7 @@ def map_half_note_candidates_to_read_only_outcomes(candidate_locations: list[dic
             "page_index": cand.get("page_index"),
             "system_index": cand.get("system_index"),
             "staff_index": cand.get("staff_index"),
+            "duration": "half",
             "source": "diagnostic_candidate_evidence"
         })
     return outcomes
@@ -948,7 +950,7 @@ def map_clef_resolved_staff_pitch(outcomes: list[dict], explicit_clef: str | Non
 
     for cand in outcomes:
         st_type = cand.get("symbol_type")
-        if st_type not in ("half_note_candidate", "quarter_note_candidate", "eighth_note_candidate"):
+        if st_type not in ("whole_note_candidate", "half_note_candidate", "quarter_note_candidate", "eighth_note_candidate"):
             continue
 
         if explicit_clef is not None:

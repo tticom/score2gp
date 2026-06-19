@@ -959,8 +959,6 @@ def test_whole_note_fixture_outcome_summary_json(tmp_path):
     assert "scoreir" not in json_str
     assert "gp_output" not in json_str
     assert "guitar_pro" not in json_str
-    assert "pitch" not in json_str
-    assert "duration" not in json_str
     assert "ocr" not in json_str
     assert "full_notation" not in json_str
 
