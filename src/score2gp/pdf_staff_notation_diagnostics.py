@@ -43,6 +43,7 @@ def _extract_note_candidates(page: Any) -> tuple[list[WholeNoteCandidateDiagnost
                         "y1": max(p0.y, p1.y)
                     })
 
+    # 1. Extract from vector drawings
     for draw in drawings:
         rect = draw.get("rect")
         if not rect:
@@ -122,6 +123,92 @@ def _extract_note_candidates(page: Any) -> tuple[list[WholeNoteCandidateDiagnost
                         height=round(h, 3),
                         aspect_ratio=round(aspect, 3)
                     ))
+
+    # 2. Extract from SMuFL text spans
+    try:
+        text_dict = page.get_text("dict")
+        for block in text_dict.get("blocks", []):
+            for line in block.get("lines", []):
+                for span in line.get("spans", []):
+                    text = span.get("text", "")
+                    if not text:
+                        continue
+                    
+                    # Check for notehead characters
+                    # \ue0a2 = noteheadWhole
+                    # \ue0a3 = noteheadHalf
+                    # \ue0a4 = noteheadBlack
+                    has_whole = "\ue0a2" in text
+                    has_half = "\ue0a3" in text
+                    has_black = "\ue0a4" in text
+                    
+                    if has_whole or has_half or has_black:
+                        bbox = span.get("bbox")
+                        if not bbox:
+                            continue
+                        
+                        x0, y0, x1, y1 = bbox
+                        w = x1 - x0
+                        h = y1 - y0
+                        if h == 0 or w == 0:
+                            continue
+                        
+                        aspect = w / h
+                        
+                        # Note: font bounding boxes can be larger than the actual glyph.
+                        # We use the text span bbox directly for diagnostics.
+                        
+                        # Stem association logic
+                        has_stem = False
+                        margin_x = 3.0
+                        margin_y = 5.0
+                        for line_geom in vertical_lines:
+                            near_left = abs(line_geom["x0"] - x0) <= margin_x
+                            near_right = abs(line_geom["x0"] - x1) <= margin_x
+                            # Also check center for some fonts where bbox includes side bearings
+                            near_center = abs(line_geom["x0"] - (x0 + x1) / 2.0) <= margin_x
+                            if near_left or near_right or near_center:
+                                if not (line_geom["y1"] < y0 - margin_y or line_geom["y0"] > y1 + margin_y):
+                                    has_stem = True
+                                    break
+                                    
+                        # Determine note type
+                        if has_whole:
+                            whole_candidates.append(WholeNoteCandidateDiagnostics(
+                                bbox=[round(x0, 3), round(y0, 3), round(x1, 3), round(y1, 3)],
+                                width=round(w, 3),
+                                height=round(h, 3),
+                                aspect_ratio=round(aspect, 3)
+                            ))
+                        elif has_half:
+                            half_candidates.append(HalfNoteCandidateDiagnostics(
+                                bbox=[round(x0, 3), round(y0, 3), round(x1, 3), round(y1, 3)],
+                                width=round(w, 3),
+                                height=round(h, 3),
+                                aspect_ratio=round(aspect, 3)
+                            ))
+                        elif has_black:
+                            # In some fonts/exports, \ue0a4 is used for hollow notes if drawing them with paths,
+                            # but usually \ue0a4 is a black notehead. However, in our Derek Trucks example,
+                            # we saw \ue0a4 for everything, so we might need to rely on stem absence for whole notes.
+                            # For safety, if it has no stem, it could be a whole note. If it has a stem, quarter/half.
+                            if not has_stem:
+                                whole_candidates.append(WholeNoteCandidateDiagnostics(
+                                    bbox=[round(x0, 3), round(y0, 3), round(x1, 3), round(y1, 3)],
+                                    width=round(w, 3),
+                                    height=round(h, 3),
+                                    aspect_ratio=round(aspect, 3)
+                                ))
+                            else:
+                                quarter_candidates.append(QuarterNoteCandidateDiagnostics(
+                                    bbox=[round(x0, 3), round(y0, 3), round(x1, 3), round(y1, 3)],
+                                    width=round(w, 3),
+                                    height=round(h, 3),
+                                    aspect_ratio=round(aspect, 3)
+                                ))
+    except Exception:
+        pass
+
     return whole_candidates, half_candidates, quarter_candidates
 
 def _extract_whole_note_candidates(page: Any) -> list[WholeNoteCandidateDiagnostics]:
