@@ -14,4 +14,5 @@ work/
 # diagnostics, and reports must stay local.
 
 scratch/
-
+fixtures/private/
+work/private/
