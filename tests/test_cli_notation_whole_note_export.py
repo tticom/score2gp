@@ -55,3 +55,94 @@ def test_notation_whole_note_export_fails_on_no_outcomes(tmp_path):
         assert "NotationBridgeInputError" in result.stderr or "NotationBridgeInputError" in result.stdout
         assert mock_recognise.call_count == 1
         assert not out_gp.exists()
+
+def test_cli_help_exposes_notation_half_note_export():
+    result = runner.invoke(app, ["--help"])
+    assert result.exit_code == 0
+    assert "notation-half-note-export" in result.stdout
+
+def test_notation_half_note_export_success(tmp_path):
+    pdf_path = tmp_path / "dummy.pdf"
+    pdf_path.touch()
+    out_gp = tmp_path / "out_half.gp"
+
+    mock_outcomes = [{"symbol_type": "half_note_candidate", "association_status": "success", "duration": "half", "clef_resolved_staff_pitch": "B4"}]
+    mock_recognition_result = {"read_only_recognition_outcomes": mock_outcomes}
+
+    with patch("score2gp.whole_note_recogniser.run_recognition_on_file") as mock_recognise:
+        mock_recognise.return_value = mock_recognition_result
+
+        result = runner.invoke(app, [
+            "notation-half-note-export",
+            "--pdf", str(pdf_path),
+            "--out", str(out_gp)
+        ])
+
+        assert result.exit_code == 0
+        assert mock_recognise.call_count == 1
+        assert out_gp.exists()
+
+def test_notation_half_note_export_fails_on_no_outcomes(tmp_path):
+    pdf_path = tmp_path / "dummy.pdf"
+    pdf_path.touch()
+    out_gp = tmp_path / "out_half_fail.gp"
+
+    mock_recognition_result = {"read_only_recognition_outcomes": []}
+
+    with patch("score2gp.whole_note_recogniser.run_recognition_on_file") as mock_recognise:
+        mock_recognise.return_value = mock_recognition_result
+
+        result = runner.invoke(app, [
+            "notation-half-note-export",
+            "--pdf", str(pdf_path),
+            "--out", str(out_gp)
+        ])
+
+        assert result.exit_code == 1
+        assert "NotationBridgeInputError" in result.stderr or "NotationBridgeInputError" in result.stdout
+        assert mock_recognise.call_count == 1
+        assert not out_gp.exists()
+
+def test_notation_whole_note_export_rejects_half_note(tmp_path):
+    pdf_path = tmp_path / "dummy.pdf"
+    pdf_path.touch()
+    out_gp = tmp_path / "out_whole_fail.gp"
+
+    # Feed half note outcome to whole note CLI
+    mock_outcomes = [{"symbol_type": "half_note_candidate", "association_status": "success", "duration": "half", "clef_resolved_staff_pitch": "B4"}]
+    mock_recognition_result = {"read_only_recognition_outcomes": mock_outcomes}
+
+    with patch("score2gp.whole_note_recogniser.run_recognition_on_file") as mock_recognise:
+        mock_recognise.return_value = mock_recognition_result
+
+        result = runner.invoke(app, [
+            "notation-whole-note-export",
+            "--pdf", str(pdf_path),
+            "--out", str(out_gp)
+        ])
+
+        assert result.exit_code == 1
+        assert "Error: Bridge produced non-whole note" in result.stderr or "Error: Bridge produced non-whole note" in result.stdout
+        assert not out_gp.exists()
+
+def test_notation_half_note_export_rejects_whole_note(tmp_path):
+    pdf_path = tmp_path / "dummy.pdf"
+    pdf_path.touch()
+    out_gp = tmp_path / "out_half_fail2.gp"
+
+    # Feed whole note outcome to half note CLI
+    mock_outcomes = [{"symbol_type": "whole_note_candidate", "association_status": "success", "duration": "whole", "clef_resolved_staff_pitch": "B4"}]
+    mock_recognition_result = {"read_only_recognition_outcomes": mock_outcomes}
+
+    with patch("score2gp.whole_note_recogniser.run_recognition_on_file") as mock_recognise:
+        mock_recognise.return_value = mock_recognition_result
+
+        result = runner.invoke(app, [
+            "notation-half-note-export",
+            "--pdf", str(pdf_path),
+            "--out", str(out_gp)
+        ])
+
+        assert result.exit_code == 1
+        assert "Error: Bridge produced non-half note" in result.stderr or "Error: Bridge produced non-half note" in result.stdout
+        assert not out_gp.exists()
