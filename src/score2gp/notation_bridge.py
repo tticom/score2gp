@@ -35,12 +35,17 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
     notes = []
     tuning = _standard_guitar_tuning()
     
+    valid_durations = ["whole", "half"]
+    found_duration = None
+    
     for outcome in outcomes:
-        if outcome.get("symbol_type") != "whole_note_candidate":
+        sym_type = outcome.get("symbol_type")
+        if sym_type not in ["whole_note_candidate", "half_note_candidate"]:
             continue
         if outcome.get("association_status") != "success":
             continue
-        if outcome.get("duration") != "whole":
+        duration = outcome.get("duration")
+        if duration not in valid_durations:
             continue
         
         pitch_str = outcome.get("clef_resolved_staff_pitch")
@@ -76,6 +81,7 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
             pitch=sounding_midi,
             confidence=1.0,
         ))
+        found_duration = duration
 
     if len(notes) == 0:
         raise NotationBridgeInputError("no_valid_notation_outcomes_found")
@@ -84,15 +90,22 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
 
     events = []
     if notes:
+        if found_duration == "whole":
+            dur_ticks = 4 * DEFAULT_TICKS_PER_QUARTER
+        elif found_duration == "half":
+            dur_ticks = 2 * DEFAULT_TICKS_PER_QUARTER
+        else:
+            raise NotationBridgeInputError(f"unsupported_duration_value_{found_duration}")
+            
         events.append(Event(
             id="evt_0",
             track_id="trk_0",
             timing=Timing(
                 bar_index=1,
                 onset_ticks=0,
-                duration_ticks=4 * DEFAULT_TICKS_PER_QUARTER,
+                duration_ticks=dur_ticks,
                 ticks_per_quarter=DEFAULT_TICKS_PER_QUARTER,
-                notated_duration=NotatedDuration(value="whole")
+                notated_duration=NotatedDuration(value=found_duration)
             ),
             notes=notes
         ))
