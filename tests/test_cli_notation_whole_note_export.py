@@ -19,7 +19,7 @@ def test_notation_whole_note_export_success(tmp_path):
     pdf_path.touch()
     out_gp = tmp_path / "out.gp"
 
-    mock_outcomes = [{"symbol_type": "whole_note_candidate", "association_status": "success", "duration": "whole", "clef_resolved_staff_pitch": "B4"}]
+    mock_outcomes = [{"symbol_type": "whole_note_candidate", "association_status": "success", "duration": "whole", "bbox": [0,0,10,10], "page_index": 1, "system_index": 1, "staff_index": 1, "clef_resolved_staff_pitch": "B4"}]
     mock_recognition_result = {"read_only_recognition_outcomes": mock_outcomes}
 
     with patch("score2gp.whole_note_recogniser.run_recognition_on_file") as mock_recognise:
@@ -66,7 +66,7 @@ def test_notation_half_note_export_success(tmp_path):
     pdf_path.touch()
     out_gp = tmp_path / "out_half.gp"
 
-    mock_outcomes = [{"symbol_type": "half_note_candidate", "association_status": "success", "duration": "half", "clef_resolved_staff_pitch": "B4"}]
+    mock_outcomes = [{"symbol_type": "half_note_candidate", "association_status": "success", "duration": "half", "bbox": [0,0,10,10], "page_index": 1, "system_index": 1, "staff_index": 1, "clef_resolved_staff_pitch": "B4"}]
     mock_recognition_result = {"read_only_recognition_outcomes": mock_outcomes}
 
     with patch("score2gp.whole_note_recogniser.run_recognition_on_file") as mock_recognise:
@@ -109,7 +109,7 @@ def test_notation_whole_note_export_rejects_half_note(tmp_path):
     out_gp = tmp_path / "out_whole_fail.gp"
 
     # Feed half note outcome to whole note CLI
-    mock_outcomes = [{"symbol_type": "half_note_candidate", "association_status": "success", "duration": "half", "clef_resolved_staff_pitch": "B4"}]
+    mock_outcomes = [{"symbol_type": "half_note_candidate", "association_status": "success", "duration": "half", "bbox": [0,0,10,10], "page_index": 1, "system_index": 1, "staff_index": 1, "clef_resolved_staff_pitch": "B4"}]
     mock_recognition_result = {"read_only_recognition_outcomes": mock_outcomes}
 
     with patch("score2gp.whole_note_recogniser.run_recognition_on_file") as mock_recognise:
@@ -131,7 +131,7 @@ def test_notation_half_note_export_rejects_whole_note(tmp_path):
     out_gp = tmp_path / "out_half_fail2.gp"
 
     # Feed whole note outcome to half note CLI
-    mock_outcomes = [{"symbol_type": "whole_note_candidate", "association_status": "success", "duration": "whole", "clef_resolved_staff_pitch": "B4"}]
+    mock_outcomes = [{"symbol_type": "whole_note_candidate", "association_status": "success", "duration": "whole", "bbox": [0,0,10,10], "page_index": 1, "system_index": 1, "staff_index": 1, "clef_resolved_staff_pitch": "B4"}]
     mock_recognition_result = {"read_only_recognition_outcomes": mock_outcomes}
 
     with patch("score2gp.whole_note_recogniser.run_recognition_on_file") as mock_recognise:
