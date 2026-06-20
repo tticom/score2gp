@@ -121,6 +121,10 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
     onset_ticks = 0
 
     for idx, cand in enumerate(cands):
+        # Reject chords / same-x notes
+        if idx > 0 and abs(cand["x0"] - cands[idx-1]["x0"]) < 5.0:
+            raise NotationBridgeInputError("multiple_simultaneous_notes_unsupported")
+
         dur = cand["duration"]
         if dur == "whole":
             dur_ticks = 4 * DEFAULT_TICKS_PER_QUARTER
@@ -146,6 +150,9 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
         else:
             raise NotationBridgeInputError(f"unsupported_duration_value_{dur}")
             
+        if onset_ticks + dur_ticks > 4 * DEFAULT_TICKS_PER_QUARTER:
+            raise NotationBridgeInputError("multi_bar_sequences_unsupported")
+
         events.append(Event(
             id=f"evt_{idx}",
             track_id="trk_0",
