@@ -419,7 +419,13 @@ def notation_whole_note_export_command(
     from .notation_bridge import NotationBridgeInputError, build_ir_from_notation_outcomes
     from .gp_package import write_gp
 
-    result = run_recognition_on_file(pdf)
+    result = run_recognition_on_file(
+        pdf,
+        include_flag_beam_candidates=True,
+        include_x_aligned_clusters=True,
+        include_ledger_line_candidates=True,
+        assume_treble_clef=True
+    )
     if not result:
         typer.echo("Error: Recognition failed or returned no results.", err=True)
         raise typer.Exit(1)
@@ -463,7 +469,13 @@ def notation_half_note_export_command(
     from .notation_bridge import NotationBridgeInputError, build_ir_from_notation_outcomes
     from .gp_package import write_gp
 
-    result = run_recognition_on_file(pdf)
+    result = run_recognition_on_file(
+        pdf,
+        include_flag_beam_candidates=True,
+        include_x_aligned_clusters=True,
+        include_ledger_line_candidates=True,
+        assume_treble_clef=True
+    )
     if not result:
         typer.echo("Error: Recognition failed or returned no results.", err=True)
         raise typer.Exit(1)
@@ -979,7 +991,13 @@ def _run_single_note_export_command(pdf: Path, out: Path, ir_out: Path | None, e
     from .gp_package import write_gp
     import typer
 
-    result = run_recognition_on_file(pdf, include_flag_beam_candidates=True)
+    result = run_recognition_on_file(
+        pdf,
+        include_flag_beam_candidates=True,
+        include_x_aligned_clusters=True,
+        include_ledger_line_candidates=True,
+        assume_treble_clef=True
+    )
     if not result:
         typer.echo("Error: Recognition failed or returned no results.", err=True)
         raise typer.Exit(1)
