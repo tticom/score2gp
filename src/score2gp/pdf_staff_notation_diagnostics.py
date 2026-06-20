@@ -66,9 +66,9 @@ def _extract_note_candidates(page: Any) -> tuple[list[WholeNoteCandidateDiagnost
         items = draw.get("items", [])
         c_count = sum(1 for item in items if item[0] == 'c')
 
-        if 1.2 <= aspect <= 2.0 and c_count >= 2:
+        if 1.0 <= aspect <= 2.0 and c_count >= 2:
             is_hollow = not draw.get("fill")
-            if not is_hollow and c_count >= 8:
+            if not is_hollow and c_count >= 16:
                 pts = []
                 for item in items:
                     if item[0] == 'l':
@@ -90,6 +90,7 @@ def _extract_note_candidates(page: Any) -> tuple[list[WholeNoteCandidateDiagnost
                     if max_dist > min(w, h) * 0.2:
                         is_hollow = True
             has_stem = False
+            stem_bbox = None
             margin_x = 3.0
             margin_y = 5.0
             for line in vertical_lines:
@@ -98,6 +99,7 @@ def _extract_note_candidates(page: Any) -> tuple[list[WholeNoteCandidateDiagnost
                 if near_left or near_right:
                     if not (line["y1"] < y0 - margin_y or line["y0"] > y1 + margin_y):
                         has_stem = True
+                        stem_bbox = [line["x0"], line["y0"], line["x1"], line["y1"]]
                         break
 
             if is_hollow:
@@ -113,7 +115,8 @@ def _extract_note_candidates(page: Any) -> tuple[list[WholeNoteCandidateDiagnost
                         bbox=[round(x0, 3), round(y0, 3), round(x1, 3), round(y1, 3)],
                         width=round(w, 3),
                         height=round(h, 3),
-                        aspect_ratio=round(aspect, 3)
+                        aspect_ratio=round(aspect, 3),
+                        stem_bbox=stem_bbox
                     ))
             else:
                 if has_stem:
@@ -121,7 +124,8 @@ def _extract_note_candidates(page: Any) -> tuple[list[WholeNoteCandidateDiagnost
                         bbox=[round(x0, 3), round(y0, 3), round(x1, 3), round(y1, 3)],
                         width=round(w, 3),
                         height=round(h, 3),
-                        aspect_ratio=round(aspect, 3)
+                        aspect_ratio=round(aspect, 3),
+                        stem_bbox=stem_bbox
                     ))
 
     # 2. Extract from SMuFL text spans

@@ -98,7 +98,7 @@
       "type": "object"
     },
     "HalfNoteCandidateDiagnostics": {
-      "description": "Candidate half-note bounding box extracted directly from vector shapes, independent of\nsemantic staff processing. Follows proportional heuristics to require an open notehead with a stem.",
+      "description": "Candidate half-note bounding box extracted directly from vector shapes, independent of\nsemantic staff processing. Follows proportional heuristics to require a hollow notehead and a stem.",
       "properties": {
         "bbox": {
           "items": {
@@ -118,6 +118,21 @@
         "aspect_ratio": {
           "title": "Aspect Ratio",
           "type": "number"
+        },
+        "stem_bbox": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stem Bbox"
         }
       },
       "required": [
@@ -631,6 +646,21 @@
         "aspect_ratio": {
           "title": "Aspect Ratio",
           "type": "number"
+        },
+        "stem_bbox": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stem Bbox"
         }
       },
       "required": [

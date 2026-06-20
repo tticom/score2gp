@@ -219,7 +219,7 @@ def test_installed_cli_note_candidate_recognition_with_eighth_notes(tmp_path):
         assert "system_index" in outcome
         assert "staff_index" in outcome
         assert "quarter_component_id" in outcome
-        assert "modifier_component_id" in outcome
+        assert "modifier_component_ids" in outcome
 
 def test_installed_cli_note_candidate_recognition_staff_geometry_exposure(tmp_path):
     fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")

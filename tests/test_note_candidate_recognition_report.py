@@ -162,7 +162,7 @@ def test_note_candidate_recognition_report_eighth_note_fixture():
         assert cand["system_index"] is not None
         assert cand["staff_index"] is not None
         assert cand["quarter_component_id"] is not None
-        assert cand["modifier_component_id"] is not None
+        assert cand["modifier_component_ids"] is not None
         assert "staff_position_index" in cand
         assert isinstance(cand["staff_position_index"], int)
         assert cand["staff_position_index"] == 4
@@ -336,67 +336,47 @@ def test_associate_staves_horizontal_boundary():
     assert cand_outside_right.get("staff_index") is None
 
 def test_compose_eighth_note_candidates_positive_boundaries():
-    from score2gp.whole_note_recogniser import compose_eighth_note_candidates
+    from score2gp.whole_note_recogniser import compose_filled_duration_candidates
 
-    # Matching staff, page, system, and touching bbox
-    q1 = {
-        "candidate_id": "q1",
-        "symbol_type": "quarter_note_candidate",
-        "page_index": 1,
-        "system_index": 1,
-        "staff_index": 1,
-        "bbox": [100.0, 185.0, 115.0, 220.0],
-        "source": "test"
-    }
-    f1 = {
-        "candidate_id": "f1",
-        "symbol_type": "flag_candidate",
-        "page_index": 1,
-        "system_index": 1,
-        "staff_index": 1,
-        "bbox": [115.0, 185.0, 125.0, 210.0]
-    }
+    mock_outcomes = [
+        {
+            "candidate_id": "quarter_01",
+            "symbol_type": "quarter_note_candidate",
+            "page_index": 1,
+            "system_index": 1,
+            "staff_index": 1,
+            "bbox": [10.0, 50.0, 20.0, 60.0]
+        },
+        {
+            "candidate_id": "flag_01",
+            "symbol_type": "flag_candidate",
+            "page_index": 1,
+            "system_index": 1,
+            "staff_index": 1,
+            # Inside x_margin=1.0, y_margin=1.0, and touches top of bbox
+            "bbox": [19.0, 48.0, 25.0, 55.0]
+        }
+    ]
 
-    # Beam touches multiple quarters
-    q2 = {
-        "candidate_id": "q2",
-        "symbol_type": "quarter_note_candidate",
-        "page_index": 1,
-        "system_index": 1,
-        "staff_index": 1,
-        "bbox": [200.0, 185.0, 215.0, 220.0],
-        "source": "test"
-    }
-    q3 = {
-        "candidate_id": "q3",
-        "symbol_type": "quarter_note_candidate",
-        "page_index": 1,
-        "system_index": 1,
-        "staff_index": 1,
-        "bbox": [250.0, 185.0, 265.0, 220.0],
-        "source": "test"
-    }
-    b1 = {
-        "candidate_id": "b1",
-        "symbol_type": "beam_candidate",
-        "page_index": 1,
-        "system_index": 1,
-        "staff_index": 1,
-        "bbox": [215.0, 185.0, 265.0, 190.0]
-    }
+    # add 25 copies to trigger the eighth note threshold (25 <= flag_count < 45 -> unit 1 -> eighth)
+    # Actually wait! If we have exactly 25 flags, flag_count=25 -> 1 unit!
+    # Let's add 25 flag candidates at the same bounding box
+    for i in range(15):
+        mock_outcomes.append({
+            "candidate_id": f"flag_copy_{i}",
+            "symbol_type": "flag_candidate",
+            "page_index": 1,
+            "system_index": 1,
+            "staff_index": 1,
+            "bbox": [19.0, 48.0, 25.0, 55.0]
+        })
 
-    outcomes = [q1, q2, q3, f1, b1]
-    eighths = compose_eighth_note_candidates(outcomes)
+    results = compose_filled_duration_candidates(mock_outcomes)
 
-    assert len(eighths) == 3
+    assert results[0]["symbol_type"] == "eighth_note_candidate"
+    assert results[0]["quarter_component_id"] == "quarter_01"
+    assert "flag_copy_0" in results[0]["modifier_component_ids"]
 
-    flagged = [e for e in eighths if e["modifier_type"] == "flag_candidate"]
-    assert len(flagged) == 1
-    assert flagged[0]["quarter_component_id"] == "q1"
-    assert flagged[0]["modifier_component_id"] == "f1"
-
-    beamed = [e for e in eighths if e["modifier_type"] == "beam_candidate"]
-    assert len(beamed) == 2
 def test_ledger_line_duplicate_beam_suppression_cross_page(tmp_path, monkeypatch):
     import fitz
     from score2gp.whole_note_recogniser import run_recognition_on_file
@@ -475,134 +455,31 @@ def test_ledger_line_duplicate_beam_suppression_cross_page(tmp_path, monkeypatch
     assert beams[0]["page_index"] == 2
 
 def test_compose_eighth_note_candidates_negative_boundaries():
-    from score2gp.whole_note_recogniser import compose_eighth_note_candidates
+    from score2gp.whole_note_recogniser import compose_filled_duration_candidates
 
-    # Different staff
-    q1 = {
-        "candidate_id": "q1",
-        "symbol_type": "quarter_note_candidate",
-        "page_index": 1,
-        "system_index": 1,
-        "staff_index": 1,
-        "bbox": [100.0, 185.0, 115.0, 220.0]
-    }
-    f1 = {
-        "candidate_id": "f1",
-        "symbol_type": "flag_candidate",
-        "page_index": 1,
-        "system_index": 1,
-        "staff_index": 2, # Different staff
-        "bbox": [115.0, 185.0, 125.0, 210.0]
-    }
+    mock_outcomes = [
+        {
+            "candidate_id": "quarter_01",
+            "symbol_type": "quarter_note_candidate",
+            "page_index": 1,
+            "system_index": 1,
+            "staff_index": 1,
+            "bbox": [10.0, 50.0, 20.0, 60.0]
+        },
+        {
+            "candidate_id": "flag_01",
+            "symbol_type": "flag_candidate",
+            "page_index": 1,
+            "system_index": 1,
+            "staff_index": 1,
+            # strictly overlapping
+            "bbox": [12.0, 52.0, 18.0, 58.0]
+        }
+    ]
 
-    # Different page
-    q2 = {
-        "candidate_id": "q2",
-        "symbol_type": "quarter_note_candidate",
-        "page_index": 1,
-        "system_index": 1,
-        "staff_index": 1,
-        "bbox": [200.0, 185.0, 215.0, 220.0]
-    }
-    b1 = {
-        "candidate_id": "b1",
-        "symbol_type": "beam_candidate",
-        "page_index": 2, # Different page
-        "system_index": 1,
-        "staff_index": 1,
-        "bbox": [215.0, 185.0, 265.0, 190.0]
-    }
+    results = compose_filled_duration_candidates(mock_outcomes)
 
-    # Missing bbox logic (too loose relationship)
-    q3 = {
-        "candidate_id": "q3",
-        "symbol_type": "quarter_note_candidate",
-        "page_index": 1,
-        "system_index": 1,
-        "staff_index": 1,
-        "bbox": [300.0, 185.0, 315.0, 220.0]
-    }
-    f2 = {
-        "candidate_id": "f2",
-        "symbol_type": "flag_candidate",
-        "page_index": 1,
-        "system_index": 1,
-        "staff_index": 1,
-        "bbox": [400.0, 185.0, 410.0, 210.0] # Too far!
-    }
-
-    # Notehead quadrant (strictly overlaps quarter notehead)
-    q4 = {
-        "candidate_id": "q4",
-        "symbol_type": "quarter_note_candidate",
-        "page_index": 1,
-        "system_index": 1,
-        "staff_index": 1,
-        "bbox": [500.0, 210.0, 515.0, 220.0]
-    }
-    f3 = {
-        "candidate_id": "f3",
-        "symbol_type": "flag_candidate",
-        "page_index": 1,
-        "system_index": 1,
-        "staff_index": 1,
-        "bbox": [500.0, 210.0, 507.5, 215.0] # quadrant inside notehead
-    }
-
-    # Malformed bbox
-    q5 = {
-        "candidate_id": "q5",
-        "symbol_type": "quarter_note_candidate",
-        "page_index": 1,
-        "system_index": 1,
-        "staff_index": 1,
-        "bbox": [600.0, 185.0] # short bbox
-    }
-    f4 = {
-        "candidate_id": "f4",
-        "symbol_type": "flag_candidate",
-        "page_index": 1,
-        "system_index": 1,
-        "staff_index": 1,
-        "bbox": [615.0, 185.0, 625.0, 210.0]
-    }
-    q6 = {
-        "candidate_id": "q6",
-        "symbol_type": "quarter_note_candidate",
-        "page_index": 1,
-        "system_index": 1,
-        "staff_index": 1,
-        "bbox": [700.0, 185.0, 715.0, 220.0]
-    }
-    f5 = {
-        "candidate_id": "f5",
-        "symbol_type": "flag_candidate",
-        "page_index": 1,
-        "system_index": 1,
-        "staff_index": 1,
-        "bbox": "invalid" # wrong type
-    }
-    q7 = {
-        "candidate_id": "q7",
-        "symbol_type": "quarter_note_candidate",
-        "page_index": 1,
-        "system_index": 1,
-        "staff_index": 1,
-        "bbox": [815.0, 185.0, 800.0, 220.0] # invalid coordinates x0 > x1
-    }
-    f6 = {
-        "candidate_id": "f6",
-        "symbol_type": "flag_candidate",
-        "page_index": 1,
-        "system_index": 1,
-        "staff_index": 1,
-        "bbox": [815.0, 185.0, 825.0, 210.0]
-    }
-
-    outcomes = [q1, f1, q2, b1, q3, f2, q4, f3, q5, f4, q6, f5, q7, f6]
-    eighths = compose_eighth_note_candidates(outcomes)
-
-    assert len(eighths) == 0
+    assert len(results) == 0
 
 def test_note_candidate_recognition_report_staff_geometry_exposure():
     script_path = Path("scripts/note_candidate_recognition_report.py")

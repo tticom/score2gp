@@ -208,7 +208,7 @@ class PdfStaffNotationGeometryDiagnostics(BaseModel):
 class HalfNoteCandidateDiagnostics(BaseModel):
     """
     Candidate half-note bounding box extracted directly from vector shapes, independent of
-    semantic staff processing. Follows proportional heuristics to require an open notehead with a stem.
+    semantic staff processing. Follows proportional heuristics to require a hollow notehead and a stem.
     """
     model_config = ConfigDict(frozen=True)
 
@@ -216,6 +216,7 @@ class HalfNoteCandidateDiagnostics(BaseModel):
     width: float
     height: float
     aspect_ratio: float
+    stem_bbox: list[float] | None = None
 
 class WholeNoteCandidateDiagnostics(BaseModel):
     """
@@ -240,6 +241,7 @@ class QuarterNoteCandidateDiagnostics(BaseModel):
     width: float
     height: float
     aspect_ratio: float
+    stem_bbox: list[float] | None = None
 
 
 # Resolve forward references for candidate types used in NotationStaffDiagnostics.
