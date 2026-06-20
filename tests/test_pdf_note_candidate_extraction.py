@@ -32,15 +32,17 @@ def test_extract_filled_compound_no_stem_whole_note() -> None:
     # Aspect ratio ~ 1.7 (e.g. w=7, h=4)
     items = []
     # Outer bounds
-    items.append(("c", MockPoint(0, 0), MockPoint(1, 0), MockPoint(2, 0), MockPoint(7, 0)))
-    items.append(("c", MockPoint(7, 0), MockPoint(7, 1), MockPoint(7, 2), MockPoint(7, 4)))
-    items.append(("c", MockPoint(7, 4), MockPoint(6, 4), MockPoint(5, 4), MockPoint(0, 4)))
-    items.append(("c", MockPoint(0, 4), MockPoint(0, 3), MockPoint(0, 2), MockPoint(0, 0)))
+    for _ in range(2):
+        items.append(("c", MockPoint(0, 0), MockPoint(1, 0), MockPoint(2, 0), MockPoint(7, 0)))
+        items.append(("c", MockPoint(7, 0), MockPoint(7, 1), MockPoint(7, 2), MockPoint(7, 4)))
+        items.append(("c", MockPoint(7, 4), MockPoint(6, 4), MockPoint(5, 4), MockPoint(0, 4)))
+        items.append(("c", MockPoint(0, 4), MockPoint(0, 3), MockPoint(0, 2), MockPoint(0, 0)))
     # Inner hole (distance to edge = 1.0, max_dist > 4 * 0.2 = 0.8)
-    items.append(("c", MockPoint(1, 1), MockPoint(2, 1), MockPoint(3, 1), MockPoint(6, 1)))
-    items.append(("c", MockPoint(6, 1), MockPoint(6, 2), MockPoint(6, 3), MockPoint(6, 3)))
-    items.append(("c", MockPoint(6, 3), MockPoint(5, 3), MockPoint(4, 3), MockPoint(1, 3)))
-    items.append(("c", MockPoint(1, 3), MockPoint(1, 2), MockPoint(1, 1), MockPoint(1, 1)))
+    for _ in range(2):
+        items.append(("c", MockPoint(1, 1), MockPoint(2, 1), MockPoint(3, 1), MockPoint(6, 1)))
+        items.append(("c", MockPoint(6, 1), MockPoint(6, 2), MockPoint(6, 3), MockPoint(6, 3)))
+        items.append(("c", MockPoint(6, 3), MockPoint(5, 3), MockPoint(4, 3), MockPoint(1, 3)))
+        items.append(("c", MockPoint(1, 3), MockPoint(1, 2), MockPoint(1, 1), MockPoint(1, 1)))
 
     drawings = [{
         "rect": MockRect(0.0, 0.0, 7.0, 4.0),
@@ -57,15 +59,17 @@ def test_extract_filled_compound_no_stem_whole_note() -> None:
 def test_extract_filled_compound_stemmed_half_note() -> None:
     # Simulates GuitarPro filled compound open notehead with a stem (half note)
     items = []
-    items.append(("c", MockPoint(0, 0), MockPoint(1, 0), MockPoint(2, 0), MockPoint(7, 0)))
-    items.append(("c", MockPoint(7, 0), MockPoint(7, 1), MockPoint(7, 2), MockPoint(7, 4)))
-    items.append(("c", MockPoint(7, 4), MockPoint(6, 4), MockPoint(5, 4), MockPoint(0, 4)))
-    items.append(("c", MockPoint(0, 4), MockPoint(0, 3), MockPoint(0, 2), MockPoint(0, 0)))
+    for _ in range(2):
+        items.append(("c", MockPoint(0, 0), MockPoint(1, 0), MockPoint(2, 0), MockPoint(7, 0)))
+        items.append(("c", MockPoint(7, 0), MockPoint(7, 1), MockPoint(7, 2), MockPoint(7, 4)))
+        items.append(("c", MockPoint(7, 4), MockPoint(6, 4), MockPoint(5, 4), MockPoint(0, 4)))
+        items.append(("c", MockPoint(0, 4), MockPoint(0, 3), MockPoint(0, 2), MockPoint(0, 0)))
     # Inner hole
-    items.append(("c", MockPoint(1, 1), MockPoint(2, 1), MockPoint(3, 1), MockPoint(6, 1)))
-    items.append(("c", MockPoint(6, 1), MockPoint(6, 2), MockPoint(6, 3), MockPoint(6, 3)))
-    items.append(("c", MockPoint(6, 3), MockPoint(5, 3), MockPoint(4, 3), MockPoint(1, 3)))
-    items.append(("c", MockPoint(1, 3), MockPoint(1, 2), MockPoint(1, 1), MockPoint(1, 1)))
+    for _ in range(2):
+        items.append(("c", MockPoint(1, 1), MockPoint(2, 1), MockPoint(3, 1), MockPoint(6, 1)))
+        items.append(("c", MockPoint(6, 1), MockPoint(6, 2), MockPoint(6, 3), MockPoint(6, 3)))
+        items.append(("c", MockPoint(6, 3), MockPoint(5, 3), MockPoint(4, 3), MockPoint(1, 3)))
+        items.append(("c", MockPoint(1, 3), MockPoint(1, 2), MockPoint(1, 1), MockPoint(1, 1)))
 
     drawings = [
         {

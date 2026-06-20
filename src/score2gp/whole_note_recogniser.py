@@ -1211,7 +1211,7 @@ def run_recognition_on_file(
     include_x_aligned_clusters: bool = False,
     include_left_margin_candidates: bool = False,
     include_ledger_line_candidates: bool = False,
-    include_flag_beam_candidates: bool = True,
+    include_flag_beam_candidates: bool = False,
     assume_treble_clef: bool = False
 ) -> dict | None:
     import sys

@@ -78,7 +78,7 @@ def test_notation_bridge_rejects_unsupported_duration():
         {
             "symbol_type": "whole_note_candidate",
             "association_status": "success",
-            "duration": "quarter",
+            "duration": "double_whole",
             "clef_resolved_staff_pitch": "B4",
         }
     ]
