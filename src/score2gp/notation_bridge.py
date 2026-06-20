@@ -51,6 +51,10 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
         duration = outcome.get("duration")
         if duration not in valid_durations:
             continue
+            
+        expected_sym_type = f"{duration}_note_candidate"
+        if sym_type != expected_sym_type:
+            continue
         
         pitch_str = outcome.get("clef_resolved_staff_pitch")
         if not pitch_str:
