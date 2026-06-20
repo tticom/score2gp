@@ -7,7 +7,7 @@ def test_build_ir_from_whole_note_outcome_yields_valid_scoreir():
         {
             "symbol_type": "whole_note_candidate",
             "association_status": "success",
-            "duration": "whole", "bbox": [0,0,10,10], "page_index": 1, "system_index": 1, "staff_index": 1,
+            "duration": "whole",
             "clef_resolved_staff_pitch": "B4",
         }
     ]
@@ -42,7 +42,7 @@ def test_notation_bridge_skips_missing_pitch_from_tab_like_outcome():
         {
             "symbol_type": "whole_note_candidate",
             "association_status": "success",
-            "duration": "whole", "bbox": [0,0,10,10], "page_index": 1, "system_index": 1, "staff_index": 1,
+            "duration": "whole",
             "clef_resolved_staff_pitch": None,
         }
     ]
@@ -54,7 +54,7 @@ def test_notation_bridge_rejects_failed_association():
         {
             "symbol_type": "whole_note_candidate",
             "association_status": "failed",
-            "duration": "whole", "bbox": [0,0,10,10], "page_index": 1, "system_index": 1, "staff_index": 1,
+            "duration": "whole",
             "clef_resolved_staff_pitch": "B4",
         }
     ]
@@ -66,7 +66,7 @@ def test_notation_bridge_rejects_rests_and_unsupported_symbols():
         {
             "symbol_type": "whole_note_rest_candidate",
             "association_status": "success",
-            "duration": "whole", "bbox": [0,0,10,10], "page_index": 1, "system_index": 1, "staff_index": 1,
+            "duration": "whole",
             "clef_resolved_staff_pitch": "B4",
         }
     ]
@@ -78,20 +78,55 @@ def test_notation_bridge_rejects_unsupported_duration():
         {
             "symbol_type": "whole_note_candidate",
             "association_status": "success",
-            "duration": "double_whole", "bbox": [0,0,10,10], "page_index": 1, "system_index": 1, "staff_index": 1,
+            "duration": "double_whole",
             "clef_resolved_staff_pitch": "B4",
         }
     ]
     with pytest.raises(NotationBridgeInputError, match="no_valid_notation_outcomes_found"):
         build_ir_from_notation_outcomes(outcomes)
 
+def test_notation_bridge_rejects_multiple_valid_outcomes():
+    outcomes = [
+        {
+            "symbol_type": "whole_note_candidate",
+            "association_status": "success",
+            "duration": "whole",
+            "clef_resolved_staff_pitch": "B4",
+        },
+        {
+            "symbol_type": "whole_note_candidate",
+            "association_status": "success",
+            "duration": "whole",
+            "clef_resolved_staff_pitch": "G4",
+        }
+    ]
+    with pytest.raises(NotationBridgeInputError, match="multiple_valid_notation_outcomes_unsupported"):
+        build_ir_from_notation_outcomes(outcomes)
+
+def test_notation_bridge_rejects_multiple_mixed_valid_outcomes():
+    outcomes = [
+        {
+            "symbol_type": "whole_note_candidate",
+            "association_status": "success",
+            "duration": "whole",
+            "clef_resolved_staff_pitch": "B4",
+        },
+        {
+            "symbol_type": "half_note_candidate",
+            "association_status": "success",
+            "duration": "half",
+            "clef_resolved_staff_pitch": "G4",
+        }
+    ]
+    with pytest.raises(NotationBridgeInputError, match="multiple_valid_notation_outcomes_unsupported"):
+        build_ir_from_notation_outcomes(outcomes)
 
 def test_build_ir_from_half_note_outcome_yields_valid_scoreir():
     outcomes = [
         {
             "symbol_type": "half_note_candidate",
             "association_status": "success",
-            "duration": "half", "bbox": [0,0,10,10], "page_index": 1, "system_index": 1, "staff_index": 1,
+            "duration": "half",
             "clef_resolved_staff_pitch": "B4",
         }
     ]
@@ -123,7 +158,7 @@ def test_notation_bridge_preserves_scoreir_semantic_validation():
         {
             "symbol_type": "whole_note_candidate",
             "association_status": "success",
-            "duration": "whole", "bbox": [0,0,10,10], "page_index": 1, "system_index": 1, "staff_index": 1,
+            "duration": "whole",
             "clef_resolved_staff_pitch": "B4",
         }
     ]
