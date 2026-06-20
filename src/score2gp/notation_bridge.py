@@ -35,12 +35,16 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
     notes = []
     tuning = _standard_guitar_tuning()
     
-    valid_durations = ["whole", "half"]
+    valid_durations = ["whole", "half", "quarter", "eighth", "sixteenth", "thirty_second", "sixty_fourth"]
     found_duration = None
     
     for outcome in outcomes:
         sym_type = outcome.get("symbol_type")
-        if sym_type not in ["whole_note_candidate", "half_note_candidate"]:
+        if sym_type not in [
+            "whole_note_candidate", "half_note_candidate", "quarter_note_candidate",
+            "eighth_note_candidate", "sixteenth_note_candidate", "thirty_second_note_candidate",
+            "sixty_fourth_note_candidate"
+        ]:
             continue
         if outcome.get("association_status") != "success":
             continue
@@ -92,8 +96,25 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
     if notes:
         if found_duration == "whole":
             dur_ticks = 4 * DEFAULT_TICKS_PER_QUARTER
+            note_val = "whole"
         elif found_duration == "half":
             dur_ticks = 2 * DEFAULT_TICKS_PER_QUARTER
+            note_val = "half"
+        elif found_duration == "quarter":
+            dur_ticks = DEFAULT_TICKS_PER_QUARTER
+            note_val = "quarter"
+        elif found_duration == "eighth":
+            dur_ticks = DEFAULT_TICKS_PER_QUARTER // 2
+            note_val = "eighth"
+        elif found_duration == "sixteenth":
+            dur_ticks = DEFAULT_TICKS_PER_QUARTER // 4
+            note_val = "16th"
+        elif found_duration == "thirty_second":
+            dur_ticks = DEFAULT_TICKS_PER_QUARTER // 8
+            note_val = "32nd"
+        elif found_duration == "sixty_fourth":
+            dur_ticks = DEFAULT_TICKS_PER_QUARTER // 16
+            note_val = "64th"
         else:
             raise NotationBridgeInputError(f"unsupported_duration_value_{found_duration}")
             
@@ -105,7 +126,7 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
                 onset_ticks=0,
                 duration_ticks=dur_ticks,
                 ticks_per_quarter=DEFAULT_TICKS_PER_QUARTER,
-                notated_duration=NotatedDuration(value=found_duration)
+                notated_duration=NotatedDuration(value=note_val)
             ),
             notes=notes
         ))

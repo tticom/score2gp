@@ -974,3 +974,223 @@ def _grouping_artifacts_for_tabraw(tabraw_path: Path) -> dict[str, object]:
 
 if __name__ == "__main__":
     app()
+
+@app.command("notation-quarter-note-export")
+def notation_quarter_note_export_command(
+    pdf: Path = typer.Option(..., "--pdf", help="Path to the PDF fixture containing exactly one quarter note"),
+    out: Path = typer.Option(..., "--out", help="Output GP artifact path"),
+    ir_out: Optional[Path] = typer.Option(None, "--ir-out", help="Optional debug path to write the intermediate ScoreIR JSON"),
+) -> None:
+    """Explicit, opt-in CLI route for single standard-notation quarter-note GP export (v0)."""
+    from .whole_note_recogniser import run_recognition_on_file
+    from .notation_bridge import NotationBridgeInputError, build_ir_from_notation_outcomes
+    from .gp_package import write_gp
+
+    result = run_recognition_on_file(pdf)
+    if not result:
+        typer.echo("Error: Recognition failed or returned no results.", err=True)
+        raise typer.Exit(1)
+
+    outcomes = result.get("read_only_recognition_outcomes", [])
+
+    try:
+        score_ir = build_ir_from_notation_outcomes(outcomes)
+    except NotationBridgeInputError as e:
+        typer.echo(f"NotationBridgeInputError: {e}", err=True)
+        raise typer.Exit(1)
+        
+    # Extra check required by product: ensure it's actually a quarter note
+    if score_ir.bars and score_ir.bars[0].events:
+        evt = score_ir.bars[0].events[0]
+        if evt.timing.notated_duration.value != "quarter":
+            typer.echo(f"Error: Bridge produced non-quarter note ({evt.timing.notated_duration.value})", err=True)
+            raise typer.Exit(1)
+
+    if ir_out:
+        ir_out.parent.mkdir(parents=True, exist_ok=True)
+        ir_out.write_text(score_ir.model_dump_json(indent=2))
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        warnings = write_gp(score_ir, out)
+        for w in warnings:
+            typer.echo(f"warning: {w}", err=True)
+    except Exception as e:
+        typer.echo(f"GP Writer failed: {e}", err=True)
+        raise typer.Exit(1)
+
+@app.command("notation-eighth-note-export")
+def notation_eighth_note_export_command(
+    pdf: Path = typer.Option(..., "--pdf", help="Path to the PDF fixture containing exactly one eighth note"),
+    out: Path = typer.Option(..., "--out", help="Output GP artifact path"),
+    ir_out: Optional[Path] = typer.Option(None, "--ir-out", help="Optional debug path to write the intermediate ScoreIR JSON"),
+) -> None:
+    """Explicit, opt-in CLI route for single standard-notation eighth-note GP export (v0)."""
+    from .whole_note_recogniser import run_recognition_on_file
+    from .notation_bridge import NotationBridgeInputError, build_ir_from_notation_outcomes
+    from .gp_package import write_gp
+
+    result = run_recognition_on_file(pdf)
+    if not result:
+        typer.echo("Error: Recognition failed or returned no results.", err=True)
+        raise typer.Exit(1)
+
+    outcomes = result.get("read_only_recognition_outcomes", [])
+
+    try:
+        score_ir = build_ir_from_notation_outcomes(outcomes)
+    except NotationBridgeInputError as e:
+        typer.echo(f"NotationBridgeInputError: {e}", err=True)
+        raise typer.Exit(1)
+        
+    # Extra check required by product: ensure it's actually a eighth note
+    if score_ir.bars and score_ir.bars[0].events:
+        evt = score_ir.bars[0].events[0]
+        if evt.timing.notated_duration.value != "eighth":
+            typer.echo(f"Error: Bridge produced non-eighth note ({evt.timing.notated_duration.value})", err=True)
+            raise typer.Exit(1)
+
+    if ir_out:
+        ir_out.parent.mkdir(parents=True, exist_ok=True)
+        ir_out.write_text(score_ir.model_dump_json(indent=2))
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        warnings = write_gp(score_ir, out)
+        for w in warnings:
+            typer.echo(f"warning: {w}", err=True)
+    except Exception as e:
+        typer.echo(f"GP Writer failed: {e}", err=True)
+        raise typer.Exit(1)
+
+@app.command("notation-sixteenth-note-export")
+def notation_sixteenth_note_export_command(
+    pdf: Path = typer.Option(..., "--pdf", help="Path to the PDF fixture containing exactly one sixteenth note"),
+    out: Path = typer.Option(..., "--out", help="Output GP artifact path"),
+    ir_out: Optional[Path] = typer.Option(None, "--ir-out", help="Optional debug path to write the intermediate ScoreIR JSON"),
+) -> None:
+    """Explicit, opt-in CLI route for single standard-notation sixteenth-note GP export (v0)."""
+    from .whole_note_recogniser import run_recognition_on_file
+    from .notation_bridge import NotationBridgeInputError, build_ir_from_notation_outcomes
+    from .gp_package import write_gp
+
+    result = run_recognition_on_file(pdf)
+    if not result:
+        typer.echo("Error: Recognition failed or returned no results.", err=True)
+        raise typer.Exit(1)
+
+    outcomes = result.get("read_only_recognition_outcomes", [])
+
+    try:
+        score_ir = build_ir_from_notation_outcomes(outcomes)
+    except NotationBridgeInputError as e:
+        typer.echo(f"NotationBridgeInputError: {e}", err=True)
+        raise typer.Exit(1)
+        
+    # Extra check required by product: ensure it's actually a sixteenth note
+    if score_ir.bars and score_ir.bars[0].events:
+        evt = score_ir.bars[0].events[0]
+        if evt.timing.notated_duration.value != "16th":
+            typer.echo(f"Error: Bridge produced non-sixteenth note ({evt.timing.notated_duration.value})", err=True)
+            raise typer.Exit(1)
+
+    if ir_out:
+        ir_out.parent.mkdir(parents=True, exist_ok=True)
+        ir_out.write_text(score_ir.model_dump_json(indent=2))
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        warnings = write_gp(score_ir, out)
+        for w in warnings:
+            typer.echo(f"warning: {w}", err=True)
+    except Exception as e:
+        typer.echo(f"GP Writer failed: {e}", err=True)
+        raise typer.Exit(1)
+
+@app.command("notation-thirty-second-note-export")
+def notation_thirty_second_note_export_command(
+    pdf: Path = typer.Option(..., "--pdf", help="Path to the PDF fixture containing exactly one thirty-second note"),
+    out: Path = typer.Option(..., "--out", help="Output GP artifact path"),
+    ir_out: Optional[Path] = typer.Option(None, "--ir-out", help="Optional debug path to write the intermediate ScoreIR JSON"),
+) -> None:
+    """Explicit, opt-in CLI route for single standard-notation thirty-second-note GP export (v0)."""
+    from .whole_note_recogniser import run_recognition_on_file
+    from .notation_bridge import NotationBridgeInputError, build_ir_from_notation_outcomes
+    from .gp_package import write_gp
+
+    result = run_recognition_on_file(pdf)
+    if not result:
+        typer.echo("Error: Recognition failed or returned no results.", err=True)
+        raise typer.Exit(1)
+
+    outcomes = result.get("read_only_recognition_outcomes", [])
+
+    try:
+        score_ir = build_ir_from_notation_outcomes(outcomes)
+    except NotationBridgeInputError as e:
+        typer.echo(f"NotationBridgeInputError: {e}", err=True)
+        raise typer.Exit(1)
+        
+    # Extra check required by product: ensure it's actually a thirty-second note
+    if score_ir.bars and score_ir.bars[0].events:
+        evt = score_ir.bars[0].events[0]
+        if evt.timing.notated_duration.value != "32nd":
+            typer.echo(f"Error: Bridge produced non-thirty-second note ({evt.timing.notated_duration.value})", err=True)
+            raise typer.Exit(1)
+
+    if ir_out:
+        ir_out.parent.mkdir(parents=True, exist_ok=True)
+        ir_out.write_text(score_ir.model_dump_json(indent=2))
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        warnings = write_gp(score_ir, out)
+        for w in warnings:
+            typer.echo(f"warning: {w}", err=True)
+    except Exception as e:
+        typer.echo(f"GP Writer failed: {e}", err=True)
+        raise typer.Exit(1)
+
+@app.command("notation-sixty-fourth-note-export")
+def notation_sixty_fourth_note_export_command(
+    pdf: Path = typer.Option(..., "--pdf", help="Path to the PDF fixture containing exactly one sixty-fourth note"),
+    out: Path = typer.Option(..., "--out", help="Output GP artifact path"),
+    ir_out: Optional[Path] = typer.Option(None, "--ir-out", help="Optional debug path to write the intermediate ScoreIR JSON"),
+) -> None:
+    """Explicit, opt-in CLI route for single standard-notation sixty-fourth-note GP export (v0)."""
+    from .whole_note_recogniser import run_recognition_on_file
+    from .notation_bridge import NotationBridgeInputError, build_ir_from_notation_outcomes
+    from .gp_package import write_gp
+
+    result = run_recognition_on_file(pdf)
+    if not result:
+        typer.echo("Error: Recognition failed or returned no results.", err=True)
+        raise typer.Exit(1)
+
+    outcomes = result.get("read_only_recognition_outcomes", [])
+
+    try:
+        score_ir = build_ir_from_notation_outcomes(outcomes)
+    except NotationBridgeInputError as e:
+        typer.echo(f"NotationBridgeInputError: {e}", err=True)
+        raise typer.Exit(1)
+        
+    # Extra check required by product: ensure it's actually a sixty-fourth note
+    if score_ir.bars and score_ir.bars[0].events:
+        evt = score_ir.bars[0].events[0]
+        if evt.timing.notated_duration.value != "64th":
+            typer.echo(f"Error: Bridge produced non-sixty-fourth note ({evt.timing.notated_duration.value})", err=True)
+            raise typer.Exit(1)
+
+    if ir_out:
+        ir_out.parent.mkdir(parents=True, exist_ok=True)
+        ir_out.write_text(score_ir.model_dump_json(indent=2))
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        warnings = write_gp(score_ir, out)
+        for w in warnings:
+            typer.echo(f"warning: {w}", err=True)
+    except Exception as e:
+        typer.echo(f"GP Writer failed: {e}", err=True)
+        raise typer.Exit(1)

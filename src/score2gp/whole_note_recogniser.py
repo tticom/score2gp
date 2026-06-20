@@ -23,11 +23,16 @@ def shape_candidate_evidence(
     shaped = []
     for i, cand in enumerate(candidates):
         candidate_id = f"{candidate_prefix}_{start_index + i:03d}"
-        shaped.append({
+        cand_dict = {
             "candidate_id": candidate_id,
             "page_index": page_index,
             "bbox": get_bbox(cand)
-        })
+        }
+        if isinstance(cand, dict) and "stem_bbox" in cand:
+            cand_dict["stem_bbox"] = cand["stem_bbox"]
+        elif hasattr(cand, "stem_bbox"):
+            cand_dict["stem_bbox"] = cand.stem_bbox
+        shaped.append(cand_dict)
     return shaped
 
 def extract_treble_clef_candidate_evidence(
@@ -483,6 +488,8 @@ def map_quarter_note_candidates_to_read_only_outcomes(candidate_locations: list[
             "page_index": cand.get("page_index"),
             "system_index": cand.get("system_index"),
             "staff_index": cand.get("staff_index"),
+            "duration": "quarter",
+            "stem_bbox": cand.get("stem_bbox"),
             "source": "diagnostic_candidate_evidence"
         })
     return outcomes
@@ -733,32 +740,25 @@ def _associate_staves(shaped_candidates: list[dict], staves: list[dict]) -> None
                 cand["staff_index"] = best_staff.get("staff_index")
                 cand["association_status"] = "success"
 
-def compose_eighth_note_candidates(outcomes: list[dict]) -> list[dict]:
+def compose_filled_duration_candidates(outcomes: list[dict]) -> list[dict]:
     quarters = [o for o in outcomes if o.get("symbol_type") == "quarter_note_candidate"]
     flags = [o for o in outcomes if o.get("symbol_type") == "flag_candidate"]
     beams = [o for o in outcomes if o.get("symbol_type") == "beam_candidate"]
 
-    def bboxes_intersect(b1, b2, x_margin=5.0, y_margin=40.0):
-        # We need a large vertical margin to allow the beam to connect to the quarter notehead
-        # across the height of the stem. Stem is roughly 30-35 points.
+    def bboxes_intersect(b1, b2, x_margin=1.0, y_margin=20.0):
         return not (b1[2] < b2[0] - x_margin or
                     b1[0] > b2[2] + x_margin or
                     b1[3] < b2[1] - y_margin or
                     b1[1] > b2[3] + y_margin)
 
-    def bboxes_strictly_overlap(b1, b2):
-        # True if bboxes overlap in both dimensions without just touching edges
-        return not (b1[2] <= b2[0] or
-                    b1[0] >= b2[2] or
-                    b1[3] <= b2[1] or
-                    b1[1] >= b2[3])
-
-    def bbox_union(b1, b2):
+    def bbox_union(bboxes):
+        if not bboxes:
+            return None
         return [
-            min(b1[0], b2[0]),
-            min(b1[1], b2[1]),
-            max(b1[2], b2[2]),
-            max(b1[3], b2[3])
+            min(b[0] for b in bboxes),
+            min(b[1] for b in bboxes),
+            max(b[2] for b in bboxes),
+            max(b[3] for b in bboxes)
         ]
 
     def is_valid_bbox(bbox):
@@ -772,8 +772,8 @@ def compose_eighth_note_candidates(outcomes: list[dict]) -> list[dict]:
         except (TypeError, ValueError):
             return False
 
-    eighth_notes = []
-    eighth_idx = 1
+    composed_notes = []
+    idx = 1
 
     for q in quarters:
         q_page = q.get("page_index")
@@ -784,59 +784,87 @@ def compose_eighth_note_candidates(outcomes: list[dict]) -> list[dict]:
         if q_page is None or q_sys is None or q_staff is None or not is_valid_bbox(q_bbox):
             continue
 
-        composed = False
+        q_stem = q.get("stem_bbox")
+        full_bbox = bbox_union([q_bbox, q_stem]) if q_stem else q_bbox
 
-        # Check flags
+        intersect_flags = []
         for f in flags:
             f_bbox = f.get("bbox")
             if f.get("page_index") == q_page and f.get("system_index") == q_sys and f.get("staff_index") == q_staff and is_valid_bbox(f_bbox):
-                # Ignore notehead quadrants incorrectly extracted as flag candidates.
-                # A real flag does not strictly overlap the quarter notehead.
-                if bboxes_strictly_overlap(q_bbox, f_bbox):
-                    continue
+                # A flag must be to the right of the stem (or slightly left of stem x0)
+                # and its Y must be within the stem's Y bounds (plus some margin)
+                stem_x = q_stem[0] if q_stem else q_bbox[2]
+                if f_bbox[0] >= stem_x - 1.0 and f_bbox[2] <= stem_x + 15.0:
+                    y_min = full_bbox[1] - 2.0
+                    y_max = full_bbox[3] + 2.0
+                    if f_bbox[1] >= y_min and f_bbox[3] <= y_max:
+                        # exclude curves that are entirely contained within the notehead bbox
+                        if not (f_bbox[0] >= q_bbox[0] - 1.0 and f_bbox[2] <= q_bbox[2] + 1.0 and
+                                f_bbox[1] >= q_bbox[1] - 1.0 and f_bbox[3] <= q_bbox[3] + 1.0):
+                            intersect_flags.append(f)
 
-                if bboxes_intersect(q_bbox, f_bbox, x_margin=5.0, y_margin=40.0):
-                    eighth_notes.append({
-                        "candidate_id": f"eighth_note_candidate_{eighth_idx:03d}",
-                        "symbol_type": "eighth_note_candidate",
-                        "page_index": q_page,
-                        "system_index": q_sys,
-                        "staff_index": q_staff,
-                        "bbox": bbox_union(q_bbox, f_bbox),
-                        "source": q.get("source"),
-                        "quarter_component_id": q.get("candidate_id"),
-                        "modifier_component_id": f.get("candidate_id"),
-                        "modifier_type": "flag_candidate"
-                    })
-                    eighth_idx += 1
-                    composed = True
-                    break
-
-        if composed:
-            continue
-
-        # Check beams
+        intersect_beams = []
         for b in beams:
             b_bbox = b.get("bbox")
             if b.get("page_index") == q_page and b.get("system_index") == q_sys and b.get("staff_index") == q_staff and is_valid_bbox(b_bbox):
-                if bboxes_intersect(q_bbox, b_bbox, x_margin=5.0, y_margin=40.0):
-                    eighth_notes.append({
-                        "candidate_id": f"eighth_note_candidate_{eighth_idx:03d}",
-                        "symbol_type": "eighth_note_candidate",
-                        "page_index": q_page,
-                        "system_index": q_sys,
-                        "staff_index": q_staff,
-                        "bbox": bbox_union(q_bbox, b_bbox),
-                        "source": q.get("source"),
-                        "quarter_component_id": q.get("candidate_id"),
-                        "modifier_component_id": b.get("candidate_id"),
-                        "modifier_type": "beam_candidate"
-                    })
-                    eighth_idx += 1
-                    composed = True
-                    break
+                if bboxes_intersect(full_bbox, b_bbox, x_margin=2.0, y_margin=20.0):
+                    intersect_beams.append(b)
 
-    return eighth_notes
+        units = 0
+        modifiers = []
+        if intersect_beams:
+            units = len(intersect_beams)
+            modifiers = intersect_beams
+        else:
+            flag_count = len(intersect_flags)
+            if flag_count == 0:
+                units = 0
+            elif flag_count < 25:
+                units = 1
+            elif flag_count < 45:
+                units = 2
+            elif flag_count < 65:
+                units = 3
+            else:
+                units = 4
+            modifiers = intersect_flags
+
+        if units == 0:
+            continue
+
+        duration_type = "eighth"
+        if units == 2:
+            duration_type = "sixteenth"
+        elif units == 3:
+            duration_type = "thirty_second"
+        elif units >= 4:
+            duration_type = "sixty_fourth"
+
+        sym_type = f"{duration_type}_note_candidate"
+        mod_type = "beam_candidate" if intersect_beams else "flag_candidate"
+        mod_ids = [m.get("candidate_id") for m in modifiers]
+        mod_bboxes = [m.get("bbox") for m in modifiers]
+        
+        composed_bbox = bbox_union([q_bbox] + mod_bboxes)
+
+        composed_notes.append({
+            "candidate_id": f"{sym_type}_{idx:03d}",
+            "symbol_type": sym_type,
+            "page_index": q_page,
+            "system_index": q_sys,
+            "staff_index": q_staff,
+            "bbox": composed_bbox,
+            "duration": duration_type,
+            "source": q.get("source"),
+            "quarter_component_id": q.get("candidate_id"),
+            "modifier_component_ids": mod_ids,
+            "modifier_type": mod_type
+        })
+        idx += 1
+        
+        q["association_status"] = "suppressed"
+
+    return composed_notes
 
 def map_staff_position_to_read_only_outcomes(outcomes: list[dict], staff_geometries: list[dict]) -> None:
     staff_geom_lookup = {}
@@ -848,10 +876,10 @@ def map_staff_position_to_read_only_outcomes(outcomes: list[dict], staff_geometr
 
     for cand in outcomes:
         st_type = cand.get("symbol_type")
-        if st_type not in ("whole_note_candidate", "half_note_candidate", "quarter_note_candidate", "eighth_note_candidate", "ledger_line_candidate"):
+        if st_type not in ("whole_note_candidate", "half_note_candidate", "quarter_note_candidate", "eighth_note_candidate", "sixteenth_note_candidate", "thirty_second_note_candidate", "sixty_fourth_note_candidate", "ledger_line_candidate"):
             continue
 
-        if cand.get("association_status") == "failed":
+        if cand.get("association_status") in ("failed", "suppressed"):
             continue
 
         sg_key = (cand.get("page_index"), cand.get("system_index"), cand.get("staff_index"))
@@ -875,7 +903,7 @@ def map_staff_position_to_read_only_outcomes(outcomes: list[dict], staff_geometr
             continue
 
         notehead_y = None
-        if st_type == "eighth_note_candidate":
+        if st_type in ("eighth_note_candidate", "sixteenth_note_candidate", "thirty_second_note_candidate", "sixty_fourth_note_candidate"):
             q_id = cand.get("quarter_component_id")
             if not q_id:
                 continue
@@ -950,7 +978,7 @@ def map_clef_resolved_staff_pitch(outcomes: list[dict], explicit_clef: str | Non
 
     for cand in outcomes:
         st_type = cand.get("symbol_type")
-        if st_type not in ("whole_note_candidate", "half_note_candidate", "quarter_note_candidate", "eighth_note_candidate"):
+        if st_type not in ("whole_note_candidate", "half_note_candidate", "quarter_note_candidate", "eighth_note_candidate", "sixteenth_note_candidate", "thirty_second_note_candidate", "sixty_fourth_note_candidate"):
             continue
 
         if explicit_clef is not None:
@@ -1035,7 +1063,7 @@ def build_clef_resolved_pitch_coverage_report(outcomes: list[dict]) -> dict:
             key = (page, sys_idx, staff_idx)
             clef_policy[key] = clef_policy.get(key, 0) + 1
 
-    note_types = ("whole_note_candidate", "half_note_candidate", "quarter_note_candidate", "eighth_note_candidate")
+    note_types = ("whole_note_candidate", "half_note_candidate", "quarter_note_candidate", "eighth_note_candidate", "sixteenth_note_candidate", "thirty_second_note_candidate", "sixty_fourth_note_candidate")
 
     for cand in outcomes:
         if not isinstance(cand, dict):
@@ -1129,7 +1157,7 @@ def map_ledger_lines_to_note_candidates(outcomes: list[dict]) -> None:
             if not cand.get("candidate_id"):
                 continue
             valid_ledgers.append(cand)
-        elif st_type in ("whole_note_candidate", "half_note_candidate", "quarter_note_candidate", "eighth_note_candidate"):
+        elif st_type in ("whole_note_candidate", "half_note_candidate", "quarter_note_candidate", "eighth_note_candidate", "sixteenth_note_candidate", "thirty_second_note_candidate", "sixty_fourth_note_candidate"):
             notes.append(cand)
 
     for note in notes:
@@ -1144,7 +1172,7 @@ def map_ledger_lines_to_note_candidates(outcomes: list[dict]) -> None:
             continue
 
         n_bbox = None
-        if note.get("symbol_type") == "eighth_note_candidate":
+        if note.get("symbol_type") in ("eighth_note_candidate", "sixteenth_note_candidate", "thirty_second_note_candidate", "sixty_fourth_note_candidate"):
             q_id = note.get("quarter_component_id")
             if q_id:
                 q_cand = candidate_lookup.get(q_id)
@@ -1182,9 +1210,9 @@ def run_recognition_on_file(
     pdf_path,
     include_x_aligned_clusters: bool = False,
     include_left_margin_candidates: bool = False,
-    include_flag_beam_candidates: bool = False,
-    assume_treble_clef: bool = False,
-    include_ledger_line_candidates: bool = False
+    include_ledger_line_candidates: bool = False,
+    include_flag_beam_candidates: bool = True,
+    assume_treble_clef: bool = False
 ) -> dict | None:
     import sys
     import fitz  # type: ignore
@@ -1360,8 +1388,8 @@ def run_recognition_on_file(
         outcomes.extend(map_flag_candidates_to_read_only_outcomes(flag_locations))
         outcomes.extend(map_beam_candidates_to_read_only_outcomes(beam_locations))
 
-        eighth_notes = compose_eighth_note_candidates(outcomes)
-        outcomes.extend(eighth_notes)
+        composed_durations = compose_filled_duration_candidates(outcomes)
+        outcomes.extend(composed_durations)
 
     map_staff_position_to_read_only_outcomes(outcomes, all_staff_geometries)
     if include_ledger_line_candidates:
