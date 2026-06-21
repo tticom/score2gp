@@ -1392,6 +1392,10 @@ def run_recognition_on_file(
         composed_durations = compose_filled_duration_candidates(outcomes)
         outcomes.extend(composed_durations)
 
+        from score2gp.quarter_rest_recogniser import extract_quarter_rest_candidates
+        quarter_rests = extract_quarter_rest_candidates(outcomes)
+        outcomes.extend(quarter_rests)
+
     map_staff_position_to_read_only_outcomes(outcomes, all_staff_geometries)
     if include_ledger_line_candidates:
         map_ledger_lines_to_note_candidates(outcomes)
