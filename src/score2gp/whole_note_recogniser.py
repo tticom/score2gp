@@ -807,7 +807,8 @@ def compose_filled_duration_candidates(outcomes: list[dict]) -> list[dict]:
         for b in beams:
             b_bbox = b.get("bbox")
             if b.get("page_index") == q_page and b.get("system_index") == q_sys and b.get("staff_index") == q_staff and is_valid_bbox(b_bbox):
-                if bboxes_intersect(full_bbox, b_bbox, x_margin=2.0, y_margin=2.0):
+                beam_y_margin = 2.0 if q_stem else 20.0
+                if bboxes_intersect(full_bbox, b_bbox, x_margin=2.0, y_margin=beam_y_margin):
                     intersect_beams.append(b)
 
         units = 0
