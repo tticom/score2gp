@@ -54,6 +54,13 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
         if sym_type == "quarter_rest_candidate":
             if duration != "quarter":
                 continue
+            bbox = outcome.get("bbox")
+            if not isinstance(bbox, (list, tuple)) or len(bbox) < 4:
+                continue
+            try:
+                float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3])
+            except (TypeError, ValueError):
+                continue
         else:
             expected_sym_type = f"{duration}_note_candidate"
             if sym_type != expected_sym_type:

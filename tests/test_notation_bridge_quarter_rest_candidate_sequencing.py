@@ -91,3 +91,51 @@ def test_malformed_rest_candidate_duration_rejected():
     ]
     with pytest.raises(NotationBridgeInputError, match="no_playable_notation_outcomes_found|no_valid_notation_outcomes_found"):
         build_ir_from_notation_outcomes(outcomes)
+
+def test_malformed_rest_candidate_bbox_missing_rejected():
+    outcomes = [
+        {
+            "symbol_type": "quarter_rest_candidate",
+            "association_status": "success",
+            "duration": "quarter",
+            # missing bbox
+            "page_index": 1,
+            "system_index": 1,
+            "staff_index": 1,
+            "candidate_id": "c1"
+        }
+    ]
+    with pytest.raises(NotationBridgeInputError, match="no_playable_notation_outcomes_found|no_valid_notation_outcomes_found"):
+        build_ir_from_notation_outcomes(outcomes)
+
+def test_malformed_rest_candidate_bbox_short_rejected():
+    outcomes = [
+        {
+            "symbol_type": "quarter_rest_candidate",
+            "association_status": "success",
+            "duration": "quarter",
+            "bbox": [30.0, 50.0], # too short
+            "page_index": 1,
+            "system_index": 1,
+            "staff_index": 1,
+            "candidate_id": "c1"
+        }
+    ]
+    with pytest.raises(NotationBridgeInputError, match="no_playable_notation_outcomes_found|no_valid_notation_outcomes_found"):
+        build_ir_from_notation_outcomes(outcomes)
+
+def test_malformed_rest_candidate_bbox_non_numeric_rejected():
+    outcomes = [
+        {
+            "symbol_type": "quarter_rest_candidate",
+            "association_status": "success",
+            "duration": "quarter",
+            "bbox": [30.0, 50.0, 40.0, "eighty"], # non-numeric
+            "page_index": 1,
+            "system_index": 1,
+            "staff_index": 1,
+            "candidate_id": "c1"
+        }
+    ]
+    with pytest.raises(NotationBridgeInputError, match="no_playable_notation_outcomes_found|no_valid_notation_outcomes_found"):
+        build_ir_from_notation_outcomes(outcomes)
