@@ -160,24 +160,34 @@ def test_quarter_rest_candidate_bridge_fallback_system_staff_index():
             "bbox": [50.0, 50.0, 60.0, 80.0],
             "page_index": 1,
             "system_index": 1,
-            "system_staff_index": 2,
+            "staff_index": 2,
             "candidate_id": "c2"
+        },
+        {
+            "symbol_type": "quarter_note_candidate",
+            "association_status": "success",
+            "duration": "quarter",
+            "clef_resolved_staff_pitch": "A4",
+            "bbox": [60.0, 50.0, 70.0, 80.0],
+            "page_index": 1,
+            "system_index": 1,
+            "staff_index": 1,
+            "candidate_id": "c0"
         }
     ]
     
     score = build_ir_from_notation_outcomes(outcomes)
     events = score.bars[0].events
     
-    assert len(events) == 2
+    assert len(events) == 3
     
-    # First event: quarter rest (has system_staff_index but no staff_index)
-    assert events[0].is_rest is True
-    assert events[0].notes == []
-    assert events[0].timing.duration_ticks == DEFAULT_TICKS_PER_QUARTER
-    assert events[0].timing.onset_ticks == 0
+    # Due to sorting: staff 1 note comes first
+    assert events[0].is_rest is False
+    assert events[0].notes[0].pitch == 57 # A4 sounding midi
     
-    # Second event: quarter note, shifted by rest
-    assert events[1].is_rest is False
-    assert len(events[1].notes) == 1
-    assert events[1].timing.duration_ticks == DEFAULT_TICKS_PER_QUARTER
-    assert events[1].timing.onset_ticks == DEFAULT_TICKS_PER_QUARTER
+    # Then staff 2 items: rest first (x=30)
+    assert events[1].is_rest is True
+    
+    # Then staff 2 note (x=50)
+    assert events[2].is_rest is False
+    assert events[2].notes[0].pitch == 55 # G4 sounding midi

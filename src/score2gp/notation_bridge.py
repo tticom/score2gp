@@ -78,7 +78,7 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
     def sort_key(out: dict[str, Any]) -> tuple:
         page = out.get("page_index", 0)
         sys = out.get("system_index", 0)
-        staff = out.get("staff_index", 0)
+        staff = out.get("staff_index", out.get("system_staff_index", 0))
         bbox = out.get("bbox", [0, 0, 0, 0])
         x_pos = bbox[0] if bbox else 0
         candidate_id = out.get("candidate_id", "")
