@@ -32,11 +32,10 @@ def _parse_pitch_to_midi(pitch_str: str) -> int:
     return (octave + 1) * 12 + step_to_semitones[step]
 
 def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
-    notes = []
     tuning = _standard_guitar_tuning()
     
     valid_durations = ["whole", "half", "quarter", "eighth", "sixteenth", "thirty_second", "sixty_fourth"]
-    found_duration = None
+    valid_outcomes = []
     
     for outcome in outcomes:
         sym_type = outcome.get("symbol_type")
@@ -60,6 +59,28 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
         if not pitch_str:
             continue
             
+        valid_outcomes.append(outcome)
+
+    if len(valid_outcomes) == 0:
+        raise NotationBridgeInputError("no_valid_notation_outcomes_found")
+
+    def sort_key(out: dict[str, Any]) -> tuple:
+        page = out.get("page_index", 0)
+        sys = out.get("system_index", 0)
+        staff = out.get("staff_index", 0)
+        bbox = out.get("bbox", [0, 0, 0, 0])
+        x_pos = bbox[0] if bbox else 0
+        candidate_id = out.get("candidate_id", "")
+        return (page, sys, staff, x_pos, candidate_id)
+
+    valid_outcomes.sort(key=sort_key)
+
+    events = []
+    current_onset_ticks = 0
+    max_ticks_in_4_4_bar = 4 * DEFAULT_TICKS_PER_QUARTER
+
+    for i, outcome in enumerate(valid_outcomes):
+        pitch_str = outcome.get("clef_resolved_staff_pitch")
         written_midi = _parse_pitch_to_midi(pitch_str)
         sounding_midi = written_midi - 12
         
@@ -83,57 +104,58 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
             # Skip if unplayable
             continue
             
-        notes.append(Note(
+        note = Note(
             string=best_string,
             fret=best_fret,
             pitch=sounding_midi,
             confidence=1.0,
-        ))
-        found_duration = duration
-
-    if len(notes) == 0:
-        raise NotationBridgeInputError("no_valid_notation_outcomes_found")
-    if len(notes) > 1:
-        raise NotationBridgeInputError("multiple_valid_notation_outcomes_unsupported")
-
-    events = []
-    if notes:
-        if found_duration == "whole":
+        )
+        
+        duration = outcome.get("duration")
+        if duration == "whole":
             dur_ticks = 4 * DEFAULT_TICKS_PER_QUARTER
             note_val = "whole"
-        elif found_duration == "half":
+        elif duration == "half":
             dur_ticks = 2 * DEFAULT_TICKS_PER_QUARTER
             note_val = "half"
-        elif found_duration == "quarter":
+        elif duration == "quarter":
             dur_ticks = DEFAULT_TICKS_PER_QUARTER
             note_val = "quarter"
-        elif found_duration == "eighth":
+        elif duration == "eighth":
             dur_ticks = DEFAULT_TICKS_PER_QUARTER // 2
             note_val = "eighth"
-        elif found_duration == "sixteenth":
+        elif duration == "sixteenth":
             dur_ticks = DEFAULT_TICKS_PER_QUARTER // 4
             note_val = "16th"
-        elif found_duration == "thirty_second":
+        elif duration == "thirty_second":
             dur_ticks = DEFAULT_TICKS_PER_QUARTER // 8
             note_val = "32nd"
-        elif found_duration == "sixty_fourth":
+        elif duration == "sixty_fourth":
             dur_ticks = DEFAULT_TICKS_PER_QUARTER // 16
             note_val = "64th"
         else:
-            raise NotationBridgeInputError(f"unsupported_duration_value_{found_duration}")
-            
+            raise NotationBridgeInputError(f"unsupported_duration_value_{duration}")
+
+        if current_onset_ticks + dur_ticks > max_ticks_in_4_4_bar:
+            raise NotationBridgeInputError("cumulative_duration_exceeds_one_4_4_bar")
+
         events.append(Event(
-            id="evt_0",
+            id=f"evt_{i}",
             track_id="trk_0",
             timing=Timing(
                 bar_index=1,
-                onset_ticks=0,
+                onset_ticks=current_onset_ticks,
                 duration_ticks=dur_ticks,
                 ticks_per_quarter=DEFAULT_TICKS_PER_QUARTER,
                 notated_duration=NotatedDuration(value=note_val)
             ),
-            notes=notes
+            notes=[note]
         ))
+        
+        current_onset_ticks += dur_ticks
+
+    if not events:
+        raise NotationBridgeInputError("no_playable_notation_outcomes_found")
 
     return ScoreIR(
         tempo=Tempo(bpm=120),
