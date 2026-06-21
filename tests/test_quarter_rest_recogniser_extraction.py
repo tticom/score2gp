@@ -43,3 +43,65 @@ def test_quarter_rest_candidate_extraction_controls(control_pdf):
     quarter_rests = [c for c in outcomes if c.get("symbol_type") == "quarter_rest_candidate"]
     
     assert len(quarter_rests) == 0, f"Expected 0 quarter rests in {control_pdf.name}, found {len(quarter_rests)}"
+
+from score2gp.quarter_rest_recogniser import extract_quarter_rest_candidates
+
+def test_quarter_rest_candidate_staff_partitioning():
+    # Two staves. On each staff, there are 30 orphan flag fragments forming a valid rest candidate.
+    # The x-coordinates overlap. If they weren't partitioned, they would form a cluster with width 30 and height 50,
+    # which might fail the height threshold or misattribute fragments.
+    outcomes = []
+    
+    # Staff 1 fragments (valid width 15, height 30)
+    for i in range(30):
+        outcomes.append({
+            "symbol_type": "flag_candidate",
+            "bbox": [10.0 + (i * 0.5), 10.0, 10.0 + (i * 0.5) + 1.0, 40.0],
+            "page_index": 0,
+            "system_index": 0,
+            "staff_index": 0,
+            "primitive_source_ids": [f"s1_f{i}"]
+        })
+        
+    # Staff 2 fragments (valid width 15, height 30), overlapping x with Staff 1
+    for i in range(30):
+        outcomes.append({
+            "symbol_type": "flag_candidate",
+            "bbox": [10.0 + (i * 0.5), 100.0, 10.0 + (i * 0.5) + 1.0, 130.0],
+            "page_index": 0,
+            "system_index": 0,
+            "staff_index": 1,
+            "primitive_source_ids": [f"s2_f{i}"]
+        })
+
+    results = extract_quarter_rest_candidates(outcomes)
+    
+    # We should get exactly 2 separate rest candidates
+    assert len(results) == 2
+    
+    # Check that they preserved the staff indices
+    staff_indices = sorted([r.get("staff_index") for r in results])
+    assert staff_indices == [0, 1]
+
+def test_quarter_rest_candidate_staff_index_preservation():
+    outcomes = []
+    # 30 fragments that will form a cluster
+    for i in range(30):
+        outcomes.append({
+            "symbol_type": "flag_candidate",
+            "bbox": [50.0 + (i * 0.5), 50.0, 50.0 + (i * 0.5) + 1.0, 80.0],
+            "page_index": 2,
+            "system_index": 1,
+            "staff_index": 3,
+            "system_staff_index": 4,
+            "primitive_source_ids": [f"f{i}"]
+        })
+        
+    results = extract_quarter_rest_candidates(outcomes)
+    assert len(results) == 1
+    
+    qr = results[0]
+    assert qr.get("page_index") == 2
+    assert qr.get("system_index") == 1
+    assert qr.get("staff_index") == 3
+    assert qr.get("system_staff_index") == 4
