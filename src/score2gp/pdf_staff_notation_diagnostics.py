@@ -466,6 +466,21 @@ def build_notation_diagnostics(
                 h_overlap = not (dx1 < x0 or dx0 > x1)
                 v_overlap = not (dy1 <= y0_padded or dy0 >= y1_padded)
                 if h_overlap and v_overlap:
+                    is_filled_beam = False
+                    if drawing.get("type") in ("f", "fs"):
+                        w = dx1 - dx0
+                        if staff_space > 0.0 and w >= 0.5 * staff_space:
+                            items = [it for it in drawing.get("items", []) if it]
+                            lines = [it for it in items if it[0] == "l"]
+                            if len(lines) == 4 and len(items) == 4:
+                                is_filled_beam = True
+                                if dx0 >= x0_limit and dx1 <= x1_limit and dy0 >= y0_limit and dy1 <= y1_limit:
+                                    non_staff_horizontal += 1
+                                    primitives_for_clustering.append(PrimitiveGeometry("non_staff_horizontal", dx0, dy0, dx1, dy1))
+
+                    if is_filled_beam:
+                        continue
+
                     for item in drawing.get("items", []):
                         if not item:
                             continue

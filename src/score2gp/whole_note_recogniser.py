@@ -794,7 +794,7 @@ def compose_filled_duration_candidates(outcomes: list[dict]) -> list[dict]:
                 # A flag must be to the right of the stem (or slightly left of stem x0)
                 # and its Y must be within the stem's Y bounds (plus some margin)
                 stem_x = q_stem[0] if q_stem else q_bbox[2]
-                if f_bbox[0] >= stem_x - 1.0 and f_bbox[2] <= stem_x + 15.0:
+                if f_bbox[0] >= stem_x - 2.0 and f_bbox[0] <= stem_x + 3.0 and f_bbox[2] <= stem_x + 15.0:
                     y_min = full_bbox[1] - 2.0
                     y_max = full_bbox[3] + 2.0
                     if f_bbox[1] >= y_min and f_bbox[3] <= y_max:
@@ -807,7 +807,7 @@ def compose_filled_duration_candidates(outcomes: list[dict]) -> list[dict]:
         for b in beams:
             b_bbox = b.get("bbox")
             if b.get("page_index") == q_page and b.get("system_index") == q_sys and b.get("staff_index") == q_staff and is_valid_bbox(b_bbox):
-                if bboxes_intersect(full_bbox, b_bbox, x_margin=2.0, y_margin=20.0):
+                if bboxes_intersect(full_bbox, b_bbox, x_margin=2.0, y_margin=2.0):
                     intersect_beams.append(b)
 
         units = 0
