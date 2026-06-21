@@ -111,6 +111,8 @@ def extract_quarter_rest_candidates(outcomes: list[dict]) -> list[dict]:
                     cand["staff_index"] = staff_index
                 if sys_staff_index is not None:
                     cand["system_staff_index"] = sys_staff_index
+                if staff_index is not None or sys_staff_index is not None:
+                    cand["association_status"] = "success"
                 if page_index is not None:
                     cand["page_index"] = page_index
                 if system_index is not None:

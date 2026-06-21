@@ -105,3 +105,27 @@ def test_quarter_rest_candidate_staff_index_preservation():
     assert qr.get("system_index") == 1
     assert qr.get("staff_index") == 3
     assert qr.get("system_staff_index") == 4
+
+def test_quarter_rest_candidate_fallback_system_staff_index():
+    outcomes = []
+    # 30 fragments that will form a cluster, omitting staff_index but including system_staff_index
+    for i in range(30):
+        outcomes.append({
+            "symbol_type": "flag_candidate",
+            "bbox": [50.0 + (i * 0.5), 50.0, 50.0 + (i * 0.5) + 1.0, 80.0],
+            "page_index": 2,
+            "system_index": 1,
+            "system_staff_index": 4,
+            "primitive_source_ids": [f"f{i}"]
+        })
+        
+    results = extract_quarter_rest_candidates(outcomes)
+    assert len(results) == 1
+    
+    qr = results[0]
+    assert qr.get("duration") == "quarter"
+    assert qr.get("page_index") == 2
+    assert qr.get("system_index") == 1
+    assert "staff_index" not in qr
+    assert qr.get("system_staff_index") == 4
+    assert qr.get("association_status") == "success"
