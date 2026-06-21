@@ -85,7 +85,7 @@ def test_notation_bridge_rejects_unsupported_duration():
     with pytest.raises(NotationBridgeInputError, match="no_valid_notation_outcomes_found"):
         build_ir_from_notation_outcomes(outcomes)
 
-def test_notation_bridge_rejects_multiple_valid_outcomes():
+def test_notation_bridge_rejects_cumulative_duration_exceeding_bar():
     outcomes = [
         {
             "symbol_type": "whole_note_candidate",
@@ -100,10 +100,10 @@ def test_notation_bridge_rejects_multiple_valid_outcomes():
             "clef_resolved_staff_pitch": "G4",
         }
     ]
-    with pytest.raises(NotationBridgeInputError, match="multiple_valid_notation_outcomes_unsupported"):
+    with pytest.raises(NotationBridgeInputError, match="cumulative_duration_exceeds_one_4_4_bar"):
         build_ir_from_notation_outcomes(outcomes)
 
-def test_notation_bridge_rejects_multiple_mixed_valid_outcomes():
+def test_notation_bridge_rejects_mixed_duration_exceeding_bar():
     outcomes = [
         {
             "symbol_type": "whole_note_candidate",
@@ -118,7 +118,7 @@ def test_notation_bridge_rejects_multiple_mixed_valid_outcomes():
             "clef_resolved_staff_pitch": "G4",
         }
     ]
-    with pytest.raises(NotationBridgeInputError, match="multiple_valid_notation_outcomes_unsupported"):
+    with pytest.raises(NotationBridgeInputError, match="cumulative_duration_exceeds_one_4_4_bar"):
         build_ir_from_notation_outcomes(outcomes)
 
 def test_build_ir_from_half_note_outcome_yields_valid_scoreir():

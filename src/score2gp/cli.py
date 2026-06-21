@@ -992,12 +992,19 @@ def _run_single_note_export_command(pdf: Path, out: Path, ir_out: Path | None, e
         typer.echo(f"NotationBridgeInputError: {e}", err=True)
         raise typer.Exit(1)
         
-    # Extra check required by product: ensure it's actually the expected duration
-    if score_ir.bars and score_ir.bars[0].events:
-        evt = score_ir.bars[0].events[0]
-        if evt.timing.notated_duration.value != expected_duration:
-            typer.echo(f"Error: Bridge produced non-{expected_duration} note ({evt.timing.notated_duration.value})", err=True)
-            raise typer.Exit(1)
+    # Extra check required by product: ensure it's actually the expected duration and exactly one event
+    if not score_ir.bars or not score_ir.bars[0].events:
+        typer.echo("Error: Bridge produced no events", err=True)
+        raise typer.Exit(1)
+        
+    if len(score_ir.bars[0].events) != 1:
+        typer.echo(f"Error: Bridge produced {len(score_ir.bars[0].events)} events but single-note export requires exactly 1", err=True)
+        raise typer.Exit(1)
+
+    evt = score_ir.bars[0].events[0]
+    if evt.timing.notated_duration.value != expected_duration:
+        typer.echo(f"Error: Bridge produced non-{expected_duration} note ({evt.timing.notated_duration.value})", err=True)
+        raise typer.Exit(1)
 
     if ir_out:
         ir_out.parent.mkdir(parents=True, exist_ok=True)
