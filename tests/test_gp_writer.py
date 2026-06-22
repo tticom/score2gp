@@ -3,9 +3,10 @@ from __future__ import annotations
 import json
 import zipfile
 from xml.etree import ElementTree as ET
+from unittest.mock import patch
 
 from score2gp.gp_package import compare_gp, inspect_gp, validate_gp, write_gp
-from score2gp.ir import ScoreIR, ScoreBooklet
+from score2gp.ir import ScoreIR, ScoreBooklet, NotatedDuration
 
 
 def test_write_gp_creates_valid_zip(tmp_path) -> None:
@@ -1132,10 +1133,10 @@ def test_gpif_microtonal_bends(tmp_path) -> None:
 
 def test_gpif_slide_styling(tmp_path) -> None:
     score = ScoreIR.from_json_file("fixtures/public/test_gpif_slide_styling.ir.json")
-    
+
     # Let's also dynamically test the flag override on a manual edit
     score.bars[0].events[0].notes[0].techniques[0].flags = 256
-    
+
     out = tmp_path / "slide_styling.gp"
     warnings = write_gp(score, out)
 
@@ -1161,10 +1162,10 @@ def test_gpif_slide_styling(tmp_path) -> None:
         n3 = e3.find("Note")
         assert n3.find("Slide") is not None
         assert n3.find("Glissando") is not None
-        
+
         slide_prop3 = n3.find(".//Properties/Property[@name='Slide']/Flags")
         assert slide_prop3.text == "64" # glissando flag
-        
+
         gliss_prop = n3.find(".//Glissando")
         if gliss_prop is None:
             # check inside property block
@@ -2603,3 +2604,68 @@ def test_gpif_slur_roundtrip(tmp_path) -> None:
 
     # n5 (id="n5") -> slur="invalid_state_value" attribute -> defaults conservatively to "start"
     assert any(t.kind == "slur" and t.state == "start" for t in r_notes[4].techniques)
+
+def test_gpif_rests(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/tiny_score.ir.json")
+    # Synthesize a quarter rest
+    score.bars[0].events = [e for e in score.bars[0].events if getattr(e, "is_rest", False)]
+    assert len(score.bars[0].events) == 1
+
+    e_rest = score.bars[0].events[0]
+    e_rest.is_rest = True
+    e_rest.timing.onset_ticks = 0
+    e_rest.timing.duration_ticks = 960
+    e_rest.timing.notated_duration = NotatedDuration(value="quarter", dots=0)
+    e_rest.notes = []
+
+    out = tmp_path / "rests.gp"
+
+    # Patch sys.modules to bypass the pytest-only legacy XML path
+    # and force the production relational XML generation
+    with patch.dict("sys.modules"):
+        import sys
+        if "pytest" in sys.modules:
+            del sys.modules["pytest"]
+
+        original_argv = sys.argv
+        # clear any pytest references from argv
+        sys.argv = [arg for arg in sys.argv if "pytest" not in arg]
+
+        try:
+            warnings = write_gp(score, out)
+        finally:
+            sys.argv = original_argv
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        # Retrieve the single beat we generated
+        beats = root.findall(".//Beat")
+        assert len(beats) == 1
+        beat = beats[0]
+
+        # 1. no note refs / empty notes representation for the rest
+        assert beat.find("Notes") is None
+        assert beat.find("Chord") is None
+
+        # 2. correct quarter rhythm mapping
+        rhythm_ref = beat.find("Rhythm").get("ref")
+        assert rhythm_ref is not None
+
+        rhythm_def = root.find(f".//Rhythm[@id='{rhythm_ref}']")
+        assert rhythm_def is not None
+        assert rhythm_def.find("NoteValue").text == "Quarter"
+
+        # 3. no emitted note object for the rest
+        notes_db = root.find("Notes")
+        if notes_db is not None:
+            assert len(list(notes_db)) == 0
+
+    validation = validate_gp(out)
+    assert validation["is_zip"] is True
+    assert validation["xml_well_formed"] is True
+    assert validation["errors"] == []
