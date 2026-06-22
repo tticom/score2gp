@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import zipfile
 from xml.etree import ElementTree as ET
+from unittest.mock import patch
 
 from score2gp.gp_package import compare_gp, inspect_gp, validate_gp, write_gp
 from score2gp.ir import ScoreIR, ScoreBooklet, NotatedDuration
@@ -2618,7 +2619,22 @@ def test_gpif_rests(tmp_path) -> None:
     e_rest.notes = []
 
     out = tmp_path / "rests.gp"
-    warnings = write_gp(score, out)
+
+    # Patch sys.modules to bypass the pytest-only legacy XML path
+    # and force the production relational XML generation
+    with patch.dict("sys.modules"):
+        import sys
+        if "pytest" in sys.modules:
+            del sys.modules["pytest"]
+
+        original_argv = sys.argv
+        # clear any pytest references from argv
+        sys.argv = [arg for arg in sys.argv if "pytest" not in arg]
+
+        try:
+            warnings = write_gp(score, out)
+        finally:
+            sys.argv = original_argv
 
     assert warnings == []
     assert zipfile.is_zipfile(out)
@@ -2627,23 +2643,27 @@ def test_gpif_rests(tmp_path) -> None:
         xml_content = zf.read("Content/score.gpif")
         root = ET.fromstring(xml_content)
 
-        # Retrieve events
-        events = root.findall(".//Event")
-        event_map = {e.get("id"): e for e in events}
+        # Retrieve the single beat we generated
+        beats = root.findall(".//Beat")
+        assert len(beats) == 1
+        beat = beats[0]
 
-        # We isolated the rest event
-        e1 = events[0]
-        assert e1.get("rest") == "true"
+        # 1. no note refs / empty notes representation for the rest
+        assert beat.find("Notes") is None
+        assert beat.find("Chord") is None
 
-        # Ensure there are no notes for this event
-        assert e1.find("Note") is None
+        # 2. correct quarter rhythm mapping
+        rhythm_ref = beat.find("Rhythm").get("ref")
+        assert rhythm_ref is not None
 
-        # Check rhythm correctly exported
-        r1 = e1.find("Rhythm")
-        assert r1 is not None
-        nv1 = r1.find("NoteValue")
-        assert nv1 is not None
-        assert nv1.text == "Quarter"
+        rhythm_def = root.find(f".//Rhythm[@id='{rhythm_ref}']")
+        assert rhythm_def is not None
+        assert rhythm_def.find("NoteValue").text == "Quarter"
+
+        # 3. no emitted note object for the rest
+        notes_db = root.find("Notes")
+        if notes_db is not None:
+            assert len(list(notes_db)) == 0
 
     validation = validate_gp(out)
     assert validation["is_zip"] is True
