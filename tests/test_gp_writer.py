@@ -5,7 +5,7 @@ import zipfile
 from xml.etree import ElementTree as ET
 
 from score2gp.gp_package import compare_gp, inspect_gp, validate_gp, write_gp
-from score2gp.ir import ScoreIR, ScoreBooklet
+from score2gp.ir import ScoreIR, ScoreBooklet, NotatedDuration
 
 
 def test_write_gp_creates_valid_zip(tmp_path) -> None:
@@ -1132,10 +1132,10 @@ def test_gpif_microtonal_bends(tmp_path) -> None:
 
 def test_gpif_slide_styling(tmp_path) -> None:
     score = ScoreIR.from_json_file("fixtures/public/test_gpif_slide_styling.ir.json")
-    
+
     # Let's also dynamically test the flag override on a manual edit
     score.bars[0].events[0].notes[0].techniques[0].flags = 256
-    
+
     out = tmp_path / "slide_styling.gp"
     warnings = write_gp(score, out)
 
@@ -1161,10 +1161,10 @@ def test_gpif_slide_styling(tmp_path) -> None:
         n3 = e3.find("Note")
         assert n3.find("Slide") is not None
         assert n3.find("Glissando") is not None
-        
+
         slide_prop3 = n3.find(".//Properties/Property[@name='Slide']/Flags")
         assert slide_prop3.text == "64" # glissando flag
-        
+
         gliss_prop = n3.find(".//Glissando")
         if gliss_prop is None:
             # check inside property block
@@ -2603,3 +2603,49 @@ def test_gpif_slur_roundtrip(tmp_path) -> None:
 
     # n5 (id="n5") -> slur="invalid_state_value" attribute -> defaults conservatively to "start"
     assert any(t.kind == "slur" and t.state == "start" for t in r_notes[4].techniques)
+
+def test_gpif_rests(tmp_path) -> None:
+    score = ScoreIR.from_json_file("fixtures/public/tiny_score.ir.json")
+    # Synthesize a quarter rest
+    score.bars[0].events = [e for e in score.bars[0].events if getattr(e, "is_rest", False)]
+    assert len(score.bars[0].events) == 1
+
+    e_rest = score.bars[0].events[0]
+    e_rest.is_rest = True
+    e_rest.timing.onset_ticks = 0
+    e_rest.timing.duration_ticks = 960
+    e_rest.timing.notated_duration = NotatedDuration(value="quarter", dots=0)
+    e_rest.notes = []
+
+    out = tmp_path / "rests.gp"
+    warnings = write_gp(score, out)
+
+    assert warnings == []
+    assert zipfile.is_zipfile(out)
+
+    with zipfile.ZipFile(out) as zf:
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+
+        # Retrieve events
+        events = root.findall(".//Event")
+        event_map = {e.get("id"): e for e in events}
+
+        # We isolated the rest event
+        e1 = events[0]
+        assert e1.get("rest") == "true"
+
+        # Ensure there are no notes for this event
+        assert e1.find("Note") is None
+
+        # Check rhythm correctly exported
+        r1 = e1.find("Rhythm")
+        assert r1 is not None
+        nv1 = r1.find("NoteValue")
+        assert nv1 is not None
+        assert nv1.text == "Quarter"
+
+    validation = validate_gp(out)
+    assert validation["is_zip"] is True
+    assert validation["xml_well_formed"] is True
+    assert validation["errors"] == []
