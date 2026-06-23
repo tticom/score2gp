@@ -29,6 +29,7 @@ def test_quarter_rest_e2e_acceptance(tmp_path):
     assert len(events) == 3
     ev0 = events[0]
     assert ev0.is_rest is True
+    assert ev0.timing.duration_ticks == 960
     assert ev0.timing.notated_duration.value == "quarter"
     assert ev0.notes == []
     
@@ -70,9 +71,9 @@ def test_quarter_rest_e2e_acceptance(tmp_path):
         assert rhythm_def.find("NoteValue").text == "Quarter"
         
         notes_db = root.find("Notes")
-        if notes_db is not None:
-            # 2 notes from the remaining events
-            assert len(list(notes_db)) == 2
+        assert notes_db is not None
+        # 2 notes from the remaining events
+        assert len(list(notes_db)) == 2
 
     validation = validate_gp(out)
     assert validation["is_zip"] is True
