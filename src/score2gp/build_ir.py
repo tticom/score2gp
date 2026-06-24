@@ -1628,8 +1628,16 @@ def build_ir_from_tabraw_only(
     *,
     tempo_bpm: float = 120.0,
     editable_draft: bool = False,
+    require_precise_timing: bool = False,
 ) -> tuple[ScoreIR, BuildIrDiagnostics]:
     tabraw = TabRaw.from_json_file(tabraw_path)
+
+    if require_precise_timing:
+        raise BuildIrInputRiskError(
+            category="pdf_only_tab_missing_timing_evidence",
+            stage="timing-gating",
+            message="Precise rhythm conversion requires MusicXML/sidecar or explicit reliable timing evidence. Tab-only input lacks reliable timing evidence.",
+        )
 
     # Safety checks
     if not tabraw.candidates:

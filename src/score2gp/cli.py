@@ -513,6 +513,7 @@ def convert_command(
     pages: Optional[str] = typer.Option(None, "--pages", help="Explicit page range subset to process (e.g. '1-1' or '1-2')."),
     pdf_only_tab: bool = typer.Option(False, "--pdf-only-tab", help="Enable direct PDF-to-GP conversion without a MusicXML timing source"),
     editable_draft: bool = typer.Option(False, "--editable-draft", help="Generate an editable GP draft with defaulted rhythms and tuning from PDF tab extraction."),
+    require_precise_timing: bool = typer.Option(False, "--require-precise-timing", help="Reject input if reliable precise timing evidence is missing."),
     ref_gp: Optional[Path] = typer.Option(None, "--ref-gp", help="Path to optional reference GP package for semantic comparison"),
 ) -> None:
     """Run the complete conversion pipeline: extraction, alignment, IR generation, and GP7 package writing."""
@@ -735,6 +736,7 @@ def convert_command(
             score, diagnostics = build_ir_from_tabraw_only(
                 tabraw_path=tabraw_path,
                 editable_draft=editable_draft,
+                require_precise_timing=require_precise_timing,
             )
             score.to_json_file(ir_path)
         else:
