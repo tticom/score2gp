@@ -1254,6 +1254,94 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                 candidates.extend(ascii_candidates)
                 filtered_index += len(ascii_candidates)
 
+            if systems:
+                from .quarter_rest_recogniser import extract_quarter_rest_candidates
+                page_outcomes = []
+                for sys in systems:
+                    if len(sys.line_ys) < 6:
+                        continue
+                    staff_space = sys.line_spacing
+                    if staff_space <= 0.0:
+                        continue
+                    y0_limit = min(sys.line_ys) - 3.0 * staff_space
+                    y1_limit = max(sys.line_ys) + 3.0 * staff_space
+                    x0_limit = sys.x0
+                    x1_limit = sys.x1
+                    
+                    flag_candidates = []
+                    flag_idx = len(page_outcomes) + 1
+                    for drawing in drawings:
+                        for item in drawing.get("items", []):
+                            if not item:
+                                continue
+                            itype = item[0]
+                            is_flag = False
+                            p_x0, p_y0, p_x1, p_y1 = 0.0, 0.0, 0.0, 0.0
+                            if itype == "l" and len(item) >= 3:
+                                p0, p1 = item[1], item[2]
+                                p_x0, p_x1 = min(p0.x, p1.x), max(p0.x, p1.x)
+                                p_y0, p_y1 = min(p0.y, p1.y), max(p0.y, p1.y)
+                                if (p_x1 - p_x0) > 1.0 and (p_y1 - p_y0) > 1.0:
+                                    is_flag = True
+                            elif itype == "c" and len(item) >= 2:
+                                pts = item[1:]
+                                p_x0, p_x1 = min(p.x for p in pts), max(p.x for p in pts)
+                                p_y0, p_y1 = min(p.y for p in pts), max(p.y for p in pts)
+                                is_flag = True
+
+                            if is_flag:
+                                if p_x0 >= x0_limit and p_x1 <= x1_limit and p_y0 >= y0_limit and p_y1 <= y1_limit:
+                                    w, h = p_x1 - p_x0, p_y1 - p_y0
+                                    if h < 4.0 * staff_space and w < 3.0 * staff_space:
+                                        flag_candidates.append({
+                                            "symbol_type": "flag_candidate",
+                                            "bbox": [p_x0, p_y0, p_x1, p_y1],
+                                            "page_index": page_number,
+                                            "system_index": sys.system_index,
+                                            "staff_index": sys.staff_index,
+                                            "system_staff_index": sys.staff_index,
+                                            "candidate_id": f"flag_candidate_{flag_idx}",
+                                            "staff_space": staff_space
+                                        })
+                                        flag_idx += 1
+                    page_outcomes.extend(flag_candidates)
+                if page_outcomes:
+                    q_rests = extract_quarter_rest_candidates(page_outcomes)
+                    for qr in q_rests:
+                        x0, y0, x1, y1 = qr["bbox"]
+                        cx = (x0 + x1) / 2.0
+                        cy = (y0 + y1) / 2.0
+                        sys_idx = qr.get("system_index")
+                        system = next((s for s in systems if s.system_index == sys_idx), None)
+                        bar_idx = None
+                        local_bar_idx = None
+                        sys_first_bar = None
+                        if system is not None:
+                            bar_idx, _ = system.bar_for_x(cx)
+                            local_bar_idx = system.local_bar_for_x(cx)[0]
+                            sys_first_bar = system.first_bar_index
+                        candidates.append({
+                            "id": f"pdf-p{page_number:03d}-rest-{filtered_index:04d}",
+                            "kind": "candidate-text",
+                            "page_index": page_number,
+                            "system_index": sys_idx,
+                            "staff_index": qr.get("staff_index"),
+                            "bar_index": bar_idx,
+                            "raw_text": "quarter_rest",
+                            "x": cx,
+                            "y": cy,
+                            "bbox": {"page": page_number, "x0": x0, "y0": y0, "x1": x1, "y1": y1},
+                            "confidence": 0.5,
+                            "source_stage": "pdf-text",
+                            "raw": {
+                                "symbol_type": "quarter_rest_candidate",
+                                "provenance": ["tab_only_vector_quarter_rest"],
+                                "local_bar_index": local_bar_idx,
+                                "system_first_bar_index": sys_first_bar
+                            }
+                        })
+                        filtered_index += 1
+
             # Pre-process, split mixed technique words, and group playable digits conservatively
             refined_words = _split_technique_mixed_words(words)
 

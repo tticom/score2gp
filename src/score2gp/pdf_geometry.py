@@ -16,7 +16,7 @@ class _LineSegment:
 
     @property
     def is_horizontal(self) -> bool:
-        return abs(self.y0 - self.y1) <= 1.0 and abs(self.x1 - self.x0) >= 80.0
+        return abs(self.y0 - self.y1) <= 1.0 and abs(self.x1 - self.x0) >= 75.0
 
     @property
     def is_vertical(self) -> bool:
