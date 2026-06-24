@@ -84,6 +84,75 @@ def test_pdf_only_tab_refuses_unsafe_grouping(tmp_path) -> None:
     assert report["pdf_only_diagnostics"]["pdf_grouping_status"] == "refused"
 
 
+def test_pdf_only_tab_strict_precise_timing_mode_refuses_inference(tmp_path) -> None:
+    # 1.5 Strict precise-timing mode must reject missing timing evidence
+    tabraw_data = {
+        "schema_version": "tabraw.v0.1",
+        "source_pdf": "test.pdf",
+        "pdf_layout_class": "drawn",
+        "pdf_layout_warnings": [],
+        "candidates": [
+            {
+                "id": "c-0001",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "line_index": 1,
+                "string": 1,
+                "raw_text": "5",
+                "parsed_fret": 5,
+                "x": 10.0,
+                "y": 20.0,
+                "confidence": 0.9,
+            }
+        ],
+        "warnings": [],
+    }
+    tabraw_file = tmp_path / "tabraw_timing.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+
+    # API validation
+    with pytest.raises(BuildIrInputRiskError) as exc_info:
+        build_ir_from_tabraw_only(tabraw_file, require_precise_timing=True)
+    assert exc_info.value.category == "pdf_only_tab_missing_timing_evidence"
+    assert "Precise rhythm conversion requires MusicXML/sidecar or explicit reliable timing evidence" in str(exc_info.value)
+
+    # CLI validation
+    out_gp = tmp_path / "output.gp"
+    workdir = tmp_path / "workdir"
+    json_report = tmp_path / "report.json"
+
+    # We use a simple pdf fixture
+    result = CliRunner().invoke(
+        app,
+        [
+            "convert",
+            "--pdf",
+            str(SIMPLE_PDF),
+            "--pdf-only-tab",
+            "--require-precise-timing",
+            "--out",
+            str(out_gp),
+            "--work-dir",
+            str(workdir),
+            "--json-report",
+            str(json_report),
+        ],
+    )
+    # The exit code for this category falls under "pdf_" so _convert_exit_code_for_error maps it to 2.
+    # We could assert exit code 2 or 1, but actually the category starts with "pdf_", so it returns 2
+    assert result.exit_code == 2
+    assert not out_gp.exists()  # Ensure no misleading GP file was produced
+    assert json_report.exists()
+    report = json.loads(json_report.read_text(encoding="utf-8"))
+    assert report["status"] == "refused"
+    assert report["refusal_code"] == "pdf_only_tab_missing_timing_evidence"
+    assert "Provide MusicXML/sidecar timing evidence" in report["recommended_action"]
+
+
+
 def test_pdf_only_tab_rhythm_inference_policy(tmp_path) -> None:
     # 2. Mock a TabRaw with a bar containing 4 x-groups to verify rhythm grid logic
     tabraw_data = {
