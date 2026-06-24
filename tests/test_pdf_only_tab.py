@@ -149,6 +149,7 @@ def test_pdf_only_tab_strict_precise_timing_mode_refuses_inference(tmp_path) -> 
     report = json.loads(json_report.read_text(encoding="utf-8"))
     assert report["status"] == "refused"
     assert report["refusal_code"] == "pdf_only_tab_missing_timing_evidence"
+    assert "Provide MusicXML/sidecar timing evidence" in report["recommended_action"]
 
 
 
