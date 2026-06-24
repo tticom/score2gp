@@ -105,3 +105,30 @@ def test_compute_staff_position_index_invalid_inputs() -> None:
     # Negative tolerance
     with pytest.raises(ValueError, match="Tolerance must be non-negative"):
         compute_staff_position_index(100.0, [100.0, 108.0, 116.0, 124.0, 132.0], tolerance=-0.1)
+
+    with pytest.raises(ValueError, match="Adjacent staff-line gaps must all be positive."):
+        compute_staff_position_index(100.0, [100.0, 100.0, 100.0, 100.0, 100.0])
+
+
+def test_line_segment_is_horizontal_threshold() -> None:
+    from score2gp.pdf_geometry import _LineSegment
+
+    # A segment matching the new 75.0 threshold (e.g. from tab-only fixtures)
+    valid_segment = _LineSegment(x0=10.0, y0=20.0, x1=85.0, y1=20.0) # width = 75.0
+    assert valid_segment.is_horizontal is True
+
+    # A segment just below the 75.0 threshold
+    invalid_segment = _LineSegment(x0=10.0, y0=20.0, x1=84.9, y1=20.0) # width = 74.9
+    assert invalid_segment.is_horizontal is False
+
+    # A segment perfectly horizontal and long enough
+    long_segment = _LineSegment(x0=10.0, y0=20.0, x1=100.0, y1=20.0) # width = 90.0
+    assert long_segment.is_horizontal is True
+
+    # A segment slightly angled but within the 1.0 vertical delta allowance
+    angled_segment = _LineSegment(x0=10.0, y0=20.0, x1=90.0, y1=20.9) # width = 80.0, dy = 0.9
+    assert angled_segment.is_horizontal is True
+
+    # A segment too angled
+    too_angled = _LineSegment(x0=10.0, y0=20.0, x1=90.0, y1=21.1) # dy = 1.1
+    assert too_angled.is_horizontal is False

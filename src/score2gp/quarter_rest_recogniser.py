@@ -84,7 +84,18 @@ def extract_quarter_rest_candidates(outcomes: list[dict]) -> list[dict]:
             height = max_y - min_y
             fragment_count = len(cl)
             
-            if 10.0 <= width <= 25.0 and 25.0 <= height <= 40.0 and fragment_count >= 30:
+            staff_space = cl[0].get('staff_space')
+            is_valid_size = False
+            if staff_space:
+                w_ratio = width / staff_space
+                h_ratio = height / staff_space
+                if 0.5 <= w_ratio <= 3.0 and 1.5 <= h_ratio <= 4.0:
+                    is_valid_size = True
+            else:
+                if 10.0 <= width <= 25.0 and 25.0 <= height <= 40.0:
+                    is_valid_size = True
+            
+            if is_valid_size and fragment_count >= 30:
                 primitive_ids = []
                 for c in cl:
                     primitive_ids.extend(c.get('primitive_source_ids', []))

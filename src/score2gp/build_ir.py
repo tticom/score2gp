@@ -1691,7 +1691,7 @@ def build_ir_from_tabraw_only(
             details={"refusal_warning_code": found_unsafe},
         )
 
-    fret_candidates = [c for c in tabraw.candidates if c.parsed_fret is not None and c.kind == "fret"]
+    fret_candidates = [c for c in tabraw.candidates if (c.parsed_fret is not None and c.kind == "fret") or c.raw_text == "quarter_rest"]
     if not fret_candidates:
         raise BuildIrInputRiskError(
             category="pdf_only_tab_grouping_unsafe",
@@ -1700,7 +1700,7 @@ def build_ir_from_tabraw_only(
         )
 
     for candidate in fret_candidates:
-        if candidate.string is None or candidate.bar_index is None or candidate.system_index is None or candidate.x is None:
+        if (candidate.string is None and candidate.raw_text != "quarter_rest") or candidate.bar_index is None or candidate.system_index is None or candidate.x is None:
             raise BuildIrInputRiskError(
                 category="pdf_only_tab_grouping_unsafe",
                 stage="layout-gating",
@@ -1793,26 +1793,38 @@ def build_ir_from_tabraw_only(
                 duration_name = "64th"
 
         events = []
+        current_onset = 0
         for i, subgroup_candidates in enumerate(event_subgroups):
-            onset_ticks = i * grid_spacing
-            if editable_draft:
-                duration_ticks = grid_spacing
-            else:
-                duration_ticks = grid_spacing if i < N - 1 else 3840 - onset_ticks
-
             notes = []
+            is_rest = False
             for candidate in subgroup_candidates:
-                base_pitch = _STRING_TO_BASE_PITCH.get(candidate.string, 40)
-                pitch = base_pitch + (candidate.parsed_fret or 0)
-                notes.append(
-                    Note(
-                        string=candidate.string,
-                        fret=candidate.parsed_fret or 0,
-                        pitch=pitch,
-                        confidence=candidate.confidence,
-                        provenance=[candidate.to_provenance()],
+                if candidate.raw_text == "quarter_rest":
+                    is_rest = True
+                else:
+                    base_pitch = _STRING_TO_BASE_PITCH.get(candidate.string, 40)
+                    pitch = base_pitch + (candidate.parsed_fret or 0)
+                    notes.append(
+                        Note(
+                            string=candidate.string,
+                            fret=candidate.parsed_fret or 0,
+                            pitch=pitch,
+                            confidence=candidate.confidence,
+                            provenance=[candidate.to_provenance()],
+                        )
                     )
-                )
+
+            if editable_draft:
+                ev_duration_ticks = grid_spacing
+                ev_duration_name = duration_name
+            elif is_rest:
+                ev_duration_ticks = 960
+                ev_duration_name = "quarter"
+            else:
+                ev_duration_ticks = grid_spacing if i < N - 1 else max(0, 3840 - current_onset)
+                ev_duration_name = duration_name
+
+            onset_ticks = current_onset
+            current_onset += ev_duration_ticks
 
             event_text = None
             if editable_draft and output_bar_idx == 1 and i == 0:
@@ -1826,6 +1838,9 @@ def build_ir_from_tabraw_only(
                     "Rests/silence may be omitted."
                 )
 
+            if is_rest:
+                notes = []
+
             events.append(
                 Event(
                     id=f"bar-{output_bar_idx}-event-{i+1}",
@@ -1833,10 +1848,11 @@ def build_ir_from_tabraw_only(
                     timing=Timing(
                         bar_index=output_bar_idx,
                         onset_ticks=onset_ticks,
-                        duration_ticks=duration_ticks,
+                        duration_ticks=ev_duration_ticks,
                         ticks_per_quarter=DEFAULT_TICKS_PER_QUARTER,
-                        notated_duration=NotatedDuration(value=duration_name, dots=0),
+                        notated_duration=NotatedDuration(value=ev_duration_name, dots=0),
                     ),
+                    is_rest=is_rest,
                     notes=notes,
                     text=event_text,
                     confidence=sum(c.confidence for c in subgroup_candidates) / len(subgroup_candidates),
