@@ -1793,13 +1793,8 @@ def build_ir_from_tabraw_only(
                 duration_name = "64th"
 
         events = []
+        current_onset = 0
         for i, subgroup_candidates in enumerate(event_subgroups):
-            onset_ticks = i * grid_spacing
-            if editable_draft:
-                duration_ticks = grid_spacing
-            else:
-                duration_ticks = grid_spacing if i < N - 1 else 3840 - onset_ticks
-
             notes = []
             is_rest = False
             for candidate in subgroup_candidates:
@@ -1817,6 +1812,19 @@ def build_ir_from_tabraw_only(
                             provenance=[candidate.to_provenance()],
                         )
                     )
+
+            if editable_draft:
+                ev_duration_ticks = grid_spacing
+                ev_duration_name = duration_name
+            elif is_rest:
+                ev_duration_ticks = 960
+                ev_duration_name = "quarter"
+            else:
+                ev_duration_ticks = grid_spacing if i < N - 1 else max(0, 3840 - current_onset)
+                ev_duration_name = duration_name
+
+            onset_ticks = current_onset
+            current_onset += ev_duration_ticks
 
             event_text = None
             if editable_draft and output_bar_idx == 1 and i == 0:
@@ -1840,9 +1848,9 @@ def build_ir_from_tabraw_only(
                     timing=Timing(
                         bar_index=output_bar_idx,
                         onset_ticks=onset_ticks,
-                        duration_ticks=duration_ticks,
+                        duration_ticks=ev_duration_ticks,
                         ticks_per_quarter=DEFAULT_TICKS_PER_QUARTER,
-                        notated_duration=NotatedDuration(value=duration_name, dots=0),
+                        notated_duration=NotatedDuration(value=ev_duration_name, dots=0),
                     ),
                     is_rest=is_rest,
                     notes=notes,

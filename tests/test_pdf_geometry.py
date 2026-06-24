@@ -106,7 +106,7 @@ def test_compute_staff_position_index_invalid_inputs() -> None:
     with pytest.raises(ValueError, match="Tolerance must be non-negative"):
         compute_staff_position_index(100.0, [100.0, 108.0, 116.0, 124.0, 132.0], tolerance=-0.1)
 
-    with pytest.raises(ValueError, match="Line spacing must be greater than zero"):
+    with pytest.raises(ValueError, match="Adjacent staff-line gaps must all be positive."):
         compute_staff_position_index(100.0, [100.0, 100.0, 100.0, 100.0, 100.0])
 
 

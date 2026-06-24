@@ -46,7 +46,7 @@ def test_pdf_only_tab_build_ir_creates_valid_rest_events(tmp_path):
     tabraw_path = tmp_path / "tabraw.json"
     tabraw_path.write_text(json.dumps(payload, indent=2))
     
-    score, diagnostics = build_ir_from_tabraw_only(tabraw_path, editable_draft=True)
+    score, diagnostics = build_ir_from_tabraw_only(tabraw_path, editable_draft=False)
     
     # Verify events
     events = score.bars[0].events
@@ -59,3 +59,5 @@ def test_pdf_only_tab_build_ir_creates_valid_rest_events(tmp_path):
     for rest_ev in rest_events:
         assert rest_ev.is_rest is True
         assert rest_ev.notes == [] # Ensure notes are cleanly stripped
+        assert rest_ev.timing.duration_ticks == 960 # Must have quarter rest duration
+        assert rest_ev.timing.notated_duration.value == "quarter"
