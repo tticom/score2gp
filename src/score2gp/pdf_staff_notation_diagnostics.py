@@ -22,10 +22,32 @@ from dataclasses import dataclass
 import statistics
 from .pdf_geometry_candidate_extractor import PdfGeometryCandidateExtractor
 
-def _extract_note_candidates(page: Any) -> tuple[list[WholeNoteCandidateDiagnostics], list[HalfNoteCandidateDiagnostics], list[QuarterNoteCandidateDiagnostics]]:
+def _extract_note_candidates(page: Any, staves_diags: list['NotationStaffDiagnostics'] | None = None) -> tuple[list[WholeNoteCandidateDiagnostics], list[HalfNoteCandidateDiagnostics], list[QuarterNoteCandidateDiagnostics]]:
     whole_candidates = []
     half_candidates = []
     quarter_candidates = []
+
+    def get_identity(y_center: float) -> tuple[int | None, int | None, int | None]:
+        if not staves_diags:
+            return None, None, None
+            
+        # We use nearest-center vertical distance as a heuristic to assign 
+        # candidate identity. This is a geometric inference rather than true
+        # extraction-context preservation, but it performs better than naive 
+        # tight-bounds overlap, particularly for ledger-line notes.
+        best_staff = None
+        min_dist = float('inf')
+        for diag in staves_diags:
+            geom = diag.staff
+            staff_center_y = sum(geom.line_y_coords) / len(geom.line_y_coords) if geom.line_y_coords else (geom.y0 + geom.y1) / 2.0
+            dist = abs(y_center - staff_center_y)
+            if dist < min_dist:
+                min_dist = dist
+                best_staff = geom
+        if best_staff:
+            return best_staff.page_index, best_staff.system_index, best_staff.staff_index
+        return None, None, None
+
     drawings = page.get_drawings()
 
     vertical_lines = []
@@ -102,13 +124,15 @@ def _extract_note_candidates(page: Any) -> tuple[list[WholeNoteCandidateDiagnost
                         stem_bbox = [line["x0"], line["y0"], line["x1"], line["y1"]]
                         break
 
+            page_idx, sys_idx, staff_idx = get_identity((y0 + y1) / 2.0)
             if is_hollow:
                 if not has_stem:
                     whole_candidates.append(WholeNoteCandidateDiagnostics(
                         bbox=[round(x0, 3), round(y0, 3), round(x1, 3), round(y1, 3)],
                         width=round(w, 3),
                         height=round(h, 3),
-                        aspect_ratio=round(aspect, 3)
+                        aspect_ratio=round(aspect, 3),
+                        page_index=page_idx, system_index=sys_idx, staff_index=staff_idx
                     ))
                 else:
                     half_candidates.append(HalfNoteCandidateDiagnostics(
@@ -116,7 +140,8 @@ def _extract_note_candidates(page: Any) -> tuple[list[WholeNoteCandidateDiagnost
                         width=round(w, 3),
                         height=round(h, 3),
                         aspect_ratio=round(aspect, 3),
-                        stem_bbox=stem_bbox
+                        stem_bbox=stem_bbox,
+                        page_index=page_idx, system_index=sys_idx, staff_index=staff_idx
                     ))
             else:
                 if has_stem:
@@ -125,7 +150,8 @@ def _extract_note_candidates(page: Any) -> tuple[list[WholeNoteCandidateDiagnost
                         width=round(w, 3),
                         height=round(h, 3),
                         aspect_ratio=round(aspect, 3),
-                        stem_bbox=stem_bbox
+                        stem_bbox=stem_bbox,
+                        page_index=page_idx, system_index=sys_idx, staff_index=staff_idx
                     ))
 
     # 2. Extract from SMuFL text spans
@@ -177,38 +203,43 @@ def _extract_note_candidates(page: Any) -> tuple[list[WholeNoteCandidateDiagnost
                                     break
 
                         # Determine note type
+                        page_idx, sys_idx, staff_idx = get_identity((y0 + y1) / 2.0)
                         if has_whole:
                             whole_candidates.append(WholeNoteCandidateDiagnostics(
                                 bbox=[round(x0, 3), round(y0, 3), round(x1, 3), round(y1, 3)],
                                 width=round(w, 3),
                                 height=round(h, 3),
-                                aspect_ratio=round(aspect, 3)
+                                aspect_ratio=round(aspect, 3),
+                                page_index=page_idx, system_index=sys_idx, staff_index=staff_idx
                             ))
                         elif has_half:
                             half_candidates.append(HalfNoteCandidateDiagnostics(
                                 bbox=[round(x0, 3), round(y0, 3), round(x1, 3), round(y1, 3)],
                                 width=round(w, 3),
                                 height=round(h, 3),
-                                aspect_ratio=round(aspect, 3)
+                                aspect_ratio=round(aspect, 3),
+                                page_index=page_idx, system_index=sys_idx, staff_index=staff_idx
                             ))
                         elif has_black:
-                            # In some fonts/exports, \ue0a4 is used for hollow notes if drawing them with paths,
-                            # but usually \ue0a4 is a black notehead. However, in our Derek Trucks example,
-                            # we saw \ue0a4 for everything, so we might need to rely on stem absence for whole notes.
+                            # In some fonts/exports,  is used for hollow notes if drawing them with paths,
+                            # but usually  is a black notehead. However, in our Derek Trucks example,
+                            # we saw  for everything, so we might need to rely on stem absence for whole notes.
                             # For safety, if it has no stem, it could be a whole note. If it has a stem, quarter/half.
                             if not has_stem:
                                 whole_candidates.append(WholeNoteCandidateDiagnostics(
                                     bbox=[round(x0, 3), round(y0, 3), round(x1, 3), round(y1, 3)],
                                     width=round(w, 3),
                                     height=round(h, 3),
-                                    aspect_ratio=round(aspect, 3)
+                                    aspect_ratio=round(aspect, 3),
+                                    page_index=page_idx, system_index=sys_idx, staff_index=staff_idx
                                 ))
                             else:
                                 quarter_candidates.append(QuarterNoteCandidateDiagnostics(
                                     bbox=[round(x0, 3), round(y0, 3), round(x1, 3), round(y1, 3)],
                                     width=round(w, 3),
                                     height=round(h, 3),
-                                    aspect_ratio=round(aspect, 3)
+                                    aspect_ratio=round(aspect, 3),
+                                    page_index=page_idx, system_index=sys_idx, staff_index=staff_idx
                                 ))
     except Exception:
         pass
@@ -800,7 +831,7 @@ def build_notation_diagnostics(
             )
         )
 
-    notes = _extract_note_candidates(page)
+    notes = _extract_note_candidates(page, staves_diags)
     return PdfStaffNotationGeometryDiagnostics(
         staves=staves_diags,
         system_connectors=system_connectors,
