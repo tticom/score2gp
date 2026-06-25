@@ -904,13 +904,19 @@ def extract_structural_skeleton_diagnostics_dict(page: Any, page_index: int) -> 
 
                     if staff_space > 0:
                         height_in_spaces = dy / staff_space
-                        if height_in_spaces >= 3.8:
+                        covers_top = (vy0 <= y0 + 0.25 * staff_space)
+                        covers_bottom = (vy1 >= y1 - 0.25 * staff_space)
+
+                        if height_in_spaces >= 3.8 and covers_top and covers_bottom:
                             cls = "confirmed_barline"
                             reason = None
                             confirmed_count += 1
                         elif height_in_spaces >= 2.5:
                             cls = "ambiguous_stem"
-                            reason = "Vertical stroke is too short to be a definite barline; might be a note stem"
+                            if height_in_spaces >= 3.8:
+                                reason = "Vertical stroke is tall enough but does not fully span the staff boundaries; likely a tall note stem"
+                            else:
+                                reason = "Vertical stroke is too short to be a definite barline; might be a note stem"
                             ambiguous_count += 1
                         else:
                             continue
@@ -942,5 +948,5 @@ def extract_structural_skeleton_diagnostics_dict(page: Any, page_index: int) -> 
             diagnostic_status="pass"
         )
         return StructuralSkeletonDiagnostics(pages=[page_diag]).model_dump()
-    except Exception as e:
-        return {"pages": [], "failure_reasons": [str(e)], "diagnostic_status": "fail"}
+    except Exception:
+        return {"pages": [], "failure_reasons": ["structural_skeleton_detection_failed"], "diagnostic_status": "fail"}
