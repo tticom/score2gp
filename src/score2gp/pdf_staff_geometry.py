@@ -249,3 +249,57 @@ class QuarterNoteCandidateDiagnostics(BaseModel):
 from score2gp.pdf_geometry_candidates import LeftMarginPrimitiveCandidate, XAlignedPrimitiveClusterCandidate  # noqa: E402
 NotationStaffDiagnostics.model_rebuild()
 
+class StructuralSkeletonBarlineCandidate(BaseModel):
+    """
+    Evidence for an internal barline candidate.
+    """
+    model_config = ConfigDict(frozen=True)
+
+    x0: float
+    x1: float
+    y0: float
+    y1: float
+    classification: Literal["confirmed_barline", "ambiguous_stem"]
+    ambiguity_reason: str | None = None
+
+class StructuralSkeletonStaff(BaseModel):
+    """
+    Structural skeleton for a single staff.
+    """
+    model_config = ConfigDict(frozen=True)
+
+    staff_index: int
+    staff_bounds: list[float]
+    barline_candidates: list[StructuralSkeletonBarlineCandidate]
+    confirmed_barline_count: int
+    ambiguous_vertical_count: int
+
+class StructuralSkeletonSystem(BaseModel):
+    """
+    Structural skeleton for a system of staves.
+    """
+    model_config = ConfigDict(frozen=True)
+
+    system_index: int
+    staff_indices: list[int]
+    staves: list[StructuralSkeletonStaff]
+
+class StructuralSkeletonPageDiagnostics(BaseModel):
+    """
+    Structural skeleton evidence for a page.
+    """
+    model_config = ConfigDict(frozen=True)
+
+    page_index: int
+    systems: list[StructuralSkeletonSystem]
+    failure_reasons: list[str]
+    diagnostic_status: Literal["pass", "fail", "ambiguous"]
+
+class StructuralSkeletonDiagnostics(BaseModel):
+    """
+    Top-level payload for standard-notation structural skeleton diagnostics.
+    """
+    model_config = ConfigDict(frozen=True)
+
+    pages: list[StructuralSkeletonPageDiagnostics]
+
