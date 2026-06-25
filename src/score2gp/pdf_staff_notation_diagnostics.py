@@ -27,9 +27,14 @@ def _extract_note_candidates(page: Any, staves_diags: list['NotationStaffDiagnos
     half_candidates = []
     quarter_candidates = []
 
-    def get_identity(y_center: float) -> tuple[int, int, int]:
+    def get_identity(y_center: float) -> tuple[int | None, int | None, int | None]:
         if not staves_diags:
-            return 1, 1, 1
+            return None, None, None
+            
+        # We use nearest-center vertical distance as a heuristic to assign 
+        # candidate identity. This is a geometric inference rather than true
+        # extraction-context preservation, but it performs better than naive 
+        # tight-bounds overlap, particularly for ledger-line notes.
         best_staff = None
         min_dist = float('inf')
         for diag in staves_diags:
@@ -41,7 +46,7 @@ def _extract_note_candidates(page: Any, staves_diags: list['NotationStaffDiagnos
                 best_staff = geom
         if best_staff:
             return best_staff.page_index, best_staff.system_index, best_staff.staff_index
-        return 1, 1, 1
+        return None, None, None
 
     drawings = page.get_drawings()
 

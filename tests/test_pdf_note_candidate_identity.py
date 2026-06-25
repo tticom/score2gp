@@ -41,8 +41,29 @@ def build_mock_quarter_note_drawing(x0: float, y0: float, x1: float, y1: float) 
         "items": items
     }
 
+def test_note_candidate_identity_missing_context() -> None:
+    # Test that extraction correctly leaves identity fields as None when no staff context exists.
+    drawings = [
+        build_mock_quarter_note_drawing(100.0, 100.0, 115.0, 110.0),
+        {
+            "rect": MockRect(114.5, 80.0, 115.5, 110.0),
+            "fill": (0, 0, 0),
+            "items": [("l", MockPoint(115.0, 80.0), MockPoint(115.0, 110.0))]
+        }
+    ]
+    mock_page = MockPage(drawings)
+    w, h, q = _extract_note_candidates(mock_page, staves_diags=None)
+    
+    assert len(q) == 1
+    assert q[0].staff_index is None
+    assert q[0].system_index is None
+    assert q[0].page_index is None
+
 def test_note_candidate_identity_multi_staff() -> None:
-    # We load the multi-staff fixture to get realistic multi-staff geometry
+    # The generated_standard_staff_multi_staff.pdf fixture does not contain real note 
+    # candidates, only staff geometry. We load the real staff geometries and inject 
+    # mock note drawings to prove the geometric distance heuristic correctly distinguishes
+    # staves without collapsing everything to a default identity.
     pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_multi_staff.pdf")
     doc = fitz.open(pdf_path)
     page = doc[0]
@@ -59,22 +80,22 @@ def test_note_candidate_identity_multi_staff() -> None:
     y_center1 = sum(staff1.line_y_coords) / len(staff1.line_y_coords)
     y_center2 = sum(staff2.line_y_coords) / len(staff2.line_y_coords)
     
-    # We create two mock quarter notes exactly on those centers
-    # aspect ratio 1.5 -> w=15, h=10
+    # We offset the notes slightly from the staff center to prove it uses robust proximity,
+    # not exact matching.
+    offset = 4.0
+    
     drawings = [
-        build_mock_quarter_note_drawing(100.0, y_center1 - 5.0, 115.0, y_center1 + 5.0),
-        # add stem for note 1
+        build_mock_quarter_note_drawing(100.0, y_center1 + offset - 5.0, 115.0, y_center1 + offset + 5.0),
         {
-            "rect": MockRect(114.5, y_center1 - 25.0, 115.5, y_center1 + 5.0),
+            "rect": MockRect(114.5, y_center1 + offset - 25.0, 115.5, y_center1 + offset + 5.0),
             "fill": (0, 0, 0),
-            "items": [("l", MockPoint(115.0, y_center1 - 25.0), MockPoint(115.0, y_center1 + 5.0))]
+            "items": [("l", MockPoint(115.0, y_center1 + offset - 25.0), MockPoint(115.0, y_center1 + offset + 5.0))]
         },
-        build_mock_quarter_note_drawing(150.0, y_center2 - 5.0, 165.0, y_center2 + 5.0),
-        # add stem for note 2
+        build_mock_quarter_note_drawing(150.0, y_center2 - offset - 5.0, 165.0, y_center2 - offset + 5.0),
         {
-            "rect": MockRect(164.5, y_center2 - 25.0, 165.5, y_center2 + 5.0),
+            "rect": MockRect(164.5, y_center2 - offset - 25.0, 165.5, y_center2 - offset + 5.0),
             "fill": (0, 0, 0),
-            "items": [("l", MockPoint(165.0, y_center2 - 25.0), MockPoint(165.0, y_center2 + 5.0))]
+            "items": [("l", MockPoint(165.0, y_center2 - offset - 25.0), MockPoint(165.0, y_center2 - offset + 5.0))]
         }
     ]
     
@@ -83,7 +104,7 @@ def test_note_candidate_identity_multi_staff() -> None:
     
     assert len(q) == 2, "Expected 2 quarter notes"
     
-    # The notes should be unambiguously assigned to staff1 and staff2
+    # The notes should be unambiguously assigned to staff1 and staff2 based on proximity
     assert q[0].staff_index == staff1.staff_index
     assert q[0].system_index == staff1.system_index
     assert q[1].staff_index == staff2.staff_index
@@ -105,5 +126,11 @@ def test_note_candidate_identity_ledger_lines() -> None:
     assert len(notes) > 0, "Expected to find note candidates with ledger lines"
     
     for n in notes:
-        assert n.staff_index > 0
+        # We explicitly assert that these notes are mapped to staff 1, proving 
+        # that the ledger lines are correctly handled by the distance heuristic.
+        assert n.staff_index == 1
+        assert n.system_index == 1
+        assert n.page_index == 1
         assert len(n.bbox) == 4
+        assert n.width > 0
+        assert n.height > 0

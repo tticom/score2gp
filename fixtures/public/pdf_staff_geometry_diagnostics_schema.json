@@ -135,19 +135,40 @@
           "title": "Stem Bbox"
         },
         "page_index": {
-          "default": 1,
-          "title": "Page Index",
-          "type": "integer"
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page Index"
         },
         "system_index": {
-          "default": 1,
-          "title": "System Index",
-          "type": "integer"
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "System Index"
         },
         "staff_index": {
-          "default": 1,
-          "title": "Staff Index",
-          "type": "integer"
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Staff Index"
         }
       },
       "required": [
@@ -678,19 +699,40 @@
           "title": "Stem Bbox"
         },
         "page_index": {
-          "default": 1,
-          "title": "Page Index",
-          "type": "integer"
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page Index"
         },
         "system_index": {
-          "default": 1,
-          "title": "System Index",
-          "type": "integer"
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "System Index"
         },
         "staff_index": {
-          "default": 1,
-          "title": "Staff Index",
-          "type": "integer"
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Staff Index"
         }
       },
       "required": [
@@ -863,19 +905,40 @@
           "type": "number"
         },
         "page_index": {
-          "default": 1,
-          "title": "Page Index",
-          "type": "integer"
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page Index"
         },
         "system_index": {
-          "default": 1,
-          "title": "System Index",
-          "type": "integer"
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "System Index"
         },
         "staff_index": {
-          "default": 1,
-          "title": "Staff Index",
-          "type": "integer"
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Staff Index"
         }
       },
       "required": [
