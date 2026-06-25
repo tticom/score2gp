@@ -950,3 +950,99 @@ def extract_structural_skeleton_diagnostics_dict(page: Any, page_index: int) -> 
         return StructuralSkeletonDiagnostics(pages=[page_diag]).model_dump()
     except Exception:
         return {"pages": [], "failure_reasons": ["structural_skeleton_detection_failed"], "diagnostic_status": "fail"}
+
+def extract_measure_grid_diagnostics_dict(page: Any, page_index: int) -> dict[str, Any]:
+    """
+    Extracts a measure-grid diagnostic from confirmed internal barlines.
+    """
+    from .pdf_staff_geometry import (
+        MeasureGridRegion,
+        MeasureGridStaff,
+        MeasureGridSystem,
+        MeasureGridPageDiagnostics,
+        MeasureGridDiagnostics
+    )
+
+    try:
+        skeleton_dict = extract_structural_skeleton_diagnostics_dict(page, page_index)
+
+        if not skeleton_dict or not skeleton_dict.get("pages"):
+            return {"pages": [], "failure_reasons": ["measure_grid_dependency_failed"], "diagnostic_status": "fail"}
+
+        mg_pages = []
+        for p in skeleton_dict.get("pages", []):
+            if p.get("diagnostic_status") != "pass":
+                mg_pages.append(MeasureGridPageDiagnostics(
+                    page_index=p.get("page_index", 1),
+                    systems=[],
+                    diagnostic_status="fail",
+                    failure_reasons=["structural_skeleton_dependency_failed"]
+                ))
+                continue
+
+            mg_systems = []
+            page_fail_reasons = []
+            page_status = "pass"
+
+            for sys in p.get("systems", []):
+                mg_staves = []
+                sys_fail_reasons = []
+                sys_status = "pass"
+
+                for staff in sys.get("staves", []):
+                    staff_bounds = staff.get("staff_bounds", [])
+                    if not staff_bounds or len(staff_bounds) != 4:
+                        continue
+
+                    x0, y0, x1, y1 = staff_bounds
+
+                    barline_candidates = staff.get("barline_candidates", [])
+                    confirmed_barlines = [
+                        b for b in barline_candidates
+                        if b.get("classification") == "confirmed_barline"
+                    ]
+
+                    sorted_barlines = sorted(confirmed_barlines, key=lambda b: b.get("x0", 0.0))
+
+                    xs = [x0]
+                    for b in sorted_barlines:
+                        bx = b.get("x0", 0.0)
+                        if bx - xs[-1] > 10.0:
+                            xs.append(bx)
+
+                    if x1 - xs[-1] > 10.0:
+                        xs.append(x1)
+
+                    regions = []
+                    for i in range(len(xs) - 1):
+                        regions.append(MeasureGridRegion(
+                            start_x=round(xs[i], 3),
+                            end_x=round(xs[i+1], 3)
+                        ))
+
+                    mg_staves.append(MeasureGridStaff(
+                        staff_index=staff.get("staff_index", 1),
+                        staff_bounds=[round(v, 3) for v in staff_bounds],
+                        measure_regions=regions
+                    ))
+
+                mg_systems.append(MeasureGridSystem(
+                    system_index=sys.get("system_index", 1),
+                    staff_indices=sys.get("staff_indices", []),
+                    staves=mg_staves,
+                    diagnostic_status=sys_status,
+                    failure_reasons=sys_fail_reasons
+                ))
+
+            mg_pages.append(MeasureGridPageDiagnostics(
+                page_index=p.get("page_index", 1),
+                systems=mg_systems,
+                diagnostic_status=page_status,
+                failure_reasons=page_fail_reasons
+            ))
+
+        diag = MeasureGridDiagnostics(pages=mg_pages)
+        return diag.model_dump()
+
+    except Exception:
+        return {"pages": [], "failure_reasons": ["measure_grid_extraction_failed"], "diagnostic_status": "fail"}

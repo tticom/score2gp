@@ -303,3 +303,53 @@ class StructuralSkeletonDiagnostics(BaseModel):
 
     pages: list[StructuralSkeletonPageDiagnostics]
 
+class MeasureGridRegion(BaseModel):
+    """
+    Spatial bounds for a single measure region within a staff.
+    """
+    model_config = ConfigDict(frozen=True)
+
+    start_x: float
+    end_x: float
+    barline_candidate_x: float | None = None
+
+class MeasureGridStaff(BaseModel):
+    """
+    Measure grid evidence for a single staff.
+    """
+    model_config = ConfigDict(frozen=True)
+
+    staff_index: int
+    staff_bounds: list[float]
+    measure_regions: list[MeasureGridRegion]
+
+class MeasureGridSystem(BaseModel):
+    """
+    Measure grid evidence for a system of staves.
+    """
+    model_config = ConfigDict(frozen=True)
+
+    system_index: int
+    staff_indices: list[int]
+    staves: list[MeasureGridStaff]
+    diagnostic_status: Literal["pass", "fail", "unsupported"]
+    failure_reasons: list[str]
+
+class MeasureGridPageDiagnostics(BaseModel):
+    """
+    Measure grid evidence for a page.
+    """
+    model_config = ConfigDict(frozen=True)
+
+    page_index: int
+    systems: list[MeasureGridSystem]
+    diagnostic_status: Literal["pass", "fail", "unsupported"]
+    failure_reasons: list[str]
+
+class MeasureGridDiagnostics(BaseModel):
+    """
+    Top-level payload for measure-grid diagnostics.
+    """
+    model_config = ConfigDict(frozen=True)
+
+    pages: list[MeasureGridPageDiagnostics]
