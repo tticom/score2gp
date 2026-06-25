@@ -133,6 +133,21 @@
           ],
           "default": null,
           "title": "Stem Bbox"
+        },
+        "page_index": {
+          "default": 1,
+          "title": "Page Index",
+          "type": "integer"
+        },
+        "system_index": {
+          "default": 1,
+          "title": "System Index",
+          "type": "integer"
+        },
+        "staff_index": {
+          "default": 1,
+          "title": "Staff Index",
+          "type": "integer"
         }
       },
       "required": [
@@ -661,6 +676,21 @@
           ],
           "default": null,
           "title": "Stem Bbox"
+        },
+        "page_index": {
+          "default": 1,
+          "title": "Page Index",
+          "type": "integer"
+        },
+        "system_index": {
+          "default": 1,
+          "title": "System Index",
+          "type": "integer"
+        },
+        "staff_index": {
+          "default": 1,
+          "title": "Staff Index",
+          "type": "integer"
         }
       },
       "required": [
@@ -831,6 +861,21 @@
         "aspect_ratio": {
           "title": "Aspect Ratio",
           "type": "number"
+        },
+        "page_index": {
+          "default": 1,
+          "title": "Page Index",
+          "type": "integer"
+        },
+        "system_index": {
+          "default": 1,
+          "title": "System Index",
+          "type": "integer"
+        },
+        "staff_index": {
+          "default": 1,
+          "title": "Staff Index",
+          "type": "integer"
         }
       },
       "required": [

@@ -217,6 +217,9 @@ class HalfNoteCandidateDiagnostics(BaseModel):
     height: float
     aspect_ratio: float
     stem_bbox: list[float] | None = None
+    page_index: int = 1
+    system_index: int = 1
+    staff_index: int = 1
 
 class WholeNoteCandidateDiagnostics(BaseModel):
     """
@@ -229,6 +232,9 @@ class WholeNoteCandidateDiagnostics(BaseModel):
     width: float
     height: float
     aspect_ratio: float
+    page_index: int = 1
+    system_index: int = 1
+    staff_index: int = 1
 
 class QuarterNoteCandidateDiagnostics(BaseModel):
     """
@@ -242,6 +248,9 @@ class QuarterNoteCandidateDiagnostics(BaseModel):
     height: float
     aspect_ratio: float
     stem_bbox: list[float] | None = None
+    page_index: int = 1
+    system_index: int = 1
+    staff_index: int = 1
 
 
 # Resolve forward references for candidate types used in NotationStaffDiagnostics.
