@@ -137,7 +137,7 @@ def _extract_note_candidates(page: Any) -> tuple[list[WholeNoteCandidateDiagnost
                     text = span.get("text", "")
                     if not text:
                         continue
-                    
+
                     # Check for notehead characters
                     # \ue0a2 = noteheadWhole
                     # \ue0a3 = noteheadHalf
@@ -145,23 +145,23 @@ def _extract_note_candidates(page: Any) -> tuple[list[WholeNoteCandidateDiagnost
                     has_whole = "\ue0a2" in text
                     has_half = "\ue0a3" in text
                     has_black = "\ue0a4" in text
-                    
+
                     if has_whole or has_half or has_black:
                         bbox = span.get("bbox")
                         if not bbox:
                             continue
-                        
+
                         x0, y0, x1, y1 = bbox
                         w = x1 - x0
                         h = y1 - y0
                         if h == 0 or w == 0:
                             continue
-                        
+
                         aspect = w / h
-                        
+
                         # Note: font bounding boxes can be larger than the actual glyph.
                         # We use the text span bbox directly for diagnostics.
-                        
+
                         # Stem association logic
                         has_stem = False
                         margin_x = 3.0
@@ -175,7 +175,7 @@ def _extract_note_candidates(page: Any) -> tuple[list[WholeNoteCandidateDiagnost
                                 if not (line_geom["y1"] < y0 - margin_y or line_geom["y0"] > y1 + margin_y):
                                     has_stem = True
                                     break
-                                    
+
                         # Determine note type
                         if has_whole:
                             whole_candidates.append(WholeNoteCandidateDiagnostics(
@@ -338,12 +338,12 @@ def _find_system_connector_between_groups(drawings: list[Any], g_prev: dict[str,
 def _group_notation_groups_by_system_connectors(drawings: list[Any], group_bounds: list[dict[str, Any]]) -> tuple[list[list[int]], list[dict[str, Any]]]:
     connected_systems = []
     connectors_found = []
-    
+
     i = 0
     while i < len(group_bounds):
         system_group_indices = [i]
         j = i + 1
-        
+
         system_connector = None
         while j < len(group_bounds):
             g_prev = group_bounds[j-1]
@@ -356,7 +356,7 @@ def _group_notation_groups_by_system_connectors(drawings: list[Any], group_bound
                 j += 1
             else:
                 break
-                
+
         connected_systems.append(system_group_indices)
         if len(system_group_indices) > 1 and system_connector:
             connectors_found.append({
@@ -364,7 +364,7 @@ def _group_notation_groups_by_system_connectors(drawings: list[Any], group_bound
                 "connector_info": system_connector
             })
         i = j
-        
+
     return connected_systems, connectors_found
 
 def build_notation_diagnostics(
@@ -683,7 +683,7 @@ def build_notation_diagnostics(
             margin_curves = 0
             margin_vertical_strokes = 0
             margin_rects = 0
-            
+
             margin_evidence_list = []
 
             for p in primitives_for_clustering:
@@ -831,3 +831,116 @@ def extract_notation_diagnostics_dict(page: Any, page_index: int) -> dict[str, A
         )
     except Exception:
         return {"staves": [], "status": "pdf_notation_geometry_diagnostics_failed"}
+
+def extract_structural_skeleton_diagnostics_dict(page: Any, page_index: int) -> dict[str, Any]:
+    from .pdf_staff_detection import _detect_notation_staff_groups
+    from .pdf_staff_geometry import (
+        StructuralSkeletonBarlineCandidate,
+        StructuralSkeletonStaff,
+        StructuralSkeletonSystem,
+        StructuralSkeletonPageDiagnostics,
+        StructuralSkeletonDiagnostics
+    )
+    import statistics
+
+    try:
+        notation_groups = _detect_notation_staff_groups(page)
+        drawings = page.get_drawings()
+
+        group_bounds = [_notation_group_bounds(g) for g in notation_groups]
+        connected_systems, connectors_found = _group_notation_groups_by_system_connectors(drawings, group_bounds)
+
+        group_system_mapping = {}
+        for system_idx, indices in enumerate(connected_systems, start=1):
+            for staff_idx_in_sys, idx in enumerate(indices, start=1):
+                group_system_mapping[idx] = {"system_index": system_idx, "staff_index": staff_idx_in_sys}
+
+        systems = []
+        for system_idx, indices in enumerate(connected_systems, start=1):
+            staves = []
+            for idx in indices:
+                mapping = group_system_mapping[idx]
+                gb = group_bounds[idx]
+                x0, x1, y0, y1 = gb["x0"], gb["x1"], gb["y0"], gb["y1"]
+                staff_space = gb["staff_space"]
+
+                verticals = []
+                for d in drawings:
+                    for item in d.get("items", []):
+                        if not item: continue
+                        if item[0] == "l" and len(item) >= 3:
+                            p0, p1 = item[1], item[2]
+                            ix0, ix1 = min(p0.x, p1.x), max(p0.x, p1.x)
+                            iy0, iy1 = min(p0.y, p1.y), max(p0.y, p1.y)
+
+                            dx = ix1 - ix0
+                            dy = iy1 - iy0
+                            if dy >= 1.0 and dx <= 2.0:
+                                if iy0 <= y1 and iy1 >= y0 and ix0 >= x0 and ix1 <= x1:
+                                    verticals.append((ix0, ix1, iy0, iy1))
+
+                unique_verticals = []
+                for v in verticals:
+                    vx0, vx1, vy0, vy1 = v
+                    is_dup = False
+                    for uv in unique_verticals:
+                        ux0, ux1, uy0, uy1 = uv
+                        if abs((vx0+vx1)/2 - (ux0+ux1)/2) <= 1.0 and abs(vy0 - uy0) <= 1.0 and abs(vy1 - uy1) <= 1.0:
+                            is_dup = True
+                            break
+                    if not is_dup:
+                        unique_verticals.append(v)
+
+                barline_candidates = []
+                confirmed_count = 0
+                ambiguous_count = 0
+
+                for v in unique_verticals:
+                    vx0, vx1, vy0, vy1 = v
+                    dy = vy1 - vy0
+
+                    if abs(vx0 - x0) <= 2.0:
+                        continue
+
+                    if staff_space > 0:
+                        height_in_spaces = dy / staff_space
+                        if height_in_spaces >= 3.8:
+                            cls = "confirmed_barline"
+                            reason = None
+                            confirmed_count += 1
+                        elif height_in_spaces >= 2.5:
+                            cls = "ambiguous_stem"
+                            reason = "Vertical stroke is too short to be a definite barline; might be a note stem"
+                            ambiguous_count += 1
+                        else:
+                            continue
+
+                        barline_candidates.append(StructuralSkeletonBarlineCandidate(
+                            x0=round(vx0, 3), x1=round(vx1, 3), y0=round(vy0, 3), y1=round(vy1, 3),
+                            classification=cls,
+                            ambiguity_reason=reason
+                        ))
+
+                staves.append(StructuralSkeletonStaff(
+                    staff_index=mapping["staff_index"],
+                    staff_bounds=[round(x0, 3), round(y0, 3), round(x1, 3), round(y1, 3)],
+                    barline_candidates=barline_candidates,
+                    confirmed_barline_count=confirmed_count,
+                    ambiguous_vertical_count=ambiguous_count
+                ))
+
+            systems.append(StructuralSkeletonSystem(
+                system_index=system_idx,
+                staff_indices=[group_system_mapping[idx]["staff_index"] for idx in indices],
+                staves=staves
+            ))
+
+        page_diag = StructuralSkeletonPageDiagnostics(
+            page_index=page_index,
+            systems=systems,
+            failure_reasons=[],
+            diagnostic_status="pass"
+        )
+        return StructuralSkeletonDiagnostics(pages=[page_diag]).model_dump()
+    except Exception as e:
+        return {"pages": [], "failure_reasons": [str(e)], "diagnostic_status": "fail"}
