@@ -1007,10 +1007,10 @@ def extract_measure_grid_diagnostics_dict(page: Any, page_index: int) -> dict[st
                     xs = [x0]
                     for b in sorted_barlines:
                         bx = b.get("x0", 0.0)
-                        if bx - xs[-1] > 2.0:
+                        if bx - xs[-1] > 10.0:
                             xs.append(bx)
 
-                    if x1 - xs[-1] > 2.0:
+                    if x1 - xs[-1] > 10.0:
                         xs.append(x1)
 
                     regions = []
