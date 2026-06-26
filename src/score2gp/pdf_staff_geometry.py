@@ -362,3 +362,28 @@ class MeasureGridDiagnostics(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     pages: list[MeasureGridPageDiagnostics]
+
+class CandidateToMeasureAssignment(BaseModel):
+    """
+    Diagnostic assignment of a notation candidate to a measure region.
+    """
+    model_config = ConfigDict(frozen=True)
+
+    candidate_type: str
+    candidate_bbox: list[float]
+    page_index: int | None
+    system_index: int | None
+    staff_index: int | None
+    center_x: float
+    assignment_status: Literal["assigned", "identity_none", "staff_unmatched", "out_of_bounds", "boundary_ambiguous"]
+    measure_region_index: int | None = None
+
+class CandidateMeasureAssignmentDiagnostics(BaseModel):
+    """
+    Top-level payload for candidate-to-measure assignments.
+    """
+    model_config = ConfigDict(frozen=True)
+
+    assignments: list[CandidateToMeasureAssignment]
+    diagnostic_status: Literal["pass", "fail"]
+    failure_reasons: list[str]
