@@ -157,3 +157,15 @@ def test_empty_bucket_behaviour_mock(mock_grid, mock_assignment):
     assert buckets[0]["bucket_status"] == "empty"
     assert buckets[0]["candidate_count"] == 0
     assert buckets[0]["ordered_candidates"] == []
+
+@patch("score2gp.pdf_staff_notation_diagnostics.extract_candidate_measure_assignment_diagnostics_dict")
+def test_measure_bucket_failure_is_private_safe_no_traceback(mock_assignment, capsys):
+    mock_assignment.side_effect = Exception("malformed simulated error")
+    
+    diag = extract_measure_bucket_diagnostics_dict(None, 1)
+    captured = capsys.readouterr()
+
+    assert diag["diagnostic_status"] == "fail"
+    assert diag["buckets"] == []
+    assert "measure_bucket_extraction_failed" in diag["failure_reasons"]
+    assert "Traceback" not in captured.err

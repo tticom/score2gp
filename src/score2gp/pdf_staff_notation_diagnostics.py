@@ -1322,6 +1322,4 @@ def extract_measure_bucket_diagnostics_dict(page: Any, page_index: int) -> dict[
         diag = MeasureBucketDiagnostics(buckets=buckets, diagnostic_status="pass", failure_reasons=[])
         return diag.model_dump()
     except Exception as e:
-        import traceback
-        traceback.print_exc()
         return {"buckets": [], "diagnostic_status": "fail", "failure_reasons": ["measure_bucket_extraction_failed"]}
