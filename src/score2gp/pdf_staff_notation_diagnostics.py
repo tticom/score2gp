@@ -1235,3 +1235,91 @@ def extract_candidate_measure_assignment_diagnostics_dict(page: Any, page_index:
         
     except Exception as e:
         return {"assignments": [], "diagnostic_status": "fail", "failure_reasons": ["assignment_extraction_failed"]}
+
+def extract_measure_bucket_diagnostics_dict(page: Any, page_index: int) -> dict[str, Any]:
+    from .pdf_staff_geometry import MeasureBucketCandidate, MeasureBucket, MeasureBucketDiagnostics
+
+    try:
+        assignment_diags_dict = extract_candidate_measure_assignment_diagnostics_dict(page, page_index)
+        if assignment_diags_dict.get("diagnostic_status") == "fail":
+            return {"buckets": [], "diagnostic_status": "fail", "failure_reasons": assignment_diags_dict.get("failure_reasons", ["upstream_failed"])}
+        
+        grid_diags_dict = extract_measure_grid_diagnostics_dict(page, page_index)
+        if grid_diags_dict.get("diagnostic_status") == "fail":
+            return {"buckets": [], "diagnostic_status": "fail", "failure_reasons": grid_diags_dict.get("failure_reasons", ["upstream_grid_failed"])}
+
+        bucket_map = {}
+        for p_data in grid_diags_dict.get("pages", []):
+            if p_data.get("page_index") != page_index:
+                continue
+            for sys_data in p_data.get("systems", []):
+                sys_idx = sys_data.get("system_index")
+                for stf_data in sys_data.get("staves", []):
+                    stf_idx = stf_data.get("staff_index")
+                    for mr_idx, mr_data in enumerate(stf_data.get("measure_regions", [])):
+                        key = (page_index, sys_idx, stf_idx, mr_idx)
+                        bucket_map[key] = []
+
+        for assignment in assignment_diags_dict.get("assignments", []):
+            if assignment.get("assignment_status") != "assigned":
+                continue
+            p_idx = assignment.get("page_index")
+            sys_idx = assignment.get("system_index")
+            stf_idx = assignment.get("staff_index")
+            mr_idx = assignment.get("measure_region_index")
+            key = (p_idx, sys_idx, stf_idx, mr_idx)
+            
+            if key in bucket_map:
+                bucket_map[key].append(MeasureBucketCandidate(
+                    candidate_type=assignment.get("candidate_type"),
+                    candidate_bbox=assignment.get("candidate_bbox"),
+                    center_x=assignment.get("center_x"),
+                    page_index=p_idx,
+                    system_index=sys_idx,
+                    staff_index=stf_idx,
+                    measure_region_index=mr_idx,
+                    assignment_status="assigned"
+                ))
+            
+        CENTER_X_TIE_TOLERANCE_PT = 0.5
+        buckets = []
+        for key in sorted(bucket_map.keys()):
+            p_idx, sys_idx, stf_idx, mr_idx = key
+            candidates = bucket_map[key]
+            
+            if not candidates:
+                buckets.append(MeasureBucket(
+                    page_index=p_idx,
+                    system_index=sys_idx,
+                    staff_index=stf_idx,
+                    measure_region_index=mr_idx,
+                    bucket_status="empty",
+                    ordered_candidates=[],
+                    candidate_count=0,
+                    failure_reasons=[]
+                ))
+                continue
+                
+            candidates.sort(key=lambda c: (c.center_x, c.candidate_bbox[1], c.candidate_bbox[0], c.candidate_type))
+            
+            bucket_status = "ordered"
+            for i in range(len(candidates) - 1):
+                if candidates[i+1].center_x - candidates[i].center_x <= CENTER_X_TIE_TOLERANCE_PT:
+                    bucket_status = "center_x_ambiguous"
+                    break
+                    
+            buckets.append(MeasureBucket(
+                page_index=p_idx,
+                system_index=sys_idx,
+                staff_index=stf_idx,
+                measure_region_index=mr_idx,
+                bucket_status=bucket_status,
+                ordered_candidates=candidates,
+                candidate_count=len(candidates),
+                failure_reasons=[]
+            ))
+
+        diag = MeasureBucketDiagnostics(buckets=buckets, diagnostic_status="pass", failure_reasons=[])
+        return diag.model_dump()
+    except Exception as e:
+        return {"buckets": [], "diagnostic_status": "fail", "failure_reasons": ["measure_bucket_extraction_failed"]}
