@@ -1077,3 +1077,157 @@ def extract_measure_grid_diagnostics_dict(page: Any, page_index: int) -> dict[st
 
     except Exception:
         return {"pages": [], "failure_reasons": ["measure_grid_extraction_failed"], "diagnostic_status": "fail"}
+
+def extract_candidate_measure_assignment_diagnostics_dict(page: Any, page_index: int) -> dict[str, Any]:
+    from .pdf_staff_geometry import CandidateToMeasureAssignment, CandidateMeasureAssignmentDiagnostics
+
+    try:
+        notation_diags_dict = extract_notation_diagnostics_dict(page, page_index)
+        if notation_diags_dict.get("status") == "pdf_notation_geometry_diagnostics_failed":
+            return {"assignments": [], "diagnostic_status": "fail", "failure_reasons": ["notation_diagnostics_failed"]}
+            
+        measure_grid_dict = extract_measure_grid_diagnostics_dict(page, page_index)
+        if measure_grid_dict.get("diagnostic_status") == "fail":
+            return {"assignments": [], "diagnostic_status": "fail", "failure_reasons": ["measure_grid_diagnostics_failed"]}
+            
+        assignments = []
+        
+        staff_map = {}
+        for p in measure_grid_dict.get("pages", []):
+            if p.get("page_index") != page_index:
+                continue
+            for sys in p.get("systems", []):
+                sys_idx = sys.get("system_index")
+                for staff in sys.get("staves", []):
+                    staff_idx = staff.get("staff_index")
+                    staff_map[(sys_idx, staff_idx)] = staff.get("measure_regions", [])
+                    
+        def process_candidates(candidates_list, ctype):
+            for c in candidates_list:
+                bbox = c.get("bbox")
+                p_idx = c.get("page_index")
+                sys_idx = c.get("system_index")
+                stf_idx = c.get("staff_index")
+                
+                center_x = (bbox[0] + bbox[2]) / 2.0
+                
+                if p_idx is None or sys_idx is None or stf_idx is None:
+                    assignments.append(CandidateToMeasureAssignment(
+                        candidate_type=ctype,
+                        candidate_bbox=bbox,
+                        page_index=p_idx,
+                        system_index=sys_idx,
+                        staff_index=stf_idx,
+                        center_x=round(center_x, 3),
+                        assignment_status="identity_none"
+                    ))
+                    continue
+                    
+                regions = staff_map.get((sys_idx, stf_idx))
+                if regions is None:
+                    assignments.append(CandidateToMeasureAssignment(
+                        candidate_type=ctype,
+                        candidate_bbox=bbox,
+                        page_index=p_idx,
+                        system_index=sys_idx,
+                        staff_index=stf_idx,
+                        center_x=round(center_x, 3),
+                        assignment_status="staff_unmatched"
+                    ))
+                    continue
+                
+                if not regions:
+                    assignments.append(CandidateToMeasureAssignment(
+                        candidate_type=ctype,
+                        candidate_bbox=bbox,
+                        page_index=p_idx,
+                        system_index=sys_idx,
+                        staff_index=stf_idx,
+                        center_x=round(center_x, 3),
+                        assignment_status="out_of_bounds"
+                    ))
+                    continue
+                    
+                MEASURE_BOUNDARY_TOLERANCE_PT = 1.0
+                
+                sorted_regions = sorted(regions, key=lambda r: r.get("start_x", 0.0))
+                
+                first_start_x = sorted_regions[0].get("start_x", 0.0)
+                last_end_x = sorted_regions[-1].get("end_x", 0.0)
+                
+                if center_x < first_start_x or center_x > last_end_x:
+                    assignments.append(CandidateToMeasureAssignment(
+                        candidate_type=ctype,
+                        candidate_bbox=bbox,
+                        page_index=p_idx,
+                        system_index=sys_idx,
+                        staff_index=stf_idx,
+                        center_x=round(center_x, 3),
+                        assignment_status="out_of_bounds"
+                    ))
+                    continue
+                    
+                is_ambiguous = False
+                for i in range(len(sorted_regions) - 1):
+                    boundary_x = sorted_regions[i].get("end_x", 0.0)
+                    if abs(center_x - boundary_x) <= MEASURE_BOUNDARY_TOLERANCE_PT:
+                        is_ambiguous = True
+                        break
+                        
+                if is_ambiguous:
+                    assignments.append(CandidateToMeasureAssignment(
+                        candidate_type=ctype,
+                        candidate_bbox=bbox,
+                        page_index=p_idx,
+                        system_index=sys_idx,
+                        staff_index=stf_idx,
+                        center_x=round(center_x, 3),
+                        assignment_status="boundary_ambiguous"
+                    ))
+                    continue
+                    
+                matched_idx = -1
+                match_count = 0
+                for i, r in enumerate(sorted_regions):
+                    sx = r.get("start_x", 0.0)
+                    ex = r.get("end_x", 0.0)
+                    if i < len(sorted_regions) - 1:
+                        if sx <= center_x < ex:
+                            matched_idx = i
+                            match_count += 1
+                    else:
+                        if sx <= center_x <= ex:
+                            matched_idx = i
+                            match_count += 1
+                            
+                if match_count == 1:
+                    assignments.append(CandidateToMeasureAssignment(
+                        candidate_type=ctype,
+                        candidate_bbox=bbox,
+                        page_index=p_idx,
+                        system_index=sys_idx,
+                        staff_index=stf_idx,
+                        center_x=round(center_x, 3),
+                        assignment_status="assigned",
+                        measure_region_index=matched_idx
+                    ))
+                else:
+                    assignments.append(CandidateToMeasureAssignment(
+                        candidate_type=ctype,
+                        candidate_bbox=bbox,
+                        page_index=p_idx,
+                        system_index=sys_idx,
+                        staff_index=stf_idx,
+                        center_x=round(center_x, 3),
+                        assignment_status="boundary_ambiguous"
+                    ))
+        
+        process_candidates(notation_diags_dict.get("whole_note_candidates", []), "whole_note")
+        process_candidates(notation_diags_dict.get("half_note_candidates", []), "half_note")
+        process_candidates(notation_diags_dict.get("quarter_note_candidates", []), "quarter_note")
+        
+        diag = CandidateMeasureAssignmentDiagnostics(assignments=assignments, diagnostic_status="pass", failure_reasons=[])
+        return diag.model_dump()
+        
+    except Exception as e:
+        return {"assignments": [], "diagnostic_status": "fail", "failure_reasons": ["assignment_extraction_failed"]}
