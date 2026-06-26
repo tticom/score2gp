@@ -1090,6 +1090,10 @@ def extract_candidate_measure_assignment_diagnostics_dict(page: Any, page_index:
         if measure_grid_dict.get("diagnostic_status") == "fail":
             return {"assignments": [], "diagnostic_status": "fail", "failure_reasons": ["measure_grid_diagnostics_failed"]}
             
+        for p in measure_grid_dict.get("pages", []):
+            if p.get("page_index") == page_index and p.get("status") in ["fail", "unsupported"]:
+                return {"assignments": [], "diagnostic_status": "fail", "failure_reasons": ["measure_grid_diagnostics_failed"]}
+                
         assignments = []
         
         staff_map = {}

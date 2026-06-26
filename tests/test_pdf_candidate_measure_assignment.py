@@ -214,3 +214,22 @@ def test_candidate_assignment_double_barline():
     assert len(assignments) == 1
     assert assignments[0]["assignment_status"] == "assigned"
     assert assignments[0]["measure_region_index"] is not None
+
+def test_candidate_assignment_page_level_grid_failure():
+    doc = fitz.open("tests/fixtures/pdf/generated_standard_staff_quarter_note.pdf")
+    
+    from score2gp.pdf_staff_notation_diagnostics import extract_measure_grid_diagnostics_dict as original_extract
+    
+    def mock_extract(page, page_index):
+        orig_dict = original_extract(page, page_index)
+        # Inject page-level failure
+        for p in orig_dict.get("pages", []):
+            if p.get("page_index") == page_index:
+                p["status"] = "fail"
+        return orig_dict
+        
+    with patch("score2gp.pdf_staff_notation_diagnostics.extract_measure_grid_diagnostics_dict", side_effect=mock_extract):
+        diag = extract_candidate_measure_assignment_diagnostics_dict(doc[0], 1)
+        
+    assert diag["diagnostic_status"] == "fail"
+    assert "measure_grid_diagnostics_failed" in diag["failure_reasons"]
