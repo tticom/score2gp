@@ -387,3 +387,34 @@ class CandidateMeasureAssignmentDiagnostics(BaseModel):
     assignments: list[CandidateToMeasureAssignment]
     diagnostic_status: Literal["pass", "fail"]
     failure_reasons: list[str]
+
+class MeasureBucketCandidate(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    candidate_type: str
+    candidate_bbox: list[float]
+    center_x: float
+    page_index: int
+    system_index: int
+    staff_index: int
+    measure_region_index: int
+    assignment_status: Literal["assigned"]
+
+class MeasureBucket(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    page_index: int
+    system_index: int
+    staff_index: int
+    measure_region_index: int
+    bucket_status: Literal["ordered", "empty", "center_x_ambiguous", "upstream_failed"]
+    ordered_candidates: list[MeasureBucketCandidate]
+    candidate_count: int
+    failure_reasons: list[str]
+
+class MeasureBucketDiagnostics(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    buckets: list[MeasureBucket]
+    diagnostic_status: Literal["pass", "fail"]
+    failure_reasons: list[str]
