@@ -150,3 +150,43 @@ def test_bbox_center_uncertainty_is_represented():
         if c["candidate_type"] in ("quarter_note", "half_note"):
             assert c["center_y_source"] == "full_bbox_center"
             assert c["position_status"] == "ambiguous_notehead_center"
+
+@patch("score2gp.pdf_staff_position_diagnostics.extract_measure_bucket_diagnostics_dict")
+@patch("score2gp.pdf_staff_position_diagnostics.extract_notation_diagnostics_dict")
+def test_malformed_evidence_handled_safely(mock_geom, mock_bucket):
+    mock_geom.return_value = {"status": "pass", "staves": [{"staff": {"system_index": 1, "staff_index": 1, "line_y_coords": [10, 20, 30, 40, 50]}}]}
+    mock_bucket.return_value = {
+        "diagnostic_status": "pass",
+        "buckets": [
+            {
+                "system_index": 1, "staff_index": 1, "measure_region_index": 0,
+                "ordered_candidates": [
+                    {"candidate_type": "quarter_note", "candidate_bbox": [10], "center_x": 5}, # Short bbox
+                    {"candidate_type": "quarter_note", "candidate_bbox": [0, "bad", 10, 20], "center_x": 15}, # Non-numeric bbox
+                    "not_a_dict", # Non-dict candidate
+                    {"candidate_type": "quarter_note"}, # Missing bbox and center_x
+                    {"candidate_type": "quarter_note", "candidate_bbox": [10, 15, 20, 25], "center_x": 15} # Valid candidate
+                ]
+            }
+        ]
+    }
+
+    diag = extract_staff_position_diagnostics_dict(None, 1)
+    assert diag["diagnostic_status"] == "pass"
+    candidates = diag["positioned_candidates"]
+    assert len(candidates) == 5
+
+    assert candidates[0]["position_status"] == "malformed_candidate_data"
+    assert "malformed_candidate_bbox" in candidates[0]["failure_reasons"]
+
+    assert candidates[1]["position_status"] == "malformed_candidate_data"
+    assert "non_numeric_candidate_bbox" in candidates[1]["failure_reasons"]
+
+    assert candidates[2]["position_status"] == "malformed_candidate_data"
+    assert "non_dict_candidate" in candidates[2]["failure_reasons"]
+
+    assert candidates[3]["position_status"] == "malformed_candidate_data"
+    assert "malformed_candidate_bbox" in candidates[3]["failure_reasons"]
+
+    # Valid candidate is still returned normally
+    assert candidates[4]["position_status"] in ("positioned", "ambiguous_notehead_center", "ledger_positioned")

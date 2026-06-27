@@ -28,7 +28,8 @@ class StaffPositionCandidateDiagnostics(BaseModel):
         "ambiguous_notehead_center",
         "unsupported_candidate_type",
         "upstream_measure_bucket_failed",
-        "upstream_assignment_failed"
+        "upstream_assignment_failed",
+        "malformed_candidate_data"
     ]
     failure_reasons: list[str]
 
@@ -69,13 +70,65 @@ def extract_staff_position_diagnostics_dict(page: Any, page_index: int) -> dict[
             s_geom = staff_geom_map.get((sys_idx, stf_idx))
 
             for candidate in bucket.get("ordered_candidates", []):
-                ctype = candidate.get("candidate_type")
-                bbox = candidate.get("candidate_bbox", [0.0, 0.0, 0.0, 0.0])
-                cx = candidate.get("center_x", 0.0)
+                if not isinstance(candidate, dict):
+                    positioned_candidates.append(StaffPositionCandidateDiagnostics(
+                        page_index=page_index,
+                        system_index=sys_idx,
+                        staff_index=stf_idx,
+                        measure_region_index=mr_idx,
+                        candidate_type="unknown",
+                        candidate_bbox=[0.0, 0.0, 0.0, 0.0],
+                        center_x=0.0,
+                        center_y=0.0,
+                        center_y_source="unknown",
+                        position_status="malformed_candidate_data",
+                        failure_reasons=["non_dict_candidate"]
+                    ))
+                    continue
 
-                cy = (bbox[1] + bbox[3]) / 2.0
+                ctype = candidate.get("candidate_type")
+                if ctype is None:
+                    ctype = "unknown"
+
+                bbox = candidate.get("candidate_bbox")
+                cx = candidate.get("center_x")
+
+                is_malformed = False
+                failure_reasons = []
+
+                if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
+                    is_malformed = True
+                    failure_reasons.append("malformed_candidate_bbox")
+                elif not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in bbox):
+                    is_malformed = True
+                    failure_reasons.append("non_numeric_candidate_bbox")
+
+                if cx is None or (not isinstance(cx, (int, float)) or isinstance(cx, bool)):
+                    is_malformed = True
+                    failure_reasons.append("missing_or_non_numeric_center_x")
+                    cx = 0.0
+
+                safe_bbox = list(bbox) if not is_malformed else [0.0, 0.0, 0.0, 0.0]
+
+                if is_malformed:
+                    positioned_candidates.append(StaffPositionCandidateDiagnostics(
+                        page_index=page_index,
+                        system_index=sys_idx,
+                        staff_index=stf_idx,
+                        measure_region_index=mr_idx,
+                        candidate_type=ctype,
+                        candidate_bbox=safe_bbox,
+                        center_x=cx,
+                        center_y=0.0,
+                        center_y_source="unknown",
+                        position_status="malformed_candidate_data",
+                        failure_reasons=failure_reasons
+                    ))
+                    continue
+
+                cy = (safe_bbox[1] + safe_bbox[3]) / 2.0
                 center_y_source = "full_bbox_center"
-                
+
                 pos_status = "ambiguous_vertical_position"
                 failure_reasons = []
                 staff_step_index = None
@@ -127,7 +180,7 @@ def extract_staff_position_diagnostics_dict(page: Any, page_index: int) -> dict[
                     staff_index=stf_idx,
                     measure_region_index=mr_idx,
                     candidate_type=ctype,
-                    candidate_bbox=bbox,
+                    candidate_bbox=safe_bbox,
                     center_x=cx,
                     center_y=cy,
                     center_y_source=center_y_source,
