@@ -66,7 +66,7 @@ def extract_staff_position_diagnostics_dict(page: Any, page_index: int) -> dict[
             sys_idx = bucket.get("system_index")
             stf_idx = bucket.get("staff_index")
             mr_idx = bucket.get("measure_region_index")
-            
+
             s_geom = staff_geom_map.get((sys_idx, stf_idx))
 
             for candidate in bucket.get("ordered_candidates", []):
@@ -145,28 +145,39 @@ def extract_staff_position_diagnostics_dict(page: Any, page_index: int) -> dict[
                     failure_reasons.append("missing_staff_geometry")
                 else:
                     line_y_coords = s_geom.get("line_y_coords", [])
-                    if len(line_y_coords) >= 2:
+                    if len(line_y_coords) == 5:
                         staff_spacing = line_y_coords[1] - line_y_coords[0]
                         if staff_spacing > 0:
                             staff_step_index = (cy - line_y_coords[0]) / (staff_spacing / 2.0)
-                            
+
                             nearest_int = round(staff_step_index)
-                            if nearest_int % 2 == 0:
-                                nearest_staff_line_index = nearest_int // 2
-                            else:
-                                nearest_staff_space_index = (nearest_int - 1) // 2
-                            
-                            if -1 <= staff_step_index <= 9:
+                            OFF_GRID_TOLERANCE = 0.25
+
+                            if abs(staff_step_index - nearest_int) > OFF_GRID_TOLERANCE:
                                 if ctype in ("half_note", "quarter_note"):
                                     pos_status = "ambiguous_notehead_center"
                                     failure_reasons.append("unreliable_candidate_center")
+                                    failure_reasons.append("off_grid_candidate_center")
                                 else:
-                                    pos_status = "positioned"
+                                    pos_status = "ambiguous_vertical_position"
+                                    failure_reasons.append("off_grid_candidate_center")
                             else:
-                                pos_status = "ledger_positioned"
-                                if ctype in ("half_note", "quarter_note"):
-                                    # Still unreliable, but ledger position takes precedence in status, or we append to failure_reasons
-                                    failure_reasons.append("unreliable_candidate_center")
+                                if nearest_int % 2 == 0:
+                                    nearest_staff_line_index = nearest_int // 2
+                                else:
+                                    nearest_staff_space_index = (nearest_int - 1) // 2
+
+                                if -1 <= staff_step_index <= 9:
+                                    if ctype in ("half_note", "quarter_note"):
+                                        pos_status = "ambiguous_notehead_center"
+                                        failure_reasons.append("unreliable_candidate_center")
+                                    else:
+                                        pos_status = "positioned"
+                                else:
+                                    pos_status = "ledger_positioned"
+                                    if ctype in ("half_note", "quarter_note"):
+                                        # Still unreliable, but ledger position takes precedence in status, or we append to failure_reasons
+                                        failure_reasons.append("unreliable_candidate_center")
                         else:
                             pos_status = "ambiguous_vertical_position"
                             failure_reasons.append("malformed_staff_spacing")

@@ -44,7 +44,7 @@ def test_whole_note_public_fixture_maps_candidates():
     assert len(whole_notes) > 0
     
     for c in whole_notes:
-        assert c["position_status"] in ("positioned", "ledger_positioned")
+        assert c["position_status"] in ("positioned", "ledger_positioned", "ambiguous_vertical_position")
         assert c["staff_step_index"] is not None
         assert c["center_y_source"] == "full_bbox_center"
 
@@ -190,3 +190,63 @@ def test_malformed_evidence_handled_safely(mock_geom, mock_bucket):
 
     # Valid candidate is still returned normally
     assert candidates[4]["position_status"] in ("positioned", "ambiguous_notehead_center", "ledger_positioned")
+
+@patch("score2gp.pdf_staff_position_diagnostics.extract_measure_bucket_diagnostics_dict")
+@patch("score2gp.pdf_staff_position_diagnostics.extract_notation_diagnostics_dict")
+def test_partial_staff_geometry_rejected(mock_geom, mock_bucket):
+    # Only 4 lines instead of 5
+    mock_geom.return_value = {"status": "pass", "staves": [{"staff": {"system_index": 1, "staff_index": 1, "line_y_coords": [10, 20, 30, 40]}}]}
+    mock_bucket.return_value = {
+        "diagnostic_status": "pass",
+        "buckets": [
+            {
+                "system_index": 1, "staff_index": 1, "measure_region_index": 0,
+                "ordered_candidates": [{"candidate_type": "whole_note", "candidate_bbox": [0,0,10,10], "center_x": 5}]
+            }
+        ]
+    }
+    diag = extract_staff_position_diagnostics_dict(None, 1)
+    candidates = diag["positioned_candidates"]
+    assert len(candidates) == 1
+    assert candidates[0]["position_status"] == "ambiguous_vertical_position"
+    assert "missing_staff_lines" in candidates[0]["failure_reasons"]
+
+@patch("score2gp.pdf_staff_position_diagnostics.extract_measure_bucket_diagnostics_dict")
+@patch("score2gp.pdf_staff_position_diagnostics.extract_notation_diagnostics_dict")
+def test_off_grid_center_is_ambiguous(mock_geom, mock_bucket):
+    # staff spacing is 10, line[0] is 10. (spacing/2.0) = 5.
+    # cy = 12.5 -> staff_step_index = 2.5 / 5 = 0.5. (Off-grid)
+    mock_geom.return_value = {"status": "pass", "staves": [{"staff": {"system_index": 1, "staff_index": 1, "line_y_coords": [10, 20, 30, 40, 50]}}]}
+    mock_bucket.return_value = {
+        "diagnostic_status": "pass",
+        "buckets": [
+            {
+                "system_index": 1, "staff_index": 1, "measure_region_index": 0,
+                "ordered_candidates": [{"candidate_type": "whole_note", "candidate_bbox": [10, 10, 20, 15], "center_x": 15}] # cy = 12.5
+            }
+        ]
+    }
+    diag = extract_staff_position_diagnostics_dict(None, 1)
+    candidates = diag["positioned_candidates"]
+    assert len(candidates) == 1
+    assert candidates[0]["position_status"] == "ambiguous_vertical_position"
+    assert "off_grid_candidate_center" in candidates[0]["failure_reasons"]
+
+@patch("score2gp.pdf_staff_position_diagnostics.extract_measure_bucket_diagnostics_dict")
+@patch("score2gp.pdf_staff_position_diagnostics.extract_notation_diagnostics_dict")
+def test_on_grid_center_is_positioned(mock_geom, mock_bucket):
+    # cy = 10 -> staff_step_index = 0
+    mock_geom.return_value = {"status": "pass", "staves": [{"staff": {"system_index": 1, "staff_index": 1, "line_y_coords": [10, 20, 30, 40, 50]}}]}
+    mock_bucket.return_value = {
+        "diagnostic_status": "pass",
+        "buckets": [
+            {
+                "system_index": 1, "staff_index": 1, "measure_region_index": 0,
+                "ordered_candidates": [{"candidate_type": "whole_note", "candidate_bbox": [5, 5, 15, 15], "center_x": 10}] # cy = 10
+            }
+        ]
+    }
+    diag = extract_staff_position_diagnostics_dict(None, 1)
+    candidates = diag["positioned_candidates"]
+    assert len(candidates) == 1
+    assert candidates[0]["position_status"] == "positioned"
