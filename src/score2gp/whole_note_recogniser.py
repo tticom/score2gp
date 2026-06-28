@@ -877,7 +877,7 @@ def map_staff_position_to_read_only_outcomes(outcomes: list[dict], staff_geometr
 
     for cand in outcomes:
         st_type = cand.get("symbol_type")
-        if st_type not in ("whole_note_candidate", "half_note_candidate", "quarter_note_candidate", "eighth_note_candidate", "sixteenth_note_candidate", "thirty_second_note_candidate", "sixty_fourth_note_candidate", "ledger_line_candidate"):
+        if st_type not in ("whole_note_candidate", "half_note_candidate", "quarter_note_candidate", "eighth_note_candidate", "sixteenth_note_candidate", "thirty_second_note_candidate", "sixty_fourth_note_candidate", "ledger_line_candidate", "x_aligned_cluster_candidate"):
             continue
 
         if cand.get("association_status") in ("failed", "suppressed"):
@@ -904,7 +904,17 @@ def map_staff_position_to_read_only_outcomes(outcomes: list[dict], staff_geometr
             continue
 
         notehead_y = None
-        if st_type in ("eighth_note_candidate", "sixteenth_note_candidate", "thirty_second_note_candidate", "sixty_fourth_note_candidate"):
+        if st_type == "x_aligned_cluster_candidate":
+            primitives = cand.get("primitives", [])
+            ys = []
+            for p in primitives:
+                if "y0" in p and "y1" in p:
+                    ys.extend([p["y0"], p["y1"]])
+            if ys:
+                notehead_y = (min(ys) + max(ys)) / 2.0
+            else:
+                continue
+        elif st_type in ("eighth_note_candidate", "sixteenth_note_candidate", "thirty_second_note_candidate", "sixty_fourth_note_candidate"):
             q_id = cand.get("quarter_component_id")
             if not q_id:
                 continue
@@ -914,16 +924,17 @@ def map_staff_position_to_read_only_outcomes(outcomes: list[dict], staff_geometr
             bbox = q_cand.get("bbox")
         else:
             bbox = cand.get("bbox")
-        if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
-            continue
-
-        try:
-            x0, y0, x1, y1 = [float(v) for v in bbox]
-            if x0 > x1 or y0 > y1:
+            
+        if notehead_y is None:
+            if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
                 continue
-            notehead_y = (y0 + y1) / 2.0
-        except (TypeError, ValueError):
-            continue
+            try:
+                x0, y0, x1, y1 = [float(v) for v in bbox]
+                if x0 > x1 or y0 > y1:
+                    continue
+                notehead_y = (y0 + y1) / 2.0
+            except (TypeError, ValueError):
+                continue
 
         if notehead_y is None:
             continue
