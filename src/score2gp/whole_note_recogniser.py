@@ -907,10 +907,13 @@ def map_staff_position_to_read_only_outcomes(outcomes: list[dict], staff_geometr
         if st_type == "x_aligned_cluster_candidate":
             primitives = cand.get("primitives", [])
             ys = []
+            has_notehead_like = False
             for p in primitives:
+                if p.get("kind") in ("text_span", "curve", "rectangle"):
+                    has_notehead_like = True
                 if "y0" in p and "y1" in p:
                     ys.extend([p["y0"], p["y1"]])
-            if ys:
+            if ys and has_notehead_like:
                 notehead_y = (min(ys) + max(ys)) / 2.0
             else:
                 continue
