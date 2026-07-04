@@ -244,11 +244,6 @@ def _extract_note_candidates(page: Any, staves_diags: list['NotationStaffDiagnos
     except Exception:
         pass
 
-    return whole_candidates, half_candidates, quarter_candidates
-
-def _extract_whole_note_candidates(page: Any) -> list[WholeNoteCandidateDiagnostics]:
-    candidates = _extract_note_candidates(page)[0]
-    
     # Bounded Font-Glyph extraction for approved Mutopia BWV 772 fixture.
     try:
         raw = page.get_text("rawdict")
@@ -266,7 +261,7 @@ def _extract_whole_note_candidates(page: Any) -> list[WholeNoteCandidateDiagnost
                             if bbox and origin and len(bbox) == 4 and len(origin) >= 2:
                                 w = float(bbox[2] - bbox[0])
                                 h = float(bbox[3] - bbox[1])
-                                candidates.append(WholeNoteCandidateDiagnostics(
+                                whole_candidates.append(WholeNoteCandidateDiagnostics(
                                     bbox=list(bbox),
                                     width=w,
                                     height=h,
@@ -280,7 +275,11 @@ def _extract_whole_note_candidates(page: Any) -> list[WholeNoteCandidateDiagnost
     except Exception:
         pass # Fail safely as required
 
-    return candidates
+
+    return whole_candidates, half_candidates, quarter_candidates
+
+def _extract_whole_note_candidates(page: Any) -> list[WholeNoteCandidateDiagnostics]:
+    return _extract_note_candidates(page)[0]
 
 def _extract_half_note_candidates(page: Any) -> list[HalfNoteCandidateDiagnostics]:
     return _extract_note_candidates(page)[1]
