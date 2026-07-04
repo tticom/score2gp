@@ -28,10 +28,18 @@ def shape_candidate_evidence(
             "page_index": page_index,
             "bbox": get_bbox(cand)
         }
-        if isinstance(cand, dict) and "stem_bbox" in cand:
-            cand_dict["stem_bbox"] = cand["stem_bbox"]
-        elif hasattr(cand, "stem_bbox"):
-            cand_dict["stem_bbox"] = cand.stem_bbox
+        if isinstance(cand, dict):
+            if "stem_bbox" in cand:
+                cand_dict["stem_bbox"] = cand["stem_bbox"]
+            for f in ("font_name", "glyph_ordinal", "origin_x", "origin_y", "source_method"):
+                if f in cand:
+                    cand_dict[f] = cand[f]
+        else:
+            if hasattr(cand, "stem_bbox"):
+                cand_dict["stem_bbox"] = cand.stem_bbox
+            for f in ("font_name", "glyph_ordinal", "origin_x", "origin_y", "source_method"):
+                if hasattr(cand, f) and getattr(cand, f) is not None:
+                    cand_dict[f] = getattr(cand, f)
         shaped.append(cand_dict)
     return shaped
 
@@ -382,6 +390,11 @@ def map_whole_note_candidates_to_read_only_outcomes(candidate_locations: list[di
             "system_index": cand.get("system_index"),
             "staff_index": cand.get("staff_index"),
             "association_status": cand.get("association_status"),
+            "font_name": cand.get("font_name"),
+            "glyph_ordinal": cand.get("glyph_ordinal"),
+            "origin_x": cand.get("origin_x"),
+            "origin_y": cand.get("origin_y"),
+            "source_method": cand.get("source_method"),
             "duration": "whole",
             "source": "diagnostic_candidate_evidence"
         }
@@ -681,7 +694,10 @@ def _associate_staves(shaped_candidates: list[dict], staves: list[dict]) -> None
             cand["association_reason"] = "malformed_candidate_bbox"
             continue
         c_x0, c_y0, c_x1, c_y1 = bbox
-        c_y = (c_y0 + c_y1) / 2.0
+        if "origin_y" in cand and cand["origin_y"] is not None:
+            c_y = cand["origin_y"]
+        else:
+            c_y = (c_y0 + c_y1) / 2.0
 
         matched_staves = []
         for staff_dict in staves:
@@ -929,15 +945,18 @@ def map_staff_position_to_read_only_outcomes(outcomes: list[dict], staff_geometr
             bbox = cand.get("bbox")
             
         if notehead_y is None:
-            if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
-                continue
-            try:
-                x0, y0, x1, y1 = [float(v) for v in bbox]
-                if x0 > x1 or y0 > y1:
+            if "origin_y" in cand and cand["origin_y"] is not None:
+                notehead_y = float(cand["origin_y"])
+            else:
+                if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
                     continue
-                notehead_y = (y0 + y1) / 2.0
-            except (TypeError, ValueError):
-                continue
+                try:
+                    x0, y0, x1, y1 = [float(v) for v in bbox]
+                    if x0 > x1 or y0 > y1:
+                        continue
+                    notehead_y = (y0 + y1) / 2.0
+                except (TypeError, ValueError):
+                    continue
 
         if notehead_y is None:
             continue
