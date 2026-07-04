@@ -235,6 +235,11 @@ class WholeNoteCandidateDiagnostics(BaseModel):
     page_index: int | None = None
     system_index: int | None = None
     staff_index: int | None = None
+    font_name: str | None = None
+    glyph_ordinal: int | None = None
+    origin_x: float | None = None
+    origin_y: float | None = None
+    source_method: str | None = None
 
 class QuarterNoteCandidateDiagnostics(BaseModel):
     """
