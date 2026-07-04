@@ -247,7 +247,40 @@ def _extract_note_candidates(page: Any, staves_diags: list['NotationStaffDiagnos
     return whole_candidates, half_candidates, quarter_candidates
 
 def _extract_whole_note_candidates(page: Any) -> list[WholeNoteCandidateDiagnostics]:
-    return _extract_note_candidates(page)[0]
+    candidates = _extract_note_candidates(page)[0]
+    
+    # Bounded Font-Glyph extraction for approved Mutopia BWV 772 fixture.
+    try:
+        raw = page.get_text("rawdict")
+        for block in raw.get("blocks", []):
+            for line in block.get("lines", []):
+                for span in line.get("spans", []):
+                    font = span.get("font") or ""
+                    if "Emmentaler" not in font and "feta" not in font:
+                        continue
+                    for ch in span.get("chars", []):
+                        c = ch.get("c", "")
+                        if len(c) == 1 and ord(c) == 0x15:
+                            bbox = ch.get("bbox")
+                            origin = ch.get("origin")
+                            if bbox and origin and len(bbox) == 4 and len(origin) >= 2:
+                                w = float(bbox[2] - bbox[0])
+                                h = float(bbox[3] - bbox[1])
+                                candidates.append(WholeNoteCandidateDiagnostics(
+                                    bbox=list(bbox),
+                                    width=w,
+                                    height=h,
+                                    aspect_ratio=w/h if h > 0 else 0.0,
+                                    font_name=font,
+                                    glyph_ordinal=0x15,
+                                    origin_x=float(origin[0]),
+                                    origin_y=float(origin[1]),
+                                    source_method="font_glyph_extraction"
+                                ))
+    except Exception:
+        pass # Fail safely as required
+
+    return candidates
 
 def _extract_half_note_candidates(page: Any) -> list[HalfNoteCandidateDiagnostics]:
     return _extract_note_candidates(page)[1]
