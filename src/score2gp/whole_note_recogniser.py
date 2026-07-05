@@ -1054,12 +1054,15 @@ def map_clef_resolved_staff_pitch(outcomes: list[dict], explicit_clef: str | Non
 
         cand["clef_resolved_staff_pitch"] = pitch
 
-def build_clef_resolved_pitch_coverage_report(outcomes: list[dict]) -> dict:
+def build_clef_resolved_pitch_coverage_report(outcomes: list[dict], assume_treble_clef: bool = False) -> dict:
     report = {
         "total_note_candidates_in_scope": 0,
         "note_candidates_with_staff_position_index": 0,
         "note_candidates_on_staves_with_valid_clef": 0,
+        "note_candidates_on_staves_with_assumed_clef": 0,
         "note_candidates_with_clef_resolved_staff_pitch": 0,
+        "note_candidates_with_assumed_treble_clef_pitch": 0,
+        "assumed_clef_mode": assume_treble_clef,
         "in_staff_mapped_notes": 0,
         "out_of_staff_mapped_notes": 0,
         "skipped_missing_required_ledger_support": 0,
@@ -1125,9 +1128,13 @@ def build_clef_resolved_pitch_coverage_report(outcomes: list[dict]) -> dict:
 
         if clef_count == 1:
             report["note_candidates_on_staves_with_valid_clef"] += 1
+        elif assume_treble_clef and clef_count == 0:
+            report["note_candidates_on_staves_with_assumed_clef"] += 1
 
         if cand.get("clef_resolved_staff_pitch"):
             report["note_candidates_with_clef_resolved_staff_pitch"] += 1
+            if assume_treble_clef and clef_count == 0:
+                report["note_candidates_with_assumed_treble_clef_pitch"] += 1
             if type(pos) is int and 0 <= pos <= 8:
                 report["in_staff_mapped_notes"] += 1
             else:
@@ -1436,7 +1443,7 @@ def run_recognition_on_file(
         map_assumed_treble_pitch_to_read_only_outcomes(outcomes)
 
     map_clef_resolved_staff_pitch(outcomes, explicit_clef="treble" if assume_treble_clef else None)
-    coverage_report = build_clef_resolved_pitch_coverage_report(outcomes)
+    coverage_report = build_clef_resolved_pitch_coverage_report(outcomes, assume_treble_clef=assume_treble_clef)
 
     return {
         "source": pdf_path.name,

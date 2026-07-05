@@ -427,8 +427,9 @@ def notation_whole_note_export_command(
 
     outcomes = result.get("read_only_recognition_outcomes", [])
     whole_cands = [o for o in outcomes if o.get("symbol_type") == "whole_note_candidate"]
-    other_cands = [o for o in outcomes if o.get("symbol_type") != "whole_note_candidate"]
-    outcomes = other_cands + whole_cands[:1]
+    if len(whole_cands) > 1:
+        typer.echo(f"Error: Found {len(whole_cands)} whole-note candidates but single-note export requires exactly 1", err=True)
+        raise typer.Exit(1)
 
     try:
         score_ir = build_ir_from_notation_outcomes(outcomes)
