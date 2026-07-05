@@ -146,3 +146,83 @@ def test_notation_half_note_export_rejects_whole_note(tmp_path):
         assert result.exit_code == 1
         assert "Error: Bridge produced non-half note" in result.stderr or "Error: Bridge produced non-half note" in result.stdout
         assert not out_gp.exists()
+
+def test_notation_whole_note_export_fails_on_real_fixture_due_to_multiple_notes(tmp_path):
+    pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
+    out_gp = tmp_path / "out_real.gp"
+
+    result = runner.invoke(app, [
+        "notation-whole-note-export",
+        "--pdf", str(pdf_path),
+        "--out", str(out_gp),
+        "--assume-treble-clef"
+    ])
+
+    assert result.exit_code == 1
+    assert "Error: Found 2 whole-note candidates but single-note export requires exactly 1" in result.stderr or \
+           "Error: Found 2 whole-note candidates but single-note export requires exactly 1" in result.stdout
+    assert not out_gp.exists()
+
+def test_notation_whole_note_export_fails_on_real_fixture_without_flag(tmp_path):
+    pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
+    out_gp = tmp_path / "out_real_fail.gp"
+
+    result = runner.invoke(app, [
+        "notation-whole-note-export",
+        "--pdf", str(pdf_path),
+        "--out", str(out_gp)
+    ])
+
+    assert result.exit_code == 1
+    assert "Error: Found 2 whole-note candidates but single-note export requires exactly 1" in result.stderr or \
+           "Error: Found 2 whole-note candidates but single-note export requires exactly 1" in result.stdout
+    assert not out_gp.exists()
+
+def test_notation_whole_note_export_fails_without_pitch_resolution(tmp_path):
+    pdf_path = tmp_path / "dummy.pdf"
+    pdf_path.touch()
+    out_gp = tmp_path / "out.gp"
+
+    # Outcome has no clef_resolved_staff_pitch, simulating lack of clef/flag
+    mock_outcomes = [{"symbol_type": "whole_note_candidate", "association_status": "success", "duration": "whole"}]
+    mock_recognition_result = {"read_only_recognition_outcomes": mock_outcomes}
+
+    with patch("score2gp.whole_note_recogniser.run_recognition_on_file") as mock_recognise:
+        mock_recognise.return_value = mock_recognition_result
+
+        result = runner.invoke(app, [
+            "notation-whole-note-export",
+            "--pdf", str(pdf_path),
+            "--out", str(out_gp)
+        ])
+
+        assert result.exit_code == 1
+        assert "NotationBridgeInputError" in result.stderr or "NotationBridgeInputError" in result.stdout
+        assert mock_recognise.call_count == 1
+        assert not out_gp.exists()
+
+def test_coverage_report_under_assume_treble_clef():
+    from score2gp.whole_note_recogniser import run_recognition_on_file
+    pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
+    res = run_recognition_on_file(pdf_path, assume_treble_clef=True)
+    report = res["clef_resolved_pitch_coverage"]
+    
+    assert report["assumed_clef_mode"] is True
+    assert report["note_candidates_on_staves_with_assumed_clef"] == 2
+    assert report["note_candidates_with_assumed_treble_clef_pitch"] == 2
+    assert report["note_candidates_on_staves_with_valid_clef"] == 0
+    assert report["note_candidates_with_clef_resolved_staff_pitch"] == 2
+
+def test_coverage_report_without_assume_treble_clef():
+    from score2gp.whole_note_recogniser import run_recognition_on_file
+    pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
+    res = run_recognition_on_file(pdf_path, assume_treble_clef=False)
+    report = res["clef_resolved_pitch_coverage"]
+    
+    assert report["assumed_clef_mode"] is False
+    assert report["note_candidates_on_staves_with_assumed_clef"] == 0
+    assert report["note_candidates_with_assumed_treble_clef_pitch"] == 0
+    assert report["note_candidates_on_staves_with_valid_clef"] == 0
+    assert report["note_candidates_with_clef_resolved_staff_pitch"] == 0
+
+

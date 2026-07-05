@@ -283,11 +283,11 @@ def test_installed_cli_note_candidate_recognition_assume_treble_clef_enabled(tmp
 
     cand1 = whole_notes[0]
     assert cand1["staff_position_index"] == 2
-    assert "assumed_treble_pitch" not in cand1
+    assert cand1["assumed_treble_pitch"] == "D5"
 
     cand2 = whole_notes[1]
     assert cand2["staff_position_index"] == 4
-    assert "assumed_treble_pitch" not in cand2
+    assert cand2["assumed_treble_pitch"] == "B4"
 
 def test_installed_cli_note_candidate_recognition_with_ledger_lines(tmp_path):
     # Test that the generic CLI path exposes ledger line candidates properly
