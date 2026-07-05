@@ -664,11 +664,11 @@ def test_assume_treble_clef_enabled_public_fixture():
 
     cand1 = whole_notes[0]
     assert cand1["staff_position_index"] == 2
-    assert "assumed_treble_pitch" not in cand1
+    assert cand1["assumed_treble_pitch"] == "D5"
 
     cand2 = whole_notes[1]
     assert cand2["staff_position_index"] == 4
-    assert "assumed_treble_pitch" not in cand2
+    assert cand2["assumed_treble_pitch"] == "B4"
 
 def test_assume_treble_clef_out_of_bounds():
     from score2gp.whole_note_recogniser import map_assumed_treble_pitch_to_read_only_outcomes

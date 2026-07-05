@@ -413,18 +413,23 @@ def notation_whole_note_export_command(
     pdf: Path = typer.Option(..., "--pdf", help="Path to the PDF fixture containing exactly one whole note"),
     out: Path = typer.Option(..., "--out", help="Output GP artifact path"),
     ir_out: Optional[Path] = typer.Option(None, "--ir-out", help="Optional debug path to write the intermediate ScoreIR JSON"),
+    assume_treble_clef: bool = typer.Option(False, "--assume-treble-clef", help="Assume a treble clef if no clef is detected"),
 ) -> None:
     """Explicit, opt-in CLI route for single standard-notation whole-note GP export (v0)."""
     from .whole_note_recogniser import run_recognition_on_file
     from .notation_bridge import NotationBridgeInputError, build_ir_from_notation_outcomes
     from .gp_package import write_gp
 
-    result = run_recognition_on_file(pdf)
+    result = run_recognition_on_file(pdf, assume_treble_clef=assume_treble_clef)
     if not result:
         typer.echo("Error: Recognition failed or returned no results.", err=True)
         raise typer.Exit(1)
 
     outcomes = result.get("read_only_recognition_outcomes", [])
+    whole_cands = [o for o in outcomes if o.get("symbol_type") == "whole_note_candidate"]
+    if len(whole_cands) > 1:
+        typer.echo(f"Error: Found {len(whole_cands)} whole-note candidates but single-note export requires exactly 1", err=True)
+        raise typer.Exit(1)
 
     try:
         score_ir = build_ir_from_notation_outcomes(outcomes)
