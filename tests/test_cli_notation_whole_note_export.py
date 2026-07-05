@@ -146,3 +146,37 @@ def test_notation_half_note_export_rejects_whole_note(tmp_path):
         assert result.exit_code == 1
         assert "Error: Bridge produced non-half note" in result.stderr or "Error: Bridge produced non-half note" in result.stdout
         assert not out_gp.exists()
+
+def test_notation_whole_note_export_with_assume_treble_clef_real_fixture(tmp_path):
+    from score2gp.gp_package import inspect_gp
+    pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
+    out_gp = tmp_path / "out_real.gp"
+
+    result = runner.invoke(app, [
+        "notation-whole-note-export",
+        "--pdf", str(pdf_path),
+        "--out", str(out_gp),
+        "--assume-treble-clef"
+    ])
+
+    assert result.exit_code == 0
+    assert out_gp.exists()
+
+    summary = inspect_gp(out_gp)
+    assert not summary["package"]["errors"]
+    assert summary["note_count"] > 0
+
+def test_notation_whole_note_export_fails_on_real_fixture_without_flag(tmp_path):
+    pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
+    out_gp = tmp_path / "out_real_fail.gp"
+
+    result = runner.invoke(app, [
+        "notation-whole-note-export",
+        "--pdf", str(pdf_path),
+        "--out", str(out_gp)
+    ])
+
+    assert result.exit_code == 1
+    assert "NotationBridgeInputError" in result.stdout or "NotationBridgeInputError" in result.stderr
+    assert not out_gp.exists()
+

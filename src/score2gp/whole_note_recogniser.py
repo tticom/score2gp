@@ -974,7 +974,7 @@ def map_staff_position_to_read_only_outcomes(outcomes: list[dict], staff_geometr
 def map_assumed_treble_pitch_to_read_only_outcomes(outcomes: list[dict]) -> None:
     pitches = ["F5", "E5", "D5", "C5", "B4", "A4", "G4", "F4", "E4"]
     for cand in outcomes:
-        if cand.get("symbol_type") in ("ledger_line_candidate", "whole_note_candidate"):
+        if cand.get("symbol_type") in ("ledger_line_candidate",):
             continue
         pos_idx = cand.get("staff_position_index")
         if type(pos_idx) is int and 0 <= pos_idx <= 8:
@@ -1435,7 +1435,7 @@ def run_recognition_on_file(
     if assume_treble_clef:
         map_assumed_treble_pitch_to_read_only_outcomes(outcomes)
 
-    map_clef_resolved_staff_pitch(outcomes)
+    map_clef_resolved_staff_pitch(outcomes, explicit_clef="treble" if assume_treble_clef else None)
     coverage_report = build_clef_resolved_pitch_coverage_report(outcomes)
 
     return {
