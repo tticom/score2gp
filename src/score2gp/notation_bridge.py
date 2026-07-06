@@ -90,6 +90,25 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
             return float(bbox[0])
         return 0.0
 
+    def has_position_evidence(out: dict[str, Any]) -> bool:
+        if out.get("page_index") is None:
+            return False
+        if out.get("system_index") is None:
+            return False
+        if out.get("staff_index") is None and out.get("system_staff_index") is None:
+            return False
+        q_id = out.get("quarter_component_id")
+        if q_id:
+            q_cand = candidate_lookup.get(q_id)
+            if q_cand:
+                q_bbox = q_cand.get("bbox")
+                if q_bbox and len(q_bbox) >= 4:
+                    return True
+        bbox = out.get("bbox")
+        if bbox and len(bbox) >= 4:
+            return True
+        return False
+
     def sort_key(out: dict[str, Any]) -> tuple:
         page = out.get("page_index", 0)
         sys = out.get("system_index", 0)
@@ -103,12 +122,12 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
     grouped_outcomes = []
     for outcome in valid_outcomes:
         is_rest = outcome.get("symbol_type") == "quarter_rest_candidate"
-        page = outcome.get("page_index", 0)
-        sys = outcome.get("system_index", 0)
-        staff = outcome.get("staff_index", outcome.get("system_staff_index", 0))
+        page = outcome.get("page_index")
+        sys = outcome.get("system_index")
+        staff = outcome.get("staff_index", outcome.get("system_staff_index"))
         x_pos = get_actual_x_pos(outcome)
         
-        if is_rest:
+        if is_rest or not has_position_evidence(outcome):
             grouped_outcomes.append([outcome])
         else:
             if grouped_outcomes:
@@ -116,10 +135,10 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
                 first_in_last = last_group[0]
                 last_is_rest = first_in_last.get("symbol_type") == "quarter_rest_candidate"
                 
-                if not last_is_rest:
-                    last_page = first_in_last.get("page_index", 0)
-                    last_sys = first_in_last.get("system_index", 0)
-                    last_staff = first_in_last.get("staff_index", first_in_last.get("system_staff_index", 0))
+                if not last_is_rest and has_position_evidence(first_in_last):
+                    last_page = first_in_last.get("page_index")
+                    last_sys = first_in_last.get("system_index")
+                    last_staff = first_in_last.get("staff_index", first_in_last.get("system_staff_index"))
                     last_x_pos = get_actual_x_pos(first_in_last)
                     
                     if (page == last_page and 

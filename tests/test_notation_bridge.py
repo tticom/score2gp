@@ -363,4 +363,101 @@ def test_chord_grouping_negative_contexts():
     score_seq = build_ir_from_notation_outcomes(outcomes_seq)
     assert len(score_seq.bars[0].events) == 2
 
+def test_chord_grouping_coordinate_and_context_fallback():
+    # Candidates lacking bbox coordinates are not grouped
+    outcomes_no_bbox = [
+        {
+            "symbol_type": "eighth_note_candidate",
+            "association_status": "success",
+            "duration": "eighth",
+            "clef_resolved_staff_pitch": "B4",
+            "page_index": 0,
+            "system_index": 0,
+            "staff_index": 0,
+        },
+        {
+            "symbol_type": "eighth_note_candidate",
+            "association_status": "success",
+            "duration": "eighth",
+            "clef_resolved_staff_pitch": "G4",
+            "page_index": 0,
+            "system_index": 0,
+            "staff_index": 0,
+        }
+    ]
+    score_no_bbox = build_ir_from_notation_outcomes(outcomes_no_bbox)
+    assert len(score_no_bbox.bars[0].events) == 2
+
+    # Candidates lacking page_index are not grouped
+    outcomes_no_page = [
+        {
+            "symbol_type": "eighth_note_candidate",
+            "association_status": "success",
+            "duration": "eighth",
+            "clef_resolved_staff_pitch": "B4",
+            "system_index": 0,
+            "staff_index": 0,
+            "bbox": [10.0, 0, 10.0, 0],
+        },
+        {
+            "symbol_type": "eighth_note_candidate",
+            "association_status": "success",
+            "duration": "eighth",
+            "clef_resolved_staff_pitch": "G4",
+            "system_index": 0,
+            "staff_index": 0,
+            "bbox": [10.0, 0, 10.0, 0],
+        }
+    ]
+    score_no_page = build_ir_from_notation_outcomes(outcomes_no_page)
+    assert len(score_no_page.bars[0].events) == 2
+
+    # Candidates lacking system_index are not grouped
+    outcomes_no_sys = [
+        {
+            "symbol_type": "eighth_note_candidate",
+            "association_status": "success",
+            "duration": "eighth",
+            "clef_resolved_staff_pitch": "B4",
+            "page_index": 0,
+            "staff_index": 0,
+            "bbox": [10.0, 0, 10.0, 0],
+        },
+        {
+            "symbol_type": "eighth_note_candidate",
+            "association_status": "success",
+            "duration": "eighth",
+            "clef_resolved_staff_pitch": "G4",
+            "page_index": 0,
+            "staff_index": 0,
+            "bbox": [10.0, 0, 10.0, 0],
+        }
+    ]
+    score_no_sys = build_ir_from_notation_outcomes(outcomes_no_sys)
+    assert len(score_no_sys.bars[0].events) == 2
+
+    # Candidates lacking staff_index (and system_staff_index) are not grouped
+    outcomes_no_staff = [
+        {
+            "symbol_type": "eighth_note_candidate",
+            "association_status": "success",
+            "duration": "eighth",
+            "clef_resolved_staff_pitch": "B4",
+            "page_index": 0,
+            "system_index": 0,
+            "bbox": [10.0, 0, 10.0, 0],
+        },
+        {
+            "symbol_type": "eighth_note_candidate",
+            "association_status": "success",
+            "duration": "eighth",
+            "clef_resolved_staff_pitch": "G4",
+            "page_index": 0,
+            "system_index": 0,
+            "bbox": [10.0, 0, 10.0, 0],
+        }
+    ]
+    score_no_staff = build_ir_from_notation_outcomes(outcomes_no_staff)
+    assert len(score_no_staff.bars[0].events) == 2
+
 
