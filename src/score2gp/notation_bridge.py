@@ -75,59 +75,108 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
     if len(valid_outcomes) == 0:
         raise NotationBridgeInputError("no_valid_notation_outcomes_found")
 
+    candidate_lookup = {o.get("candidate_id"): o for o in outcomes if o.get("candidate_id")}
+
+    def get_actual_x_pos(out: dict[str, Any]) -> float:
+        q_id = out.get("quarter_component_id")
+        if q_id:
+            q_cand = candidate_lookup.get(q_id)
+            if q_cand:
+                q_bbox = q_cand.get("bbox")
+                if q_bbox and len(q_bbox) >= 4:
+                    return float(q_bbox[0])
+        bbox = out.get("bbox")
+        if bbox and len(bbox) >= 4:
+            return float(bbox[0])
+        return 0.0
+
     def sort_key(out: dict[str, Any]) -> tuple:
         page = out.get("page_index", 0)
         sys = out.get("system_index", 0)
         staff = out.get("staff_index", out.get("system_staff_index", 0))
-        bbox = out.get("bbox", [0, 0, 0, 0])
-        x_pos = bbox[0] if bbox else 0
+        x_pos = get_actual_x_pos(out)
         candidate_id = out.get("candidate_id", "")
         return (page, sys, staff, x_pos, candidate_id)
 
     valid_outcomes.sort(key=sort_key)
 
+    grouped_outcomes = []
+    for outcome in valid_outcomes:
+        is_rest = outcome.get("symbol_type") == "quarter_rest_candidate"
+        page = outcome.get("page_index", 0)
+        sys = outcome.get("system_index", 0)
+        staff = outcome.get("staff_index", outcome.get("system_staff_index", 0))
+        x_pos = get_actual_x_pos(outcome)
+        
+        if is_rest:
+            grouped_outcomes.append([outcome])
+        else:
+            if grouped_outcomes:
+                last_group = grouped_outcomes[-1]
+                first_in_last = last_group[0]
+                last_is_rest = first_in_last.get("symbol_type") == "quarter_rest_candidate"
+                
+                if not last_is_rest:
+                    last_page = first_in_last.get("page_index", 0)
+                    last_sys = first_in_last.get("system_index", 0)
+                    last_staff = first_in_last.get("staff_index", first_in_last.get("system_staff_index", 0))
+                    last_x_pos = get_actual_x_pos(first_in_last)
+                    
+                    if (page == last_page and 
+                        sys == last_sys and 
+                        staff == last_staff and 
+                        abs(x_pos - last_x_pos) <= 1.0):
+                        last_group.append(outcome)
+                        continue
+            grouped_outcomes.append([outcome])
+
     events = []
     current_onset_ticks = 0
     max_ticks_in_4_4_bar = 4 * DEFAULT_TICKS_PER_QUARTER
 
-    for i, outcome in enumerate(valid_outcomes):
-        is_rest = outcome.get("symbol_type") == "quarter_rest_candidate"
+    for i, group in enumerate(grouped_outcomes):
+        first_outcome = group[0]
+        is_rest = first_outcome.get("symbol_type") == "quarter_rest_candidate"
         
         if is_rest:
             note_list = []
         else:
-            pitch_str = outcome.get("clef_resolved_staff_pitch")
-            written_midi = _parse_pitch_to_midi(pitch_str)
-            sounding_midi = written_midi - 12
-            
-            # Route to lowest fret on standard guitar
-            best_string = None
-            best_fret = None
-            
-            for s in tuning.strings:
-                fret = sounding_midi - s.pitch
-                if fret >= 0:
-                    if best_fret is None or fret < best_fret:
-                        best_fret = fret
-                        best_string = s.number
-                    elif fret == best_fret:
-                        # Break ties by highest string (lowest string number)
-                        if best_string is None or s.number < best_string:
+            note_list = []
+            for outcome in group:
+                pitch_str = outcome.get("clef_resolved_staff_pitch")
+                written_midi = _parse_pitch_to_midi(pitch_str)
+                sounding_midi = written_midi - 12
+                
+                # Route to lowest fret on standard guitar
+                best_string = None
+                best_fret = None
+                
+                for s in tuning.strings:
+                    fret = sounding_midi - s.pitch
+                    if fret >= 0:
+                        if best_fret is None or fret < best_fret:
                             best_fret = fret
                             best_string = s.number
-                            
-            if best_string is None or best_fret is None or best_fret > 36:
-                # Skip if unplayable
+                        elif fret == best_fret:
+                            # Break ties by highest string (lowest string number)
+                            if best_string is None or s.number < best_string:
+                                best_fret = fret
+                                best_string = s.number
+                                
+                if best_string is None or best_fret is None or best_fret > 36:
+                    # Skip if unplayable
+                    continue
+                    
+                note_list.append(Note(
+                    string=best_string,
+                    fret=best_fret,
+                    pitch=sounding_midi,
+                    confidence=1.0,
+                ))
+            if not note_list:
                 continue
-                
-            note_list = [Note(
-                string=best_string,
-                fret=best_fret,
-                pitch=sounding_midi,
-                confidence=1.0,
-            )]
         
-        duration = outcome.get("duration")
+        duration = first_outcome.get("duration")
         if duration == "whole":
             dur_ticks = 4 * DEFAULT_TICKS_PER_QUARTER
             note_val = "whole"

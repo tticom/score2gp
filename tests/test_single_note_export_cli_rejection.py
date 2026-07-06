@@ -15,13 +15,15 @@ def test_single_note_export_rejects_multi_note_pdf(tmp_path):
                 "symbol_type": "quarter_note_candidate",
                 "association_status": "success",
                 "duration": "quarter",
-                "clef_resolved_staff_pitch": "B4"
+                "clef_resolved_staff_pitch": "B4",
+                "bbox": [10.0, 0, 10.0, 0]
             },
             {
                 "symbol_type": "quarter_note_candidate",
                 "association_status": "success",
                 "duration": "quarter",
-                "clef_resolved_staff_pitch": "G4"
+                "clef_resolved_staff_pitch": "G4",
+                "bbox": [20.0, 0, 20.0, 0]
             }
         ]
     }
