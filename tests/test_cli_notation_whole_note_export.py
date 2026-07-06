@@ -225,4 +225,35 @@ def test_coverage_report_without_assume_treble_clef():
     assert report["note_candidates_on_staves_with_valid_clef"] == 0
     assert report["note_candidates_with_clef_resolved_staff_pitch"] == 0
 
+def test_notation_whole_note_export_success_real_fixture(tmp_path):
+    from score2gp.whole_note_recogniser import run_recognition_on_file
+    from score2gp.gp_package import inspect_gp, validate_gp
 
+    pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_single_whole_note.pdf")
+    out_gp = tmp_path / "out_success.gp"
+
+    # 1. Candidate-count validation through real recognition
+    res = run_recognition_on_file(pdf_path, assume_treble_clef=True)
+    outcomes = res["read_only_recognition_outcomes"]
+    assert len(outcomes) == 1
+    assert outcomes[0]["symbol_type"] == "whole_note_candidate"
+    assert outcomes[0]["association_status"] == "success"
+
+    # 2. CLI execution without patching
+    result = runner.invoke(app, [
+        "notation-whole-note-export",
+        "--pdf", str(pdf_path),
+        "--out", str(out_gp),
+        "--assume-treble-clef"
+    ])
+
+    assert result.exit_code == 0, f"CLI output: {result.stdout or result.stderr}"
+    assert out_gp.exists()
+
+    # 3. GP package validation and inspection
+    val_result = validate_gp(out_gp)
+    assert not val_result["errors"]
+
+    summary = inspect_gp(out_gp)
+    assert len(summary["tracks"]) == 1
+    assert summary["note_count"] == 1
