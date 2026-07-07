@@ -56,7 +56,8 @@ https://github.com/tticom/score2gp-agentops/blob/main/projects/score2gp/README.m
 ## Local Private-Safety Rules
 
 - Do not add private PDFs, private GP/MusicXML files, rendered private pages, private exports, or derived private benchmark artifacts to Git.
-- Keep private inputs and generated private outputs under gitignored locations such as `fixtures/private/` and `work/`.
+- Private fixtures reside in the sibling repository `score2gp-private-fixtures`.
+- Keep local mounts, symlinks, or copies of private inputs and generated private outputs under gitignored locations such as `fixtures/private/` and `work/`.
 - The only tracked file allowed under `fixtures/private` or `work` is `fixtures/private/.gitkeep`.
 - Do not move fixtures unless the human maintainer explicitly requests it.
 - Do not claim conversion progress without the evidence required by `score2gp-agentops`.
@@ -69,6 +70,7 @@ Run and report these commands before concluding product work:
 python -m pytest
 python -m score2gp.cli export-schema --out schemas
 python -m score2gp.cli validate-ir fixtures/public/tiny_score.ir.json
+python scripts/artifact_audit.py
 git diff --check
 git diff -- schemas
 git ls-files fixtures/private work
@@ -76,13 +78,19 @@ git status --short
 git status --branch
 ```
 
-The private-safety invariant is:
+The private-safety invariant check:
+
+```bash
+python scripts/artifact_audit.py
+```
+
+It must exit with code 0 (PASS). Also:
 
 ```bash
 git ls-files fixtures/private work
 ```
 
-It must output exactly:
+must output exactly:
 
 ```text
 fixtures/private/.gitkeep

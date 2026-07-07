@@ -13,3 +13,6 @@ Use:
 - `templates/` for required record formats
 
 This product repository should not carry long-form agent-control state.
+
+Private benchmark inputs/fixtures live in:
+https://github.com/tticom/score2gp-private-fixtures
