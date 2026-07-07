@@ -149,8 +149,27 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
                         continue
             grouped_outcomes.append([outcome])
 
+    unique_staves = set()
+    for group in grouped_outcomes:
+        first_outcome = group[0]
+        staff = first_outcome.get("staff_index", first_outcome.get("system_staff_index"))
+        if staff is not None:
+            unique_staves.add(staff)
+
+    sorted_unique_staves = sorted(list(unique_staves))
+    if not sorted_unique_staves:
+        sorted_unique_staves = [0]
+
+    staff_to_track_idx = {staff: idx for idx, staff in enumerate(sorted_unique_staves)}
+
+    def get_track_id(staff_val: int | None) -> str:
+        if staff_val is None:
+            return "trk_0"
+        idx = staff_to_track_idx.get(staff_val, 0)
+        return f"trk_{idx}"
+
     events = []
-    current_onset_ticks = 0
+    current_onset_ticks = {}
     max_ticks_in_4_4_bar = 4 * DEFAULT_TICKS_PER_QUARTER
 
     for i, group in enumerate(grouped_outcomes):
@@ -220,15 +239,20 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
         else:
             raise NotationBridgeInputError(f"unsupported_duration_value_{duration}")
 
-        if current_onset_ticks + dur_ticks > max_ticks_in_4_4_bar:
+        staff = first_outcome.get("staff_index", first_outcome.get("system_staff_index"))
+        track_id = get_track_id(staff)
+
+        onset_ticks = current_onset_ticks.get(track_id, 0)
+
+        if onset_ticks + dur_ticks > max_ticks_in_4_4_bar:
             raise NotationBridgeInputError("cumulative_duration_exceeds_one_4_4_bar")
 
         events.append(Event(
             id=f"evt_{i}",
-            track_id="trk_0",
+            track_id=track_id,
             timing=Timing(
                 bar_index=1,
-                onset_ticks=current_onset_ticks,
+                onset_ticks=onset_ticks,
                 duration_ticks=dur_ticks,
                 ticks_per_quarter=DEFAULT_TICKS_PER_QUARTER,
                 notated_duration=NotatedDuration(value=note_val)
@@ -237,20 +261,22 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
             is_rest=is_rest
         ))
         
-        current_onset_ticks += dur_ticks
+        current_onset_ticks[track_id] = onset_ticks + dur_ticks
 
     if not events:
         raise NotationBridgeInputError("no_playable_notation_outcomes_found")
 
+    tracks = []
+    for idx, s in enumerate(sorted_unique_staves):
+        tracks.append(Track(
+            id=f"trk_{idx}",
+            name="Guitar" if idx == 0 else f"Guitar {idx + 1}",
+            tuning=tuning,
+        ))
+
     return ScoreIR(
         tempo=Tempo(bpm=120),
-        tracks=[
-            Track(
-                id="trk_0",
-                name="Guitar",
-                tuning=tuning,
-            )
-        ],
+        tracks=tracks,
         bars=[
             Bar(
                 index=1,
