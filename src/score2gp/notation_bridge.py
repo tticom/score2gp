@@ -149,8 +149,17 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
                         continue
             grouped_outcomes.append([outcome])
 
-    unique_staves = set()
+    positioned_groups = []
+    positionless_groups = []
     for group in grouped_outcomes:
+        first_outcome = group[0]
+        if has_position_evidence(first_outcome):
+            positioned_groups.append(group)
+        else:
+            positionless_groups.append(group)
+
+    unique_staves = set()
+    for group in positioned_groups:
         first_outcome = group[0]
         staff = first_outcome.get("staff_index", first_outcome.get("system_staff_index"))
         if staff is not None:
@@ -162,20 +171,104 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
 
     staff_to_track_idx = {staff: idx for idx, staff in enumerate(sorted_unique_staves)}
 
-    def get_track_id(staff_val: int | None) -> str:
-        if staff_val is None:
+    def get_track_id(staff_val: int | None, is_positioned: bool) -> str:
+        if not is_positioned or staff_val is None:
             return "trk_0"
         idx = staff_to_track_idx.get(staff_val, 0)
         return f"trk_{idx}"
 
+    group_onsets = {}
+    track_time = {f"trk_{idx}": 0 for idx in range(len(sorted_unique_staves))}
+
+    system_to_groups = {}
+    for group in positioned_groups:
+        first_outcome = group[0]
+        page = first_outcome.get("page_index", 0)
+        sys = first_outcome.get("system_index", 0)
+        system_to_groups.setdefault((page, sys), []).append(group)
+
+    sorted_systems = sorted(system_to_groups.keys())
+
+    for sys_key in sorted_systems:
+        grps = system_to_groups[sys_key]
+        grps.sort(key=lambda g: get_actual_x_pos(g[0]))
+
+        cols = []
+        for g in grps:
+            x_pos = get_actual_x_pos(g[0])
+            if cols and abs(x_pos - get_actual_x_pos(cols[-1][-1][0])) <= 1.0:
+                cols[-1].append(g)
+            else:
+                cols.append([g])
+
+        for col in cols:
+            col_track_ids = []
+            for g in col:
+                first_outcome = g[0]
+                staff = first_outcome.get("staff_index", first_outcome.get("system_staff_index"))
+                track_id = get_track_id(staff, is_positioned=True)
+                col_track_ids.append(track_id)
+
+            col_onset = max(track_time.get(tid, 0) for tid in col_track_ids)
+
+            for g in col:
+                first_outcome = g[0]
+                staff = first_outcome.get("staff_index", first_outcome.get("system_staff_index"))
+                track_id = get_track_id(staff, is_positioned=True)
+
+                duration = first_outcome.get("duration")
+                if duration == "whole":
+                    dur_ticks = 4 * DEFAULT_TICKS_PER_QUARTER
+                elif duration == "half":
+                    dur_ticks = 2 * DEFAULT_TICKS_PER_QUARTER
+                elif duration == "quarter":
+                    dur_ticks = DEFAULT_TICKS_PER_QUARTER
+                elif duration == "eighth":
+                    dur_ticks = DEFAULT_TICKS_PER_QUARTER // 2
+                elif duration == "sixteenth":
+                    dur_ticks = DEFAULT_TICKS_PER_QUARTER // 4
+                elif duration == "thirty_second":
+                    dur_ticks = DEFAULT_TICKS_PER_QUARTER // 8
+                elif duration == "sixty_fourth":
+                    dur_ticks = DEFAULT_TICKS_PER_QUARTER // 16
+                else:
+                    raise NotationBridgeInputError(f"unsupported_duration_value_{duration}")
+
+                group_onsets[id(g)] = (col_onset, dur_ticks, track_id)
+                track_time[track_id] = col_onset + dur_ticks
+
+    for g in positionless_groups:
+        first_outcome = g[0]
+        col_onset = track_time.get("trk_0", 0)
+
+        duration = first_outcome.get("duration")
+        if duration == "whole":
+            dur_ticks = 4 * DEFAULT_TICKS_PER_QUARTER
+        elif duration == "half":
+            dur_ticks = 2 * DEFAULT_TICKS_PER_QUARTER
+        elif duration == "quarter":
+            dur_ticks = DEFAULT_TICKS_PER_QUARTER
+        elif duration == "eighth":
+            dur_ticks = DEFAULT_TICKS_PER_QUARTER // 2
+        elif duration == "sixteenth":
+            dur_ticks = DEFAULT_TICKS_PER_QUARTER // 4
+        elif duration == "thirty_second":
+            dur_ticks = DEFAULT_TICKS_PER_QUARTER // 8
+        elif duration == "sixty_fourth":
+            dur_ticks = DEFAULT_TICKS_PER_QUARTER // 16
+        else:
+            raise NotationBridgeInputError(f"unsupported_duration_value_{duration}")
+
+        group_onsets[id(g)] = (col_onset, dur_ticks, "trk_0")
+        track_time["trk_0"] = col_onset + dur_ticks
+
     events = []
-    current_onset_ticks = {}
     max_ticks_in_4_4_bar = 4 * DEFAULT_TICKS_PER_QUARTER
 
     for i, group in enumerate(grouped_outcomes):
         first_outcome = group[0]
         is_rest = first_outcome.get("symbol_type") == "quarter_rest_candidate"
-        
+
         if is_rest:
             note_list = []
         else:
@@ -184,11 +277,11 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
                 pitch_str = outcome.get("clef_resolved_staff_pitch")
                 written_midi = _parse_pitch_to_midi(pitch_str)
                 sounding_midi = written_midi - 12
-                
+
                 # Route to lowest fret on standard guitar
                 best_string = None
                 best_fret = None
-                
+
                 for s in tuning.strings:
                     fret = sounding_midi - s.pitch
                     if fret >= 0:
@@ -200,11 +293,11 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
                             if best_string is None or s.number < best_string:
                                 best_fret = fret
                                 best_string = s.number
-                                
+
                 if best_string is None or best_fret is None or best_fret > 36:
                     # Skip if unplayable
                     continue
-                    
+
                 note_list.append(Note(
                     string=best_string,
                     fret=best_fret,
@@ -213,39 +306,29 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
                 ))
             if not note_list:
                 continue
-        
-        duration = first_outcome.get("duration")
-        if duration == "whole":
-            dur_ticks = 4 * DEFAULT_TICKS_PER_QUARTER
-            note_val = "whole"
-        elif duration == "half":
-            dur_ticks = 2 * DEFAULT_TICKS_PER_QUARTER
-            note_val = "half"
-        elif duration == "quarter":
-            dur_ticks = DEFAULT_TICKS_PER_QUARTER
-            note_val = "quarter"
-        elif duration == "eighth":
-            dur_ticks = DEFAULT_TICKS_PER_QUARTER // 2
-            note_val = "eighth"
-        elif duration == "sixteenth":
-            dur_ticks = DEFAULT_TICKS_PER_QUARTER // 4
-            note_val = "16th"
-        elif duration == "thirty_second":
-            dur_ticks = DEFAULT_TICKS_PER_QUARTER // 8
-            note_val = "32nd"
-        elif duration == "sixty_fourth":
-            dur_ticks = DEFAULT_TICKS_PER_QUARTER // 16
-            note_val = "64th"
-        else:
-            raise NotationBridgeInputError(f"unsupported_duration_value_{duration}")
 
-        staff = first_outcome.get("staff_index", first_outcome.get("system_staff_index"))
-        track_id = get_track_id(staff)
-
-        onset_ticks = current_onset_ticks.get(track_id, 0)
+        onset_ticks, dur_ticks, track_id = group_onsets[id(group)]
 
         if onset_ticks + dur_ticks > max_ticks_in_4_4_bar:
             raise NotationBridgeInputError("cumulative_duration_exceeds_one_4_4_bar")
+
+        duration = first_outcome.get("duration")
+        if duration == "whole":
+            note_val = "whole"
+        elif duration == "half":
+            note_val = "half"
+        elif duration == "quarter":
+            note_val = "quarter"
+        elif duration == "eighth":
+            note_val = "eighth"
+        elif duration == "sixteenth":
+            note_val = "16th"
+        elif duration == "thirty_second":
+            note_val = "32nd"
+        elif duration == "sixty_fourth":
+            note_val = "64th"
+        else:
+            raise NotationBridgeInputError(f"unsupported_duration_value_{duration}")
 
         events.append(Event(
             id=f"evt_{i}",
@@ -260,8 +343,6 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
             notes=note_list,
             is_rest=is_rest
         ))
-        
-        current_onset_ticks[track_id] = onset_ticks + dur_ticks
 
     if not events:
         raise NotationBridgeInputError("no_playable_notation_outcomes_found")
