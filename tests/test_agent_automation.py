@@ -162,3 +162,39 @@ def test_agent_verify_strict_gating(tmp_path, monkeypatch) -> None:
         agent_verify.main()
     except SystemExit as e:
         assert e.code == 1
+
+
+def test_agent_verify_fails_non_empty_schema_diff(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["agent_verify.py", "--base", "main"])
+    monkeypatch.setattr(agent_verify, "STEPS", [])
+
+    def mock_run_step(name, cmd):
+        if name == "Git schema diff":
+            return {"name": name, "command": "cmd", "exit_code": 0, "stdout": "schemas/scoreir.v0.1.schema.json", "stderr": "", "elapsed_seconds": 0.1, "status": "PASS"}
+        return {"name": name, "command": "cmd", "exit_code": 0, "stdout": "", "stderr": "", "elapsed_seconds": 0.1, "status": "PASS"}
+
+    monkeypatch.setattr(agent_verify, "run_step", mock_run_step)
+
+    with pytest.raises(SystemExit) as exc_info:
+        agent_verify.main()
+    assert exc_info.value.code == 1
+
+
+def test_agent_verify_uses_supplied_base_for_range_check(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["agent_verify.py", "--base", "feature/base-branch"])
+    monkeypatch.setattr(agent_verify, "STEPS", [])
+    commands = {}
+
+    def mock_run_step(name, cmd):
+        commands[name] = cmd
+        return {"name": name, "command": " ".join(cmd), "exit_code": 0, "stdout": "", "stderr": "", "elapsed_seconds": 0.1, "status": "PASS"}
+
+    monkeypatch.setattr(agent_verify, "run_step", mock_run_step)
+
+    with pytest.raises(SystemExit) as exc_info:
+        agent_verify.main()
+    assert exc_info.value.code == 0
+    assert commands["Git PR range check diff"] == ["git", "diff", "--check", "feature/base-branch...HEAD"]
+    assert commands["Git schema diff"] == ["git", "diff", "--exit-code", "--", "schemas"]

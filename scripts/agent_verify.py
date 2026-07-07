@@ -85,7 +85,7 @@ def main():
     # Construct execution steps dynamically based on arguments
     execution_steps = STEPS.copy()
     execution_steps.append(("Git PR range check diff", ["git", "diff", "--check", f"{args.base}...HEAD"]))
-    execution_steps.append(("Git schema diff", ["git", "diff", "--", "schemas"]))
+    execution_steps.append(("Git schema diff", ["git", "diff", "--exit-code", "--", "schemas"]))
     execution_steps.append(("Git status short", ["git", "status", "--short"]))
 
     for name, cmd in execution_steps:
