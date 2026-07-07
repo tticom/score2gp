@@ -29,6 +29,7 @@ def main():
     allowed_json_prefixes = ("tests/", "fixtures/public/", "schemas/", ".antigravitycli/")
     allowed_png_prefixes = ("tests/", "reference/")
     allowed_html_prefixes = ("tests/", "docs/")
+    generated_json_suffixes = (".ir.json", ".tabraw.json")
 
     for file in tracked_files:
         # Rule 1: git ls-files fixtures/private work contains anything except fixtures/private/.gitkeep
@@ -54,6 +55,9 @@ def main():
 
         # Rule 5: Generated diagnostic HTML/PNG/JSON outputs tracked outside allowlisted folders
         if file.endswith(".json"):
+            if file.endswith(generated_json_suffixes) and not any(file.startswith(p) for p in allowed_json_prefixes):
+                violations.append((file, "Generated IR/TabRaw JSON tracked outside allowed public fixture directories"))
+                continue
             # Check if it starts with allowed prefixes
             if not any(file.startswith(p) for p in allowed_json_prefixes):
                 # Allow root config files if any (e.g. package.json)

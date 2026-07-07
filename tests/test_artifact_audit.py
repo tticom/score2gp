@@ -88,3 +88,17 @@ def test_artifact_audit_fails_json_outside_allowlist(monkeypatch) -> None:
     with pytest.raises(SystemExit) as exc_info:
         artifact_audit.main()
     assert exc_info.value.code == 1
+
+
+@pytest.mark.parametrize("path", ["analysis.ir.json", "analysis.tabraw.json"])
+def test_artifact_audit_fails_root_generated_score_json(monkeypatch, path: str) -> None:
+    mock_files = [
+        "src/score2gp/notation_bridge.py",
+        path,
+    ]
+
+    monkeypatch.setattr(artifact_audit, "run_cmd", lambda args: mock_files)
+
+    with pytest.raises(SystemExit) as exc_info:
+        artifact_audit.main()
+    assert exc_info.value.code == 1

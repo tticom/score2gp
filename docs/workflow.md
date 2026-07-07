@@ -724,3 +724,41 @@ python scripts/private_e2e_smoke.py
 | Public E2E Smoke Proof | N/A (Test Suite) | Fully implemented via `tests/test_e2e_pdf_to_gp.py` |
 
 The project should keep uncertainty visible at every stage. Unsupported features should become warnings or report items, not silent omissions.
+
+## Agent Verification & PR Automation
+
+To reduce manual copy/paste operations and ensure consistent reporting across agentic workflows, the repository provides automated status, verification, and PR body generation tools:
+
+### 1. One-Command Verification
+Run the standard verification suite (pytest, schema export/validation, artifact audit, and git diff checks):
+```bash
+make verify
+# or
+python3 scripts/agent_verify.py
+```
+* **Options**: Use `--keep-going` to run all verification steps even if earlier ones fail.
+* **Outputs**: Machine-readable JSON summary is written to `work/agent_verify.json` and a Markdown summary is written to `work/agent_verify.md`. Both are gitignored.
+
+### 2. Repository Status Reporting
+Gather current repository metadata (branch, head SHA, base, working tree status, recent commits, schema status, and artifact audit result):
+```bash
+python3 scripts/agent_status.py
+# or in JSON format
+python3 scripts/agent_status.py --json
+```
+
+### 3. One-Command PR Body Generation
+Generate a structured Markdown pull request body containing a list of modified files, embedded verification status details, and private-safety audit results:
+```bash
+make pr-body TITLE="Your PR Title" SUMMARY="Summary of the changes"
+# or
+python3 scripts/pr_body.py --title "Title" --summary "Detailed Summary"
+```
+
+### 4. Git-Hygiene Audit Checks
+Verify repository directory hygiene (making sure no private fixtures or generated diagnostic artifacts are tracked):
+```bash
+make audit
+# or
+python3 scripts/artifact_audit.py
+```
