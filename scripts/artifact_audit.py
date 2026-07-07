@@ -34,7 +34,7 @@ def main():
         # Rule 1: git ls-files fixtures/private work contains anything except fixtures/private/.gitkeep
         if file.startswith("fixtures/private/") and file != "fixtures/private/.gitkeep":
             violations.append((file, "Tracked file in fixtures/private/ (only .gitkeep allowed)"))
-            
+
         if file.startswith("work/"):
             violations.append((file, "Tracked file in work/ (entire directory must be untracked)"))
 
