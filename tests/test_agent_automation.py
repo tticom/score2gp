@@ -31,7 +31,7 @@ def test_agent_verify_report_generation(tmp_path, monkeypatch) -> None:
     # Test agent_verify writing reports correctly
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["agent_verify.py"])
-    
+
     results = [
         {"name": "Step 1", "command": "cmd1", "exit_code": 0, "stdout": "out1", "stderr": "", "elapsed_seconds": 1.2, "status": "PASS"},
         {"name": "Step 2", "command": "cmd2", "exit_code": 1, "stdout": "", "stderr": "err2", "elapsed_seconds": 0.5, "status": "FAIL"},
@@ -46,7 +46,7 @@ def test_agent_verify_report_generation(tmp_path, monkeypatch) -> None:
 
     # Mock steps run
     monkeypatch.setattr(agent_verify, "run_step", lambda name, cmd: results[0])
-    
+
     # Override steps to be minimal
     monkeypatch.setattr(agent_verify, "STEPS", [("Step 1", ["echo"])])
 
@@ -63,7 +63,7 @@ def test_agent_verify_report_generation(tmp_path, monkeypatch) -> None:
 
 def test_agent_status_reporting(tmp_path, monkeypatch, capsys) -> None:
     monkeypatch.chdir(tmp_path)
-    
+
     # Mock Git CLI results
     def mock_run_cmd(args):
         if "remote.origin.url" in args:
@@ -99,7 +99,7 @@ def test_agent_status_reporting(tmp_path, monkeypatch, capsys) -> None:
     monkeypatch.setattr(sys, "argv", ["agent_status.py", "--json"])
     agent_status.main()
     captured = capsys.readouterr()
-    
+
     status_json = json.loads(captured.out)
     assert status_json["branch"] == "feature/automation-test"
     assert status_json["head_sha"] == "abc123sha"
@@ -133,3 +133,32 @@ def test_pr_body_generation(tmp_path, monkeypatch, capsys) -> None:
     assert "file1.py" in captured.out
     assert "🟢 Run pytest passed" in captured.out
     assert "Verify git status hygiene." in captured.out
+
+
+def test_agent_verify_strict_gating(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["agent_verify.py", "--base", "main"])
+
+    # Mock run_step to return clean runs
+    def mock_run_step(name, cmd):
+        return {"name": name, "command": "cmd", "exit_code": 0, "stdout": "", "stderr": "", "elapsed_seconds": 0.1, "status": "PASS"}
+
+    monkeypatch.setattr(agent_verify, "run_step", mock_run_step)
+    monkeypatch.setattr(agent_verify, "STEPS", [])
+
+    try:
+        agent_verify.main()
+    except SystemExit as e:
+        assert e.code == 0
+
+    # Mock dirty status run
+    def mock_run_step_dirty(name, cmd):
+        if name == "Git status short":
+            return {"name": name, "command": "cmd", "exit_code": 0, "stdout": "M file.py", "stderr": "", "elapsed_seconds": 0.1, "status": "PASS"}
+        return {"name": name, "command": "cmd", "exit_code": 0, "stdout": "", "stderr": "", "elapsed_seconds": 0.1, "status": "PASS"}
+
+    monkeypatch.setattr(agent_verify, "run_step", mock_run_step_dirty)
+    try:
+        agent_verify.main()
+    except SystemExit as e:
+        assert e.code == 1

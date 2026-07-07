@@ -41,7 +41,7 @@ def main():
     lines.append(f"# {args.title}\n")
     lines.append("## Summary")
     lines.append(args.summary + "\n")
-    
+
     lines.append("## Proposed Changes")
     if changed_files:
         for file in changed_files:

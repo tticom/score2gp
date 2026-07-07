@@ -22,10 +22,10 @@ def main():
     if not branch:
         branch = run_cmd(["git", "rev-parse", "--abbrev-ref", "HEAD"])
     head_sha = run_cmd(["git", "rev-parse", "HEAD"])
-    
+
     # Base branch
     base_branch = "main"
-    
+
     # Working tree status
     status_porcelain = run_cmd(["git", "status", "--porcelain"])
     working_tree_clean = (status_porcelain == "")
@@ -100,11 +100,11 @@ def main():
     print(f"- **Schema Changed**: `{schema_changed}`")
     print(f"- **Artifact Audit**: `{'🟢 PASS' if audit_pass else '🔴 FAIL'}`")
     print(f"- **Pytest Status**: `{saved_pytest_summary}`")
-    
+
     print("\n## Recent Commits")
     for commit in recent_commits:
         print(f"- {commit}")
-    
+
     if not audit_pass:
         print("\n## Artifact Audit Failure Details")
         print("```text")

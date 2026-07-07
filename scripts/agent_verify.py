@@ -43,7 +43,7 @@ def make_markdown_report(results, overall_status):
     for r in results:
         status_icon = "🟢 PASS" if r["status"] == "PASS" else "🔴 FAIL"
         lines.append(f"| {r['name']} | {status_icon} | {r['exit_code']} | {r['elapsed_seconds']}s |")
-    
+
     lines.append("\n## Step Details\n")
     for r in results:
         lines.append(f"### {r['name']}")
@@ -70,22 +70,38 @@ STEPS = [
     ("Export schemas", [sys.executable, "-m", "score2gp.cli", "export-schema", "--out", "schemas"]),
     ("Validate IR on tiny_score", [sys.executable, "-m", "score2gp.cli", "validate-ir", "fixtures/public/tiny_score.ir.json"]),
     ("Artifact audit", [sys.executable, "scripts/artifact_audit.py"]),
-    ("Git check diff", ["git", "diff", "--check"]),
-    ("Git schema diff", ["git", "diff", "--", "schemas"]),
-    ("Git status short", ["git", "status", "--short"]),
 ]
 
 def main():
     parser = argparse.ArgumentParser(description="Run Score2GP agent verification suite.")
     parser.add_argument("--keep-going", action="store_true", help="Continue running verification checks even if one fails.")
+    parser.add_argument("--base", type=str, default="origin/main", help="Base branch for PR-range checks.")
     args = parser.parse_args()
 
     os.makedirs("work", exist_ok=True)
     results = []
     overall_status = "PASS"
 
-    for name, cmd in STEPS:
+    # Construct execution steps dynamically based on arguments
+    execution_steps = STEPS.copy()
+    execution_steps.append(("Git PR range check diff", ["git", "diff", "--check", f"{args.base}...HEAD"]))
+    execution_steps.append(("Git schema diff", ["git", "diff", "--", "schemas"]))
+    execution_steps.append(("Git status short", ["git", "status", "--short"]))
+
+    for name, cmd in execution_steps:
         res = run_step(name, cmd)
+
+        # Enforce additional verification rules on command outputs
+        if res["status"] == "PASS":
+            if name == "Git status short" and res["stdout"].strip():
+                res["status"] = "FAIL"
+                res["exit_code"] = 1
+                res["stderr"] = "Failure: working tree is dirty (uncommitted changes exist)."
+            elif name == "Git schema diff" and res["stdout"].strip():
+                res["status"] = "FAIL"
+                res["exit_code"] = 1
+                res["stderr"] = "Failure: schemas folder has uncommitted diffs."
+
         results.append(res)
         if res["status"] == "FAIL":
             overall_status = "FAIL"
@@ -109,7 +125,7 @@ def main():
 
     print(f"\nVerification finished. Overall status: {overall_status}")
     print("Report written to work/agent_verify.json and work/agent_verify.md")
-    
+
     if overall_status == "FAIL":
         sys.exit(1)
     else:
