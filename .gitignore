@@ -18,9 +18,9 @@ fixtures/private/*
 !fixtures/private/.gitkeep
 work/
 work/private/
-inspect/
-overlays/
-grouping-diagnostics.html
-warnings.json
-*.tabraw.json
-*.ir.json
+/inspect/
+/overlays/
+/grouping-diagnostics.html
+/warnings.json
+/*.tabraw.json
+/*.ir.json
