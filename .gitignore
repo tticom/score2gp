@@ -14,5 +14,14 @@ work/
 # diagnostics, and reports must stay local.
 
 scratch/
-fixtures/private/
+fixtures/private/*
+!fixtures/private/.gitkeep
+work/
 work/private/
+inspect/
+overlays/
+grouping-diagnostics.html
+warnings.json
+*.tabraw.json
+*.ir.json
+

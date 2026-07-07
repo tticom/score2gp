@@ -446,7 +446,7 @@ This path is intentionally tiny. The `ascii-scoreir-gate.v0.1` diagnostics repor
 
 Refusal diagnostics are useful outcomes. Common categories include `missing_ascii_alignment_sidecar`, `ascii_alignment_status_unavailable`, `ascii_alignment_status_partial`, `ascii_alignment_status_ambiguous`, `ascii_alignment_status_incompatible`, `ascii_alignment_candidate_missing`, `ascii_alignment_not_one_to_one`, `ascii_candidate_missing_string`, `ascii_candidate_missing_fret`, `ascii_candidate_unmapped_measure`, `ascii_candidate_unmapped_onset`, `ascii_unsupported_technique_required`, `ascii_unsupported_chord_symbol`, `ascii_polyphony_not_supported`, `ascii_musicxml_timing_risk`, `ascii_duration_source_missing`, and `ascii_outside_tiny_gate_scope`. When `--diagnostics-out` is supplied, `build-ir` writes these in the `build-ir-failure-diagnostics.v0.1` sidecar rather than writing unsafe ScoreIR. In addition, when it refuses due to ASCII ScoreIR gate diagnostics, it writes a developer-facing HTML diagnostics report (`ascii-scoreir-gate-diagnostics.html`) alongside the JSON sidecar to explain the refusal clearly to developers. The HTML report is developer-facing only; JSON remains the programmatic source of truth. Refusal is the expected behavior for unsupported ASCII inputs, and this HTML report does not imply broader ASCII-to-ScoreIR support.
 
-Private ASCII-tab PDFs can be inspected with the same commands, but keep inputs under `fixtures/private/` and outputs under ignored `work/`:
+Private ASCII-tab PDFs can be inspected with the same commands, but keep inputs under `fixtures/private/` (which are untracked and belong to the sibling repository `score2gp-private-fixtures`) and outputs under ignored `work/`:
 
 ```powershell
 python -m score2gp.cli inspect-pdf "fixtures/private/ascii_tab_example.pdf" `
@@ -708,7 +708,7 @@ python scripts/private_e2e_smoke.py
   - Contains local tab raw candidates (`extracted.tabraw.json`), intermediate ScoreIR output (`score.ir.json` if successful), build warnings/errors (`build_error.json` / `warnings.json`), and generated GP package (`smoke.gp` if successful).
 
 > [!NOTE]
-> Private smoke runs are purely diagnostic. They do not weaken timing gates or tune conversion thresholds to specific private files. All private files under `fixtures/private/` and generated outputs under `work/` are ignored by Git.
+> Private smoke runs are purely diagnostic. They do not weaken timing gates or tune conversion thresholds to specific private files. All private files under `fixtures/private/` (which are untracked and belong to the sibling repository `score2gp-private-fixtures`) and generated outputs under `work/` are ignored by Git.
 
 ## Current Stage Summary
 
