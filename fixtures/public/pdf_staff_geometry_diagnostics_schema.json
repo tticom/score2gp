@@ -273,7 +273,7 @@
       "type": "object"
     },
     "LocalPrimitivesSummary": {
-      "description": "Raw geometric primitive counts strictly within the staff bounding box.",
+      "description": "Raw geometric primitive counts and geometries strictly within the staff bounding box.",
       "properties": {
         "line_count": {
           "title": "Line Count",
@@ -293,6 +293,21 @@
           },
           "title": "Text Span Count By Font",
           "type": "object"
+        },
+        "geometries": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/PrimitiveGeometryEvidence"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Geometries"
         }
       },
       "required": [
@@ -615,14 +630,6 @@
           "type": "number"
         },
         "kind": {
-          "enum": [
-            "text_span",
-            "curve",
-            "vertical_stroke",
-            "horizontal_stroke",
-            "rectangle",
-            "diagonal_stroke"
-          ],
           "title": "Kind",
           "type": "string"
         },

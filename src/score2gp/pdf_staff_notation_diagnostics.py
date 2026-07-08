@@ -241,7 +241,8 @@ def _extract_note_candidates(page: Any, staves_diags: list['NotationStaffDiagnos
                                     aspect_ratio=round(aspect, 3),
                                     page_index=page_idx, system_index=sys_idx, staff_index=staff_idx
                                 ))
-    except Exception:
+    except Exception as e:
+        import traceback; traceback.print_exc()
         pass
 
     # Bounded Font-Glyph extraction for approved Mutopia BWV 772 fixture.
@@ -272,7 +273,8 @@ def _extract_note_candidates(page: Any, staves_diags: list['NotationStaffDiagnos
                                     origin_y=float(origin[1]),
                                     source_method="font_glyph_extraction"
                                 ))
-    except Exception:
+    except Exception as e:
+        import traceback; traceback.print_exc()
         pass # Fail safely as required
 
 
@@ -444,7 +446,8 @@ def build_notation_diagnostics(
     drawings = page.get_drawings()
     try:
         text_dict = page.get_text("dict")
-    except Exception:
+    except Exception as e:
+        import traceback; traceback.print_exc()
         text_dict = {}
 
     group_bounds = [_notation_group_bounds(g) for g in notation_groups]
@@ -628,11 +631,25 @@ def build_notation_diagnostics(
                             text_span_by_font[font_name] = text_span_by_font.get(font_name, 0) + 1
                             primitives_for_clustering.append(PrimitiveGeometry("text_span", sx0, sy0, sx1, sy1, font_name, font_size))
 
+        primitive_geometries_evidence = [
+            PrimitiveGeometryEvidence(
+                kind=p.type,  # type: ignore
+                x0=p.x0,
+                y0=p.y0,
+                x1=p.x1,
+                y1=p.y1,
+                font_name=p.font_name,
+                font_size=p.font_size
+            )
+            for p in primitives_for_clustering
+        ]
+
         primitives_summary = LocalPrimitivesSummary(
             line_count=line_count,
             curve_count=curve_count,
             rect_count=rect_count,
-            text_span_count_by_font=font_counts
+            text_span_count_by_font=font_counts,
+            geometries=primitive_geometries_evidence
         )
 
         morphology = NotationStaffMorphology(
@@ -892,7 +909,8 @@ def extract_notation_diagnostics_dict(page: Any, page_index: int) -> dict[str, A
             if hasattr(notation_diags, "model_dump")
             else notation_diags.dict()
         )
-    except Exception:
+    except Exception as e:
+        import traceback; traceback.print_exc()
         return {"staves": [], "status": "pdf_notation_geometry_diagnostics_failed"}
 
 def extract_structural_skeleton_diagnostics_dict(page: Any, page_index: int) -> dict[str, Any]:
@@ -1011,7 +1029,8 @@ def extract_structural_skeleton_diagnostics_dict(page: Any, page_index: int) -> 
             diagnostic_status="pass"
         )
         return StructuralSkeletonDiagnostics(pages=[page_diag]).model_dump()
-    except Exception:
+    except Exception as e:
+        import traceback; traceback.print_exc()
         return {"pages": [], "failure_reasons": ["structural_skeleton_detection_failed"], "diagnostic_status": "fail"}
 
 def extract_measure_grid_diagnostics_dict(page: Any, page_index: int) -> dict[str, Any]:
@@ -1107,7 +1126,8 @@ def extract_measure_grid_diagnostics_dict(page: Any, page_index: int) -> dict[st
         diag = MeasureGridDiagnostics(pages=mg_pages)
         return diag.model_dump()
 
-    except Exception:
+    except Exception as e:
+        import traceback; traceback.print_exc()
         return {"pages": [], "failure_reasons": ["measure_grid_extraction_failed"], "diagnostic_status": "fail"}
 
 def extract_candidate_measure_assignment_diagnostics_dict(page: Any, page_index: int) -> dict[str, Any]:
