@@ -97,15 +97,15 @@ def inspect_pdf(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
             pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
             image_path = pages_dir / f"page-{index:03d}.png"
             pix.save(image_path)
-            
+
             # Collect notation staves for diagnostics
             from .pdf_staff_notation_diagnostics import extract_notation_diagnostics_dict
             from .pdf_staff_geometry import PdfStaffNotationGeometryDiagnostics
             from .pdf_geometry_candidate_extraction import extract_geometry_candidates
-            
+
             diags_dict = extract_notation_diagnostics_dict(page, index)
             diags_model = PdfStaffNotationGeometryDiagnostics.model_validate(diags_dict)
-            
+
             candidates = []
             for staff_diag in diags_model.staves:
                 cand = extract_geometry_candidates(staff_diag)
