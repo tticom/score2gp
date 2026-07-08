@@ -15,13 +15,13 @@ def test_extract_geometry_candidates_returns_empty_set_initially():
 def test_geometry_candidate_set_schema_has_no_semantic_leakage():
     schema = GeometryCandidateSet.model_json_schema()
     schema_str = str(schema).lower()
-    
+
     forbidden_words = [
-        "notehead", "stem", "clef", "pitch", "duration", 
-        "voice", "chord", "key_signature", "time_signature", 
+        "notehead", "stem", "clef", "pitch", "duration",
+        "voice", "chord", "key_signature", "time_signature",
         "beat", "rhythm"
     ]
-    
+
     for word in forbidden_words:
         # use word boundaries to avoid matching "system" for "stem"
         pattern = r'\b' + word + r'\b'
