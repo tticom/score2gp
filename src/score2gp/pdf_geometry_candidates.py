@@ -68,3 +68,8 @@ class XAlignedPrimitiveClusterCandidate(BaseModel):
             if p.source != "x_aligned_cluster":
                 raise ValueError("cluster primitives must have source 'x_aligned_cluster'")
         return self
+
+class GeometryCandidateSet(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    left_margin_primitives: list[LeftMarginPrimitiveCandidate] = Field(default_factory=list)
+    x_aligned_clusters: list[XAlignedPrimitiveClusterCandidate] = Field(default_factory=list)
