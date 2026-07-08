@@ -1,6 +1,7 @@
 from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict
 from score2gp.pdf_geometry_candidates import GeometryCandidateSet
+from score2gp.logical_clef_candidate_classifier import classify_logical_clef_candidate
 
 LogicalClefKind = Literal["treble", "bass", "unknown"]
 SemanticGateStatus = Literal["no_candidate", "ambiguous_candidate", "logical_clef_candidate"]
@@ -11,11 +12,15 @@ class SemanticGateResult(BaseModel):
     reason: str
     clef_kind: Optional[LogicalClefKind] = None
 
-def evaluate_logical_clef_gate(geometry: GeometryCandidateSet) -> SemanticGateResult:
+def evaluate_logical_clef_gate(
+    geometry: GeometryCandidateSet,
+    staff_spacing: float = 0.0,
+    staff_height: float = 0.0,
+    staff_x0: float = 0.0
+) -> SemanticGateResult:
     """
     Evaluates page-level geometry candidates to determine if a logical clef is present.
-    Because we only have bounding box and font metadata (no text characters),
-    this gate fails closed to 'unknown' or 'ambiguous' when evidence is insufficient.
+    Uses proportional bounding box heuristics to classify the clef kind.
     """
     if not geometry.left_margin_primitives:
         return SemanticGateResult(
@@ -32,8 +37,22 @@ def evaluate_logical_clef_gate(geometry: GeometryCandidateSet) -> SemanticGateRe
             reason="left margin contains primitives but no text spans or curves to suggest a clef"
         )
     
-    return SemanticGateResult(
-        status="logical_clef_candidate",
-        clef_kind="unknown",
-        reason="found text_span or curve in left margin suggesting a clef, but insufficient evidence to classify kind"
+    classification = classify_logical_clef_candidate(
+        geometry.left_margin_primitives,
+        staff_spacing=staff_spacing,
+        staff_height=staff_height,
+        staff_x0=staff_x0
     )
+
+    if classification["label"] == "treble_clef_candidate":
+        return SemanticGateResult(
+            status="logical_clef_candidate",
+            clef_kind="treble",
+            reason=classification["reason"]
+        )
+    else:
+        return SemanticGateResult(
+            status="logical_clef_candidate",
+            clef_kind="unknown",
+            reason=classification["reason"]
+        )
