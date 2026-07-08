@@ -100,7 +100,16 @@ def inspect_pdf(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
             
             # Collect notation staves for diagnostics
             from .pdf_staff_notation_diagnostics import extract_notation_diagnostics_dict
+            from .pdf_staff_geometry import PdfStaffNotationGeometryDiagnostics
+            from .pdf_geometry_candidate_extraction import extract_geometry_candidates
+            
             diags_dict = extract_notation_diagnostics_dict(page, index)
+            diags_model = PdfStaffNotationGeometryDiagnostics.model_validate(diags_dict)
+            
+            candidates = []
+            for staff_diag in diags_model.staves:
+                cand = extract_geometry_candidates(staff_diag)
+                candidates.append(cand.model_dump(mode="json"))
 
             page_info = {
                 "page": index,
@@ -119,6 +128,7 @@ def inspect_pdf(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
                     if block[4].strip()
                 ],
                 "pdf_staff_notation_diagnostics": diags_dict,
+                "geometry_candidates": candidates,
             }
             summary["pages"].append(page_info)
 
