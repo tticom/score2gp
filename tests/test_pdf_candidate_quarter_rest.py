@@ -1,0 +1,72 @@
+import pytest
+from score2gp.pdf_geometry_candidates import (
+    GeometryCandidateSet,
+    XAlignedPrimitiveClusterCandidate,
+    PrimitiveEvidenceCandidate
+)
+from score2gp.pdf_candidate_quarter_rest import extract_quarter_rest_candidates
+
+def make_cluster(kind: str, x0: float, y0: float, x1: float, y1: float, count: int = 1) -> XAlignedPrimitiveClusterCandidate:
+    prims = []
+    for _ in range(count):
+        prims.append(
+            PrimitiveEvidenceCandidate(
+                page_index=1,
+                system_index=1,
+                staff_index=1,
+                x0=x0, y0=y0, x1=x1, y1=y1,
+                kind=kind,  # type: ignore
+                source="x_aligned_cluster"
+            )
+        )
+    return XAlignedPrimitiveClusterCandidate(
+        page_index=1,
+        system_index=1,
+        staff_index=1,
+        x0=x0, x1=x1,
+        primitive_count=count,
+        primitives=prims
+    )
+
+def test_extract_quarter_rest_success():
+    # Staff spacing 10, center y = 50 (e.g. staff from 30 to 70)
+    # Quarter rest height ~ 30, width ~ 10, center ~ 50
+    cluster = make_cluster("curve", x0=100.0, y0=35.0, x1=110.0, y1=65.0)
+    geometry = GeometryCandidateSet(x_aligned_clusters=[cluster])
+
+    rests = extract_quarter_rest_candidates(geometry, staff_spacing=10.0, staff_center_y=50.0)
+    assert len(rests) == 1
+    assert rests[0].x0 == 100.0
+    assert rests[0].y1 == 65.0
+
+def test_extract_quarter_rest_fails_isolation():
+    # Two primitives in the cluster
+    cluster = make_cluster("curve", x0=100.0, y0=35.0, x1=110.0, y1=65.0, count=2)
+    geometry = GeometryCandidateSet(x_aligned_clusters=[cluster])
+
+    rests = extract_quarter_rest_candidates(geometry, staff_spacing=10.0, staff_center_y=50.0)
+    assert len(rests) == 0
+
+def test_extract_quarter_rest_fails_height_ratio():
+    # Too short (height = 10, ratio = 1.0)
+    cluster = make_cluster("curve", x0=100.0, y0=45.0, x1=110.0, y1=55.0)
+    geometry = GeometryCandidateSet(x_aligned_clusters=[cluster])
+
+    rests = extract_quarter_rest_candidates(geometry, staff_spacing=10.0, staff_center_y=50.0)
+    assert len(rests) == 0
+
+def test_extract_quarter_rest_fails_aspect_ratio():
+    # Too wide (width = 30, height = 30 -> ratio 1.0)
+    cluster = make_cluster("curve", x0=100.0, y0=35.0, x1=130.0, y1=65.0)
+    geometry = GeometryCandidateSet(x_aligned_clusters=[cluster])
+
+    rests = extract_quarter_rest_candidates(geometry, staff_spacing=10.0, staff_center_y=50.0)
+    assert len(rests) == 0
+
+def test_extract_quarter_rest_fails_vertical_centering():
+    # Centered at 30, but staff center is 50. Difference is 20 > 5.0 (0.5 * 10)
+    cluster = make_cluster("curve", x0=100.0, y0=15.0, x1=110.0, y1=45.0)
+    geometry = GeometryCandidateSet(x_aligned_clusters=[cluster])
+
+    rests = extract_quarter_rest_candidates(geometry, staff_spacing=10.0, staff_center_y=50.0)
+    assert len(rests) == 0
