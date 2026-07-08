@@ -1,8 +1,8 @@
 {
-  "staves": [],
-  "system_connectors": [],
-  "whole_note_candidates": [],
   "half_note_candidates": [],
   "quarter_note_candidates": [],
-  "status": "success"
+  "status": "success",
+  "staves": [],
+  "system_connectors": [],
+  "whole_note_candidates": []
 }

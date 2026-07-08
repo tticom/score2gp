@@ -23,9 +23,29 @@ class NotationStaffGeometry(BaseModel):
         assert self.y0 <= self.y1, f"y0 ({self.y0}) must be <= y1 ({self.y1})"
         return self
 
+class PrimitiveGeometryEvidence(BaseModel):
+    """
+    Evidence array item for a single geometric primitive.
+    """
+    model_config = ConfigDict(frozen=True)
+
+    x0: float
+    y0: float
+    x1: float
+    y1: float
+    kind: str
+    font_name: str | None = None
+    font_size: float | None = None
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> PrimitiveGeometryEvidence:
+        assert self.x0 <= self.x1, f"x0 ({self.x0}) must be <= x1 ({self.x1})"
+        assert self.y0 <= self.y1, f"y0 ({self.y0}) must be <= y1 ({self.y1})"
+        return self
+
 class LocalPrimitivesSummary(BaseModel):
     """
-    Raw geometric primitive counts strictly within the staff bounding box.
+    Raw geometric primitive counts and geometries strictly within the staff bounding box.
     """
     model_config = ConfigDict(frozen=True)
 
@@ -33,6 +53,7 @@ class LocalPrimitivesSummary(BaseModel):
     curve_count: int
     rect_count: int
     text_span_count_by_font: dict[str, int]
+    geometries: list[PrimitiveGeometryEvidence] | None = None
 
 class NotationStaffMorphology(BaseModel):
     """
@@ -61,25 +82,7 @@ class ClusterPrimitiveCountSummary(BaseModel):
     rects_total: int = Field(ge=0)
     text_spans_total: int = Field(ge=0)
 
-class PrimitiveGeometryEvidence(BaseModel):
-    """
-    Evidence array item for a single geometric primitive.
-    """
-    model_config = ConfigDict(frozen=True)
 
-    x0: float
-    y0: float
-    x1: float
-    y1: float
-    kind: Literal["text_span", "curve", "vertical_stroke", "horizontal_stroke", "rectangle", "diagonal_stroke"]
-    font_name: str | None = None
-    font_size: float | None = None
-
-    @model_validator(mode="after")
-    def validate_bounds(self) -> PrimitiveGeometryEvidence:
-        assert self.x0 <= self.x1, f"x0 ({self.x0}) must be <= x1 ({self.x1})"
-        assert self.y0 <= self.y1, f"y0 ({self.y0}) must be <= y1 ({self.y1})"
-        return self
 
 class XAlignedPrimitiveClusterEvidence(BaseModel):
     """
