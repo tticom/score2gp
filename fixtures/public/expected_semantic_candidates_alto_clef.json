@@ -9,7 +9,9 @@
         "reason": "Candidate matches proportional heuristics for an alto clef",
         "clef_kind": "alto"
       },
-      "quarter_rests": []
+      "quarter_rests": [],
+      "whole_rests": [],
+      "half_rests": []
     }
   ]
 }
