@@ -747,8 +747,14 @@ def test_map_clef_resolved_staff_pitch():
         {"symbol_type": "half_note_candidate", "staff_position_index": 4}, # 17: half note mapped
     ]
 
-    # Test wrong clef
-    map_clef_resolved_staff_pitch(outcomes, explicit_clef="bass")
+    # Clear helper
+    def clear_resolved_pitch(oc):
+        for o in oc:
+            o.pop("clef_resolved_staff_pitch", None)
+            o.pop("clef_resolved_midi_pitch", None)
+
+    # Test invalid clef
+    map_clef_resolved_staff_pitch(outcomes, explicit_clef="invalid")
     for cand in outcomes:
         assert "clef_resolved_staff_pitch" not in cand
 
@@ -757,7 +763,27 @@ def test_map_clef_resolved_staff_pitch():
     for cand in outcomes:
         assert "clef_resolved_staff_pitch" not in cand
 
-    # Test valid clef
+    # Test Bass Clef
+    map_clef_resolved_staff_pitch(outcomes, explicit_clef="bass")
+    assert outcomes[0].get("clef_resolved_staff_pitch") == "D3"
+    assert outcomes[0].get("clef_resolved_midi_pitch") == 50
+    assert outcomes[1].get("clef_resolved_staff_pitch") == "B3"
+    assert outcomes[1].get("clef_resolved_midi_pitch") == 59
+    assert outcomes[3].get("clef_resolved_staff_pitch") == "C4"
+    assert outcomes[3].get("clef_resolved_midi_pitch") == 60
+    clear_resolved_pitch(outcomes)
+
+    # Test Alto Clef
+    map_clef_resolved_staff_pitch(outcomes, explicit_clef="alto")
+    assert outcomes[0].get("clef_resolved_staff_pitch") == "C4"
+    assert outcomes[0].get("clef_resolved_midi_pitch") == 60
+    assert outcomes[1].get("clef_resolved_staff_pitch") == "A4"
+    assert outcomes[1].get("clef_resolved_midi_pitch") == 69
+    assert outcomes[3].get("clef_resolved_staff_pitch") == "B4"
+    assert outcomes[3].get("clef_resolved_midi_pitch") == 71
+    clear_resolved_pitch(outcomes)
+
+    # Test Treble Clef
     map_clef_resolved_staff_pitch(outcomes, explicit_clef="treble")
 
     assert outcomes[0].get("clef_resolved_staff_pitch") == "B4"
