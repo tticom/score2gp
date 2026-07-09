@@ -983,8 +983,17 @@ def map_assumed_treble_pitch_to_read_only_outcomes(outcomes: list[dict]) -> None
 def map_clef_resolved_staff_pitch(
     outcomes: list[dict],
     explicit_clef: str | None = None,
-    semantic_candidates: list[dict] | None = None
+    semantic_candidates: list[dict] | None = None,
+    explicit_key_signature: str | None = None
 ) -> None:
+    from score2gp.pdf_pitch_mapper import (
+        map_staff_step_to_midi_pitch,
+        midi_to_note_name,
+        get_spelled_note_name,
+        KEY_SIGNATURE_ALTERATIONS,
+        LOCAL_ACCIDENTAL_MODIFIERS
+    )
+
     clef_map = {}
 
     if explicit_clef is not None:
@@ -1029,55 +1038,143 @@ def map_clef_resolved_staff_pitch(
         # Filter out ambiguous keys
         clef_map = {k: v for k, v in clef_map.items() if v != "AMBIGUOUS"}
 
+    # Group all notes and barlines by (page, sys_idx, staff_idx)
+    groups = {}
     for cand in outcomes:
         st_type = cand.get("symbol_type")
-        if st_type not in ("whole_note_candidate", "half_note_candidate", "quarter_note_candidate", "eighth_note_candidate", "sixteenth_note_candidate", "thirty_second_note_candidate", "sixty_fourth_note_candidate"):
+        is_note = st_type in ("whole_note_candidate", "half_note_candidate", "quarter_note_candidate", "eighth_note_candidate", "sixteenth_note_candidate", "thirty_second_note_candidate", "sixty_fourth_note_candidate")
+        is_barline = st_type in ("barline_candidate", "barline")
+        if not (is_note or is_barline):
             continue
 
+        page = cand.get("page_index")
+        sys_idx = cand.get("system_index")
+        staff_idx = cand.get("staff_index")
+
+        # Fallback key if indices are missing but explicit_clef is provided
+        if (page is None or sys_idx is None or staff_idx is None) and explicit_clef is not None:
+            key = (0, 0, 0)
+        else:
+            if type(page) is not int or type(sys_idx) is not int or type(staff_idx) is not int:
+                continue
+            key = (page, sys_idx, staff_idx)
+
+        if key not in groups:
+            groups[key] = []
+        groups[key].append(cand)
+
+    def get_x_coord(c):
+        if "bbox" in c and isinstance(c["bbox"], (list, tuple)) and len(c["bbox"]) >= 1:
+            return c["bbox"][0]
+        return c.get("x0", 0.0)
+
+    # Process each staff group
+    for key, cands in groups.items():
+        # Resolve clef
         if explicit_clef is not None:
             clef = explicit_clef
         else:
-            page = cand.get("page_index")
-            sys_idx = cand.get("system_index")
-            staff_idx = cand.get("staff_index")
-            if type(page) is not int or type(sys_idx) is not int or type(staff_idx) is not int:
-                continue
-            clef = clef_map.get((page, sys_idx, staff_idx))
+            clef = clef_map.get(key)
 
         if clef not in ("treble", "bass", "alto"):
             continue
 
-        pos = cand.get("staff_position_index")
-        if type(pos) is not int:
-            continue
+        # Resolve key signature
+        key_sig = "C Major"
+        if explicit_key_signature is not None:
+            key_sig = explicit_key_signature
+        elif semantic_candidates is not None:
+            for sc in semantic_candidates:
+                sc_page = sc.get("page_index")
+                sc_sys = sc.get("system_index")
+                sc_staff = sc.get("staff_index")
+                if sc_page == key[0] and sc_sys == key[1] and sc_staff == key[2]:
+                    # Nested key signature candidate check
+                    ks_obj = sc.get("key_signature")
+                    if isinstance(ks_obj, dict):
+                        key_sig = ks_obj.get("key_kind", "C Major")
+                    elif sc.get("symbol_type") == "key_signature_candidate":
+                        key_sig = sc.get("key_kind", "C Major")
+                    break
 
-        # Keep ledger bounds check
-        if pos < -7 or pos > 15:
-            continue
+        if key_sig not in KEY_SIGNATURE_ALTERATIONS:
+            key_sig = "C Major"
 
-        if pos < 0 or pos > 8:
-            required_ledgers = 0
-            if pos < 0:
-                required_ledgers = abs(pos) // 2
-            elif pos > 8:
-                required_ledgers = (pos - 8) // 2
+        sig_alts = KEY_SIGNATURE_ALTERATIONS[key_sig]
 
-            if "attached_ledger_line_candidate_ids" in cand:
-                attached = cand["attached_ledger_line_candidate_ids"]
-                if type(attached) is not list or len(attached) != required_ledgers:
-                    continue
-            else:
-                if required_ledgers > 0:
-                    continue
+        # Sort candidates chronologically (by x coord)
+        sorted_cands = sorted(cands, key=get_x_coord)
 
-        try:
-            from score2gp.pdf_pitch_mapper import map_staff_step_to_midi_pitch, midi_to_note_name
-            midi_pitch = map_staff_step_to_midi_pitch(pos, clef)
-            pitch_name = midi_to_note_name(midi_pitch)
-            cand["clef_resolved_staff_pitch"] = pitch_name
-            cand["clef_resolved_midi_pitch"] = midi_pitch
-        except Exception:
-            continue
+        measure_memory = {}  # maps (letter, octave) to local modifier offset (semitones)
+
+        for cand in sorted_cands:
+            st_type = cand.get("symbol_type")
+            is_barline = st_type in ("barline_candidate", "barline")
+
+            if is_barline:
+                measure_memory.clear()
+                continue
+
+            # Process note candidate
+            pos = cand.get("staff_position_index")
+            if type(pos) is not int:
+                continue
+
+            # Keep ledger bounds check
+            if pos < -7 or pos > 15:
+                continue
+
+            # Explicit check for staff bounds compat
+            if pos < 0 or pos > 8:
+                required_ledgers = 0
+                if pos < 0:
+                    required_ledgers = abs(pos) // 2
+                elif pos > 8:
+                    required_ledgers = (pos - 8) // 2
+
+                if "attached_ledger_line_candidate_ids" in cand:
+                    attached = cand["attached_ledger_line_candidate_ids"]
+                    if type(attached) is not list or len(attached) != required_ledgers:
+                        continue
+                else:
+                    if required_ledgers > 0:
+                        continue
+
+            try:
+                natural_midi = map_staff_step_to_midi_pitch(pos, clef)
+                natural_name = midi_to_note_name(natural_midi)
+                letter = natural_name[0]
+                octave = int(natural_name[1:])
+
+                # Resolve modifier based on precedence rules
+                # Level 1: Direct local accidental
+                cand_acc = cand.get("accidental")
+                acc_val = None
+                if cand_acc is not None:
+                    if isinstance(cand_acc, int):
+                        acc_val = cand_acc
+                    elif isinstance(cand_acc, str):
+                        acc_val = LOCAL_ACCIDENTAL_MODIFIERS.get(cand_acc.lower())
+
+                if cand_acc is not None and acc_val is not None:
+                    # Update local measure memory
+                    measure_memory[(letter, octave)] = acc_val
+                    modifier = acc_val
+                # Level 2: Previous accidental in measure on same pitch class and octave
+                elif (letter, octave) in measure_memory:
+                    modifier = measure_memory[(letter, octave)]
+                # Level 3: Key signature alteration
+                elif letter in sig_alts:
+                    modifier = sig_alts[letter]
+                # Level 4: Natural baseline
+                else:
+                    modifier = 0
+
+                final_midi = natural_midi + modifier
+                cand["clef_resolved_staff_pitch"] = get_spelled_note_name(natural_midi, modifier)
+                cand["clef_resolved_midi_pitch"] = final_midi
+            except Exception:
+                continue
 
 def build_clef_resolved_pitch_coverage_report(
     outcomes: list[dict],
