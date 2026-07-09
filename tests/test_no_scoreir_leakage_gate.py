@@ -52,7 +52,7 @@ def test_candidate_gate_isolation(tmp_path):
         del report["work_dir"]
 
     report_str = json.dumps(report).lower()
-    for forbidden in ["quarter_rest_candidate", "logical_clef_candidate", "semantic_candidates"]:
+    for forbidden in ["quarter_rest_candidate", "logical_clef_candidate", "semantic_candidates", "whole_rest_candidate", "half_rest_candidate"]:
         assert forbidden not in report_str, f"Forbidden keyword '{forbidden}' leaked into JSON conversion report"
 
     # Load intermediate ScoreIR file if written to the work-dir
@@ -60,7 +60,7 @@ def test_candidate_gate_isolation(tmp_path):
     if scoreir_json.exists():
         scoreir_data = json.loads(scoreir_json.read_text(encoding="utf-8"))
         scoreir_str = json.dumps(scoreir_data).lower()
-        for forbidden in ["quarter_rest_candidate", "logical_clef_candidate", "semantic_candidates", "logical_clef", "quarter_rests"]:
+        for forbidden in ["quarter_rest_candidate", "logical_clef_candidate", "semantic_candidates", "logical_clef", "quarter_rests", "whole_rests", "half_rests", "whole_rest_candidate", "half_rest_candidate"]:
             assert forbidden not in scoreir_str, f"Forbidden keyword '{forbidden}' leaked into intermediate ScoreIR JSON"
 
     # Verify that the generated GP package has no traces of semantic candidate metadata.
@@ -72,7 +72,7 @@ def test_candidate_gate_isolation(tmp_path):
     for p in extract_dir.rglob("*"):
         if p.is_file() and p.suffix in [".xml", ".json", ".txt"]:
             content = p.read_text(encoding="utf-8", errors="ignore").lower()
-            for forbidden in ["quarter_rest_candidate", "logical_clef_candidate", "semantic_candidates"]:
+            for forbidden in ["quarter_rest_candidate", "logical_clef_candidate", "semantic_candidates", "whole_rest_candidate", "half_rest_candidate"]:
                 assert forbidden not in content, f"Forbidden keyword '{forbidden}' leaked into GP package file: {p.name}"
 
 def test_scoreir_identical_regardless_of_diagnostics(tmp_path):
@@ -96,5 +96,5 @@ def test_scoreir_identical_regardless_of_diagnostics(tmp_path):
 
     # Verify baseline contents are pristine
     baseline_str = baseline_ir_path.read_text(encoding="utf-8").lower()
-    for forbidden in ["quarter_rest_candidate", "logical_clef_candidate", "semantic_candidates"]:
+    for forbidden in ["quarter_rest_candidate", "logical_clef_candidate", "semantic_candidates", "whole_rest_candidate", "half_rest_candidate"]:
         assert forbidden not in baseline_str

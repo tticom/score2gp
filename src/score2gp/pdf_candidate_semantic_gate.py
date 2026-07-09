@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from score2gp.pdf_geometry_candidates import GeometryCandidateSet
 from score2gp.logical_clef_candidate_classifier import classify_logical_clef_candidate
 from score2gp.pdf_candidate_quarter_rest import QuarterRestCandidate
+from score2gp.pdf_candidate_whole_half_rest import WholeRestCandidate, HalfRestCandidate
 
 LogicalClefKind = Literal["treble", "bass", "alto", "unknown"]
 SemanticGateStatus = Literal["no_candidate", "ambiguous_candidate", "logical_clef_candidate"]
@@ -34,6 +35,8 @@ class StaffSemanticCandidates(BaseModel):
     staff_index: int = Field(ge=1)
     logical_clef: LogicalClefCandidate
     quarter_rests: List[QuarterRestCandidate]
+    whole_rests: List[WholeRestCandidate] = Field(default_factory=list)
+    half_rests: List[HalfRestCandidate] = Field(default_factory=list)
 
 def evaluate_logical_clef_gate(
     geometry: GeometryCandidateSet,

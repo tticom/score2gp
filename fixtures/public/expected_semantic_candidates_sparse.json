@@ -9,7 +9,9 @@
         "reason": "left margin contains primitives but no text spans or curves to suggest a clef",
         "clef_kind": null
       },
-      "quarter_rests": []
+      "quarter_rests": [],
+      "whole_rests": [],
+      "half_rests": []
     }
   ]
 }

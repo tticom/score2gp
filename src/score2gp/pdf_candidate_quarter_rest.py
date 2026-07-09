@@ -20,8 +20,10 @@ class QuarterRestCandidate(BaseModel):
 
     @model_validator(mode="after")
     def validate_bounds(self) -> QuarterRestCandidate:
-        assert self.x0 <= self.x1, f"x0 ({self.x0}) must be <= x1 ({self.x1})"
-        assert self.y0 <= self.y1, f"y0 ({self.y0}) must be <= y1 ({self.y1})"
+        if self.x0 > self.x1:
+            raise ValueError(f"x0 ({self.x0}) must be <= x1 ({self.x1})")
+        if self.y0 > self.y1:
+            raise ValueError(f"y0 ({self.y0}) must be <= y1 ({self.y1})")
         return self
 
 def extract_quarter_rest_candidates(
