@@ -980,9 +980,29 @@ def map_assumed_treble_pitch_to_read_only_outcomes(outcomes: list[dict]) -> None
         if type(pos_idx) is int and 0 <= pos_idx <= 8:
             cand["assumed_treble_pitch"] = pitches[pos_idx]
 
-def map_clef_resolved_staff_pitch(outcomes: list[dict], explicit_clef: str | None = None) -> None:
-    clef_policy = {}
-    if explicit_clef is None:
+def map_clef_resolved_staff_pitch(
+    outcomes: list[dict],
+    explicit_clef: str | None = None,
+    semantic_candidates: list[dict] | None = None
+) -> None:
+    clef_map = {}
+
+    if explicit_clef is not None:
+        pass
+    elif semantic_candidates is not None:
+        for sc in semantic_candidates:
+            page = sc.get("page_index")
+            sys_idx = sc.get("system_index")
+            staff_idx = sc.get("staff_index")
+            if type(page) is not int or type(sys_idx) is not int or type(staff_idx) is not int:
+                continue
+            logical_clef = sc.get("logical_clef", {})
+            status = logical_clef.get("status")
+            clef_kind = logical_clef.get("clef_kind")
+            if status == "logical_clef_candidate" and clef_kind in ("treble", "bass", "alto"):
+                clef_map[(page, sys_idx, staff_idx)] = clef_kind
+    else:
+        # Legacy fallback
         for cand in outcomes:
             if cand.get("symbol_type") == "treble_clef_candidate":
                 cand_id = cand.get("candidate_id")
@@ -1002,13 +1022,12 @@ def map_clef_resolved_staff_pitch(outcomes: list[dict], explicit_clef: str | Non
                 if type(page) is not int or type(sys_idx) is not int or type(staff_idx) is not int:
                     continue
                 key = (page, sys_idx, staff_idx)
-                clef_policy[key] = clef_policy.get(key, 0) + 1
-
-    pitches = [
-        "F6", "E6", "D6", "C6", "B5", "A5", "G5", # -7 to -1
-        "F5", "E5", "D5", "C5", "B4", "A4", "G4", "F4", "E4", # 0 to 8
-        "D4", "C4", "B3", "A3", "G3", "F3", "E3" # 9 to 15
-    ]
+                if key in clef_map:
+                    clef_map[key] = "AMBIGUOUS"
+                else:
+                    clef_map[key] = "treble"
+        # Filter out ambiguous keys
+        clef_map = {k: v for k, v in clef_map.items() if v != "AMBIGUOUS"}
 
     for cand in outcomes:
         st_type = cand.get("symbol_type")
@@ -1016,26 +1035,25 @@ def map_clef_resolved_staff_pitch(outcomes: list[dict], explicit_clef: str | Non
             continue
 
         if explicit_clef is not None:
-            if explicit_clef != "treble":
-                continue
+            clef = explicit_clef
         else:
             page = cand.get("page_index")
             sys_idx = cand.get("system_index")
             staff_idx = cand.get("staff_index")
             if type(page) is not int or type(sys_idx) is not int or type(staff_idx) is not int:
                 continue
-            if clef_policy.get((page, sys_idx, staff_idx), 0) != 1:
-                continue
+            clef = clef_map.get((page, sys_idx, staff_idx))
+
+        if clef not in ("treble", "bass", "alto"):
+            continue
 
         pos = cand.get("staff_position_index")
         if type(pos) is not int:
             continue
 
-        idx = pos + 7
-        if idx < 0 or idx >= len(pitches):
+        # Keep ledger bounds check
+        if pos < -7 or pos > 15:
             continue
-
-        pitch = pitches[idx]
 
         if pos < 0 or pos > 8:
             required_ledgers = 0
@@ -1052,9 +1070,20 @@ def map_clef_resolved_staff_pitch(outcomes: list[dict], explicit_clef: str | Non
                 if required_ledgers > 0:
                     continue
 
-        cand["clef_resolved_staff_pitch"] = pitch
+        try:
+            from score2gp.pdf_pitch_mapper import map_staff_step_to_midi_pitch, midi_to_note_name
+            midi_pitch = map_staff_step_to_midi_pitch(pos, clef)
+            pitch_name = midi_to_note_name(midi_pitch)
+            cand["clef_resolved_staff_pitch"] = pitch_name
+            cand["clef_resolved_midi_pitch"] = midi_pitch
+        except Exception:
+            continue
 
-def build_clef_resolved_pitch_coverage_report(outcomes: list[dict], assume_treble_clef: bool = False) -> dict:
+def build_clef_resolved_pitch_coverage_report(
+    outcomes: list[dict],
+    assume_treble_clef: bool = False,
+    semantic_candidates: list[dict] | None = None
+) -> dict:
     report = {
         "total_note_candidates_in_scope": 0,
         "note_candidates_with_staff_position_index": 0,
@@ -1121,19 +1150,44 @@ def build_clef_resolved_pitch_coverage_report(outcomes: list[dict], assume_trebl
 
         malformed_staff = (type(page) is not int or type(sys_idx) is not int or type(staff_idx) is not int)
 
-        clef_count = 0
-        if not malformed_staff:
-            key = (page, sys_idx, staff_idx)
-            clef_count = clef_policy.get(key, 0)
+        clef = None
+        has_valid_clef = False
+        has_assumed_clef = False
+        is_ambiguous = False
 
-        if clef_count == 1:
+        if not malformed_staff:
+            if semantic_candidates is not None:
+                sc_match = None
+                for sc in semantic_candidates:
+                    if sc.get("page_index") == page and sc.get("system_index") == sys_idx and sc.get("staff_index") == staff_idx:
+                        sc_match = sc
+                        break
+                if sc_match is not None:
+                    logical_clef = sc_match.get("logical_clef", {})
+                    status = logical_clef.get("status")
+                    clef_kind = logical_clef.get("clef_kind")
+                    if status == "logical_clef_candidate" and clef_kind in ("treble", "bass", "alto"):
+                        clef = clef_kind
+                        has_valid_clef = True
+                    elif status == "ambiguous_candidate":
+                        is_ambiguous = True
+            else:
+                clef_count = clef_policy.get((page, sys_idx, staff_idx), 0)
+                if clef_count == 1:
+                    clef = "treble"
+                    has_valid_clef = True
+                elif clef_count > 1:
+                    is_ambiguous = True
+
+        if has_valid_clef:
             report["note_candidates_on_staves_with_valid_clef"] += 1
-        elif assume_treble_clef and clef_count == 0:
+        elif assume_treble_clef and not has_valid_clef and not is_ambiguous:
             report["note_candidates_on_staves_with_assumed_clef"] += 1
+            has_assumed_clef = True
 
         if cand.get("clef_resolved_staff_pitch"):
             report["note_candidates_with_clef_resolved_staff_pitch"] += 1
-            if assume_treble_clef and clef_count == 0:
+            if assume_treble_clef and not has_valid_clef:
                 report["note_candidates_with_assumed_treble_clef_pitch"] += 1
             if type(pos) is int and 0 <= pos <= 8:
                 report["in_staff_mapped_notes"] += 1
@@ -1144,12 +1198,12 @@ def build_clef_resolved_pitch_coverage_report(outcomes: list[dict], assume_trebl
             if malformed_staff:
                 report["skipped_staff_association_malformed"] += 1
                 reason = "malformed_staff_association"
-            elif clef_count == 0:
-                report["skipped_clef_missing"] += 1
-                reason = "missing_clef_evidence"
-            elif clef_count > 1:
+            elif is_ambiguous:
                 report["skipped_clef_ambiguous"] += 1
                 reason = "ambiguous_clef_evidence"
+            elif not has_valid_clef and not has_assumed_clef:
+                report["skipped_clef_missing"] += 1
+                reason = "missing_clef_evidence"
             elif not has_pos:
                 report["skipped_staff_position_malformed"] += 1
                 reason = "malformed_staff_position"
@@ -1477,8 +1531,8 @@ def run_recognition_on_file(
     if assume_treble_clef:
         map_assumed_treble_pitch_to_read_only_outcomes(outcomes)
 
-    map_clef_resolved_staff_pitch(outcomes, explicit_clef="treble" if assume_treble_clef else None)
-    coverage_report = build_clef_resolved_pitch_coverage_report(outcomes, assume_treble_clef=assume_treble_clef)
+    map_clef_resolved_staff_pitch(outcomes, explicit_clef="treble" if assume_treble_clef else None, semantic_candidates=semantic_candidates)
+    coverage_report = build_clef_resolved_pitch_coverage_report(outcomes, assume_treble_clef=assume_treble_clef, semantic_candidates=semantic_candidates)
 
     return {
         "source": pdf_path.name,

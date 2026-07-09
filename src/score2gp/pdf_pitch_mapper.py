@@ -34,3 +34,14 @@ def map_staff_step_to_midi_pitch(
 
     midi_pitch = 60 + 12 * octave + note_offsets[note_index]
     return midi_pitch
+
+
+def midi_to_note_name(midi: int) -> str:
+    """
+    Translates a MIDI pitch integer to a note name string (e.g. 60 -> "C4", 77 -> "F5").
+    Supports natural notes only (assumes sharps/flats are not present in baseline mapping).
+    """
+    note_names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+    octave = (midi // 12) - 1
+    name = note_names[midi % 12]
+    return f"{name}{octave}"
