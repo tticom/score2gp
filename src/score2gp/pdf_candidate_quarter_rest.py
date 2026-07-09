@@ -1,4 +1,5 @@
-from pydantic import BaseModel, ConfigDict, Field
+from __future__ import annotations
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing import List
 from score2gp.pdf_geometry_candidates import GeometryCandidateSet, XAlignedPrimitiveClusterCandidate
 
@@ -16,6 +17,12 @@ class QuarterRestCandidate(BaseModel):
     y1: float
     # Link back to the original geometry cluster
     cluster: XAlignedPrimitiveClusterCandidate
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> QuarterRestCandidate:
+        assert self.x0 <= self.x1, f"x0 ({self.x0}) must be <= x1 ({self.x1})"
+        assert self.y0 <= self.y1, f"y0 ({self.y0}) must be <= y1 ({self.y1})"
+        return self
 
 def extract_quarter_rest_candidates(
     geometry: GeometryCandidateSet,
