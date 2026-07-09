@@ -1,0 +1,15 @@
+{
+  "staves": [
+    {
+      "page_index": 1,
+      "system_index": 1,
+      "staff_index": 1,
+      "logical_clef": {
+        "status": "ambiguous_candidate",
+        "reason": "left margin contains primitives but no text spans or curves to suggest a clef",
+        "clef_kind": null
+      },
+      "quarter_rests": []
+    }
+  ]
+}
