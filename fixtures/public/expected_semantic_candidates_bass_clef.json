@@ -6,8 +6,8 @@
       "staff_index": 1,
       "logical_clef": {
         "status": "logical_clef_candidate",
-        "reason": "Evidence is ambiguous or does not strongly match clef heuristics",
-        "clef_kind": "unknown"
+        "reason": "Candidate matches proportional heuristics for a bass clef",
+        "clef_kind": "bass"
       },
       "quarter_rests": []
     }

@@ -5,7 +5,7 @@ from score2gp.pdf_geometry_candidates import GeometryCandidateSet
 from score2gp.logical_clef_candidate_classifier import classify_logical_clef_candidate
 from score2gp.pdf_candidate_quarter_rest import QuarterRestCandidate
 
-LogicalClefKind = Literal["treble", "bass", "unknown"]
+LogicalClefKind = Literal["treble", "bass", "alto", "unknown"]
 SemanticGateStatus = Literal["no_candidate", "ambiguous_candidate", "logical_clef_candidate"]
 
 class LogicalClefCandidate(BaseModel):
@@ -17,9 +17,11 @@ class LogicalClefCandidate(BaseModel):
     @model_validator(mode="after")
     def validate_clef_state(self) -> LogicalClefCandidate:
         if self.status == "logical_clef_candidate":
-            assert self.clef_kind is not None, "clef_kind must be provided when status is 'logical_clef_candidate'"
+            if self.clef_kind is None:
+                raise ValueError("clef_kind must be provided when status is 'logical_clef_candidate'")
         else:
-            assert self.clef_kind is None, "clef_kind must be None when status is not 'logical_clef_candidate'"
+            if self.clef_kind is not None:
+                raise ValueError("clef_kind must be None when status is not 'logical_clef_candidate'")
         return self
 
 # Backwards compatibility alias
@@ -69,6 +71,18 @@ def evaluate_logical_clef_gate(
         return SemanticGateResult(
             status="logical_clef_candidate",
             clef_kind="treble",
+            reason=classification["reason"]
+        )
+    elif classification["label"] == "bass_clef_candidate":
+        return SemanticGateResult(
+            status="logical_clef_candidate",
+            clef_kind="bass",
+            reason=classification["reason"]
+        )
+    elif classification["label"] == "alto_clef_candidate":
+        return SemanticGateResult(
+            status="logical_clef_candidate",
+            clef_kind="alto",
             reason=classification["reason"]
         )
     else:

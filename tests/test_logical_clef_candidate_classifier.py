@@ -114,3 +114,19 @@ def test_classify_logical_clef_candidate_ignores_rests():
     result = classify_logical_clef_candidate([c1], 5.0, 20.0, 10.0)
     assert result["label"] == "unknown"
     assert "Evidence is ambiguous or does not strongly match" in result["reason"]
+
+def test_classify_logical_clef_candidate_valid_bass():
+    # Spacing 8.5, height 34.0
+    # Bass clef needs height_to_spacing 2.5..4.2 and width_to_spacing 1.2..3.0 and height_to_staff_height 0.6..1.2
+    c1 = make_candidate("curve", 90.0, 95.0, 110.0, 125.0) # width 20.0 (ratio 2.35), height 30.0 (ratio 3.53), height_to_staff 0.88
+    result = classify_logical_clef_candidate([c1], 8.5, 34.0, 80.0)
+    assert result["label"] == "bass_clef_candidate"
+
+def test_classify_logical_clef_candidate_valid_alto():
+    # Spacing 8.5, height 34.0
+    # Alto clef needs height_to_spacing 3.0..4.5 and width_to_spacing 0.8..1.5 and height_to_staff_height 0.8..1.2
+    c1 = make_candidate("curve", 90.0, 100.0, 100.0, 117.0) # width 10.0, height 17.0
+    c2 = make_candidate("curve", 90.0, 117.0, 100.0, 134.0) # width 10.0, height 17.0
+    # Clustered bbox: [90.0, 100.0, 100.0, 134.0] -> width 10.0 (ratio 1.176), height 34.0 (ratio 4.0), height_to_staff 1.0
+    result = classify_logical_clef_candidate([c1, c2], 8.5, 34.0, 80.0)
+    assert result["label"] == "alto_clef_candidate"
