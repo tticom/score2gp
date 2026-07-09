@@ -130,5 +130,7 @@ def main() -> None:
     build_pdf("generated_standard_staff_quarter_note.json", "generated_standard_staff_quarter_note.pdf")
     build_pdf("generated_standard_staff_eighth_notes.json", "generated_standard_staff_eighth_notes.pdf")
     build_pdf("generated_standard_staff_ledger_lines.json", "generated_standard_staff_ledger_lines.pdf")
+    build_pdf("generated_standard_staff_bass_clef.json", "generated_standard_staff_bass_clef.pdf")
+    build_pdf("generated_standard_staff_alto_clef.json", "generated_standard_staff_alto_clef.pdf")
 if __name__ == "__main__":
     main()

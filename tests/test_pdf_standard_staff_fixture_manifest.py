@@ -9,9 +9,9 @@ def test_standard_staff_fixture_manifest_properties() -> None:
         manifest = json.load(f)
 
     fixtures = manifest.get("fixtures", [])
-    assert len(fixtures) == 4, "Expected exactly 4 standard staff fixtures in manifest"
+    assert len(fixtures) == 6, "Expected exactly 6 standard staff fixtures in manifest"
 
-    expected_ids = {"dense-margin", "sparse", "wide-curves", "complex-cluster"}
+    expected_ids = {"dense-margin", "sparse", "wide-curves", "complex-cluster", "bass-clef", "alto-clef"}
     actual_ids = set()
 
     for fixture in fixtures:
