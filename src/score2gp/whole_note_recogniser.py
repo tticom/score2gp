@@ -1283,6 +1283,7 @@ def run_recognition_on_file(
     beam_locations = []
     ledger_line_locations = []
     clef_locations = []
+    semantic_candidates = []
 
     all_staff_geometries = []
 
@@ -1411,6 +1412,36 @@ def run_recognition_on_file(
                         )
                         beam_locations.extend(shaped_beams)
 
+        # Extract page/staff-level semantic candidates using same logic as Req-119
+        try:
+            from score2gp.pdf_staff_geometry import PdfStaffNotationGeometryDiagnostics
+            from score2gp.pdf_geometry_candidate_extraction import extract_geometry_candidates
+            from score2gp.pdf_candidate_semantic_gate import evaluate_logical_clef_gate
+            from score2gp.pdf_candidate_quarter_rest import extract_quarter_rest_candidates
+
+            diags_model = PdfStaffNotationGeometryDiagnostics.model_validate(page_diags)
+            for staff_diag in diags_model.staves:
+                geometry = extract_geometry_candidates(staff_diag)
+
+                line_y_coords = staff_diag.staff.line_y_coords
+                staff_spacing = (line_y_coords[-1] - line_y_coords[0]) / 4.0 if len(line_y_coords) == 5 else 10.0
+                staff_height = line_y_coords[-1] - line_y_coords[0] if len(line_y_coords) == 5 else (staff_diag.staff.y1 - staff_diag.staff.y0)
+                staff_x0 = staff_diag.staff.x0
+                staff_center_y = sum(line_y_coords) / len(line_y_coords) if line_y_coords else (staff_diag.staff.y0 + staff_diag.staff.y1) / 2.0
+
+                clef_res = evaluate_logical_clef_gate(geometry, staff_spacing, staff_height, staff_x0)
+                qr_cands = extract_quarter_rest_candidates(geometry, staff_spacing, staff_center_y)
+
+                semantic_candidates.append({
+                    "page_index": page_index,
+                    "system_index": staff_diag.staff.system_index,
+                    "staff_index": staff_diag.staff.staff_index,
+                    "logical_clef": clef_res.model_dump(mode="json"),
+                    "quarter_rests": [qr.model_dump(mode="json") for qr in qr_cands]
+                })
+        except Exception:
+            pass
+
     outcomes = map_whole_note_candidates_to_read_only_outcomes(whole_note_locations)
     outcomes.extend(map_half_note_candidates_to_read_only_outcomes(half_note_locations))
     outcomes.extend(map_quarter_note_candidates_to_read_only_outcomes(quarter_note_locations))
@@ -1450,5 +1481,6 @@ def run_recognition_on_file(
         "recognition_mode": "read_only_diagnostic_derived",
         "staff_geometry": all_staff_geometries,
         "read_only_recognition_outcomes": outcomes,
-        "clef_resolved_pitch_coverage": coverage_report
+        "clef_resolved_pitch_coverage": coverage_report,
+        "semantic_candidates": semantic_candidates
     }
