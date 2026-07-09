@@ -107,3 +107,10 @@ def test_text_spans_do_not_cluster():
     c2 = make_candidate("text_span", 12.0, 20.0, 16.0, 35.0)
     result = classify_logical_clef_candidate([c1, c2], 5.0, 20.0, 10.0)
     assert result["label"] == "unknown"
+
+def test_classify_logical_clef_candidate_ignores_rests():
+    # Construct candidates resembling whole/half rests and ensure they are classified as unknown
+    c1 = make_candidate("curve", 10.0, 35.0, 22.0, 40.0)  # width 12, height 5 (wider than tall)
+    result = classify_logical_clef_candidate([c1], 5.0, 20.0, 10.0)
+    assert result["label"] == "unknown"
+    assert "Evidence is ambiguous or does not strongly match" in result["reason"]

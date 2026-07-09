@@ -70,3 +70,27 @@ def test_extract_quarter_rest_fails_vertical_centering():
 
     rests = extract_quarter_rest_candidates(geometry, staff_spacing=10.0, staff_center_y=50.0)
     assert len(rests) == 0
+
+def test_extract_quarter_rest_ignores_whole_rest():
+    # Whole rest is wider than tall and hanging/short (e.g. width = 12, height = 5)
+    cluster = make_cluster("curve", x0=100.0, y0=35.0, x1=112.0, y1=40.0)
+    geometry = GeometryCandidateSet(x_aligned_clusters=[cluster])
+
+    rests = extract_quarter_rest_candidates(geometry, staff_spacing=10.0, staff_center_y=50.0)
+    assert len(rests) == 0
+
+def test_extract_quarter_rest_ignores_half_rest():
+    # Half rest is wider than tall and sitting/short (e.g. width = 12, height = 5)
+    cluster = make_cluster("curve", x0=100.0, y0=45.0, x1=112.0, y1=50.0)
+    geometry = GeometryCandidateSet(x_aligned_clusters=[cluster])
+
+    rests = extract_quarter_rest_candidates(geometry, staff_spacing=10.0, staff_center_y=50.0)
+    assert len(rests) == 0
+
+def test_extract_quarter_rest_ignores_overlapping_polyphonic_cluster():
+    # Multiple overlapping primitives in the cluster
+    cluster = make_cluster("curve", x0=100.0, y0=35.0, x1=110.0, y1=65.0, count=3)
+    geometry = GeometryCandidateSet(x_aligned_clusters=[cluster])
+
+    rests = extract_quarter_rest_candidates(geometry, staff_spacing=10.0, staff_center_y=50.0)
+    assert len(rests) == 0
