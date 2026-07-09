@@ -163,3 +163,9 @@ def test_semantic_candidates_fail_closed_on_whole_half_rests():
         assert "semantic_candidates" in output
         for staff in output["semantic_candidates"]:
             assert len(staff["quarter_rests"]) == 0, f"Expected 0 quarter rests for {f}, found {len(staff['quarter_rests'])}"
+            if f == "WholeNoteRest.pdf":
+                assert len(staff.get("whole_rests", [])) == 1, f"Expected 1 whole rest for {f}, found {len(staff.get('whole_rests', []))}"
+                assert len(staff.get("half_rests", [])) == 0, f"Expected 0 half rests for {f}, found {len(staff.get('half_rests', []))}"
+            elif f == "HalfNotes.pdf":
+                assert len(staff.get("whole_rests", [])) == 0, f"Expected 0 whole rests for {f}, found {len(staff.get('whole_rests', []))}"
+                assert len(staff.get("half_rests", [])) == 0, f"Expected 0 half rests for {f}, found {len(staff.get('half_rests', []))}"

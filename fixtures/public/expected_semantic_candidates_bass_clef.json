@@ -9,7 +9,9 @@
         "reason": "Candidate matches proportional heuristics for a bass clef",
         "clef_kind": "bass"
       },
-      "quarter_rests": []
+      "quarter_rests": [],
+      "whole_rests": [],
+      "half_rests": []
     }
   ]
 }

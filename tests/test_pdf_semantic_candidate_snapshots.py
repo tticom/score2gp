@@ -6,6 +6,7 @@ from score2gp.pdf_staff_notation_diagnostics import extract_notation_diagnostics
 from score2gp.pdf_geometry_candidate_extraction import extract_geometry_candidates
 from score2gp.pdf_candidate_semantic_gate import evaluate_logical_clef_gate
 from score2gp.pdf_candidate_quarter_rest import extract_quarter_rest_candidates
+from score2gp.pdf_candidate_whole_half_rest import extract_whole_half_rest_candidates
 
 def test_semantic_candidates_snapshots() -> None:
     fixtures = [
@@ -44,13 +45,16 @@ def test_semantic_candidates_snapshots() -> None:
 
             clef_res = evaluate_logical_clef_gate(geometry, staff_spacing, staff_height, staff_x0)
             qr_cands = extract_quarter_rest_candidates(geometry, staff_spacing, staff_center_y)
+            whole_cands, half_cands = extract_whole_half_rest_candidates(geometry, staff_spacing, staff_center_y)
 
             staves_data.append({
                 "page_index": staff_diag.staff.page_index,
                 "system_index": staff_diag.staff.system_index,
                 "staff_index": staff_diag.staff.staff_index,
                 "logical_clef": clef_res.model_dump(mode="json"),
-                "quarter_rests": [qr.model_dump(mode="json") for qr in qr_cands]
+                "quarter_rests": [qr.model_dump(mode="json") for qr in qr_cands],
+                "whole_rests": [wr.model_dump(mode="json") for wr in whole_cands],
+                "half_rests": [hr.model_dump(mode="json") for hr in half_cands]
             })
 
         cand_dict = {"staves": staves_data}
