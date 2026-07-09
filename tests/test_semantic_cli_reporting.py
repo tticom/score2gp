@@ -107,3 +107,59 @@ def test_legacy_scoreir_and_playable_output_unchanged(tmp_path):
     summary_str = json.dumps(report).lower()
     for forbidden in ["quarter_rest_candidate", "logical_clef_candidate"]:
         assert forbidden not in summary_str
+
+def test_semantic_candidates_fail_closed_on_standard_fixtures():
+    # List of public standard staff fixtures that contain noise, blank staves,
+    # wide curves, or complex clusters (overlapping primitives).
+    fixtures = [
+        "complex_cluster",
+        "sparse",
+        "wide_curves",
+        "negative_tab",
+        "negative_blank",
+        "negative_noise"
+    ]
+
+    for f in fixtures:
+        pdf_path = Path(f"tests/fixtures/pdf/generated_standard_staff_{f}.pdf")
+        assert pdf_path.exists()
+
+        cmd = [
+            sys.executable, "-m", "score2gp.cli", "note-candidate-recognition",
+            "--pdf", str(pdf_path),
+            "--json"
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=_get_subprocess_env())
+        output = json.loads(result.stdout)
+
+        assert "semantic_candidates" in output
+        for staff in output["semantic_candidates"]:
+            # Confirm that no quarter rests are extracted (fail-closed on these staves)
+            assert len(staff["quarter_rests"]) == 0, f"Expected 0 quarter rests for {f}, found {len(staff['quarter_rests'])}"
+
+            # Confirm that no treble clef was resolved (either unknown or no_candidate)
+            clef = staff["logical_clef"]
+            assert clef["clef_kind"] in [None, "unknown"], f"Expected clef_kind to be None/unknown for {f}, found {clef['clef_kind']}"
+
+def test_semantic_candidates_fail_closed_on_whole_half_rests():
+    # Verify simple public fixtures with whole/half rests do not produce quarter rests
+    fixtures = [
+        "WholeNoteRest.pdf",
+        "HalfNotes.pdf"
+    ]
+
+    for f in fixtures:
+        pdf_path = Path(f"fixtures/public/generated_simple/simple/{f}")
+        assert pdf_path.exists()
+
+        cmd = [
+            sys.executable, "-m", "score2gp.cli", "note-candidate-recognition",
+            "--pdf", str(pdf_path),
+            "--json"
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=_get_subprocess_env())
+        output = json.loads(result.stdout)
+
+        assert "semantic_candidates" in output
+        for staff in output["semantic_candidates"]:
+            assert len(staff["quarter_rests"]) == 0, f"Expected 0 quarter rests for {f}, found {len(staff['quarter_rests'])}"
