@@ -47,6 +47,30 @@
       "scanned": false,
       "ocr": false,
       "semantic_inference": false
+    },
+    {
+      "id": "bass-clef",
+      "json_path": "fixtures/public/generated_standard_staff_bass_clef.json",
+      "pdf_path": "tests/fixtures/pdf/generated_standard_staff_bass_clef.pdf",
+      "generator_script": "tests/fixtures/pdf/make_standard_staff_diagnostics_pdfs.py",
+      "expected_diagnostic_focus": "Left margin curve matching F-clef/bass geometry",
+      "synthetic": true,
+      "private": false,
+      "scanned": false,
+      "ocr": false,
+      "semantic_inference": false
+    },
+    {
+      "id": "alto-clef",
+      "json_path": "fixtures/public/generated_standard_staff_alto_clef.json",
+      "pdf_path": "tests/fixtures/pdf/generated_standard_staff_alto_clef.pdf",
+      "generator_script": "tests/fixtures/pdf/make_standard_staff_diagnostics_pdfs.py",
+      "expected_diagnostic_focus": "Left margin curves matching C-clef/alto geometry",
+      "synthetic": true,
+      "private": false,
+      "scanned": false,
+      "ocr": false,
+      "semantic_inference": false
     }
   ]
 }
