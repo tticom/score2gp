@@ -116,8 +116,19 @@ def classify_logical_clef_candidate(
         height_to_staff_height = float(c_height) / float(staff_height)
         x0_offset = float(bbox.x0) - float(staff_x0)
 
+        clef_label = None
         if height_to_spacing >= 3.5 and width_to_spacing >= 1.5 and height_to_staff_height > 1.2:
+            clef_label = "treble_clef_candidate"
+        elif group["kind"] == "curve_group":
+            if -2.0 * staff_spacing <= x0_offset <= 3.0 * staff_spacing:
+                if (2.5 <= height_to_spacing <= 4.2) and (1.2 <= width_to_spacing <= 3.0) and (0.6 <= height_to_staff_height <= 1.2):
+                    clef_label = "bass_clef_candidate"
+                elif (3.0 <= height_to_spacing <= 4.5) and (0.8 <= width_to_spacing <= 1.5) and (0.8 <= height_to_staff_height <= 1.2):
+                    clef_label = "alto_clef_candidate"
+
+        if clef_label:
             valid_candidates.append({
+                "label": clef_label,
                 "candidate_kind": group["kind"],
                 "height_to_spacing": round(height_to_spacing, 3),
                 "width_to_spacing": round(width_to_spacing, 3),
@@ -127,12 +138,35 @@ def classify_logical_clef_candidate(
             })
 
     if len(valid_candidates) == 1:
-        return {
-            "kind": "logical_clef_candidate_classifier",
-            "label": "treble_clef_candidate",
-            "reason": "Candidate matches proportional heuristics for a treble clef",
-            "features": valid_candidates[0]
-        }
+        cand = valid_candidates[0]
+        if cand["label"] == "treble_clef_candidate":
+            return {
+                "kind": "logical_clef_candidate_classifier",
+                "label": "treble_clef_candidate",
+                "reason": "Candidate matches proportional heuristics for a treble clef",
+                "features": cand
+            }
+        elif cand["label"] == "bass_clef_candidate":
+            return {
+                "kind": "logical_clef_candidate_classifier",
+                "label": "bass_clef_candidate",
+                "reason": "Candidate matches proportional heuristics for a bass clef",
+                "features": cand
+            }
+        elif cand["label"] == "alto_clef_candidate":
+            return {
+                "kind": "logical_clef_candidate_classifier",
+                "label": "alto_clef_candidate",
+                "reason": "Candidate matches proportional heuristics for an alto clef",
+                "features": cand
+            }
+        else:
+            return {
+                "kind": "logical_clef_candidate_classifier",
+                "label": "unknown",
+                "reason": "Unknown classification label encountered",
+                "features": {}
+            }
     elif len(valid_candidates) > 1:
         return {
             "kind": "logical_clef_candidate_classifier",
@@ -144,6 +178,6 @@ def classify_logical_clef_candidate(
         return {
             "kind": "logical_clef_candidate_classifier",
             "label": "unknown",
-            "reason": "Evidence is ambiguous or does not strongly match treble clef heuristics",
+            "reason": "Evidence is ambiguous or does not strongly match clef heuristics",
             "features": {}
         }
