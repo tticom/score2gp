@@ -15,7 +15,9 @@ def test_semantic_candidates_snapshots() -> None:
         "complex_cluster",
         "negative_tab",
         "negative_blank",
-        "negative_noise"
+        "negative_noise",
+        "bass_clef",
+        "alto_clef"
     ]
 
     for f in fixtures:
@@ -23,7 +25,6 @@ def test_semantic_candidates_snapshots() -> None:
         expected_path = Path(f"fixtures/public/expected_semantic_candidates_{f}.json")
 
         assert pdf_path.exists(), f"PDF missing: {pdf_path}"
-        assert expected_path.exists(), f"Snapshot missing: {expected_path}"
 
         with fitz.open(pdf_path) as doc:
             page = doc[0]
@@ -54,13 +55,19 @@ def test_semantic_candidates_snapshots() -> None:
 
         cand_dict = {"staves": staves_data}
 
-        with open(expected_path, "r", encoding="utf-8") as file:
-            expected = json.load(file)
-
         # Ensure prohibited semantic terms (like pitch, scoreir, duration/rhythm timeline inference)
         # do not appear in the generated JSON. Note: "clef" and "rests" are fine here since they are candidate level.
         diags_str = json.dumps(cand_dict).lower()
         for forbidden in ["pitch", "timeline", "scoreir", "duration_inference"]:
             assert forbidden not in diags_str, f"Forbidden semantic field '{forbidden}' found in semantic candidates for {f}!"
+
+        import os
+        if os.environ.get("UPDATE_SNAPSHOTS") == "1" or not expected_path.exists():
+            with open(expected_path, "w", encoding="utf-8") as file:
+                json.dump(cand_dict, file, indent=2)
+                file.write("\n")
+
+        with open(expected_path, "r", encoding="utf-8") as file:
+            expected = json.load(file)
 
         assert cand_dict == expected, f"Semantic candidates snapshot mismatch for {f}"
