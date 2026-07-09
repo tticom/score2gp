@@ -254,3 +254,123 @@ def test_multi_clef_pitch_mapping_semantic_candidates():
     assert report["skipped_clef_missing"] == 1  # note_unknown counts as missing
     assert report["skipped_clef_ambiguous"] == 1  # note_ambiguous is ambiguous
 
+
+def test_accidental_and_key_signature_modifiers():
+    from score2gp.whole_note_recogniser import map_clef_resolved_staff_pitch
+
+    outcomes = [
+        # Note 0: F5 under treble clef (pos=0).
+        # Key signature: G Major.
+        # Should be F#5 (MIDI 78 instead of 77).
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": 0, "x0": 10.0, "page_index": 1, "system_index": 1, "staff_index": 1},
+
+        # Note 1: F5 under treble clef (pos=0).
+        # Key signature: G Major. But has local flat accidental ("flat").
+        # Should be Fb5 (MIDI 76 instead of 77).
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": 0, "x0": 20.0, "page_index": 1, "system_index": 1, "staff_index": 1, "accidental": "flat"},
+
+        # Note 2: F5 under treble clef (pos=0).
+        # Key signature: G Major. No local accidental, but follows Note 1 (local flat) in the same measure.
+        # Should carry over Fb5 (MIDI 76).
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": 0, "x0": 30.0, "page_index": 1, "system_index": 1, "staff_index": 1},
+
+        # Note 3: F5 under treble clef (pos=0) but in a different octave (e.g. F4, pos=7 -> MIDI 65).
+        # Local accidental memory is octave-specific, so it should NOT be flatted. It should follow G Major (F#4, MIDI 66).
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": 7, "x0": 35.0, "page_index": 1, "system_index": 1, "staff_index": 1},
+
+        # Barline Candidate! Should reset measure memory.
+        {"symbol_type": "barline_candidate", "x0": 40.0, "page_index": 1, "system_index": 1, "staff_index": 1},
+
+        # Note 4: F5 under treble clef (pos=0).
+        # Follows barline, so measure memory is reset. Should revert to key signature default: F#5 (MIDI 78).
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": 0, "x0": 50.0, "page_index": 1, "system_index": 1, "staff_index": 1},
+
+        # Note 5: F5 under treble clef (pos=0).
+        # Has local natural accidental ("natural").
+        # Should be F5 (MIDI 77).
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": 0, "x0": 60.0, "page_index": 1, "system_index": 1, "staff_index": 1, "accidental": "natural"},
+
+        # Note 6: F5 under treble clef (pos=0).
+        # Double sharp ("double_sharp").
+        # Should be F##5 (MIDI 79).
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": 0, "x0": 70.0, "page_index": 1, "system_index": 1, "staff_index": 1, "accidental": "double_sharp"},
+
+        # Note 7: F5 under treble clef (pos=0).
+        # Unrecognized local accidental - should fail-closed (revert to previous double_sharp memory).
+        # Should be F##5 (MIDI 79).
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": 0, "x0": 80.0, "page_index": 1, "system_index": 1, "staff_index": 1, "accidental": "unrecognized"}
+    ]
+
+    semantic_candidates = [
+        {
+            "page_index": 1,
+            "system_index": 1,
+            "staff_index": 1,
+            "logical_clef": {
+                "status": "logical_clef_candidate",
+                "clef_kind": "treble"
+            },
+            "key_signature": {
+                "status": "key_signature_candidate",
+                "key_kind": "G Major"
+            }
+        }
+    ]
+
+    map_clef_resolved_staff_pitch(outcomes, semantic_candidates=semantic_candidates)
+
+    # Note 0: G Major (F#5)
+    assert outcomes[0].get("clef_resolved_staff_pitch") == "F#5"
+    assert outcomes[0].get("clef_resolved_midi_pitch") == 78
+
+    # Note 1: Local flat (Fb5)
+    assert outcomes[1].get("clef_resolved_staff_pitch") == "Fb5"
+    assert outcomes[1].get("clef_resolved_midi_pitch") == 76
+
+    # Note 2: Measure memory (Fb5)
+    assert outcomes[2].get("clef_resolved_staff_pitch") == "Fb5"
+    assert outcomes[2].get("clef_resolved_midi_pitch") == 76
+
+    # Note 3: Different octave, G Major (F#4)
+    assert outcomes[3].get("clef_resolved_staff_pitch") == "F#4"
+    assert outcomes[3].get("clef_resolved_midi_pitch") == 66
+
+    # Note 4: Reset by barline (F#5)
+    assert outcomes[5].get("clef_resolved_staff_pitch") == "F#5"
+    assert outcomes[5].get("clef_resolved_midi_pitch") == 78
+
+    # Note 5: Natural (F5)
+    assert outcomes[6].get("clef_resolved_staff_pitch") == "F5"
+    assert outcomes[6].get("clef_resolved_midi_pitch") == 77
+
+    # Note 6: Double sharp (F##5)
+    assert outcomes[7].get("clef_resolved_staff_pitch") == "F##5"
+    assert outcomes[7].get("clef_resolved_midi_pitch") == 79
+
+    # Note 7: Fail closed on unrecognized (retains measure memory of double sharp)
+    assert outcomes[8].get("clef_resolved_staff_pitch") == "F##5"
+    assert outcomes[8].get("clef_resolved_midi_pitch") == 79
+
+    # Test unrecognized key signature fallback
+    invalid_outcomes = [
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": 0, "x0": 10.0, "page_index": 1, "system_index": 1, "staff_index": 1}
+    ]
+    invalid_sem_cands = [
+        {
+            "page_index": 1,
+            "system_index": 1,
+            "staff_index": 1,
+            "logical_clef": {
+                "status": "logical_clef_candidate",
+                "clef_kind": "treble"
+            },
+            "key_signature": {
+                "status": "key_signature_candidate",
+                "key_kind": "Invalid Key Name"
+            }
+        }
+    ]
+    map_clef_resolved_staff_pitch(invalid_outcomes, semantic_candidates=invalid_sem_cands)
+    # Should fall back to C Major, F5 -> F5 (MIDI 77)
+    assert invalid_outcomes[0].get("clef_resolved_staff_pitch") == "F5"
+    assert invalid_outcomes[0].get("clef_resolved_midi_pitch") == 77
