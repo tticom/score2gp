@@ -211,7 +211,7 @@ def _format_diagnostics_report(data: dict) -> str:
         clef_text = "Unknown"
         if clef_info:
             status = clef_info.get("status")
-            kind = clef_info.get("clef_kind", "").capitalize()
+            kind = (clef_info.get("clef_kind") or "").capitalize()
             if status == "logical_clef_candidate":
                 clef_text = f"{kind} (Detected)"
             elif status == "assumed_default":
