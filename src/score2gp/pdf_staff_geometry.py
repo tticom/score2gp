@@ -160,6 +160,26 @@ class StaffFlagBeamCandidateDiagnostics(BaseModel):
     flags: list[FlagPrimitiveCandidateDiagnostics]
     beams: list[BeamPrimitiveCandidateDiagnostics]
 
+class TieCandidateDiagnostics(BaseModel):
+    """
+    Geometric bounding box for a tie or slur primitive extracted from curve strokes.
+    """
+    model_config = ConfigDict(frozen=True)
+    bbox: list[float]
+    primitive_kind: str
+    width: float
+    height: float
+
+class DotPrimitiveCandidateDiagnostics(BaseModel):
+    """
+    Geometric bounding box for a dot primitive extracted from circles/small paths.
+    """
+    model_config = ConfigDict(frozen=True)
+    bbox: list[float]
+    primitive_kind: str
+    width: float
+    height: float
+
 class NotationStaffDiagnostics(BaseModel):
     """
     Comprehensive geometric diagnostics for a single notation staff.
@@ -175,6 +195,8 @@ class NotationStaffDiagnostics(BaseModel):
     left_margin_candidates: list[LeftMarginPrimitiveCandidate] | None = None
     x_aligned_cluster_candidates: list[XAlignedPrimitiveClusterCandidate] | None = None
     flag_beam_candidates: StaffFlagBeamCandidateDiagnostics | None = None
+    tie_candidates: list[TieCandidateDiagnostics] | None = None
+    dot_candidates: list[DotPrimitiveCandidateDiagnostics] | None = None
 
 class SystemConnectorDiagnostics(BaseModel):
     """
@@ -206,6 +228,7 @@ class PdfStaffNotationGeometryDiagnostics(BaseModel):
     whole_note_candidates: list[WholeNoteCandidateDiagnostics] | None = None
     half_note_candidates: list[HalfNoteCandidateDiagnostics] | None = None
     quarter_note_candidates: list[QuarterNoteCandidateDiagnostics] | None = None
+    dot_candidates: list[DotPrimitiveCandidateDiagnostics] | None = None
     status: str | None = "success"
 
 class HalfNoteCandidateDiagnostics(BaseModel):

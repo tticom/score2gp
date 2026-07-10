@@ -16,16 +16,19 @@ from .pdf_staff_geometry import (
     QuarterNoteCandidateDiagnostics,
     FlagPrimitiveCandidateDiagnostics,
     BeamPrimitiveCandidateDiagnostics,
-    StaffFlagBeamCandidateDiagnostics
+    StaffFlagBeamCandidateDiagnostics,
+    TieCandidateDiagnostics,
+    DotPrimitiveCandidateDiagnostics
 )
 from dataclasses import dataclass
 import statistics
 from .pdf_geometry_candidate_extractor import PdfGeometryCandidateExtractor
 
-def _extract_note_candidates(page: Any, staves_diags: list['NotationStaffDiagnostics'] | None = None) -> tuple[list[WholeNoteCandidateDiagnostics], list[HalfNoteCandidateDiagnostics], list[QuarterNoteCandidateDiagnostics]]:
+def _extract_note_candidates(page: Any, staves_diags: list['NotationStaffDiagnostics'] | None = None) -> tuple[list[WholeNoteCandidateDiagnostics], list[HalfNoteCandidateDiagnostics], list[QuarterNoteCandidateDiagnostics], list[DotPrimitiveCandidateDiagnostics]]:
     whole_candidates = []
     half_candidates = []
     quarter_candidates = []
+    dot_candidates = []
 
     def get_identity(y_center: float) -> tuple[int | None, int | None, int | None]:
         if not staves_diags:
@@ -88,7 +91,7 @@ def _extract_note_candidates(page: Any, staves_diags: list['NotationStaffDiagnos
         items = draw.get("items", [])
         c_count = sum(1 for item in items if item[0] == 'c')
 
-        if 1.0 <= aspect <= 2.0 and c_count >= 2:
+        if 0.8 <= aspect <= 2.0 and c_count >= 2:
             is_hollow = not draw.get("fill")
             if not is_hollow:
                 # Fallback heuristic: check if inner contour points exist and are far from edges.
@@ -151,7 +154,14 @@ def _extract_note_candidates(page: Any, staves_diags: list['NotationStaffDiagnos
                         page_index=page_idx, system_index=sys_idx, staff_index=staff_idx
                     ))
             else:
-                if has_stem:
+                if w < 3.0 and h < 3.0 and c_count >= 2:
+                    dot_candidates.append(DotPrimitiveCandidateDiagnostics(
+                        bbox=[round(x0, 3), round(y0, 3), round(x1, 3), round(y1, 3)],
+                        primitive_kind="dot",
+                        width=round(w, 3),
+                        height=round(h, 3)
+                    ))
+                elif has_stem:
                     quarter_candidates.append(QuarterNoteCandidateDiagnostics(
                         bbox=[round(x0, 3), round(y0, 3), round(x1, 3), round(y1, 3)],
                         width=round(w, 3),
@@ -160,6 +170,14 @@ def _extract_note_candidates(page: Any, staves_diags: list['NotationStaffDiagnos
                         stem_bbox=stem_bbox,
                         page_index=page_idx, system_index=sys_idx, staff_index=staff_idx
                     ))
+                elif w < 6.5 and h < 6.5 and c_count >= 2:
+                    dot_candidates.append(DotPrimitiveCandidateDiagnostics(
+                        bbox=[round(x0, 3), round(y0, 3), round(x1, 3), round(y1, 3)],
+                        primitive_kind="dot",
+                        width=round(w, 3),
+                        height=round(h, 3)
+                    ))
+
 
     # 2. Extract from SMuFL text spans
     try:
@@ -285,7 +303,7 @@ def _extract_note_candidates(page: Any, staves_diags: list['NotationStaffDiagnos
         pass # Fail safely as required
 
 
-    return whole_candidates, half_candidates, quarter_candidates
+    return whole_candidates, half_candidates, quarter_candidates, dot_candidates
 
 def _extract_whole_note_candidates(page: Any) -> list[WholeNoteCandidateDiagnostics]:
     return _extract_note_candidates(page)[0]
@@ -820,6 +838,8 @@ def build_notation_diagnostics(
 
         flag_candidates = []
         beam_candidates = []
+        tie_candidates = []
+        dot_candidates = []
         if staff_space > 0.0:
             for p in primitives_for_clustering:
                 if p.type in ("curve", "diagonal_stroke_candidate"):
@@ -827,6 +847,16 @@ def build_notation_diagnostics(
                     h = abs(p.y1 - p.y0)
                     if h < 4.0 * staff_space and w < 3.0 * staff_space:
                         flag_candidates.append(FlagPrimitiveCandidateDiagnostics(
+                            bbox=[round(p.x0, 3), round(p.y0, 3), round(p.x1, 3), round(p.y1, 3)],
+                            primitive_kind=p.type,
+                            width=round(w, 3),
+                            height=round(h, 3)
+                        ))
+                if p.type == "curve":
+                    w = abs(p.x1 - p.x0)
+                    h = abs(p.y1 - p.y0)
+                    if w >= 1.5 * staff_space and h <= 4.0 * staff_space:
+                        tie_candidates.append(TieCandidateDiagnostics(
                             bbox=[round(p.x0, 3), round(p.y0, 3), round(p.x1, 3), round(p.y1, 3)],
                             primitive_kind=p.type,
                             width=round(w, 3),
@@ -884,6 +914,8 @@ def build_notation_diagnostics(
                 left_margin_candidates=left_margin_candidates,
                 x_aligned_cluster_candidates=x_aligned_cluster_candidates,
                 flag_beam_candidates=flag_beam_diags,
+                tie_candidates=tie_candidates if tie_candidates else None,
+                dot_candidates=dot_candidates if dot_candidates else None,
             )
         )
 
@@ -893,7 +925,8 @@ def build_notation_diagnostics(
         system_connectors=system_connectors,
         whole_note_candidates=notes[0],
         half_note_candidates=notes[1],
-        quarter_note_candidates=notes[2]
+        quarter_note_candidates=notes[2],
+        dot_candidates=notes[3]
     )
 
 

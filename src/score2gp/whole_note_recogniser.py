@@ -212,6 +212,24 @@ def shape_half_note_candidate_evidence(
 ) -> list[dict]:
     return shape_candidate_evidence(raw_candidates, page_index, "half_note_candidate", start_index)
 
+def shape_tie_candidate_evidence(
+    raw_candidates: Iterable[Any],
+    page_index: int,
+    system_index: int | None = None,
+    staff_index: int | None = None,
+    start_index: int = 1
+) -> list[dict]:
+    return shape_candidate_evidence(raw_candidates, page_index, "tie_candidate", start_index)
+
+def shape_dot_candidate_evidence(
+    raw_candidates: Iterable[Any],
+    page_index: int,
+    system_index: int | None = None,
+    staff_index: int | None = None,
+    start_index: int = 1
+) -> list[dict]:
+    return shape_candidate_evidence(raw_candidates, page_index, "dot_candidate", start_index)
+
 def shape_quarter_note_candidate_evidence(
     raw_candidates: Iterable[Any],
     page_index: int,
@@ -658,6 +676,40 @@ def map_beam_candidates_to_read_only_outcomes(candidate_locations: list[dict]) -
         })
     return outcomes
 
+def map_tie_candidates_to_read_only_outcomes(candidate_locations: list[dict]) -> list[dict]:
+    outcomes = []
+    for cand in candidate_locations:
+        outcomes.append({
+            "symbol_type": "tie_candidate",
+            "candidate_id": cand.get("candidate_id"),
+            "page_index": cand.get("page_index"),
+            "system_index": cand.get("system_index"),
+            "staff_index": cand.get("staff_index"),
+            "bbox": cand.get("bbox"),
+            "primitive_kind": cand.get("primitive_kind"),
+            "width": cand.get("width"),
+            "height": cand.get("height"),
+            "source": "diagnostic_candidate_evidence"
+        })
+    return outcomes
+
+def map_dot_candidates_to_read_only_outcomes(candidate_locations: list[dict]) -> list[dict]:
+    outcomes = []
+    for cand in candidate_locations:
+        outcomes.append({
+            "symbol_type": "dot_candidate",
+            "candidate_id": cand.get("candidate_id"),
+            "page_index": cand.get("page_index"),
+            "system_index": cand.get("system_index"),
+            "staff_index": cand.get("staff_index"),
+            "bbox": cand.get("bbox"),
+            "primitive_kind": cand.get("primitive_kind"),
+            "width": cand.get("width"),
+            "height": cand.get("height"),
+            "source": "diagnostic_candidate_evidence"
+        })
+    return outcomes
+
 def map_staff_geometry_to_read_only_report(staves_diags: list[dict]) -> list[dict]:
     staff_geometries = []
     for staff_diag in staves_diags:
@@ -823,7 +875,8 @@ def compose_filled_duration_candidates(outcomes: list[dict]) -> list[dict]:
         for b in beams:
             b_bbox = b.get("bbox")
             if b.get("page_index") == q_page and b.get("system_index") == q_sys and b.get("staff_index") == q_staff and is_valid_bbox(b_bbox):
-                beam_y_margin = 2.0 if q_stem else 20.0
+                # Expand y-margin significantly so all stacked notes in a chord intersect the beam
+                beam_y_margin = 50.0 
                 if bboxes_intersect(full_bbox, b_bbox, x_margin=2.0, y_margin=beam_y_margin):
                     intersect_beams.append(b)
 
@@ -882,6 +935,92 @@ def compose_filled_duration_candidates(outcomes: list[dict]) -> list[dict]:
         q["association_status"] = "suppressed"
 
     return composed_notes
+
+def apply_dots_to_notes(outcomes: list[dict]) -> None:
+    dots = [o for o in outcomes if o.get("symbol_type") == "dot_candidate"]
+    notes = [o for o in outcomes if o.get("symbol_type") in (
+        "whole_note_candidate", "half_note_candidate", "quarter_note_candidate",
+        "eighth_note_candidate", "sixteenth_note_candidate", "thirty_second_note_candidate", "sixty_fourth_note_candidate"
+    ) and o.get("association_status") != "suppressed"]
+    
+    for dot in dots:
+        d_page = dot.get("page_index")
+        d_sys = dot.get("system_index")
+        d_staff = dot.get("staff_index")
+        d_bbox = dot.get("bbox")
+        if not d_bbox: continue
+        
+        best_note = None
+        min_dist = float('inf')
+        for note in notes:
+            if note.get("page_index") != d_page or note.get("system_index") != d_sys or note.get("staff_index") != d_staff:
+                continue
+            
+            n_bbox = note.get("bbox")
+            if not n_bbox: continue
+            
+            dy = abs((d_bbox[1] + d_bbox[3])/2.0 - (n_bbox[1] + n_bbox[3])/2.0)
+            dx = d_bbox[0] - n_bbox[2]
+            
+            # Augmentation dots must be to the right of the notehead and tightly aligned vertically
+            if 0.0 < dx < 20.0 and dy < 4.5:
+                dist = dx + dy * 2.0  # Weight dy more to prefer the vertically closest note in a chord
+                if dist < min_dist:
+                    min_dist = dist
+                    best_note = note
+                    
+        if best_note:
+            best_note["is_dotted"] = True
+            best_note.setdefault("dot_component_ids", []).append(dot.get("candidate_id"))
+            dot["association_status"] = "consumed"
+            dot["associated_note_id"] = best_note.get("candidate_id")
+
+    TICK_MAPPINGS = {
+        "whole_note_candidate": 3840,
+        "half_note_candidate": 1920,
+        "quarter_note_candidate": 960,
+        "eighth_note_candidate": 480,
+        "sixteenth_note_candidate": 240,
+        "thirty_second_note_candidate": 120,
+        "sixty_fourth_note_candidate": 60,
+    }
+
+    # Now calculate durations for all dotted notes
+    for note in notes:
+        dots = note.get("dot_component_ids", [])
+        if not dots: continue
+        
+        base_dur = TICK_MAPPINGS.get(note.get("symbol_type"), 960)
+        dur = base_dur
+        modifier = 0.0
+        # If it happens to swallow multiple dots incorrectly, cap it at 3 (triple dotted)
+        num_dots = min(len(dots), 3)
+        for i in range(1, num_dots + 1):
+            modifier += 1.0 / (2 ** i)
+        
+        note["duration_ticks"] = int(base_dur * (1.0 + modifier))
+        note["is_dotted"] = True
+
+    # Propagate the longest duration in a chord to all other notes in that chord
+    for n1 in notes:
+        if "duration_ticks" not in n1:
+            continue
+        # Find all notes in the same chord (X-aligned and same staff)
+        chord_notes = [
+            n2 for n2 in notes 
+            if n2.get("page_index") == n1.get("page_index") 
+            and n2.get("system_index") == n1.get("system_index") 
+            and n2.get("staff_index") == n1.get("staff_index")
+            and "bbox" in n1 and "bbox" in n2
+            and abs(n1["bbox"][0] - n2["bbox"][0]) < 10.0
+        ]
+        
+        max_dur = max([n.get("duration_ticks", TICK_MAPPINGS.get(n.get("symbol_type"), 960)) for n in chord_notes])
+        
+        for n2 in chord_notes:
+            n2["duration_ticks"] = max_dur
+            if max_dur != TICK_MAPPINGS.get(n2.get("symbol_type"), 960):
+                n2["is_dotted"] = True
 
 def map_staff_position_to_read_only_outcomes(outcomes: list[dict], staff_geometries: list[dict]) -> None:
     staff_geom_lookup = {}
@@ -1727,6 +1866,8 @@ def run_recognition_on_file(
     left_margin_locations = []
     flag_locations = []
     beam_locations = []
+    tie_locations = []
+    dot_locations = []
     ledger_line_locations = []
     clef_locations = []
     semantic_candidates = []
@@ -1858,6 +1999,27 @@ def run_recognition_on_file(
                         )
                         beam_locations.extend(shaped_beams)
 
+                    ties = staff.get("tie_candidates", [])
+                    if ties:
+                        shaped_ties = shape_tie_candidate_evidence(
+                            ties,
+                            page_index=page_index,
+                            system_index=sys_idx,
+                            staff_index=staff_idx,
+                            start_index=len(tie_locations) + 1
+                        )
+                        tie_locations.extend(shaped_ties)
+
+        dots = page_diags.get("dot_candidates", [])
+        if dots:
+            shaped_dots = shape_dot_candidate_evidence(
+                dots,
+                page_index=page_index,
+                start_index=len(dot_locations) + 1
+            )
+            _associate_staves(shaped_dots, staves)
+            dot_locations.extend(shaped_dots)
+
         # Extract page/staff-level semantic candidates using same logic as Req-119
         try:
             from score2gp.pdf_staff_geometry import PdfStaffNotationGeometryDiagnostics
@@ -1909,9 +2071,12 @@ def run_recognition_on_file(
     if include_flag_beam_candidates:
         outcomes.extend(map_flag_candidates_to_read_only_outcomes(flag_locations))
         outcomes.extend(map_beam_candidates_to_read_only_outcomes(beam_locations))
+        outcomes.extend(map_tie_candidates_to_read_only_outcomes(tie_locations))
+        outcomes.extend(map_dot_candidates_to_read_only_outcomes(dot_locations))
 
         composed_durations = compose_filled_duration_candidates(outcomes)
         outcomes.extend(composed_durations)
+        apply_dots_to_notes(outcomes)
 
         from score2gp.quarter_rest_recogniser import extract_quarter_rest_candidates
         quarter_rests = extract_quarter_rest_candidates(outcomes)
