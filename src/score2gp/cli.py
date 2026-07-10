@@ -239,6 +239,7 @@ def _format_diagnostics_report(data: dict) -> str:
         staff_outcomes = [o for o in outcomes if o.get("page_index") == p and o.get("system_index") == sy and o.get("staff_index") == st]
 
         qn = sum(1 for o in staff_outcomes if o.get("symbol_type") == "quarter_note_candidate")
+        en = sum(1 for o in staff_outcomes if o.get("symbol_type") == "eighth_note_candidate")
         hn = sum(1 for o in staff_outcomes if o.get("symbol_type") == "half_note_candidate")
         wn = sum(1 for o in staff_outcomes if o.get("symbol_type") == "whole_note_candidate")
 
@@ -248,6 +249,7 @@ def _format_diagnostics_report(data: dict) -> str:
 
         lines.append("Note / Rest Candidates:")
         lines.append(f"- Quarter Notes: {qn}")
+        lines.append(f"- Eighth Notes: {en}")
         lines.append(f"- Half Notes: {hn}")
         lines.append(f"- Whole Notes: {wn}")
         lines.append(f"- Quarter Rests: {qr}")
@@ -286,10 +288,18 @@ def _format_diagnostics_report(data: dict) -> str:
                     for v in sorted(voices.keys()):
                         v_name = "Voice 1 (Upper)" if v == 1 else f"Voice {v} (Lower)"
                         ev_strs = []
+                        
+                        # Group by start_tick to identify chords
+                        grouped_events = {}
                         for ev in voices[v]:
-                            stype = ev.get("symbol_type", "")
-                            dur = ev.get("duration_ticks", 0)
-                            pitch = ev.get("resolved_pitch")
+                            st = ev.get("start_tick", 0)
+                            grouped_events.setdefault(st, []).append(ev)
+                            
+                        for st in sorted(grouped_events.keys()):
+                            evs = grouped_events[st]
+                            stype = evs[0].get("symbol_type", "")
+                            dur = evs[0].get("duration_ticks", 0)
+                            
                             if "rest" in stype:
                                 if stype == "padding_rest":
                                     name = "Padding Rest"
@@ -297,8 +307,17 @@ def _format_diagnostics_report(data: dict) -> str:
                                     name = stype.replace("_candidate", "").replace("_", " ").title()
                                 ev_strs.append(f"--[{name}, {dur}]--")
                             else:
-                                pitch_str = pitch if pitch else "?"
-                                ev_strs.append(f"--({pitch_str}, {dur})--")
+                                pitches = []
+                                for ev in evs:
+                                    p = ev.get("resolved_pitch")
+                                    pitches.append(p if p else "?")
+                                
+                                if len(pitches) == 1:
+                                    ev_strs.append(f"--({pitches[0]}, {dur})--")
+                                else:
+                                    chord_str = ", ".join(pitches)
+                                    ev_strs.append(f"--[{chord_str}, {dur}]--")
+                                    
                         lines.append(f"  {v_name}: |" + "|".join(ev_strs) + "|")
         lines.append("")
     return "\n".join(lines).strip()
