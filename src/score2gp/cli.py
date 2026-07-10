@@ -175,6 +175,135 @@ def extract_tab_command(input_pdf: Path, out: Path = typer.Option(...)) -> None:
     typer.echo(json.dumps(extract_tab_file(input_pdf, out), indent=2))
 
 
+def _format_diagnostics_report(data: dict) -> str:
+    lines = []
+    lines.append("================================================================================")
+    lines.append("OMR CONSOLIDATED DIAGNOSTICS REPORT")
+    lines.append("================================================================================")
+    lines.append(f"Source File: {data.get('source', 'Unknown')}")
+    lines.append(f"Recognition Mode: {data.get('recognition_mode', 'Unknown')}")
+    lines.append("")
+
+    semantic_cands = data.get("semantic_candidates", [])
+    outcomes = data.get("read_only_recognition_outcomes", [])
+    timeline_preview = data.get("timeline_preview", [])
+
+    staves = data.get("staff_geometry", [])
+    if not staves:
+        staves_set = set()
+        for o in outcomes + semantic_cands + timeline_preview:
+            p = o.get("page_index")
+            sy = o.get("system_index")
+            st = o.get("staff_index")
+            if p is not None and sy is not None and st is not None:
+                staves_set.add((p, sy, st))
+        staves = [{"page_index": p, "system_index": sy, "staff_index": st} for p, sy, st in sorted(staves_set)]
+
+    for staff in staves:
+        p, sy, st = staff.get("page_index"), staff.get("system_index"), staff.get("staff_index")
+        lines.append("--------------------------------------------------------------------------------")
+        lines.append(f"STAFF INDEX SUMMARY: Page {p} | System {sy} | Staff {st}")
+        lines.append("--------------------------------------------------------------------------------")
+
+        sem = next((s for s in semantic_cands if s.get("page_index") == p and s.get("system_index") == sy and s.get("staff_index") == st), {})
+
+        clef_info = sem.get("logical_clef", {})
+        clef_text = "Unknown"
+        if clef_info:
+            status = clef_info.get("status")
+            kind = (clef_info.get("clef_kind") or "").capitalize()
+            if status == "logical_clef_candidate":
+                clef_text = f"{kind} (Detected)"
+            elif status == "assumed_default":
+                clef_text = f"{kind} (Assumed)"
+            elif status == "logical_clef_missing":
+                clef_text = "Missing"
+            elif status == "logical_clef_ambiguous":
+                clef_text = "Ambiguous"
+            else:
+                clef_text = f"{kind} ({status})"
+        lines.append(f"Clef: {clef_text}")
+
+        key_info = sem.get("logical_key_signature", {})
+        key_text = "Unknown"
+        if key_info:
+            if key_info.get("status") == "assumed_default":
+                key_text = f"{key_info.get('key_name', 'C Major')} (Assumed)"
+            else:
+                key_text = key_info.get("key_name", "Unknown")
+        else:
+            key_text = "C Major"
+        lines.append(f"Key Signature: {key_text}")
+        lines.append("")
+
+        staff_outcomes = [o for o in outcomes if o.get("page_index") == p and o.get("system_index") == sy and o.get("staff_index") == st]
+
+        qn = sum(1 for o in staff_outcomes if o.get("symbol_type") == "quarter_note_candidate")
+        hn = sum(1 for o in staff_outcomes if o.get("symbol_type") == "half_note_candidate")
+        wn = sum(1 for o in staff_outcomes if o.get("symbol_type") == "whole_note_candidate")
+
+        qr = sum(1 for o in staff_outcomes if o.get("symbol_type") == "quarter_rest_candidate") + len(sem.get("quarter_rests", []))
+        hr = sum(1 for o in staff_outcomes if o.get("symbol_type") == "half_rest_candidate") + len(sem.get("half_rests", []))
+        wr = sum(1 for o in staff_outcomes if o.get("symbol_type") == "whole_rest_candidate") + len(sem.get("whole_rests", []))
+
+        lines.append("Note / Rest Candidates:")
+        lines.append(f"- Quarter Notes: {qn}")
+        lines.append(f"- Half Notes: {hn}")
+        lines.append(f"- Whole Notes: {wn}")
+        lines.append(f"- Quarter Rests: {qr}")
+        lines.append(f"- Half Rests: {hr}")
+        lines.append(f"- Whole Rests: {wr}")
+        lines.append("")
+
+        staff_notes = sum(1 for o in staff_outcomes if "note_candidate" in o.get("symbol_type", ""))
+        mapped = sum(1 for o in staff_outcomes if "note_candidate" in o.get("symbol_type", "") and o.get("clef_resolved_staff_pitch") is not None)
+        skipped = staff_notes - mapped
+        pct_mapped = (mapped / staff_notes * 100.0) if staff_notes > 0 else 0.0
+        pct_skipped = (skipped / staff_notes * 100.0) if staff_notes > 0 else 0.0
+
+        lines.append("Diatonic Pitch Coverage:")
+        lines.append(f"- Total Note Candidates: {staff_notes}")
+        lines.append(f"- Successfully Mapped: {mapped} ({pct_mapped:.1f}%)")
+        lines.append(f"- Skipped/Failed: {skipped} ({pct_skipped:.1f}%)")
+        lines.append("")
+
+        lines.append("Timeline Preview:")
+        staff_timelines = [t for t in timeline_preview if t.get("page_index") == p and t.get("system_index") == sy and t.get("staff_index") == st]
+        if not staff_timelines:
+            lines.append("None")
+        else:
+            for t in staff_timelines:
+                for m in t.get("measures", []):
+                    m_idx = m.get("measure_index")
+                    m_valid = "[VALID]" if m.get("valid") else "[INVALID]"
+                    lines.append(f"Measure {m_idx} {m_valid}")
+
+                    voices = {}
+                    for ev in m.get("events", []):
+                        v = ev.get("voice")
+                        voices.setdefault(v, []).append(ev)
+
+                    for v in sorted(voices.keys()):
+                        v_name = "Voice 1 (Upper)" if v == 1 else f"Voice {v} (Lower)"
+                        ev_strs = []
+                        for ev in voices[v]:
+                            stype = ev.get("symbol_type", "")
+                            dur = ev.get("duration_ticks", 0)
+                            pitch = ev.get("resolved_pitch")
+                            if "rest" in stype:
+                                if stype == "padding_rest":
+                                    name = "Padding Rest"
+                                else:
+                                    name = stype.replace("_candidate", "").replace("_", " ").title()
+                                ev_strs.append(f"--[{name}, {dur}]--")
+                            else:
+                                pitch_str = pitch if pitch else "?"
+                                ev_strs.append(f"--({pitch_str}, {dur})--")
+                        lines.append(f"  {v_name}: |" + "|".join(ev_strs) + "|")
+        lines.append("")
+    return "\n".join(lines).strip()
+
+
 @app.command("whole-note-recognition")
 def whole_note_recognition_command(
     pdf: Path = typer.Option(..., "--pdf", help="Path to the PDF fixture"),
@@ -186,8 +315,10 @@ def whole_note_recognition_command(
     if not res:
         raise typer.Exit(1)
 
-    # Even if json_out is False, we print JSON because the report script does so.
-    typer.echo(json.dumps(res, indent=2))
+    if json_out:
+        typer.echo(json.dumps(res, indent=2))
+    else:
+        typer.echo(_format_diagnostics_report(res))
 
 
 @app.command("note-candidate-recognition")
@@ -209,7 +340,10 @@ def note_candidate_recognition_command(
     if not res:
         raise typer.Exit(1)
 
-    typer.echo(json.dumps(res, indent=2))
+    if json_out:
+        typer.echo(json.dumps(res, indent=2))
+    else:
+        typer.echo(_format_diagnostics_report(res))
 
 
 @app.command("omr")
@@ -480,7 +614,7 @@ def notation_half_note_export_command(
     except NotationBridgeInputError as e:
         typer.echo(f"NotationBridgeInputError: {e}", err=True)
         raise typer.Exit(1)
-        
+
     # Extra check required by product: ensure it's actually a half note
     if score_ir.bars and score_ir.bars[0].events:
         evt = score_ir.bars[0].events[0]
@@ -998,12 +1132,12 @@ def _run_single_note_export_command(pdf: Path, out: Path, ir_out: Path | None, e
     except NotationBridgeInputError as e:
         typer.echo(f"NotationBridgeInputError: {e}", err=True)
         raise typer.Exit(1)
-        
+
     # Extra check required by product: ensure it's actually the expected duration and exactly one event
     if not score_ir.bars or not score_ir.bars[0].events:
         typer.echo("Error: Bridge produced no events", err=True)
         raise typer.Exit(1)
-        
+
     if len(score_ir.bars[0].events) != 1:
         typer.echo(f"Error: Bridge produced {len(score_ir.bars[0].events)} events but single-note export requires exactly 1", err=True)
         raise typer.Exit(1)
