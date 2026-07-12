@@ -855,7 +855,7 @@ def build_notation_diagnostics(
                 if p.type == "curve":
                     w = abs(p.x1 - p.x0)
                     h = abs(p.y1 - p.y0)
-                    if w >= 1.0 * staff_space and h <= 4.0 * staff_space:
+                    if w >= 1.5 * staff_space and h <= 4.0 * staff_space:
                         tie_candidates.append(TieCandidateDiagnostics(
                             bbox=[round(p.x0, 3), round(p.y0, 3), round(p.x1, 3), round(p.y1, 3)],
                             primitive_kind=p.type,

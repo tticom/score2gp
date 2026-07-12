@@ -31,42 +31,19 @@ def generate_musicxml_sidecar(pdf_path: Path, out_mxl: Path) -> Path:
     for global_m_idx, m_data in enumerate(measures):
         measure_el = ET.SubElement(part, "measure", number=str(global_m_idx + 1))
 
-        events = m_data.get("events", [])
-        events = sorted(events, key=lambda e: e.get("start_tick", 0))
-
-        # Calculate actual measure duration by simulating MusicXML cursor advancement
-        total_ticks = 0
-        last_start = -1
-        last_was_rest = False
-        for e in events:
-            st = e.get("start_tick", 0)
-            is_rest = e.get("symbol_type", "").endswith("rest") or not e.get("resolved_pitch")
-            is_chord = (st == last_start and not is_rest and not last_was_rest)
-            
-            if not is_chord:
-                total_ticks += e.get("duration_ticks", 960)
-            
-            last_start = st
-            last_was_rest = is_rest
-
-        if total_ticks == 0:
-            total_ticks = 3840  # Default to 4/4 if empty
-
-        import math
-        beats = max(4, math.ceil(total_ticks / 960))
-
-        if total_ticks > 0:
+        if global_m_idx == 0:
             attrs = ET.SubElement(measure_el, "attributes")
             ET.SubElement(attrs, "divisions").text = "960"
             key = ET.SubElement(attrs, "key")
             ET.SubElement(key, "fifths").text = "0"
             time = ET.SubElement(attrs, "time")
-            ET.SubElement(time, "beats").text = str(beats)
+            ET.SubElement(time, "beats").text = "4"
             ET.SubElement(time, "beat-type").text = "4"
             clef = ET.SubElement(attrs, "clef")
             ET.SubElement(clef, "sign").text = "G"
             ET.SubElement(clef, "line").text = "2"
 
+        events = m_data.get("events", [])
         events = sorted(events, key=lambda e: e.get("start_tick", 0))
 
         def write_events(evs):
