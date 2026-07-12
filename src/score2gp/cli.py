@@ -288,18 +288,18 @@ def _format_diagnostics_report(data: dict) -> str:
                     for v in sorted(voices.keys()):
                         v_name = "Voice 1 (Upper)" if v == 1 else f"Voice {v} (Lower)"
                         ev_strs = []
-                        
+
                         # Group by start_tick to identify chords
                         grouped_events = {}
                         for ev in voices[v]:
                             st = ev.get("start_tick", 0)
                             grouped_events.setdefault(st, []).append(ev)
-                            
+
                         for st in sorted(grouped_events.keys()):
                             evs = grouped_events[st]
                             stype = evs[0].get("symbol_type", "")
                             dur = evs[0].get("duration_ticks", 0)
-                            
+
                             if "rest" in stype:
                                 if stype == "padding_rest":
                                     name = "Padding Rest"
@@ -311,13 +311,13 @@ def _format_diagnostics_report(data: dict) -> str:
                                 for ev in evs:
                                     p = ev.get("resolved_pitch")
                                     pitches.append(p if p else "?")
-                                
+
                                 if len(pitches) == 1:
                                     ev_strs.append(f"--({pitches[0]}, {dur})--")
                                 else:
                                     chord_str = ", ".join(pitches)
                                     ev_strs.append(f"--[{chord_str}, {dur}]--")
-                                    
+
                         lines.append(f"  {v_name}: |" + "|".join(ev_strs) + "|")
         lines.append("")
     return "\n".join(lines).strip()
@@ -674,6 +674,7 @@ def convert_command(
     require_precise_timing: bool = typer.Option(False, "--require-precise-timing", help="Reject input if reliable precise timing evidence is missing."),
     ref_gp: Optional[Path] = typer.Option(None, "--ref-gp", help="Path to optional reference GP package for semantic comparison"),
     require_ref_match: bool = typer.Option(False, "--require-ref-match", help="Fail conversion if --ref-gp semantic comparison does not match."),
+    audiveris: Optional[Path] = typer.Option(None, "--audiveris", help="Path to Audiveris executable for auto-OMR MusicXML generation"),
 ) -> None:
     """Run the complete conversion pipeline: extraction, alignment, IR generation, and GP7 package writing."""
     actual_work_dir = work_dir or workdir
@@ -796,29 +797,44 @@ def convert_command(
     # Stage 2: Check for MusicXML sidecar requirement
     if not pdf_only_tab and not editable_draft:
         if musicxml is None:
-            typer.echo("Error: MusicXML sidecar path must be provided via --musicxml or -m.", err=True)
-            warnings.append({
-                "code": "missing_musicxml",
-                "message": "MusicXML file is required for timing alignment and GP7 conversion.",
-                "severity": "warning",
-            })
-            summary["blocking_reason"] = "missing_musicxml"
-            write_warnings(actual_work_dir / "warnings.json", warnings)
-            write_conversion_report(actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary)
-            if json_report:
-                _write_convert_report(
-                    report_path=json_report,
-                    status="refused",
-                    stage="orchestration-gate",
-                    exit_code=1,
-                    work_dir=actual_work_dir,
-                    error_type="ValueError",
-                    refusal_code="missing_musicxml",
-                    recommended_action="Provide a matching MusicXML sidecar before attempting build-ir.",
-                    output_written=False,
-                    strict=strict,
-                )
-            raise typer.Exit(1)
+            typer.echo(f"Info: No MusicXML sidecar provided. Generating automatically via deterministic OMR...")
+            from .deterministic_musicxml import generate_musicxml_sidecar
+            try:
+                musicxml = actual_work_dir / "deterministic_omr.musicxml"
+                musicxml = generate_musicxml_sidecar(pdf, musicxml)
+                typer.echo(f"Success: Auto-generated MusicXML sidecar at {musicxml}")
+            except Exception as exc:
+                typer.echo(f"Error: Auto-OMR failed: {str(exc)}", err=True)
+                warnings.append({
+                    "code": "auto_omr_failed",
+                    "message": f"OMR failed: {str(exc)}",
+                    "severity": "error",
+                })
+                musicxml = None
+
+            if musicxml is None:
+                warnings.append({
+                    "code": "missing_musicxml",
+                    "message": "MusicXML file is required for timing alignment and GP7 conversion.",
+                    "severity": "warning",
+                })
+                summary["blocking_reason"] = "missing_musicxml"
+                write_warnings(actual_work_dir / "warnings.json", warnings)
+                write_conversion_report(actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary)
+                if json_report:
+                    _write_convert_report(
+                        report_path=json_report,
+                        status="refused",
+                        stage="orchestration-gate",
+                        exit_code=1,
+                        work_dir=actual_work_dir,
+                        error_type="ValueError",
+                        refusal_code="missing_musicxml",
+                        recommended_action="Provide a matching MusicXML sidecar before attempting build-ir.",
+                        output_written=False,
+                        strict=strict,
+                    )
+                raise typer.Exit(1)
 
         if not musicxml.exists():
             typer.echo(f"Error: MusicXML file not found at {musicxml}", err=True)
