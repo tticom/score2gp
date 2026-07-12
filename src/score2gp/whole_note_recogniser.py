@@ -1375,6 +1375,9 @@ def build_staff_timeline_preview(
                 "geometry": None
             }
 
+        if is_note and not cand.get("clef_resolved_staff_pitch"):
+            continue
+
         if is_tie:
             staves[key]["ties"].append(cand)
         else:
@@ -1407,12 +1410,16 @@ def build_staff_timeline_preview(
                         "staff_index": staff_idx,
                         "duration_ticks": dur
                     }
-                    if "bbox" in r:
+                    if "bbox" in r and r["bbox"] is not None:
                         rest_cand["bbox"] = r["bbox"]
-                    if "x0" in r:
+                    if "x0" in r and r["x0"] is not None:
                         rest_cand["x0"] = r["x0"]
-                    if "y0" in r:
+                    if "y0" in r and r["y0"] is not None:
                         rest_cand["y0"] = r["y0"]
+                    
+                    if "bbox" not in rest_cand and "x0" not in rest_cand:
+                        continue
+
                     staves[key]["notes_rests_barlines"].append(rest_cand)
 
     # Attach staff geometry
@@ -1576,6 +1583,15 @@ def build_staff_timeline_preview(
                     cursor_1 = start_tick
                 if slice_v2:
                     cursor_2 = start_tick
+
+                # Discard rests if there are valid notes in the same slice for the same voice
+                has_notes_v1 = any("note" in c.get("symbol_type", "") for c in slice_v1)
+                if has_notes_v1:
+                    slice_v1 = [c for c in slice_v1 if "rest" not in c.get("symbol_type", "")]
+
+                has_notes_v2 = any("note" in c.get("symbol_type", "") for c in slice_v2)
+                if has_notes_v2:
+                    slice_v2 = [c for c in slice_v2 if "rest" not in c.get("symbol_type", "")]
 
                 # Process voice 1
                 for c in slice_v1:
@@ -1963,6 +1979,7 @@ def run_recognition_on_file(
     whole_note_locations = []
     half_note_locations = []
     quarter_note_locations = []
+    barline_locations = []
     x_aligned_cluster_locations = []
     left_margin_locations = []
     flag_locations = []
@@ -2129,9 +2146,37 @@ def run_recognition_on_file(
             from score2gp.pdf_candidate_quarter_rest import extract_quarter_rest_candidates
             from score2gp.pdf_candidate_whole_half_rest import extract_whole_half_rest_candidates
             from score2gp.pdf_candidate_eighth_sixteenth_rest import extract_eighth_sixteenth_rest_candidates
+            from score2gp.pdf_staff_notation_diagnostics import (
+                extract_notation_diagnostics_dict,
+                extract_structural_skeleton_diagnostics_dict
+            )
 
             diags_model = PdfStaffNotationGeometryDiagnostics.model_validate(page_diags)
+            skeleton_diags = extract_structural_skeleton_diagnostics_dict(page, page_index)
+            
+            # Extract barline candidates from skeleton diagnostics
+            skeleton_staves = {}
+            skeleton_pages = skeleton_diags.get("pages", [])
+            if skeleton_pages:
+                for sys in skeleton_pages[0].get("systems", []):
+                    for staff in sys.get("staves", []):
+                        key = (page_index, sys.get("system_index"), staff.get("staff_index"))
+                        skeleton_staves[key] = staff.get("barline_candidates", [])
+
             for staff_diag in diags_model.staves:
+                key = (page_index, staff_diag.staff.system_index, staff_diag.staff.staff_index)
+                barlines = skeleton_staves.get(key, [])
+                for bc in barlines:
+                    if bc.get("classification") == "confirmed_barline":
+                        barline_locations.append({
+                            "bbox": [bc["x0"], bc["y0"], bc["x1"], bc["y1"]],
+                            "page_index": page_index,
+                            "system_index": staff_diag.staff.system_index,
+                            "staff_index": staff_diag.staff.staff_index,
+                            "candidate_id": f"barline_{bc['x0']}_{bc['y0']}",
+                            "symbol_type": "barline_candidate"
+                        })
+
                 geometry = extract_geometry_candidates(staff_diag)
 
                 line_y_coords = staff_diag.staff.line_y_coords
@@ -2166,6 +2211,7 @@ def run_recognition_on_file(
     outcomes.extend(map_half_note_candidates_to_read_only_outcomes(half_note_locations))
     outcomes.extend(map_quarter_note_candidates_to_read_only_outcomes(quarter_note_locations))
     outcomes.extend(map_treble_clef_candidates_to_read_only_outcomes(clef_locations))
+    outcomes.extend(barline_locations)
 
     if include_x_aligned_clusters:
         outcomes.extend(map_x_aligned_cluster_candidates_to_read_only_outcomes(x_aligned_cluster_locations))

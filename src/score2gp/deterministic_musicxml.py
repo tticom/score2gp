@@ -10,6 +10,7 @@ def generate_musicxml_sidecar(pdf_path: Path, out_mxl: Path) -> Path:
         include_left_margin_candidates=True,
         include_flag_beam_candidates=True,
         include_ledger_line_candidates=True,
+        assume_treble_clef=True,
     )
     previews = res.get("timeline_preview", [])
     if not previews:
@@ -44,11 +45,21 @@ def generate_musicxml_sidecar(pdf_path: Path, out_mxl: Path) -> Path:
             ET.SubElement(clef, "line").text = "2"
 
         events = m_data.get("events", [])
-        events = sorted(events, key=lambda e: e.get("start_tick", 0))
+        
+        # Group events by voice
+        voices = {}
+        for e in events:
+            v = str(e.get("voice", 1))
+            if v not in voices:
+                voices[v] = []
+            voices[v].append(e)
 
-        def write_events(evs):
+        def write_voice_events(evs, voice_id):
+            evs = sorted(evs, key=lambda e: e.get("start_tick", 0))
             last_start_tick = -1
             last_was_rest = False
+            total_duration = 0
+            
             for e in evs:
                 start_tick = e.get("start_tick", 0)
                 note_el = ET.SubElement(measure_el, "note")
@@ -84,7 +95,7 @@ def generate_musicxml_sidecar(pdf_path: Path, out_mxl: Path) -> Path:
                 if e.get("is_tie_start"):
                     ET.SubElement(note_el, "tie", type="start")
 
-                ET.SubElement(note_el, "voice").text = "1"
+                ET.SubElement(note_el, "voice").text = voice_id
 
                 type_map = {
                     3840: "whole",
@@ -116,8 +127,19 @@ def generate_musicxml_sidecar(pdf_path: Path, out_mxl: Path) -> Path:
 
                 last_start_tick = start_tick
                 last_was_rest = is_rest
+                
+                # Add to total duration if it's not a chord note
+                if note_el.find("chord") is None:
+                    total_duration += dur_ticks
 
-        write_events(events)
+            return total_duration
+
+        sorted_voices = sorted(voices.keys())
+        for i, v_id in enumerate(sorted_voices):
+            v_dur = write_voice_events(voices[v_id], v_id)
+            if i < len(sorted_voices) - 1 and v_dur > 0:
+                backup = ET.SubElement(measure_el, "backup")
+                ET.SubElement(backup, "duration").text = str(v_dur)
 
     xml_str = minidom.parseString(ET.tostring(root)).toprettyxml(indent="  ")
     out_mxl.write_text(xml_str, encoding="utf-8")

@@ -136,6 +136,8 @@ def _extract_note_candidates(page: Any, staves_diags: list['NotationStaffDiagnos
 
             page_idx, sys_idx, staff_idx = get_identity((y0 + y1) / 2.0)
             if is_hollow:
+                if w < 7.5 or h < 5.0:
+                    continue
                 if not has_stem:
                     whole_candidates.append(WholeNoteCandidateDiagnostics(
                         bbox=[round(x0, 3), round(y0, 3), round(x1, 3), round(y1, 3)],
