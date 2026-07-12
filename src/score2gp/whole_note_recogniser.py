@@ -875,29 +875,53 @@ def compose_filled_duration_candidates(outcomes: list[dict]) -> list[dict]:
         for b in beams:
             b_bbox = b.get("bbox")
             if b.get("page_index") == q_page and b.get("system_index") == q_sys and b.get("staff_index") == q_staff and is_valid_bbox(b_bbox):
-                # Expand y-margin significantly so all stacked notes in a chord intersect the beam
-                beam_y_margin = 50.0 
+                beam_y_margin = 2.0 if q_stem else 20.0
                 if bboxes_intersect(full_bbox, b_bbox, x_margin=2.0, y_margin=beam_y_margin):
                     intersect_beams.append(b)
+
+        staff_space = max(0.1, q_bbox[3] - q_bbox[1])
 
         units = 0
         modifiers = []
         if intersect_beams:
-            units = len(intersect_beams)
+            stem_x = q_stem[0] if q_stem else q_bbox[2]
+
+            def get_y_at_x(bbox, x):
+                x0, y0, x1, y1 = bbox
+                if x1 == x0:
+                    return (y0 + y1) / 2.0
+                x_clamped = max(x0, min(x1, x))
+                return y0 + (y1 - y0) * (x_clamped - x0) / (x1 - x0)
+
+            ys = sorted([get_y_at_x(b.get("bbox"), stem_x) for b in intersect_beams])
+            clusters = []
+            curr_y = ys[0]
+            for y in ys[1:]:
+                if y <= curr_y + 0.3 * staff_space:
+                    curr_y = max(curr_y, y)
+                else:
+                    clusters.append(curr_y)
+                    curr_y = y
+            clusters.append(curr_y)
+
+            units = len(clusters)
             modifiers = intersect_beams
         else:
-            flag_count = len(intersect_flags)
-            if flag_count == 0:
-                units = 0
-            elif flag_count < 25:
-                units = 1
-            elif flag_count < 45:
-                units = 2
-            elif flag_count < 65:
-                units = 3
-            else:
-                units = 4
-            modifiers = intersect_flags
+            if intersect_flags:
+                min_y = min([f.get("bbox")[1] for f in intersect_flags])
+                max_y = max([f.get("bbox")[3] for f in intersect_flags])
+                flag_height = max_y - min_y
+                ratio = flag_height / staff_space
+
+                if ratio < 2.8:
+                    units = 1
+                elif ratio < 4.5:
+                    units = 2
+                elif ratio < 6.5:
+                    units = 3
+                else:
+                    units = 4
+                modifiers = intersect_flags
 
         if units == 0:
             continue
@@ -914,7 +938,7 @@ def compose_filled_duration_candidates(outcomes: list[dict]) -> list[dict]:
         mod_type = "beam_candidate" if intersect_beams else "flag_candidate"
         mod_ids = [m.get("candidate_id") for m in modifiers]
         mod_bboxes = [m.get("bbox") for m in modifiers]
-        
+
         composed_bbox = bbox_union([q_bbox] + mod_bboxes)
 
         composed_notes.append({
@@ -931,7 +955,7 @@ def compose_filled_duration_candidates(outcomes: list[dict]) -> list[dict]:
             "modifier_type": mod_type
         })
         idx += 1
-        
+
         q["association_status"] = "suppressed"
 
     return composed_notes
@@ -942,33 +966,34 @@ def apply_dots_to_notes(outcomes: list[dict]) -> None:
         "whole_note_candidate", "half_note_candidate", "quarter_note_candidate",
         "eighth_note_candidate", "sixteenth_note_candidate", "thirty_second_note_candidate", "sixty_fourth_note_candidate"
     ) and o.get("association_status") != "suppressed"]
-    
+
     for dot in dots:
         d_page = dot.get("page_index")
         d_sys = dot.get("system_index")
         d_staff = dot.get("staff_index")
         d_bbox = dot.get("bbox")
         if not d_bbox: continue
-        
+
         best_note = None
         min_dist = float('inf')
         for note in notes:
             if note.get("page_index") != d_page or note.get("system_index") != d_sys or note.get("staff_index") != d_staff:
                 continue
-            
+
             n_bbox = note.get("bbox")
             if not n_bbox: continue
-            
+
             dy = abs((d_bbox[1] + d_bbox[3])/2.0 - (n_bbox[1] + n_bbox[3])/2.0)
             dx = d_bbox[0] - n_bbox[2]
-            
+
             # Augmentation dots must be to the right of the notehead and tightly aligned vertically
-            if 0.0 < dx < 20.0 and dy < 4.5:
+            # Relaxed dx up to 35.0 to account for flags which push the dot further right
+            if 0.0 < dx < 35.0 and dy < 4.5:
                 dist = dx + dy * 2.0  # Weight dy more to prefer the vertically closest note in a chord
                 if dist < min_dist:
                     min_dist = dist
                     best_note = note
-                    
+
         if best_note:
             best_note["is_dotted"] = True
             best_note.setdefault("dot_component_ids", []).append(dot.get("candidate_id"))
@@ -989,7 +1014,7 @@ def apply_dots_to_notes(outcomes: list[dict]) -> None:
     for note in notes:
         dots = note.get("dot_component_ids", [])
         if not dots: continue
-        
+
         base_dur = TICK_MAPPINGS.get(note.get("symbol_type"), 960)
         dur = base_dur
         modifier = 0.0
@@ -997,7 +1022,7 @@ def apply_dots_to_notes(outcomes: list[dict]) -> None:
         num_dots = min(len(dots), 3)
         for i in range(1, num_dots + 1):
             modifier += 1.0 / (2 ** i)
-        
+
         note["duration_ticks"] = int(base_dur * (1.0 + modifier))
         note["is_dotted"] = True
 
@@ -1007,16 +1032,16 @@ def apply_dots_to_notes(outcomes: list[dict]) -> None:
             continue
         # Find all notes in the same chord (X-aligned and same staff)
         chord_notes = [
-            n2 for n2 in notes 
-            if n2.get("page_index") == n1.get("page_index") 
-            and n2.get("system_index") == n1.get("system_index") 
+            n2 for n2 in notes
+            if n2.get("page_index") == n1.get("page_index")
+            and n2.get("system_index") == n1.get("system_index")
             and n2.get("staff_index") == n1.get("staff_index")
             and "bbox" in n1 and "bbox" in n2
             and abs(n1["bbox"][0] - n2["bbox"][0]) < 10.0
         ]
-        
+
         max_dur = max([n.get("duration_ticks", TICK_MAPPINGS.get(n.get("symbol_type"), 960)) for n in chord_notes])
-        
+
         for n2 in chord_notes:
             n2["duration_ticks"] = max_dur
             if max_dur != TICK_MAPPINGS.get(n2.get("symbol_type"), 960):
@@ -1082,7 +1107,7 @@ def map_staff_position_to_read_only_outcomes(outcomes: list[dict], staff_geometr
             bbox = q_cand.get("bbox")
         else:
             bbox = cand.get("bbox")
-            
+
         if notehead_y is None:
             if "origin_y" in cand and cand["origin_y"] is not None:
                 notehead_y = float(cand["origin_y"])
@@ -1328,22 +1353,28 @@ def build_staff_timeline_preview(
         is_note = st_type in ("whole_note_candidate", "half_note_candidate", "quarter_note_candidate", "eighth_note_candidate", "sixteenth_note_candidate", "thirty_second_note_candidate", "sixty_fourth_note_candidate")
         is_barline = st_type in ("barline_candidate", "barline")
         is_rest = st_type in ("quarter_rest_candidate", "quarter_rest", "whole_rest_candidate", "whole_rest", "half_rest_candidate", "half_rest")
-        if not (is_note or is_barline or is_rest):
+        is_tie = st_type == "tie_candidate"
+        if not (is_note or is_barline or is_rest or is_tie):
             continue
 
         page = cand.get("page_index")
         sys_idx = cand.get("system_index")
         staff_idx = cand.get("staff_index")
-        if type(page) is not int or type(sys_idx) is not int or type(staff_idx) is not int:
+        if page is None or sys_idx is None or staff_idx is None:
             continue
 
         key = (page, sys_idx, staff_idx)
         if key not in staves:
             staves[key] = {
                 "notes_rests_barlines": [],
+                "ties": [],
                 "geometry": None
             }
-        staves[key]["notes_rests_barlines"].append(cand)
+
+        if is_tie:
+            staves[key]["ties"].append(cand)
+        else:
+            staves[key]["notes_rests_barlines"].append(cand)
 
     # Collect rests from semantic_candidates
     if semantic_candidates is not None:
@@ -1351,7 +1382,7 @@ def build_staff_timeline_preview(
             page = sc.get("page_index")
             sys_idx = sc.get("system_index")
             staff_idx = sc.get("staff_index")
-            if type(page) is not int or type(sys_idx) is not int or type(staff_idx) is not int:
+            if page is None or sys_idx is None or staff_idx is None:
                 continue
 
             key = (page, sys_idx, staff_idx)
@@ -1362,7 +1393,7 @@ def build_staff_timeline_preview(
                 }
 
             # Gather rests from sc
-            for r_type, dur in [("quarter_rests", 960), ("whole_rests", 3840), ("half_rests", 1920)]:
+            for r_type, dur in [("quarter_rests", 960), ("whole_rests", 3840), ("half_rests", 1920), ("eighth_rests", 480), ("sixteenth_rests", 240)]:
                 rests = sc.get(r_type, [])
                 for r in rests:
                     rest_cand = {
@@ -1414,7 +1445,11 @@ def build_staff_timeline_preview(
         "whole_rest_candidate": 3840,
         "whole_rest": 3840,
         "half_rest_candidate": 1920,
-        "half_rest": 1920
+        "half_rest": 1920,
+        "eighth_rest_candidate": 480,
+        "eighth_rest": 480,
+        "sixteenth_rest_candidate": 240,
+        "sixteenth_rest": 240
     }
 
     timeline_previews = []
@@ -1494,6 +1529,17 @@ def build_staff_timeline_preview(
                         stem = c.get("stem_direction") or c.get("stem")
                         if isinstance(stem, str) and "down" in stem.lower():
                             voice = 2
+                    elif c.get("stem_bbox") and c.get("bbox"):
+                        stem_bbox = c["stem_bbox"]
+                        note_bbox = c["bbox"]
+                        if isinstance(stem_bbox, (list, tuple)) and len(stem_bbox) == 4 and isinstance(note_bbox, (list, tuple)) and len(note_bbox) == 4:
+                            note_center_x = (note_bbox[0] + note_bbox[2]) / 2.0
+                            stem_center_x = (stem_bbox[0] + stem_bbox[2]) / 2.0
+                            # If stem is on the left of notehead, it goes DOWN -> voice 2
+                            if stem_center_x < note_center_x:
+                                voice = 2
+                            else:
+                                voice = 1
                     elif "rest" in c.get("symbol_type", ""):
                         # Determine rest vertical position
                         y_center = None
@@ -1503,7 +1549,7 @@ def build_staff_timeline_preview(
                             y_center = c.get("y0")
 
                         if middle_y is not None and y_center is not None:
-                            if y_center > middle_y:
+                            if y_center > middle_y + 10.0:  # slightly below middle to count as voice 2
                                 voice = 2
 
                     if voice == 2:
@@ -1540,7 +1586,8 @@ def build_staff_timeline_preview(
                         "voice": 1,
                         "start_tick": start_tick,
                         "duration_ticks": dur,
-                        "resolved_pitch": c.get("clef_resolved_staff_pitch")
+                        "resolved_pitch": c.get("clef_resolved_staff_pitch"),
+                        "bbox": c.get("bbox")
                     })
                     cursor_1 = max(cursor_1, start_tick + dur)
 
@@ -1557,7 +1604,8 @@ def build_staff_timeline_preview(
                         "voice": 2,
                         "start_tick": start_tick,
                         "duration_ticks": dur,
-                        "resolved_pitch": c.get("clef_resolved_staff_pitch")
+                        "resolved_pitch": c.get("clef_resolved_staff_pitch"),
+                        "bbox": c.get("bbox")
                     })
                     cursor_2 = max(cursor_2, start_tick + dur)
 
@@ -1599,6 +1647,55 @@ def build_staff_timeline_preview(
                 "voice_2_final_tick": cursor_2,
                 "events": measure_events
             })
+
+        # Process ties for this staff
+        staff_ties = data.get("ties", [])
+        if staff_ties:
+            # gather all notes
+            all_notes = []
+            for m in timeline_measures:
+                for ev in m["events"]:
+                    if "bbox" in ev and ev.get("symbol_type", "").endswith("note_candidate"):
+                        all_notes.append(ev)
+
+            for tie in staff_ties:
+                tb = tie.get("bbox")
+                if not tb:
+                    continue
+                tx0, ty0, tx1, ty1 = tb
+                tie_y = (ty0 + ty1) / 2.0
+
+                best_start = None
+                best_start_dist = float('inf')
+                best_end = None
+                best_end_dist = float('inf')
+
+                for n in all_notes:
+                    nb = n["bbox"]
+                    nx0, ny0, nx1, ny1 = nb
+                    ny = (ny0 + ny1) / 2.0
+
+                    # start note: tie's left side (tx0) is near note's right side (nx1)
+                    dx_start = tx0 - nx1
+                    # allow tie to start slightly inside or after note
+                    if -10.0 <= dx_start <= 40.0:
+                        dist = dx_start*dx_start + (tie_y - ny)*(tie_y - ny)
+                        if dist < best_start_dist:
+                            best_start_dist = dist
+                            best_start = n
+
+                    # end note: tie's right side (tx1) is near note's left side (nx0)
+                    dx_end = nx0 - tx1
+                    if -10.0 <= dx_end <= 40.0:
+                        dist = dx_end*dx_end + (tie_y - ny)*(tie_y - ny)
+                        if dist < best_end_dist:
+                            best_end_dist = dist
+                            best_end = n
+
+                if best_start and best_end and best_start != best_end:
+                    if best_start.get("resolved_pitch") == best_end.get("resolved_pitch"):
+                        best_start["is_tie_start"] = True
+                        best_end["is_tie_stop"] = True
 
         timeline_previews.append({
             "page_index": page,
@@ -2027,6 +2124,7 @@ def run_recognition_on_file(
             from score2gp.pdf_candidate_semantic_gate import evaluate_logical_clef_gate
             from score2gp.pdf_candidate_quarter_rest import extract_quarter_rest_candidates
             from score2gp.pdf_candidate_whole_half_rest import extract_whole_half_rest_candidates
+            from score2gp.pdf_candidate_eighth_sixteenth_rest import extract_eighth_sixteenth_rest_candidates
 
             diags_model = PdfStaffNotationGeometryDiagnostics.model_validate(page_diags)
             for staff_diag in diags_model.staves:
@@ -2041,6 +2139,7 @@ def run_recognition_on_file(
                 clef_res = evaluate_logical_clef_gate(geometry, staff_spacing, staff_height, staff_x0)
                 qr_cands = extract_quarter_rest_candidates(geometry, staff_spacing, staff_center_y)
                 whole_cands, half_cands = extract_whole_half_rest_candidates(geometry, staff_spacing, staff_center_y)
+                eighth_cands, sixteenth_cands = extract_eighth_sixteenth_rest_candidates(geometry, staff_spacing, staff_center_y)
 
                 semantic_candidates.append({
                     "page_index": page_index,
@@ -2049,9 +2148,14 @@ def run_recognition_on_file(
                     "logical_clef": clef_res.model_dump(mode="json"),
                     "quarter_rests": [qr.model_dump(mode="json") for qr in qr_cands],
                     "whole_rests": [wr.model_dump(mode="json") for wr in whole_cands],
-                    "half_rests": [hr.model_dump(mode="json") for hr in half_cands]
+                    "half_rests": [hr.model_dump(mode="json") for hr in half_cands],
+                    "eighth_rests": [er.model_dump(mode="json") for er in eighth_cands],
+                    "sixteenth_rests": [sr.model_dump(mode="json") for sr in sixteenth_cands]
                 })
-        except Exception:
+        except Exception as e:
+            print("EXC:", e)
+            import traceback
+            traceback.print_exc()
             pass
 
     outcomes = map_whole_note_candidates_to_read_only_outcomes(whole_note_locations)
