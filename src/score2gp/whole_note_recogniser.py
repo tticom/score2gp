@@ -219,7 +219,11 @@ def shape_tie_candidate_evidence(
     staff_index: int | None = None,
     start_index: int = 1
 ) -> list[dict]:
-    return shape_candidate_evidence(raw_candidates, page_index, "tie_candidate", start_index)
+    shaped = shape_candidate_evidence(raw_candidates, page_index, "tie_candidate", start_index)
+    for cand in shaped:
+        cand["system_index"] = system_index
+        cand["staff_index"] = staff_index
+    return shaped
 
 def shape_dot_candidate_evidence(
     raw_candidates: Iterable[Any],
