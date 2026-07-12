@@ -43,6 +43,9 @@ class MusicXmlTimingIssue(BaseModel):
     voice_extents: dict[str, int] | None = None
     voice_durations: dict[str, int] | None = None
     timing_calibration_possible: bool = False
+    event_count: int | None = None
+    rest_count: int | None = None
+    note_count: int | None = None
     timing_repair_attempted: bool = False
     overfull_divisions: float | None = None
     overlap_count: int | None = None
@@ -895,6 +898,10 @@ def analyze_musicxml_timing(imported: MusicXmlImport, include_polyphony_diagnost
 
             vcd = measure.voice_cursor_diagnostics
             if vcd is not None:
+                rest_count = vcd.rest_event_count
+                note_count = vcd.note_event_count
+                event_count = rest_count + note_count
+
                 # 1. Overfull bars
                 if vcd.measure_overfull:
                     for note in timed_notes:
@@ -918,6 +925,9 @@ def analyze_musicxml_timing(imported: MusicXmlImport, include_polyphony_diagnost
                                     duration_divisions=note.duration_divisions,
                                     end_divisions=end,
                                     source_path=note.source_path,
+                                    event_count=event_count,
+                                    rest_count=rest_count,
+                                    note_count=note_count,
                                     meter=meter_str,
                                     backup_forward_count=measure.backup_forward_count,
                                     voice_extents=voice_extents,
