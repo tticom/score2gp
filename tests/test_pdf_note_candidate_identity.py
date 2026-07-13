@@ -52,7 +52,7 @@ def test_note_candidate_identity_missing_context() -> None:
         }
     ]
     mock_page = MockPage(drawings)
-    w, h, q = _extract_note_candidates(mock_page, staves_diags=None)
+    w, h, q, dots = _extract_note_candidates(mock_page, staves_diags=None)
     
     assert len(q) == 1
     assert q[0].staff_index is None
@@ -100,7 +100,7 @@ def test_note_candidate_identity_multi_staff() -> None:
     ]
     
     mock_page = MockPage(drawings)
-    w, h, q = _extract_note_candidates(mock_page, diags.staves)
+    w, h, q, dots = _extract_note_candidates(mock_page, diags.staves)
     
     assert len(q) == 2, "Expected 2 quarter notes"
     

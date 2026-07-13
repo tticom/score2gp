@@ -22,10 +22,11 @@ def test_whole_note_recognition_report_public_fixture():
     assert data["source"] == fixture_path.name
     assert data["recognition_mode"] == "read_only_diagnostic_derived"
     outcomes = data["read_only_recognition_outcomes"]
-    assert len(outcomes) == 2
+    whole_notes = [o for o in outcomes if o["symbol_type"] == "whole_note_candidate"]
+    assert len(whole_notes) == 2
 
     # Verify candidate shape
-    cand1 = outcomes[0]
+    cand1 = whole_notes[0]
     assert cand1["symbol_type"] == "whole_note_candidate"
     assert cand1["candidate_id"] == "whole_note_candidate_001"
     assert "bbox" in cand1

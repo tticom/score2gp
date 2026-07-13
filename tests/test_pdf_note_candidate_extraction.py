@@ -51,7 +51,7 @@ def test_extract_filled_compound_no_stem_whole_note() -> None:
     }]
     
     page = MockPage(drawings)
-    whole, half, quarter = _extract_note_candidates(page)
+    whole, half, quarter, dots = _extract_note_candidates(page)
     assert len(whole) == 1
     assert len(half) == 0
     assert len(quarter) == 0
@@ -85,7 +85,7 @@ def test_extract_filled_compound_stemmed_half_note() -> None:
     ]
     
     page = MockPage(drawings)
-    whole, half, quarter = _extract_note_candidates(page)
+    whole, half, quarter, dots = _extract_note_candidates(page)
     assert len(whole) == 0
     assert len(half) == 1
     assert len(quarter) == 0
@@ -113,7 +113,7 @@ def test_extract_solid_stemmed_quarter_note() -> None:
     ]
     
     page = MockPage(drawings)
-    whole, half, quarter = _extract_note_candidates(page)
+    whole, half, quarter, dots = _extract_note_candidates(page)
     assert len(whole) == 0
     assert len(half) == 0
     assert len(quarter) == 1
@@ -139,7 +139,7 @@ def test_reject_rest_like_filled_compound_symbol() -> None:
     }]
     
     page = MockPage(drawings)
-    whole, half, quarter = _extract_note_candidates(page)
+    whole, half, quarter, dots = _extract_note_candidates(page)
     assert len(whole) == 0
     assert len(half) == 0
     assert len(quarter) == 0
@@ -159,7 +159,7 @@ def test_extract_existing_hollow_whole_note() -> None:
     }]
     
     page = MockPage(drawings)
-    whole, half, quarter = _extract_note_candidates(page)
+    whole, half, quarter, dots = _extract_note_candidates(page)
     assert len(whole) == 1
     assert len(half) == 0
     assert len(quarter) == 0
