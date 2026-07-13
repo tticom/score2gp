@@ -2953,8 +2953,6 @@ def _unsafe_grouping_codes(fret_candidates: list[dict[str, Any]], page_warnings:
         "pdf_string_lines_missing",
         "pdf_string_assignment_missing",
         "pdf_string_assignment_ambiguous",
-        "pdf_candidate_outside_system",
-        "pdf_candidate_outside_bar",
         "pdf_candidate_between_strings",
         "pdf_multi_system_order_ambiguous",
         "pdf_page_layout_unsupported",
