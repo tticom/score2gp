@@ -542,7 +542,8 @@ def test_cli_convert_lesson_3_quality_gate(tmp_path: Path) -> None:
         "--json-report", str(json_report),
     ])
 
-    # --require-ref-match must fail when the generated GP is structurally different.
+    # The raw GP package may be written for diagnostics, but --require-ref-match
+    # must reject it while it remains structurally different from the reference.
     assert result.exit_code == 6
     assert "generated GP package does not match --ref-gp semantic summary" in clean_ansi(result.stderr)
 
@@ -553,8 +554,11 @@ def test_cli_convert_lesson_3_quality_gate(tmp_path: Path) -> None:
     assert report["refusal_code"] == "gp_semantic_reference_mismatch"
     assert report["output_written"] is True
 
-    # The raw package may still be useful for diagnostics, but it is not a successful transcription.
+    # A diagnostic artifact is still produced; it must not be mistaken for a passing transcription.
     assert out_gp.exists()
+    gpif_content = _read_score_gpif(out_gp)
+    notes_count = len(re.findall(r'<Note\b', gpif_content))
+    assert notes_count > 150, f"Expected pitch fallback to avoid an empty tail, found {notes_count} notes"
 
     # Assert deterministic musicxml used strict 4/4 and has no fake tie restoration
     musicxml_path = work_dir / "deterministic_omr.musicxml"

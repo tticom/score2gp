@@ -1569,12 +1569,38 @@ def build_ir_with_diagnostics_from_imports(
     candidate_pools = CandidatePools.from_tabraw(tabraw)
     bars: list[Bar] = []
     if part is not None:
+        mxl_measures = len(part.measures)
+        tab_max_bar = max((c.bar_index for c in tabraw.candidates if c.bar_index is not None), default=0)
+        blank_tab_misaligned = (
+            mxl_measures > 0
+            and tab_max_bar > 0
+            and (mxl_measures - tab_max_bar) > max(10, mxl_measures * 0.2)
+        )
+        if blank_tab_misaligned:
+            warnings.append(
+                WarningItem(
+                    code="blank_tab_pitch_to_tab_fallback",
+                    message=(
+                        f"MusicXML extracted {mxl_measures} measures but TabRaw only has playable "
+                        f"candidates up to measure {tab_max_bar}; missing tab candidates will be "
+                        "inferred from standard notation pitch where possible. Use --ref-gp "
+                        "--require-ref-match to reject this artifact if it diverges from the reference."
+                    ),
+                    severity="warning",
+                )
+            )
+
         staves_in_part = {note.staff for measure in part.measures for note in measure.notes if note.staff is not None and not note.is_suppressed}
         target_staff = max(staves_in_part) if staves_in_part else 1
         for measure in part.measures:
             measure.notes = [note for note in measure.notes if (note.staff is None or note.staff == target_staff) and not note.is_suppressed]
             bar_warnings: list[WarningItem] = []
-            events = _measure_events(measure, candidate_pools, bar_warnings)
+            events = _measure_events(
+                measure,
+                candidate_pools,
+                bar_warnings,
+                allow_remediation=musicxml.allow_remediation or blank_tab_misaligned,
+            )
             warnings.extend(bar_warnings)
             bars.append(
                 Bar(
@@ -2336,6 +2362,8 @@ def _measure_events(
     measure: MusicXmlMeasure,
     candidate_pools: "CandidatePools",
     warnings: list[WarningItem],
+    *,
+    allow_remediation: bool = False,
 ) -> list[Event]:
     events: list[Event] = []
     harmony_by_onset = _harmony_by_onset(measure)
@@ -2408,6 +2436,11 @@ def _measure_events(
                 continue
             candidate = candidate_pools.pop(measure.index, event_id=event_id, musicxml_note_id=xml_note.id)
             if candidate is None:
+                if allow_remediation:
+                    note = _infer_fallback_note(xml_note, measure)
+                    if note is not None:
+                        notes.append(note)
+                        continue
                 warnings.append(
                     _event_warning(
                         "tab-candidate-missing",
@@ -2447,6 +2480,47 @@ def _measure_events(
             warnings.append(_harmony_warning(harmony, "MusicXML harmony could not be attached to a timed event."))
 
     return sorted(events, key=lambda event: (event.timing.onset_ticks, event.timing.voice, event.id))
+
+
+def _infer_fallback_note(
+    xml_note: MusicXmlNote,
+    measure: MusicXmlMeasure,
+) -> Note | None:
+    if xml_note.pitch is None:
+        return None
+
+    tuning = _standard_guitar_tuning()
+    best_fret = None
+    best_string = None
+
+    for s in tuning.strings:
+        open_pitch = tuning.pitch_for_string(s.number)
+        if open_pitch is None:
+            continue
+
+        fret = xml_note.pitch.midi - open_pitch
+        if fret < 0 or fret > 24:
+            continue
+
+        if best_fret is None or fret < best_fret:
+            best_fret = fret
+            best_string = s.number
+
+    if best_fret is not None and best_string is not None:
+        provenance = _musicxml_provenance(xml_note, measure)
+        provenance.raw["alignment_strategy"] = "pitch-to-tab-fallback"
+        provenance.raw["inference"] = "inferred_from_standard_notation"
+        provenance.raw["musicxml_pitch"] = xml_note.pitch.midi
+        provenance.raw["inferred_string"] = best_string
+        provenance.raw["inferred_fret"] = best_fret
+        return Note(
+            string=best_string,
+            fret=best_fret,
+            pitch=xml_note.pitch.midi,
+            provenance=[provenance],
+            confidence=0.1,
+        )
+    return None
 
 
 def _aligned_note(
