@@ -1102,7 +1102,7 @@ def convert_command(
         "unmatched_tabraw_candidate_count": diagnostics.unmatched_tabraw_candidate_count if diagnostics else 0,
     }
     semantic_comparison = None
-    if (pdf_only_tab or editable_draft) and ref_gp:
+    if ref_gp:
         try:
             from .gp_package import compare_gp
             comp = compare_gp(ref_gp, out)

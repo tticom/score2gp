@@ -522,25 +522,38 @@ def test_cli_convert_editable_draft_dense_bar(tmp_path) -> None:
                 notes_count = len(re.findall(r'<Note\b', gpif_content))
                 assert notes_count >= 20, f"Expected at least 20 notes, found {notes_count}"
 
-def test_cli_convert_lesson_3_succeeds(tmp_path: Path) -> None:
+def test_cli_convert_lesson_3_quality_gate(tmp_path: Path) -> None:
     pdf_path = Path("../score2gp-private-fixtures/fixtures/private/Lesson-3.pdf")
-    if not pdf_path.exists():
-        pytest.skip("Private fixture Lesson-3.pdf not found")
+    ref_path = Path("../score2gp-private-fixtures/fixtures/private/Lesson-3.gp")
+    if not pdf_path.exists() or not ref_path.exists():
+        pytest.skip("Private fixture Lesson-3 not found")
 
     out_gp = tmp_path / "Lesson-3.gp"
     work_dir = tmp_path / "work"
+    json_report = tmp_path / "report.json"
 
     result = CliRunner().invoke(app, [
         "convert",
         "--pdf", str(pdf_path),
+        "--ref-gp", str(ref_path),
+        "--require-ref-match",
         "--out", str(out_gp),
-        "--work-dir", str(work_dir)
+        "--work-dir", str(work_dir),
+        "--json-report", str(json_report),
     ])
 
-    # Assert CLI exited safely
-    assert result.exit_code == 0
+    # --require-ref-match must fail when the generated GP is structurally different.
+    assert result.exit_code == 6
+    assert "generated GP package does not match --ref-gp semantic summary" in clean_ansi(result.stderr)
 
-    # Assert GP file was produced
+    assert json_report.exists()
+    report = json.loads(json_report.read_text(encoding="utf-8"))
+    assert report["status"] == "failed"
+    assert report["stage"] == "semantic-reference-comparison"
+    assert report["refusal_code"] == "gp_semantic_reference_mismatch"
+    assert report["output_written"] is True
+
+    # The raw package may still be useful for diagnostics, but it is not a successful transcription.
     assert out_gp.exists()
 
     # Assert deterministic musicxml used strict 4/4 and has no fake tie restoration
