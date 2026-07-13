@@ -1,141 +1,461 @@
 {
-  "half_note_candidates": [],
-  "quarter_note_candidates": [],
-  "status": "success",
   "staves": [
     {
+      "contract_version": "notation-diagnostics.v0.1",
+      "staff": {
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "x0": 80.0,
+        "y0": 100.0,
+        "x1": 575.0,
+        "y1": 134.0,
+        "line_y_coords": [
+          100.0,
+          108.5,
+          117.0,
+          125.5,
+          134.0
+        ]
+      },
+      "primitives": {
+        "line_count": 10,
+        "curve_count": 0,
+        "rect_count": 3,
+        "text_span_count_by_font": {
+          "Helvetica": 1
+        },
+        "geometries": [
+          {
+            "x0": 80.0,
+            "y0": 100.0,
+            "x1": 80.0,
+            "y1": 134.0,
+            "kind": "vertical_stroke_candidate",
+            "font_name": null,
+            "font_size": null
+          },
+          {
+            "x0": 575.0,
+            "y0": 100.0,
+            "x1": 575.0,
+            "y1": 134.0,
+            "kind": "vertical_stroke_candidate",
+            "font_name": null,
+            "font_size": null
+          },
+          {
+            "x0": 200.0,
+            "y0": 110.0,
+            "x1": 208.0,
+            "y1": 118.0,
+            "kind": "rect",
+            "font_name": null,
+            "font_size": null
+          },
+          {
+            "x0": 208.0,
+            "y0": 90.0,
+            "x1": 208.0,
+            "y1": 114.0,
+            "kind": "vertical_stroke_candidate",
+            "font_name": null,
+            "font_size": null
+          },
+          {
+            "x0": 300.0,
+            "y0": 90.0,
+            "x1": 308.0,
+            "y1": 98.0,
+            "kind": "rect",
+            "font_name": null,
+            "font_size": null
+          },
+          {
+            "x0": 300.0,
+            "y0": 130.0,
+            "x1": 308.0,
+            "y1": 138.0,
+            "kind": "rect",
+            "font_name": null,
+            "font_size": null
+          },
+          {
+            "x0": 308.0,
+            "y0": 94.0,
+            "x1": 308.0,
+            "y1": 134.0,
+            "kind": "vertical_stroke_candidate",
+            "font_name": null,
+            "font_size": null
+          },
+          {
+            "x0": 298.0,
+            "y0": 94.0,
+            "x1": 310.0,
+            "y1": 94.0,
+            "kind": "non_staff_horizontal",
+            "font_name": null,
+            "font_size": null
+          },
+          {
+            "x0": 190.0,
+            "y0": 98.94999694824219,
+            "x1": 197.78399658203125,
+            "y1": 118.18599700927734,
+            "kind": "text_span",
+            "font_name": "Helvetica",
+            "font_size": 14.0
+          }
+        ]
+      },
+      "morphology": {
+        "staff_line_horizontal": 5,
+        "non_staff_horizontal": 1,
+        "vertical_stroke_candidate": 4,
+        "diagonal_stroke_candidate": 0,
+        "rectangle_candidate": 3,
+        "curve_candidate": 0,
+        "text_span_by_font": {
+          "Helvetica": 1
+        }
+      },
       "clustering": {
+        "x_aligned_cluster_count": 5,
+        "max_primitives_per_x_aligned_cluster": 4,
+        "clusters_with_vertical_stroke_candidate": 1,
+        "max_cluster_vertical_span_staff_spaces": 5.647,
         "cluster_primitive_count_summary": {
-          "curves_total": 0,
           "lines_total": 5,
+          "curves_total": 0,
           "rects_total": 3,
           "text_spans_total": 1
         },
-        "clusters_with_vertical_stroke_candidate": 1,
         "evidence": [
           {
+            "x0": 80.0,
+            "x1": 80.0,
             "primitive_count": 1,
             "primitives": [
               {
-                "font_name": null,
-                "font_size": null,
-                "kind": "vertical_stroke",
                 "x0": 80.0,
-                "x1": 80.0,
                 "y0": 100.0,
-                "y1": 134.0
+                "x1": 80.0,
+                "y1": 134.0,
+                "kind": "vertical_stroke",
+                "font_name": null,
+                "font_size": null
               }
-            ],
-            "x0": 80.0,
-            "x1": 80.0
+            ]
           },
           {
+            "x0": 190.0,
+            "x1": 208.0,
             "primitive_count": 2,
             "primitives": [
               {
-                "font_name": "Helvetica",
-                "font_size": 14.0,
-                "kind": "text_span",
                 "x0": 190.0,
-                "x1": 197.784,
                 "y0": 98.95,
-                "y1": 118.186
+                "x1": 197.784,
+                "y1": 118.186,
+                "kind": "text_span",
+                "font_name": "Helvetica",
+                "font_size": 14.0
               },
               {
-                "font_name": null,
-                "font_size": null,
-                "kind": "rectangle",
                 "x0": 200.0,
-                "x1": 208.0,
                 "y0": 110.0,
-                "y1": 118.0
+                "x1": 208.0,
+                "y1": 118.0,
+                "kind": "rectangle",
+                "font_name": null,
+                "font_size": null
               }
-            ],
-            "x0": 190.0,
-            "x1": 208.0
+            ]
           },
           {
+            "x0": 208.0,
+            "x1": 208.0,
             "primitive_count": 1,
             "primitives": [
               {
-                "font_name": null,
-                "font_size": null,
-                "kind": "vertical_stroke",
                 "x0": 208.0,
-                "x1": 208.0,
                 "y0": 90.0,
-                "y1": 114.0
+                "x1": 208.0,
+                "y1": 114.0,
+                "kind": "vertical_stroke",
+                "font_name": null,
+                "font_size": null
               }
-            ],
-            "x0": 208.0,
-            "x1": 208.0
+            ]
           },
           {
+            "x0": 298.0,
+            "x1": 310.0,
             "primitive_count": 4,
             "primitives": [
               {
-                "font_name": null,
-                "font_size": null,
-                "kind": "rectangle",
                 "x0": 300.0,
-                "x1": 308.0,
                 "y0": 90.0,
-                "y1": 98.0
-              },
-              {
-                "font_name": null,
-                "font_size": null,
-                "kind": "horizontal_stroke",
-                "x0": 298.0,
-                "x1": 310.0,
-                "y0": 94.0,
-                "y1": 94.0
-              },
-              {
-                "font_name": null,
-                "font_size": null,
+                "x1": 308.0,
+                "y1": 98.0,
                 "kind": "rectangle",
-                "x0": 300.0,
-                "x1": 308.0,
-                "y0": 130.0,
-                "y1": 138.0
+                "font_name": null,
+                "font_size": null
               },
               {
-                "font_name": null,
-                "font_size": null,
-                "kind": "vertical_stroke",
-                "x0": 308.0,
-                "x1": 308.0,
+                "x0": 298.0,
                 "y0": 94.0,
-                "y1": 134.0
+                "x1": 310.0,
+                "y1": 94.0,
+                "kind": "horizontal_stroke",
+                "font_name": null,
+                "font_size": null
+              },
+              {
+                "x0": 300.0,
+                "y0": 130.0,
+                "x1": 308.0,
+                "y1": 138.0,
+                "kind": "rectangle",
+                "font_name": null,
+                "font_size": null
+              },
+              {
+                "x0": 308.0,
+                "y0": 94.0,
+                "x1": 308.0,
+                "y1": 134.0,
+                "kind": "vertical_stroke",
+                "font_name": null,
+                "font_size": null
               }
-            ],
-            "x0": 298.0,
-            "x1": 310.0
+            ]
           },
           {
+            "x0": 575.0,
+            "x1": 575.0,
             "primitive_count": 1,
             "primitives": [
               {
-                "font_name": null,
-                "font_size": null,
-                "kind": "vertical_stroke",
                 "x0": 575.0,
-                "x1": 575.0,
                 "y0": 100.0,
-                "y1": 134.0
+                "x1": 575.0,
+                "y1": 134.0,
+                "kind": "vertical_stroke",
+                "font_name": null,
+                "font_size": null
               }
-            ],
-            "x0": 575.0,
-            "x1": 575.0
+            ]
           }
-        ],
-        "max_cluster_vertical_span_staff_spaces": 5.647,
-        "max_primitives_per_x_aligned_cluster": 4,
-        "x_aligned_cluster_count": 5
+        ]
       },
-      "contract_version": "notation-diagnostics.v0.1",
+      "left_margin": {
+        "margin_x_threshold_staff_spaces": 10.0,
+        "text_span_count": 0,
+        "distinct_font_count": 0,
+        "max_text_spans_for_single_font": 0,
+        "curve_candidate_count": 0,
+        "vertical_stroke_candidate_count": 1,
+        "rectangle_candidate_count": 0,
+        "evidence": [
+          {
+            "x0": 80.0,
+            "y0": 100.0,
+            "x1": 80.0,
+            "y1": 134.0,
+            "kind": "vertical_stroke",
+            "font_name": null,
+            "font_size": null
+          }
+        ]
+      },
+      "left_margin_candidates": [
+        {
+          "page_index": 1,
+          "system_index": 1,
+          "staff_index": 1,
+          "x0": 80.0,
+          "y0": 100.0,
+          "x1": 80.0,
+          "y1": 134.0,
+          "kind": "vertical_stroke",
+          "source": "left_margin",
+          "font_name": null,
+          "font_size": null
+        }
+      ],
+      "x_aligned_cluster_candidates": [
+        {
+          "page_index": 1,
+          "system_index": 1,
+          "staff_index": 1,
+          "x0": 80.0,
+          "x1": 80.0,
+          "primitive_count": 1,
+          "primitives": [
+            {
+              "page_index": 1,
+              "system_index": 1,
+              "staff_index": 1,
+              "x0": 80.0,
+              "y0": 100.0,
+              "x1": 80.0,
+              "y1": 134.0,
+              "kind": "vertical_stroke",
+              "source": "x_aligned_cluster",
+              "font_name": null,
+              "font_size": null
+            }
+          ]
+        },
+        {
+          "page_index": 1,
+          "system_index": 1,
+          "staff_index": 1,
+          "x0": 190.0,
+          "x1": 208.0,
+          "primitive_count": 2,
+          "primitives": [
+            {
+              "page_index": 1,
+              "system_index": 1,
+              "staff_index": 1,
+              "x0": 190.0,
+              "y0": 98.95,
+              "x1": 197.784,
+              "y1": 118.186,
+              "kind": "text_span",
+              "source": "x_aligned_cluster",
+              "font_name": "Helvetica",
+              "font_size": 14.0
+            },
+            {
+              "page_index": 1,
+              "system_index": 1,
+              "staff_index": 1,
+              "x0": 200.0,
+              "y0": 110.0,
+              "x1": 208.0,
+              "y1": 118.0,
+              "kind": "rectangle",
+              "source": "x_aligned_cluster",
+              "font_name": null,
+              "font_size": null
+            }
+          ]
+        },
+        {
+          "page_index": 1,
+          "system_index": 1,
+          "staff_index": 1,
+          "x0": 208.0,
+          "x1": 208.0,
+          "primitive_count": 1,
+          "primitives": [
+            {
+              "page_index": 1,
+              "system_index": 1,
+              "staff_index": 1,
+              "x0": 208.0,
+              "y0": 90.0,
+              "x1": 208.0,
+              "y1": 114.0,
+              "kind": "vertical_stroke",
+              "source": "x_aligned_cluster",
+              "font_name": null,
+              "font_size": null
+            }
+          ]
+        },
+        {
+          "page_index": 1,
+          "system_index": 1,
+          "staff_index": 1,
+          "x0": 298.0,
+          "x1": 310.0,
+          "primitive_count": 4,
+          "primitives": [
+            {
+              "page_index": 1,
+              "system_index": 1,
+              "staff_index": 1,
+              "x0": 300.0,
+              "y0": 90.0,
+              "x1": 308.0,
+              "y1": 98.0,
+              "kind": "rectangle",
+              "source": "x_aligned_cluster",
+              "font_name": null,
+              "font_size": null
+            },
+            {
+              "page_index": 1,
+              "system_index": 1,
+              "staff_index": 1,
+              "x0": 298.0,
+              "y0": 94.0,
+              "x1": 310.0,
+              "y1": 94.0,
+              "kind": "horizontal_stroke",
+              "source": "x_aligned_cluster",
+              "font_name": null,
+              "font_size": null
+            },
+            {
+              "page_index": 1,
+              "system_index": 1,
+              "staff_index": 1,
+              "x0": 300.0,
+              "y0": 130.0,
+              "x1": 308.0,
+              "y1": 138.0,
+              "kind": "rectangle",
+              "source": "x_aligned_cluster",
+              "font_name": null,
+              "font_size": null
+            },
+            {
+              "page_index": 1,
+              "system_index": 1,
+              "staff_index": 1,
+              "x0": 308.0,
+              "y0": 94.0,
+              "x1": 308.0,
+              "y1": 134.0,
+              "kind": "vertical_stroke",
+              "source": "x_aligned_cluster",
+              "font_name": null,
+              "font_size": null
+            }
+          ]
+        },
+        {
+          "page_index": 1,
+          "system_index": 1,
+          "staff_index": 1,
+          "x0": 575.0,
+          "x1": 575.0,
+          "primitive_count": 1,
+          "primitives": [
+            {
+              "page_index": 1,
+              "system_index": 1,
+              "staff_index": 1,
+              "x0": 575.0,
+              "y0": 100.0,
+              "x1": 575.0,
+              "y1": 134.0,
+              "kind": "vertical_stroke",
+              "source": "x_aligned_cluster",
+              "font_name": null,
+              "font_size": null
+            }
+          ]
+        }
+      ],
       "flag_beam_candidates": {
+        "flags": [],
         "beams": [
           {
             "bbox": [
@@ -144,337 +464,20 @@
               310.0,
               94.0
             ],
-            "height": 0.0,
             "primitive_kind": "non_staff_horizontal",
-            "width": 12.0
+            "width": 12.0,
+            "height": 0.0
           }
-        ],
-        "flags": []
+        ]
       },
-      "left_margin": {
-        "curve_candidate_count": 0,
-        "distinct_font_count": 0,
-        "evidence": [
-          {
-            "font_name": null,
-            "font_size": null,
-            "kind": "vertical_stroke",
-            "x0": 80.0,
-            "x1": 80.0,
-            "y0": 100.0,
-            "y1": 134.0
-          }
-        ],
-        "margin_x_threshold_staff_spaces": 10.0,
-        "max_text_spans_for_single_font": 0,
-        "rectangle_candidate_count": 0,
-        "text_span_count": 0,
-        "vertical_stroke_candidate_count": 1
-      },
-      "left_margin_candidates": [
-        {
-          "font_name": null,
-          "font_size": null,
-          "kind": "vertical_stroke",
-          "page_index": 1,
-          "source": "left_margin",
-          "staff_index": 1,
-          "system_index": 1,
-          "x0": 80.0,
-          "x1": 80.0,
-          "y0": 100.0,
-          "y1": 134.0
-        }
-      ],
-      "morphology": {
-        "curve_candidate": 0,
-        "diagonal_stroke_candidate": 0,
-        "non_staff_horizontal": 1,
-        "rectangle_candidate": 3,
-        "staff_line_horizontal": 5,
-        "text_span_by_font": {
-          "Helvetica": 1
-        },
-        "vertical_stroke_candidate": 4
-      },
-      "primitives": {
-        "curve_count": 0,
-        "geometries": [
-          {
-            "font_name": null,
-            "font_size": null,
-            "kind": "vertical_stroke_candidate",
-            "x0": 80.0,
-            "x1": 80.0,
-            "y0": 100.0,
-            "y1": 134.0
-          },
-          {
-            "font_name": null,
-            "font_size": null,
-            "kind": "vertical_stroke_candidate",
-            "x0": 575.0,
-            "x1": 575.0,
-            "y0": 100.0,
-            "y1": 134.0
-          },
-          {
-            "font_name": null,
-            "font_size": null,
-            "kind": "rect",
-            "x0": 200.0,
-            "x1": 208.0,
-            "y0": 110.0,
-            "y1": 118.0
-          },
-          {
-            "font_name": null,
-            "font_size": null,
-            "kind": "vertical_stroke_candidate",
-            "x0": 208.0,
-            "x1": 208.0,
-            "y0": 90.0,
-            "y1": 114.0
-          },
-          {
-            "font_name": null,
-            "font_size": null,
-            "kind": "rect",
-            "x0": 300.0,
-            "x1": 308.0,
-            "y0": 90.0,
-            "y1": 98.0
-          },
-          {
-            "font_name": null,
-            "font_size": null,
-            "kind": "rect",
-            "x0": 300.0,
-            "x1": 308.0,
-            "y0": 130.0,
-            "y1": 138.0
-          },
-          {
-            "font_name": null,
-            "font_size": null,
-            "kind": "vertical_stroke_candidate",
-            "x0": 308.0,
-            "x1": 308.0,
-            "y0": 94.0,
-            "y1": 134.0
-          },
-          {
-            "font_name": null,
-            "font_size": null,
-            "kind": "non_staff_horizontal",
-            "x0": 298.0,
-            "x1": 310.0,
-            "y0": 94.0,
-            "y1": 94.0
-          },
-          {
-            "font_name": "Helvetica",
-            "font_size": 14.0,
-            "kind": "text_span",
-            "x0": 190.0,
-            "x1": 197.78399658203125,
-            "y0": 98.94999694824219,
-            "y1": 118.18599700927734
-          }
-        ],
-        "line_count": 10,
-        "rect_count": 3,
-        "text_span_count_by_font": {
-          "Helvetica": 1
-        }
-      },
-      "staff": {
-        "line_y_coords": [
-          100.0,
-          108.5,
-          117.0,
-          125.5,
-          134.0
-        ],
-        "page_index": 1,
-        "staff_index": 1,
-        "system_index": 1,
-        "x0": 80.0,
-        "x1": 575.0,
-        "y0": 100.0,
-        "y1": 134.0
-      },
-      "x_aligned_cluster_candidates": [
-        {
-          "page_index": 1,
-          "primitive_count": 1,
-          "primitives": [
-            {
-              "font_name": null,
-              "font_size": null,
-              "kind": "vertical_stroke",
-              "page_index": 1,
-              "source": "x_aligned_cluster",
-              "staff_index": 1,
-              "system_index": 1,
-              "x0": 80.0,
-              "x1": 80.0,
-              "y0": 100.0,
-              "y1": 134.0
-            }
-          ],
-          "staff_index": 1,
-          "system_index": 1,
-          "x0": 80.0,
-          "x1": 80.0
-        },
-        {
-          "page_index": 1,
-          "primitive_count": 2,
-          "primitives": [
-            {
-              "font_name": "Helvetica",
-              "font_size": 14.0,
-              "kind": "text_span",
-              "page_index": 1,
-              "source": "x_aligned_cluster",
-              "staff_index": 1,
-              "system_index": 1,
-              "x0": 190.0,
-              "x1": 197.784,
-              "y0": 98.95,
-              "y1": 118.186
-            },
-            {
-              "font_name": null,
-              "font_size": null,
-              "kind": "rectangle",
-              "page_index": 1,
-              "source": "x_aligned_cluster",
-              "staff_index": 1,
-              "system_index": 1,
-              "x0": 200.0,
-              "x1": 208.0,
-              "y0": 110.0,
-              "y1": 118.0
-            }
-          ],
-          "staff_index": 1,
-          "system_index": 1,
-          "x0": 190.0,
-          "x1": 208.0
-        },
-        {
-          "page_index": 1,
-          "primitive_count": 1,
-          "primitives": [
-            {
-              "font_name": null,
-              "font_size": null,
-              "kind": "vertical_stroke",
-              "page_index": 1,
-              "source": "x_aligned_cluster",
-              "staff_index": 1,
-              "system_index": 1,
-              "x0": 208.0,
-              "x1": 208.0,
-              "y0": 90.0,
-              "y1": 114.0
-            }
-          ],
-          "staff_index": 1,
-          "system_index": 1,
-          "x0": 208.0,
-          "x1": 208.0
-        },
-        {
-          "page_index": 1,
-          "primitive_count": 4,
-          "primitives": [
-            {
-              "font_name": null,
-              "font_size": null,
-              "kind": "rectangle",
-              "page_index": 1,
-              "source": "x_aligned_cluster",
-              "staff_index": 1,
-              "system_index": 1,
-              "x0": 300.0,
-              "x1": 308.0,
-              "y0": 90.0,
-              "y1": 98.0
-            },
-            {
-              "font_name": null,
-              "font_size": null,
-              "kind": "horizontal_stroke",
-              "page_index": 1,
-              "source": "x_aligned_cluster",
-              "staff_index": 1,
-              "system_index": 1,
-              "x0": 298.0,
-              "x1": 310.0,
-              "y0": 94.0,
-              "y1": 94.0
-            },
-            {
-              "font_name": null,
-              "font_size": null,
-              "kind": "rectangle",
-              "page_index": 1,
-              "source": "x_aligned_cluster",
-              "staff_index": 1,
-              "system_index": 1,
-              "x0": 300.0,
-              "x1": 308.0,
-              "y0": 130.0,
-              "y1": 138.0
-            },
-            {
-              "font_name": null,
-              "font_size": null,
-              "kind": "vertical_stroke",
-              "page_index": 1,
-              "source": "x_aligned_cluster",
-              "staff_index": 1,
-              "system_index": 1,
-              "x0": 308.0,
-              "x1": 308.0,
-              "y0": 94.0,
-              "y1": 134.0
-            }
-          ],
-          "staff_index": 1,
-          "system_index": 1,
-          "x0": 298.0,
-          "x1": 310.0
-        },
-        {
-          "page_index": 1,
-          "primitive_count": 1,
-          "primitives": [
-            {
-              "font_name": null,
-              "font_size": null,
-              "kind": "vertical_stroke",
-              "page_index": 1,
-              "source": "x_aligned_cluster",
-              "staff_index": 1,
-              "system_index": 1,
-              "x0": 575.0,
-              "x1": 575.0,
-              "y0": 100.0,
-              "y1": 134.0
-            }
-          ],
-          "staff_index": 1,
-          "system_index": 1,
-          "x0": 575.0,
-          "x1": 575.0
-        }
-      ]
+      "tie_candidates": null,
+      "dot_candidates": null
     }
   ],
   "system_connectors": [],
-  "whole_note_candidates": []
+  "whole_note_candidates": [],
+  "half_note_candidates": [],
+  "quarter_note_candidates": [],
+  "dot_candidates": [],
+  "status": "success"
 }
