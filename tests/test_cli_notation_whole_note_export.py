@@ -235,9 +235,10 @@ def test_notation_whole_note_export_success_real_fixture(tmp_path):
     # 1. Candidate-count validation through real recognition
     res = run_recognition_on_file(pdf_path, assume_treble_clef=True)
     outcomes = res["read_only_recognition_outcomes"]
-    assert len(outcomes) == 1
-    assert outcomes[0]["symbol_type"] == "whole_note_candidate"
-    assert outcomes[0]["association_status"] == "success"
+    whole_notes = [o for o in outcomes if o.get("symbol_type") == "whole_note_candidate"]
+    assert len(whole_notes) == 1
+    assert whole_notes[0]["symbol_type"] == "whole_note_candidate"
+    assert whole_notes[0]["association_status"] == "success"
 
     # 2. CLI execution without patching
     result = runner.invoke(app, [

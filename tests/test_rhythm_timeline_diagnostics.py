@@ -24,7 +24,8 @@ def test_rhythm_timeline_rests_and_voices():
             "staff_index": 1,
             "x0": 100.0,
             "y0": 210.0,
-            "stem_direction": "up"
+            "stem_direction": "up",
+            "clef_resolved_staff_pitch": "C4"
         },
         # Note 1: Voice 2 (stems down) at x=100.0 (vertically aligned)
         {
@@ -35,7 +36,8 @@ def test_rhythm_timeline_rests_and_voices():
             "staff_index": 1,
             "x0": 102.0,
             "y0": 230.0,
-            "stem_direction": "down"
+            "stem_direction": "down",
+            "clef_resolved_staff_pitch": "A3"
         },
         # Note 2: Voice 1 (stems up) at x=200.0
         {
@@ -46,7 +48,8 @@ def test_rhythm_timeline_rests_and_voices():
             "staff_index": 1,
             "x0": 200.0,
             "y0": 210.0,
-            "stem_direction": "up"
+            "stem_direction": "up",
+            "clef_resolved_staff_pitch": "C4"
         },
         # Barline at x=250.0 -> Reset cursors to 0
         {
@@ -65,7 +68,8 @@ def test_rhythm_timeline_rests_and_voices():
             "staff_index": 1,
             "x0": 300.0,
             "y0": 210.0,
-            "stem_direction": "up"
+            "stem_direction": "up",
+            "clef_resolved_staff_pitch": "C4"
         }
     ]
 

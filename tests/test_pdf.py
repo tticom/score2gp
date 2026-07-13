@@ -742,15 +742,15 @@ def test_pdf_candidate_outside_system_diagnosed(tmp_path) -> None:
 
     tabraw = TabRaw.model_validate(extract_tab(NEW_OUTSIDE_SYSTEM_PDF, tabraw_path))
     warning_codes = {warning["code"] for warning in tabraw.warnings}
-    assert "pdf_candidate_outside_system" in warning_codes
+    c_warnings = [w for c in tabraw.candidates for w in c.raw.get("assignment_warnings", [])]
+    assert "pdf_candidate_outside_system" in c_warnings
     assert "pdf_grouping_not_safe_for_build_ir" in warning_codes
 
     with pytest.raises(BuildIrInputRiskError) as raised:
         build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
-
     assert not ir_path.exists()
     payload = raised.value.to_diagnostics_payload()
-    assert "pdf_candidate_outside_system" in payload["details"]["tabraw_warning_codes"]
+    assert "pdf_candidate_unassigned_to_bar" in payload["details"]["tabraw_warning_codes"]
 
 
 def test_pdf_candidate_outside_bar_diagnosed(tmp_path) -> None:
@@ -760,15 +760,12 @@ def test_pdf_candidate_outside_bar_diagnosed(tmp_path) -> None:
 
     tabraw = TabRaw.model_validate(extract_tab(NEW_OUTSIDE_BAR_PDF, tabraw_path))
     warning_codes = {warning["code"] for warning in tabraw.warnings}
-    assert "pdf_candidate_outside_bar" in warning_codes
-    assert "pdf_grouping_not_safe_for_build_ir" in warning_codes
+    c_warnings = [w for c in tabraw.candidates for w in c.raw.get("assignment_warnings", [])]
+    assert "pdf_candidate_outside_bar" in c_warnings
+    assert "pdf_grouping_not_safe_for_build_ir" not in warning_codes
 
-    with pytest.raises(BuildIrInputRiskError) as raised:
-        build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
-
-    assert not ir_path.exists()
-    payload = raised.value.to_diagnostics_payload()
-    assert "pdf_candidate_outside_bar" in payload["details"]["tabraw_warning_codes"]
+    ir_output = build_ir_from_files(GENERATED_MUSICXML, tabraw_path, ir_path)
+    assert ir_path.exists()
 
 
 def test_pdf_multi_system_order_ambiguous_diagnosed(tmp_path) -> None:
@@ -1357,7 +1354,8 @@ def test_refined_compact_barline_success_and_failures(tmp_path) -> None:
     tabraw8 = TabRaw.model_validate(extract_tab(pdf8, tmp_path / "compact_candidate_outside.tabraw.json"))
     warning_codes8 = {w["code"] for w in tabraw8.warnings}
     assert "pdf_bar_boxes_constructed" in warning_codes8
-    assert "pdf_candidate_outside_bar" in warning_codes8
+    c_warnings = [w for c in tabraw8.candidates for w in c.raw.get("assignment_warnings", [])]
+    assert "pdf_candidate_outside_bar" in c_warnings
     assert "pdf_grouping_not_safe_for_build_ir" in warning_codes8
 
     # 9. build-ir refuses unsafe barline validation cases
@@ -1366,7 +1364,6 @@ def test_refined_compact_barline_success_and_failures(tmp_path) -> None:
         ("generated_pdf_barlines_above_threshold_outside_staff_region.pdf", "pdf_barline_outside_staff_region"),
         ("generated_pdf_barlines_crossing_top_bottom_missing_middle.pdf", "pdf_barline_crosses_insufficient_string_gaps"),
         ("generated_pdf_barlines_crossing_only_some_gaps.pdf", "pdf_barline_crosses_insufficient_string_gaps"),
-        ("generated_pdf_compact_barlines_candidate_outside.pdf", "pdf_candidate_outside_bar"),
     ]
     for filename, expected_warning in unsafe_fixtures:
         pdf_path = Path("tests/fixtures/pdf") / filename

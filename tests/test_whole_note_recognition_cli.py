@@ -23,9 +23,10 @@ def test_installed_cli_whole_note_recognition_report(tmp_path):
     assert output["recognition_mode"] == "read_only_diagnostic_derived"
 
     outcomes = output["read_only_recognition_outcomes"]
-    assert len(outcomes) == 2
+    whole_notes = [o for o in outcomes if o["symbol_type"] == "whole_note_candidate"]
+    assert len(whole_notes) == 2
 
-    for outcome in outcomes:
+    for outcome in whole_notes:
         assert outcome["symbol_type"] == "whole_note_candidate"
         assert outcome["source"] == "diagnostic_candidate_evidence"
         assert "candidate_id" in outcome

@@ -46,7 +46,7 @@ def test_cli_convert_missing_pdf(tmp_path) -> None:
     workdir = tmp_path / "workdir"
     out_gp = tmp_path / "output.gp"
     non_existent_pdf = tmp_path / "non_existent.pdf"
-    
+
     result = CliRunner().invoke(
         app,
         [
@@ -69,7 +69,7 @@ def test_cli_convert_missing_musicxml(tmp_path) -> None:
     # 4. Missing MusicXML path exits 1
     workdir = tmp_path / "workdir"
     out_gp = tmp_path / "output.gp"
-    
+
     result = CliRunner().invoke(
         app,
         [
@@ -91,7 +91,7 @@ def test_cli_convert_layout_refusal(tmp_path) -> None:
     workdir = tmp_path / "workdir"
     out_gp = tmp_path / "output.gp"
     json_report = tmp_path / "report.json"
-    
+
     result = CliRunner().invoke(
         app,
         [
@@ -111,7 +111,7 @@ def test_cli_convert_layout_refusal(tmp_path) -> None:
     )
     assert result.exit_code == 2, result.output
     assert not out_gp.exists()
-    
+
     # 10. Failure path writes JSON report but does not write GP
     assert json_report.exists()
     report = json.loads(json_report.read_text(encoding="utf-8"))
@@ -125,7 +125,7 @@ def test_cli_convert_timing_refusal(tmp_path) -> None:
     workdir = tmp_path / "workdir"
     out_gp = tmp_path / "output.gp"
     json_report = tmp_path / "report.json"
-    
+
     result = CliRunner().invoke(
         app,
         [
@@ -145,7 +145,7 @@ def test_cli_convert_timing_refusal(tmp_path) -> None:
     )
     assert result.exit_code == 3, result.output
     assert not out_gp.exists()
-    
+
     assert json_report.exists()
     report = json.loads(json_report.read_text(encoding="utf-8"))
     assert report["status"] == "refused"
@@ -158,7 +158,7 @@ def test_cli_convert_success(tmp_path) -> None:
     workdir = tmp_path / "workdir"
     out_gp = tmp_path / "output.gp"
     json_report = tmp_path / "report.json"
-    
+
     result = CliRunner().invoke(
         app,
         [
@@ -178,7 +178,7 @@ def test_cli_convert_success(tmp_path) -> None:
     assert result.exit_code == 0, result.output
     assert out_gp.exists()
     assert json_report.exists()
-    
+
     report = json.loads(json_report.read_text(encoding="utf-8"))
     assert report["status"] == "success"
     assert report["exit_code"] == 0
@@ -436,7 +436,7 @@ def test_cli_convert_editable_draft_success(tmp_path) -> None:
     workdir = tmp_path / "workdir"
     out_gp = tmp_path / "output.gp"
     json_report = tmp_path / "report.json"
-    
+
     result = CliRunner().invoke(
         app,
         [
@@ -459,7 +459,7 @@ def test_cli_convert_editable_draft_success(tmp_path) -> None:
     report = json.loads(json_report.read_text(encoding="utf-8"))
     assert report.get("pdf_only_diagnostics", {}).get("inferred_rhythm_status") == "defaulted_placeholder"
 
-    
+
     gpif_content = _read_score_gpif(out_gp)
     assert "Editable draft generated from PDF tablature" in gpif_content
     assert "Rhythms defaulted to quarter notes" in gpif_content
@@ -475,7 +475,7 @@ def test_cli_convert_editable_draft_dense_bar(tmp_path) -> None:
     from score2gp.tabraw import TabRaw, TabCandidate
     from score2gp.ir import BoundingBox
     import json
-    
+
     tabraw = TabRaw(
         candidates=[
             TabCandidate(
@@ -494,7 +494,7 @@ def test_cli_convert_editable_draft_dense_bar(tmp_path) -> None:
             ) for i in range(20) # 20 events in 1 bar
         ]
     )
-    
+
     workdir = tmp_path / "workdir"
     out_gp = tmp_path / "output.gp"
     from unittest.mock import patch
@@ -516,7 +516,7 @@ def test_cli_convert_editable_draft_dense_bar(tmp_path) -> None:
                 )
                 assert result.exit_code == 0, result.output
                 assert out_gp.exists()
-                
+
                 import re
                 gpif_content = _read_score_gpif(out_gp)
                 notes_count = len(re.findall(r'<Note\b', gpif_content))
@@ -540,8 +540,10 @@ def test_cli_convert_lesson_3_quality_gate(tmp_path: Path) -> None:
         "--out", str(out_gp),
         "--work-dir", str(work_dir),
         "--json-report", str(json_report),
-    ])
+    ], catch_exceptions=False)
 
+    if result.exit_code != 6:
+        print("CLI output:", result.output)
     # The raw GP package may be written for diagnostics, but --require-ref-match
     # must reject it while it remains structurally different from the reference.
     assert result.exit_code == 6
@@ -554,10 +556,22 @@ def test_cli_convert_lesson_3_quality_gate(tmp_path: Path) -> None:
     assert report["refusal_code"] == "gp_semantic_reference_mismatch"
     assert report["output_written"] is True
     assert report["summary_counts"]["bar_count"] == 66
-    assert report["summary_counts"]["empty_bar_count"] == 5
+    assert report["summary_counts"]["empty_bar_count"] == 1
     assert report["summary_counts"]["semantic_differences"]["note_count"]["actual"] > (
         report["summary_counts"]["semantic_differences"]["note_count"]["expected"]
     )
+
+    # Verify no zero-note musical events and plausible scalar/arpeggio shapes
+    shapes = report["summary_counts"]["per_bar_event_shapes"]
+    for i in range(12):
+        if not shapes[i]:
+            continue
+        assert 0 not in shapes[i], f"Zero-note event emitted in bar {i+1}"
+        assert max(shapes[i]) <= 3, f"Four-note chord event in scalar bar {i+1}"
+        # Plausible shape: mostly single notes (at least half are single notes)
+        assert shapes[i].count(1) >= len(shapes[i]) // 2, f"Not a plausible scalar shape in bar {i+1}"
+
+    # A diagnostic artifact is still produced; it must not be mistaken for a passing transcription.
 
     # A diagnostic artifact is still produced; it must not be mistaken for a passing transcription.
     assert out_gp.exists()
