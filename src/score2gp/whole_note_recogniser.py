@@ -1416,7 +1416,7 @@ def build_staff_timeline_preview(
                         rest_cand["x0"] = r["x0"]
                     if "y0" in r and r["y0"] is not None:
                         rest_cand["y0"] = r["y0"]
-                    
+
                     if "bbox" not in rest_cand and "x0" not in rest_cand:
                         continue
 
@@ -1588,10 +1588,14 @@ def build_staff_timeline_preview(
                 has_notes_v1 = any("note" in c.get("symbol_type", "") for c in slice_v1)
                 if has_notes_v1:
                     slice_v1 = [c for c in slice_v1 if "rest" not in c.get("symbol_type", "")]
+                elif len(slice_v1) > 1:
+                    slice_v1 = [max(slice_v1, key=lambda c: TICK_MAPPINGS.get(c.get("symbol_type", ""), c.get("duration_ticks", 960)))]
 
                 has_notes_v2 = any("note" in c.get("symbol_type", "") for c in slice_v2)
                 if has_notes_v2:
                     slice_v2 = [c for c in slice_v2 if "rest" not in c.get("symbol_type", "")]
+                elif len(slice_v2) > 1:
+                    slice_v2 = [max(slice_v2, key=lambda c: TICK_MAPPINGS.get(c.get("symbol_type", ""), c.get("duration_ticks", 960)))]
 
                 # Process voice 1
                 for c in slice_v1:
@@ -1657,6 +1661,23 @@ def build_staff_timeline_preview(
             elif cursor_2 > D_measure:
                 invalid = True
 
+            overflow_diagnostics = None
+            if invalid:
+                v1_notes = sum(1 for e in measure_events if e["voice"] == 1 and "note" in e["symbol_type"])
+                v1_rests = sum(1 for e in measure_events if e["voice"] == 1 and "rest" in e["symbol_type"])
+                v2_notes = sum(1 for e in measure_events if e["voice"] == 2 and "note" in e["symbol_type"])
+                v2_rests = sum(1 for e in measure_events if e["voice"] == 2 and "rest" in e["symbol_type"])
+                overflow_diagnostics = {
+                    "measure_number": m_idx + 1,
+                    "expected_duration": D_measure,
+                    "actual_cursor_duration_v1": cursor_1,
+                    "actual_cursor_duration_v2": cursor_2,
+                    "event_count": len(measure_events),
+                    "note_count": v1_notes + v2_notes,
+                    "rest_count": v1_rests + v2_rests,
+                    "cause": "cumulative_duration_exceeds_measure_capacity"
+                }
+
             # Sort events by start_tick then voice
             measure_events = sorted(measure_events, key=lambda e: (e["start_tick"], e["voice"]))
 
@@ -1665,7 +1686,8 @@ def build_staff_timeline_preview(
                 "valid": not invalid,
                 "voice_1_final_tick": cursor_1,
                 "voice_2_final_tick": cursor_2,
-                "events": measure_events
+                "events": measure_events,
+                "overflow_diagnostics": overflow_diagnostics
             })
 
         # Process ties for this staff
@@ -2153,7 +2175,7 @@ def run_recognition_on_file(
 
             diags_model = PdfStaffNotationGeometryDiagnostics.model_validate(page_diags)
             skeleton_diags = extract_structural_skeleton_diagnostics_dict(page, page_index)
-            
+
             # Extract barline candidates from skeleton diagnostics
             skeleton_staves = {}
             skeleton_pages = skeleton_diags.get("pages", [])
