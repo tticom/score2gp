@@ -45,7 +45,7 @@ def generate_musicxml_sidecar(pdf_path: Path, out_mxl: Path) -> Path:
             ET.SubElement(clef, "line").text = "2"
 
         events = m_data.get("events", [])
-        
+
         # Group events by voice
         voices = {}
         for e in events:
@@ -59,7 +59,7 @@ def generate_musicxml_sidecar(pdf_path: Path, out_mxl: Path) -> Path:
             last_start_tick = -1
             last_was_rest = False
             total_duration = 0
-            
+
             for e in evs:
                 start_tick = e.get("start_tick", 0)
                 note_el = ET.SubElement(measure_el, "note")
@@ -127,7 +127,7 @@ def generate_musicxml_sidecar(pdf_path: Path, out_mxl: Path) -> Path:
 
                 last_start_tick = start_tick
                 last_was_rest = is_rest
-                
+
                 # Add to total duration if it's not a chord note
                 if note_el.find("chord") is None:
                     total_duration += dur_ticks
