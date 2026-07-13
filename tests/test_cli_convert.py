@@ -522,7 +522,7 @@ def test_cli_convert_editable_draft_dense_bar(tmp_path) -> None:
                 notes_count = len(re.findall(r'<Note\b', gpif_content))
                 assert notes_count >= 20, f"Expected at least 20 notes, found {notes_count}"
 
-def test_cli_convert_lesson_3_fails_closed_with_timing_risk(tmp_path: Path) -> None:
+def test_cli_convert_lesson_3_fails_closed_with_partial_grouping(tmp_path: Path) -> None:
     pdf_path = Path("../score2gp-private-fixtures/fixtures/private/Lesson-3.pdf")
     if not pdf_path.exists():
         pytest.skip("Private fixture Lesson-3.pdf not found")
@@ -537,11 +537,11 @@ def test_cli_convert_lesson_3_fails_closed_with_timing_risk(tmp_path: Path) -> N
         "--work-dir", str(work_dir)
     ])
 
-    # Assert CLI exited safely (exit code 3 is used for timing risk refusal)
-    assert result.exit_code == 3
+    # Assert CLI exited safely
+    assert result.exit_code == 1
 
-    # Assert refusal code is exactly musicxml_timing_risk
-    assert "refusal_code: musicxml_timing_risk" in clean_ansi(result.output)
+    # Assert refusal code is exactly partial_pdf_grouping
+    assert "refusal_code: partial_pdf_grouping" in clean_ansi(result.output)
 
     # Assert no GP file was produced
     assert not out_gp.exists()
