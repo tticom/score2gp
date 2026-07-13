@@ -582,7 +582,7 @@ def build_ir_from_files(
                 from .report import write_musicxml_timing_diagnostics_html, write_musicxml_unrecoverable_timing_report
                 html_path = out_path_p.parent / "musicxml-timing-diagnostics.html"
                 write_musicxml_timing_diagnostics_html(html_path, payload, json_path_ref=out_path_p.name)
-                
+
                 # Write unrecoverable timing reports as sidecars
                 unrec_json_path = out_path_p.parent / "musicxml-unrecoverable-timing-report.json"
                 unrec_html_path = out_path_p.parent / "musicxml-unrecoverable-timing-report.html"
@@ -2429,7 +2429,7 @@ def _measure_events(
             )
             continue
 
-        notes: list[Note] = []
+        notes_with_candidates: list[tuple[Note, Any]] = []
         for xml_note in group:
             if xml_note.pitch is None:
                 warnings.append(_event_warning("musicxml-pitch-missing", xml_note, "Pitched note is missing pitch data."))
@@ -2439,7 +2439,7 @@ def _measure_events(
                 if allow_remediation:
                     note = _infer_fallback_note(xml_note, measure)
                     if note is not None:
-                        notes.append(note)
+                        notes_with_candidates.append((note, None))
                         continue
                 warnings.append(
                     _event_warning(
@@ -2451,9 +2451,66 @@ def _measure_events(
                 continue
             note = _aligned_note(xml_note, candidate, measure, warnings)
             if note is not None:
-                notes.append(note)
+                notes_with_candidates.append((note, candidate))
 
-        if notes:
+        if notes_with_candidates:
+            x_groups: list[dict[str, Any]] = []
+            for idx, (note, candidate) in enumerate(notes_with_candidates):
+                if candidate is None:
+                    # Unmatched fallback notes are sequenced strictly left-to-right
+                    x = -1000.0 + (idx * 10.0)
+                else:
+                    x = candidate.x if candidate.x is not None else 0.0
+
+                added = False
+                for xg in x_groups:
+                    if abs(xg["x"] - x) < 1.5:
+                        xg["notes"].append((note, candidate))
+                        added = True
+                        break
+                if not added:
+                    x_groups.append({"x": x, "notes": [(note, candidate)]})
+
+            x_groups.sort(key=lambda g: g["x"])
+
+            if len(x_groups) > 1:
+                current_onset = timing.onset_ticks
+                new_duration = max(1, timing.duration_ticks // len(x_groups))
+                measure_duration_ticks = int((measure.time_signature.numerator / measure.time_signature.denominator) * 4 * DEFAULT_TICKS_PER_QUARTER)
+                for i, xg in enumerate(x_groups):
+                    is_last = (i == len(x_groups) - 1)
+                    actual_duration = new_duration
+                    if is_last:
+                        actual_duration = timing.duration_ticks - (new_duration * (len(x_groups) - 1))
+                        if actual_duration <= 0:
+                            actual_duration = 1
+
+                    if current_onset + actual_duration > measure_duration_ticks:
+                        actual_duration = max(1, measure_duration_ticks - current_onset)
+
+                    new_timing = timing.model_copy(update={
+                        "onset_ticks": current_onset,
+                        "duration_ticks": actual_duration
+                    })
+                    seq_notes = [n for n, c in xg["notes"]]
+                    if seq_notes:
+                        events.append(
+                            Event(
+                                id=f"{event_id}-{i}",
+                                track_id=TRACK_ID,
+                                timing=new_timing,
+                                notes=seq_notes,
+                                chord_symbol=chord_symbol if i == 0 else None,
+                                confidence=0.9,
+                                provenance=[_musicxml_provenance(first, measure)] + [
+                                    c.to_provenance() for _, c in xg["notes"] if c is not None
+                                ],
+                            )
+                        )
+                    current_onset += actual_duration
+                continue
+
+            notes = [n for n, c in notes_with_candidates]
             events.append(
                 Event(
                     id=event_id,
@@ -2462,8 +2519,8 @@ def _measure_events(
                     notes=notes,
                     chord_symbol=chord_symbol,
                     techniques=_event_techniques(group),
-                    confidence=min(note.confidence for note in notes),
-                    provenance=[_musicxml_provenance(first, measure), *[note.provenance[-1] for note in notes]],
+                    confidence=min((n.confidence for n in notes), default=0.9),
+                    provenance=[_musicxml_provenance(first, measure), *[n.provenance[-1] for n in notes]],
                 )
             )
         else:
