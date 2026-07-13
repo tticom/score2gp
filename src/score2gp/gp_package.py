@@ -297,7 +297,20 @@ def _summarize_gpif(root: ET.Element) -> dict[str, Any]:
             if (node.get("name") or "".join(node.itertext()).strip())
         }
     )
-    notes = root.findall(".//Note")
+    beats = root.findall(".//Beat")
+    has_beat_notes = False
+    logical_note_count = 0
+    if beats:
+        for beat in beats:
+            notes_tag = beat.find("Notes")
+            if notes_tag is not None and notes_tag.text:
+                ids = notes_tag.text.split()
+                if ids:
+                    has_beat_notes = True
+                    logical_note_count += len(ids)
+
+    if not has_beat_notes:
+        logical_note_count = len(root.findall(".//Note"))
 
     track_bars = root.findall(".//Bars/Bar")
     raw_bars = root.findall(".//Bar")
@@ -332,7 +345,7 @@ def _summarize_gpif(root: ET.Element) -> dict[str, Any]:
         "tempo": tempo,
         "time_signatures": sorted(set(time_signatures)),
         "bar_count": bar_count,
-        "note_count": len(notes),
+        "note_count": logical_note_count,
         "chord_symbols": chord_symbols,
         "techniques": techniques,
         "raw_bar_tag_count": raw_bar_tag_count,
