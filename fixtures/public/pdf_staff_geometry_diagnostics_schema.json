@@ -65,6 +65,38 @@
       "title": "ClusterPrimitiveCountSummary",
       "type": "object"
     },
+    "DotPrimitiveCandidateDiagnostics": {
+      "description": "Geometric bounding box for a dot primitive extracted from circles/small paths.",
+      "properties": {
+        "bbox": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Bbox",
+          "type": "array"
+        },
+        "primitive_kind": {
+          "title": "Primitive Kind",
+          "type": "string"
+        },
+        "width": {
+          "title": "Width",
+          "type": "number"
+        },
+        "height": {
+          "title": "Height",
+          "type": "number"
+        }
+      },
+      "required": [
+        "bbox",
+        "primitive_kind",
+        "width",
+        "height"
+      ],
+      "title": "DotPrimitiveCandidateDiagnostics",
+      "type": "object"
+    },
     "FlagPrimitiveCandidateDiagnostics": {
       "description": "Geometric bounding box for a flag-like primitive extracted directly from curves or strokes.",
       "properties": {
@@ -407,6 +439,36 @@
             }
           ],
           "default": null
+        },
+        "tie_candidates": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/TieCandidateDiagnostics"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tie Candidates"
+        },
+        "dot_candidates": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/DotPrimitiveCandidateDiagnostics"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dot Candidates"
         }
       },
       "required": [
@@ -889,6 +951,38 @@
       "title": "SystemConnectorDiagnostics",
       "type": "object"
     },
+    "TieCandidateDiagnostics": {
+      "description": "Geometric bounding box for a tie or slur primitive extracted from curve strokes.",
+      "properties": {
+        "bbox": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Bbox",
+          "type": "array"
+        },
+        "primitive_kind": {
+          "title": "Primitive Kind",
+          "type": "string"
+        },
+        "width": {
+          "title": "Width",
+          "type": "number"
+        },
+        "height": {
+          "title": "Height",
+          "type": "number"
+        }
+      },
+      "required": [
+        "bbox",
+        "primitive_kind",
+        "width",
+        "height"
+      ],
+      "title": "TieCandidateDiagnostics",
+      "type": "object"
+    },
     "WholeNoteCandidateDiagnostics": {
       "description": "Candidate whole-note bounding box extracted directly from vector shapes, independent of\nsemantic staff processing. Follows proportional heuristics to exclude stems.",
       "properties": {
@@ -1220,6 +1314,21 @@
       ],
       "default": null,
       "title": "Quarter Note Candidates"
+    },
+    "dot_candidates": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/DotPrimitiveCandidateDiagnostics"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Dot Candidates"
     },
     "status": {
       "anyOf": [
