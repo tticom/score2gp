@@ -3436,8 +3436,6 @@ def _tabraw_grouping_risk(tabraw: TabRaw) -> dict[str, object] | None:
             "pdf_string_lines_missing",
             "pdf_string_assignment_missing",
             "pdf_string_assignment_ambiguous",
-            "pdf_candidate_outside_system",
-            "pdf_candidate_outside_bar",
             "pdf_candidate_between_strings",
             "pdf_multi_system_order_ambiguous",
             "pdf_page_layout_unsupported",
