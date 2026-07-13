@@ -1096,6 +1096,7 @@ def convert_command(
     summary_counts = {
         "bar_count": len(score.bars) if score else 0,
         "event_count": sum(len(bar.events) for bar in score.bars) if score else 0,
+        "empty_bar_count": sum(1 for bar in score.bars if not any(event.notes for event in bar.events)) if score else 0,
         "warning_count": len(score.warnings) if score else 0,
         "matched_candidate_count": diagnostics.matched_candidate_count if diagnostics else 0,
         "unmatched_musicxml_event_count": diagnostics.unmatched_musicxml_event_count if diagnostics else 0,
@@ -1115,6 +1116,9 @@ def convert_command(
                 "matches": False,
                 "error": f"Semantic comparison failed: {exc}",
             }
+
+        if semantic_comparison:
+            summary_counts["semantic_differences"] = semantic_comparison.get("differences", {})
 
     if require_ref_match and semantic_comparison is not None and not semantic_comparison.get("matches"):
         pdf_only_diag_payload = None

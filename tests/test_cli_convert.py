@@ -553,6 +553,11 @@ def test_cli_convert_lesson_3_quality_gate(tmp_path: Path) -> None:
     assert report["stage"] == "semantic-reference-comparison"
     assert report["refusal_code"] == "gp_semantic_reference_mismatch"
     assert report["output_written"] is True
+    assert report["summary_counts"]["bar_count"] == 66
+    assert report["summary_counts"]["empty_bar_count"] == 5
+    assert report["summary_counts"]["semantic_differences"]["note_count"]["actual"] > (
+        report["summary_counts"]["semantic_differences"]["note_count"]["expected"]
+    )
 
     # A diagnostic artifact is still produced; it must not be mistaken for a passing transcription.
     assert out_gp.exists()
@@ -564,6 +569,9 @@ def test_cli_convert_lesson_3_quality_gate(tmp_path: Path) -> None:
     musicxml_path = work_dir / "deterministic_omr.musicxml"
     assert musicxml_path.exists()
 
+    import xml.etree.ElementTree as ET
+
+    assert len(ET.parse(musicxml_path).getroot().findall(".//measure")) == 66
     xml_content = musicxml_path.read_text(encoding="utf-8")
     assert "<beats>4</beats>" in xml_content
     assert "<tie " not in xml_content
