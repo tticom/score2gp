@@ -1344,11 +1344,62 @@ def map_clef_resolved_staff_pitch(
             except Exception:
                 continue
 
+def extract_measure_anchors_from_text(pdf_path, staff_geometries: list[dict]) -> dict:
+    import fitz
+    import re
+
+    staves_sorted = sorted(staff_geometries, key=lambda s: (s["page_index"], s.get("bbox", [0,0,0,0])[1], s.get("bbox", [0,0,0,0])[0]))
+    anchors = {}
+    expected_measure = 1
+
+    try:
+        doc = fitz.open(pdf_path)
+    except Exception:
+        return anchors
+
+    for staff in staves_sorted:
+        if staff.get("staff_index") != 1:
+            continue
+
+        p_idx = staff["page_index"]
+        key = (p_idx, staff.get("system_index"), staff.get("staff_index"))
+        bbox = staff.get("bbox")
+        if not bbox or p_idx < 1 or p_idx > len(doc):
+            continue
+
+        page = doc[p_idx - 1]
+        search_rect = fitz.Rect(0, bbox[1] - 30, page.rect.width, bbox[1] + 10)
+
+        try:
+            words = [w for w in page.get_text("words") if fitz.Rect(w[:4]).intersects(search_rect)]
+        except Exception:
+            continue
+
+        words.sort(key=lambda w: w[0])
+
+        staff_anchors = []
+        for w in words:
+            w_clean = re.sub(r'[^\w\s]', '', w[4])
+            if w_clean.isdigit():
+                num = int(w_clean)
+                if num == expected_measure:
+                    staff_anchors.append(w[0])
+                    expected_measure += 1
+                elif num > expected_measure and num <= expected_measure + 2:
+                    staff_anchors.append(w[0])
+                    expected_measure = num + 1
+
+        if staff_anchors:
+            anchors[key] = staff_anchors
+
+    return anchors
+
 
 def build_staff_timeline_preview(
     outcomes: list[dict],
     semantic_candidates: list[dict] | None = None,
-    all_staff_geometries: list[dict] | None = None
+    all_staff_geometries: list[dict] | None = None,
+    measure_anchors: dict | None = None
 ) -> list[dict]:
     # Group note and barline candidates by (page, sys, staff)
     staves = {}
@@ -1485,6 +1536,22 @@ def build_staff_timeline_preview(
 
         X_tol = 1.5 * staff_spacing
 
+        # Use textual measure anchors if available and sufficiently dense
+        staff_anchors = measure_anchors.get(key, []) if measure_anchors else []
+        if len(staff_anchors) >= 1:
+            # Filter out OMR barlines
+            cands = [c for c in cands if c.get("symbol_type") not in ("barline_candidate", "barline")]
+            # Inject synthetic barlines at X = anchor - 2.0 (skipping the first anchor since staff start acts as first barline)
+            for anchor_x in staff_anchors[1:]:
+                cands.append({
+                    "symbol_type": "barline_candidate",
+                    "page_index": page,
+                    "system_index": sys_idx,
+                    "staff_index": staff_idx,
+                    "x0": anchor_x - 2.0,
+                    "bbox": [anchor_x - 2.0, 0, anchor_x - 1.0, 0]
+                })
+
         # Sort all candidates chronologically by horizontal coordinate
         sorted_cands = sorted(cands, key=get_x_coord)
 
@@ -1495,13 +1562,11 @@ def build_staff_timeline_preview(
             st_type = cand.get("symbol_type")
             is_barline = st_type in ("barline_candidate", "barline")
             if is_barline:
-                if current_measure_cands:
-                    measures.append(current_measure_cands)
-                    current_measure_cands = []
+                measures.append(current_measure_cands)
+                current_measure_cands = []
             else:
                 current_measure_cands.append(cand)
-        if current_measure_cands:
-            measures.append(current_measure_cands)
+        measures.append(current_measure_cands)
 
         timeline_measures = []
 
@@ -2267,8 +2332,10 @@ def run_recognition_on_file(
     map_clef_resolved_staff_pitch(outcomes, explicit_clef="treble" if assume_treble_clef else None, semantic_candidates=semantic_candidates)
     coverage_report = build_clef_resolved_pitch_coverage_report(outcomes, assume_treble_clef=assume_treble_clef, semantic_candidates=semantic_candidates)
 
+    measure_anchors = extract_measure_anchors_from_text(pdf_path, all_staff_geometries)
+
     try:
-        timeline_preview = build_staff_timeline_preview(outcomes, semantic_candidates, all_staff_geometries)
+        timeline_preview = build_staff_timeline_preview(outcomes, semantic_candidates, all_staff_geometries, measure_anchors=measure_anchors)
     except Exception:
         timeline_preview = []
 

@@ -963,10 +963,10 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
             text = free_text.text if free_text is not None else None
 
             brush = b.find("Brush")
-            brush_dir = brush.get("direction").lower() if brush is not None else None
+            brush_dir = (brush.get("direction") or "none").lower() if brush is not None else None
 
             arpeggio = b.find("Arpeggio")
-            arp_dir = arpeggio.get("direction").lower() if arpeggio is not None else None
+            arp_dir = (arpeggio.get("direction") or "none").lower() if arpeggio is not None else None
 
             chord_symbol = _first_text(b, ["Chord"])
 
@@ -1138,6 +1138,10 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
                         ev_id = f"e_m{mb_idx}_s{s_idx}_v{voice_num}_{onset}"
 
                         from .ir import Event
+
+                        if len(resolved_notes) == 0 and beat.get("type", "") != "rest":
+                            continue
+
                         events.append(Event(
                             id=ev_id,
                             track_id=track_id,
