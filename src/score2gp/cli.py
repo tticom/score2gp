@@ -1102,6 +1102,19 @@ def convert_command(
         "unmatched_musicxml_event_count": diagnostics.unmatched_musicxml_event_count if diagnostics else 0,
         "unmatched_tabraw_candidate_count": diagnostics.unmatched_tabraw_candidate_count if diagnostics else 0,
     }
+    if score:
+        chord_size_histogram: dict[int, int] = {}
+        per_bar_event_shapes: list[list[int]] = []
+        for bar in score.bars:
+            shapes = []
+            for event in bar.events:
+                if not event.is_rest:
+                    n = len(event.notes)
+                    shapes.append(n)
+                    chord_size_histogram[n] = chord_size_histogram.get(n, 0) + 1
+            per_bar_event_shapes.append(shapes)
+        summary_counts["chord_size_histogram"] = chord_size_histogram
+        summary_counts["per_bar_event_shapes"] = per_bar_event_shapes
     semantic_comparison = None
     if ref_gp:
         try:
