@@ -55,8 +55,10 @@ def test_inspect_gp_relational_format(tmp_path) -> None:
         <Voices>0 -1 -1 -1</Voices>
       </Bar>
     </Bars>
-    <Voice id="0">0 1</Voice>
   </Score>
+  <Voices>
+    <Voice id="0"><Beats>0 1</Beats></Voice>
+  </Voices>
   <Beats>
     <Beat id="0">
       <Notes>0 1</Notes>
@@ -120,8 +122,10 @@ def test_compare_gp_different_representations(tmp_path) -> None:
         <Voices>0 -1 -1 -1</Voices>
       </Bar>
     </Bars>
-    <Voice id="0">0 1</Voice>
   </Score>
+  <Voices>
+    <Voice id="0"><Beats>0 1</Beats></Voice>
+  </Voices>
   <Beats>
     <Beat id="0">
       <Notes>0</Notes>

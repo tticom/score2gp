@@ -297,19 +297,33 @@ def _summarize_gpif(root: ET.Element) -> dict[str, Any]:
             if (node.get("name") or "".join(node.itertext()).strip())
         }
     )
-    beats = root.findall(".//Beat")
-    has_beat_notes = False
-    logical_note_count = 0
-    if beats:
-        for beat in beats:
-            notes_tag = beat.find("Notes")
-            if notes_tag is not None and notes_tag.text:
-                ids = notes_tag.text.split()
-                if ids:
-                    has_beat_notes = True
-                    logical_note_count += len(ids)
+    bars = root.findall(".//Bars/Bar")
+    voices_by_id = {v.get("id"): v for v in root.findall(".//Voices/Voice")}
+    beats_by_id = {b.get("id"): b for b in root.findall(".//Beats/Beat")}
 
-    if not has_beat_notes:
+    logical_note_count = 0
+    has_relational_structure = False
+
+    if bars and voices_by_id and beats_by_id:
+        for bar in bars:
+            voices_tag = bar.find("Voices")
+            if voices_tag is not None and voices_tag.text:
+                voice_ids = voices_tag.text.split()
+                for v_id in voice_ids:
+                    if v_id != "-1" and v_id in voices_by_id:
+                        voice = voices_by_id[v_id]
+                        beats_tag = voice.find("Beats")
+                        if beats_tag is not None and beats_tag.text:
+                            beat_ids = beats_tag.text.split()
+                            for b_id in beat_ids:
+                                if b_id in beats_by_id:
+                                    has_relational_structure = True
+                                    beat = beats_by_id[b_id]
+                                    notes_tag = beat.find("Notes")
+                                    if notes_tag is not None and notes_tag.text:
+                                        logical_note_count += len(notes_tag.text.split())
+
+    if not has_relational_structure:
         logical_note_count = len(root.findall(".//Note"))
 
     track_bars = root.findall(".//Bars/Bar")
