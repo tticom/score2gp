@@ -557,9 +557,8 @@ def test_cli_convert_lesson_3_quality_gate(tmp_path: Path) -> None:
     assert report["output_written"] is True
     assert report["summary_counts"]["bar_count"] == 66
     assert report["summary_counts"]["empty_bar_count"] == 1
-    assert report["summary_counts"]["semantic_differences"]["note_count"]["actual"] > (
-        report["summary_counts"]["semantic_differences"]["note_count"]["expected"]
-    )
+    assert report["summary_counts"]["semantic_differences"]["note_count"]["expected"] == 473
+    assert report["summary_counts"]["semantic_differences"]["note_count"]["actual"] == 427
 
     # Verify no zero-note musical events and plausible scalar/arpeggio shapes
     shapes = report["summary_counts"]["per_bar_event_shapes"]

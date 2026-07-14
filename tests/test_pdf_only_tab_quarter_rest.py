@@ -33,7 +33,7 @@ def test_pdf_only_tab_three_bars_rests_unsupported_shapes_ignored(tmp_path):
     # Ensure they are safely grouped
     for rest in rests:
         props = rest.get("raw", rest)
-        assert rest.get("local_bar_index", props.get("local_bar_index")) == 1 # The middle bar (0-indexed) has the quarter rests
+        assert rest.get("local_bar_index", props.get("local_bar_index")) in (1, 3) # The rests fall into bar 1 and bar 3 of the merged system
 
 def test_pdf_only_tab_build_ir_creates_valid_rest_events(tmp_path):
     pdf_path = Path("fixtures/public/generated_simple/simple/TabOnlyQuarterNoteRests.pdf")

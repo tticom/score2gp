@@ -3364,3 +3364,83 @@ def test_build_ir_gating_unsupported_layouts(tmp_path) -> None:
         )
     assert exc_info.value.category == "pdf_input_class_no_extractable_tab_geometry"
     assert exc_info.value.stage == "layout-gating"
+
+
+def test_tab_system_detection_continuity_and_extension() -> None:
+    from collections import namedtuple
+    from score2gp.pdf import _detect_tab_systems, _TabSystem
+    from score2gp.pdf_geometry import _LineSegment
+
+    Point = namedtuple('Point', ['x', 'y'])
+
+    # --- Test Case 1: Cross-page absolute bar index continuity ---
+    p1_drawings = []
+    for y in [200.0, 206.0, 212.0, 218.0, 224.0, 230.0]:
+        p1_drawings.append({"items": [("l", Point(100.0, y), Point(800.0, y))]})
+    for x in [100.0, 300.0, 500.0, 800.0]:
+        p1_drawings.append({"items": [("l", Point(x, 200.0), Point(x, 230.0))]})
+
+    class MockPage1:
+        def get_drawings(self): return p1_drawings
+        def get_text(self, kind): return []
+
+    systems_p1 = _detect_tab_systems(MockPage1(), page_index=1, first_bar_index=1)
+    assert len(systems_p1) == 1
+    sys1 = systems_p1[0]
+    assert sys1.first_bar_index == 1
+    assert len(sys1.barlines) == 4
+
+    next_bar_index = sys1.first_bar_index + len(sys1.barlines) - 1
+    assert next_bar_index == 4
+
+    p2_drawings = []
+    for y in [200.0, 206.0, 212.0, 218.0, 224.0, 230.0]:
+        p2_drawings.append({"items": [("l", Point(100.0, y), Point(800.0, y))]})
+    for x in [100.0, 300.0, 500.0, 800.0]:
+        p2_drawings.append({"items": [("l", Point(x, 200.0), Point(x, 230.0))]})
+
+    class MockPage2:
+        def get_drawings(self): return p2_drawings
+        def get_text(self, kind): return []
+
+    systems_p2 = _detect_tab_systems(MockPage2(), page_index=2, first_bar_index=next_bar_index)
+    assert len(systems_p2) == 1
+    sys2 = systems_p2[0]
+    assert sys2.first_bar_index == 4
+
+    # --- Test Case 2: Fragmented staff-line extension on short/fragmented system endings ---
+    ext_drawings = []
+    for y in [200.0, 206.0, 212.0, 218.0, 224.0, 230.0]:
+        ext_drawings.append({"items": [("l", Point(100.0, y), Point(500.0, y))]})
+    for y in [200.0, 206.0, 212.0, 218.0, 224.0, 230.0]:
+        ext_drawings.append({"items": [("l", Point(505.0, y), Point(540.0, y))]})
+    for x in [100.0, 535.0]:
+        ext_drawings.append({"items": [("l", Point(x, 200.0), Point(x, 230.0))]})
+
+    class MockPageExt:
+        def get_drawings(self): return ext_drawings
+        def get_text(self, kind): return []
+
+    systems_ext = _detect_tab_systems(MockPageExt(), page_index=1, first_bar_index=1)
+    assert len(systems_ext) == 1
+    sys_ext = systems_ext[0]
+    assert sys_ext.x1 >= 540.0
+    assert 535.0 in sys_ext.barlines
+
+    # --- Test Case 3: No regression to broad false system merging ---
+    multi_drawings = []
+    for y in [100.0, 108.0, 116.0, 124.0, 132.0]:
+        multi_drawings.append({"items": [("l", Point(100.0, y), Point(800.0, y))]})
+    for y in [200.0, 206.0, 212.0, 218.0, 224.0, 230.0]:
+        multi_drawings.append({"items": [("l", Point(100.0, y), Point(800.0, y))]})
+    for x in [100.0, 800.0]:
+        multi_drawings.append({"items": [("l", Point(x, 200.0), Point(x, 230.0))]})
+
+    class MockPageMulti:
+        def get_drawings(self): return multi_drawings
+        def get_text(self, kind): return []
+
+    systems_multi = _detect_tab_systems(MockPageMulti(), page_index=1, first_bar_index=1)
+    assert len(systems_multi) == 1
+    assert systems_multi[0].line_ys[0] >= 195.0
+

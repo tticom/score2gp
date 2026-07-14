@@ -747,9 +747,13 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
 
     candidates = []
     filtered_index = 0
+    next_bar_index = 1
     with fitz.open(pdf_path) as doc:
         for page_number, page in enumerate(doc, start=1):
-            systems = _detect_tab_systems(page, page_number)
+            systems = _detect_tab_systems(page, page_number, first_bar_index=next_bar_index)
+            if systems:
+                last_sys = systems[-1]
+                next_bar_index = last_sys.first_bar_index + max(1, len(last_sys.barlines) - 1)
             ascii_blocks = _detect_ascii_tab_blocks(page, page_number, first_system_index=len(systems) + 1)
 
             words = sorted(
@@ -3785,7 +3789,40 @@ def filter_tab_barline_candidates(
     }
 
 
-def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
+def _extend_staff_group(group: list[_LineSegment], all_segments: list[_LineSegment]) -> tuple[list[_LineSegment], float, float]:
+    extended_group = []
+    for line in group:
+        line_y = (line.y0 + line.y1) / 2
+        curr_x0, curr_x1 = min(line.x0, line.x1), max(line.x0, line.x1)
+
+        while True:
+            merged_any = False
+            for s in all_segments:
+                if abs(s.y0 - s.y1) > 1.0:
+                    continue
+                s_y = (s.y0 + s.y1) / 2
+                if abs(s_y - line_y) > 1.0:
+                    continue
+                s_x0, s_x1 = min(s.x0, s.x1), max(s.x0, s.x1)
+                s_w = s_x1 - s_x0
+                if s_w < 5.0:
+                    continue
+
+                if s_x0 - 15.0 <= curr_x1 and curr_x0 <= s_x1 + 15.0:
+                    new_x0 = min(curr_x0, s_x0)
+                    new_x1 = max(curr_x1, s_x1)
+                    if new_x0 < curr_x0 or new_x1 > curr_x1:
+                        curr_x0, curr_x1 = new_x0, new_x1
+                        merged_any = True
+            if not merged_any:
+                break
+        extended_group.append(_LineSegment(curr_x0, line_y, curr_x1, line_y))
+    g_x0 = min(l.x0 for l in extended_group)
+    g_x1 = max(l.x1 for l in extended_group)
+    return extended_group, g_x0, g_x1
+
+
+def _detect_tab_systems(page: Any, page_index: int, first_bar_index: int = 1) -> list[_TabSystem]:
     segments = list(_drawing_segments(page.get_drawings()))
     raw_horizontal = sorted((segment for segment in segments if segment.is_horizontal), key=lambda segment: segment.y0)
     horizontal = sorted(merge_collinear_horizontal_segments(raw_horizontal), key=lambda segment: segment.y0)
@@ -3819,16 +3856,15 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
 
     systems = []
     system_index = 1
-    next_bar_index = 1
+    next_bar_index = first_bar_index
 
     for group in _tab_line_groups(horizontal):
         classification = classify_staff_line_group(group, page)
         if classification in ("notation", "ambiguous"):
             continue
 
+        group, x0, x1 = _extend_staff_group(group, segments)
         line_ys = [round((line.y0 + line.y1) / 2, 3) for line in group]
-        x0 = min(min(line.x0, line.x1) for line in group)
-        x1 = max(max(line.x0, line.x1) for line in group)
         y0 = min(line_ys)
         y1 = max(line_ys)
 
@@ -4011,11 +4047,14 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
         if not is_ghost:
             non_ghost_systems.append(sys1)
 
-    # Re-index remaining systems
+    # Re-index remaining systems and compute correct sequential bar indices
     final_systems = []
+    current_bar_index = first_bar_index
     for idx, sys in enumerate(non_ghost_systems, start=1):
         from dataclasses import replace
-        final_systems.append(replace(sys, system_index=idx))
+        updated_sys = replace(sys, system_index=idx, first_bar_index=current_bar_index)
+        final_systems.append(updated_sys)
+        current_bar_index += max(1, len(updated_sys.barlines) - 1)
     return final_systems
 
 
