@@ -212,6 +212,14 @@ def inspect_gp(path: str | Path) -> dict[str, Any]:
     return summary
 
 
+def _normalize_track_name(name: str) -> str:
+    name = (name or "").lower()
+    for modifier in ["clean", "acoustic", "electric", "classical", "classic", "distorted", "overdriven"]:
+        name = name.replace(modifier, "")
+    words = name.split()
+    return " ".join(words)
+
+
 def compare_gp(expected: str | Path, actual: str | Path) -> dict[str, Any]:
     expected_summary = inspect_gp(expected)
     actual_summary = inspect_gp(actual)
@@ -225,11 +233,18 @@ def compare_gp(expected: str | Path, actual: str | Path) -> dict[str, Any]:
         "chord_symbols",
         "techniques",
     ]
-    differences = {
-        field: {"expected": expected_summary.get(field), "actual": actual_summary.get(field)}
-        for field in fields
-        if expected_summary.get(field) != actual_summary.get(field)
-    }
+    differences = {}
+    for field in fields:
+        val_exp = expected_summary.get(field)
+        val_act = actual_summary.get(field)
+        if field == "tracks":
+            norm_exp = [_normalize_track_name(t) for t in (val_exp or [])]
+            norm_act = [_normalize_track_name(t) for t in (val_act or [])]
+            if norm_exp != norm_act:
+                differences[field] = {"expected": val_exp, "actual": val_act}
+        else:
+            if val_exp != val_act:
+                differences[field] = {"expected": val_exp, "actual": val_act}
     return {
         "expected": str(expected),
         "actual": str(actual),

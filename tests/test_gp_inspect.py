@@ -149,3 +149,34 @@ def test_compare_gp_different_representations(tmp_path) -> None:
 
     comp = compare_gp(path_classic, path_relational)
     assert "note_count" not in comp["differences"]
+
+
+def test_compare_gp_normalized_track_names(tmp_path) -> None:
+    gpif_guitar = b"""<?xml version="1.0" encoding="utf-8"?>
+<GPIF>
+  <Score>
+    <Tracks>
+      <Track id="0">
+        <Name>Guitar</Name>
+      </Track>
+    </Tracks>
+  </Score>
+</GPIF>
+"""
+    gpif_clean_guitar = b"""<?xml version="1.0" encoding="utf-8"?>
+<GPIF>
+  <Score>
+    <Tracks>
+      <Track id="0">
+        <Name>Clean Guitar</Name>
+      </Track>
+    </Tracks>
+  </Score>
+</GPIF>
+"""
+    path_guitar = _create_synthetic_gp_package(tmp_path, "guitar.gp", gpif_guitar)
+    path_clean = _create_synthetic_gp_package(tmp_path, "clean.gp", gpif_clean_guitar)
+
+    comp = compare_gp(path_guitar, path_clean)
+    assert comp["matches"] is True
+    assert "tracks" not in comp["differences"]
