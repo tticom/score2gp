@@ -98,7 +98,7 @@ def _extract_note_candidates(page: Any, staves_diags: list['NotationStaffDiagnos
                 # Standard hollow notes usually have c_count >= 14 (or >= 24 for half notes).
                 # Some fonts (e.g. 1WholeNote.pdf) use fewer curves (c_count >= 8), but they are distinctly wide.
                 # We enforce aspect >= 1.4 for these lower curve counts to prevent misclassifying solid notes.
-                should_check_hollow = (c_count >= 14) or (c_count >= 8 and aspect >= 1.4)
+                should_check_hollow = (c_count >= 12) or (c_count >= 8 and aspect >= 1.4)
 
                 if should_check_hollow:
                     pts = []

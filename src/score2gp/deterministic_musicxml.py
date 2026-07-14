@@ -99,6 +99,7 @@ def generate_musicxml_sidecar(pdf_path: Path, out_mxl: Path) -> Path:
 
                 type_map = {
                     3840: "whole",
+                    2880: "half",
                     1920: "half",
                     1440: "quarter",
                     960: "quarter",
@@ -110,7 +111,7 @@ def generate_musicxml_sidecar(pdf_path: Path, out_mxl: Path) -> Path:
                     60: "64th"
                 }
                 is_dotted = False
-                if dur_ticks in [1440, 720, 360]:
+                if dur_ticks in [2880, 1440, 720, 360]:
                     is_dotted = True
 
                 note_type = type_map.get(dur_ticks, "quarter")

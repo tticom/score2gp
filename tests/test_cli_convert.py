@@ -611,3 +611,52 @@ def test_cli_convert_lesson_3_quality_gate(tmp_path: Path) -> None:
     assert m3_type is not None and m3_type.text == "whole", f"Expected note in measure 3 to be 'whole', found '{m3_type.text if m3_type is not None else None}'"
     m3_dur = m3_note.find("duration")
     assert m3_dur is not None and m3_dur.text == "3840", f"Expected note in measure 3 to have duration 3840, found '{m3_dur.text if m3_dur is not None else None}'"
+
+    # Confirm measure 18 (index 17) contains exactly 4 eighth notes and 1 half note (no trailing rest)
+    m18 = measures[17]
+    m18_notes = m18.findall("note")
+    pitched_m18 = [n for n in m18_notes if n.find("pitch") is not None]
+    assert len(pitched_m18) == 5, f"Expected exactly 5 pitched notes in measure 18, found {len(pitched_m18)}"
+    for idx in range(4):
+        ntype = pitched_m18[idx].find("type")
+        assert ntype is not None and ntype.text == "eighth"
+        ndur = pitched_m18[idx].find("duration")
+        assert ndur is not None and ndur.text == "480"
+    last_note = pitched_m18[4]
+    ntype = last_note.find("type")
+    assert ntype is not None and ntype.text == "half", f"Expected note 4 in measure 18 to be 'half', found '{ntype.text if ntype is not None else None}'"
+    ndur = last_note.find("duration")
+    assert ndur is not None and ndur.text == "1920", f"Expected note 4 in measure 18 to have duration 1920, found '{ndur.text if ndur is not None else None}'"
+    assert len(m18.findall("note/rest")) == 0, f"Expected no rest notes in measure 18, found {len(m18.findall('note/rest'))}"
+
+    # Confirm measure 19 (index 18) contains half rest, quarter rest, and two eighth notes in order
+    m19 = measures[18]
+    m19_notes = m19.findall("note")
+    assert m19_notes[0].find("rest") is not None
+    assert m19_notes[0].find("type").text == "half"
+    assert m19_notes[0].find("duration").text == "1920"
+    assert m19_notes[1].find("rest") is not None
+    assert m19_notes[1].find("type").text == "quarter"
+    assert m19_notes[1].find("duration").text == "960"
+    assert m19_notes[2].find("pitch") is not None
+    assert m19_notes[2].find("type").text == "eighth"
+    assert m19_notes[2].find("duration").text == "480"
+    assert m19_notes[3].find("pitch") is not None
+    assert m19_notes[3].find("type").text == "eighth"
+    assert m19_notes[3].find("duration").text == "480"
+
+    # Confirm measure 25 (index 24) contains a quarter note followed by a dotted half note chord (no trailing quarter rest)
+    m25 = measures[24]
+    m25_notes = m25.findall("note")
+    pitched_m25 = [n for n in m25_notes if n.find("pitch") is not None]
+    assert len(pitched_m25) == 7, f"Expected exactly 7 pitched notes in measure 25, found {len(pitched_m25)}"
+    assert pitched_m25[0].find("type").text == "quarter"
+    assert pitched_m25[0].find("duration").text == "960"
+    for idx in range(1, 7):
+        n = pitched_m25[idx]
+        assert n.find("type").text == "half"
+        assert n.find("duration").text == "2880"
+        assert n.find("dot") is not None
+        if idx > 1:
+            assert n.find("chord") is not None
+    assert len(m25.findall("note/rest")) == 0, f"Expected no rest notes in measure 25, found {len(m25.findall('note/rest'))}"

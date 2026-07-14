@@ -972,6 +972,8 @@ def apply_dots_to_notes(outcomes: list[dict]) -> None:
         "eighth_note_candidate", "sixteenth_note_candidate", "thirty_second_note_candidate", "sixty_fourth_note_candidate"
     ) and o.get("association_status") != "suppressed"]
 
+    # Gather all possible valid matches between dots and notes
+    possible_matches = []
     for dot in dots:
         d_page = dot.get("page_index")
         d_sys = dot.get("system_index")
@@ -979,8 +981,6 @@ def apply_dots_to_notes(outcomes: list[dict]) -> None:
         d_bbox = dot.get("bbox")
         if not d_bbox: continue
 
-        best_note = None
-        min_dist = float('inf')
         for note in notes:
             if note.get("page_index") != d_page or note.get("system_index") != d_sys or note.get("staff_index") != d_staff:
                 continue
@@ -995,15 +995,37 @@ def apply_dots_to_notes(outcomes: list[dict]) -> None:
             # Relaxed dx up to 35.0 to account for flags which push the dot further right
             if 0.0 < dx < 35.0 and dy < 4.5:
                 dist = dx + dy * 2.0  # Weight dy more to prefer the vertically closest note in a chord
-                if dist < min_dist:
-                    min_dist = dist
-                    best_note = note
+                possible_matches.append((dist, dot, note))
 
-        if best_note:
-            best_note["is_dotted"] = True
-            best_note.setdefault("dot_component_ids", []).append(dot.get("candidate_id"))
-            dot["association_status"] = "consumed"
-            dot["associated_note_id"] = best_note.get("candidate_id")
+    # Sort matches by distance (closest first)
+    possible_matches.sort(key=lambda x: x[0])
+
+    # Greedily assign matches uniquely
+    assigned_dots = set()
+    assigned_notes = {}  # note_id -> list of dot dictionaries
+    for dist, dot, note in possible_matches:
+        dot_id = dot.get("candidate_id")
+        note_id = note.get("candidate_id")
+        if dot_id in assigned_dots:
+            continue
+
+        # Allow multiple dots on the same notehead only if they are horizontally separated (i.e. different X)
+        existing_dots = assigned_notes.get(note_id, [])
+        if existing_dots:
+            is_duplicate_x = False
+            for ed in existing_dots:
+                if abs(ed["bbox"][0] - dot["bbox"][0]) < 2.0:
+                    is_duplicate_x = True
+                    break
+            if is_duplicate_x:
+                continue
+
+        assigned_dots.add(dot_id)
+        assigned_notes.setdefault(note_id, []).append(dot)
+        note["is_dotted"] = True
+        note.setdefault("dot_component_ids", []).append(dot_id)
+        dot["association_status"] = "consumed"
+        dot["associated_note_id"] = note_id
 
     TICK_MAPPINGS = {
         "whole_note_candidate": 3840,
@@ -1021,7 +1043,6 @@ def apply_dots_to_notes(outcomes: list[dict]) -> None:
         if not dots: continue
 
         base_dur = TICK_MAPPINGS.get(note.get("symbol_type"), 960)
-        dur = base_dur
         modifier = 0.0
         # If it happens to swallow multiple dots incorrectly, cap it at 3 (triple dotted)
         num_dots = min(len(dots), 3)

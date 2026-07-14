@@ -40,27 +40,43 @@ def extract_quarter_rest_candidates(
         return []
 
     for cluster in geometry.x_aligned_clusters:
-        # Rule 1: Isolation (must be exactly 1 primitive, of kind text_span, curve, or vertical_stroke)
-        if cluster.primitive_count != 1:
+        # Rule 1: Primitives check (allow multiple curve/stroke/rect/text primitives clustered together)
+        if not cluster.primitives:
             continue
-            
-        prim = cluster.primitives[0]
-        if prim.kind not in ("text_span", "curve", "vertical_stroke"):
-            continue
-        if prim.kind == "text_span":
-            font = (getattr(prim, "font_name", "") or "").lower()
-            if any(f in font for f in ("times", "arial", "helvetica", "calibri", "georgia", "courier", "verdana", "cambria")):
-                continue
 
-        c_height = prim.y1 - prim.y0
-        c_width = prim.x1 - prim.x0
+        all_valid_kinds = True
+        for p in cluster.primitives:
+            if p.kind not in ("text_span", "curve", "vertical_stroke", "vertical_stroke_candidate", "diagonal_stroke", "rect"):
+                all_valid_kinds = False
+                break
+        if not all_valid_kinds:
+            continue
+
+        has_invalid_text = False
+        for p in cluster.primitives:
+            if p.kind == "text_span":
+                font = (getattr(p, "font_name", "") or "").lower()
+                if any(f in font for f in ("times", "arial", "helvetica", "calibri", "georgia", "courier", "verdana", "cambria")):
+                    has_invalid_text = True
+                    break
+        if has_invalid_text:
+            continue
+
+        # Compute cluster bounding box
+        c_x0 = min(p.x0 for p in cluster.primitives)
+        c_x1 = max(p.x1 for p in cluster.primitives)
+        c_y0 = min(p.y0 for p in cluster.primitives)
+        c_y1 = max(p.y1 for p in cluster.primitives)
+
+        c_height = c_y1 - c_y0
+        c_width = c_x1 - c_x0
 
         if c_height <= 0.0 or c_width <= 0.0:
             continue
 
         height_ratio = c_height / staff_spacing
         aspect_ratio = c_height / c_width
-        c_center_y = (prim.y0 + prim.y1) / 2.0
+        c_center_y = (c_y0 + c_y1) / 2.0
 
         # Rule 2: Height Ratio (between 2.0 and 4.0 staff spaces)
         if not (2.0 <= height_ratio <= 4.0):
@@ -79,10 +95,10 @@ def extract_quarter_rest_candidates(
                 page_index=cluster.page_index,
                 system_index=cluster.system_index,
                 staff_index=cluster.staff_index,
-                x0=prim.x0,
-                y0=prim.y0,
-                x1=prim.x1,
-                y1=prim.y1,
+                x0=c_x0,
+                y0=c_y0,
+                x1=c_x1,
+                y1=c_y1,
                 cluster=cluster
             )
         )
