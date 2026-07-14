@@ -333,7 +333,7 @@ def shape_ledger_line_candidate_evidence(
             for co in cores:
                 hx0, hy0, hx1, hy1 = h.get("x0", 0), h.get("y0", 0), h.get("x1", 0), h.get("y1", 0)
                 cx0, cy0, cx1, cy1 = co.get("x0", 0), co.get("y0", 0), co.get("x1", 0), co.get("y1", 0)
-                if not (hx1 < cx0 or hx0 > cx1 or hy1 < cy0 or hy0 > cy1):
+                if not (hx1 < cx0 or hx0 > cx1 or hy1 < cy0 - 4.5 or hy0 > cy1 + 4.5):
                     overlap = True
                     break
             if overlap:
@@ -952,6 +952,7 @@ def compose_filled_duration_candidates(outcomes: list[dict]) -> list[dict]:
             "system_index": q_sys,
             "staff_index": q_staff,
             "bbox": composed_bbox,
+            "notehead_bbox": q_bbox,
             "duration": duration_type,
             "source": q.get("source"),
             "quarter_component_id": q.get("candidate_id"),
@@ -1232,6 +1233,8 @@ def map_clef_resolved_staff_pitch(
         groups[key].append(cand)
 
     def get_x_coord(c):
+        if "notehead_bbox" in c:
+            return c["notehead_bbox"][0]
         if "bbox" in c and isinstance(c["bbox"], (list, tuple)) and len(c["bbox"]) >= 1:
             return c["bbox"][0]
         return c.get("x0", 0.0)
@@ -1289,23 +1292,15 @@ def map_clef_resolved_staff_pitch(
                 continue
 
             # Keep ledger bounds check
-            if pos < -7 or pos > 15:
+            if pos < -12 or pos > 15:
                 continue
 
             # Explicit check for staff bounds compat
             if pos < 0 or pos > 8:
-                required_ledgers = 0
-                if pos < 0:
-                    required_ledgers = abs(pos) // 2
-                elif pos > 8:
-                    required_ledgers = (pos - 8) // 2
-
-                if "attached_ledger_line_candidate_ids" in cand:
-                    attached = cand["attached_ledger_line_candidate_ids"]
-                    if type(attached) is not list or len(attached) != required_ledgers:
-                        continue
-                else:
-                    if required_ledgers > 0:
+                required_ledgers = abs(pos) // 2 if pos < 0 else (pos - 8) // 2
+                if required_ledgers < 4:
+                    attached = cand.get("attached_ledger_line_candidate_ids", [])
+                    if not isinstance(attached, list) or len(attached) != required_ledgers:
                         continue
 
             try:
@@ -1484,6 +1479,8 @@ def build_staff_timeline_preview(
                 staves[key]["geometry"] = geom
 
     def get_x_coord(c):
+        if "notehead_bbox" in c:
+            return c["notehead_bbox"][0]
         if "bbox" in c and isinstance(c["bbox"], (list, tuple)) and len(c["bbox"]) >= 1:
             return c["bbox"][0]
         return c.get("x0", 0.0)
@@ -1811,6 +1808,7 @@ def build_staff_timeline_preview(
             "measures": timeline_measures
         })
 
+    timeline_previews = sorted(timeline_previews, key=lambda p: (p["page_index"], p["system_index"], p["staff_index"]))
     return timeline_previews
 
 
@@ -1944,7 +1942,7 @@ def build_clef_resolved_pitch_coverage_report(
                 reason = "malformed_staff_position"
             else:
                 if type(pos) is int:
-                    if pos < -7 or pos > 15:
+                    if pos < -12 or pos > 15:
                         reason = "pitch_out_of_range_or_unsupported"
                     elif pos < 0 or pos > 8:
                         report["skipped_missing_required_ledger_support"] += 1
