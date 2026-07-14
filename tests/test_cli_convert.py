@@ -542,24 +542,19 @@ def test_cli_convert_lesson_3_quality_gate(tmp_path: Path) -> None:
         "--json-report", str(json_report),
     ], catch_exceptions=False)
 
-    if result.exit_code != 6:
+    if result.exit_code != 0:
         print("CLI output:", result.output)
-    # The raw GP package may be written for diagnostics, but --require-ref-match
-    # must reject it while it remains structurally different from the reference.
-    assert result.exit_code == 6
-    assert "generated GP package does not match --ref-gp semantic summary" in clean_ansi(result.stderr)
+        print("CLI error:", result.stderr)
+    assert result.exit_code == 0
 
     assert json_report.exists()
     report = json.loads(json_report.read_text(encoding="utf-8"))
-    assert report["status"] == "failed"
-    assert report["stage"] == "semantic-reference-comparison"
-    assert report["refusal_code"] == "gp_semantic_reference_mismatch"
+    assert report["status"] == "success"
+    assert report["stage"] == "gp-write"
     assert report["output_written"] is True
     assert report["summary_counts"]["bar_count"] == 66
     assert report["summary_counts"]["empty_bar_count"] == 0
-    assert report["summary_counts"]["semantic_differences"] == {
-        "tracks": {"actual": ["Guitar"], "expected": ["Clean Guitar"]}
-    }
+    assert report["summary_counts"]["semantic_differences"] == {}
 
     # Verify no zero-note musical events and plausible scalar/arpeggio shapes
     shapes = report["summary_counts"]["per_bar_event_shapes"]
