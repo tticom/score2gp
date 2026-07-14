@@ -40,8 +40,10 @@ def extract_quarter_rest_candidates(
         return []
 
     for cluster in geometry.x_aligned_clusters:
-        # Rule 1: Primitives check (allow multiple curve/stroke/rect/text primitives clustered together)
+        # Rule 1: Primitives check (allow single primitive or complex vector clusters with >= 10 primitives)
         if not cluster.primitives:
+            continue
+        if cluster.primitive_count != 1 and len(cluster.primitives) < 10:
             continue
 
         all_valid_kinds = True
