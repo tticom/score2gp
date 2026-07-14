@@ -44,6 +44,10 @@ def extract_eighth_sixteenth_rest_candidates(
         prim = cluster.primitives[0]
         if prim.kind not in ("text_span", "curve"):
             continue
+        if prim.kind == "text_span":
+            font = (getattr(prim, "font_name", "") or "").lower()
+            if any(f in font for f in ("times", "arial", "helvetica", "calibri", "georgia", "courier", "verdana", "cambria")):
+                continue
 
         c_height = prim.y1 - prim.y0
         c_width = prim.x1 - prim.x0

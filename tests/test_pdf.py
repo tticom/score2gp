@@ -3443,4 +3443,3 @@ def test_tab_system_detection_continuity_and_extension() -> None:
     systems_multi = _detect_tab_systems(MockPageMulti(), page_index=1, first_bar_index=1)
     assert len(systems_multi) == 1
     assert systems_multi[0].line_ys[0] >= 195.0
-

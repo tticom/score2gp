@@ -737,7 +737,7 @@ def test_map_clef_resolved_staff_pitch():
         {"symbol_type": "quarter_note_candidate", "staff_position_index": -2, "attached_ledger_line_candidate_ids": ["l1", "l2"]}, # 7: ambiguous (too many) -> fail
         {"symbol_type": "ledger_line_candidate", "staff_position_index": 4}, # 8: ignore non-notes
         {"symbol_type": "quarter_note_candidate", "staff_position_index": None}, # 9: malformed
-        {"symbol_type": "quarter_note_candidate", "staff_position_index": -8}, # 10: out of mapped bounds
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": -13}, # 10: out of mapped bounds
         {"symbol_type": "quarter_note_candidate", "staff_position_index": -1, "attached_ledger_line_candidate_ids": ["l1"]}, # 11: 0 ledger required but 1 given -> fail
         {"symbol_type": "quarter_note_candidate", "staff_position_index": 9, "attached_ledger_line_candidate_ids": ["l2"]}, # 12: 0 ledger required but 1 given -> fail
         {"symbol_type": "quarter_note_candidate", "staff_position_index": -1, "attached_ledger_line_candidate_ids": "malformed"}, # 13: 0 ledger required but malformed -> fail
@@ -1078,8 +1078,8 @@ def test_clef_resolved_pitch_coverage_report_out_of_range_positions():
     outcomes = [
         {"symbol_type": "treble_clef_candidate", "candidate_id": "clef_1", "page_index": 1, "system_index": 1, "staff_index": 1, "source": "diagnostic_candidate_evidence"},
 
-        # Out of range position: -8
-        {"symbol_type": "quarter_note_candidate", "candidate_id": "n_out_1", "page_index": 1, "system_index": 1, "staff_index": 1, "staff_position_index": -8},
+        # Out of range position: -13
+        {"symbol_type": "quarter_note_candidate", "candidate_id": "n_out_1", "page_index": 1, "system_index": 1, "staff_index": 1, "staff_position_index": -13},
         # Out of range position: 16
         {"symbol_type": "quarter_note_candidate", "candidate_id": "n_out_2", "page_index": 1, "system_index": 1, "staff_index": 1, "staff_position_index": 16},
         # Extreme position
