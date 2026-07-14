@@ -901,7 +901,7 @@ def compose_filled_duration_candidates(outcomes: list[dict]) -> list[dict]:
             clusters = []
             curr_y = ys[0]
             for y in ys[1:]:
-                if y <= curr_y + 0.3 * staff_space:
+                if y <= curr_y + 0.6 * staff_space:
                     curr_y = max(curr_y, y)
                 else:
                     clusters.append(curr_y)
@@ -1622,7 +1622,7 @@ def build_staff_timeline_preview(
                             y_center = c.get("y0")
 
                         if middle_y is not None and y_center is not None:
-                            if y_center > middle_y + 10.0:  # slightly below middle to count as voice 2
+                            if y_center >= middle_y + 10.0:  # slightly below middle to count as voice 2
                                 voice = 2
 
                     if voice == 2:
@@ -1695,9 +1695,12 @@ def build_staff_timeline_preview(
                     })
                     cursor_2 = max(cursor_2, start_tick + dur)
 
-            # Pad measure voices up to expected duration
+            # Pad only voices that are musically active. An inactive secondary voice should not
+            # introduce a visible whole-measure rest over a complete single-voice measure.
             D_measure = 3840
-            if cursor_1 < D_measure:
+            active_voice_1 = any(e["voice"] == 1 for e in measure_events) or not measure_events
+            active_voice_2 = any(e["voice"] == 2 for e in measure_events)
+            if active_voice_1 and cursor_1 < D_measure:
                 measure_events.append({
                     "candidate_id": None,
                     "symbol_type": "padding_rest",
@@ -1707,10 +1710,10 @@ def build_staff_timeline_preview(
                     "resolved_pitch": None
                 })
                 cursor_1 = D_measure
-            elif cursor_1 > D_measure:
+            elif active_voice_1 and cursor_1 > D_measure:
                 invalid = True
 
-            if cursor_2 < D_measure:
+            if active_voice_2 and cursor_2 < D_measure:
                 measure_events.append({
                     "candidate_id": None,
                     "symbol_type": "padding_rest",
@@ -1720,7 +1723,7 @@ def build_staff_timeline_preview(
                     "resolved_pitch": None
                 })
                 cursor_2 = D_measure
-            elif cursor_2 > D_measure:
+            elif active_voice_2 and cursor_2 > D_measure:
                 invalid = True
 
             overflow_diagnostics = None

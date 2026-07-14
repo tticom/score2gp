@@ -580,8 +580,34 @@ def test_cli_convert_lesson_3_quality_gate(tmp_path: Path) -> None:
 
     import xml.etree.ElementTree as ET
 
-    assert len(ET.parse(musicxml_path).getroot().findall(".//measure")) == 66
+    tree = ET.parse(musicxml_path)
+    measures = tree.getroot().findall(".//measure")
+    assert len(measures) == 66
     xml_content = musicxml_path.read_text(encoding="utf-8")
     assert "<beats>4</beats>" in xml_content
     assert "<tie " not in xml_content
     assert "<tied " not in xml_content
+
+    # Verify measures 1 and 2 contain exactly 8 eighth notes and no sixteenth note regression
+    for m_idx in [0, 1]:
+        m = measures[m_idx]
+        notes = m.findall("note")
+        pitched_notes = [n for n in notes if n.find("pitch") is not None]
+        rests = [n for n in notes if n.find("rest") is not None]
+        assert rests == [], f"Expected no rests in measure {m_idx + 1}, found {len(rests)}"
+        assert len(pitched_notes) == 8, f"Expected exactly 8 pitched notes in measure {m_idx+1}, found {len(pitched_notes)}"
+        for idx, n in enumerate(pitched_notes):
+            ntype = n.find("type")
+            assert ntype is not None and ntype.text == "eighth", f"Expected note {idx} in measure {m_idx+1} to be 'eighth', found '{ntype.text if ntype is not None else None}'"
+            ndur = n.find("duration")
+            assert ndur is not None and ndur.text == "480", f"Expected note {idx} in measure {m_idx+1} to have duration 480, found '{ndur.text if ndur is not None else None}'"
+
+    # Confirm measure 3 still contains the whole note
+    m3 = measures[2]
+    m3_pitched = [n for n in m3.findall("note") if n.find("pitch") is not None]
+    assert len(m3_pitched) == 1, f"Expected exactly 1 pitched note in measure 3, found {len(m3_pitched)}"
+    m3_note = m3_pitched[0]
+    m3_type = m3_note.find("type")
+    assert m3_type is not None and m3_type.text == "whole", f"Expected note in measure 3 to be 'whole', found '{m3_type.text if m3_type is not None else None}'"
+    m3_dur = m3_note.find("duration")
+    assert m3_dur is not None and m3_dur.text == "3840", f"Expected note in measure 3 to have duration 3840, found '{m3_dur.text if m3_dur is not None else None}'"
