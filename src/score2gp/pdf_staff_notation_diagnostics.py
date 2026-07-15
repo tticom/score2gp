@@ -91,7 +91,7 @@ def _extract_note_candidates(page: Any, staves_diags: list['NotationStaffDiagnos
         items = draw.get("items", [])
         c_count = sum(1 for item in items if item[0] == 'c')
 
-        if 1.0 <= aspect <= 2.0 and c_count >= 2:
+        if 0.95 <= aspect <= 2.0 and c_count >= 2:
             is_hollow = not draw.get("fill")
             if not is_hollow:
                 # Fallback heuristic: check if inner contour points exist and are far from edges.
@@ -865,7 +865,10 @@ def build_notation_diagnostics(
                 elif p.type in ("non_staff_horizontal", "diagonal_stroke_candidate"):
                     w = abs(p.x1 - p.x0)
                     h = abs(p.y1 - p.y0)
-                    if w >= 0.5 * staff_space:
+                    is_valid = True
+                    if p.type == "non_staff_horizontal" and w < 0.5 * staff_space:
+                        is_valid = False
+                    if is_valid and w >= 0.5 * staff_space:
                         beam_candidates.append(BeamPrimitiveCandidateDiagnostics(
                             bbox=[round(p.x0, 3), round(p.y0, 3), round(p.x1, 3), round(p.y1, 3)],
                             primitive_kind=p.type,
@@ -997,6 +1000,17 @@ def extract_structural_skeleton_diagnostics_dict(page: Any, page_index: int) -> 
                             dx = ix1 - ix0
                             dy = iy1 - iy0
                             if dy >= 1.0 and dx <= 2.0:
+                                if iy0 <= y1 and iy1 >= y0 and ix0 >= x0 and ix1 <= x1:
+                                    verticals.append((ix0, ix1, iy0, iy1))
+                        elif item[0] == "re" and len(item) >= 2:
+                            r = item[1]
+                            if hasattr(r, "x0"):
+                                ix0, iy0, ix1, iy1 = r.x0, r.y0, r.x1, r.y1
+                            else:
+                                ix0, iy0, ix1, iy1 = r
+                            dx = ix1 - ix0
+                            dy = iy1 - iy0
+                            if dy >= 1.0 and dx <= 4.0:
                                 if iy0 <= y1 and iy1 >= y0 and ix0 >= x0 and ix1 <= x1:
                                     verticals.append((ix0, ix1, iy0, iy1))
 

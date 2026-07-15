@@ -142,6 +142,12 @@ def generate_musicxml_sidecar(pdf_path: Path, out_mxl: Path) -> Path:
                 backup = ET.SubElement(measure_el, "backup")
                 ET.SubElement(backup, "duration").text = str(v_dur)
 
-    xml_str = minidom.parseString(ET.tostring(root)).toprettyxml(indent="  ")
+        b_style = m_data.get("barline_style", "simple")
+        if b_style in ("double", "final"):
+            bar_el = ET.SubElement(measure_el, "barline", location="right")
+            style_name = "light-light" if b_style == "double" else "light-heavy"
+            ET.SubElement(bar_el, "bar-style").text = style_name
+
+    xml_str = minidom.parseString(ET.tostring(root)).toprexml(indent="  ") if hasattr(minidom.parseString(ET.tostring(root)), "toprexml") else minidom.parseString(ET.tostring(root)).toprettyxml(indent="  ")
     out_mxl.write_text(xml_str, encoding="utf-8")
     return out_mxl

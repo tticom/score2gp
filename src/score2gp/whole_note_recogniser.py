@@ -875,15 +875,20 @@ def compose_filled_duration_candidates(outcomes: list[dict]) -> list[dict]:
                                 f_bbox[1] >= q_bbox[1] - 1.0 and f_bbox[3] <= q_bbox[3] + 1.0):
                             intersect_flags.append(f)
 
+        staff_space = max(0.1, q_bbox[3] - q_bbox[1])
         intersect_beams = []
         for b in beams:
             b_bbox = b.get("bbox")
             if b.get("page_index") == q_page and b.get("system_index") == q_sys and b.get("staff_index") == q_staff and is_valid_bbox(b_bbox):
+                w = abs(b_bbox[2] - b_bbox[0])
+                # Suppress short horizontal strokes (like ledger lines) from being treated as beams.
+                # Ledger lines are centered on noteheads and are short (w < 2.0 * staff_space).
+                # Actual beams span across multiple notes and are wide (w >= 2.0 * staff_space).
+                if b.get("primitive_kind") == "non_staff_horizontal" and w < 2.0 * staff_space:
+                    continue
                 beam_y_margin = 2.0 if q_stem else 20.0
                 if bboxes_intersect(full_bbox, b_bbox, x_margin=2.0, y_margin=beam_y_margin):
                     intersect_beams.append(b)
-
-        staff_space = max(0.1, q_bbox[3] - q_bbox[1])
 
         units = 0
         modifiers = []
@@ -1557,17 +1562,28 @@ def build_staff_timeline_preview(
         # Use textual measure anchors if available and sufficiently dense
         staff_anchors = measure_anchors.get(key, []) if measure_anchors else []
         if len(staff_anchors) >= 1:
-            # Filter out OMR barlines
+            anchors_to_use = list(staff_anchors)
+            if geom and "bbox" in geom and len(geom["bbox"]) >= 3:
+                x1_staff = geom["bbox"][2]
+                if not any(abs(a - x1_staff) <= 10.0 for a in anchors_to_use):
+                    anchors_to_use.append(x1_staff)
+
+            omr_barlines = [c for c in cands if c.get("symbol_type") in ("barline_candidate", "barline")]
             cands = [c for c in cands if c.get("symbol_type") not in ("barline_candidate", "barline")]
-            # Inject synthetic barlines at X = anchor - 2.0 (skipping the first anchor since staff start acts as first barline)
-            for anchor_x in staff_anchors[1:]:
+            for anchor_x in anchors_to_use[1:]:
+                style = "simple"
+                if omr_barlines:
+                    nearest_omr = min(omr_barlines, key=lambda b: abs(get_x_coord(b) - anchor_x))
+                    if abs(get_x_coord(nearest_omr) - anchor_x) <= 15.0:
+                        style = nearest_omr.get("barline_style", "simple")
                 cands.append({
                     "symbol_type": "barline_candidate",
                     "page_index": page,
                     "system_index": sys_idx,
                     "staff_index": staff_idx,
                     "x0": anchor_x - 2.0,
-                    "bbox": [anchor_x - 2.0, 0, anchor_x - 1.0, 0]
+                    "bbox": [anchor_x - 2.0, 0, anchor_x - 1.0, 0],
+                    "barline_style": style
                 })
 
         # Sort all candidates chronologically by horizontal coordinate
@@ -1580,15 +1596,16 @@ def build_staff_timeline_preview(
             st_type = cand.get("symbol_type")
             is_barline = st_type in ("barline_candidate", "barline")
             if is_barline:
-                measures.append(current_measure_cands)
+                measures.append((current_measure_cands, cand.get("barline_style", "simple")))
                 current_measure_cands = []
             else:
                 current_measure_cands.append(cand)
-        measures.append(current_measure_cands)
+        if current_measure_cands:
+            measures.append((current_measure_cands, "simple"))
 
         timeline_measures = []
 
-        for m_idx, m_cands in enumerate(measures):
+        for m_idx, (m_cands, b_style) in enumerate(measures):
             # Cluster measure candidates into vertical time slices
             time_slices = []
             current_slice = []
@@ -1619,21 +1636,6 @@ def build_staff_timeline_preview(
                     voice = 1
                     if "voice" in c:
                         voice = c["voice"]
-                    elif "stem_direction" in c or "stem" in c:
-                        stem = c.get("stem_direction") or c.get("stem")
-                        if isinstance(stem, str) and "down" in stem.lower():
-                            voice = 2
-                    elif c.get("stem_bbox") and c.get("bbox"):
-                        stem_bbox = c["stem_bbox"]
-                        note_bbox = c["bbox"]
-                        if isinstance(stem_bbox, (list, tuple)) and len(stem_bbox) == 4 and isinstance(note_bbox, (list, tuple)) and len(note_bbox) == 4:
-                            note_center_x = (note_bbox[0] + note_bbox[2]) / 2.0
-                            stem_center_x = (stem_bbox[0] + stem_bbox[2]) / 2.0
-                            # If stem is on the left of notehead, it goes DOWN -> voice 2
-                            if stem_center_x < note_center_x:
-                                voice = 2
-                            else:
-                                voice = 1
                     elif "rest" in c.get("symbol_type", ""):
                         # Determine rest vertical position
                         y_center = None
@@ -1773,7 +1775,8 @@ def build_staff_timeline_preview(
                 "voice_1_final_tick": cursor_1,
                 "voice_2_final_tick": cursor_2,
                 "events": measure_events,
-                "overflow_diagnostics": overflow_diagnostics
+                "overflow_diagnostics": overflow_diagnostics,
+                "barline_style": b_style
             })
 
         # Process ties for this staff
@@ -2273,18 +2276,51 @@ def run_recognition_on_file(
                         skeleton_staves[key] = staff.get("barline_candidates", [])
 
             for staff_diag in diags_model.staves:
-                key = (page_index, staff_diag.staff.system_index, staff_diag.staff.staff_index)
+                sys_idx = staff_diag.staff.system_index
+                staff_idx = staff_diag.staff.staff_index
+                key = (page_index, sys_idx, staff_idx)
                 barlines = skeleton_staves.get(key, [])
-                for bc in barlines:
-                    if bc.get("classification") == "confirmed_barline":
-                        barline_locations.append({
-                            "bbox": [bc["x0"], bc["y0"], bc["x1"], bc["y1"]],
-                            "page_index": page_index,
-                            "system_index": staff_diag.staff.system_index,
-                            "staff_index": staff_diag.staff.staff_index,
-                            "candidate_id": f"barline_{bc['x0']}_{bc['y0']}",
-                            "symbol_type": "barline_candidate"
-                        })
+                confirmed = [bc for bc in barlines if bc.get("classification") == "confirmed_barline"]
+                confirmed.sort(key=lambda bc: bc["x0"])
+
+                merged = []
+                skip_indices = set()
+                for i in range(len(confirmed)):
+                    if i in skip_indices:
+                        continue
+                    bc1 = confirmed[i]
+                    if i + 1 < len(confirmed):
+                        bc2 = confirmed[i+1]
+                        dist = bc2["x0"] - bc1["x0"]
+                        if dist <= 5.0:
+                            w1 = bc1["x1"] - bc1["x0"]
+                            w2 = bc2["x1"] - bc2["x0"]
+                            is_final = (w1 >= 1.5 or w2 >= 1.5)
+                            bar_style = "final" if is_final else "double"
+                            merged.append({
+                                "page_index": page_index,
+                                "system_index": sys_idx,
+                                "staff_index": staff_idx,
+                                "bbox": [bc1["x0"], min(bc1["y0"], bc2["y0"]), bc2["x1"], max(bc1["y1"], bc2["y1"])],
+                                "candidate_id": f"barline_{bc1['x0']}_{bc1['y0']}",
+                                "symbol_type": "barline_candidate",
+                                "barline_style": bar_style
+                            })
+                            skip_indices.add(i + 1)
+                            continue
+
+                    merged.append({
+                        "page_index": page_index,
+                        "system_index": sys_idx,
+                        "staff_index": staff_idx,
+                        "bbox": [bc1["x0"], bc1["y0"], bc1["x1"], bc1["y1"]],
+                        "candidate_id": f"barline_{bc1['x0']}_{bc1['y0']}",
+                        "symbol_type": "barline_candidate",
+                        "barline_style": "simple"
+                    })
+
+                for m_bc in merged:
+                    barline_locations.append(m_bc)
 
                 geometry = extract_geometry_candidates(staff_diag)
 

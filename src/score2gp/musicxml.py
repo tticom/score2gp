@@ -497,6 +497,7 @@ class MusicXmlMeasure(BaseModel):
     key_fifths: int | None = None
     notes: list[MusicXmlNote] = Field(default_factory=list)
     harmonies: list[MusicXmlHarmony] = Field(default_factory=list)
+    barline: str | None = None
     divisions_missing: bool = False
     divisions_changed_mid_measure: bool = False
     backup_forward_risk: bool = False
@@ -1995,6 +1996,7 @@ def _parse_part(
         harmonies: list[MusicXmlHarmony] = []
         divisions_changed_mid_measure = False
         has_backup_or_forward = voice_cursor_diagnostics.backup_count > 0 or voice_cursor_diagnostics.forward_count > 0
+        measure_barline = None
 
         for child in list(measure_node):
             name = _local_name(child.tag)
@@ -2073,22 +2075,29 @@ def _parse_part(
                 )
                 dur = _duration(child)
                 cursor += dur
-            elif name == "barline" and _has_descendant(child, "repeat"):
-                warnings.append(
-                    MusicXmlWarning(
-                        code="unsupported-repeat",
-                        message="repeat barlines are recorded as unsupported and ignored in this phase",
-                        source_path=source_path,
+            elif name == "barline":
+                style_el = child.find("bar-style")
+                if style_el is not None and style_el.text:
+                    if style_el.text == "light-light":
+                        measure_barline = "double"
+                    elif style_el.text in ("light-heavy", "heavy-light", "heavy-heavy"):
+                        measure_barline = "end"
+                if _has_descendant(child, "repeat"):
+                    warnings.append(
+                        MusicXmlWarning(
+                            code="unsupported-repeat",
+                            message="repeat barlines are recorded as unsupported and ignored in this phase",
+                            source_path=source_path,
+                        )
                     )
-                )
-            elif name == "barline" and _has_descendant(child, "ending"):
-                warnings.append(
-                    MusicXmlWarning(
-                        code="unsupported-ending",
-                        message="alternate endings are recorded as unsupported and ignored in this phase",
-                        source_path=source_path,
+                elif _has_descendant(child, "ending"):
+                    warnings.append(
+                        MusicXmlWarning(
+                            code="unsupported-ending",
+                            message="alternate endings are recorded as unsupported and ignored in this phase",
+                            source_path=source_path,
+                        )
                     )
-                )
 
         expected_divs = None
         if current_time is not None:
@@ -2113,6 +2122,7 @@ def _parse_part(
                 key_fifths=current_key,
                 notes=notes,
                 harmonies=harmonies,
+                barline=measure_barline,
                 divisions_missing=not has_divisions_defined,
                 divisions_changed_mid_measure=divisions_changed_mid_measure,
                 backup_forward_risk=backup_past_zero,

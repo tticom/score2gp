@@ -660,3 +660,61 @@ def test_cli_convert_lesson_3_quality_gate(tmp_path: Path) -> None:
         if idx > 1:
             assert n.find("chord") is not None
     assert len(m25.findall("note/rest")) == 0, f"Expected no rest notes in measure 25, found {len(m25.findall('note/rest'))}"
+
+    # Confirm measure 47 (index 46) contains dotted quarter note B6 and no rest
+    m47 = measures[46]
+    m47_notes = m47.findall("note")
+    pitched_m47 = [n for n in m47_notes if n.find("pitch") is not None]
+    assert len(pitched_m47) == 6, f"Expected exactly 6 pitched notes in measure 47, found {len(pitched_m47)}"
+    b6_note = pitched_m47[4]
+    assert b6_note.find("pitch/step").text == "B"
+    assert b6_note.find("pitch/octave").text == "6"
+    assert b6_note.find("type").text == "quarter"
+    assert b6_note.find("duration").text == "1440"
+    assert b6_note.find("dot") is not None
+    assert len(m47.findall("note/rest")) == 0, f"Expected no rest notes in measure 47, found {len(m47.findall('note/rest'))}"
+
+    # Confirm measure 63 (index 62) contains exactly 8 eighth notes and no rests
+    m63 = measures[62]
+    m63_notes = m63.findall("note")
+    pitched_m63 = [n for n in m63_notes if n.find("pitch") is not None]
+    assert len(pitched_m63) == 8, f"Expected exactly 8 pitched notes in measure 63, found {len(pitched_m63)}"
+    for idx, n in enumerate(pitched_m63):
+        assert n.find("type").text == "eighth", f"Expected note {idx} in measure 63 to be eighth"
+        assert n.find("duration").text == "480", f"Expected note {idx} in measure 63 to have duration 480"
+    assert len(m63.findall("note/rest")) == 0, f"Expected no rest notes in measure 63, found {len(m63.findall('note/rest'))}"
+
+    # Confirm measure 66 (index 65) contains a quarter note followed by a dotted half note chord (no trailing quarter rest)
+    m66 = measures[65]
+    m66_notes = m66.findall("note")
+    pitched_m66 = [n for n in m66_notes if n.find("pitch") is not None]
+    assert len(pitched_m66) == 7, f"Expected exactly 7 pitched notes in measure 66, found {len(pitched_m66)}"
+    assert pitched_m66[0].find("type").text == "quarter"
+    assert pitched_m66[0].find("duration").text == "960"
+    for idx in range(1, 7):
+        n = pitched_m66[idx]
+        assert n.find("type").text == "half"
+        assert n.find("duration").text == "2880"
+        assert n.find("dot") is not None
+        if idx > 1:
+            assert n.find("chord") is not None
+    assert len(m66.findall("note/rest")) == 0, f"Expected no rest notes in measure 66, found {len(m66.findall('note/rest'))}"
+
+    # Confirm double barlines and final barlines are written correctly to MusicXML
+    for num, expected_style in [("7", "light-light"), ("25", "light-light"), ("40", "light-light"), ("49", "light-light"), ("53", "light-light"), ("66", "light-heavy")]:
+        meas = tree.find(f".//measure[@number='{num}']")
+        assert meas is not None
+        barline = meas.find("barline")
+        assert barline is not None, f"Expected barline in measure {num}"
+        style_el = barline.find("bar-style")
+        assert style_el is not None and style_el.text == expected_style, f"Expected bar-style {expected_style} in measure {num}"
+
+    # Confirm barlines are propagated to GPIF XML in the Guitar Pro package
+    gpif_content = _read_score_gpif(out_gp)
+    gpif_tree = ET.fromstring(gpif_content.encode("utf-8"))
+    master_bars = gpif_tree.findall(".//MasterBar")
+    # MasterBar index in GPIF matches XML measure number (since index is 0-based in list, but MasterBar elements represent measures 1-66)
+    # MasterBar 7 (index 6): double barline
+    assert master_bars[6].find("Barline") is not None and master_bars[6].find("Barline").text == "Double"
+    # MasterBar 66 (index 65): final barline
+    assert master_bars[65].find("Barline") is not None and master_bars[65].find("Barline").text == "End"

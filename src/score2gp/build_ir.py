@@ -1608,6 +1608,7 @@ def build_ir_with_diagnostics_from_imports(
                     time_signature=measure.time_signature,
                     key_signature=KeySignature(fifths=measure.key_fifths) if measure.key_fifths is not None else None,
                     events=events,
+                    barline=measure.barline,
                 )
             )
         warnings.extend(_unused_candidate_warnings(candidate_pools))
