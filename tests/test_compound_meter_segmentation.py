@@ -105,3 +105,67 @@ def test_split_only_on_evidence():
     measures = previews[0]["measures"]
     assert len(measures) == 1
     assert measures[0]["valid"] is False
+
+
+def test_iterative_barline_restoration():
+    # 4. Iterative barline restoration under dense text anchors.
+    # We have dense anchors, so OMR barlines are discarded.
+    # But because a measure is overfull, we restore the discarded OMR barline to split it.
+    outcomes = []
+    # 24 eighth notes
+    for i in range(24):
+        outcomes.append({
+            "candidate_id": f"note_{i}",
+            "symbol_type": "eighth_note_candidate",
+            "page_index": 1,
+            "system_index": 1,
+            "staff_index": 1,
+            "x0": 10.0 + i * 15.0,
+            "voice": 1,
+            "clef_resolved_staff_pitch": "C4"
+        })
+    # OMR Barline at x=182.5
+    outcomes.append({
+        "symbol_type": "barline_candidate",
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "x0": 182.5
+    })
+
+    # Page 1, System 1, Staff 1 geometries
+    geometries = [{
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "bbox": [10.0, 100.0, 400.0, 140.0],
+        "line_y_coords": [100.0, 110.0, 120.0, 130.0, 140.0]
+    }]
+
+    # Mock measure anchors to set is_dense = True
+    measure_anchors = {
+        (1, 1, 1): [10.0, 400.0]
+    }
+
+    # Mock fitz.open to return "12/8" text for meter detection
+    from unittest.mock import patch, MagicMock
+    mock_doc = MagicMock()
+    mock_page = MagicMock()
+    mock_page.get_text.return_value = "12/8"
+    mock_doc.__len__.return_value = 1
+    mock_doc.__getitem__.return_value = mock_page
+
+    with patch("fitz.open", return_value=mock_doc):
+        previews = build_staff_timeline_preview(
+            outcomes,
+            semantic_candidates=None,
+            all_staff_geometries=geometries,
+            measure_anchors=measure_anchors,
+            pdf_path="dummy.pdf"
+        )
+    assert len(previews) == 1
+    measures = previews[0]["measures"]
+    # The discarded OMR barline at 190.0 should be restored, splitting it into 2 measures!
+    assert len(measures) == 2
+    assert measures[0]["valid"] is True
+    assert measures[1]["valid"] is True

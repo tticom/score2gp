@@ -1789,6 +1789,7 @@ def build_staff_timeline_preview(
         # Use textual measure anchors if available and sufficiently dense
         staff_anchors = measure_anchors.get(key, []) if measure_anchors else []
         is_dense = len(staff_anchors) >= 2
+        discarded_omr_barlines = []
         if is_dense:
             anchors_to_use = list(staff_anchors)
             if geom and "bbox" in geom and len(geom["bbox"]) >= 3:
@@ -1797,6 +1798,7 @@ def build_staff_timeline_preview(
                     anchors_to_use.append(x1_staff)
 
             omr_barlines = [c for c in cands if c.get("symbol_type") in ("barline_candidate", "barline")]
+            discarded_omr_barlines = list(omr_barlines)
             cands = [c for c in cands if c.get("symbol_type") not in ("barline_candidate", "barline")]
             for anchor_x in anchors_to_use[1:]:
                 style = "simple"
@@ -1840,22 +1842,134 @@ def build_staff_timeline_preview(
                         "barline_style": style
                     })
 
-        # Sort all candidates chronologically by horizontal coordinate
-        sorted_cands = sorted(cands, key=get_x_coord)
+        # Sort all candidates chronologically by horizontal coordinate and split into measures
+        iteration = 0
+        while iteration < 10:
+            sorted_cands = sorted(cands, key=get_x_coord)
+            measures_with_x = []
+            current_measure_cands = []
+            current_start_x = geom["bbox"][0] if (geom and "bbox" in geom and len(geom["bbox"]) >= 1) else 0.0
 
-        # Split candidates into measures separated by barlines
-        measures = []
-        current_measure_cands = []
-        for cand in sorted_cands:
-            st_type = cand.get("symbol_type")
-            is_barline = st_type in ("barline_candidate", "barline")
-            if is_barline:
-                measures.append((current_measure_cands, cand.get("barline_style", "simple")))
-                current_measure_cands = []
+            for cand in sorted_cands:
+                st_type = cand.get("symbol_type")
+                is_barline = st_type in ("barline_candidate", "barline")
+                if is_barline:
+                    bar_x = get_x_coord(cand)
+                    measures_with_x.append((current_measure_cands, cand.get("barline_style", "simple"), current_start_x, bar_x))
+                    current_measure_cands = []
+                    current_start_x = bar_x
+                else:
+                    current_measure_cands.append(cand)
+            if current_measure_cands:
+                end_x = geom["bbox"][2] if (geom and "bbox" in geom and len(geom["bbox"]) >= 3) else current_start_x + 1000.0
+                measures_with_x.append((current_measure_cands, "simple", current_start_x, end_x))
+
+            # Check if any measure is overfull and can be split using discarded barlines
+            barlines_to_restore = []
+            num, den = detected_meter
+            D_measure = int(num * 960 * 4 / den)
+
+            for m_cands, b_style, x_start, x_end in measures_with_x:
+                if not m_cands:
+                    continue
+
+                # Simple sequence check to calculate measure_ticks
+                time_slices = []
+                current_slice = []
+                for c in sorted(m_cands, key=get_x_coord):
+                    if not current_slice:
+                        current_slice.append(c)
+                    else:
+                        prev_x = get_x_coord(current_slice[-1])
+                        curr_x = get_x_coord(c)
+                        if curr_x - prev_x < X_tol:
+                            current_slice.append(c)
+                        else:
+                            time_slices.append(current_slice)
+                            current_slice = [c]
+                if current_slice:
+                    time_slices.append(current_slice)
+
+                cursor_1 = 0
+                cursor_2 = 0
+                for slice_cands in time_slices:
+                    slice_v1 = []
+                    slice_v2 = []
+                    for c in slice_cands:
+                        voice = 1
+                        if "voice" in c:
+                            voice = c["voice"]
+                        elif c.get("stem_direction") == "down":
+                            voice = 2
+                        elif "rest" in c.get("symbol_type", ""):
+                            y_center = None
+                            if "bbox" in c and isinstance(c["bbox"], (list, tuple)) and len(c["bbox"]) >= 4:
+                                y_center = (c["bbox"][1] + c["bbox"][3]) / 2.0
+                            else:
+                                y_center = c.get("y0")
+                            if middle_y is not None and y_center is not None:
+                                if y_center >= middle_y + 10.0:
+                                    voice = 2
+                        if voice == 2:
+                            slice_v2.append(c)
+                        else:
+                            slice_v1.append(c)
+
+                    start_tick = 0
+                    if slice_v1 and slice_v2:
+                        start_tick = max(cursor_1, cursor_2)
+                    elif slice_v1:
+                        start_tick = cursor_1
+                    elif slice_v2:
+                        start_tick = cursor_2
+                    else:
+                        continue
+
+                    dur_v1 = 960
+                    if slice_v1:
+                        durs_v1 = []
+                        for c in slice_v1:
+                            d = TICK_MAPPINGS.get(c.get("symbol_type"), 960)
+                            if "duration_ticks" in c:
+                                d = c["duration_ticks"]
+                            durs_v1.append(d)
+                        dur_v1 = max(durs_v1) if durs_v1 else 960
+                    dur_v2 = 960
+                    if slice_v2:
+                        durs_v2 = []
+                        for c in slice_v2:
+                            d = TICK_MAPPINGS.get(c.get("symbol_type"), 960)
+                            if "duration_ticks" in c:
+                                d = c["duration_ticks"]
+                            durs_v2.append(d)
+                        dur_v2 = max(durs_v2) if durs_v2 else 960
+
+                    if slice_v1:
+                        cursor_1 = max(cursor_1, start_tick + dur_v1)
+                    if slice_v2:
+                        cursor_2 = max(cursor_2, start_tick + dur_v2)
+
+                measure_ticks = max(cursor_1, cursor_2)
+                if measure_ticks > D_measure:
+                    # Overfull! Look for a discarded barline in (x_start + 30.0, x_end - 30.0)
+                    for b in discarded_omr_barlines:
+                        bx = get_x_coord(b)
+                        if x_start + 30.0 < bx < x_end - 30.0:
+                            barlines_to_restore.append(b)
+
+            if barlines_to_restore:
+                # Add to active cands and remove from discarded list
+                for b in barlines_to_restore:
+                    cands.append(b)
+                    if b in discarded_omr_barlines:
+                        discarded_omr_barlines.remove(b)
+                iteration += 1
+                continue
             else:
-                current_measure_cands.append(cand)
-        if current_measure_cands:
-            measures.append((current_measure_cands, "simple"))
+                measures = [(mc, bs) for mc, bs, _, _ in measures_with_x]
+                break
+        else:
+            measures = [(mc, bs) for mc, bs, _, _ in measures_with_x]
 
         timeline_measures = []
 
