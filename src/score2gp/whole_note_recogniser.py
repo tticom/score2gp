@@ -1758,6 +1758,12 @@ def build_staff_timeline_preview(
         "sixteenth_rest": 240
     }
 
+    if detected_meter is not None and detected_meter[1] == 8:
+        TICK_MAPPINGS["quarter_note_candidate"] = 480
+        TICK_MAPPINGS["quarter_note"] = 480
+        TICK_MAPPINGS["quarter_rest_candidate"] = 480
+        TICK_MAPPINGS["quarter_rest"] = 480
+
     timeline_previews = []
 
     for key, data in staves.items():
@@ -1782,7 +1788,8 @@ def build_staff_timeline_preview(
 
         # Use textual measure anchors if available and sufficiently dense
         staff_anchors = measure_anchors.get(key, []) if measure_anchors else []
-        if len(staff_anchors) >= 1:
+        is_dense = len(staff_anchors) >= 2
+        if is_dense:
             anchors_to_use = list(staff_anchors)
             if geom and "bbox" in geom and len(geom["bbox"]) >= 3:
                 x1_staff = geom["bbox"][2]
@@ -1806,6 +1813,32 @@ def build_staff_timeline_preview(
                     "bbox": [anchor_x - 2.0, 0, anchor_x - 1.0, 0],
                     "barline_style": style
                 })
+        else:
+            if len(staff_anchors) >= 1:
+                anchors_to_use = list(staff_anchors)
+                if geom and "bbox" in geom and len(geom["bbox"]) >= 3:
+                    x1_staff = geom["bbox"][2]
+                    if not any(abs(a - x1_staff) <= 10.0 for a in anchors_to_use):
+                        anchors_to_use.append(x1_staff)
+
+                omr_barlines = [c for c in cands if c.get("symbol_type") in ("barline_candidate", "barline")]
+                for anchor_x in anchors_to_use[1:]:
+                    if any(abs(get_x_coord(b) - anchor_x) <= 20.0 for b in omr_barlines):
+                        continue
+                    style = "simple"
+                    if omr_barlines:
+                        nearest_omr = min(omr_barlines, key=lambda b: abs(get_x_coord(b) - anchor_x))
+                        if abs(get_x_coord(nearest_omr) - anchor_x) <= 15.0:
+                            style = nearest_omr.get("barline_style", "simple")
+                    cands.append({
+                        "symbol_type": "barline_candidate",
+                        "page_index": page,
+                        "system_index": sys_idx,
+                        "staff_index": staff_idx,
+                        "x0": anchor_x - 2.0,
+                        "bbox": [anchor_x - 2.0, 0, anchor_x - 1.0, 0],
+                        "barline_style": style
+                    })
 
         # Sort all candidates chronologically by horizontal coordinate
         sorted_cands = sorted(cands, key=get_x_coord)
@@ -1857,6 +1890,8 @@ def build_staff_timeline_preview(
                     voice = 1
                     if "voice" in c:
                         voice = c["voice"]
+                    elif c.get("stem_direction") == "down":
+                        voice = 2
                     elif "rest" in c.get("symbol_type", ""):
                         # Determine rest vertical position
                         y_center = None
@@ -1903,41 +1938,59 @@ def build_staff_timeline_preview(
                 elif len(slice_v2) > 1:
                     slice_v2 = [max(slice_v2, key=lambda c: TICK_MAPPINGS.get(c.get("symbol_type", ""), c.get("duration_ticks", 960)))]
 
+                # Resolve a single duration for all notes in slice_v1
+                dur_v1 = 960
+                if slice_v1:
+                    durs_v1 = []
+                    for c in slice_v1:
+                        d = TICK_MAPPINGS.get(c.get("symbol_type"), 960)
+                        if "duration_ticks" in c:
+                            d = c["duration_ticks"]
+                        durs_v1.append(d)
+                    dur_v1 = max(durs_v1) if durs_v1 else 960
+
+                # Resolve a single duration for all notes in slice_v2
+                dur_v2 = 960
+                if slice_v2:
+                    durs_v2 = []
+                    for c in slice_v2:
+                        d = TICK_MAPPINGS.get(c.get("symbol_type"), 960)
+                        if "duration_ticks" in c:
+                            d = c["duration_ticks"]
+                        durs_v2.append(d)
+                    dur_v2 = max(durs_v2) if durs_v2 else 960
+
                 # Process voice 1
                 for c in slice_v1:
-                    dur = TICK_MAPPINGS.get(c.get("symbol_type"), 960)
-                    if "duration_ticks" in c:
-                        dur = c["duration_ticks"]
                     c["timeline_start_tick"] = start_tick
-                    c["timeline_duration_ticks"] = dur
+                    c["timeline_duration_ticks"] = dur_v1
                     measure_events.append({
                         "candidate_id": c.get("candidate_id"),
                         "symbol_type": c.get("symbol_type"),
                         "voice": 1,
                         "start_tick": start_tick,
-                        "duration_ticks": dur,
+                        "duration_ticks": dur_v1,
                         "resolved_pitch": c.get("clef_resolved_staff_pitch"),
                         "bbox": c.get("bbox")
                     })
-                    cursor_1 = max(cursor_1, start_tick + dur)
+                if slice_v1:
+                    cursor_1 = max(cursor_1, start_tick + dur_v1)
 
                 # Process voice 2
                 for c in slice_v2:
-                    dur = TICK_MAPPINGS.get(c.get("symbol_type"), 960)
-                    if "duration_ticks" in c:
-                        dur = c["duration_ticks"]
                     c["timeline_start_tick"] = start_tick
-                    c["timeline_duration_ticks"] = dur
+                    c["timeline_duration_ticks"] = dur_v2
                     measure_events.append({
                         "candidate_id": c.get("candidate_id"),
                         "symbol_type": c.get("symbol_type"),
                         "voice": 2,
                         "start_tick": start_tick,
-                        "duration_ticks": dur,
+                        "duration_ticks": dur_v2,
                         "resolved_pitch": c.get("clef_resolved_staff_pitch"),
                         "bbox": c.get("bbox")
                     })
-                    cursor_2 = max(cursor_2, start_tick + dur)
+                if slice_v2:
+                    cursor_2 = max(cursor_2, start_tick + dur_v2)
 
             num, den = detected_meter
             D_measure = int(num * 960 * 4 / den)

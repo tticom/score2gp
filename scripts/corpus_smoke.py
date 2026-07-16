@@ -104,24 +104,23 @@ def parse_conversion_details(work_dir: Path, json_report: Path, out_gp: Path):
         except Exception as e:
             print(f"Error parsing MusicXML: {e}")
             
-    # 2. Check timing valid/invalid from warnings.json
-    warnings_json = work_dir / "warnings.json"
-    if warnings_json.exists():
+    # 2. Check timing valid/invalid from parsed MusicXML and analyze_musicxml_timing
+    if mxl_path.exists():
         try:
-            with open(warnings_json, "r", encoding="utf-8") as f:
-                warnings_data = json.load(f)
+            from score2gp.musicxml import parse_musicxml, analyze_musicxml_timing
+            parsed_part = parse_musicxml(mxl_path)
+            issues = analyze_musicxml_timing(parsed_part)
+            invalid_indices = set()
+            for w in issues:
+                if w.severity == "error":
+                    # Some issues might not have measure_index, but we only count those that do
+                    if w.measure_index is not None:
+                        invalid_indices.add(w.measure_index)
             
-            invalid_measures = set()
-            for w in warnings_data:
-                if w.get("severity") == "error":
-                    m_idx = w.get("measure_index")
-                    if m_idx is not None:
-                        invalid_measures.add(m_idx)
-            
-            timing_invalid = len(invalid_measures)
+            timing_invalid = len(invalid_indices)
             timing_valid = max(0, measure_count - timing_invalid)
         except Exception as e:
-            print(f"Error parsing warnings.json: {e}")
+            print(f"Error analyzing MusicXML timing: {e}")
             
     # 3. Check score.ir.json for average confidence
     score_ir_path = work_dir / "score.ir.json"
