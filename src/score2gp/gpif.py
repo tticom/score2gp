@@ -952,7 +952,7 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
             "Rhythms",
             "ScoreViews"
         ]
-        _apply_relational_defaults(root)
+        _apply_relational_defaults(root, score)
 
         root_children = list(root)
         root_children.sort(key=lambda x: ROOT_TAG_ORDER.index(x.tag) if x.tag in ROOT_TAG_ORDER else len(ROOT_TAG_ORDER))
@@ -962,19 +962,31 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
         return ET.tostring(root, encoding="utf-8", xml_declaration=True)
 
 
-def _apply_relational_defaults(root: ET.Element) -> None:
+def _apply_relational_defaults(root: ET.Element, score: ScoreIR) -> None:
     # 1. MasterTrack defaults
     mt = root.find("MasterTrack")
     if mt is not None:
         if mt.find("Automations") is None:
             autos = ET.SubElement(mt, "Automations")
-            auto = ET.SubElement(autos, "Automation")
-            _text(auto, "Type", "Tempo")
-            _text(auto, "Linear", "false")
-            _text(auto, "Bar", "0")
-            _text(auto, "Position", "0")
-            _text(auto, "Visible", "true")
-            _text(auto, "Value", "120 2")
+            tempo_bars = [bar for bar in score.bars if getattr(bar, "tempo", None) is not None]
+            has_bar_0 = any(bar.index == 1 for bar in tempo_bars)
+            if not has_bar_0:
+                auto = ET.SubElement(autos, "Automation")
+                _text(auto, "Type", "Tempo")
+                _text(auto, "Linear", "false")
+                _text(auto, "Bar", "0")
+                _text(auto, "Position", "0")
+                _text(auto, "Visible", "true")
+                _text(auto, "Value", f"{score.tempo.bpm} 2")
+            
+            for bar in tempo_bars:
+                auto = ET.SubElement(autos, "Automation")
+                _text(auto, "Type", "Tempo")
+                _text(auto, "Linear", "false")
+                _text(auto, "Bar", str(bar.index - 1))
+                _text(auto, "Position", "0")
+                _text(auto, "Visible", "true")
+                _text(auto, "Value", f"{bar.tempo.bpm} 2")
         if mt.find("RSE") is None:
             rse = ET.SubElement(mt, "RSE")
             master = ET.SubElement(rse, "Master")

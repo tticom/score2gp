@@ -3,6 +3,7 @@ from typing import Any
 from .pdf import (
     _tab_line_groups,
     classify_staff_line_group,
+    _extend_staff_group,
 )
 from .pdf_geometry import (
     _LineSegment,
@@ -19,5 +20,6 @@ def _detect_notation_staff_groups(page: Any) -> list[list[_LineSegment]]:
     for group in _tab_line_groups(horizontal):
         classification = classify_staff_line_group(group, page)
         if classification == "notation" and len(group) == 5:
-            notation_groups.append(group)
+            extended_group, _, _ = _extend_staff_group(group, segments)
+            notation_groups.append(extended_group)
     return notation_groups

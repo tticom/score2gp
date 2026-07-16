@@ -1,4 +1,5 @@
 from typing import Any, Iterable
+from pathlib import Path
 
 def shape_candidate_evidence(
     raw_candidates: Iterable[Any],
@@ -1389,10 +1390,12 @@ def extract_measure_anchors_from_text(pdf_path, staff_geometries: list[dict]) ->
             continue
 
         page = doc[p_idx - 1]
-        search_rect = fitz.Rect(0, bbox[1] - 30, page.rect.width, bbox[1] + 10)
+        search_rect = fitz.Rect(0, bbox[1] - 25, page.rect.width, bbox[1] + 5)
 
         try:
             words = [w for w in page.get_text("words") if fitz.Rect(w[:4]).intersects(search_rect)]
+            # Filter to keep only words whose top edge y0 is between 6.0 and 9.0 points above the staff top
+            words = [w for w in words if 6.0 <= (bbox[1] - w[1]) <= 9.0]
         except Exception:
             continue
 
@@ -1420,7 +1423,8 @@ def build_staff_timeline_preview(
     outcomes: list[dict],
     semantic_candidates: list[dict] | None = None,
     all_staff_geometries: list[dict] | None = None,
-    measure_anchors: dict | None = None
+    measure_anchors: dict | None = None,
+    pdf_path: str | Path | None = None
 ) -> list[dict]:
     # Group note and barline candidates by (page, sys, staff)
     staves = {}
@@ -1718,9 +1722,10 @@ def build_staff_timeline_preview(
                     })
                     cursor_2 = max(cursor_2, start_tick + dur)
 
+            D_measure = 3840
+
             # Pad only voices that are musically active. An inactive secondary voice should not
             # introduce a visible whole-measure rest over a complete single-voice measure.
-            D_measure = 3840
             active_voice_1 = any(e["voice"] == 1 for e in measure_events) or not measure_events
             active_voice_2 = any(e["voice"] == 2 for e in measure_events)
             if active_voice_1 and cursor_1 < D_measure:
@@ -1834,6 +1839,79 @@ def build_staff_timeline_preview(
             "staff_index": staff_idx,
             "measures": timeline_measures
         })
+
+    # Parse and apply section markers / double barlines / tempo markings
+    section_markers = {}
+    tempo_markers = {}
+    if pdf_path is not None and all_staff_geometries:
+        try:
+            import fitz
+            import re
+            tempo_pattern = re.compile(r'(?:[♩qQ]|\bBPM|\btempo)?\s*=\s*(\d+)', re.IGNORECASE)
+            doc = fitz.open(pdf_path)
+            for page_idx, page in enumerate(doc):
+                page_staves = [s for s in all_staff_geometries if s.get("page_index") == page_idx + 1]
+                if not page_staves:
+                    continue
+                blocks = page.get_text("blocks")
+                for b in blocks:
+                    text = b[4].strip()
+                    if "Example" in text:
+                        lines = [line.strip() for line in text.split("\n") if line.strip()]
+                        if not lines:
+                            continue
+                        section_name = lines[0]
+                        best_staff = None
+                        min_dist = 1000.0
+                        for s in page_staves:
+                            staff_y0 = s["bbox"][1]
+                            dist = staff_y0 - b[1]
+                            if 0.0 < dist < 45.0:
+                                if dist < min_dist:
+                                    min_dist = dist
+                                    best_staff = s
+                        if best_staff is not None:
+                            sys_idx = best_staff.get("system_index")
+                            section_markers[(page_idx + 1, sys_idx)] = section_name
+
+                    m = tempo_pattern.search(text)
+                    if m:
+                        bpm = int(m.group(1))
+                        if 20 <= bpm <= 400:
+                            best_staff = None
+                            min_dist = 1000.0
+                            for s in page_staves:
+                                staff_y0 = s["bbox"][1]
+                                dist = staff_y0 - b[1]
+                                if 0.0 < dist < 120.0:
+                                    if dist < min_dist:
+                                        min_dist = dist
+                                        best_staff = s
+                            if best_staff is not None:
+                                sys_idx = best_staff.get("system_index")
+                                tempo_markers[(page_idx + 1, sys_idx)] = bpm
+        except Exception:
+            pass
+
+    # Map measure_index -> measure dict for easy lookup
+    measure_by_index = {}
+    for preview in timeline_previews:
+        for m in preview["measures"]:
+            measure_by_index[m["measure_index"]] = m
+
+    for preview in timeline_previews:
+        key = (preview["page_index"], preview["system_index"])
+        if key in section_markers:
+            sect_name = section_markers[key]
+            first_m = preview["measures"][0]
+            first_m["section_name"] = sect_name
+            prev_idx = first_m["measure_index"] - 1
+            if prev_idx in measure_by_index:
+                measure_by_index[prev_idx]["barline_style"] = "double"
+        if key in tempo_markers:
+            bpm = tempo_markers[key]
+            first_m = preview["measures"][0]
+            first_m["tempo_bpm"] = bpm
 
     timeline_previews = sorted(timeline_previews, key=lambda p: (p["page_index"], p["system_index"], p["staff_index"]))
     return timeline_previews
@@ -2393,7 +2471,13 @@ def run_recognition_on_file(
     measure_anchors = extract_measure_anchors_from_text(pdf_path, all_staff_geometries)
 
     try:
-        timeline_preview = build_staff_timeline_preview(outcomes, semantic_candidates, all_staff_geometries, measure_anchors=measure_anchors)
+        timeline_preview = build_staff_timeline_preview(
+            outcomes,
+            semantic_candidates,
+            all_staff_geometries,
+            measure_anchors=measure_anchors,
+            pdf_path=pdf_path
+        )
     except Exception:
         timeline_preview = []
 

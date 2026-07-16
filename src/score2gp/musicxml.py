@@ -497,6 +497,8 @@ class MusicXmlMeasure(BaseModel):
     key_fifths: int | None = None
     notes: list[MusicXmlNote] = Field(default_factory=list)
     harmonies: list[MusicXmlHarmony] = Field(default_factory=list)
+    tempo_bpm: int | None = None
+    marker: str | None = None
     barline: str | None = None
     divisions_missing: bool = False
     divisions_changed_mid_measure: bool = False
@@ -1997,6 +1999,8 @@ def _parse_part(
         divisions_changed_mid_measure = False
         has_backup_or_forward = voice_cursor_diagnostics.backup_count > 0 or voice_cursor_diagnostics.forward_count > 0
         measure_barline = None
+        measure_marker = None
+        measure_tempo = None
 
         for child in list(measure_node):
             name = _local_name(child.tag)
@@ -2098,6 +2102,31 @@ def _parse_part(
                             source_path=source_path,
                         )
                     )
+            elif name == "direction":
+                dt = _child(child, "direction-type")
+                if dt is not None:
+                    rehearsal = _child(dt, "rehearsal")
+                    if rehearsal is not None and rehearsal.text:
+                        measure_marker = rehearsal.text.strip()
+                sound = _child(child, "sound")
+                if sound is not None and sound.get("tempo"):
+                    try:
+                        measure_tempo = round(float(sound.get("tempo", "0")))
+                    except ValueError:
+                        pass
+                else:
+                    dt = _child(child, "direction-type")
+                    if dt is not None:
+                        metronome = _child(dt, "metronome")
+                        if metronome is None:
+                            metronome = _first_descendant(dt, "metronome")
+                        if metronome is not None:
+                            per_minute = _child(metronome, "per-minute")
+                            if per_minute is not None and per_minute.text:
+                                try:
+                                    measure_tempo = round(float(per_minute.text))
+                                except ValueError:
+                                    pass
 
         expected_divs = None
         if current_time is not None:
@@ -2123,6 +2152,8 @@ def _parse_part(
                 notes=notes,
                 harmonies=harmonies,
                 barline=measure_barline,
+                tempo_bpm=measure_tempo,
+                marker=measure_marker,
                 divisions_missing=not has_divisions_defined,
                 divisions_changed_mid_measure=divisions_changed_mid_measure,
                 backup_forward_risk=backup_past_zero,

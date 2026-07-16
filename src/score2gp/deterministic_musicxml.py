@@ -32,6 +32,21 @@ def generate_musicxml_sidecar(pdf_path: Path, out_mxl: Path) -> Path:
     for global_m_idx, m_data in enumerate(measures):
         measure_el = ET.SubElement(part, "measure", number=str(global_m_idx + 1))
 
+        section_name = m_data.get("section_name")
+        if section_name:
+            dir_el = ET.SubElement(measure_el, "direction", placement="above")
+            dt_el = ET.SubElement(dir_el, "direction-type")
+            ET.SubElement(dt_el, "rehearsal").text = section_name
+
+        tempo_bpm = m_data.get("tempo_bpm")
+        if tempo_bpm:
+            dir_el = ET.SubElement(measure_el, "direction", placement="above")
+            dt_el = ET.SubElement(dir_el, "direction-type")
+            met_el = ET.SubElement(dt_el, "metronome")
+            ET.SubElement(met_el, "beat-unit").text = "quarter"
+            ET.SubElement(met_el, "per-minute").text = str(tempo_bpm)
+            ET.SubElement(dir_el, "sound", tempo=str(tempo_bpm))
+
         if global_m_idx == 0:
             attrs = ET.SubElement(measure_el, "attributes")
             ET.SubElement(attrs, "divisions").text = "960"
@@ -104,10 +119,14 @@ def generate_musicxml_sidecar(pdf_path: Path, out_mxl: Path) -> Path:
                     1440: "quarter",
                     960: "quarter",
                     720: "eighth",
+                    640: "quarter", # triplet quarter
                     480: "eighth",
                     360: "16th",
+                    320: "eighth", # triplet eighth
                     240: "16th",
+                    160: "16th", # triplet sixteenth
                     120: "32nd",
+                    80: "32nd", # triplet 32nd
                     60: "64th"
                 }
                 is_dotted = False
@@ -118,6 +137,18 @@ def generate_musicxml_sidecar(pdf_path: Path, out_mxl: Path) -> Path:
                 ET.SubElement(note_el, "type").text = note_type
                 if is_dotted:
                     ET.SubElement(note_el, "dot")
+
+                tuplet_info = {
+                    640: (3, 2),
+                    320: (3, 2),
+                    160: (3, 2),
+                    80: (3, 2)
+                }
+                if dur_ticks in tuplet_info:
+                    act, norm = tuplet_info[dur_ticks]
+                    tm = ET.SubElement(note_el, "time-modification")
+                    ET.SubElement(tm, "actual-notes").text = str(act)
+                    ET.SubElement(tm, "normal-notes").text = str(norm)
 
                 if e.get("is_tie_start") or e.get("is_tie_stop"):
                     notations_el = ET.SubElement(note_el, "notations")

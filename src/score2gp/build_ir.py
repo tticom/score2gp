@@ -1592,6 +1592,7 @@ def build_ir_with_diagnostics_from_imports(
 
         staves_in_part = {note.staff for measure in part.measures for note in measure.notes if note.staff is not None and not note.is_suppressed}
         target_staff = max(staves_in_part) if staves_in_part else 1
+        active_ties: dict[tuple[int, int], Note] = {}
         for measure in part.measures:
             measure.notes = [note for note in measure.notes if (note.staff is None or note.staff == target_staff) and not note.is_suppressed]
             bar_warnings: list[WarningItem] = []
@@ -1599,6 +1600,7 @@ def build_ir_with_diagnostics_from_imports(
                 measure,
                 candidate_pools,
                 bar_warnings,
+                active_ties,
                 allow_remediation=musicxml.allow_remediation or blank_tab_misaligned,
             )
             warnings.extend(bar_warnings)
@@ -1609,9 +1611,16 @@ def build_ir_with_diagnostics_from_imports(
                     key_signature=KeySignature(fifths=measure.key_fifths) if measure.key_fifths is not None else None,
                     events=events,
                     barline=measure.barline,
+                    marker=measure.marker,
+                    tempo=Tempo(bpm=measure.tempo_bpm) if measure.tempo_bpm is not None else None,
                 )
             )
         warnings.extend(_unused_candidate_warnings(candidate_pools))
+
+    initial_tempo = musicxml.tempo_bpm or 120
+    for bar in bars:
+        if bar.index == 1 and bar.tempo is not None:
+            initial_tempo = bar.tempo.bpm
 
     score = ScoreIR(
         metadata=Metadata(
@@ -1626,7 +1635,7 @@ def build_ir_with_diagnostics_from_imports(
             conversion_timestamp=datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
             source_file_hash=musicxml.source_sha256,
         ),
-        tempo=Tempo(bpm=musicxml.tempo_bpm or 120),
+        tempo=Tempo(bpm=initial_tempo),
         tracks=[_standard_guitar_track()],
         bars=bars,
         warnings=warnings,
@@ -2363,6 +2372,7 @@ def _measure_events(
     measure: MusicXmlMeasure,
     candidate_pools: "CandidatePools",
     warnings: list[WarningItem],
+    active_ties: dict[tuple[int, int], Note],
     *,
     allow_remediation: bool = False,
 ) -> list[Event]:
@@ -2435,24 +2445,50 @@ def _measure_events(
             if xml_note.pitch is None:
                 warnings.append(_event_warning("musicxml-pitch-missing", xml_note, "Pitched note is missing pitch data."))
                 continue
-            candidate = candidate_pools.pop(measure.index, event_id=event_id, musicxml_note_id=xml_note.id)
-            if candidate is None:
-                if allow_remediation:
-                    note = _infer_fallback_note(xml_note, measure)
-                    if note is not None:
-                        notes_with_candidates.append((note, None))
-                        continue
-                warnings.append(
-                    _event_warning(
-                        "tab-candidate-missing",
-                        xml_note,
-                        "No TabRaw fret/string candidate was available for this MusicXML note.",
+
+            is_tie_stop = xml_note.ties is not None and "stop" in xml_note.ties
+            note = None
+            candidate = None
+
+            if is_tie_stop:
+                tie_key = (xml_note.voice, xml_note.pitch.midi)
+                if tie_key in active_ties:
+                    note = Note(
+                        string=active_ties[tie_key].string,
+                        fret=active_ties[tie_key].fret,
+                        pitch=active_ties[tie_key].pitch,
+                        techniques=_note_techniques(xml_note),
+                        provenance=[_musicxml_provenance(xml_note, measure)],
+                        confidence=active_ties[tie_key].confidence,
                     )
-                )
-                continue
-            note = _aligned_note(xml_note, candidate, measure, warnings)
+
+            if note is None:
+                candidate = candidate_pools.pop(measure.index, event_id=event_id, musicxml_note_id=xml_note.id)
+                if candidate is None:
+                    if allow_remediation:
+                        note = _infer_fallback_note(xml_note, measure)
+                        if note is not None:
+                            notes_with_candidates.append((note, None))
+                            if xml_note.ties and "start" in xml_note.ties:
+                                active_ties[(xml_note.voice, xml_note.pitch.midi)] = note
+                            continue
+                    warnings.append(
+                        _event_warning(
+                            "tab-candidate-missing",
+                            xml_note,
+                            "No TabRaw fret/string candidate was available for this MusicXML note.",
+                        )
+                    )
+                    continue
+                note = _aligned_note(xml_note, candidate, measure, warnings)
+
             if note is not None:
                 notes_with_candidates.append((note, candidate))
+                tie_key = (xml_note.voice, xml_note.pitch.midi)
+                if xml_note.ties and "start" in xml_note.ties:
+                    active_ties[tie_key] = note
+                elif xml_note.ties and "stop" in xml_note.ties and not ("start" in xml_note.ties):
+                    active_ties.pop(tie_key, None)
 
         if notes_with_candidates:
             x_groups: list[dict[str, Any]] = []

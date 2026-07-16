@@ -531,6 +531,7 @@ def _write_convert_report(
     strict: bool = True,
     summary_counts: Optional[dict] = None,
     pdf_only_diagnostics: Optional[dict] = None,
+    timing_repair_used: bool = False,
 ) -> None:
     """Writes a consolidated, private-safe execution JSON report."""
     report = {
@@ -551,6 +552,7 @@ def _write_convert_report(
         },
         "strict": strict,
         "summary_counts": summary_counts or {},
+        "timing_repair_used": timing_repair_used,
     }
     if pdf_only_diagnostics is not None:
         report["pdf_only_diagnostics"] = pdf_only_diagnostics
@@ -929,6 +931,7 @@ def convert_command(
                 optimize_fret_snapping=optimize_fret_snapping,
                 page_range=parse_page_range(pages),
             )
+
         summary["build_ir"] = {
             "ran": True,
             "failed": False,
@@ -1184,7 +1187,8 @@ def convert_command(
             output_written=True,
             strict=strict,
             summary_counts=summary_counts,
-            pdf_only_diagnostics=pdf_only_diag_payload
+            pdf_only_diagnostics=pdf_only_diag_payload,
+            timing_repair_used=False,
         )
 
     typer.echo(f"Success: GP package written to {out}")
