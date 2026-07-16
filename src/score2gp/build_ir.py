@@ -1613,6 +1613,7 @@ def build_ir_with_diagnostics_from_imports(
                     barline=measure.barline,
                     marker=measure.marker,
                     tempo=Tempo(bpm=measure.tempo_bpm) if measure.tempo_bpm is not None else None,
+                    layout_break=measure.layout_break,
                 )
             )
         warnings.extend(_unused_candidate_warnings(candidate_pools))

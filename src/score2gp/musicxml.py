@@ -499,6 +499,7 @@ class MusicXmlMeasure(BaseModel):
     harmonies: list[MusicXmlHarmony] = Field(default_factory=list)
     tempo_bpm: int | None = None
     marker: str | None = None
+    layout_break: str | None = None
     barline: str | None = None
     divisions_missing: bool = False
     divisions_changed_mid_measure: bool = False
@@ -2001,6 +2002,7 @@ def _parse_part(
         measure_barline = None
         measure_marker = None
         measure_tempo = None
+        measure_layout_break = None
 
         for child in list(measure_node):
             name = _local_name(child.tag)
@@ -2102,6 +2104,13 @@ def _parse_part(
                             source_path=source_path,
                         )
                     )
+            elif name == "print":
+                new_page = child.get("new-page")
+                new_system = child.get("new-system")
+                if new_page == "yes":
+                    measure_layout_break = "page"
+                elif new_system == "yes":
+                    measure_layout_break = "line"
             elif name == "direction":
                 dt = _child(child, "direction-type")
                 if dt is not None:
@@ -2154,6 +2163,7 @@ def _parse_part(
                 barline=measure_barline,
                 tempo_bpm=measure_tempo,
                 marker=measure_marker,
+                layout_break=measure_layout_break,
                 divisions_missing=not has_divisions_defined,
                 divisions_changed_mid_measure=divisions_changed_mid_measure,
                 backup_forward_risk=backup_past_zero,

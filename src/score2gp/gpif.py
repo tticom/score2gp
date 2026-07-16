@@ -658,6 +658,10 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
                     repeat_count = getattr(bar, "repeat_count", None) or 2
                     ET.SubElement(mb_node, "Repeat", {"count": str(repeat_count)})
 
+            if getattr(bar, "marker", None) is not None:
+                section_node = ET.SubElement(mb_node, "Section")
+                _text(section_node, "Name", bar.marker)
+
         rhythms_db = ET.SubElement(root, "Rhythms")
         notes_db = ET.SubElement(root, "Notes")
         beats_db = ET.SubElement(root, "Beats")
@@ -1542,6 +1546,10 @@ def _master_bars(parent: ET.Element, score: ScoreIR) -> None:
             elif bar.barline == "repeat-end":
                 repeat_count = getattr(bar, "repeat_count", None) or 2
                 ET.SubElement(node, "Repeat", {"count": str(repeat_count)})
+
+        if getattr(bar, "marker", None) is not None:
+            section_node = ET.SubElement(node, "Section")
+            _text(section_node, "Name", bar.marker)
 
         if getattr(bar, "measure_layout", None) is not None:
             ml_node = ET.SubElement(node, "MeasureLayout")

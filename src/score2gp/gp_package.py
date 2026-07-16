@@ -1100,6 +1100,11 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
             elif break_val == "None":
                 layout_break = "none"
 
+            marker = None
+            section_node = mb_node.find("Section")
+            if section_node is not None:
+                marker = _first_text(section_node, ["Name"])
+
             barline = None
             barline_val = _first_text(mb_node, ["Barline"])
             if barline_val is not None:
@@ -1208,7 +1213,8 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
                     tempo_automation=tempo_automation,
                     layout_break=layout_break,
                     barline=barline,
-                    repeat_count=repeat_count
+                    repeat_count=repeat_count,
+                    marker=marker
                 )
             )
 
@@ -1604,6 +1610,11 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
                 mask = int(ae_node.text)
                 alternate_ending_passes = [p for p in range(1, 32) if (mask & (1 << (p - 1))) != 0]
 
+            marker = None
+            section_node = mb_node.find("Section")
+            if section_node is not None:
+                marker = _first_text(section_node, ["Name"])
+
             mb_map[idx] = {
                 "num": num,
                 "den": den,
@@ -1613,6 +1624,7 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
                 "barline": barline,
                 "repeat_count": repeat_count,
                 "alternate_ending_passes": alternate_ending_passes,
+                "marker": marker,
             }
 
     bars_node = root.find(".//Score/Bars")
@@ -1953,7 +1965,8 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
                     barline=barline,
                     repeat_count=repeat_count,
                     alternate_ending_passes=ae_passes,
-                    alternate_ending_is_stop=ae_is_stop
+                    alternate_ending_is_stop=ae_is_stop,
+                    marker=mb_data.get("marker")
                 )
             )
 
@@ -2203,6 +2216,14 @@ def _validate_score_ir_roundtrip(original: ScoreIR, recovered: ScoreIR) -> list[
             continue
         ob = orig_bars_map[idx]
         rb = rec_bars_map[idx]
+
+        if ob.layout_break != rb.layout_break:
+            errors.append(f"bar {idx} layout_break mismatch: original={ob.layout_break}, recovered={rb.layout_break}")
+        if ob.barline != rb.barline:
+            errors.append(f"bar {idx} barline mismatch: original={ob.barline}, recovered={rb.barline}")
+        if ob.marker != rb.marker:
+            errors.append(f"bar {idx} marker mismatch: original={ob.marker}, recovered={rb.marker}")
+
         if (ob.bar_numbering is None) != (rb.bar_numbering is None):
             errors.append(f"bar {idx} bar_numbering presence mismatch: original={ob.bar_numbering is not None}, recovered={rb.bar_numbering is not None}")
         elif ob.bar_numbering is not None:
