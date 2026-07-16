@@ -718,3 +718,38 @@ def test_cli_convert_lesson_3_quality_gate(tmp_path: Path) -> None:
     assert master_bars[6].find("Barline") is not None and master_bars[6].find("Barline").text == "Double"
     # MasterBar 66 (index 65): final barline
     assert master_bars[65].find("Barline") is not None and master_bars[65].find("Barline").text == "End"
+
+
+def test_cli_convert_lesson_5_meter_detection(tmp_path: Path) -> None:
+    pdf_path = Path("../score2gp-private-fixtures/fixtures/private/Lesson-5.pdf")
+    if not pdf_path.exists():
+        pytest.skip("Private fixture Lesson-5 not found")
+
+    out_gp = tmp_path / "Lesson-5.gp"
+    work_dir = tmp_path / "work"
+    json_report = tmp_path / "report.json"
+
+    # We run with CliRunner. It may exit with non-zero if timing validation fails, 
+    # but deterministic_omr.musicxml must be created.
+    result = CliRunner().invoke(app, [
+        "convert",
+        "--pdf", str(pdf_path),
+        "--out", str(out_gp),
+        "--work-dir", str(work_dir),
+        "--json-report", str(json_report),
+        "--no-strict"
+    ], catch_exceptions=False)
+
+    musicxml_path = work_dir / "deterministic_omr.musicxml"
+    assert musicxml_path.exists()
+
+    import xml.etree.ElementTree as ET
+    tree = ET.parse(musicxml_path)
+    root = tree.getroot()
+    time_el = root.find(".//measure/attributes/time")
+    assert time_el is not None
+    beats = time_el.find("beats").text
+    beat_type = time_el.find("beat-type").text
+    
+    assert beats == "12"
+    assert beat_type == "8"

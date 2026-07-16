@@ -86,6 +86,7 @@ def test_layout_and_title_propagation(tmp_path) -> None:
     pdf_path = tmp_path / "test_trace.pdf"
     pdf_path.write_text("fake pdf data that is longer than 10 bytes")
     synthetic_result = {
+        "detected_meter": (4, 4),
         "timeline_preview": [
             {
                 "page_index": 1,

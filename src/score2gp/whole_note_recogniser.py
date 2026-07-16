@@ -1419,6 +1419,214 @@ def extract_measure_anchors_from_text(pdf_path, staff_geometries: list[dict]) ->
     return anchors
 
 
+def detect_time_signature(staves, pdf_path, measure_anchors=None) -> tuple[int, int] | None:
+    # 1. Try text-based detection first
+    if pdf_path is not None:
+        try:
+            import fitz
+            import re
+            doc = fitz.open(pdf_path)
+            text = ""
+            for i in range(min(3, len(doc))):
+                text += doc[i].get_text()
+            m = re.findall(r'\b(4/4|6/8|12/8)\b', text)
+            if m:
+                from collections import Counter
+                most_common = Counter(m).most_common(1)[0][0]
+                num, den = map(int, most_common.split("/"))
+                return num, den
+        except Exception:
+            pass
+
+    # 2. Duration evidence heuristics
+    TICK_MAPPINGS = {
+        "whole_note_candidate": 3840, "whole_note": 3840,
+        "half_note_candidate": 1920, "half_note": 1920,
+        "quarter_note_candidate": 960, "quarter_note": 960,
+        "eighth_note_candidate": 480, "eighth_note": 480,
+        "sixteenth_note_candidate": 240, "sixteenth_note": 240,
+        "thirty_second_note_candidate": 120, "thirty_second_note": 120,
+        "sixty_fourth_note_candidate": 60, "sixty_fourth_note": 60,
+        "quarter_rest_candidate": 960, "quarter_rest": 960,
+        "whole_rest_candidate": 3840, "whole_rest": 3840,
+        "half_rest_candidate": 1920, "half_rest": 1920,
+        "eighth_rest_candidate": 480, "eighth_rest": 480,
+        "sixteenth_rest_candidate": 240, "sixteenth_rest": 240
+    }
+
+    raw_lengths = []
+
+    def get_x_coord_local(c):
+        if "notehead_bbox" in c:
+            return c["notehead_bbox"][0]
+        if "bbox" in c and isinstance(c["bbox"], (list, tuple)) and len(c["bbox"]) >= 1:
+            return c["bbox"][0]
+        return c.get("x0", 0.0)
+
+    for key, data in staves.items():
+        page, sys_idx, staff_idx = key
+        cands = list(data["notes_rests_barlines"])
+        geom = data["geometry"]
+        
+        staff_spacing = 10.0
+        middle_y = None
+        if geom is not None:
+            line_y = geom.get("line_y_coords", [])
+            if len(line_y) == 5:
+                staff_spacing = (line_y[4] - line_y[0]) / 4.0
+                middle_y = line_y[2]
+            else:
+                bbox = geom.get("bbox")
+                if bbox and len(bbox) >= 4:
+                    middle_y = (bbox[1] + bbox[3]) / 2.0
+                    
+        X_tol = 1.5 * staff_spacing
+        
+        staff_anchors = measure_anchors.get(key, []) if measure_anchors else []
+        anchors_to_use = list(staff_anchors)
+        if len(anchors_to_use) >= 1:
+            if geom and "bbox" in geom and len(geom["bbox"]) >= 3:
+                x1_staff = geom["bbox"][2]
+                if not any(abs(a - x1_staff) <= 10.0 for a in anchors_to_use):
+                    anchors_to_use.append(x1_staff)
+                    
+            omr_barlines = [c for c in cands if c.get("symbol_type") in ("barline_candidate", "barline")]
+            cands = [c for c in cands if c.get("symbol_type") not in ("barline_candidate", "barline")]
+            for anchor_x in anchors_to_use[1:]:
+                cands.append({
+                    "symbol_type": "barline_candidate",
+                    "x0": anchor_x - 2.0,
+                    "bbox": [anchor_x - 2.0, 0, anchor_x - 1.0, 0]
+                })
+
+        measures = []
+        current_measure_cands = []
+        for cand in sorted(cands, key=get_x_coord_local):
+            st_type = cand.get("symbol_type")
+            is_barline = st_type in ("barline_candidate", "barline")
+            if is_barline:
+                measures.append(current_measure_cands)
+                current_measure_cands = []
+            else:
+                current_measure_cands.append(cand)
+        if current_measure_cands:
+            measures.append(current_measure_cands)
+
+        for m_cands in measures:
+            time_slices = []
+            current_slice = []
+            for c in sorted(m_cands, key=get_x_coord_local):
+                if not current_slice:
+                    current_slice.append(c)
+                else:
+                    prev_x = get_x_coord_local(current_slice[-1])
+                    curr_x = get_x_coord_local(c)
+                    if curr_x - prev_x < X_tol:
+                        current_slice.append(c)
+                    else:
+                        time_slices.append(current_slice)
+                        current_slice = [c]
+            if current_slice:
+                time_slices.append(current_slice)
+
+            cursor_1 = 0
+            cursor_2 = 0
+            for slice_cands in time_slices:
+                slice_v1 = []
+                slice_v2 = []
+                for c in slice_cands:
+                    voice = 1
+                    if "voice" in c:
+                        voice = c["voice"]
+                    elif "rest" in c.get("symbol_type", ""):
+                        y_center = None
+                        if "bbox" in c and isinstance(c["bbox"], (list, tuple)) and len(c["bbox"]) >= 4:
+                            y_center = (c["bbox"][1] + c["bbox"][3]) / 2.0
+                        else:
+                            y_center = c.get("y0")
+                        if middle_y is not None and y_center is not None:
+                            if y_center >= middle_y + 10.0:
+                                voice = 2
+                    if voice == 2:
+                        slice_v2.append(c)
+                    else:
+                        slice_v1.append(c)
+
+                if slice_v1 and slice_v2:
+                    start_tick = max(cursor_1, cursor_2)
+                elif slice_v1:
+                    start_tick = cursor_1
+                elif slice_v2:
+                    start_tick = cursor_2
+                else:
+                    continue
+
+                if slice_v1:
+                    cursor_1 = start_tick
+                if slice_v2:
+                    cursor_2 = start_tick
+
+                has_notes_v1 = any("note" in c.get("symbol_type", "") for c in slice_v1)
+                if has_notes_v1:
+                    slice_v1 = [c for c in slice_v1 if "rest" not in c.get("symbol_type", "")]
+                elif len(slice_v1) > 1:
+                    slice_v1 = [max(slice_v1, key=lambda c: TICK_MAPPINGS.get(c.get("symbol_type", ""), c.get("duration_ticks", 960)))]
+
+                has_notes_v2 = any("note" in c.get("symbol_type", "") for c in slice_v2)
+                if has_notes_v2:
+                    slice_v2 = [c for c in slice_v2 if "rest" not in c.get("symbol_type", "")]
+                elif len(slice_v2) > 1:
+                    slice_v2 = [max(slice_v2, key=lambda c: TICK_MAPPINGS.get(c.get("symbol_type", ""), c.get("duration_ticks", 960)))]
+
+                for c in slice_v1:
+                    dur = TICK_MAPPINGS.get(c.get("symbol_type"), 960)
+                    if "duration_ticks" in c:
+                        dur = c["duration_ticks"]
+                    cursor_1 = max(cursor_1, start_tick + dur)
+
+                for c in slice_v2:
+                    dur = TICK_MAPPINGS.get(c.get("symbol_type"), 960)
+                    if "duration_ticks" in c:
+                        dur = c["duration_ticks"]
+                    cursor_2 = max(cursor_2, start_tick + dur)
+
+            raw_lengths.append(max(cursor_1, cursor_2))
+
+    if not raw_lengths:
+        return 4, 4
+
+    from collections import Counter
+    counts = Counter(raw_lengths)
+    scores = {
+        (4, 4): 0.0,
+        (6, 8): 0.0,
+        (12, 8): 0.0
+    }
+    for length, count in counts.items():
+        if length == 0:
+            continue
+        d_44 = abs(length - 3840)
+        d_68 = abs(length - 2880)
+        d_128 = abs(length - 5760)
+        min_d = min(d_44, d_68, d_128)
+        if min_d > 960:
+            continue
+        if min_d == d_44:
+            scores[(4, 4)] += count
+        elif min_d == d_68:
+            scores[(6, 8)] += count
+        else:
+            scores[(12, 8)] += count
+
+    best_meter = max(scores, key=scores.get)
+    max_score = scores[best_meter]
+    if max_score == 0:
+        return None
+    if list(scores.values()).count(max_score) > 1:
+        return None
+    return best_meter
+
+
 def build_staff_timeline_preview(
     outcomes: list[dict],
     semantic_candidates: list[dict] | None = None,
@@ -1507,6 +1715,15 @@ def build_staff_timeline_preview(
             key = (page, sys_idx, staff_idx)
             if key in staves:
                 staves[key]["geometry"] = geom
+
+    detected_meter = (4, 4)
+    if staves:
+        detected_meter = detect_time_signature(staves, pdf_path, measure_anchors)
+        if detected_meter is None:
+            if pdf_path is None:
+                detected_meter = (4, 4)
+            else:
+                raise ValueError("Insufficient time signature meter evidence.")
 
     def get_x_coord(c):
         if "notehead_bbox" in c:
@@ -1722,7 +1939,8 @@ def build_staff_timeline_preview(
                     })
                     cursor_2 = max(cursor_2, start_tick + dur)
 
-            D_measure = 3840
+            num, den = detected_meter
+            D_measure = int(num * 960 * 4 / den)
 
             # Pad only voices that are musically active. An inactive secondary voice should not
             # introduce a visible whole-measure rest over a complete single-voice measure.
@@ -1837,7 +2055,8 @@ def build_staff_timeline_preview(
             "page_index": page,
             "system_index": sys_idx,
             "staff_index": staff_idx,
-            "measures": timeline_measures
+            "measures": timeline_measures,
+            "detected_meter": detected_meter
         })
 
     # Parse and apply section markers / double barlines / tempo markings
@@ -2481,6 +2700,8 @@ def run_recognition_on_file(
     except Exception:
         timeline_preview = []
 
+    detected_meter = timeline_preview[0].get("detected_meter") if timeline_preview else None
+
     return {
         "source": pdf_path.name,
         "recognition_mode": "read_only_diagnostic_derived",
@@ -2488,5 +2709,6 @@ def run_recognition_on_file(
         "read_only_recognition_outcomes": outcomes,
         "clef_resolved_pitch_coverage": coverage_report,
         "semantic_candidates": semantic_candidates,
-        "timeline_preview": timeline_preview
+        "timeline_preview": timeline_preview,
+        "detected_meter": detected_meter
     }

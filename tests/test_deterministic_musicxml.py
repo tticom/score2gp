@@ -11,6 +11,7 @@ def test_generate_musicxml_with_ties_and_rests(tmp_path):
 
     # Mock run_recognition_on_file to return a synthetic timeline_preview
     synthetic_res = {
+        "detected_meter": (4, 4),
         "timeline_preview": [{
             "page_index": 1,
             "system_index": 1,
@@ -90,3 +91,65 @@ def test_generate_musicxml_with_ties_and_rests(tmp_path):
     tied_stop = notations_stop.find("tied")
     assert tied_stop is not None
     assert tied_stop.get("type") == "stop"
+
+
+def test_synthetic_meters():
+    from score2gp.whole_note_recogniser import detect_time_signature
+    
+    # 4/4 meter (expected 3840 ticks)
+    staves_44 = {
+        (1, 1, 1): {
+            "notes_rests_barlines": [
+                {"symbol_type": "quarter_note_candidate", "voice": 1, "x0": 10.0},
+                {"symbol_type": "quarter_note_candidate", "voice": 1, "x0": 40.0},
+                {"symbol_type": "quarter_note_candidate", "voice": 1, "x0": 70.0},
+                {"symbol_type": "quarter_note_candidate", "voice": 1, "x0": 100.0},
+                {"symbol_type": "barline_candidate", "x0": 130.0}
+            ],
+            "geometry": None
+        }
+    }
+    meter_44 = detect_time_signature(staves_44, pdf_path=None)
+    assert meter_44 == (4, 4)
+
+    # 6/8 meter (expected 2880 ticks)
+    staves_68 = {
+        (1, 1, 1): {
+            "notes_rests_barlines": [
+                {"symbol_type": "eighth_note_candidate", "voice": 1, "x0": 10.0},
+                {"symbol_type": "eighth_note_candidate", "voice": 1, "x0": 40.0},
+                {"symbol_type": "eighth_note_candidate", "voice": 1, "x0": 70.0},
+                {"symbol_type": "eighth_note_candidate", "voice": 1, "x0": 100.0},
+                {"symbol_type": "eighth_note_candidate", "voice": 1, "x0": 130.0},
+                {"symbol_type": "eighth_note_candidate", "voice": 1, "x0": 160.0},
+                {"symbol_type": "barline_candidate", "x0": 190.0}
+            ],
+            "geometry": None
+        }
+    }
+    meter_68 = detect_time_signature(staves_68, pdf_path=None)
+    assert meter_68 == (6, 8)
+
+    # 12/8 meter (expected 5760 ticks)
+    staves_128 = {
+        (1, 1, 1): {
+            "notes_rests_barlines": [
+                {"symbol_type": "eighth_note_candidate", "voice": 1, "x0": 10.0},
+                {"symbol_type": "eighth_note_candidate", "voice": 1, "x0": 40.0},
+                {"symbol_type": "eighth_note_candidate", "voice": 1, "x0": 70.0},
+                {"symbol_type": "eighth_note_candidate", "voice": 1, "x0": 100.0},
+                {"symbol_type": "eighth_note_candidate", "voice": 1, "x0": 130.0},
+                {"symbol_type": "eighth_note_candidate", "voice": 1, "x0": 160.0},
+                {"symbol_type": "eighth_note_candidate", "voice": 1, "x0": 190.0},
+                {"symbol_type": "eighth_note_candidate", "voice": 1, "x0": 220.0},
+                {"symbol_type": "eighth_note_candidate", "voice": 1, "x0": 250.0},
+                {"symbol_type": "eighth_note_candidate", "voice": 1, "x0": 280.0},
+                {"symbol_type": "eighth_note_candidate", "voice": 1, "x0": 310.0},
+                {"symbol_type": "eighth_note_candidate", "voice": 1, "x0": 340.0},
+                {"symbol_type": "barline_candidate", "x0": 370.0}
+            ],
+            "geometry": None
+        }
+    }
+    meter_128 = detect_time_signature(staves_128, pdf_path=None)
+    assert meter_128 == (12, 8)

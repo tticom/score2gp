@@ -50,6 +50,108 @@ def analyze_pdf(pdf_path: Path):
         
     return page_count, pdf_type
 
+def parse_conversion_details(work_dir: Path, json_report: Path, out_gp: Path):
+    timeline_available = "No"
+    clef = "N/A"
+    key = "N/A"
+    meter = "N/A"
+    confidence = 0.0
+    measure_count = 0
+    timing_valid = 0
+    timing_invalid = 0
+    
+    # 1. Check if deterministic_omr.musicxml exists
+    mxl_path = work_dir / "deterministic_omr.musicxml"
+    if mxl_path.exists():
+        timeline_available = "Yes"
+        try:
+            # Parse XML
+            import xml.etree.ElementTree as ET
+            tree = ET.parse(mxl_path)
+            root = tree.getroot()
+            measures = root.findall(".//measure")
+            measure_count = len(measures)
+            
+            if measure_count > 0:
+                first_measure = measures[0]
+                clef = "Assumed G2" # Default fallback
+                key = "0 fifths" # Default fallback
+                meter = "Assumed 4/4" # Default fallback
+                
+                # Parse Clef
+                clef_el = first_measure.find(".//clef")
+                if clef_el is not None:
+                    sign = clef_el.find("sign")
+                    line = clef_el.find("line")
+                    if sign is not None and line is not None:
+                        clef = f"{sign.text}{line.text}"
+                
+                # Parse Key
+                key_el = first_measure.find(".//key")
+                if key_el is not None:
+                    fifths = key_el.find("fifths")
+                    if fifths is not None:
+                        fifths_val = int(fifths.text)
+                        key = f"{fifths_val} fifths"
+                
+                # Parse Time
+                time_el = first_measure.find(".//time")
+                if time_el is not None:
+                    beats = time_el.find("beats")
+                    beat_type = time_el.find("beat-type")
+                    if beats is not None and beat_type is not None:
+                        meter = f"{beats.text}/{beat_type.text}"
+        except Exception as e:
+            print(f"Error parsing MusicXML: {e}")
+            
+    # 2. Check timing valid/invalid from warnings.json
+    warnings_json = work_dir / "warnings.json"
+    if warnings_json.exists():
+        try:
+            with open(warnings_json, "r", encoding="utf-8") as f:
+                warnings_data = json.load(f)
+            
+            invalid_measures = set()
+            for w in warnings_data:
+                if w.get("severity") == "error":
+                    m_idx = w.get("measure_index")
+                    if m_idx is not None:
+                        invalid_measures.add(m_idx)
+            
+            timing_invalid = len(invalid_measures)
+            timing_valid = max(0, measure_count - timing_invalid)
+        except Exception as e:
+            print(f"Error parsing warnings.json: {e}")
+            
+    # 3. Check score.ir.json for average confidence
+    score_ir_path = work_dir / "score.ir.json"
+    if score_ir_path.exists():
+        try:
+            with open(score_ir_path, "r", encoding="utf-8") as f:
+                ir_data = json.load(f)
+            confidences = []
+            for bar in ir_data.get("bars", []):
+                for event in bar.get("events", []):
+                    if "confidence" in event:
+                        confidences.append(event["confidence"])
+            if confidences:
+                confidence = sum(confidences) / len(confidences)
+            else:
+                confidence = 1.0
+        except Exception as e:
+            print(f"Error parsing score.ir.json: {e}")
+            
+    return {
+        "timeline_available": timeline_available,
+        "clef": clef,
+        "key": key,
+        "meter": meter,
+        "confidence": round(confidence, 3),
+        "measure_count": measure_count,
+        "timing_valid": timing_valid,
+        "timing_invalid": timing_invalid,
+    }
+
 def run_conversion(
     pdf_name: str,
     corpus_dir: Path,
@@ -151,7 +253,9 @@ def run_conversion(
     if not gp_written and out_gp.exists():
         gp_written = True
         
-    return {
+    details = parse_conversion_details(work_dir, json_report, out_gp)
+    
+    res_dict = {
         "pdf_name": pdf_name,
         "ref_exists": ref_gp_path.exists(),
         "status": status,
@@ -165,6 +269,15 @@ def run_conversion(
         "timing_repair_used": timing_repair_used,
         "error_msg": error_msg.strip().split("\n")[0] if error_msg else ""
     }
+    res_dict.update(details)
+    return res_dict
+
+def is_inside_repo(path: Path) -> bool:
+    resolved = path.resolve()
+    for parent in [resolved] + list(resolved.parents):
+        if (parent / ".git").exists():
+            return True
+    return False
 
 def main():
     parser = argparse.ArgumentParser(description="Corpus Smoke Test Runner")
@@ -172,10 +285,17 @@ def main():
     parser.add_argument("--limit-pages", type=int, help="Limit page range processed per PDF (e.g. 2 for pages 1-2)")
     parser.add_argument("--timeout", type=int, default=120, help="Per-PDF timeout in seconds (default 120)")
     parser.add_argument("--strict", action="store_true", help="Run conversion in strict mode (fails on mismatch)")
+    parser.add_argument("--out-dir", required=True, help="Directory to write all conversion results (must not be inside repositories)")
+    parser.add_argument("--corpus-dir", default="/home/tticom/work/score2gp-workspace/score2gp-private-fixtures/fixtures/private", help="Directory containing PDF files")
     args = parser.parse_args()
 
-    corpus_dir = Path("../score2gp-private-fixtures/fixtures/private")
-    out_dir = Path("tmp/corpus_smoke")
+    corpus_dir = Path(args.corpus_dir)
+    out_dir = Path(args.out_dir)
+    
+    if is_inside_repo(out_dir):
+        print("Error: --out-dir must not be inside any git repository to prevent file pollution.")
+        sys.exit(1)
+        
     out_dir.mkdir(parents=True, exist_ok=True)
     
     pdf_list = PDF_FILES
@@ -212,18 +332,17 @@ def main():
     md_lines = []
     md_lines.append("# Corpus Smoke Test Matrix")
     md_lines.append(f"\nGenerated: {time.strftime('%Y-%m-%d %H:%M:%S')} | Strict Mode: {args.strict}\n")
-    md_lines.append("| PDF Name | Pages | Type | Ref Available | Status | Exit Code | Stage | GP Written | Strict Ref Match | Semantic Diffs | Used No Strict | Timing Repair | Error / Refusal Code |")
-    md_lines.append("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |")
+    md_lines.append("| PDF Name | Type | Pages | Timeline Avail | Clef | Key | Meter | OMR Conf | Measures | Valid Meas | Invalid Meas | GP Written | Refusal Code | Evidence Summary |")
+    md_lines.append("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |")
     for r in results:
-        ref_status = "Yes" if r["ref_exists"] else "No"
-        status_icon = "🟢 PASS" if r["status"] == "success" else "🔴 FAIL"
         gp_written_str = "Yes" if r["gp_written"] else "No"
-        ref_match_str = r["strict_ref_match"]
-        diffs_str = r["semantic_differences"] or "None"
-        used_no_strict_str = "Yes" if r["used_no_strict"] else "No"
-        timing_repair_str = "Yes" if r["timing_repair_used"] else "No"
-        err_msg = r["refusal_code"] or r["error_msg"] or "Unknown"
-        md_lines.append(f"| {r['pdf_name']} | {r['page_count']} | {r['pdf_type']} | {ref_status} | {status_icon} | {r['exit_code']} | {r['stage']} | {gp_written_str} | {ref_match_str} | {diffs_str} | {used_no_strict_str} | {timing_repair_str} | {err_msg} |")
+        ref_code = r["refusal_code"] or ("Success" if r["status"] == "success" else "Fail")
+        evidence = r["error_msg"] or "N/A"
+        md_lines.append(
+            f"| {r['pdf_name']} | {r['pdf_type']} | {r['page_count']} | {r['timeline_available']} | "
+            f"{r['clef']} | {r['key']} | {r['meter']} | {r['confidence']} | {r['measure_count']} | "
+            f"{r['timing_valid']} | {r['timing_invalid']} | {gp_written_str} | {ref_code} | {evidence} |"
+        )
         
     report_md_path = out_dir / "corpus_smoke_matrix.md"
     report_md_path.write_text("\n".join(md_lines), encoding="utf-8")
