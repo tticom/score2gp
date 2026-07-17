@@ -982,7 +982,7 @@ def _apply_relational_defaults(root: ET.Element, score: ScoreIR) -> None:
                 _text(auto, "Position", "0")
                 _text(auto, "Visible", "true")
                 _text(auto, "Value", f"{score.tempo.bpm} 2")
-            
+
             for bar in tempo_bars:
                 auto = ET.SubElement(autos, "Automation")
                 _text(auto, "Type", "Tempo")

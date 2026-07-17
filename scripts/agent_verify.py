@@ -66,6 +66,7 @@ def make_markdown_report(results, overall_status):
 
 # Default verification steps list
 STEPS = [
+    ("Verify local workspace import boundary", [sys.executable, "scripts/import_check.py"]),
     ("Run pytest", [sys.executable, "-m", "pytest"]),
     ("Export schemas", [sys.executable, "-m", "score2gp.cli", "export-schema", "--out", "schemas"]),
     ("Validate IR on tiny_score", [sys.executable, "-m", "score2gp.cli", "validate-ir", "fixtures/public/tiny_score.ir.json"]),
