@@ -761,23 +761,62 @@ def test_cli_convert_lesson_5_meter_detection(tmp_path: Path) -> None:
     assert beat_type == "8"
 
 
-def test_cli_convert_tab_only_fallback(tmp_path: Path) -> None:
+def test_cli_convert_tab_only_refusal_and_explicit_fallback(tmp_path: Path) -> None:
     pdf_path = Path("../score2gp-private-fixtures/fixtures/private/Melodic Soloing Masterclass.pdf")
     if not pdf_path.exists():
         pytest.skip("Private fixture Melodic Soloing Masterclass not found")
 
-    out_gp = tmp_path / "Melodic-Soloing-Masterclass.gp"
-    work_dir = tmp_path / "work"
-    json_report = tmp_path / "report.json"
+    # 1. Test normal convert (refuses and writes no GP)
+    out_gp_default = tmp_path / "Melodic-Soloing-Masterclass-default.gp"
+    work_dir_default = tmp_path / "work-default"
+    json_report_default = tmp_path / "report-default.json"
 
-    result = CliRunner().invoke(app, [
+    result_default = CliRunner().invoke(app, [
         "convert",
         "--pdf", str(pdf_path),
-        "--out", str(out_gp),
-        "--work-dir", str(work_dir),
-        "--json-report", str(json_report),
+        "--out", str(out_gp_default),
+        "--work-dir", str(work_dir_default),
+        "--json-report", str(json_report_default),
     ], catch_exceptions=False)
 
-    assert result.exit_code == 0
-    assert out_gp.exists()
-    assert "TAB-only vector PDF layout detected" in result.output
+    assert result_default.exit_code != 0
+    assert not out_gp_default.exists()
+    assert json_report_default.exists()
+    report_default = json.loads(json_report_default.read_text(encoding="utf-8"))
+    assert report_default["status"] == "refused"
+    assert report_default["refusal_code"] == "missing_musicxml"
+
+    # 2. Test explicit approximate/draft convert (succeeds and is labeled approximate)
+    out_gp_approx = tmp_path / "Melodic-Soloing-Masterclass-approx.gp"
+    work_dir_approx = tmp_path / "work-approx"
+    json_report_approx = tmp_path / "report-approx.json"
+
+    result_approx = CliRunner().invoke(app, [
+        "convert",
+        "--pdf", str(pdf_path),
+        "--out", str(out_gp_approx),
+        "--work-dir", str(work_dir_approx),
+        "--json-report", str(json_report_approx),
+        "--pdf-only-tab",
+    ], catch_exceptions=False)
+
+    assert result_approx.exit_code == 0
+    assert out_gp_approx.exists()
+
+    # Assert labeled in CLI output
+    assert "rhythms are defaulted/approximated" in result_approx.stderr
+
+    # Assert labeled in JSON output
+    assert json_report_approx.exists()
+    report_approx = json.loads(json_report_approx.read_text(encoding="utf-8"))
+    assert report_approx["approximate"] is True
+    assert report_approx["strict_success"] is False
+    assert report_approx["timing_evidence"] == "missing"
+    assert report_approx["pdf_only_diagnostics"]["mode"] == "approximate"
+    assert report_approx["pdf_only_diagnostics"]["timing_evidence"] == "missing"
+
+    # Assert labeled in warnings.json (HTML output context)
+    warnings_json = work_dir_approx / "warnings.json"
+    assert warnings_json.exists()
+    warnings = json.loads(warnings_json.read_text(encoding="utf-8"))
+    assert any(w.get("code") == "approximate_conversion_warning" for w in warnings)

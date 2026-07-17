@@ -26,7 +26,7 @@ def main():
         print(f"Instead of the local recovery workspace path:", file=sys.stderr)
         print(f"  {expected_file}", file=sys.stderr)
         print(f"\nThis is likely due to the virtual environment having an editable installation", file=sys.stderr)
-        print(f"pointing to the canonical product directory (/home/tticom/work/score2gp-workspace/score2gp).", file=sys.stderr)
+        print(f"pointing to a different workspace directory.", file=sys.stderr)
         print(f"\nTo resolve this, ensure you execute python with PYTHONPATH=.:src set,", file=sys.stderr)
         print(f"for example:", file=sys.stderr)
         print(f"  env PYTHONPATH=.:src python -m score2gp.cli convert ...", file=sys.stderr)

@@ -556,6 +556,10 @@ def _write_convert_report(
     }
     if pdf_only_diagnostics is not None:
         report["pdf_only_diagnostics"] = pdf_only_diagnostics
+        if pdf_only_diagnostics.get("mode") == "approximate" or pdf_only_diagnostics.get("timing_evidence") == "missing":
+            report["approximate"] = True
+            report["strict_success"] = False
+            report["timing_evidence"] = "missing"
     try:
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
@@ -712,6 +716,16 @@ def convert_command(
     warnings = []
     summary = {}
 
+    if pdf_only_tab or editable_draft:
+        typer.echo("Warning: Explicit approximate/draft path requested. Timing evidence is missing; rhythms are defaulted/approximated.", err=True)
+        warnings.append({
+            "code": "approximate_conversion_warning",
+            "message": "Conversion completed in approximate/draft mode. Precise timing evidence (MusicXML sidecar) was missing; rhythms are defaulted or approximated.",
+            "severity": "warning",
+        })
+        summary["mode"] = "approximate"
+        summary["timing_evidence"] = "missing"
+
     # Stage 1: Inspect PDF and Extract Tab Candidates
     try:
         pdf_summary = inspect_pdf_file(pdf, actual_work_dir / "inspect")
@@ -797,17 +811,6 @@ def convert_command(
             )
         raise typer.Exit(1)
     # Stage 2: Check for MusicXML sidecar requirement
-    if not pdf_only_tab and not editable_draft and musicxml is None:
-        total_notation_staves = 0
-        for page_data in pdf_summary.get("pages", []):
-            diags = page_data.get("pdf_staff_notation_diagnostics", {}) or {}
-            staves = diags.get("staves", []) or []
-            total_notation_staves += len(staves)
-
-        if pdf_summary.get("pdf_layout_class") == "vector_tab_with_barlines" and total_notation_staves == 0:
-            typer.echo("Info: TAB-only vector PDF layout detected (0 standard staves). Automatically falling back to direct PDF-only TAB conversion (--pdf-only-tab).")
-            pdf_only_tab = True
-
     if not pdf_only_tab and not editable_draft:
         if musicxml is None:
             typer.echo(f"Info: No MusicXML sidecar provided. Generating automatically via deterministic OMR...")
@@ -1013,6 +1016,8 @@ def convert_command(
                     "pdf_grouping_status": "refused",
                     "inferred_rhythm_status": None,
                     "gp_package_written": False,
+                    "mode": "approximate",
+                    "timing_evidence": "missing",
                 }
             _write_convert_report(
                 report_path=json_report,
@@ -1043,6 +1048,8 @@ def convert_command(
                     "pdf_grouping_status": "refused" if getattr(exc, "category", None) == "pdf_only_tab_grouping_unsafe" else "failed",
                     "inferred_rhythm_status": None,
                     "gp_package_written": False,
+                    "mode": "approximate",
+                    "timing_evidence": "missing",
                 }
             _write_convert_report(
                 report_path=json_report,
@@ -1095,6 +1102,8 @@ def convert_command(
                         "pdf_grouping_status": "safe",
                         "inferred_rhythm_status": "defaulted_placeholder" if editable_draft else "applied",
                         "gp_package_written": False,
+                        "mode": "approximate",
+                        "timing_evidence": "missing",
                     }
                 _write_convert_report(
                     report_path=json_report,
@@ -1163,6 +1172,8 @@ def convert_command(
                 "inferred_rhythm_status": "defaulted_placeholder" if editable_draft else "applied",
                 "gp_package_written": True,
                 "semantic_comparison": semantic_comparison,
+                "mode": "approximate",
+                "timing_evidence": "missing",
             }
         if json_report:
             _write_convert_report(
@@ -1193,6 +1204,8 @@ def convert_command(
                 "pdf_grouping_status": "safe",
                 "inferred_rhythm_status": "defaulted_placeholder" if editable_draft else "applied",
                 "gp_package_written": True,
+                "mode": "approximate",
+                "timing_evidence": "missing",
             }
             if semantic_comparison is not None:
                 pdf_only_diag_payload["semantic_comparison"] = semantic_comparison
