@@ -797,6 +797,17 @@ def convert_command(
             )
         raise typer.Exit(1)
     # Stage 2: Check for MusicXML sidecar requirement
+    if not pdf_only_tab and not editable_draft and musicxml is None:
+        total_notation_staves = 0
+        for page_data in pdf_summary.get("pages", []):
+            diags = page_data.get("pdf_staff_notation_diagnostics", {}) or {}
+            staves = diags.get("staves", []) or []
+            total_notation_staves += len(staves)
+
+        if pdf_summary.get("pdf_layout_class") == "vector_tab_with_barlines" and total_notation_staves == 0:
+            typer.echo("Info: TAB-only vector PDF layout detected (0 standard staves). Automatically falling back to direct PDF-only TAB conversion (--pdf-only-tab).")
+            pdf_only_tab = True
+
     if not pdf_only_tab and not editable_draft:
         if musicxml is None:
             typer.echo(f"Info: No MusicXML sidecar provided. Generating automatically via deterministic OMR...")
