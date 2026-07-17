@@ -904,17 +904,18 @@ def compose_filled_duration_candidates(outcomes: list[dict]) -> list[dict]:
                 return y0 + (y1 - y0) * (x_clamped - x0) / (x1 - x0)
 
             ys = sorted([get_y_at_x(b.get("bbox"), stem_x) for b in intersect_beams])
-            clusters = []
-            curr_y = ys[0]
-            for y in ys[1:]:
-                if y <= curr_y + 0.6 * staff_space:
-                    curr_y = max(curr_y, y)
+            if len(ys) == 1:
+                units = 1
+            else:
+                span = ys[-1] - ys[0]
+                if span < 3.2:
+                    units = 1
+                elif span < 6.5:
+                    units = 2
+                elif span < 9.5:
+                    units = 3
                 else:
-                    clusters.append(curr_y)
-                    curr_y = y
-            clusters.append(curr_y)
-
-            units = len(clusters)
+                    units = 4
             modifiers = intersect_beams
         else:
             if intersect_flags:
@@ -1609,14 +1610,21 @@ def detect_time_signature(staves, pdf_path, measure_anchors=None) -> tuple[int, 
         d_68 = abs(length - 2880)
         d_128 = abs(length - 5760)
         min_d = min(d_44, d_68, d_128)
-        if min_d > 960:
-            continue
-        if min_d == d_44:
-            scores[(4, 4)] += count
-        elif min_d == d_68:
-            scores[(6, 8)] += count
-        else:
-            scores[(12, 8)] += count
+        if min_d <= 960:
+            if min_d == d_44:
+                scores[(4, 4)] += count
+            elif min_d == d_68:
+                scores[(6, 8)] += count
+            else:
+                scores[(12, 8)] += count
+
+        # Overfull penalties to avoid selecting invalid meters
+        if length > 3840 + 240:
+            scores[(4, 4)] -= 100.0 * count
+        if length > 2880 + 240:
+            scores[(6, 8)] -= 100.0 * count
+        if length > 5760 + 240:
+            scores[(12, 8)] -= 100.0 * count
 
     best_meter = max(scores, key=scores.get)
     max_score = scores[best_meter]
@@ -1769,6 +1777,25 @@ def build_staff_timeline_preview(
     for key, data in staves.items():
         page, sys_idx, staff_idx = key
         cands = data["notes_rests_barlines"]
+
+        # Filter out false barline candidates that are actually note stems
+        cands_filtered = []
+        for c in cands:
+            if c.get("symbol_type") in ("barline_candidate", "barline"):
+                bx = get_x_coord(c)
+                is_stem = False
+                for n in cands:
+                    if "note" in n.get("symbol_type", ""):
+                        stem = n.get("stem_bbox")
+                        if stem and isinstance(stem, (list, tuple)) and len(stem) >= 1:
+                            if abs(bx - stem[0]) < 1.0:
+                                is_stem = True
+                                break
+                if is_stem:
+                    continue
+            cands_filtered.append(c)
+        cands = cands_filtered
+
         geom = data["geometry"]
 
         # Resolve staff spacing and middle line y coordinate
@@ -1873,16 +1900,38 @@ def build_staff_timeline_preview(
                 if not m_cands:
                     continue
 
+                filtered_m_cands = []
+                for c in m_cands:
+                    st_type = c.get("symbol_type", "")
+                    is_note = ("note" in st_type) and ("clef" not in st_type)
+                    is_rest = ("rest" in st_type)
+                    if is_note and not c.get("clef_resolved_staff_pitch"):
+                        continue
+                    if is_note or is_rest:
+                        filtered_m_cands.append(c)
+
                 # Simple sequence check to calculate measure_ticks
                 time_slices = []
                 current_slice = []
-                for c in sorted(m_cands, key=get_x_coord):
+                for c in sorted(filtered_m_cands, key=get_x_coord):
                     if not current_slice:
                         current_slice.append(c)
                     else:
-                        prev_x = get_x_coord(current_slice[-1])
+                        prev_c = current_slice[-1]
+                        prev_x = get_x_coord(prev_c)
                         curr_x = get_x_coord(c)
-                        if curr_x - prev_x < X_tol:
+
+                        if curr_x - prev_x < 1.2 * staff_spacing:
+                            group_together = True
+                        elif curr_x - prev_x < 2.5 * staff_spacing:
+                            has_same_stem = False
+                            if "bbox" in prev_c and "bbox" in c and isinstance(prev_c["bbox"], (list, tuple)) and isinstance(c["bbox"], (list, tuple)) and len(prev_c["bbox"]) >= 1 and len(c["bbox"]) >= 1:
+                                has_same_stem = (abs(prev_c["bbox"][0] - c["bbox"][0]) < 1.0)
+                            group_together = has_same_stem
+                        else:
+                            group_together = False
+
+                        if group_together:
                             current_slice.append(c)
                         else:
                             time_slices.append(current_slice)
@@ -1974,16 +2023,38 @@ def build_staff_timeline_preview(
         timeline_measures = []
 
         for m_idx, (m_cands, b_style) in enumerate(measures):
+            filtered_m_cands = []
+            for c in m_cands:
+                st_type = c.get("symbol_type", "")
+                is_note = ("note" in st_type) and ("clef" not in st_type)
+                is_rest = ("rest" in st_type)
+                if is_note and not c.get("clef_resolved_staff_pitch"):
+                    continue
+                if is_note or is_rest:
+                    filtered_m_cands.append(c)
+
             # Cluster measure candidates into vertical time slices
             time_slices = []
             current_slice = []
-            for c in sorted(m_cands, key=get_x_coord):
+            for c in sorted(filtered_m_cands, key=get_x_coord):
                 if not current_slice:
                     current_slice.append(c)
                 else:
-                    prev_x = get_x_coord(current_slice[-1])
+                    prev_c = current_slice[-1]
+                    prev_x = get_x_coord(prev_c)
                     curr_x = get_x_coord(c)
-                    if curr_x - prev_x < X_tol:
+
+                    if curr_x - prev_x < 1.2 * staff_spacing:
+                        group_together = True
+                    elif curr_x - prev_x < 2.5 * staff_spacing:
+                        has_same_stem = False
+                        if "bbox" in prev_c and "bbox" in c and isinstance(prev_c["bbox"], (list, tuple)) and isinstance(c["bbox"], (list, tuple)) and len(prev_c["bbox"]) >= 1 and len(c["bbox"]) >= 1:
+                            has_same_stem = (abs(prev_c["bbox"][0] - c["bbox"][0]) < 1.0)
+                        group_together = has_same_stem
+                    else:
+                        group_together = False
+
+                    if group_together:
                         current_slice.append(c)
                     else:
                         time_slices.append(current_slice)
