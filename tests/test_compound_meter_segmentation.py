@@ -45,11 +45,11 @@ def test_correctly_segmented_128():
     assert len(previews) == 1
     measures = previews[0]["measures"]
     assert len(measures) == 2
-    
+
     assert measures[0]["measure_index"] == 1
     assert measures[0]["valid"] is True
     assert len(measures[0]["events"]) == 12
-    
+
     assert measures[1]["measure_index"] == 2
     assert measures[1]["valid"] is True
     assert len(measures[1]["events"]) == 12
@@ -99,7 +99,7 @@ def test_split_only_on_evidence():
             "voice": 1,
             "clef_resolved_staff_pitch": "C4"
         })
-        
+
     previews = build_staff_timeline_preview(outcomes, pdf_path=None)
     assert len(previews) == 1
     measures = previews[0]["measures"]

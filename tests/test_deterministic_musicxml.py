@@ -95,7 +95,7 @@ def test_generate_musicxml_with_ties_and_rests(tmp_path):
 
 def test_synthetic_meters():
     from score2gp.whole_note_recogniser import detect_time_signature
-    
+
     # 4/4 meter (expected 3840 ticks)
     staves_44 = {
         (1, 1, 1): {

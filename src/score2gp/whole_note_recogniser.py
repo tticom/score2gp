@@ -1468,7 +1468,7 @@ def detect_time_signature(staves, pdf_path, measure_anchors=None) -> tuple[int, 
         page, sys_idx, staff_idx = key
         cands = list(data["notes_rests_barlines"])
         geom = data["geometry"]
-        
+
         staff_spacing = 10.0
         middle_y = None
         if geom is not None:
@@ -1480,9 +1480,9 @@ def detect_time_signature(staves, pdf_path, measure_anchors=None) -> tuple[int, 
                 bbox = geom.get("bbox")
                 if bbox and len(bbox) >= 4:
                     middle_y = (bbox[1] + bbox[3]) / 2.0
-                    
+
         X_tol = 1.5 * staff_spacing
-        
+
         staff_anchors = measure_anchors.get(key, []) if measure_anchors else []
         anchors_to_use = list(staff_anchors)
         if len(anchors_to_use) >= 1:
@@ -1490,7 +1490,7 @@ def detect_time_signature(staves, pdf_path, measure_anchors=None) -> tuple[int, 
                 x1_staff = geom["bbox"][2]
                 if not any(abs(a - x1_staff) <= 10.0 for a in anchors_to_use):
                     anchors_to_use.append(x1_staff)
-                    
+
             omr_barlines = [c for c in cands if c.get("symbol_type") in ("barline_candidate", "barline")]
             cands = [c for c in cands if c.get("symbol_type") not in ("barline_candidate", "barline")]
             for anchor_x in anchors_to_use[1:]:

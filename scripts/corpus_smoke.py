@@ -27,12 +27,12 @@ PDF_FILES = [
 def analyze_pdf(pdf_path: Path):
     doc = fitz.open(pdf_path)
     page_count = len(doc)
-    
+
     # Heuristic for born-digital vs scanned vs mixed
     has_text = False
     has_vector = False
     has_image = False
-    
+
     for page in doc:
         if page.get_text().strip():
             has_text = True
@@ -40,14 +40,14 @@ def analyze_pdf(pdf_path: Path):
             has_vector = True
         if page.get_images():
             has_image = True
-            
+
     if has_text and has_vector and not has_image:
         pdf_type = "born-digital"
     elif has_image and not has_text and not has_vector:
         pdf_type = "scanned"
     else:
         pdf_type = "mixed"
-        
+
     return page_count, pdf_type
 
 def parse_conversion_details(work_dir: Path, json_report: Path, out_gp: Path):
@@ -59,7 +59,7 @@ def parse_conversion_details(work_dir: Path, json_report: Path, out_gp: Path):
     measure_count = 0
     timing_valid = 0
     timing_invalid = 0
-    
+
     # 1. Check if deterministic_omr.musicxml exists
     mxl_path = work_dir / "deterministic_omr.musicxml"
     if mxl_path.exists():
@@ -71,13 +71,13 @@ def parse_conversion_details(work_dir: Path, json_report: Path, out_gp: Path):
             root = tree.getroot()
             measures = root.findall(".//measure")
             measure_count = len(measures)
-            
+
             if measure_count > 0:
                 first_measure = measures[0]
                 clef = "Assumed G2" # Default fallback
                 key = "0 fifths" # Default fallback
                 meter = "Assumed 4/4" # Default fallback
-                
+
                 # Parse Clef
                 clef_el = first_measure.find(".//clef")
                 if clef_el is not None:
@@ -85,7 +85,7 @@ def parse_conversion_details(work_dir: Path, json_report: Path, out_gp: Path):
                     line = clef_el.find("line")
                     if sign is not None and line is not None:
                         clef = f"{sign.text}{line.text}"
-                
+
                 # Parse Key
                 key_el = first_measure.find(".//key")
                 if key_el is not None:
@@ -93,7 +93,7 @@ def parse_conversion_details(work_dir: Path, json_report: Path, out_gp: Path):
                     if fifths is not None:
                         fifths_val = int(fifths.text)
                         key = f"{fifths_val} fifths"
-                
+
                 # Parse Time
                 time_el = first_measure.find(".//time")
                 if time_el is not None:
@@ -103,7 +103,7 @@ def parse_conversion_details(work_dir: Path, json_report: Path, out_gp: Path):
                         meter = f"{beats.text}/{beat_type.text}"
         except Exception as e:
             print(f"Error parsing MusicXML: {e}")
-            
+
     # 2. Check timing valid/invalid from parsed MusicXML and analyze_musicxml_timing
     if mxl_path.exists():
         try:
@@ -116,12 +116,12 @@ def parse_conversion_details(work_dir: Path, json_report: Path, out_gp: Path):
                     # Some issues might not have measure_index, but we only count those that do
                     if w.measure_index is not None:
                         invalid_indices.add(w.measure_index)
-            
+
             timing_invalid = len(invalid_indices)
             timing_valid = max(0, measure_count - timing_invalid)
         except Exception as e:
             print(f"Error analyzing MusicXML timing: {e}")
-            
+
     # 3. Check score.ir.json for average confidence
     score_ir_path = work_dir / "score.ir.json"
     if score_ir_path.exists():
@@ -139,7 +139,7 @@ def parse_conversion_details(work_dir: Path, json_report: Path, out_gp: Path):
                 confidence = 1.0
         except Exception as e:
             print(f"Error parsing score.ir.json: {e}")
-            
+
     return {
         "timeline_available": timeline_available,
         "clef": clef,
@@ -162,17 +162,17 @@ def run_conversion(
     pdf_path = corpus_dir / pdf_name
     base_name = pdf_name[:-4]
     ref_gp_path = corpus_dir / f"{base_name}.gp"
-    
+
     work_dir = out_dir / f"work_{base_name.replace(' ', '_')}"
     out_gp = out_dir / f"{base_name.replace(' ', '_')}.gp"
     json_report = out_dir / f"report_{base_name.replace(' ', '_')}.json"
-    
+
     # Clean up old files if they exist to get a fresh run
     if out_gp.exists():
         out_gp.unlink()
     if json_report.exists():
         json_report.unlink()
-        
+
     cmd = [
         sys.executable, "-m", "score2gp.cli", "convert",
         "--pdf", str(pdf_path),
@@ -180,20 +180,20 @@ def run_conversion(
         "--work-dir", str(work_dir),
         "--json-report", str(json_report)
     ]
-    
+
     # Default is strict mode. Bypassed with --no-strict unless strict_mode is True.
     used_no_strict = not strict_mode
     if used_no_strict:
         cmd.append("--no-strict")
-    
+
     if ref_gp_path.exists():
         cmd.extend(["--ref-gp", str(ref_gp_path)])
-        
+
     if limit_pages is not None:
         cmd.extend(["--pages", f"1-{limit_pages}"])
-        
+
     print(f"Running conversion for: {pdf_name}...")
-    
+
     status = "failed"
     exit_code = -1
     refusal_code = None
@@ -203,7 +203,7 @@ def run_conversion(
     strict_ref_match = "None"
     semantic_diffs_str = ""
     timing_repair_used = False
-    
+
     try:
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         exit_code = res.returncode
@@ -214,7 +214,7 @@ def run_conversion(
         refusal_code = "timeout"
         stage = "unknown"
         error_msg = f"Timed out after {timeout} seconds"
-        
+
     if json_report.exists():
         try:
             with open(json_report, "r", encoding="utf-8") as f:
@@ -225,7 +225,7 @@ def run_conversion(
                 stage = rep_data.get("stage", "unknown")
                 gp_written = rep_data.get("output_written", False)
                 timing_repair_used = rep_data.get("timing_repair_used", False)
-                
+
                 # Semantic comparison
                 if ref_gp_path.exists():
                     sum_counts = rep_data.get("summary_counts", {})
@@ -242,18 +242,18 @@ def run_conversion(
                 else:
                     strict_ref_match = "None"
                     semantic_diffs_str = "N/A"
-                    
+
                 if rep_data.get("error_type"):
                     error_msg = f"{rep_data.get('error_type')}: {rep_data.get('recommended_action')}"
         except Exception as e:
             error_msg = f"Failed to parse json report: {e}"
-            
+
     # Check if gp file was actually written if we don't have json report
     if not gp_written and out_gp.exists():
         gp_written = True
-        
+
     details = parse_conversion_details(work_dir, json_report, out_gp)
-    
+
     res_dict = {
         "pdf_name": pdf_name,
         "ref_exists": ref_gp_path.exists(),
@@ -290,13 +290,13 @@ def main():
 
     corpus_dir = Path(args.corpus_dir)
     out_dir = Path(args.out_dir)
-    
+
     if is_inside_repo(out_dir):
         print("Error: --out-dir must not be inside any git repository to prevent file pollution.")
         sys.exit(1)
-        
+
     out_dir.mkdir(parents=True, exist_ok=True)
-    
+
     pdf_list = PDF_FILES
     if args.pdf:
         if args.pdf in PDF_FILES:
@@ -306,14 +306,14 @@ def main():
         else:
             print(f"Error: Specified PDF file '{args.pdf}' not found in private fixtures.")
             sys.exit(1)
-            
+
     results = []
     for pdf_name in pdf_list:
         pdf_path = corpus_dir / pdf_name
         if not pdf_path.exists():
             print(f"Skipping missing file: {pdf_name}")
             continue
-            
+
         page_count, pdf_type = analyze_pdf(pdf_path)
         conv_res = run_conversion(
             pdf_name,
@@ -326,7 +326,7 @@ def main():
         conv_res["page_count"] = page_count
         conv_res["pdf_type"] = pdf_type
         results.append(conv_res)
-        
+
     # Generate markdown table with requested detailed columns
     md_lines = []
     md_lines.append("# Corpus Smoke Test Matrix")
@@ -342,14 +342,14 @@ def main():
             f"{r['clef']} | {r['key']} | {r['meter']} | {r['confidence']} | {r['measure_count']} | "
             f"{r['timing_valid']} | {r['timing_invalid']} | {gp_written_str} | {ref_code} | {evidence} |"
         )
-        
+
     report_md_path = out_dir / "corpus_smoke_matrix.md"
     report_md_path.write_text("\n".join(md_lines), encoding="utf-8")
     print(f"\nSmoke matrix written to {report_md_path}")
-    
+
     # Also write JSON matrix
     report_json_path = out_dir / "corpus_smoke_matrix.json"
     report_json_path.write_text(json.dumps(results, indent=2), encoding="utf-8")
-    
+
 if __name__ == "__main__":
     main()

@@ -729,7 +729,7 @@ def test_cli_convert_lesson_5_meter_detection(tmp_path: Path) -> None:
     work_dir = tmp_path / "work"
     json_report = tmp_path / "report.json"
 
-    # We run with CliRunner. It may exit with non-zero if timing validation fails, 
+    # We run with CliRunner. It may exit with non-zero if timing validation fails,
     # but deterministic_omr.musicxml must be created.
     result = CliRunner().invoke(app, [
         "convert",
@@ -750,6 +750,6 @@ def test_cli_convert_lesson_5_meter_detection(tmp_path: Path) -> None:
     assert time_el is not None
     beats = time_el.find("beats").text
     beat_type = time_el.find("beat-type").text
-    
+
     assert beats == "12"
     assert beat_type == "8"
