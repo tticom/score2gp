@@ -932,6 +932,14 @@ def convert_command(
                 page_range=parse_page_range(pages),
             )
 
+        # Suppress unverified embellishments lacking source evidence. Legato, pull-off, slide, vibrato, and sustain must remain fail-closed.
+        for bar in score.bars:
+            for event in bar.events:
+                event.techniques = [t for t in event.techniques if t.kind not in ("slide", "vibrato", "hammer-on", "pull-off", "slur", "sustain")]
+                for note in event.notes:
+                    note.techniques = [t for t in note.techniques if t.kind not in ("slide", "vibrato", "hammer-on", "pull-off", "slur", "sustain")]
+        score.to_json_file(ir_path)
+
         summary["build_ir"] = {
             "ran": True,
             "failed": False,

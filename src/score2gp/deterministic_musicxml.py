@@ -20,6 +20,12 @@ def generate_musicxml_sidecar(pdf_path: Path, out_mxl: Path) -> Path:
     if not detected_meter:
         raise ValueError("Insufficient time signature meter evidence.")
 
+    # Write metadata_trace.json to the parent directory of out_mxl
+    import json
+    metadata_trace = res.get("metadata_trace", [])
+    trace_path = out_mxl.parent / "metadata_trace.json"
+    trace_path.write_text(json.dumps(metadata_trace, indent=2), encoding="utf-8")
+
     # Flatten measures across all systems, tracking page and system indices.
     measures = []
     for preview in previews:
@@ -73,8 +79,7 @@ def generate_musicxml_sidecar(pdf_path: Path, out_mxl: Path) -> Path:
         if global_m_idx == 0:
             attrs = ET.SubElement(measure_el, "attributes")
             ET.SubElement(attrs, "divisions").text = "960"
-            key = ET.SubElement(attrs, "key")
-            ET.SubElement(key, "fifths").text = "0"
+            # Omit key element as key signature is unknown
             time = ET.SubElement(attrs, "time")
             ET.SubElement(time, "beats").text = str(detected_meter[0])
             ET.SubElement(time, "beat-type").text = str(detected_meter[1])

@@ -452,6 +452,30 @@ class BarAlignmentDiagnostics(BaseModel):
     ambiguity_flags: list[str] = Field(default_factory=list)
 
 
+class PhraseTitleCandidate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    text: str
+    status: Literal["accepted", "rejected"]
+    reason: str | None = None
+
+
+class MetadataTraceItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    raw_texts: list[str] = Field(default_factory=list)
+    page_index: int
+    system_index: int
+    staff_index: int | None = None
+    measure_anchors: list[float] = Field(default_factory=list)
+    phrase_title_candidates: list[PhraseTitleCandidate] = Field(default_factory=list)
+    tempo_bpm: int | None = None
+    tempo_status: Literal["detected", "unknown", "override"] = "unknown"
+    key_fifths: int | None = None
+    key_status: Literal["detected", "unknown", "override"] = "unknown"
+    layout_break: str | None = None
+    barline_style: str | None = None
+
+
 class SystemAlignmentDiagnostics(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -465,6 +489,7 @@ class SystemAlignmentDiagnostics(BaseModel):
     ignored_non_playable_candidate_count: int
     candidates_with_string: int
     candidates_with_bar: int
+    metadata_trace: MetadataTraceItem | None = None
 
 
 class BuildIrDiagnostics(BaseModel):
@@ -707,6 +732,17 @@ def build_ir_with_diagnostics_from_files(
                 timing_issues=gate.timing_issues,
                 details=gate.details,
             )
+
+    metadata_trace = None
+    if musicxml_path is not None:
+        trace_path = Path(musicxml_path).parent / "metadata_trace.json"
+        if trace_path.exists():
+            try:
+                import json
+                metadata_trace = json.loads(trace_path.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+
     score, diagnostics = build_ir_with_diagnostics_from_imports(
         musicxml,
         tabraw,
@@ -715,6 +751,7 @@ def build_ir_with_diagnostics_from_files(
         optimize_fret_snapping=optimize_fret_snapping,
         page_range=page_range,
         include_polyphony_diagnostics=include_polyphony_diagnostics,
+        metadata_trace=metadata_trace,
     )
     if out_path is not None:
         out = Path(out_path)
@@ -1221,6 +1258,7 @@ def build_ir_with_diagnostics_from_imports(
     optimize_fret_snapping: bool = False,
     page_range: tuple[int, int] | None = None,
     include_polyphony_diagnostics: bool = False,
+    metadata_trace: list[dict] | None = None,
 ) -> tuple[ScoreIR, BuildIrDiagnostics]:
     from .musicxml import deduplicate_suspected_staff_tab_voices
     musicxml = deduplicate_suspected_staff_tab_voices(musicxml)
@@ -1644,7 +1682,7 @@ def build_ir_with_diagnostics_from_imports(
     _attach_symbols_and_techniques(score, tabraw)
     if optimize_fret_snapping:
         globals()["optimize_fret_snapping"](score)
-    diagnostics = _build_diagnostics(musicxml, tabraw, score, candidate_pools, ascii_gate_details=ascii_gate_details)
+    diagnostics = _build_diagnostics(musicxml, tabraw, score, candidate_pools, ascii_gate_details=ascii_gate_details, metadata_trace=metadata_trace)
     if diagnostics.pdf_timing_mapping:
         mapping = diagnostics.pdf_timing_mapping
         is_monotonic = mapping.get("monotonic")
@@ -2992,6 +3030,7 @@ def _build_diagnostics(
     candidate_pools: CandidatePools,
     *,
     ascii_gate_details: dict[str, object] | None = None,
+    metadata_trace: list[dict] | None = None,
 ) -> BuildIrDiagnostics:
     per_bar = []
     first_part = musicxml.parts[0] if musicxml.parts else None
@@ -3268,7 +3307,7 @@ def _build_diagnostics(
         ascii_scoreir_gate_alignment_status=_ascii_gate_detail_optional_string(ascii_gate_details, "alignment_status"),
         ascii_scoreir_gate_musicxml_timing_safe=_ascii_gate_detail_optional_bool(ascii_gate_details, "musicxml_timing_safe"),
         ascii_scoreir_gate_expected_next_remediation=_ascii_gate_detail_optional_string(ascii_gate_details, "expected_next_remediation"),
-        per_system=_system_diagnostics(tabraw, candidate_pools),
+        per_system=_system_diagnostics(tabraw, candidate_pools, metadata_trace=metadata_trace, score=score),
         per_bar=per_bar,
         warnings=[warning.model_dump(mode="json", exclude_none=True) for warning in warnings],
         pdf_timing_mapping=pdf_timing_mapping_dict,
@@ -3973,7 +4012,12 @@ def _alignment_quality_flags(per_bar: list[BarAlignmentDiagnostics]) -> list[str
     return flags
 
 
-def _system_diagnostics(tabraw: TabRaw, candidate_pools: CandidatePools) -> list[SystemAlignmentDiagnostics]:
+def _system_diagnostics(
+    tabraw: TabRaw,
+    candidate_pools: CandidatePools,
+    metadata_trace: list[dict] | None = None,
+    score: ScoreIR | None = None,
+) -> list[SystemAlignmentDiagnostics]:
     grouped: dict[tuple[int, int], list[TabCandidate]] = defaultdict(list)
     for candidate in tabraw.candidates:
         if candidate.page_index is not None and candidate.system_index is not None:
@@ -3983,6 +4027,94 @@ def _system_diagnostics(tabraw: TabRaw, candidate_pools: CandidatePools) -> list
     unused_ids = {candidate.id for candidate in candidate_pools.unused()}
     diagnostics = []
     for (page_index, system_index), candidates in sorted(grouped.items()):
+        trace_item = None
+        if metadata_trace:
+            for item in metadata_trace:
+                if item.get("page_index") == page_index and item.get("system_index") == system_index:
+                    trace_item = item
+                    break
+
+        if trace_item is None and score is not None:
+            bar_indices = sorted(list({c.bar_index for c in candidates if c.bar_index is not None}))
+            tempo_bpm = None
+            tempo_status = "unknown"
+            key_fifths = None
+            key_status = "unknown"
+            layout_break = "none"
+            barline_style = "standard"
+            phrase_title_candidates = []
+
+            if bar_indices:
+                first_bar_idx = bar_indices[0]
+                matching_bar = next((b for b in score.bars if b.index == first_bar_idx), None)
+                if matching_bar:
+                    if matching_bar.tempo:
+                        tempo_bpm = matching_bar.tempo.bpm
+                        tempo_status = "detected"
+                    if matching_bar.key_signature:
+                        key_fifths = matching_bar.key_signature.fifths
+                        key_status = "detected"
+                    if matching_bar.layout_break:
+                        layout_break = matching_bar.layout_break
+                    if matching_bar.marker:
+                        phrase_title_candidates.append({
+                            "text": matching_bar.marker,
+                            "status": "accepted"
+                        })
+                    if matching_bar.index > 1:
+                        prev_bar = next((b for b in score.bars if b.index == first_bar_idx - 1), None)
+                        if prev_bar and getattr(prev_bar, "barline_style", None) == "double":
+                            barline_style = "double"
+
+            trace_item = {
+                "raw_texts": [],
+                "page_index": page_index,
+                "system_index": system_index,
+                "staff_index": None,
+                "measure_anchors": [],
+                "phrase_title_candidates": phrase_title_candidates,
+                "tempo_bpm": tempo_bpm,
+                "tempo_status": tempo_status,
+                "key_fifths": key_fifths,
+                "key_status": key_status,
+                "layout_break": layout_break,
+                "barline_style": barline_style
+            }
+
+        metadata_trace_model = None
+        if trace_item:
+            k_fifths = trace_item.get("key_fifths")
+            k_status = trace_item.get("key_status", "unknown")
+            if k_fifths is None:
+                k_status = "unknown"
+
+            t_bpm = trace_item.get("tempo_bpm")
+            t_status = trace_item.get("tempo_status", "unknown")
+            if t_bpm is None:
+                t_status = "unknown"
+
+            metadata_trace_model = MetadataTraceItem(
+                raw_texts=trace_item.get("raw_texts", []),
+                page_index=trace_item.get("page_index", page_index),
+                system_index=trace_item.get("system_index", system_index),
+                staff_index=trace_item.get("staff_index"),
+                measure_anchors=trace_item.get("measure_anchors", []),
+                phrase_title_candidates=[
+                    PhraseTitleCandidate(
+                        text=tc.get("text", ""),
+                        status=tc.get("status", "rejected"),
+                        reason=tc.get("reason")
+                    )
+                    for tc in trace_item.get("phrase_title_candidates", [])
+                ],
+                tempo_bpm=t_bpm,
+                tempo_status=t_status,
+                key_fifths=k_fifths,
+                key_status=k_status,
+                layout_break=trace_item.get("layout_break", "none"),
+                barline_style=trace_item.get("barline_style", "standard")
+            )
+
         diagnostics.append(
             SystemAlignmentDiagnostics(
                 page_index=page_index,
@@ -3995,6 +4127,7 @@ def _system_diagnostics(tabraw: TabRaw, candidate_pools: CandidatePools) -> list
                 ignored_non_playable_candidate_count=sum(1 for candidate in candidates if candidate.parsed_fret is None),
                 candidates_with_string=sum(1 for candidate in candidates if candidate.string is not None),
                 candidates_with_bar=sum(1 for candidate in candidates if candidate.bar_index is not None),
+                metadata_trace=metadata_trace_model
             )
         )
     return diagnostics

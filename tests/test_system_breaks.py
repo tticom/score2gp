@@ -170,3 +170,130 @@ def test_layout_and_title_propagation(tmp_path) -> None:
     section = master_bars[1].find("Section")
     assert section is not None
     assert section.find("Name").text == "Exercise 1"
+
+
+def test_title_anchoring_classification() -> None:
+    from unittest.mock import patch, MagicMock
+    from score2gp.whole_note_recogniser import build_staff_timeline_preview
+
+    outcomes = []
+    geometries = [{
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "bbox": [50.0, 200.0, 500.0, 240.0],
+        "line_y_coords": [200.0, 210.0, 220.0, 230.0, 240.0]
+    }]
+
+    mock_doc = MagicMock()
+    mock_page = MagicMock()
+    mock_page.get_text.return_value = [
+        (50.0, 100.0, 150.0, 120.0, "Example 1\n", 0, 0),
+        (50.0, 130.0, 60.0, 140.0, "P\n", 1, 0),
+        (50.0, 150.0, 200.0, 170.0, "See Example 2 below\n", 2, 0),
+        (50.0, 90.0, 120.0, 105.0, "♩ = 132\n", 3, 0)
+    ]
+    mock_doc.__len__.return_value = 1
+    mock_doc.__iter__.return_value = [mock_page]
+    mock_doc.__getitem__.return_value = mock_page
+
+    with patch("fitz.open", return_value=mock_doc):
+        previews = build_staff_timeline_preview(
+            outcomes,
+            semantic_candidates=None,
+            all_staff_geometries=geometries,
+            measure_anchors=None,
+            pdf_path="mock.pdf"
+        )
+
+    assert hasattr(previews, "metadata_trace")
+    trace = previews.metadata_trace
+    assert len(trace) == 1
+    item = trace[0]
+
+    candidates = item["phrase_title_candidates"]
+    accepted = [c for c in candidates if c["status"] == "accepted"]
+    rejected = [c for c in candidates if c["status"] == "rejected"]
+
+    assert len(accepted) == 1
+    assert accepted[0]["text"] == "Example 1"
+
+    assert len(rejected) == 3
+    reasons = [r["reason"] for r in rejected]
+    assert any("does not match title pattern" in r.lower() for r in reasons)
+    assert any("contains 'example' but fails pattern match" in r.lower() for r in reasons)
+
+    assert item["tempo_bpm"] == 132
+    assert item["tempo_status"] == "detected"
+
+
+def test_key_status_propagation(tmp_path) -> None:
+    from unittest.mock import patch
+    from score2gp.deterministic_musicxml import generate_musicxml_sidecar
+    from score2gp.musicxml import parse_musicxml
+    from score2gp.build_ir import build_ir_with_diagnostics_from_imports
+    from score2gp.tabraw import TabRaw, TabCandidate
+    from score2gp.ir import BoundingBox
+    from score2gp.gp_package import write_gp
+
+    pdf_path = tmp_path / "mock_unknown_key.pdf"
+    pdf_path.write_text("dummy pdf contents that is long enough")
+
+    synthetic_result = {
+        "detected_meter": (4, 4),
+        "timeline_preview": [
+            {
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "measures": [
+                    {
+                        "measure_index": 0,
+                        "events": []
+                    }
+                ]
+            }
+        ]
+    }
+
+    out_xml = tmp_path / "mock_unknown_key.musicxml"
+    with patch("score2gp.deterministic_musicxml.run_recognition_on_file", return_value=synthetic_result):
+        generate_musicxml_sidecar(pdf_path, out_xml)
+
+    tree = ET.parse(out_xml)
+    key_tag = tree.getroot().find(".//key")
+    assert key_tag is None
+
+    parsed_part = parse_musicxml(out_xml)
+    tabraw = TabRaw(
+        candidates=[TabCandidate(
+            id="cand1",
+            kind="fret",
+            raw_text="3",
+            page_index=1,
+            system_index=1,
+            staff_index=1,
+            bar_index=1,
+            bbox=BoundingBox(page=1, x0=10, y0=20, x1=30, y1=40),
+            x=20,
+            y=30,
+            parsed_fret=3,
+            string=5
+        )],
+        warnings=[],
+        pdf_layout_class="standard_staff"
+    )
+    score_ir, diagnostics = build_ir_with_diagnostics_from_imports(parsed_part, tabraw)
+    assert score_ir.bars[0].key_signature is None
+
+    item = diagnostics.per_system[0].metadata_trace
+    assert item is not None
+    assert item.key_status == "unknown"
+    assert item.key_fifths is None
+
+    out_gp = tmp_path / "mock_unknown_key.gp"
+    assert write_gp(score_ir, out_gp) == []
+    with zipfile.ZipFile(out_gp) as zf:
+        gpif_root = ET.fromstring(zf.read("Content/score.gpif"))
+    master_bar = gpif_root.find(".//MasterBars/MasterBar")
+    assert master_bar.find("Key") is None

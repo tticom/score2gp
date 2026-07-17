@@ -50,6 +50,13 @@ def analyze_pdf(pdf_path: Path):
 
     return page_count, pdf_type
 
+def get_source_commit() -> str:
+    try:
+        res = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=str(Path(__file__).parent.parent))
+        return res.stdout.strip()
+    except Exception:
+        return "unknown"
+
 def parse_conversion_details(work_dir: Path, json_report: Path, out_gp: Path):
     timeline_available = "No"
     clef = "N/A"
@@ -60,7 +67,28 @@ def parse_conversion_details(work_dir: Path, json_report: Path, out_gp: Path):
     timing_valid = 0
     timing_invalid = 0
 
-    # 1. Check if deterministic_omr.musicxml exists
+    fatal_timing_issues_count = 0
+    warnings_count = 0
+    info_diagnostics_count = 0
+
+    # 1. Parse warnings.json to categorize by severity
+    warnings_path = work_dir / "warnings.json"
+    if warnings_path.exists():
+        try:
+            with open(warnings_path, "r", encoding="utf-8") as f:
+                warn_list = json.load(f)
+            for w in warn_list:
+                sev = w.get("severity", "warning").lower()
+                if sev == "error":
+                    fatal_timing_issues_count += 1
+                elif sev == "info":
+                    info_diagnostics_count += 1
+                else:
+                    warnings_count += 1
+        except Exception as e:
+            print(f"Error parsing warnings.json: {e}")
+
+    # 2. Check if deterministic_omr.musicxml exists
     mxl_path = work_dir / "deterministic_omr.musicxml"
     if mxl_path.exists():
         timeline_available = "Yes"
@@ -104,7 +132,7 @@ def parse_conversion_details(work_dir: Path, json_report: Path, out_gp: Path):
         except Exception as e:
             print(f"Error parsing MusicXML: {e}")
 
-    # 2. Check timing valid/invalid from parsed MusicXML and analyze_musicxml_timing
+    # 3. Check timing valid/invalid from parsed MusicXML and analyze_musicxml_timing
     if mxl_path.exists():
         try:
             from score2gp.musicxml import parse_musicxml, analyze_musicxml_timing
@@ -113,7 +141,6 @@ def parse_conversion_details(work_dir: Path, json_report: Path, out_gp: Path):
             invalid_indices = set()
             for w in issues:
                 if w.severity == "error":
-                    # Some issues might not have measure_index, but we only count those that do
                     if w.measure_index is not None:
                         invalid_indices.add(w.measure_index)
 
@@ -122,7 +149,7 @@ def parse_conversion_details(work_dir: Path, json_report: Path, out_gp: Path):
         except Exception as e:
             print(f"Error analyzing MusicXML timing: {e}")
 
-    # 3. Check score.ir.json for average confidence
+    # 4. Check score.ir.json for average confidence
     score_ir_path = work_dir / "score.ir.json"
     if score_ir_path.exists():
         try:
@@ -149,6 +176,9 @@ def parse_conversion_details(work_dir: Path, json_report: Path, out_gp: Path):
         "measure_count": measure_count,
         "timing_valid": timing_valid,
         "timing_invalid": timing_invalid,
+        "fatal_timing_issues_count": fatal_timing_issues_count,
+        "warnings_count": warnings_count,
+        "info_diagnostics_count": info_diagnostics_count,
     }
 
 def run_conversion(
@@ -266,7 +296,12 @@ def run_conversion(
         "semantic_differences": semantic_diffs_str,
         "used_no_strict": used_no_strict,
         "timing_repair_used": timing_repair_used,
-        "error_msg": error_msg.strip().split("\n")[0] if error_msg else ""
+        "error_msg": error_msg.strip().split("\n")[0] if error_msg else "",
+        "external_output_gp": str(out_gp),
+        "external_work_dir": str(work_dir),
+        "external_json_report": str(json_report),
+        "source_commit": get_source_commit(),
+        "gp_package_exists": out_gp.exists()
     }
     res_dict.update(details)
     return res_dict
@@ -331,16 +366,16 @@ def main():
     md_lines = []
     md_lines.append("# Corpus Smoke Test Matrix")
     md_lines.append(f"\nGenerated: {time.strftime('%Y-%m-%d %H:%M:%S')} | Strict Mode: {args.strict}\n")
-    md_lines.append("| PDF Name | Type | Pages | Timeline Avail | Clef | Key | Meter | OMR Conf | Measures | Valid Meas | Invalid Meas | GP Written | Refusal Code | Evidence Summary |")
-    md_lines.append("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |")
+    md_lines.append("| PDF Name | Type | Pages | GP Written | GP Exists | Refusal Code | Errors | Warnings | Infos | Commit | Output GP | Work Dir |")
+    md_lines.append("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |")
     for r in results:
         gp_written_str = "Yes" if r["gp_written"] else "No"
+        gp_exists_str = "Yes" if r["gp_package_exists"] else "No"
         ref_code = r["refusal_code"] or ("Success" if r["status"] == "success" else "Fail")
-        evidence = r["error_msg"] or "N/A"
         md_lines.append(
-            f"| {r['pdf_name']} | {r['pdf_type']} | {r['page_count']} | {r['timeline_available']} | "
-            f"{r['clef']} | {r['key']} | {r['meter']} | {r['confidence']} | {r['measure_count']} | "
-            f"{r['timing_valid']} | {r['timing_invalid']} | {gp_written_str} | {ref_code} | {evidence} |"
+            f"| {r['pdf_name']} | {r['pdf_type']} | {r['page_count']} | {gp_written_str} | {gp_exists_str} | {ref_code} | "
+            f"{r['fatal_timing_issues_count']} | {r['warnings_count']} | {r['info_diagnostics_count']} | "
+            f"`{r['source_commit'][:8]}` | `{r['external_output_gp']}` | `{r['external_work_dir']}` |"
         )
 
     report_md_path = out_dir / "corpus_smoke_matrix.md"

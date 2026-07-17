@@ -1635,6 +1635,12 @@ def detect_time_signature(staves, pdf_path, measure_anchors=None) -> tuple[int, 
     return best_meter
 
 
+class TimelinePreviewList(list):
+    def __init__(self, seq=(), metadata_trace=None):
+        super().__init__(seq)
+        self.metadata_trace = metadata_trace or []
+
+
 def build_staff_timeline_preview(
     outcomes: list[dict],
     semantic_candidates: list[dict] | None = None,
@@ -2300,55 +2306,109 @@ def build_staff_timeline_preview(
     # Parse and apply section markers / double barlines / tempo markings
     section_markers = {}
     tempo_markers = {}
+    metadata_trace = []
     if pdf_path is not None and all_staff_geometries:
         try:
             import fitz
             import re
+            from collections import defaultdict
+            title_pattern = re.compile(r'^(Example|Exercise|Lesson|Lick|Figure|Pattern)\s+\d+', re.IGNORECASE)
             tempo_pattern = re.compile(r'(?:[♩qQ]|\bBPM|\btempo)?\s*=\s*(\d+)', re.IGNORECASE)
             doc = fitz.open(pdf_path)
-            for page_idx, page in enumerate(doc):
-                page_staves = [s for s in all_staff_geometries if s.get("page_index") == page_idx + 1]
+
+            # Group staff geometries by page
+            staves_by_page = defaultdict(list)
+            for s in all_staff_geometries:
+                staves_by_page[s.get("page_index", 1)].append(s)
+
+            for page_idx, page_obj in enumerate(doc):
+                page_num = page_idx + 1
+                page_staves = sorted(
+                    staves_by_page[page_num],
+                    key=lambda s: (s.get("bbox", [0,0,0,0])[1], s.get("bbox", [0,0,0,0])[0])
+                )
                 if not page_staves:
                     continue
-                blocks = page.get_text("blocks")
+
+                blocks = page_obj.get_text("blocks")
                 for b in blocks:
                     text = b[4].strip()
-                    if "Example" in text:
-                        lines = [line.strip() for line in text.split("\n") if line.strip()]
-                        if not lines:
-                            continue
-                        section_name = lines[0]
-                        best_staff = None
-                        min_dist = 1000.0
-                        for s in page_staves:
-                            staff_y0 = s["bbox"][1]
-                            dist = staff_y0 - b[1]
-                            if 0.0 < dist < 45.0:
-                                if dist < min_dist:
-                                    min_dist = dist
-                                    best_staff = s
-                        if best_staff is not None:
-                            sys_idx = best_staff.get("system_index")
-                            section_markers[(page_idx + 1, sys_idx)] = section_name
+                    if not text:
+                        continue
 
-                    m = tempo_pattern.search(text)
-                    if m:
-                        bpm = int(m.group(1))
-                        if 20 <= bpm <= 400:
-                            best_staff = None
-                            min_dist = 1000.0
-                            for s in page_staves:
-                                staff_y0 = s["bbox"][1]
-                                dist = staff_y0 - b[1]
-                                if 0.0 < dist < 120.0:
-                                    if dist < min_dist:
-                                        min_dist = dist
-                                        best_staff = s
-                            if best_staff is not None:
-                                sys_idx = best_staff.get("system_index")
-                                tempo_markers[(page_idx + 1, sys_idx)] = bpm
-        except Exception:
-            pass
+                    lines = [line.strip() for line in text.split("\n") if line.strip()]
+                    if not lines:
+                        continue
+
+                    # Calculate distance to staves on this page to find matching system
+                    best_staff = None
+                    min_dist = 1000.0
+                    for s in page_staves:
+                        staff_y0 = s["bbox"][1]
+                        dist = staff_y0 - b[1]
+                        if 0.0 < dist < 120.0:
+                            if dist < min_dist:
+                                min_dist = dist
+                                best_staff = s
+
+                    if best_staff is not None:
+                        sys_idx = best_staff.get("system_index")
+                        staff_idx = best_staff.get("staff_index")
+
+                        system_trace = None
+                        for item in metadata_trace:
+                            if item["page_index"] == page_num and item["system_index"] == sys_idx:
+                                system_trace = item
+                                break
+                        if system_trace is None:
+                            system_trace = {
+                                "page_index": page_num,
+                                "system_index": sys_idx,
+                                "staff_index": staff_idx,
+                                "raw_texts": [],
+                                "phrase_title_candidates": [],
+                                "tempo_bpm": None,
+                                "tempo_status": "unknown",
+                                "key_fifths": None,
+                                "key_status": "unknown",
+                                "layout_break": "none",
+                                "barline_style": "standard"
+                            }
+                            metadata_trace.append(system_trace)
+
+                        if text not in system_trace["raw_texts"]:
+                            system_trace["raw_texts"].append(text)
+
+                        # Strict title pattern match
+                        if title_pattern.match(lines[0]):
+                            section_name = lines[0]
+                            section_markers[(page_num, sys_idx)] = section_name
+                            system_trace["phrase_title_candidates"].append({
+                                "text": text,
+                                "status": "accepted"
+                            })
+                        else:
+                            is_candidate = any(c.isalnum() for c in lines[0])
+                            if is_candidate:
+                                reason = "Text does not match title pattern (Example/Exercise/Lesson/Lick/Figure/Pattern followed by a number)"
+                                if "Example" in text:
+                                    reason = "Contains 'Example' but fails pattern match (must start with Example/Exercise/Lesson/Lick/Figure/Pattern followed by a number)"
+                                system_trace["phrase_title_candidates"].append({
+                                    "text": text,
+                                    "status": "rejected",
+                                    "reason": reason
+                                })
+
+                        # Check tempo
+                        m = tempo_pattern.search(text)
+                        if m:
+                            bpm = int(m.group(1))
+                            if 20 <= bpm <= 400:
+                                tempo_markers[(page_num, sys_idx)] = bpm
+                                system_trace["tempo_bpm"] = bpm
+                                system_trace["tempo_status"] = "detected"
+        except Exception as e:
+            raise e
 
     # Map measure_index -> measure dict for easy lookup
     measure_by_index = {}
@@ -2358,6 +2418,27 @@ def build_staff_timeline_preview(
 
     for preview in timeline_previews:
         key = (preview["page_index"], preview["system_index"])
+        system_trace = None
+        for item in metadata_trace:
+            if item["page_index"] == preview["page_index"] and item["system_index"] == preview["system_index"]:
+                system_trace = item
+                break
+        if system_trace is None:
+            system_trace = {
+                "page_index": preview["page_index"],
+                "system_index": preview["system_index"],
+                "staff_index": preview["staff_index"],
+                "raw_texts": [],
+                "phrase_title_candidates": [],
+                "tempo_bpm": None,
+                "tempo_status": "unknown",
+                "key_fifths": None,
+                "key_status": "unknown",
+                "layout_break": "none",
+                "barline_style": "standard"
+            }
+            metadata_trace.append(system_trace)
+
         if key in section_markers:
             sect_name = section_markers[key]
             first_m = preview["measures"][0]
@@ -2365,13 +2446,50 @@ def build_staff_timeline_preview(
             prev_idx = first_m["measure_index"] - 1
             if prev_idx in measure_by_index:
                 measure_by_index[prev_idx]["barline_style"] = "double"
+                prev_preview = next((p for p in timeline_previews if any(m["measure_index"] == prev_idx for m in p["measures"])), None)
+                if prev_preview:
+                    prev_key = (prev_preview["page_index"], prev_preview["system_index"])
+                    for prev_item in metadata_trace:
+                        if prev_item["page_index"] == prev_key[0] and prev_item["system_index"] == prev_key[1]:
+                            prev_item["barline_style"] = "double"
+
         if key in tempo_markers:
             bpm = tempo_markers[key]
             first_m = preview["measures"][0]
             first_m["tempo_bpm"] = bpm
 
+    # Populate layout breaks and measure anchors in trace
+    sorted_previews = sorted(timeline_previews, key=lambda p: (p["page_index"], p["system_index"], p["staff_index"]))
+    for preview in sorted_previews:
+        page_idx = preview["page_index"]
+        sys_idx = preview["system_index"]
+        staff_idx = preview["staff_index"]
+
+        system_trace = None
+        for item in metadata_trace:
+            if item["page_index"] == page_idx and item["system_index"] == sys_idx:
+                system_trace = item
+                break
+        if system_trace:
+            # Set measure anchors
+            if measure_anchors:
+                anchors_key = (page_idx, sys_idx, staff_idx)
+                system_trace["measure_anchors"] = measure_anchors.get(anchors_key, [])
+
+            # Set layout breaks
+            same_page_previews = [p for p in sorted_previews if p["page_index"] == page_idx]
+            min_sys_idx = min((p["system_index"] for p in same_page_previews), default=0)
+
+            if sys_idx == min_sys_idx:
+                if page_idx > 1:
+                    system_trace["layout_break"] = "page"
+                else:
+                    system_trace["layout_break"] = "none"
+            else:
+                system_trace["layout_break"] = "system"
+
     timeline_previews = sorted(timeline_previews, key=lambda p: (p["page_index"], p["system_index"], p["staff_index"]))
-    return timeline_previews
+    return TimelinePreviewList(timeline_previews, metadata_trace)
 
 
 def build_clef_resolved_pitch_coverage_report(
@@ -2927,6 +3045,7 @@ def run_recognition_on_file(
 
     measure_anchors = extract_measure_anchors_from_text(pdf_path, all_staff_geometries)
 
+    metadata_trace = []
     try:
         timeline_preview = build_staff_timeline_preview(
             outcomes,
@@ -2935,6 +3054,8 @@ def run_recognition_on_file(
             measure_anchors=measure_anchors,
             pdf_path=pdf_path
         )
+        if hasattr(timeline_preview, "metadata_trace"):
+            metadata_trace = timeline_preview.metadata_trace
     except Exception:
         timeline_preview = []
 
@@ -2948,5 +3069,6 @@ def run_recognition_on_file(
         "clef_resolved_pitch_coverage": coverage_report,
         "semantic_candidates": semantic_candidates,
         "timeline_preview": timeline_preview,
-        "detected_meter": detected_meter
+        "detected_meter": detected_meter,
+        "metadata_trace": metadata_trace
     }
