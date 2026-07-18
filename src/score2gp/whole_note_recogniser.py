@@ -1,4 +1,32 @@
 from typing import Any, Iterable
+from dataclasses import dataclass
+
+@dataclass
+class TupletMarkerEvidence:
+    marker_id: str
+    page_index: int
+    system_index: int
+    staff_index: int
+    bbox: list[float]
+    raw_text: str
+
+@dataclass
+class TupletAssociation:
+    marker_id: str
+    candidate_ids: list[str]
+    ratio: str
+    span_id: str
+    geometry_facts: dict
+    status: str
+
+@dataclass
+class MeasureSpan:
+    span_id: str
+    page_index: int
+    system_index: int
+    staff_index: int
+    x0: float
+    x1: float
 
 def shape_candidate_evidence(
     raw_candidates: Iterable[Any],
@@ -1315,7 +1343,170 @@ def map_clef_resolved_staff_pitch(
             except Exception:
                 continue
 
+def build_staff_local_measure_spans(outcomes: list[dict], staff_geometries: list[dict]) -> list[MeasureSpan]:
+    barlines_by_staff = {}
+    for cand in outcomes:
+        if cand.get("symbol_type") in ("barline_candidate", "barline"):
+            key = (cand.get("page_index"), cand.get("system_index"), cand.get("staff_index"))
+            if key not in barlines_by_staff:
+                barlines_by_staff[key] = []
+            x0 = cand.get("bbox", [0])[0] if "bbox" in cand else cand.get("x0", 0)
+            barlines_by_staff[key].append(x0)
+            
+    spans = []
+    for geom in staff_geometries:
+        page = geom.get("page_index")
+        sys_idx = geom.get("system_index")
+        staff_idx = geom.get("staff_index")
+        key = (page, sys_idx, staff_idx)
+        
+        staff_x0 = geom.get("bbox")[0]
+        staff_x1 = geom.get("bbox")[2]
+        
+        bl_xs = barlines_by_staff.get(key, [])
+        bl_xs = sorted(list(set(bl_xs)))
+        
+        boundaries = [staff_x0] + bl_xs + [staff_x1]
+        for i in range(len(boundaries) - 1):
+            left = boundaries[i]
+            right = boundaries[i+1]
+            if right - left < 5.0:
+                continue
+            span_id = f"span_p{page}_s{sys_idx}_st{staff_idx}_{i}"
+            spans.append(MeasureSpan(span_id, page, sys_idx, staff_idx, left, right))
+            
+    return spans
 
+def assign_candidates_to_spans(outcomes: list[dict], spans: list[MeasureSpan]):
+    spans_by_staff = {}
+    for s in spans:
+        key = (s.page_index, s.system_index, s.staff_index)
+        if key not in spans_by_staff:
+            spans_by_staff[key] = []
+        spans_by_staff[key].append(s)
+        
+    for cand in outcomes:
+        page = cand.get("page_index")
+        sys_idx = cand.get("system_index")
+        staff_idx = cand.get("staff_index")
+        if page is None or sys_idx is None or staff_idx is None:
+            continue
+            
+        key = (page, sys_idx, staff_idx)
+        s_list = spans_by_staff.get(key, [])
+        cand_x = cand.get("bbox", [0.0])[0] if "bbox" in cand else cand.get("x0", 0.0)
+        
+        best_span = None
+        for s in s_list:
+            if s.x0 - 5.0 <= cand_x <= s.x1 + 5.0:
+                best_span = s.span_id
+                break
+        if best_span:
+            cand["span_id"] = best_span
+
+def extract_and_apply_tuplet_associations(outcomes: list[dict], staff_geometries: list[dict], all_text_blocks: list[dict]):
+    spans = build_staff_local_measure_spans(outcomes, staff_geometries)
+    assign_candidates_to_spans(outcomes, spans)
+    
+    TICK_MAPPINGS = {
+        "whole_note_candidate": 3840,
+        "half_note_candidate": 1920,
+        "quarter_note_candidate": 960,
+        "eighth_note_candidate": 480,
+        "sixteenth_note_candidate": 240,
+        "thirty_second_note_candidate": 120,
+        "sixty_fourth_note_candidate": 60,
+        "quarter_rest_candidate": 960,
+        "whole_rest_candidate": 3840,
+        "half_rest_candidate": 1920
+    }
+    
+    markers = []
+    for tb in all_text_blocks:
+        if tb["text"].strip() != "3":
+            continue
+        best_staff = None
+        for geom in staff_geometries:
+            if geom.get("page_index") != tb.get("page_index"):
+                continue
+            staff_y0 = geom.get("bbox")[1]
+            staff_y1 = geom.get("bbox")[3]
+            staff_height = staff_y1 - staff_y0
+            staff_space = staff_height / 4.0
+            
+            lane_top = staff_y0 - (2.0 * staff_space)
+            lane_bottom = staff_y0
+            
+            tb_y_center = (tb["bbox"][1] + tb["bbox"][3]) / 2.0
+            
+            if lane_top <= tb_y_center <= lane_bottom:
+                best_staff = geom
+                break
+                
+        if best_staff:
+            marker_id = tb.get("marker_id", f"tuplet_marker_p{tb.get('page_index')}_{tb['bbox'][0]}_{tb['bbox'][1]}")
+            markers.append(TupletMarkerEvidence(
+                marker_id=marker_id,
+                page_index=best_staff["page_index"],
+                system_index=best_staff["system_index"],
+                staff_index=best_staff["staff_index"],
+                bbox=tb["bbox"],
+                raw_text="3"
+            ))
+            
+    associations = []
+    for m in markers:
+        all_events = []
+        for c in outcomes:
+            st = c.get("symbol_type", "")
+            if "note" in st or "rest" in st:
+                if c.get("page_index") == m.page_index and c.get("system_index") == m.system_index and c.get("staff_index") == m.staff_index:
+                    all_events.append(c)
+        
+        all_events.sort(key=lambda x: x.get("bbox", [0])[0] if "bbox" in x else x.get("x0", 0))
+        
+        groups = []
+        for i in range(len(all_events) - 2):
+            g = all_events[i:i+3]
+            if all(c.get("symbol_type") == "eighth_note_candidate" for c in g):
+                span_ids = {c.get("span_id") for c in g}
+                if len(span_ids) == 1 and None not in span_ids:
+                    m_x_center = (m.bbox[0] + m.bbox[2]) / 2.0
+                    first_x = g[0].get("bbox", [0])[0] if "bbox" in g[0] else g[0].get("x0", 0)
+                    first_w = (g[0].get("bbox", [0,0,0,0])[2] - g[0].get("bbox", [0,0,0,0])[0]) if "bbox" in g[0] else 5.0
+                    third_x = g[2].get("bbox", [0])[0] if "bbox" in g[2] else g[2].get("x0", 0)
+                    third_w = (g[2].get("bbox", [0,0,0,0])[2] - g[2].get("bbox", [0,0,0,0])[0]) if "bbox" in g[2] else 5.0
+                    
+                    if first_x - (0.5 * first_w) <= m_x_center <= third_x + (0.5 * third_w):
+                        groups.append(g)
+                        
+        if len(groups) == 1:
+            assoc = TupletAssociation(
+                marker_id=m.marker_id,
+                candidate_ids=[c.get("candidate_id") for c in groups[0]],
+                ratio="3:2",
+                span_id=groups[0][0].get("span_id"),
+                geometry_facts={"marker_x_center": (m.bbox[0] + m.bbox[2])/2.0},
+                status="associated"
+            )
+            associations.append(assoc)
+            for c in groups[0]:
+                dur = TICK_MAPPINGS.get(c.get("symbol_type"), 960)
+                c["duration_ticks"] = int(dur * 2 / 3)
+                c["tuplet_ratio"] = "3:2"
+                c["tuplet_marker_id"] = m.marker_id
+        else:
+            assoc = TupletAssociation(
+                marker_id=m.marker_id,
+                candidate_ids=[],
+                ratio="3:2",
+                span_id="",
+                geometry_facts={"groups_found": len(groups)},
+                status="ambiguous"
+            )
+            associations.append(assoc)
+            
+    return associations
 def build_staff_timeline_preview(
     outcomes: list[dict],
     semantic_candidates: list[dict] | None = None,
@@ -1873,10 +2064,20 @@ def run_recognition_on_file(
     semantic_candidates = []
 
     all_staff_geometries = []
+    all_text_blocks = []
 
     for i in range(len(doc)):
         page = doc[i]
         page_index = i + 1
+
+        text_blocks = [b for b in page.get_text("blocks") if b[4].strip()]
+        for idx, block in enumerate(text_blocks):
+            all_text_blocks.append({
+                "page_index": page_index,
+                "bbox": [block[0], block[1], block[2], block[3]],
+                "text": block[4].strip(),
+                "marker_id": f"tuplet_marker_p{page_index}_{idx}"
+            })
 
         page_diags = extract_notation_diagnostics_dict(page, page_index)
         staves = page_diags.get("staves", [])
@@ -2090,6 +2291,8 @@ def run_recognition_on_file(
 
     map_clef_resolved_staff_pitch(outcomes, explicit_clef="treble" if assume_treble_clef else None, semantic_candidates=semantic_candidates)
     coverage_report = build_clef_resolved_pitch_coverage_report(outcomes, assume_treble_clef=assume_treble_clef, semantic_candidates=semantic_candidates)
+
+    extract_and_apply_tuplet_associations(outcomes, all_staff_geometries, all_text_blocks)
 
     try:
         timeline_preview = build_staff_timeline_preview(outcomes, semantic_candidates, all_staff_geometries)
