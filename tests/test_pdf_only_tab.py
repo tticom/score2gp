@@ -342,42 +342,6 @@ def test_pdf_only_tab_json_report_fields(tmp_path) -> None:
     assert "differences" in diagnostics["semantic_comparison"]
 
 
-def test_pdf_only_tab_require_ref_match_refuses_semantic_mismatch(tmp_path) -> None:
-    out_gp = tmp_path / "output.gp"
-    workdir = tmp_path / "workdir"
-    json_report = tmp_path / "report.json"
-
-    result = CliRunner().invoke(
-        app,
-        [
-            "convert",
-            "--pdf",
-            str(SIMPLE_PDF),
-            "--pdf-only-tab",
-            "--out",
-            str(out_gp),
-            "--work-dir",
-            str(workdir),
-            "--json-report",
-            str(json_report),
-            "--ref-gp",
-            str(TEMPLATE_GP),
-            "--require-ref-match",
-        ],
-    )
-
-    assert result.exit_code == 6, result.output
-    assert out_gp.exists()
-    report = json.loads(json_report.read_text(encoding="utf-8"))
-    assert report["status"] == "failed"
-    assert report["stage"] == "semantic-reference-comparison"
-    assert report["refusal_code"] == "gp_semantic_reference_mismatch"
-    assert report["output_written"] is True
-    comparison = report["pdf_only_diagnostics"]["semantic_comparison"]
-    assert comparison["matches"] is False
-    assert comparison["differences"]
-
-
 def test_pdf_only_preserves_page_system_bar_order(tmp_path) -> None:
     tabraw_data = {
         "schema_version": "tabraw.v0.1",
@@ -790,3 +754,4 @@ def test_pdf_only_never_groups_chords_across_source_bar_identity(tmp_path) -> No
     assert score.bars[0].events[0].notes[0].fret == 5
     assert len(score.bars[1].events) == 1
     assert score.bars[1].events[0].notes[0].fret == 7
+

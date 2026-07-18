@@ -239,7 +239,6 @@ def _format_diagnostics_report(data: dict) -> str:
         staff_outcomes = [o for o in outcomes if o.get("page_index") == p and o.get("system_index") == sy and o.get("staff_index") == st]
 
         qn = sum(1 for o in staff_outcomes if o.get("symbol_type") == "quarter_note_candidate")
-        en = sum(1 for o in staff_outcomes if o.get("symbol_type") == "eighth_note_candidate")
         hn = sum(1 for o in staff_outcomes if o.get("symbol_type") == "half_note_candidate")
         wn = sum(1 for o in staff_outcomes if o.get("symbol_type") == "whole_note_candidate")
 
@@ -249,7 +248,6 @@ def _format_diagnostics_report(data: dict) -> str:
 
         lines.append("Note / Rest Candidates:")
         lines.append(f"- Quarter Notes: {qn}")
-        lines.append(f"- Eighth Notes: {en}")
         lines.append(f"- Half Notes: {hn}")
         lines.append(f"- Whole Notes: {wn}")
         lines.append(f"- Quarter Rests: {qr}")
@@ -288,18 +286,10 @@ def _format_diagnostics_report(data: dict) -> str:
                     for v in sorted(voices.keys()):
                         v_name = "Voice 1 (Upper)" if v == 1 else f"Voice {v} (Lower)"
                         ev_strs = []
-                        
-                        # Group by start_tick to identify chords
-                        grouped_events = {}
                         for ev in voices[v]:
-                            st = ev.get("start_tick", 0)
-                            grouped_events.setdefault(st, []).append(ev)
-                            
-                        for st in sorted(grouped_events.keys()):
-                            evs = grouped_events[st]
-                            stype = evs[0].get("symbol_type", "")
-                            dur = evs[0].get("duration_ticks", 0)
-                            
+                            stype = ev.get("symbol_type", "")
+                            dur = ev.get("duration_ticks", 0)
+                            pitch = ev.get("resolved_pitch")
                             if "rest" in stype:
                                 if stype == "padding_rest":
                                     name = "Padding Rest"
@@ -307,17 +297,8 @@ def _format_diagnostics_report(data: dict) -> str:
                                     name = stype.replace("_candidate", "").replace("_", " ").title()
                                 ev_strs.append(f"--[{name}, {dur}]--")
                             else:
-                                pitches = []
-                                for ev in evs:
-                                    p = ev.get("resolved_pitch")
-                                    pitches.append(p if p else "?")
-                                
-                                if len(pitches) == 1:
-                                    ev_strs.append(f"--({pitches[0]}, {dur})--")
-                                else:
-                                    chord_str = ", ".join(pitches)
-                                    ev_strs.append(f"--[{chord_str}, {dur}]--")
-                                    
+                                pitch_str = pitch if pitch else "?"
+                                ev_strs.append(f"--({pitch_str}, {dur})--")
                         lines.append(f"  {v_name}: |" + "|".join(ev_strs) + "|")
         lines.append("")
     return "\n".join(lines).strip()
@@ -673,16 +654,11 @@ def convert_command(
     editable_draft: bool = typer.Option(False, "--editable-draft", help="Generate an editable GP draft with defaulted rhythms and tuning from PDF tab extraction."),
     require_precise_timing: bool = typer.Option(False, "--require-precise-timing", help="Reject input if reliable precise timing evidence is missing."),
     ref_gp: Optional[Path] = typer.Option(None, "--ref-gp", help="Path to optional reference GP package for semantic comparison"),
-    require_ref_match: bool = typer.Option(False, "--require-ref-match", help="Fail conversion if --ref-gp semantic comparison does not match."),
 ) -> None:
     """Run the complete conversion pipeline: extraction, alignment, IR generation, and GP7 package writing."""
     actual_work_dir = work_dir or workdir
     if actual_work_dir is None:
         typer.echo("Error: --work-dir or --workdir option is required.", err=True)
-        raise typer.Exit(1)
-
-    if require_ref_match and ref_gp is None:
-        typer.echo("Error: --require-ref-match requires --ref-gp.", err=True)
         raise typer.Exit(1)
 
     pdf_only_diag_payload = None
@@ -1077,60 +1053,6 @@ def convert_command(
     write_warnings(actual_work_dir / "warnings.json", warnings)
     write_conversion_report(actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary)
 
-    summary_counts = {
-        "bar_count": len(score.bars) if score else 0,
-        "event_count": sum(len(bar.events) for bar in score.bars) if score else 0,
-        "warning_count": len(score.warnings) if score else 0,
-        "matched_candidate_count": diagnostics.matched_candidate_count if diagnostics else 0,
-        "unmatched_musicxml_event_count": diagnostics.unmatched_musicxml_event_count if diagnostics else 0,
-        "unmatched_tabraw_candidate_count": diagnostics.unmatched_tabraw_candidate_count if diagnostics else 0,
-    }
-    semantic_comparison = None
-    if (pdf_only_tab or editable_draft) and ref_gp:
-        try:
-            from .gp_package import compare_gp
-            comp = compare_gp(ref_gp, out)
-            semantic_comparison = {
-                "matches": comp["matches"],
-                "differences": comp["differences"],
-            }
-        except Exception as exc:
-            semantic_comparison = {
-                "matches": False,
-                "error": f"Semantic comparison failed: {exc}",
-            }
-
-    if require_ref_match and semantic_comparison is not None and not semantic_comparison.get("matches"):
-        pdf_only_diag_payload = None
-        if pdf_only_tab or editable_draft:
-            pdf_only_diag_payload = {
-                "pdf_grouping_status": "safe",
-                "inferred_rhythm_status": "defaulted_placeholder" if editable_draft else "applied",
-                "gp_package_written": True,
-                "semantic_comparison": semantic_comparison,
-            }
-        if json_report:
-            _write_convert_report(
-                report_path=json_report,
-                status="failed",
-                stage="semantic-reference-comparison",
-                exit_code=6,
-                work_dir=actual_work_dir,
-                error_type="SemanticReferenceMismatch",
-                refusal_code="gp_semantic_reference_mismatch",
-                recommended_action=(
-                    "Generated GP package does not match the reference GP semantic summary; "
-                    "do not promote this artifact as a successful transcription."
-                ),
-                output_path=out,
-                output_written=out.exists(),
-                strict=strict,
-                summary_counts=summary_counts,
-                pdf_only_diagnostics=pdf_only_diag_payload,
-            )
-        typer.echo("Error: generated GP package does not match --ref-gp semantic summary.", err=True)
-        raise typer.Exit(6)
-
     # Write successful JSON report
     if json_report:
         if pdf_only_tab or editable_draft:
@@ -1139,8 +1061,19 @@ def convert_command(
                 "inferred_rhythm_status": "defaulted_placeholder" if editable_draft else "applied",
                 "gp_package_written": True,
             }
-            if semantic_comparison is not None:
-                pdf_only_diag_payload["semantic_comparison"] = semantic_comparison
+            if ref_gp:
+                try:
+                    from .gp_package import compare_gp
+                    comp = compare_gp(ref_gp, out)
+                    pdf_only_diag_payload["semantic_comparison"] = {
+                        "matches": comp["matches"],
+                        "differences": comp["differences"],
+                    }
+                except Exception as exc:
+                    pdf_only_diag_payload["semantic_comparison"] = {
+                        "matches": False,
+                        "error": f"Semantic comparison failed: {exc}"
+                    }
         _write_convert_report(
             report_path=json_report,
             status="success",
@@ -1150,7 +1083,14 @@ def convert_command(
             output_path=out,
             output_written=True,
             strict=strict,
-            summary_counts=summary_counts,
+            summary_counts={
+                "bar_count": len(score.bars) if score else 0,
+                "event_count": sum(len(bar.events) for bar in score.bars) if score else 0,
+                "warning_count": len(score.warnings) if score else 0,
+                "matched_candidate_count": diagnostics.matched_candidate_count if diagnostics else 0,
+                "unmatched_musicxml_event_count": diagnostics.unmatched_musicxml_event_count if diagnostics else 0,
+                "unmatched_tabraw_candidate_count": diagnostics.unmatched_tabraw_candidate_count if diagnostics else 0,
+            },
             pdf_only_diagnostics=pdf_only_diag_payload
         )
 
@@ -1267,3 +1207,4 @@ def notation_sixty_fourth_note_export_command(
 
 if __name__ == "__main__":
     app()
+
