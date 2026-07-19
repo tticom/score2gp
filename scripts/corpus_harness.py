@@ -120,16 +120,17 @@ def resolve_score2gp_cmd() -> List[str]:
     """Finds the actual score2gp executable command list."""
     import shutil
     from pathlib import Path
-    
-    score2gp_bin = shutil.which("score2gp")
-    if score2gp_bin:
-        return [score2gp_bin, "convert"]
-        
-    # Use the existing native WSL CLI entrypoint from the committed environment
+
+    # Priority 1: Use the existing native WSL CLI entrypoint from the committed environment
     venv_bin = Path(__file__).resolve().parent.parent / ".venv" / "bin" / "score2gp"
     if venv_bin.exists():
         return [str(venv_bin), "convert"]
-        
+
+    # Priority 2: native system executable (WSL/Linux PATH)
+    score2gp_bin = shutil.which("score2gp")
+    if score2gp_bin:
+        return [score2gp_bin, "convert"]
+
     raise RuntimeError("Native score2gp CLI entrypoint not found. Ensure .venv is initialized.")
 
 

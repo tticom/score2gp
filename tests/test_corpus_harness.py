@@ -17,26 +17,27 @@ from scripts.corpus_harness import run_pipeline_for_input, resolve_score2gp_cmd
 
 
 def test_resolve_score2gp_cmd():
-    with patch("shutil.which") as mock_which:
-        mock_which.return_value = "/mock/bin/score2gp"
+    with patch("pathlib.Path.exists") as mock_exists:
+        # Test Priority 1: .venv/bin/score2gp
+        mock_exists.return_value = True
         cmd = resolve_score2gp_cmd()
-        assert cmd == ["/mock/bin/score2gp", "convert"]
+        assert cmd[1] == "convert"
+        assert "score2gp" in cmd[0]
 
-        mock_which.return_value = None
-        with patch("pathlib.Path.exists") as mock_exists:
-            mock_exists.return_value = True
+        # Test Priority 2: shutil.which fallback
+        mock_exists.return_value = False
+        with patch("shutil.which") as mock_which:
+            mock_which.return_value = "/mock/bin/score2gp"
             cmd = resolve_score2gp_cmd()
-            assert cmd[1] == "convert"
-            assert "score2gp" in cmd[0]
+            assert cmd == ["/mock/bin/score2gp", "convert"]
 
 def test_real_invocation_smoke():
     """Real invocation smoke test verifying the CLI entrypoint can execute successfully."""
     cmd = resolve_score2gp_cmd()
-    
-    # We replace 'convert' with '--help' to ensure we do a clean fast-exit test 
+
+    # We replace 'convert' with '--help' to ensure we do a clean fast-exit test
     # instead of a conversion run.
     smoke_cmd = [cmd[0], "convert", "--help"]
-    
     import subprocess
     result = subprocess.run(
         smoke_cmd,
@@ -44,7 +45,7 @@ def test_real_invocation_smoke():
         text=True,
         check=False
     )
-    
+
     # Assert successful invocation
     assert result.returncode == 0
     assert "Usage: score2gp convert" in result.stdout
