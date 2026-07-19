@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -498,6 +499,20 @@ def _convert_exit_code_for_error(exc: Exception) -> int:
     return 1
 
 
+def _get_mxl_info(musicxml_path: Optional[Path], was_supplied: bool) -> dict:
+    if not musicxml_path or not musicxml_path.exists():
+        return {"provenance": "absent"}
+    import hashlib
+    h = hashlib.sha256()
+    with open(musicxml_path, "rb") as f:
+        for b in iter(lambda: f.read(4096), b""): h.update(b)
+    return {
+        "path": str(musicxml_path.resolve()),
+        "sha256": h.hexdigest(),
+        "generation_provenance": "supplied" if was_supplied else "generated"
+    }
+
+
 def _write_convert_report(
     report_path: Path,
     status: str,
@@ -512,6 +527,7 @@ def _write_convert_report(
     strict: bool = True,
     summary_counts: Optional[dict] = None,
     pdf_only_diagnostics: Optional[dict] = None,
+    musicxml_sidecar_info: Optional[dict] = None,
 ) -> None:
     """Writes a consolidated, private-safe execution JSON report."""
     report = {
@@ -532,6 +548,9 @@ def _write_convert_report(
         },
         "strict": strict,
         "summary_counts": summary_counts or {},
+        "python_import_path": str(Path(__file__).parent.resolve()),
+        "child_python_executable_path": sys.executable,
+        "musicxml_sidecar_info": musicxml_sidecar_info,
     }
     if pdf_only_diagnostics is not None:
         report["pdf_only_diagnostics"] = pdf_only_diagnostics
@@ -662,7 +681,8 @@ def convert_command(
         raise typer.Exit(1)
 
     pdf_only_diag_payload = None
-
+    supplied_musicxml = musicxml is not None
+    mxl_info = _get_mxl_info(musicxml, supplied_musicxml)
     # Validate PDF file existence early
     if not pdf.exists():
         typer.echo(f"Error: Input PDF file not found at {pdf}", err=True)
@@ -678,6 +698,7 @@ def convert_command(
                 recommended_action=f"Provide a valid PDF path. Checked path: {pdf}",
                 output_written=False,
                 strict=strict,
+                    musicxml_sidecar_info=mxl_info,
             )
         raise typer.Exit(1)
 
@@ -705,6 +726,7 @@ def convert_command(
                 recommended_action=f"Ensure the PDF is a valid born-digital document. Error: {str(exc)}",
                 output_written=False,
                 strict=strict,
+                    musicxml_sidecar_info=mxl_info,
             )
         raise typer.Exit(1)
 
@@ -767,6 +789,7 @@ def convert_command(
                 recommended_action=f"Ensure the PDF contains extractable vector tab geometry. Error: {str(exc)}",
                 output_written=False,
                 strict=strict,
+                    musicxml_sidecar_info=mxl_info,
             )
         raise typer.Exit(1)
     # Stage 2: Check for MusicXML sidecar requirement
@@ -793,6 +816,7 @@ def convert_command(
                     recommended_action="Provide a matching MusicXML sidecar before attempting build-ir.",
                     output_written=False,
                     strict=strict,
+                    musicxml_sidecar_info=mxl_info,
                 )
             raise typer.Exit(1)
 
@@ -817,6 +841,7 @@ def convert_command(
                     recommended_action=f"Provide a valid MusicXML path. Checked path: {musicxml}",
                     output_written=False,
                     strict=strict,
+                    musicxml_sidecar_info=mxl_info,
                 )
             raise typer.Exit(1)
 
@@ -860,10 +885,13 @@ def convert_command(
                     recommended_action=f"Verify alignment parameters. Error: {str(exc)}",
                     output_written=False,
                     strict=strict,
+                    musicxml_sidecar_info=mxl_info,
                 )
             raise typer.Exit(1)
 
     # Stage 3: ScoreIR Generation
+    # Update mxl_info in case orchestration generated it
+    mxl_info = _get_mxl_info(musicxml, supplied_musicxml)
     score = None
     diagnostics = None
     ir_path = actual_work_dir / "score.ir.json"
@@ -963,6 +991,7 @@ def convert_command(
                 recommended_action=recommended_action,
                 output_written=False,
                 strict=strict,
+                    musicxml_sidecar_info=mxl_info,
                 summary_counts={
                     "total_candidates": tab_summary.get("candidates_count", 0) if isinstance(tab_summary, dict) else 0,
                     "playable_candidates": sum(1 for c in tab_summary.get("candidates", []) if c.get("parsed_fret") is not None) if isinstance(tab_summary, dict) else 0
@@ -993,6 +1022,7 @@ def convert_command(
                 recommended_action=f"ScoreIR generation failed. Error: {str(exc)}",
                 output_written=False,
                 strict=strict,
+                    musicxml_sidecar_info=mxl_info,
                 pdf_only_diagnostics=pdf_only_diag_payload
             )
         raise typer.Exit(1)
@@ -1045,6 +1075,7 @@ def convert_command(
                     recommended_action=f"Check the ScoreIR output and template validity. Error: {str(exc)}",
                     output_written=False,
                     strict=strict,
+                    musicxml_sidecar_info=mxl_info,
                     pdf_only_diagnostics=pdf_only_diag_payload
                 )
             raise typer.Exit(5)
@@ -1083,6 +1114,7 @@ def convert_command(
             output_path=out,
             output_written=True,
             strict=strict,
+                    musicxml_sidecar_info=mxl_info,
             summary_counts={
                 "bar_count": len(score.bars) if score else 0,
                 "event_count": sum(len(bar.events) for bar in score.bars) if score else 0,
