@@ -93,7 +93,7 @@ def get_file_sha256(path: Path) -> Optional[str]:
 def anonymize_name(path: Path) -> str:
     """Anonymize private input filenames to prevent private data leakage."""
     name = path.name.lower()
-    fallback_hash = hashlib.sha256(name.encode()).hexdigest()[:8]
+    fallback_hash = hashlib.sha256(name.encode()).hexdigest()
     return f"private_input_{fallback_hash}"
 
 

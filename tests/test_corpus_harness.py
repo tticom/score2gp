@@ -53,7 +53,7 @@ def test_real_invocation_smoke():
     assert "convert" in clean_stdout.lower()
 
 def test_anonymize_name_collision():
-    """Ensure two different unknown inputs generate unique deterministic labels."""
+    """Ensure two different unknown inputs generate deterministic, collision-resistant labels."""
     paths = [
         Path("Derek Trucks BB King.pdf"),
         Path("Lick in All 5 CAGED Shapes start on the 5 _ guitar tab creator.pdf"),
