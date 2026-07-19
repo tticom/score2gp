@@ -17,8 +17,37 @@ from scripts.corpus_harness import run_pipeline_for_input, resolve_score2gp_cmd
 
 
 def test_resolve_score2gp_cmd():
+    with patch("shutil.which") as mock_which:
+        mock_which.return_value = "/mock/bin/score2gp"
+        cmd = resolve_score2gp_cmd()
+        assert cmd == ["/mock/bin/score2gp", "convert"]
+
+        mock_which.return_value = None
+        with patch("pathlib.Path.exists") as mock_exists:
+            mock_exists.return_value = True
+            cmd = resolve_score2gp_cmd()
+            assert cmd[1] == "convert"
+            assert "score2gp" in cmd[0]
+
+def test_real_invocation_smoke():
+    """Real invocation smoke test verifying the CLI entrypoint can execute successfully."""
     cmd = resolve_score2gp_cmd()
-    assert cmd == [sys.executable, "-m", "score2gp", "convert"]
+    
+    # We replace 'convert' with '--help' to ensure we do a clean fast-exit test 
+    # instead of a conversion run.
+    smoke_cmd = [cmd[0], "convert", "--help"]
+    
+    import subprocess
+    result = subprocess.run(
+        smoke_cmd,
+        capture_output=True,
+        text=True,
+        check=False
+    )
+    
+    # Assert successful invocation
+    assert result.returncode == 0
+    assert "Usage: score2gp convert" in result.stdout
 
 
 
@@ -205,7 +234,7 @@ def test_run_pipeline_missing_report(mock_run, tmp_path):
     provenance_path = output_base / label / "provenance_record.json"
     prov_data = json.loads(provenance_path.read_text())
 
-    assert prov_data["cli_executable_path"] == sys.executable
+    assert prov_data["cli_executable_path"] == resolve_score2gp_cmd()[0]
     assert prov_data["child_python_executable_path"] == "unknown"
     assert prov_data["python_import_path"] == "unknown"
     assert prov_data["stage"] == "runtime_probe_failed"

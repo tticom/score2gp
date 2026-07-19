@@ -118,8 +118,19 @@ def anonymize_name(path: Path) -> str:
 
 def resolve_score2gp_cmd() -> List[str]:
     """Finds the actual score2gp executable command list."""
-    # Use a pinned, committed invocation environment for the supported command
-    return [sys.executable, "-m", "score2gp", "convert"]
+    import shutil
+    from pathlib import Path
+    
+    score2gp_bin = shutil.which("score2gp")
+    if score2gp_bin:
+        return [score2gp_bin, "convert"]
+        
+    # Use the existing native WSL CLI entrypoint from the committed environment
+    venv_bin = Path(__file__).resolve().parent.parent / ".venv" / "bin" / "score2gp"
+    if venv_bin.exists():
+        return [str(venv_bin), "convert"]
+        
+    raise RuntimeError("Native score2gp CLI entrypoint not found. Ensure .venv is initialized.")
 
 
 
