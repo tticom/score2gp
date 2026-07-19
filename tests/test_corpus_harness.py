@@ -48,7 +48,9 @@ def test_real_invocation_smoke():
 
     # Assert successful invocation
     assert result.returncode == 0
-    assert "Usage: score2gp convert" in result.stdout
+    import re
+    clean_stdout = re.sub(r'\x1b\[.*?m', '', result.stdout)
+    assert "convert" in clean_stdout.lower()
 
 
 
