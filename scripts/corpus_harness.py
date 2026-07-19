@@ -112,7 +112,8 @@ def anonymize_name(path: Path) -> str:
 
             return f"private_input_custom_{safe_suffix}"
 
-    return "private_input_custom"
+    fallback_hash = hashlib.sha256(name.encode()).hexdigest()[:8]
+    return f"private_input_custom_{fallback_hash}"
 
 
 

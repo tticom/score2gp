@@ -12,7 +12,7 @@ import sys
 
 
 
-from scripts.corpus_harness import run_pipeline_for_input, resolve_score2gp_cmd
+from scripts.corpus_harness import run_pipeline_for_input, resolve_score2gp_cmd, anonymize_name
 
 
 
@@ -51,6 +51,18 @@ def test_real_invocation_smoke():
     import re
     clean_stdout = re.sub(r'\x1b\[.*?m', '', result.stdout)
     assert "convert" in clean_stdout.lower()
+
+def test_anonymize_name_collision():
+    """Ensure two different unknown inputs generate unique deterministic labels."""
+    path1 = Path("unknown_input_a.pdf")
+    path2 = Path("unknown_input_b.pdf")
+
+    label1 = anonymize_name(path1)
+    label2 = anonymize_name(path2)
+
+    assert label1.startswith("private_input_custom_")
+    assert label2.startswith("private_input_custom_")
+    assert label1 != label2
 
 
 
