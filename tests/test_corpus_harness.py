@@ -26,7 +26,7 @@ def test_resolve_score2gp_cmd():
 
         assert cmd == ["/mock/bin/score2gp", "convert"]
 
-        
+
 
         mock_which.return_value = None
 
@@ -44,17 +44,17 @@ def test_run_pipeline_for_input(mock_run, tmp_path):
 
     pdf_path.touch()
 
-    
+
 
     musicxml_path = tmp_path / "test_input.musicxml"
 
     musicxml_path.write_text("<score-partwise/>")
 
-    
+
 
     output_base = tmp_path / "work"
 
-    
+
 
     def side_effect(cmd, *args, **kwargs):
 
@@ -116,15 +116,15 @@ def test_run_pipeline_for_input(mock_run, tmp_path):
 
         return mock_res
 
-        
+
 
     mock_run.side_effect = side_effect
 
-    
+
 
     summary = run_pipeline_for_input(pdf_path, musicxml_path, output_base)
 
-    
+
 
     # Assert sidecar handling
 
@@ -132,7 +132,7 @@ def test_run_pipeline_for_input(mock_run, tmp_path):
 
     assert summary["output_written"] is True
 
-    
+
 
     label = summary["input_label"]
 
@@ -140,11 +140,11 @@ def test_run_pipeline_for_input(mock_run, tmp_path):
 
     assert provenance_path.exists()
 
-    
+
 
     prov_data = json.loads(provenance_path.read_text())
 
-    
+
 
     # Assert actual-runtime capture
 
@@ -152,13 +152,13 @@ def test_run_pipeline_for_input(mock_run, tmp_path):
 
     assert prov_data["python_import_path"] == "/mock/lib/python3.10/site-packages/score2gp"
 
-    
+
 
     # Assert output/report paths
 
     assert prov_data["output_report_path"] == str((output_base / label).resolve())
 
-    
+
 
     # Assert unknown counts are correctly passed
 
@@ -168,7 +168,7 @@ def test_run_pipeline_for_input(mock_run, tmp_path):
 
     assert prov_data["structural_counts"]["bars"] == 10
 
-    
+
 
     # Assert sidecar hashing/provenance from report
 
@@ -190,7 +190,7 @@ def test_run_pipeline_for_input(mock_run, tmp_path):
 
             break
 
-            
+
 
     assert score2gp_call is not None
 
@@ -199,4 +199,3 @@ def test_run_pipeline_for_input(mock_run, tmp_path):
     assert "--allow-remediation" not in score2gp_call
 
     assert "--allow-skip-unboxed-systems" not in score2gp_call
-
