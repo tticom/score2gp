@@ -91,29 +91,10 @@ def get_file_sha256(path: Path) -> Optional[str]:
 
 
 def anonymize_name(path: Path) -> str:
-
     """Anonymize private input filenames to prevent private data leakage."""
-
     name = path.name.lower()
-
-    if "derek" in name or "trucks" in name:
-
-        return "private_input_1"
-
-    if "caged" in name or "guitar tab creator" in name:
-
-        return "private_input_2"
-
-    for suffix in ["lesson-3", "lesson-4", "lesson-5", "lesson-6", "lesson-7", "melodic soloing"]:
-
-        if suffix in name:
-
-            safe_suffix = suffix.replace(" ", "_").replace("-", "_")
-
-            return f"private_input_custom_{safe_suffix}"
-
     fallback_hash = hashlib.sha256(name.encode()).hexdigest()[:8]
-    return f"private_input_custom_{fallback_hash}"
+    return f"private_input_{fallback_hash}"
 
 
 

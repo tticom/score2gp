@@ -54,15 +54,22 @@ def test_real_invocation_smoke():
 
 def test_anonymize_name_collision():
     """Ensure two different unknown inputs generate unique deterministic labels."""
-    path1 = Path("unknown_input_a.pdf")
-    path2 = Path("unknown_input_b.pdf")
+    paths = [
+        Path("Derek Trucks BB King.pdf"),
+        Path("Lick in All 5 CAGED Shapes start on the 5 _ guitar tab creator.pdf"),
+        Path("Lesson-3.pdf"),
+        Path("Lesson-4.pdf"),
+        Path("Melodic Soloing Masterclass.pdf"),
+        Path("unknown_input_a.pdf"),
+        Path("unknown_input_b.pdf")
+    ]
 
-    label1 = anonymize_name(path1)
-    label2 = anonymize_name(path2)
+    labels = [anonymize_name(p) for p in paths]
 
-    assert label1.startswith("private_input_custom_")
-    assert label2.startswith("private_input_custom_")
-    assert label1 != label2
+    for label in labels:
+        assert label.startswith("private_input_")
+
+    assert len(labels) == len(set(labels))
 
 
 
