@@ -499,6 +499,20 @@ def _convert_exit_code_for_error(exc: Exception) -> int:
     return 1
 
 
+def _get_mxl_info(musicxml_path: Optional[Path], was_supplied: bool) -> dict:
+    if not musicxml_path or not musicxml_path.exists():
+        return {"provenance": "absent"}
+    import hashlib
+    h = hashlib.sha256()
+    with open(musicxml_path, "rb") as f:
+        for b in iter(lambda: f.read(4096), b""): h.update(b)
+    return {
+        "path": str(musicxml_path.resolve()),
+        "sha256": h.hexdigest(),
+        "generation_provenance": "supplied" if was_supplied else "generated"
+    }
+
+
 def _write_convert_report(
     report_path: Path,
     status: str,
@@ -535,7 +549,7 @@ def _write_convert_report(
         "strict": strict,
         "summary_counts": summary_counts or {},
         "python_import_path": str(Path(__file__).parent.resolve()),
-        "cli_executable_path": sys.executable,
+        "child_python_executable_path": sys.executable,
         "musicxml_sidecar_info": musicxml_sidecar_info,
     }
     if pdf_only_diagnostics is not None:
@@ -667,19 +681,8 @@ def convert_command(
         raise typer.Exit(1)
 
     pdf_only_diag_payload = None
-
-    mxl_info = None
-    if musicxml and musicxml.exists():
-        import hashlib
-        h = hashlib.sha256()
-        with open(musicxml, "rb") as f:
-            for b in iter(lambda: f.read(4096), b""): h.update(b)
-        mxl_info = {
-            "path": str(musicxml.resolve()),
-            "sha256": h.hexdigest(),
-            "generation_provenance": "supplied"
-        }
-
+    supplied_musicxml = musicxml is not None
+    mxl_info = _get_mxl_info(musicxml, supplied_musicxml)
     # Validate PDF file existence early
     if not pdf.exists():
         typer.echo(f"Error: Input PDF file not found at {pdf}", err=True)
@@ -887,6 +890,8 @@ def convert_command(
             raise typer.Exit(1)
 
     # Stage 3: ScoreIR Generation
+    # Update mxl_info in case orchestration generated it
+    mxl_info = _get_mxl_info(musicxml, supplied_musicxml)
     score = None
     diagnostics = None
     ir_path = actual_work_dir / "score.ir.json"

@@ -117,17 +117,8 @@ def anonymize_name(path: Path) -> str:
 
 
 def resolve_score2gp_cmd() -> List[str]:
-
     """Finds the actual score2gp executable command list."""
-
-    cli_path = shutil.which("score2gp")
-
-    if cli_path:
-
-        return [cli_path, "convert"]
-
-    # Fallback to module execution if installed in developer mode but script not in PATH
-
+    # Use a pinned, committed invocation environment for the supported command
     return [sys.executable, "-m", "score2gp", "convert"]
 
 
@@ -180,10 +171,11 @@ def run_pipeline_for_input(
 
     # Run command
 
+    import os
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(PROJECT_ROOT / "src")
     print(f"Running command: {' '.join(cmd)}")
-
-    result = subprocess.run(cmd, capture_output=True, text=True)
-
+    result = subprocess.run(cmd, env=env, capture_output=True, text=True)
     exit_status = result.returncode
 
 
@@ -191,77 +183,50 @@ def run_pipeline_for_input(
     # Read json report
 
     report_data = {}
-
     if json_report_path.exists():
-
         try:
-
             report_data = json.loads(json_report_path.read_text(encoding="utf-8"))
-
         except json.JSONDecodeError:
-
             pass
 
-
-
-    stage = report_data.get("stage", "unknown")
+    cli_executable_path = cmd[0]
+    if report_data:
+        stage = report_data.get("stage", "unknown")
+        child_python_executable_path = report_data.get("child_python_executable_path", "unknown")
+        python_import_path = report_data.get("python_import_path", "unknown")
+        mxl_info = report_data.get("musicxml_sidecar_info")
+    else:
+        stage = "runtime_probe_failed"
+        child_python_executable_path = "unknown"
+        python_import_path = "unknown"
+        mxl_info = {"provenance": "absent"}
 
     refusal_code = report_data.get("refusal_code")
-
     output_written = report_data.get("output_written", False)
-
     summary_counts = report_data.get("summary_counts", {})
-
-
-
-    mxl_info = report_data.get("musicxml_sidecar_info")
-
-
-
-    cli_executable_path = report_data.get("cli_executable_path", shutil.which("score2gp") or sys.executable)
-
-    python_import_path = report_data.get("python_import_path", str(Path(score2gp.__file__).resolve()))
 
     classification = "pdf-tab-musicxml" if musicxml_path else "pdf-tab-only"
 
-
-
     structural_counts = {
-
         "bars": summary_counts.get("bar_count", "unknown"),
-
         "events": summary_counts.get("event_count", "unknown"),
-
         "source_rests": "unknown",
-
         "emitted_rests": "unknown",
-
         "warning_count": summary_counts.get("warning_count", "unknown"),
-
     }
 
-
-
     provenance = RuntimeProvenanceRecord(
-
         product_sha=get_git_sha(),
-
         is_dirty=is_git_dirty(),
-
         cli_executable_path=cli_executable_path,
-
+        child_python_executable_path=child_python_executable_path,
         python_import_path=python_import_path,
-
-        exact_command=" ".join(cmd),
-
+        exact_command=cmd,
         input_classification=classification,
-
         musicxml_sidecar_info=mxl_info,
-
-        output_report_path=str(out_dir.resolve()),
-
+        output_report_path=str(json_report_path.resolve()),
+        gp_output_path=str(gp_out_path.resolve()),
         exit_status=exit_status,
-
         output_written=output_written,
 
         stage=stage,

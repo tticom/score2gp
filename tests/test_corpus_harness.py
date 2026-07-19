@@ -17,22 +17,8 @@ from scripts.corpus_harness import run_pipeline_for_input, resolve_score2gp_cmd
 
 
 def test_resolve_score2gp_cmd():
-
-    with patch("shutil.which") as mock_which:
-
-        mock_which.return_value = "/mock/bin/score2gp"
-
-        cmd = resolve_score2gp_cmd()
-
-        assert cmd == ["/mock/bin/score2gp", "convert"]
-
-
-
-        mock_which.return_value = None
-
-        cmd = resolve_score2gp_cmd()
-
-        assert cmd == [sys.executable, "-m", "score2gp", "convert"]
+    cmd = resolve_score2gp_cmd()
+    assert cmd == [sys.executable, "-m", "score2gp", "convert"]
 
 
 
@@ -81,7 +67,7 @@ def test_run_pipeline_for_input(mock_run, tmp_path):
                 "output_written": True,
 
                 "cli_executable_path": "/mock/bin/score2gp",
-
+                "child_python_executable_path": "/mock/bin/python3",
                 "python_import_path": "/mock/lib/python3.10/site-packages/score2gp",
 
                 "summary_counts": {
@@ -147,16 +133,14 @@ def test_run_pipeline_for_input(mock_run, tmp_path):
 
 
     # Assert actual-runtime capture
-
-    assert prov_data["cli_executable_path"] == "/mock/bin/score2gp"
-
+    assert prov_data["child_python_executable_path"] == "/mock/bin/python3"
     assert prov_data["python_import_path"] == "/mock/lib/python3.10/site-packages/score2gp"
 
 
 
     # Assert output/report paths
-
-    assert prov_data["output_report_path"] == str((output_base / label).resolve())
+    assert prov_data["output_report_path"] == str((output_base / label / "convert-report.json").resolve())
+    assert prov_data["gp_output_path"] == str((output_base / label / "smoke.gp").resolve())
 
 
 
@@ -197,5 +181,32 @@ def test_run_pipeline_for_input(mock_run, tmp_path):
     assert "--pdf" in score2gp_call
 
     assert "--allow-remediation" not in score2gp_call
-
     assert "--allow-skip-unboxed-systems" not in score2gp_call
+
+@patch("subprocess.run")
+def test_run_pipeline_missing_report(mock_run, tmp_path):
+    pdf_path = tmp_path / "test_input.pdf"
+    pdf_path.touch()
+
+    output_base = tmp_path / "work"
+
+    def side_effect(cmd, *args, **kwargs):
+        mock_res = MagicMock()
+        mock_res.returncode = 1
+        mock_res.stdout = "mock stdout"
+        mock_res.stderr = "Traceback ModuleNotFoundError"
+        return mock_res
+
+    mock_run.side_effect = side_effect
+
+    summary = run_pipeline_for_input(pdf_path, None, output_base)
+
+    label = summary["input_label"]
+    provenance_path = output_base / label / "provenance_record.json"
+    prov_data = json.loads(provenance_path.read_text())
+
+    assert prov_data["cli_executable_path"] == sys.executable
+    assert prov_data["child_python_executable_path"] == "unknown"
+    assert prov_data["python_import_path"] == "unknown"
+    assert prov_data["stage"] == "runtime_probe_failed"
+    assert prov_data["musicxml_sidecar_info"] == {"provenance": "absent"}
