@@ -10,6 +10,8 @@ anonymized, private-safe summaries and artifacts to work/.
 import argparse
 import json
 import sys
+import subprocess
+import hashlib
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -20,6 +22,30 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 from score2gp.private_diagnostics import run_private_diagnostic_smoke
 from score2gp.gp_package import write_gp, validate_gp
 from score2gp.ir import ScoreIR
+import score2gp
+from score2gp.runtime_provenance import RuntimeProvenanceRecord
+
+def get_git_sha() -> str:
+    try:
+        return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=PROJECT_ROOT, text=True).strip()
+    except Exception:
+        return "unknown"
+
+def is_git_dirty() -> bool:
+    try:
+        status = subprocess.check_output(["git", "status", "--short"], cwd=PROJECT_ROOT, text=True).strip()
+        return bool(status)
+    except Exception:
+        return True
+
+def get_file_sha256(path: Path) -> Optional[str]:
+    if not path.exists():
+        return None
+    sha256_hash = hashlib.sha256()
+    with open(path, "rb") as f:
+        for byte_block in iter(lambda: f.read(4096), b""):
+            sha256_hash.update(byte_block)
+    return sha256_hash.hexdigest()
 
 
 def anonymize_name(path: Path) -> str:
@@ -190,6 +216,51 @@ def run_pipeline_for_input(
             alignment_status = "failed"
             scoreir_gate_status = "refused"
 
+    # Record Runtime Provenance
+    stage = "completed"
+    if build_ir_info.get("failed"):
+        stage = "failed_build_ir"
+    elif not score_ir_written:
+        stage = "failed_extraction"
+    elif not gp_valid:
+        stage = "failed_gp_validation"
+
+    mxl_info = None
+    if musicxml_path and musicxml_path.exists():
+        mxl_info = {
+            "path": str(musicxml_path.resolve()),
+            "sha256": get_file_sha256(musicxml_path) or "unknown",
+            "generation_provenance": "external"
+        }
+
+    structural_counts = {
+        "bars": len(score.bars) if ('score' in locals() and score is not None) else 0, # Note: this requires reading ScoreIR, but let's just use 0 if unavailable
+        "events": extraction.get("playable_candidates", 0), # Using candidates as proxy
+        "source_rests": 0,
+        "emitted_rests": 0,
+        "timing_issues": len(secondary_codes)
+    }
+
+    provenance = RuntimeProvenanceRecord(
+        product_sha=get_git_sha(),
+        is_dirty=is_git_dirty(),
+        cli_executable_path=sys.executable,
+        python_import_path=str(Path(score2gp.__file__).resolve()),
+        exact_command=" ".join(sys.argv),
+        input_classification=classification,
+        musicxml_sidecar_info=mxl_info,
+        output_report_path=str(out_dir.resolve()),
+        exit_status=1 if primary_failure else 0,
+        output_written=score_ir_written,
+        stage=stage,
+        refusal_code=primary_failure,
+        structural_counts=structural_counts
+    )
+
+    provenance_path = out_dir / "provenance_record.json"
+    provenance_path.write_text(provenance.model_dump_json(indent=2), encoding="utf-8")
+    artifacts["provenance_record"] = f"{label}/provenance_record.json"
+
     # Build the final private-safe summary for this input
     return {
         "input_label": label,
@@ -233,7 +304,11 @@ def main():
         inputs.append((args.pdf, args.musicxml))
     else:
         # Directory scan mode
-        private_dir = PROJECT_ROOT / "fixtures" / "private"
+        if args.in_dir:
+            private_dir = args.in_dir
+        else:
+            private_dir = PROJECT_ROOT.parent / "score2gp-private-fixtures" / "fixtures" / "private"
+            
         if not private_dir.exists():
             print(f"No private fixtures directory found at {private_dir}", file=sys.stderr)
             sys.exit(0)
@@ -315,6 +390,7 @@ def parse_args():
     parser.add_argument("--pdf", type=Path, help="Path to a single private PDF file.")
     parser.add_argument("--musicxml", type=Path, help="Path to matching MusicXML file (optional).")
     parser.add_argument("--out", type=Path, help="Target output directory (optional).")
+    parser.add_argument("--in-dir", type=Path, help="Target input directory (optional).")
     return parser.parse_args()
 
 
