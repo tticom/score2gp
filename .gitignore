@@ -24,3 +24,7 @@ work/private/
 /warnings.json
 /*.tabraw.json
 /*.ir.json
+
+# Interactive conversion outputs created at the repository root.
+/*.gp
+/tmp/
