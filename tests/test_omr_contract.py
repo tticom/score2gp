@@ -55,7 +55,7 @@ def test_omr_artifact_contract_failed_exec_with_pre_existing_xml(tmp_path: Path)
     assert manifest["discovery_status"] == "failed"
     assert manifest["refusal_code"] == "omr_execution_failed"
 
-def test_omr_artifact_contract_success_exec_with_only_pre_existing(tmp_path: Path):
+def test_omr_artifact_contract_success_exec_no_files(tmp_path: Path):
     runner = CliRunner()
     mock_pdf = tmp_path / "test.pdf"
     mock_pdf.write_bytes(b"dummy pdf content")
@@ -64,10 +64,6 @@ def test_omr_artifact_contract_success_exec_with_only_pre_existing(tmp_path: Pat
     out_dir.mkdir(parents=True, exist_ok=True)
     xml_content = b'<?xml version="1.0" encoding="UTF-8"?><score-partwise></score-partwise>\n'
     (out_dir / "pre_existing.xml").write_bytes(xml_content)
-
-    # Must wait slightly to ensure timestamps differ if they were created in the same second,
-    # but here pre_existing is created before the script runs.
-    time.sleep(0.1)
 
     mock_audiveris = tmp_path / "mock_audiveris.sh"
     mock_audiveris.write_text("#!/bin/bash\nexit 0")
@@ -79,8 +75,35 @@ def test_omr_artifact_contract_success_exec_with_only_pre_existing(tmp_path: Pat
     manifest_path = out_dir / "omr_manifest.json"
     manifest = json.loads(manifest_path.read_text())
     assert manifest["execution_status"] == "success"
-    assert manifest["discovery_status"] == "stale"
-    assert manifest["refusal_code"] == "omr_artifact_stale"
+    assert manifest["discovery_status"] == "missing"
+    assert manifest["refusal_code"] == "omr_artifact_missing"
+
+def test_omr_artifact_contract_escaped_symlink(tmp_path: Path):
+    runner = CliRunner()
+    mock_pdf = tmp_path / "test.pdf"
+    mock_pdf.write_bytes(b"dummy pdf content")
+
+    out_dir = tmp_path / "out"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    xml_content = b'<?xml version="1.0" encoding="UTF-8"?><score-partwise></score-partwise>\n'
+    outside_xml = tmp_path / "outside.xml"
+    outside_xml.write_bytes(xml_content)
+
+    mock_audiveris = tmp_path / "mock_audiveris.sh"
+    mock_audiveris.write_text(f"""#!/bin/bash
+out_dir=$4
+ln -s '{outside_xml.resolve()}' "$out_dir/escaped.xml"
+""")
+    mock_audiveris.chmod(0o755)
+
+    result = runner.invoke(app, ["omr", str(mock_pdf), "--out", str(out_dir), "--audiveris", str(mock_audiveris)])
+    assert result.exit_code == 1
+
+    manifest_path = out_dir / "omr_manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    assert manifest["execution_status"] == "success"
+    assert manifest["discovery_status"] == "missing"
+    assert manifest["refusal_code"] == "omr_artifact_missing"
 
 def test_omr_artifact_contract_nested_valid_xml(tmp_path: Path):
     runner = CliRunner()

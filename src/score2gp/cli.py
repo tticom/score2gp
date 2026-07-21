@@ -6,6 +6,7 @@ import sys
 import hashlib
 import zipfile
 import xml.etree.ElementTree as ET
+import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -352,7 +353,9 @@ def note_candidate_recognition_command(
 
 def _get_file_sha256(path: Path) -> str:
     h = hashlib.sha256()
-    h.update(path.read_bytes())
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            h.update(chunk)
     return h.hexdigest()
 
 def _get_product_sha() -> str:
@@ -371,8 +374,8 @@ def omr_command(input_pdf: Path, out: Path = typer.Option(...), audiveris: Optio
     out.mkdir(parents=True, exist_ok=True)
     out = out.resolve()
 
-    pre_existing = set(out.rglob("*.xml")) | set(out.rglob("*.mxl"))
-    pre_existing_mtimes = {p: p.stat().st_mtime for p in pre_existing if p.is_file()}
+    run_id = uuid.uuid4().hex
+    run_dir = out / f"run_{run_id}"
 
     warnings = []
     execution_status = "not_run"
@@ -383,6 +386,7 @@ def omr_command(input_pdf: Path, out: Path = typer.Option(...), audiveris: Optio
     artifact_path_str = None
     artifact_sha = None
     next_handoff = None
+    run_directory_str = None
 
     if audiveris is None:
         warnings.append({"code": "audiveris-not-configured", "message": "Audiveris path was not provided."})
@@ -392,11 +396,13 @@ def omr_command(input_pdf: Path, out: Path = typer.Option(...), audiveris: Optio
         refusal_code = "audiveris_not_configured"
         typer.echo("Error: audiveris_not_configured", err=True)
     else:
-        log_path = out / "audiveris.log"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        run_directory_str = str(run_dir)
+        log_path = run_dir / "audiveris.log"
         try:
             completed = subprocess.run(
-                [str(audiveris), "-batch", "-export", "-output", str(out), str(input_pdf)],
-                cwd=out,
+                [str(audiveris), "-batch", "-export", "-output", str(run_dir), str(input_pdf)],
+                cwd=run_dir,
                 text=True,
                 capture_output=True,
                 check=False,
@@ -417,30 +423,24 @@ def omr_command(input_pdf: Path, out: Path = typer.Option(...), audiveris: Optio
             refusal_code = "omr_execution_failed"
             typer.echo(f"Error: {refusal_code}", err=True)
         else:
-            current_candidates = set(out.rglob("*.xml")) | set(out.rglob("*.mxl"))
+            current_candidates = set(run_dir.rglob("*.xml")) | set(run_dir.rglob("*.mxl"))
             run_candidates = []
             for p in current_candidates:
                 if not p.is_file():
                     continue
+                # resolve and check if it escapes run_dir (e.g. symlink)
                 try:
-                    p.relative_to(out)
+                    resolved_p = p.resolve()
+                    resolved_p.relative_to(run_dir)
                 except ValueError:
                     continue
-                if p not in pre_existing_mtimes:
-                    run_candidates.append(p)
-                elif p.stat().st_mtime > pre_existing_mtimes[p]:
-                    run_candidates.append(p)
+                run_candidates.append(resolved_p)
 
             if len(run_candidates) == 0:
                 validation_status = "not_run"
-                if len(current_candidates) > 0:
-                    discovery_status = "stale"
-                    refusal_code = "omr_artifact_stale"
-                    warnings.append({"code": "omr_artifact_stale", "message": "Artifacts exist but were not produced or modified by this run."})
-                else:
-                    discovery_status = "missing"
-                    refusal_code = "omr_artifact_missing"
-                    warnings.append({"code": "omr_artifact_missing", "message": "No XML/MXL artifact discovered."})
+                discovery_status = "missing"
+                refusal_code = "omr_artifact_missing"
+                warnings.append({"code": "omr_artifact_missing", "message": "No XML/MXL artifact discovered."})
                 typer.echo(f"Error: {refusal_code}", err=True)
             elif len(run_candidates) > 1:
                 discovery_status = "ambiguous"
@@ -493,6 +493,7 @@ def omr_command(input_pdf: Path, out: Path = typer.Option(...), audiveris: Optio
         "artifact_sha256": artifact_sha,
         "product_sha": _get_product_sha(),
         "omr_executable": str(audiveris) if audiveris else None,
+        "run_directory": run_directory_str,
         "execution_status": execution_status,
         "discovery_status": discovery_status,
         "validation_status": validation_status,
