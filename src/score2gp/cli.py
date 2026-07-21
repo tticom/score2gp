@@ -395,7 +395,7 @@ def omr_command(input_pdf: Path, out: Path = typer.Option(...), audiveris: Optio
                 warnings.append({"code": "audiveris-failed", "message": f"Audiveris exited {completed.returncode}."})
         except OSError as exc:
             warnings.append({"code": "audiveris-error", "message": str(exc)})
-            
+
         candidates = list(out.glob("*.xml")) + list(out.glob("*.mxl"))
         if len(candidates) == 0:
             status = "omr_artifact_missing"
@@ -424,7 +424,7 @@ def omr_command(input_pdf: Path, out: Path = typer.Option(...), audiveris: Optio
                         valid = True
             except Exception as e:
                 pass
-                
+
             if not valid:
                 status = "omr_artifact_invalid"
                 warnings.append({"code": "omr_artifact_invalid", "message": "XML/MXL artifact failed structure validation."})
@@ -436,7 +436,7 @@ def omr_command(input_pdf: Path, out: Path = typer.Option(...), audiveris: Optio
                 next_handoff = f"score2gp convert --pdf {input_pdf} --musicxml {artifact}"
 
     pdf_sha = _get_file_sha256(input_pdf) if input_pdf.exists() else None
-    
+
     manifest = {
         "pdf_sha256": pdf_sha,
         "artifact_sha256": artifact_sha,
@@ -447,13 +447,13 @@ def omr_command(input_pdf: Path, out: Path = typer.Option(...), audiveris: Optio
         "next_handoff": next_handoff,
         "provenance_note": "Association is command-run provenance only; not proof of musical equivalence."
     }
-    
+
     (out / "omr_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     (out / "warnings.json").write_text(json.dumps(warnings, indent=2), encoding="utf-8")
-    
+
     if status != "success":
         raise typer.Exit(1)
-        
+
     typer.echo(json.dumps({"out": str(out), "warnings": warnings, "manifest": manifest}, indent=2))
 
 
