@@ -238,6 +238,29 @@ def test_omr_artifact_contract_malformed_plain_xml(tmp_path: Path):
     mock_pdf.write_bytes(b"dummy pdf content")
 
     mock_audiveris = tmp_path / "mock_audiveris.sh"
+    xml_content = b'<?xml version="1.0" encoding="UTF-8"?><score-partwise>\n'
+
+    mock_audiveris.write_text(f"""#!/bin/bash
+out_dir=$4
+printf '%s' '{xml_content.decode("utf-8")}' > "$out_dir/test.xml"
+""")
+    mock_audiveris.chmod(0o755)
+
+    out_dir = tmp_path / "out"
+    result = runner.invoke(app, ["omr", str(mock_pdf), "--out", str(out_dir), "--audiveris", str(mock_audiveris)])
+    assert result.exit_code == 1
+
+    manifest_path = out_dir / "omr_manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    assert manifest["validation_status"] == "invalid"
+    assert manifest["refusal_code"] == "omr_artifact_invalid"
+
+def test_omr_artifact_contract_unsupported_root_xml(tmp_path: Path):
+    runner = CliRunner()
+    mock_pdf = tmp_path / "test.pdf"
+    mock_pdf.write_bytes(b"dummy pdf content")
+
+    mock_audiveris = tmp_path / "mock_audiveris.sh"
     xml_content = b'<?xml version="1.0" encoding="UTF-8"?><invalid-root></invalid-root>\n'
 
     mock_audiveris.write_text(f"""#!/bin/bash
