@@ -370,16 +370,27 @@ def omr_command(input_pdf: Path, out: Path = typer.Option(...), audiveris: Optio
         audiveris = audiveris.resolve()
     out.mkdir(parents=True, exist_ok=True)
     out = out.resolve()
+
+    pre_existing = set(out.rglob("*.xml")) | set(out.rglob("*.mxl"))
+    pre_existing_mtimes = {p: p.stat().st_mtime for p in pre_existing if p.is_file()}
+
     warnings = []
-    status = "failed"
+    execution_status = "not_run"
+    discovery_status = "not_run"
+    validation_status = "not_run"
+    refusal_code = None
+
     artifact_path_str = None
     artifact_sha = None
     next_handoff = None
 
     if audiveris is None:
         warnings.append({"code": "audiveris-not-configured", "message": "Audiveris path was not provided."})
-        status = "audiveris-not-configured"
-        typer.echo("Error: omr_artifact_missing - audiveris-not-configured", err=True)
+        execution_status = "not_configured"
+        discovery_status = "failed"
+        validation_status = "failed"
+        refusal_code = "audiveris_not_configured"
+        typer.echo("Error: audiveris_not_configured", err=True)
     else:
         log_path = out / "audiveris.log"
         try:
@@ -391,49 +402,89 @@ def omr_command(input_pdf: Path, out: Path = typer.Option(...), audiveris: Optio
                 check=False,
             )
             log_path.write_text(completed.stdout + completed.stderr, encoding="utf-8")
-            if completed.returncode:
+            if completed.returncode != 0:
                 warnings.append({"code": "audiveris-failed", "message": f"Audiveris exited {completed.returncode}."})
+                execution_status = "failed"
+            else:
+                execution_status = "success"
         except OSError as exc:
             warnings.append({"code": "audiveris-error", "message": str(exc)})
+            execution_status = "error"
 
-        candidates = list(out.glob("*.xml")) + list(out.glob("*.mxl"))
-        if len(candidates) == 0:
-            status = "omr_artifact_missing"
-            warnings.append({"code": "omr_artifact_missing", "message": "No XML/MXL artifact discovered."})
-            typer.echo("Error: omr_artifact_missing", err=True)
-        elif len(candidates) > 1:
-            status = "omr_artifact_ambiguous"
-            warnings.append({"code": "omr_artifact_ambiguous", "message": "Multiple XML/MXL artifacts discovered."})
-            typer.echo("Error: omr_artifact_ambiguous", err=True)
+        if execution_status != "success":
+            discovery_status = "failed"
+            validation_status = "failed"
+            refusal_code = "omr_execution_failed"
+            typer.echo(f"Error: {refusal_code}", err=True)
         else:
-            artifact = candidates[0]
-            valid = False
-            try:
-                if artifact.suffix.lower() == ".mxl":
-                    with zipfile.ZipFile(artifact, 'r') as z:
-                        with z.open('META-INF/container.xml') as f:
-                            tree = ET.parse(f)
-                            rootfile = tree.getroot().find('.//rootfile')
-                            full_path = rootfile.attrib['full-path']
-                        with z.open(full_path) as f:
-                            ET.parse(f)
-                    valid = True
-                else:
-                    tree = ET.parse(artifact)
-                    if tree.getroot().tag == "score-partwise":
-                        valid = True
-            except Exception as e:
-                pass
+            current_candidates = set(out.rglob("*.xml")) | set(out.rglob("*.mxl"))
+            run_candidates = []
+            for p in current_candidates:
+                if not p.is_file():
+                    continue
+                try:
+                    p.relative_to(out)
+                except ValueError:
+                    continue
+                if p not in pre_existing_mtimes:
+                    run_candidates.append(p)
+                elif p.stat().st_mtime > pre_existing_mtimes[p]:
+                    run_candidates.append(p)
 
-            if not valid:
-                status = "omr_artifact_invalid"
-                warnings.append({"code": "omr_artifact_invalid", "message": "XML/MXL artifact failed structure validation."})
-                typer.echo("Error: omr_artifact_invalid", err=True)
+            if len(run_candidates) == 0:
+                validation_status = "not_run"
+                if len(current_candidates) > 0:
+                    discovery_status = "stale"
+                    refusal_code = "omr_artifact_stale"
+                    warnings.append({"code": "omr_artifact_stale", "message": "Artifacts exist but were not produced or modified by this run."})
+                else:
+                    discovery_status = "missing"
+                    refusal_code = "omr_artifact_missing"
+                    warnings.append({"code": "omr_artifact_missing", "message": "No XML/MXL artifact discovered."})
+                typer.echo(f"Error: {refusal_code}", err=True)
+            elif len(run_candidates) > 1:
+                discovery_status = "ambiguous"
+                validation_status = "not_run"
+                refusal_code = "omr_artifact_ambiguous"
+                warnings.append({"code": "omr_artifact_ambiguous", "message": "Multiple XML/MXL artifacts produced."})
+                typer.echo("Error: omr_artifact_ambiguous", err=True)
             else:
-                status = "success"
-                artifact_path_str = str(artifact)
-                artifact_sha = _get_file_sha256(artifact)
-                next_handoff = f"score2gp convert --pdf {input_pdf} --musicxml {artifact}"
+                discovery_status = "success"
+                artifact = run_candidates[0]
+                valid = False
+                validation_status = "failed"
+                try:
+                    if artifact.suffix.lower() == ".mxl":
+                        with zipfile.ZipFile(artifact, 'r') as z:
+                            with z.open('META-INF/container.xml') as f:
+                                tree = ET.parse(f)
+                                root = tree.getroot()
+                                rootfiles = [elem for elem in root.iter() if elem.tag.endswith('rootfile')]
+                                if len(rootfiles) == 1:
+                                    full_path = rootfiles[0].attrib.get('full-path')
+                                    if full_path:
+                                        with z.open(full_path) as inner_f:
+                                            inner_tree = ET.parse(inner_f)
+                                            inner_root = inner_tree.getroot()
+                                            if inner_root.tag in ("score-partwise", "score-timewise"):
+                                                valid = True
+                    else:
+                        tree = ET.parse(artifact)
+                        if tree.getroot().tag in ("score-partwise", "score-timewise"):
+                            valid = True
+                except Exception as e:
+                    warnings.append({"code": "validation-exception", "message": str(e)})
+
+                if not valid:
+                    validation_status = "invalid"
+                    refusal_code = "omr_artifact_invalid"
+                    warnings.append({"code": "omr_artifact_invalid", "message": "XML/MXL artifact failed structure validation."})
+                    typer.echo("Error: omr_artifact_invalid", err=True)
+                else:
+                    validation_status = "success"
+                    artifact_path_str = str(artifact)
+                    artifact_sha = _get_file_sha256(artifact)
+                    next_handoff = f"score2gp convert --pdf {input_pdf} --musicxml {artifact}"
 
     pdf_sha = _get_file_sha256(input_pdf) if input_pdf.exists() else None
 
@@ -442,7 +493,10 @@ def omr_command(input_pdf: Path, out: Path = typer.Option(...), audiveris: Optio
         "artifact_sha256": artifact_sha,
         "product_sha": _get_product_sha(),
         "omr_executable": str(audiveris) if audiveris else None,
-        "status": status,
+        "execution_status": execution_status,
+        "discovery_status": discovery_status,
+        "validation_status": validation_status,
+        "refusal_code": refusal_code,
         "artifact_path": artifact_path_str,
         "next_handoff": next_handoff,
         "provenance_note": "Association is command-run provenance only; not proof of musical equivalence."
@@ -451,7 +505,7 @@ def omr_command(input_pdf: Path, out: Path = typer.Option(...), audiveris: Optio
     (out / "omr_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     (out / "warnings.json").write_text(json.dumps(warnings, indent=2), encoding="utf-8")
 
-    if status != "success":
+    if refusal_code is not None:
         raise typer.Exit(1)
 
     typer.echo(json.dumps({"out": str(out), "warnings": warnings, "manifest": manifest}, indent=2))

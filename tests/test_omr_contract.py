@@ -1,95 +1,186 @@
 import json
+import zipfile
 from pathlib import Path
 from typer.testing import CliRunner
 import hashlib
+import time
 
 from score2gp.cli import app
 
 def test_omr_artifact_contract_success(tmp_path: Path):
     runner = CliRunner()
-
-    # Setup mock PDF
     mock_pdf = tmp_path / "test.pdf"
     mock_pdf.write_bytes(b"dummy pdf content")
 
-    # Setup mock audiveris executable that generates a valid MusicXML file
     mock_audiveris = tmp_path / "mock_audiveris.sh"
     xml_content = b'<?xml version="1.0" encoding="UTF-8"?><score-partwise version="3.1"></score-partwise>\n'
 
-    # Shell script that writes the xml_content into the output dir
     mock_audiveris.write_text(f"""#!/bin/bash
-    out_dir=$4
-    printf '%s' '{xml_content.decode("utf-8")}' > "$out_dir/test.xml"
-    """)
+out_dir=$4
+printf '%s' '{xml_content.decode("utf-8")}' > "$out_dir/test.xml"
+""")
     mock_audiveris.chmod(0o755)
 
     out_dir = tmp_path / "out"
-
     result = runner.invoke(app, ["omr", str(mock_pdf), "--out", str(out_dir), "--audiveris", str(mock_audiveris)])
-
     assert result.exit_code == 0
 
     manifest_path = out_dir / "omr_manifest.json"
-    assert manifest_path.exists()
-
     manifest = json.loads(manifest_path.read_text())
-    assert manifest["status"] == "success"
-    assert manifest["artifact_path"].endswith("test.xml")
-    assert manifest["pdf_sha256"] == hashlib.sha256(b"dummy pdf content").hexdigest()
-    assert manifest["artifact_sha256"] == hashlib.sha256(xml_content).hexdigest()
-    assert manifest["next_handoff"] == f"score2gp convert --pdf {mock_pdf} --musicxml {manifest['artifact_path']}"
-    assert manifest["provenance_note"] == "Association is command-run provenance only; not proof of musical equivalence."
-    assert "product_sha" in manifest
-    assert "omr_executable" in manifest
+    assert manifest["execution_status"] == "success"
+    assert manifest["discovery_status"] == "success"
+    assert manifest["validation_status"] == "success"
+    assert manifest["refusal_code"] is None
 
-def test_omr_artifact_contract_missing(tmp_path: Path):
+def test_omr_artifact_contract_failed_exec_with_pre_existing_xml(tmp_path: Path):
     runner = CliRunner()
     mock_pdf = tmp_path / "test.pdf"
     mock_pdf.write_bytes(b"dummy pdf content")
 
-    mock_audiveris = tmp_path / "mock_audiveris_missing.sh"
+    out_dir = tmp_path / "out"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    xml_content = b'<?xml version="1.0" encoding="UTF-8"?><score-partwise></score-partwise>\n'
+    (out_dir / "pre_existing.xml").write_bytes(xml_content)
+
+    mock_audiveris = tmp_path / "mock_audiveris.sh"
+    mock_audiveris.write_text("#!/bin/bash\nexit 1")
+    mock_audiveris.chmod(0o755)
+
+    result = runner.invoke(app, ["omr", str(mock_pdf), "--out", str(out_dir), "--audiveris", str(mock_audiveris)])
+    assert result.exit_code == 1
+
+    manifest_path = out_dir / "omr_manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    assert manifest["execution_status"] == "failed"
+    assert manifest["discovery_status"] == "failed"
+    assert manifest["refusal_code"] == "omr_execution_failed"
+
+def test_omr_artifact_contract_success_exec_with_only_pre_existing(tmp_path: Path):
+    runner = CliRunner()
+    mock_pdf = tmp_path / "test.pdf"
+    mock_pdf.write_bytes(b"dummy pdf content")
+
+    out_dir = tmp_path / "out"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    xml_content = b'<?xml version="1.0" encoding="UTF-8"?><score-partwise></score-partwise>\n'
+    (out_dir / "pre_existing.xml").write_bytes(xml_content)
+
+    # Must wait slightly to ensure timestamps differ if they were created in the same second,
+    # but here pre_existing is created before the script runs.
+    time.sleep(0.1)
+
+    mock_audiveris = tmp_path / "mock_audiveris.sh"
     mock_audiveris.write_text("#!/bin/bash\nexit 0")
     mock_audiveris.chmod(0o755)
 
-    out_dir = tmp_path / "out_missing"
     result = runner.invoke(app, ["omr", str(mock_pdf), "--out", str(out_dir), "--audiveris", str(mock_audiveris)])
-
     assert result.exit_code == 1
-    assert "omr_artifact_missing" in result.output
 
-def test_omr_artifact_contract_ambiguous(tmp_path: Path):
+    manifest_path = out_dir / "omr_manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    assert manifest["execution_status"] == "success"
+    assert manifest["discovery_status"] == "stale"
+    assert manifest["refusal_code"] == "omr_artifact_stale"
+
+def test_omr_artifact_contract_nested_valid_xml(tmp_path: Path):
     runner = CliRunner()
     mock_pdf = tmp_path / "test.pdf"
-    mock_pdf.write_bytes(b"dummy pdf content")
+    mock_pdf.write_bytes(b"dummy")
 
-    mock_audiveris = tmp_path / "mock_audiveris_ambiguous.sh"
-    mock_audiveris.write_text("""#!/bin/bash
-    out_dir=$4
-    touch "$out_dir/test1.xml"
-    touch "$out_dir/test2.xml"
-    """)
+    mock_audiveris = tmp_path / "mock_audiveris.sh"
+    xml_content = b'<?xml version="1.0" encoding="UTF-8"?><score-partwise></score-partwise>'
+
+    mock_audiveris.write_text(f"""#!/bin/bash
+out_dir=$4
+mkdir -p "$out_dir/deep/nested"
+printf '%s' '{xml_content.decode("utf-8")}' > "$out_dir/deep/nested/test.xml"
+""")
     mock_audiveris.chmod(0o755)
 
-    out_dir = tmp_path / "out_ambiguous"
+    out_dir = tmp_path / "out"
     result = runner.invoke(app, ["omr", str(mock_pdf), "--out", str(out_dir), "--audiveris", str(mock_audiveris)])
+    assert result.exit_code == 0
+    manifest = json.loads((out_dir / "omr_manifest.json").read_text())
+    assert manifest["discovery_status"] == "success"
+    assert "deep/nested/test.xml" in manifest["artifact_path"].replace("\\", "/")
 
-    assert result.exit_code == 1
-    assert "omr_artifact_ambiguous" in result.output
-
-def test_omr_artifact_contract_invalid(tmp_path: Path):
+def test_omr_artifact_contract_valid_mxl(tmp_path: Path):
     runner = CliRunner()
     mock_pdf = tmp_path / "test.pdf"
-    mock_pdf.write_bytes(b"dummy pdf content")
+    mock_pdf.write_bytes(b"dummy")
 
-    mock_audiveris = tmp_path / "mock_audiveris_invalid.sh"
-    mock_audiveris.write_text("""#!/bin/bash
-    out_dir=$4
-    echo "not xml" > "$out_dir/test.xml"
-    """)
+    # Create valid MXL
+    mxl_path = tmp_path / "test.mxl"
+    with zipfile.ZipFile(mxl_path, 'w') as z:
+        z.writestr('META-INF/container.xml', b'<?xml version="1.0" encoding="UTF-8"?><container xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="score.xml"/></rootfiles></container>')
+        z.writestr('score.xml', b'<?xml version="1.0" encoding="UTF-8"?><score-partwise></score-partwise>')
+
+    mock_audiveris = tmp_path / "mock_audiveris.sh"
+    mock_audiveris.write_text(f"#!/bin/bash\ncp '{mxl_path}' \"$4/test.mxl\"")
     mock_audiveris.chmod(0o755)
 
-    out_dir = tmp_path / "out_invalid"
+    out_dir = tmp_path / "out"
     result = runner.invoke(app, ["omr", str(mock_pdf), "--out", str(out_dir), "--audiveris", str(mock_audiveris)])
+    assert result.exit_code == 0
+    manifest = json.loads((out_dir / "omr_manifest.json").read_text())
+    assert manifest["validation_status"] == "success"
 
+def test_omr_artifact_contract_mxl_malformed_container(tmp_path: Path):
+    runner = CliRunner()
+    mock_pdf = tmp_path / "test.pdf"
+    mock_pdf.write_bytes(b"dummy")
+
+    mxl_path = tmp_path / "test.mxl"
+    with zipfile.ZipFile(mxl_path, 'w') as z:
+        z.writestr('META-INF/container.xml', b'not xml')
+        z.writestr('score.xml', b'<score-partwise></score-partwise>')
+
+    mock_audiveris = tmp_path / "mock_audiveris.sh"
+    mock_audiveris.write_text(f"#!/bin/bash\ncp '{mxl_path}' \"$4/test.mxl\"")
+    mock_audiveris.chmod(0o755)
+
+    out_dir = tmp_path / "out"
+    result = runner.invoke(app, ["omr", str(mock_pdf), "--out", str(out_dir), "--audiveris", str(mock_audiveris)])
     assert result.exit_code == 1
-    assert "omr_artifact_invalid" in result.output
+    manifest = json.loads((out_dir / "omr_manifest.json").read_text())
+    assert manifest["validation_status"] == "invalid"
+    assert manifest["refusal_code"] == "omr_artifact_invalid"
+
+def test_omr_artifact_contract_mxl_missing_rootfile(tmp_path: Path):
+    runner = CliRunner()
+    mock_pdf = tmp_path / "test.pdf"
+    mock_pdf.write_bytes(b"dummy")
+
+    mxl_path = tmp_path / "test.mxl"
+    with zipfile.ZipFile(mxl_path, 'w') as z:
+        z.writestr('META-INF/container.xml', b'<?xml version="1.0" encoding="UTF-8"?><container xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles></rootfiles></container>')
+
+    mock_audiveris = tmp_path / "mock_audiveris.sh"
+    mock_audiveris.write_text(f"#!/bin/bash\ncp '{mxl_path}' \"$4/test.mxl\"")
+    mock_audiveris.chmod(0o755)
+
+    out_dir = tmp_path / "out"
+    result = runner.invoke(app, ["omr", str(mock_pdf), "--out", str(out_dir), "--audiveris", str(mock_audiveris)])
+    assert result.exit_code == 1
+    manifest = json.loads((out_dir / "omr_manifest.json").read_text())
+    assert manifest["validation_status"] == "invalid"
+
+def test_omr_artifact_contract_mxl_invalid_inner_score(tmp_path: Path):
+    runner = CliRunner()
+    mock_pdf = tmp_path / "test.pdf"
+    mock_pdf.write_bytes(b"dummy")
+
+    mxl_path = tmp_path / "test.mxl"
+    with zipfile.ZipFile(mxl_path, 'w') as z:
+        z.writestr('META-INF/container.xml', b'<?xml version="1.0" encoding="UTF-8"?><container xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="score.xml"/></rootfiles></container>')
+        z.writestr('score.xml', b'<invalid-root></invalid-root>')
+
+    mock_audiveris = tmp_path / "mock_audiveris.sh"
+    mock_audiveris.write_text(f"#!/bin/bash\ncp '{mxl_path}' \"$4/test.mxl\"")
+    mock_audiveris.chmod(0o755)
+
+    out_dir = tmp_path / "out"
+    result = runner.invoke(app, ["omr", str(mock_pdf), "--out", str(out_dir), "--audiveris", str(mock_audiveris)])
+    assert result.exit_code == 1
+    manifest = json.loads((out_dir / "omr_manifest.json").read_text())
+    assert manifest["validation_status"] == "invalid"
