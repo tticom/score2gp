@@ -3,6 +3,10 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import hashlib
+import zipfile
+import xml.etree.ElementTree as ET
+import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -347,6 +351,20 @@ def note_candidate_recognition_command(
         typer.echo(_format_diagnostics_report(res))
 
 
+def _get_file_sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+def _get_product_sha() -> str:
+    try:
+        res = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=Path(__file__).parent)
+        return res.stdout.strip()
+    except Exception:
+        return "unknown"
+
 @app.command("omr")
 def omr_command(input_pdf: Path, out: Path = typer.Option(...), audiveris: Optional[Path] = typer.Option(None)) -> None:
     """Run optional Audiveris OMR if configured."""
@@ -355,26 +373,143 @@ def omr_command(input_pdf: Path, out: Path = typer.Option(...), audiveris: Optio
         audiveris = audiveris.resolve()
     out.mkdir(parents=True, exist_ok=True)
     out = out.resolve()
+
+    run_id = uuid.uuid4().hex
+    run_dir = out / f"run_{run_id}"
+
     warnings = []
+    execution_status = "not_run"
+    discovery_status = "not_run"
+    validation_status = "not_run"
+    refusal_code = None
+
+    artifact_path_str = None
+    artifact_sha = None
+    next_handoff = None
+    run_directory_str = None
+
     if audiveris is None:
         warnings.append({"code": "audiveris-not-configured", "message": "Audiveris path was not provided."})
+        execution_status = "not_configured"
+        discovery_status = "failed"
+        validation_status = "failed"
+        refusal_code = "audiveris_not_configured"
+        typer.echo("Error: audiveris_not_configured", err=True)
     else:
-        log_path = out / "audiveris.log"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        run_directory_str = str(run_dir)
+        log_path = run_dir / "audiveris.log"
         try:
             completed = subprocess.run(
-                [str(audiveris), "-batch", "-export", "-output", str(out), str(input_pdf)],
-                cwd=out,
+                [str(audiveris), "-batch", "-export", "-output", str(run_dir), str(input_pdf)],
+                cwd=run_dir,
                 text=True,
                 capture_output=True,
                 check=False,
             )
             log_path.write_text(completed.stdout + completed.stderr, encoding="utf-8")
-            if completed.returncode:
+            if completed.returncode != 0:
                 warnings.append({"code": "audiveris-failed", "message": f"Audiveris exited {completed.returncode}."})
+                execution_status = "failed"
+            else:
+                execution_status = "success"
         except OSError as exc:
             warnings.append({"code": "audiveris-error", "message": str(exc)})
+            execution_status = "error"
+
+        if execution_status != "success":
+            discovery_status = "failed"
+            validation_status = "failed"
+            refusal_code = "omr_execution_failed"
+            typer.echo(f"Error: {refusal_code}", err=True)
+        else:
+            current_candidates = set(run_dir.rglob("*.xml")) | set(run_dir.rglob("*.mxl"))
+            run_candidates = []
+            for p in current_candidates:
+                if not p.is_file():
+                    continue
+                # resolve and check if it escapes run_dir (e.g. symlink)
+                try:
+                    resolved_p = p.resolve()
+                    resolved_p.relative_to(run_dir)
+                except ValueError:
+                    continue
+                run_candidates.append(resolved_p)
+
+            if len(run_candidates) == 0:
+                validation_status = "not_run"
+                discovery_status = "missing"
+                refusal_code = "omr_artifact_missing"
+                warnings.append({"code": "omr_artifact_missing", "message": "No XML/MXL artifact discovered."})
+                typer.echo(f"Error: {refusal_code}", err=True)
+            elif len(run_candidates) > 1:
+                discovery_status = "ambiguous"
+                validation_status = "not_run"
+                refusal_code = "omr_artifact_ambiguous"
+                warnings.append({"code": "omr_artifact_ambiguous", "message": "Multiple XML/MXL artifacts produced."})
+                typer.echo("Error: omr_artifact_ambiguous", err=True)
+            else:
+                discovery_status = "success"
+                artifact = run_candidates[0]
+                valid = False
+                validation_status = "failed"
+                try:
+                    if artifact.suffix.lower() == ".mxl":
+                        with zipfile.ZipFile(artifact, 'r') as z:
+                            with z.open('META-INF/container.xml') as f:
+                                tree = ET.parse(f)
+                                root = tree.getroot()
+                                rootfiles = [elem for elem in root.iter() if elem.tag.endswith('rootfile')]
+                                if len(rootfiles) == 1:
+                                    full_path = rootfiles[0].attrib.get('full-path')
+                                    if full_path:
+                                        with z.open(full_path) as inner_f:
+                                            inner_tree = ET.parse(inner_f)
+                                            inner_root = inner_tree.getroot()
+                                            if inner_root.tag in ("score-partwise", "score-timewise"):
+                                                valid = True
+                    else:
+                        tree = ET.parse(artifact)
+                        if tree.getroot().tag in ("score-partwise", "score-timewise"):
+                            valid = True
+                except Exception as e:
+                    warnings.append({"code": "validation-exception", "message": str(e)})
+
+                if not valid:
+                    validation_status = "invalid"
+                    refusal_code = "omr_artifact_invalid"
+                    warnings.append({"code": "omr_artifact_invalid", "message": "XML/MXL artifact failed structure validation."})
+                    typer.echo("Error: omr_artifact_invalid", err=True)
+                else:
+                    validation_status = "success"
+                    artifact_path_str = str(artifact)
+                    artifact_sha = _get_file_sha256(artifact)
+                    next_handoff = f"score2gp convert --pdf {input_pdf} --musicxml {artifact}"
+
+    pdf_sha = _get_file_sha256(input_pdf) if input_pdf.exists() else None
+
+    manifest = {
+        "pdf_sha256": pdf_sha,
+        "artifact_sha256": artifact_sha,
+        "product_sha": _get_product_sha(),
+        "omr_executable": str(audiveris) if audiveris else None,
+        "run_directory": run_directory_str,
+        "execution_status": execution_status,
+        "discovery_status": discovery_status,
+        "validation_status": validation_status,
+        "refusal_code": refusal_code,
+        "artifact_path": artifact_path_str,
+        "next_handoff": next_handoff,
+        "provenance_note": "Association is command-run provenance only; not proof of musical equivalence."
+    }
+
+    (out / "omr_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     (out / "warnings.json").write_text(json.dumps(warnings, indent=2), encoding="utf-8")
-    typer.echo(json.dumps({"out": str(out), "warnings": warnings}, indent=2))
+
+    if refusal_code is not None:
+        raise typer.Exit(1)
+
+    typer.echo(json.dumps({"out": str(out), "warnings": warnings, "manifest": manifest}, indent=2))
 
 
 @app.command("build-ir")
