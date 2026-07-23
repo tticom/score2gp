@@ -241,4 +241,3 @@ def map_ledger_lines_to_note_candidates(outcomes: list[dict]) -> None:
 
         if attached:
             note["attached_ledger_line_candidate_ids"] = sorted(attached)
-

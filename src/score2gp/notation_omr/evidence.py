@@ -45,4 +45,3 @@ def shape_candidate_evidence(
                     cand_dict[f] = getattr(cand, f)
         shaped.append(cand_dict)
     return shaped
-
