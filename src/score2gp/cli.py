@@ -315,7 +315,7 @@ def whole_note_recognition_command(
     json_out: bool = typer.Option(False, "--json", help="Output machine-checkable JSON")
 ) -> None:
     """Expose read-only whole-note recognition outcomes. (Compatibility alias)"""
-    from .whole_note_recogniser import run_recognition_on_file
+    from .notation_omr.pipeline import run_recognition_on_file
     res = run_recognition_on_file(pdf)
     if not res:
         raise typer.Exit(1)
@@ -333,7 +333,7 @@ def note_candidate_recognition_command(
     assume_treble_clef: bool = typer.Option(False, "--assume-treble-clef", help="Opt-in to assumed-treble pitch mapping")
 ) -> None:
     """Expose generic read-only note-candidate recognition outcomes."""
-    from .whole_note_recogniser import run_recognition_on_file
+    from .notation_omr.pipeline import run_recognition_on_file
     res = run_recognition_on_file(
         pdf,
         include_x_aligned_clusters=True,
@@ -704,7 +704,7 @@ def notation_whole_note_export_command(
     assume_treble_clef: bool = typer.Option(False, "--assume-treble-clef", help="Assume a treble clef if no clef is detected"),
 ) -> None:
     """Explicit, opt-in CLI route for single standard-notation whole-note GP export (v0)."""
-    from .whole_note_recogniser import run_recognition_on_file
+    from .notation_omr.pipeline import run_recognition_on_file
     from .notation_bridge import NotationBridgeInputError, build_ir_from_notation_outcomes
     from .gp_package import write_gp
 
@@ -752,7 +752,7 @@ def notation_half_note_export_command(
     ir_out: Optional[Path] = typer.Option(None, "--ir-out", help="Optional debug path to write the intermediate ScoreIR JSON"),
 ) -> None:
     """Explicit, opt-in CLI route for single standard-notation half-note GP export (v0)."""
-    from .whole_note_recogniser import run_recognition_on_file
+    from .notation_omr.pipeline import run_recognition_on_file
     from .notation_bridge import NotationBridgeInputError, build_ir_from_notation_outcomes
     from .gp_package import write_gp
 
@@ -1282,7 +1282,7 @@ def _grouping_artifacts_for_tabraw(tabraw_path: Path) -> dict[str, object]:
 
 
 def _run_single_note_export_command(pdf: Path, out: Path, ir_out: Path | None, expected_duration: str) -> None:
-    from .whole_note_recogniser import run_recognition_on_file
+    from .notation_omr.pipeline import run_recognition_on_file
     from .notation_bridge import NotationBridgeInputError, build_ir_from_notation_outcomes
     from .gp_package import write_gp
     import typer

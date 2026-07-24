@@ -22,7 +22,7 @@ def test_notation_whole_note_export_success(tmp_path):
     mock_outcomes = [{"symbol_type": "whole_note_candidate", "association_status": "success", "duration": "whole", "clef_resolved_staff_pitch": "B4"}]
     mock_recognition_result = {"read_only_recognition_outcomes": mock_outcomes}
 
-    with patch("score2gp.whole_note_recogniser.run_recognition_on_file") as mock_recognise:
+    with patch("score2gp.notation_omr.pipeline.run_recognition_on_file") as mock_recognise:
         mock_recognise.return_value = mock_recognition_result
 
         result = runner.invoke(app, [
@@ -42,7 +42,7 @@ def test_notation_whole_note_export_fails_on_no_outcomes(tmp_path):
 
     mock_recognition_result = {"read_only_recognition_outcomes": []}
 
-    with patch("score2gp.whole_note_recogniser.run_recognition_on_file") as mock_recognise:
+    with patch("score2gp.notation_omr.pipeline.run_recognition_on_file") as mock_recognise:
         mock_recognise.return_value = mock_recognition_result
 
         result = runner.invoke(app, [
@@ -69,7 +69,7 @@ def test_notation_half_note_export_success(tmp_path):
     mock_outcomes = [{"symbol_type": "half_note_candidate", "association_status": "success", "duration": "half", "clef_resolved_staff_pitch": "B4"}]
     mock_recognition_result = {"read_only_recognition_outcomes": mock_outcomes}
 
-    with patch("score2gp.whole_note_recogniser.run_recognition_on_file") as mock_recognise:
+    with patch("score2gp.notation_omr.pipeline.run_recognition_on_file") as mock_recognise:
         mock_recognise.return_value = mock_recognition_result
 
         result = runner.invoke(app, [
@@ -89,7 +89,7 @@ def test_notation_half_note_export_fails_on_no_outcomes(tmp_path):
 
     mock_recognition_result = {"read_only_recognition_outcomes": []}
 
-    with patch("score2gp.whole_note_recogniser.run_recognition_on_file") as mock_recognise:
+    with patch("score2gp.notation_omr.pipeline.run_recognition_on_file") as mock_recognise:
         mock_recognise.return_value = mock_recognition_result
 
         result = runner.invoke(app, [
@@ -112,7 +112,7 @@ def test_notation_whole_note_export_rejects_half_note(tmp_path):
     mock_outcomes = [{"symbol_type": "half_note_candidate", "association_status": "success", "duration": "half", "clef_resolved_staff_pitch": "B4"}]
     mock_recognition_result = {"read_only_recognition_outcomes": mock_outcomes}
 
-    with patch("score2gp.whole_note_recogniser.run_recognition_on_file") as mock_recognise:
+    with patch("score2gp.notation_omr.pipeline.run_recognition_on_file") as mock_recognise:
         mock_recognise.return_value = mock_recognition_result
 
         result = runner.invoke(app, [
@@ -134,7 +134,7 @@ def test_notation_half_note_export_rejects_whole_note(tmp_path):
     mock_outcomes = [{"symbol_type": "whole_note_candidate", "association_status": "success", "duration": "whole", "clef_resolved_staff_pitch": "B4"}]
     mock_recognition_result = {"read_only_recognition_outcomes": mock_outcomes}
 
-    with patch("score2gp.whole_note_recogniser.run_recognition_on_file") as mock_recognise:
+    with patch("score2gp.notation_omr.pipeline.run_recognition_on_file") as mock_recognise:
         mock_recognise.return_value = mock_recognition_result
 
         result = runner.invoke(app, [
@@ -187,7 +187,7 @@ def test_notation_whole_note_export_fails_without_pitch_resolution(tmp_path):
     mock_outcomes = [{"symbol_type": "whole_note_candidate", "association_status": "success", "duration": "whole"}]
     mock_recognition_result = {"read_only_recognition_outcomes": mock_outcomes}
 
-    with patch("score2gp.whole_note_recogniser.run_recognition_on_file") as mock_recognise:
+    with patch("score2gp.notation_omr.pipeline.run_recognition_on_file") as mock_recognise:
         mock_recognise.return_value = mock_recognition_result
 
         result = runner.invoke(app, [
