@@ -219,14 +219,17 @@ def build_staff_timeline_preview(
                         dur = c["duration_ticks"]
                     c["timeline_start_tick"] = start_tick
                     c["timeline_duration_ticks"] = dur
-                    measure_events.append({
+                    evt1 = {
                         "candidate_id": c.get("candidate_id"),
                         "symbol_type": c.get("symbol_type"),
                         "voice": 1,
                         "start_tick": start_tick,
                         "duration_ticks": dur,
                         "resolved_pitch": c.get("clef_resolved_staff_pitch")
-                    })
+                    }
+                    if "tuplet_association" in c:
+                        evt1["tuplet_association"] = c["tuplet_association"]
+                    measure_events.append(evt1)
                     cursor_1 = max(cursor_1, start_tick + dur)
 
                 # Process voice 2
@@ -236,15 +239,19 @@ def build_staff_timeline_preview(
                         dur = c["duration_ticks"]
                     c["timeline_start_tick"] = start_tick
                     c["timeline_duration_ticks"] = dur
-                    measure_events.append({
+                    evt2 = {
                         "candidate_id": c.get("candidate_id"),
                         "symbol_type": c.get("symbol_type"),
                         "voice": 2,
                         "start_tick": start_tick,
                         "duration_ticks": dur,
                         "resolved_pitch": c.get("clef_resolved_staff_pitch")
-                    })
+                    }
+                    if "tuplet_association" in c:
+                        evt2["tuplet_association"] = c["tuplet_association"]
+                    measure_events.append(evt2)
                     cursor_2 = max(cursor_2, start_tick + dur)
+
 
             # Pad measure voices up to expected duration
             D_measure = 3840

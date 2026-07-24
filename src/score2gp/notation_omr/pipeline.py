@@ -298,16 +298,11 @@ def run_recognition_on_file(
 
     tuplet_associations = associate_local_tuplets(tuplet_marker_locations, outcomes, all_staff_geometries)
     for assoc in tuplet_associations:
-        if assoc.status == "associated":
-            for cid in assoc.associated_candidate_ids:
-                for cand in outcomes:
-                    if cand.get("candidate_id") == cid:
-                        cand["duration_ticks"] = 320
-                        cand["tuplet_association"] = assoc.to_dict()
-        elif assoc.status == "ambiguous":
-            for cand in outcomes:
-                if cand.get("candidate_id") in assoc.associated_candidate_ids:
-                    cand["tuplet_association"] = assoc.to_dict()
+        target_ids = set(assoc.associated_candidate_ids) | set(assoc.competing_candidate_ids)
+        for cand in outcomes:
+            if cand.get("candidate_id") in target_ids:
+                cand["tuplet_association"] = assoc.to_dict()
+
 
     try:
         timeline_preview = build_staff_timeline_preview(outcomes, semantic_candidates, all_staff_geometries)
@@ -324,4 +319,3 @@ def run_recognition_on_file(
         "timeline_preview": timeline_preview,
         "tuplet_associations": [a.to_dict() for a in tuplet_associations]
     }
-
