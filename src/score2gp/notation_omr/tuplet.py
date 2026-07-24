@@ -68,13 +68,13 @@ def _get_x_center(cand: dict[str, Any]) -> float:
 def derive_measure_spans_for_staff(
     staff_info: dict[str, Any],
     outcomes: list[dict[str, Any]] | None = None,
-) -> list[tuple[float, float, str]]:
+) -> tuple[set[float], list[tuple[float, float, str]]]:
     """
-    Derives measure spans [x_start, x_end, span_id] for a staff using barlines from:
+    Derives barline X-coordinates and measure spans [x_start, x_end, span_id] for a staff using barlines from:
     1. `outcomes` (symbol_type in ("barline_candidate", "barline"))
     2. `staff_info.get("barlines")` or `staff_info.get("barline_candidates")`
-    If no barlines exist but staff_info has an explicit `span_id`, returns [(staff_x0, staff_x1, explicit_span_id)].
-    If no barlines exist and no explicit span_id is set, returns [] (cannot observe a genuine measure span).
+    If no barlines exist but staff_info has an explicit `span_id`, returns (set(), [(staff_x0, staff_x1, explicit_span_id)]).
+    If no barlines exist and no explicit span_id is set, returns (set(), []) (cannot observe a genuine measure span).
     """
     s_obj = staff_info.get("staff", staff_info)
     page = staff_info.get("page_index", s_obj.get("page_index", 1))
@@ -124,8 +124,8 @@ def derive_measure_spans_for_staff(
 
     if not barline_xs:
         if explicit_span:
-            return [(staff_x0, staff_x1, str(explicit_span))]
-        return []
+            return set(), [(staff_x0, staff_x1, str(explicit_span))]
+        return set(), []
 
     sorted_barline_xs = sorted(barline_xs)
     spans: list[tuple[float, float, str]] = []
@@ -142,7 +142,7 @@ def derive_measure_spans_for_staff(
             f"span_m{len(sorted_barline_xs) + 1}_p{page}_sys{sys_idx}_s{staff_idx}",
         )
     )
-    return spans
+    return barline_xs, spans
 
 
 def find_measure_span_id(
@@ -152,6 +152,8 @@ def find_measure_span_id(
     x_center: float,
     staff_spans_map: dict[tuple[int, int, int], list[tuple[float, float, str]]],
     explicit_span_id: str | None = None,
+    barline_xs_map: dict[tuple[int, int, int], set[float]] | None = None,
+    boundary_tolerance: float = 0.5,
 ) -> str | None:
     if explicit_span_id:
         return explicit_span_id
@@ -159,9 +161,19 @@ def find_measure_span_id(
     if page is None or sys_idx is None or staff_idx is None:
         return None
 
-    spans = staff_spans_map.get((page, sys_idx, staff_idx), [])
-    for x_start, x_end, span_id in spans:
-        if x_start - 1.0 <= x_center <= x_end + 1.0:
+    key = (page, sys_idx, staff_idx)
+
+    # Check if x_center falls directly on or within boundary_tolerance of a barline
+    if barline_xs_map:
+        barlines = barline_xs_map.get(key, set())
+        for b_x in barlines:
+            if abs(x_center - b_x) <= boundary_tolerance:
+                return None
+
+    spans = staff_spans_map.get(key, [])
+    for idx, (x_start, x_end, span_id) in enumerate(spans):
+        is_last = idx == len(spans) - 1
+        if x_start <= x_center < x_end or (is_last and x_center == x_end):
             return span_id
 
     return None
@@ -176,12 +188,14 @@ def extract_tuplet_marker_evidence(
     """
     Extracts candidate printed tuplet digit '3' evidence from text elements.
     Derives ownership and genuine measure span from staves_geometry and barlines.
+    Enforces strict 2.0 staff space above-staff lane boundary (top_line_y - 2.0*spacing).
     Rejects text that is not a plain '3' or is labeled as TAB fret, measure label, or metadata.
     """
     markers: list[TupletMarkerEvidence] = []
     idx = 1
 
     staff_spans_map: dict[tuple[int, int, int], list[tuple[float, float, str]]] = {}
+    barline_xs_map: dict[tuple[int, int, int], set[float]] = {}
     valid_staves: list[dict[str, Any]] = []
 
     if staves_geometry:
@@ -198,16 +212,17 @@ def extract_tuplet_marker_evidence(
                     x0 = float(s_info.get("x0", 0.0))
                     x1 = float(s_info.get("x1", 1000.0))
 
-                    spans = derive_measure_spans_for_staff(sg, outcomes)
+                    barlines, spans = derive_measure_spans_for_staff(sg, outcomes)
                     key = (page_index, sys_idx, staff_idx)
                     staff_spans_map[key] = spans
+                    barline_xs_map[key] = barlines
 
                     valid_staves.append({
                         "system_index": sys_idx,
                         "staff_index": staff_idx,
                         "top_line_y": top_y,
-                        "lane_top": top_y - 2.5 * spacing,
-                        "lane_bottom": top_y + 0.5 * spacing,
+                        "lane_top": top_y - 2.0 * spacing,  # Strict 2.0 staff spaces above top line
+                        "lane_bottom": top_y + 0.5,
                         "x0": x0 - 10.0,
                         "x1": x1 + 10.0,
                     })
@@ -253,7 +268,13 @@ def extract_tuplet_marker_evidence(
 
         if span_id is None:
             span_id = find_measure_span_id(
-                page_index, sys_idx, staff_idx, x_center, staff_spans_map, explicit_span_id=None
+                page_index,
+                sys_idx,
+                staff_idx,
+                x_center,
+                staff_spans_map,
+                explicit_span_id=None,
+                barline_xs_map=barline_xs_map,
             )
 
         marker_id = f"tuplet_marker_{idx:03d}"
@@ -289,14 +310,15 @@ def associate_local_tuplets(
 ) -> list[TupletAssociation]:
     """
     Associates candidate tuplet '3' markers with local 3-eighth-note sequences according to 5 strict rules:
-    1. Above-staff lane: requires valid 5-line staff geometry. Marker y-center must fall in top_line_y - 2.5*spacing to top_line_y.
-    2. Hierarchy ownership: page, system, staff, and genuine measure span_id must match. Fails closed if span cannot be derived.
+    1. Above-staff lane: requires valid 5-line staff geometry. Marker y-center must fall in top_line_y - 2.0*spacing to top_line_y.
+    2. Hierarchy ownership: page, system, staff, and genuine measure span_id must match. Fails closed if span cannot be derived or is ambiguous.
     3. X-center tolerance: marker x-center is strictly between 1st and 3rd notehead x-centers.
     4. Exact 3-event sequential group: 3 consecutive eighth notes with no intervening rests/durations.
     5. Unique matching group: exactly 1 matching group per marker. Competing groups or markers -> status='ambiguous'.
     """
     staff_geom_map: dict[tuple[int, int, int], dict[str, Any]] = {}
     staff_spans_map: dict[tuple[int, int, int], list[tuple[float, float, str]]] = {}
+    barline_xs_map: dict[tuple[int, int, int], set[float]] = {}
 
     if staff_geometries:
         for sg in staff_geometries:
@@ -317,8 +339,9 @@ def associate_local_tuplets(
                     "top_line_y": float(line_ys[0]),
                     "staff_spacing": float(line_ys[4] - line_ys[0]) / 4.0,
                 }
-                spans = derive_measure_spans_for_staff(sg, outcomes)
+                barlines, spans = derive_measure_spans_for_staff(sg, outcomes)
                 staff_spans_map[key] = spans
+                barline_xs_map[key] = barlines
 
     norm_markers: list[TupletMarkerEvidence] = []
     for m in markers:
@@ -375,10 +398,15 @@ def associate_local_tuplets(
 
         note_x = _get_x_center(cand)
         span_id = find_measure_span_id(
-            page, sys_idx, staff_idx, note_x, staff_spans_map, explicit_span_id=explicit_span
+            page,
+            sys_idx,
+            staff_idx,
+            note_x,
+            staff_spans_map,
+            explicit_span_id=explicit_span,
+            barline_xs_map=barline_xs_map,
         )
 
-        # Do NOT invent synthetic span_id! Require explicit or derived span_id!
         if (
             type(page) is not int
             or type(sys_idx) is not int
@@ -409,7 +437,13 @@ def associate_local_tuplets(
 
         marker_x_center = (marker.bbox[0] + marker.bbox[2]) / 2.0
         span_id = find_measure_span_id(
-            page, sys_idx, staff_idx, marker_x_center, staff_spans_map, explicit_span_id=explicit_span
+            page,
+            sys_idx,
+            staff_idx,
+            marker_x_center,
+            staff_spans_map,
+            explicit_span_id=explicit_span,
+            barline_xs_map=barline_xs_map,
         )
 
         if (
@@ -431,7 +465,7 @@ def associate_local_tuplets(
             continue
 
         marker_y_center = (marker.bbox[1] + marker.bbox[3]) / 2.0
-        lane_top = top_line_y - 2.5 * staff_spacing
+        lane_top = top_line_y - 2.0 * staff_spacing  # Strict 2.0 staff spaces above top line
         lane_bottom = top_line_y + 0.5
 
         if not (lane_top - 0.5 <= marker_y_center <= lane_bottom):
