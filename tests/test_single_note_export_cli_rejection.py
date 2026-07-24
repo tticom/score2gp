@@ -26,7 +26,7 @@ def test_single_note_export_rejects_multi_note_pdf(tmp_path):
         ]
     }
     
-    with patch("src.score2gp.whole_note_recogniser.run_recognition_on_file", return_value=mock_outcomes):
+    with patch("src.score2gp.notation_omr.pipeline.run_recognition_on_file", return_value=mock_outcomes):
         result = runner.invoke(app, [
             "notation-quarter-note-export",
             "--pdf", "fixtures/public/generated_simple/simple/4QuarterNotes.pdf",
