@@ -11,14 +11,14 @@ from score2gp.notation_omr.timeline import build_staff_timeline_preview
 
 
 def test_genuine_above_staff_tuplet_association():
-    """1. Genuine above-staff tuplet '3' associates to exactly three eighth notes."""
+    """1. Genuine above-staff tuplet '3' associates to exactly three eighth notes in same measure."""
     staff_geom = [{
         "page_index": 1,
         "system_index": 1,
         "staff_index": 1,
-        "span_id": "span_m1",
         "line_y_coords": [100.0, 110.0, 120.0, 130.0, 140.0],
-        "bbox": [50.0, 100.0, 500.0, 140.0]
+        "bbox": [50.0, 100.0, 500.0, 140.0],
+        "barlines": [{"bbox": [300.0, 100.0, 301.0, 140.0], "kind": "barline"}]
     }]
 
     marker = TupletMarkerEvidence(
@@ -27,15 +27,15 @@ def test_genuine_above_staff_tuplet_association():
         page_index=1,
         system_index=1,
         staff_index=1,
-        span_id="span_m1",
         bbox=(145.0, 80.0, 155.0, 90.0),
         geometry_facts={"kind": "text_span"}
     )
 
     outcomes = [
-        {"candidate_id": "8th_001", "symbol_type": "eighth_note_candidate", "bbox": [95.0, 105.0, 105.0, 115.0], "page_index": 1, "system_index": 1, "staff_index": 1, "span_id": "span_m1"},
-        {"candidate_id": "8th_002", "symbol_type": "eighth_note_candidate", "bbox": [145.0, 105.0, 155.0, 115.0], "page_index": 1, "system_index": 1, "staff_index": 1, "span_id": "span_m1"},
-        {"candidate_id": "8th_003", "symbol_type": "eighth_note_candidate", "bbox": [195.0, 105.0, 205.0, 115.0], "page_index": 1, "system_index": 1, "staff_index": 1, "span_id": "span_m1"},
+        {"candidate_id": "8th_001", "symbol_type": "eighth_note_candidate", "bbox": [95.0, 105.0, 105.0, 115.0], "page_index": 1, "system_index": 1, "staff_index": 1},
+        {"candidate_id": "8th_002", "symbol_type": "eighth_note_candidate", "bbox": [145.0, 105.0, 155.0, 115.0], "page_index": 1, "system_index": 1, "staff_index": 1},
+        {"candidate_id": "8th_003", "symbol_type": "eighth_note_candidate", "bbox": [195.0, 105.0, 205.0, 115.0], "page_index": 1, "system_index": 1, "staff_index": 1},
+        {"symbol_type": "barline", "bbox": [300.0, 100.0, 301.0, 140.0], "page_index": 1, "system_index": 1, "staff_index": 1}
     ]
 
     assocs = associate_local_tuplets([marker], outcomes, staff_geom)
@@ -43,6 +43,74 @@ def test_genuine_above_staff_tuplet_association():
     assert assocs[0].status == "associated"
     assert assocs[0].associated_candidate_ids == ("8th_001", "8th_002", "8th_003")
     assert assocs[0].ratio == (3, 2)
+
+
+def test_cross_measure_notes_cannot_group():
+    """Production Blocker Regression: Candidates across a barline in different measures CANNOT group into one tuplet."""
+    staff_geom = [{
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "line_y_coords": [100.0, 110.0, 120.0, 130.0, 140.0],
+        "bbox": [50.0, 100.0, 500.0, 140.0],
+    }]
+
+    # Barline at x=180.0 divides staff into Measure 1 (x < 180) and Measure 2 (x > 180)
+    # Note 1 is in Measure 1 (x=120). Notes 2 & 3 are in Measure 2 (x=195, x=245).
+    outcomes = [
+        {"candidate_id": "8th_001", "symbol_type": "eighth_note_candidate", "bbox": [115.0, 105.0, 125.0, 115.0], "page_index": 1, "system_index": 1, "staff_index": 1},
+        {"candidate_id": "bar_001", "symbol_type": "barline", "bbox": [179.0, 100.0, 181.0, 140.0], "page_index": 1, "system_index": 1, "staff_index": 1},
+        {"candidate_id": "8th_002", "symbol_type": "eighth_note_candidate", "bbox": [190.0, 105.0, 200.0, 115.0], "page_index": 1, "system_index": 1, "staff_index": 1},
+        {"candidate_id": "8th_003", "symbol_type": "eighth_note_candidate", "bbox": [240.0, 105.0, 250.0, 115.0], "page_index": 1, "system_index": 1, "staff_index": 1},
+    ]
+
+    # Tuplet marker at x=175 (Measure 1)
+    marker = TupletMarkerEvidence(
+        marker_id="tuplet_marker_001",
+        literal="3",
+        page_index=1,
+        system_index=1,
+        staff_index=1,
+        bbox=(170.0, 80.0, 180.0, 90.0)
+    )
+
+    assocs = associate_local_tuplets([marker], outcomes, staff_geom)
+    # Must fail closed: Note 1 is in Measure 1, Notes 2 & 3 are in Measure 2 -> cannot group across barline!
+    assert len(assocs) == 0
+
+
+def test_unpartitioned_staff_without_barlines_fails_closed():
+    """Production Blocker Regression: An unpartitioned staff without barlines or explicit span_id fails closed without manufacturing fake span IDs."""
+    staff_geom = [{
+        "page_index": 1,
+        "system_index": 1,
+        "staff_index": 1,
+        "line_y_coords": [100.0, 110.0, 120.0, 130.0, 140.0],
+        "bbox": [50.0, 100.0, 500.0, 140.0]
+    }]
+
+    # No barlines in outcomes or staff_geom, and no explicit span_id
+    outcomes = [
+        {"candidate_id": "8th_001", "symbol_type": "eighth_note_candidate", "bbox": [95.0, 105.0, 105.0, 115.0], "page_index": 1, "system_index": 1, "staff_index": 1},
+        {"candidate_id": "8th_002", "symbol_type": "eighth_note_candidate", "bbox": [145.0, 105.0, 155.0, 115.0], "page_index": 1, "system_index": 1, "staff_index": 1},
+        {"candidate_id": "8th_003", "symbol_type": "eighth_note_candidate", "bbox": [195.0, 105.0, 205.0, 115.0], "page_index": 1, "system_index": 1, "staff_index": 1},
+    ]
+
+    marker = TupletMarkerEvidence(
+        marker_id="tuplet_marker_001",
+        literal="3",
+        page_index=1,
+        system_index=1,
+        staff_index=1,
+        bbox=(145.0, 80.0, 155.0, 90.0)
+    )
+
+    assocs = associate_local_tuplets([marker], outcomes, staff_geom)
+    assert len(assocs) == 0
+
+    # Ensure outcomes are NOT mutated to add manufactured span_id
+    for c in outcomes:
+        assert "span_id" not in c
 
 
 def test_tuplet_marker_extraction_derives_ownership_from_staff_geometry():
@@ -53,10 +121,10 @@ def test_tuplet_marker_extraction_derives_ownership_from_staff_geometry():
         "staff_index": 2,
         "span_id": "span_p1_sys7_s2",
         "line_y_coords": [500.0, 510.0, 520.0, 530.0, 540.0],
-        "bbox": [50.0, 500.0, 500.0, 540.0]
+        "bbox": [50.0, 500.0, 500.0, 540.0],
+        "barlines": [{"bbox": [300.0, 500.0, 301.0, 540.0], "kind": "barline"}]
     }]
 
-    # Raw word at y=485 (above staff 2 on system 7)
     raw_text = [
         {"text": "3", "bbox": [145.0, 480.0, 155.0, 490.0], "page_index": 1}
     ]
@@ -65,7 +133,8 @@ def test_tuplet_marker_extraction_derives_ownership_from_staff_geometry():
     assert len(markers) == 1
     assert markers[0].system_index == 7
     assert markers[0].staff_index == 2
-    assert markers[0].span_id == "span_p1_sys7_s2"
+    assert markers[0].span_id == "span_m1_p1_sys7_s2"
+
 
 
 def test_unmapped_text_without_matching_staff_geometry_is_rejected():
@@ -78,7 +147,6 @@ def test_unmapped_text_without_matching_staff_geometry_is_rejected():
         "bbox": [50.0, 100.0, 500.0, 140.0]
     }]
 
-    # Word far away at y=800 (no matching staff)
     raw_text = [
         {"text": "3", "bbox": [145.0, 800.0, 155.0, 810.0], "page_index": 1}
     ]
@@ -105,7 +173,6 @@ def test_missing_staff_geometry_fails_closed():
         {"candidate_id": "8th_003", "symbol_type": "eighth_note_candidate", "bbox": [195.0, 105.0, 205.0, 115.0], "page_index": 1, "system_index": 1, "staff_index": 1, "span_id": "span_m1"},
     ]
 
-    # Empty staff geometries -> fail closed
     assocs = associate_local_tuplets([marker], outcomes, [])
     assert len(assocs) == 0
 
