@@ -36,7 +36,14 @@ from .staff_geometry import (
     map_staff_geometry_to_read_only_report,
     shape_ledger_line_candidate_evidence,
 )
+from .tuplet import (
+    TupletAssociation,
+    TupletMarkerEvidence,
+    associate_local_tuplets,
+    extract_tuplet_marker_evidence,
+)
 from .timeline import build_staff_timeline_preview
+
 
 
 def run_recognition_on_file(
@@ -75,6 +82,7 @@ def run_recognition_on_file(
     beam_locations = []
     ledger_line_locations = []
     clef_locations = []
+    tuplet_marker_locations = []
     semantic_candidates = []
 
     all_staff_geometries = []
@@ -88,6 +96,21 @@ def run_recognition_on_file(
 
         all_staff_geometries.extend(map_staff_geometry_to_read_only_report(staves))
 
+        raw_text_elements = []
+        try:
+            words = page.get_text("words")
+            for w in words:
+                raw_text_elements.append({
+                    "text": w[4],
+                    "bbox": [w[0], w[1], w[2], w[3]],
+                    "page_index": page_index,
+                })
+        except Exception:
+            pass
+
+        page_tuplet_markers = extract_tuplet_marker_evidence(raw_text_elements, staves, page_index=page_index)
+        tuplet_marker_locations.extend(page_tuplet_markers)
+
         clef_cands = extract_treble_clef_candidate_evidence(
             staves,
             page_index=page_index,
@@ -95,6 +118,7 @@ def run_recognition_on_file(
             page=page
         )
         clef_locations.extend(clef_cands)
+
 
         whole_cands = _extract_whole_note_candidates(page)
         shaped_whole = shape_whole_note_candidate_evidence(
@@ -272,6 +296,19 @@ def run_recognition_on_file(
     map_clef_resolved_staff_pitch(outcomes, explicit_clef="treble" if assume_treble_clef else None, semantic_candidates=semantic_candidates)
     coverage_report = build_clef_resolved_pitch_coverage_report(outcomes, assume_treble_clef=assume_treble_clef, semantic_candidates=semantic_candidates)
 
+    tuplet_associations = associate_local_tuplets(tuplet_marker_locations, outcomes, all_staff_geometries)
+    for assoc in tuplet_associations:
+        if assoc.status == "associated":
+            for cid in assoc.associated_candidate_ids:
+                for cand in outcomes:
+                    if cand.get("candidate_id") == cid:
+                        cand["duration_ticks"] = 320
+                        cand["tuplet_association"] = assoc.to_dict()
+        elif assoc.status == "ambiguous":
+            for cand in outcomes:
+                if cand.get("candidate_id") in assoc.associated_candidate_ids:
+                    cand["tuplet_association"] = assoc.to_dict()
+
     try:
         timeline_preview = build_staff_timeline_preview(outcomes, semantic_candidates, all_staff_geometries)
     except Exception:
@@ -284,5 +321,7 @@ def run_recognition_on_file(
         "read_only_recognition_outcomes": outcomes,
         "clef_resolved_pitch_coverage": coverage_report,
         "semantic_candidates": semantic_candidates,
-        "timeline_preview": timeline_preview
+        "timeline_preview": timeline_preview,
+        "tuplet_associations": [a.to_dict() for a in tuplet_associations]
     }
+
