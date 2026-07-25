@@ -755,3 +755,148 @@ def test_pdf_only_never_groups_chords_across_source_bar_identity(tmp_path) -> No
     assert len(score.bars[1].events) == 1
     assert score.bars[1].events[0].notes[0].fret == 7
 
+
+def test_build_ir_from_tabraw_only_tempo_override(tmp_path) -> None:
+    tabraw_data = {
+        "schema_version": "tabraw.v0.1",
+        "source_pdf": "test.pdf",
+        "pdf_layout_class": "drawn",
+        "pdf_layout_warnings": [],
+        "candidates": [
+            {
+                "id": "c-1",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "string": 1,
+                "raw_text": "5",
+                "parsed_fret": 5,
+                "x": 10.0,
+                "y": 20.0,
+                "confidence": 0.9,
+            }
+        ],
+        "warnings": [],
+    }
+    tabraw_file = tmp_path / "tabraw_tempo.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+
+    # Explicit 70.0 BPM
+    score_70, _ = build_ir_from_tabraw_only(tabraw_file, tempo_bpm=70.0)
+    assert score_70.tempo is not None
+    assert score_70.tempo.bpm == 70.0
+
+    # Default (omitted) -> 120.0 BPM
+    score_default, _ = build_ir_from_tabraw_only(tabraw_file)
+    assert score_default.tempo is not None
+    assert score_default.tempo.bpm == 120.0
+
+
+def test_build_ir_from_tabraw_only_rejects_invalid_tempo(tmp_path) -> None:
+    tabraw_data = {
+        "schema_version": "tabraw.v0.1",
+        "source_pdf": "test.pdf",
+        "pdf_layout_class": "drawn",
+        "pdf_layout_warnings": [],
+        "candidates": [
+            {
+                "id": "c-1",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "string": 1,
+                "raw_text": "5",
+                "parsed_fret": 5,
+                "x": 10.0,
+                "y": 20.0,
+                "confidence": 0.9,
+            }
+        ],
+        "warnings": [],
+    }
+    tabraw_file = tmp_path / "tabraw_invalid_tempo.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+
+    for bad_tempo in [0.0, -10.0, float("nan"), float("inf"), float("-inf")]:
+        with pytest.raises(BuildIrInputRiskError) as exc_info:
+            build_ir_from_tabraw_only(tabraw_file, tempo_bpm=bad_tempo)
+        assert exc_info.value.category == "pdf_only_tab_invalid_tempo"
+
+
+def test_cli_convert_tempo_bpm_option(tmp_path) -> None:
+    out_gp = tmp_path / "out_70.gp"
+    workdir = tmp_path / "workdir_70"
+    json_report = tmp_path / "report_70.json"
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "convert",
+            "--pdf",
+            str(SIMPLE_PDF),
+            "--pdf-only-tab",
+            "--tempo-bpm",
+            "70",
+            "--out",
+            str(out_gp),
+            "--work-dir",
+            str(workdir),
+            "--json-report",
+            str(json_report),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert out_gp.exists()
+    ir_file = workdir / "score.ir.json"
+    assert ir_file.exists()
+    ir_data = json.loads(ir_file.read_text(encoding="utf-8"))
+    assert ir_data["tempo"]["bpm"] == 70.0
+
+    # Omitting --tempo-bpm preserves 120.0 BPM
+    out_gp_def = tmp_path / "out_def.gp"
+    workdir_def = tmp_path / "workdir_def"
+
+    result_def = CliRunner().invoke(
+        app,
+        [
+            "convert",
+            "--pdf",
+            str(SIMPLE_PDF),
+            "--pdf-only-tab",
+            "--out",
+            str(out_gp_def),
+            "--work-dir",
+            str(workdir_def),
+        ],
+    )
+    assert result_def.exit_code == 0, result_def.output
+    ir_file_def = workdir_def / "score.ir.json"
+    assert ir_file_def.exists()
+    ir_data_def = json.loads(ir_file_def.read_text(encoding="utf-8"))
+    assert ir_data_def["tempo"]["bpm"] == 120.0
+
+    # CLI refuses --tempo-bpm outside --pdf-only-tab / --editable-draft
+    out_gp_refuse = tmp_path / "out_refuse.gp"
+    workdir_refuse = tmp_path / "workdir_refuse"
+
+    result_refuse = CliRunner().invoke(
+        app,
+        [
+            "convert",
+            "--pdf",
+            str(SIMPLE_PDF),
+            "--tempo-bpm",
+            "70",
+            "--out",
+            str(out_gp_refuse),
+            "--work-dir",
+            str(workdir_refuse),
+        ],
+    )
+    assert result_refuse.exit_code != 0
+    assert not out_gp_refuse.exists()
+

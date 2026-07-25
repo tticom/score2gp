@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+import math
 from pathlib import Path
 from typing import Iterable, Literal
 
@@ -1630,6 +1631,14 @@ def build_ir_from_tabraw_only(
     editable_draft: bool = False,
     require_precise_timing: bool = False,
 ) -> tuple[ScoreIR, BuildIrDiagnostics]:
+    if tempo_bpm is None or math.isnan(tempo_bpm) or math.isinf(tempo_bpm) or tempo_bpm <= 0:
+        raise BuildIrInputRiskError(
+            category="pdf_only_tab_invalid_tempo",
+            stage="argument-validation",
+            message=f"Invalid tempo_bpm: {tempo_bpm}. Must be a positive finite float.",
+            details={"tempo_bpm": str(tempo_bpm)},
+        )
+
     tabraw = TabRaw.from_json_file(tabraw_path)
 
     if require_precise_timing:
