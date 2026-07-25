@@ -8,7 +8,7 @@ import pytest
 from score2gp.cli import app
 from score2gp.build_ir import build_ir_from_tabraw_only, BuildIrInputRiskError
 from score2gp.tabraw import TabRaw, TabCandidate
-from score2gp.gp_package import validate_gp
+from score2gp.gp_package import inspect_gp, validate_gp
 
 # Public fixtures
 SIMPLE_PDF = Path("tests/fixtures/pdf/generated_pdf_fret_grouped_success.pdf")
@@ -755,3 +755,236 @@ def test_pdf_only_never_groups_chords_across_source_bar_identity(tmp_path) -> No
     assert len(score.bars[1].events) == 1
     assert score.bars[1].events[0].notes[0].fret == 7
 
+
+def test_build_ir_from_tabraw_only_tempo_override(tmp_path) -> None:
+    tabraw_data = {
+        "schema_version": "tabraw.v0.1",
+        "source_pdf": "test.pdf",
+        "pdf_layout_class": "drawn",
+        "pdf_layout_warnings": [],
+        "candidates": [
+            {
+                "id": "c-1",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "string": 1,
+                "raw_text": "5",
+                "parsed_fret": 5,
+                "x": 10.0,
+                "y": 20.0,
+                "confidence": 0.9,
+            }
+        ],
+        "warnings": [],
+    }
+    tabraw_file = tmp_path / "tabraw_tempo.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+
+    # Explicit 70.0 BPM
+    score_70, _ = build_ir_from_tabraw_only(tabraw_file, tempo_bpm=70.0, tempo_is_explicit=True, editable_draft=True)
+    assert score_70.tempo is not None
+    assert score_70.tempo.bpm == 70.0
+    assert "Tempo set to 70 bpm." in score_70.bars[0].events[0].text
+
+    # Explicit 120.0 BPM
+    score_exp120, _ = build_ir_from_tabraw_only(tabraw_file, tempo_bpm=120.0, tempo_is_explicit=True, editable_draft=True)
+    assert score_exp120.tempo is not None
+    assert score_exp120.tempo.bpm == 120.0
+    assert "Tempo set to 120 bpm." in score_exp120.bars[0].events[0].text
+    assert "Tempo defaulted" not in score_exp120.bars[0].events[0].text
+
+    # Default (omitted) -> 120.0 BPM
+    score_default, _ = build_ir_from_tabraw_only(tabraw_file, editable_draft=True)
+    assert score_default.tempo is not None
+    assert score_default.tempo.bpm == 120.0
+    assert "Tempo defaulted to 120 bpm." in score_default.bars[0].events[0].text
+
+
+def test_build_ir_from_tabraw_only_rejects_invalid_tempo(tmp_path) -> None:
+    tabraw_data = {
+        "schema_version": "tabraw.v0.1",
+        "source_pdf": "test.pdf",
+        "pdf_layout_class": "drawn",
+        "pdf_layout_warnings": [],
+        "candidates": [
+            {
+                "id": "c-1",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "string": 1,
+                "raw_text": "5",
+                "parsed_fret": 5,
+                "x": 10.0,
+                "y": 20.0,
+                "confidence": 0.9,
+            }
+        ],
+        "warnings": [],
+    }
+    tabraw_file = tmp_path / "tabraw_invalid_tempo.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+
+    for bad_tempo in [0.0, -10.0, float("nan"), float("inf"), float("-inf")]:
+        with pytest.raises(BuildIrInputRiskError) as exc_info:
+            build_ir_from_tabraw_only(tabraw_file, tempo_bpm=bad_tempo)
+        assert exc_info.value.category == "pdf_only_tab_invalid_tempo"
+
+
+def test_cli_convert_tempo_bpm_option(tmp_path) -> None:
+    out_gp = tmp_path / "out_70.gp"
+    workdir = tmp_path / "workdir_70"
+    json_report = tmp_path / "report_70.json"
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "convert",
+            "--pdf",
+            str(SIMPLE_PDF),
+            "--pdf-only-tab",
+            "--tempo-bpm",
+            "70",
+            "--out",
+            str(out_gp),
+            "--work-dir",
+            str(workdir),
+            "--json-report",
+            str(json_report),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert out_gp.exists()
+    gp_summary = inspect_gp(out_gp)
+    assert gp_summary["tempo"] is not None
+    assert gp_summary["tempo"].startswith("70")
+
+    ir_file = workdir / "score.ir.json"
+    assert ir_file.exists()
+    ir_data = json.loads(ir_file.read_text(encoding="utf-8"))
+    assert ir_data["tempo"]["bpm"] == 70.0
+
+    # Omitting --tempo-bpm preserves 120.0 BPM
+    out_gp_def = tmp_path / "out_def.gp"
+    workdir_def = tmp_path / "workdir_def"
+
+    result_def = CliRunner().invoke(
+        app,
+        [
+            "convert",
+            "--pdf",
+            str(SIMPLE_PDF),
+            "--pdf-only-tab",
+            "--out",
+            str(out_gp_def),
+            "--work-dir",
+            str(workdir_def),
+        ],
+    )
+    assert result_def.exit_code == 0, result_def.output
+    ir_file_def = workdir_def / "score.ir.json"
+    assert ir_file_def.exists()
+    ir_data_def = json.loads(ir_file_def.read_text(encoding="utf-8"))
+    assert ir_data_def["tempo"]["bpm"] == 120.0
+
+    # CLI refuses --tempo-bpm outside --pdf-only-tab / --editable-draft
+    out_gp_refuse = tmp_path / "out_refuse.gp"
+    workdir_refuse = tmp_path / "workdir_refuse"
+
+    result_refuse = CliRunner().invoke(
+        app,
+        [
+            "convert",
+            "--pdf",
+            str(SIMPLE_PDF),
+            "--tempo-bpm",
+            "70",
+            "--out",
+            str(out_gp_refuse),
+            "--work-dir",
+            str(workdir_refuse),
+        ],
+    )
+    assert result_refuse.exit_code != 0
+    assert not out_gp_refuse.exists()
+
+
+def test_cli_convert_editable_draft_tempo_bpm_option(tmp_path) -> None:
+    out_gp = tmp_path / "out_draft.gp"
+    workdir = tmp_path / "workdir_draft"
+    json_report = tmp_path / "report_draft.json"
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "convert",
+            "--pdf",
+            str(SIMPLE_PDF),
+            "--editable-draft",
+            "--tempo-bpm",
+            "70",
+            "--out",
+            str(out_gp),
+            "--work-dir",
+            str(workdir),
+            "--json-report",
+            str(json_report),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert out_gp.exists()
+
+    # Inspect ScoreIR tempo & text annotation
+    ir_file = workdir / "score.ir.json"
+    assert ir_file.exists()
+    ir_data = json.loads(ir_file.read_text(encoding="utf-8"))
+    assert ir_data["tempo"]["bpm"] == 70.0
+
+    first_event = ir_data["bars"][0]["events"][0]
+    annotation = first_event.get("text")
+    assert annotation is not None
+    assert "Tempo set to 70 bpm." in annotation
+    assert "Tempo defaulted" not in annotation
+
+    # Inspect GPIF tempo in generated .gp package
+    gp_summary = inspect_gp(out_gp)
+    assert gp_summary["tempo"] is not None
+    assert gp_summary["tempo"].startswith("70")
+
+    # Regression test for explicit --tempo-bpm 120
+    out_gp_120 = tmp_path / "out_draft_120.gp"
+    workdir_120 = tmp_path / "workdir_draft_120"
+    result_120 = CliRunner().invoke(
+        app,
+        [
+            "convert",
+            "--pdf",
+            str(SIMPLE_PDF),
+            "--editable-draft",
+            "--tempo-bpm",
+            "120",
+            "--out",
+            str(out_gp_120),
+            "--work-dir",
+            str(workdir_120),
+        ],
+    )
+    assert result_120.exit_code == 0, result_120.output
+    assert out_gp_120.exists()
+    ir_file_120 = workdir_120 / "score.ir.json"
+    ir_data_120 = json.loads(ir_file_120.read_text(encoding="utf-8"))
+    assert ir_data_120["tempo"]["bpm"] == 120.0
+
+    ann_120 = ir_data_120["bars"][0]["events"][0].get("text")
+    assert ann_120 is not None
+    assert "Tempo set to 120 bpm." in ann_120
+    assert "Tempo defaulted" not in ann_120
+
+    gp_summary_120 = inspect_gp(out_gp_120)
+    assert gp_summary_120["tempo"] is not None
+    assert gp_summary_120["tempo"].startswith("120")

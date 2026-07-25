@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import subprocess
 import sys
 import hashlib
@@ -807,6 +808,7 @@ def convert_command(
     pdf_only_tab: bool = typer.Option(False, "--pdf-only-tab", help="Enable direct PDF-to-GP conversion without a MusicXML timing source"),
     editable_draft: bool = typer.Option(False, "--editable-draft", help="Generate an editable GP draft with defaulted rhythms and tuning from PDF tab extraction."),
     require_precise_timing: bool = typer.Option(False, "--require-precise-timing", help="Reject input if reliable precise timing evidence is missing."),
+    tempo_bpm: Optional[float] = typer.Option(None, "--tempo-bpm", help="Explicit tempo override in BPM for PDF-only TabRaw conversion."),
     ref_gp: Optional[Path] = typer.Option(None, "--ref-gp", help="Path to optional reference GP package for semantic comparison"),
 ) -> None:
     """Run the complete conversion pipeline: extraction, alignment, IR generation, and GP7 package writing."""
@@ -818,6 +820,42 @@ def convert_command(
     pdf_only_diag_payload = None
     supplied_musicxml = musicxml is not None
     mxl_info = _get_mxl_info(musicxml, supplied_musicxml)
+
+    if tempo_bpm is not None:
+        if not pdf_only_tab and not editable_draft:
+            typer.echo("Error: --tempo-bpm option is only supported with --pdf-only-tab or --editable-draft.", err=True)
+            if json_report:
+                _write_convert_report(
+                    report_path=json_report,
+                    status="refused",
+                    stage="argument-validation",
+                    exit_code=1,
+                    work_dir=actual_work_dir,
+                    error_type="ValueError",
+                    refusal_code="pdf_only_tab_invalid_tempo",
+                    recommended_action="Remove --tempo-bpm or specify --pdf-only-tab or --editable-draft.",
+                    output_written=False,
+                    strict=strict,
+                    musicxml_sidecar_info=mxl_info,
+                )
+            raise typer.Exit(1)
+        if math.isnan(tempo_bpm) or math.isinf(tempo_bpm) or tempo_bpm <= 0:
+            typer.echo(f"Error: Invalid --tempo-bpm value: {tempo_bpm}. Must be positive and finite.", err=True)
+            if json_report:
+                _write_convert_report(
+                    report_path=json_report,
+                    status="refused",
+                    stage="argument-validation",
+                    exit_code=1,
+                    work_dir=actual_work_dir,
+                    error_type="ValueError",
+                    refusal_code="pdf_only_tab_invalid_tempo",
+                    recommended_action=f"Provide a positive finite float for --tempo-bpm. Provided: {tempo_bpm}",
+                    output_written=False,
+                    strict=strict,
+                    musicxml_sidecar_info=mxl_info,
+                )
+            raise typer.Exit(1)
     # Validate PDF file existence early
     if not pdf.exists():
         typer.echo(f"Error: Input PDF file not found at {pdf}", err=True)
@@ -1035,11 +1073,15 @@ def convert_command(
     try:
         if pdf_only_tab or editable_draft:
             from .build_ir import build_ir_from_tabraw_only
-            score, diagnostics = build_ir_from_tabraw_only(
-                tabraw_path=tabraw_path,
-                editable_draft=editable_draft,
-                require_precise_timing=require_precise_timing,
-            )
+            tabraw_kwargs = {
+                "tabraw_path": tabraw_path,
+                "editable_draft": editable_draft,
+                "require_precise_timing": require_precise_timing,
+            }
+            if tempo_bpm is not None:
+                tabraw_kwargs["tempo_bpm"] = tempo_bpm
+                tabraw_kwargs["tempo_is_explicit"] = True
+            score, diagnostics = build_ir_from_tabraw_only(**tabraw_kwargs)
             score.to_json_file(ir_path)
         else:
             score, diagnostics = build_ir_with_diagnostics_from_files(
