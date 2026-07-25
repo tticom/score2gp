@@ -1848,12 +1848,14 @@ def build_ir_from_tabraw_only(
 
             event_text = None
             if editable_draft and output_bar_idx == 1 and i == 0:
+                tempo_fmt = int(tempo_bpm) if tempo_bpm == int(tempo_bpm) else tempo_bpm
+                tempo_phrase = f"Tempo set to {tempo_fmt} bpm." if tempo_bpm != 120.0 else "Tempo defaulted to 120 bpm."
                 event_text = (
                     "Editable draft generated from PDF tablature. "
                     "Rhythms defaulted to quarter notes; timing was not recognised. "
                     "Tuning defaulted to E Standard unless corrected by the user. "
                     "Time signature defaulted to 4/4. "
-                    "Tempo defaulted to 120 bpm. "
+                    f"{tempo_phrase} "
                     "Standard notation and notation/tab alignment were skipped. "
                     "Rests/silence may be omitted."
                 )

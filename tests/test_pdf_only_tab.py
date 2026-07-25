@@ -8,7 +8,7 @@ import pytest
 from score2gp.cli import app
 from score2gp.build_ir import build_ir_from_tabraw_only, BuildIrInputRiskError
 from score2gp.tabraw import TabRaw, TabCandidate
-from score2gp.gp_package import validate_gp
+from score2gp.gp_package import inspect_gp, validate_gp
 
 # Public fixtures
 SIMPLE_PDF = Path("tests/fixtures/pdf/generated_pdf_fret_grouped_success.pdf")
@@ -851,6 +851,10 @@ def test_cli_convert_tempo_bpm_option(tmp_path) -> None:
     )
     assert result.exit_code == 0, result.output
     assert out_gp.exists()
+    gp_summary = inspect_gp(out_gp)
+    assert gp_summary["tempo"] is not None
+    assert gp_summary["tempo"].startswith("70")
+
     ir_file = workdir / "score.ir.json"
     assert ir_file.exists()
     ir_data = json.loads(ir_file.read_text(encoding="utf-8"))
@@ -899,4 +903,47 @@ def test_cli_convert_tempo_bpm_option(tmp_path) -> None:
     )
     assert result_refuse.exit_code != 0
     assert not out_gp_refuse.exists()
+
+
+def test_cli_convert_editable_draft_tempo_bpm_option(tmp_path) -> None:
+    out_gp = tmp_path / "out_draft.gp"
+    workdir = tmp_path / "workdir_draft"
+    json_report = tmp_path / "report_draft.json"
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "convert",
+            "--pdf",
+            str(SIMPLE_PDF),
+            "--editable-draft",
+            "--tempo-bpm",
+            "70",
+            "--out",
+            str(out_gp),
+            "--work-dir",
+            str(workdir),
+            "--json-report",
+            str(json_report),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert out_gp.exists()
+
+    # Inspect ScoreIR tempo & text annotation
+    ir_file = workdir / "score.ir.json"
+    assert ir_file.exists()
+    ir_data = json.loads(ir_file.read_text(encoding="utf-8"))
+    assert ir_data["tempo"]["bpm"] == 70.0
+
+    first_event = ir_data["bars"][0]["events"][0]
+    annotation = first_event.get("text")
+    assert annotation is not None
+    assert "Tempo set to 70 bpm." in annotation
+    assert "Tempo defaulted to 120 bpm." not in annotation
+
+    # Inspect GPIF tempo in generated .gp package
+    gp_summary = inspect_gp(out_gp)
+    assert gp_summary["tempo"] is not None
+    assert gp_summary["tempo"].startswith("70")
 
