@@ -1080,6 +1080,7 @@ def convert_command(
             }
             if tempo_bpm is not None:
                 tabraw_kwargs["tempo_bpm"] = tempo_bpm
+                tabraw_kwargs["tempo_is_explicit"] = True
             score, diagnostics = build_ir_from_tabraw_only(**tabraw_kwargs)
             score.to_json_file(ir_path)
         else:

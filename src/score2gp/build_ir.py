@@ -1628,6 +1628,7 @@ def build_ir_from_tabraw_only(
     tabraw_path: str | Path,
     *,
     tempo_bpm: float = 120.0,
+    tempo_is_explicit: bool = False,
     editable_draft: bool = False,
     require_precise_timing: bool = False,
 ) -> tuple[ScoreIR, BuildIrDiagnostics]:
@@ -1849,7 +1850,10 @@ def build_ir_from_tabraw_only(
             event_text = None
             if editable_draft and output_bar_idx == 1 and i == 0:
                 tempo_fmt = int(tempo_bpm) if tempo_bpm == int(tempo_bpm) else tempo_bpm
-                tempo_phrase = f"Tempo set to {tempo_fmt} bpm." if tempo_bpm != 120.0 else "Tempo defaulted to 120 bpm."
+                if tempo_is_explicit:
+                    tempo_phrase = f"Tempo set to {tempo_fmt} bpm."
+                else:
+                    tempo_phrase = f"Tempo defaulted to {tempo_fmt} bpm."
                 event_text = (
                     "Editable draft generated from PDF tablature. "
                     "Rhythms defaulted to quarter notes; timing was not recognised. "
