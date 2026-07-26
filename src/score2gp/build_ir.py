@@ -10,6 +10,7 @@ from typing import Iterable, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from .pdf_tab_event_factory import (
+    TRACK_ID,
     build_pdf_tab_event_from_subgroup,
     determine_pdf_tab_event_duration,
 )
@@ -70,7 +71,6 @@ from .pdf_only_chord_event_grouper import (
     PdfOnlyChordEventGrouper,
 )
 
-TRACK_ID = "gtr-1"
 DIAGNOSTICS_SCHEMA_VERSION = "build-ir-diagnostics.v0.1"
 ASCII_SCOREIR_GATE_VERSION = "ascii-scoreir-gate.v0.1"
 PDF_TIMING_REFINEMENT_VERSION = "pdf-timing-refinement.v1.0"

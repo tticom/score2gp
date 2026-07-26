@@ -204,3 +204,81 @@ def test_build_pdf_tab_event_from_subgroup_editable_first_event_text() -> None:
     assert event.text is not None
     assert "Editable draft generated from PDF tablature." in event.text
     assert "Tempo defaulted to 120 bpm." in event.text
+
+
+def test_pdf_tab_event_factory_normalized_before_after_equivalence() -> None:
+    """Verify field-for-field normalized equivalence between legacy inline event creation and build_pdf_tab_event_from_subgroup."""
+    from score2gp.ir import DEFAULT_TICKS_PER_QUARTER, Event, NotatedDuration, Note, Timing
+    from score2gp.pdf_tab_event_factory import TRACK_ID, _STRING_TO_BASE_PITCH
+
+    c1 = TabCandidate(
+        id="c-1",
+        kind="fret",
+        raw_text="5",
+        parsed_fret=5,
+        x=10.0,
+        y=10.0,
+        string=1,
+        bar_index=1,
+        system_index=1,
+        staff_index=1,
+        page_index=1,
+        bbox=BoundingBox(page=1, x0=10.0, y0=10.0, x1=15.0, y1=15.0),
+        confidence=0.85,
+    )
+    c2 = TabCandidate(
+        id="c-2",
+        kind="fret",
+        raw_text="7",
+        parsed_fret=7,
+        x=10.0,
+        y=20.0,
+        string=3,
+        bar_index=1,
+        system_index=1,
+        staff_index=1,
+        page_index=1,
+        bbox=BoundingBox(page=1, x0=10.0, y0=20.0, x1=15.0, y1=25.0),
+        confidence=0.95,
+    )
+    subgroup = [c1, c2]
+
+    # Baseline/Legacy inline creation algorithm
+    legacy_notes = [
+        Note(
+            string=c.string,
+            fret=c.parsed_fret or 0,
+            pitch=_STRING_TO_BASE_PITCH.get(c.string, 40) + (c.parsed_fret or 0),
+            confidence=c.confidence,
+            provenance=[c.to_provenance()],
+        )
+        for c in subgroup
+    ]
+    legacy_event = Event(
+        id="bar-1-event-1",
+        track_id=TRACK_ID,
+        timing=Timing(
+            bar_index=1,
+            onset_ticks=0,
+            duration_ticks=480,
+            ticks_per_quarter=DEFAULT_TICKS_PER_QUARTER,
+            notated_duration=NotatedDuration(value="eighth", dots=0),
+        ),
+        is_rest=False,
+        notes=legacy_notes,
+        text=None,
+        confidence=sum(c.confidence for c in subgroup) / len(subgroup),
+        provenance=[c.to_provenance() for c in subgroup],
+    )
+
+    # Refactored event factory creation
+    factory_event = build_pdf_tab_event_from_subgroup(
+        subgroup,
+        output_bar_idx=1,
+        event_idx=0,
+        onset_ticks=0,
+        grid_spacing=480,
+        duration_name="eighth",
+    )
+
+    assert factory_event.model_dump() == legacy_event.model_dump()
