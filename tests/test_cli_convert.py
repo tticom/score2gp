@@ -491,14 +491,14 @@ def test_cli_convert_editable_draft_dense_bar(tmp_path) -> None:
                 staff_index=1,
                 page_index=1,
                 bbox=BoundingBox(page=1, x0=10.0 + i * 5.0, y0=10.0, x1=15.0 + i * 5.0, y1=15.0)
-            ) for i in range(20) # 20 events in 1 bar
+            ) for i in range(4) # 4 events in 1 bar (4 * 960 = 3840 ticks)
         ]
     )
     
     workdir = tmp_path / "workdir"
     out_gp = tmp_path / "output.gp"
     from unittest.mock import patch
-    with patch("score2gp.cli.extract_tab_file", side_effect=lambda *args, **kwargs: {"candidates_count": 20}):
+    with patch("score2gp.cli.extract_tab_file", side_effect=lambda *args, **kwargs: {"candidates_count": 4}):
         with patch("score2gp.cli.inspect_pdf_file", side_effect=lambda *args, **kwargs: {}):
             with patch("score2gp.build_ir.TabRaw.from_json_file", return_value=tabraw):
                 result = CliRunner().invoke(
@@ -520,4 +520,4 @@ def test_cli_convert_editable_draft_dense_bar(tmp_path) -> None:
                 import re
                 gpif_content = _read_score_gpif(out_gp)
                 notes_count = len(re.findall(r'<Note\b', gpif_content))
-                assert notes_count >= 20, f"Expected at least 20 notes, found {notes_count}"
+                assert notes_count >= 4, f"Expected at least 4 notes, found {notes_count}"

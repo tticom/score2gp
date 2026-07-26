@@ -183,9 +183,9 @@ def test_pdf_only_chord_event_grouper_does_not_cross_source_bar_identity(tmp_pat
 
     score, diagnostics = build_ir_from_tabraw_only(tabraw_file)
 
-    # Must produce 2 distinct bars, each with 1 event
+    # Must produce 2 distinct bars, each with 1 note event + 3 rests
     assert len(score.bars) == 2
-    assert len(score.bars[0].events) == 1
+    assert len(score.bars[0].events) == 4
     assert score.bars[0].events[0].notes[0].fret == 5
-    assert len(score.bars[1].events) == 1
+    assert len(score.bars[1].events) == 4
     assert score.bars[1].events[0].notes[0].fret == 7
