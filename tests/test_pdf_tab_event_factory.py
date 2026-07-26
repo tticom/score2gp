@@ -207,10 +207,16 @@ def test_build_pdf_tab_event_from_subgroup_editable_first_event_text() -> None:
 
 
 def test_pdf_tab_event_factory_normalized_before_after_equivalence() -> None:
-    """Verify field-for-field normalized equivalence between legacy inline event creation and build_pdf_tab_event_from_subgroup."""
+    """Verify field-for-field normalized equivalence for representative public scenarios:
+    1. Single-note event
+    2. Multi-note chord event
+    3. Explicit quarter-rest event
+    4. Editable-draft first-event text annotation
+    against independent baseline expectations.
+    """
     from score2gp.ir import DEFAULT_TICKS_PER_QUARTER, Event, NotatedDuration, Note, Timing
-    from score2gp.pdf_tab_event_factory import TRACK_ID, _STRING_TO_BASE_PITCH
 
+    # 1. Representative single-note event
     c1 = TabCandidate(
         id="c-1",
         kind="fret",
@@ -224,8 +230,43 @@ def test_pdf_tab_event_factory_normalized_before_after_equivalence() -> None:
         staff_index=1,
         page_index=1,
         bbox=BoundingBox(page=1, x0=10.0, y0=10.0, x1=15.0, y1=15.0),
-        confidence=0.85,
+        confidence=0.9,
     )
+    ev_note = build_pdf_tab_event_from_subgroup(
+        [c1],
+        output_bar_idx=1,
+        event_idx=0,
+        onset_ticks=0,
+        grid_spacing=480,
+        duration_name="eighth",
+    )
+    expected_note_event = Event(
+        id="bar-1-event-1",
+        track_id="gtr-1",
+        timing=Timing(
+            bar_index=1,
+            onset_ticks=0,
+            duration_ticks=480,
+            ticks_per_quarter=DEFAULT_TICKS_PER_QUARTER,
+            notated_duration=NotatedDuration(value="eighth", dots=0),
+        ),
+        is_rest=False,
+        notes=[
+            Note(
+                string=1,
+                fret=5,
+                pitch=69,  # E4 (64) + 5
+                confidence=0.9,
+                provenance=[c1.to_provenance()],
+            )
+        ],
+        text=None,
+        confidence=0.9,
+        provenance=[c1.to_provenance()],
+    )
+    assert ev_note == expected_note_event
+
+    # 2. Representative chord event (string 1 fret 5 & string 3 fret 7)
     c2 = TabCandidate(
         id="c-2",
         kind="fret",
@@ -239,46 +280,112 @@ def test_pdf_tab_event_factory_normalized_before_after_equivalence() -> None:
         staff_index=1,
         page_index=1,
         bbox=BoundingBox(page=1, x0=10.0, y0=20.0, x1=15.0, y1=25.0),
-        confidence=0.95,
+        confidence=0.7,
     )
-    subgroup = [c1, c2]
-
-    # Baseline/Legacy inline creation algorithm
-    legacy_notes = [
-        Note(
-            string=c.string,
-            fret=c.parsed_fret or 0,
-            pitch=_STRING_TO_BASE_PITCH.get(c.string, 40) + (c.parsed_fret or 0),
-            confidence=c.confidence,
-            provenance=[c.to_provenance()],
-        )
-        for c in subgroup
-    ]
-    legacy_event = Event(
-        id="bar-1-event-1",
-        track_id=TRACK_ID,
+    ev_chord = build_pdf_tab_event_from_subgroup(
+        [c1, c2],
+        output_bar_idx=1,
+        event_idx=1,
+        onset_ticks=480,
+        grid_spacing=480,
+        duration_name="eighth",
+    )
+    expected_chord_event = Event(
+        id="bar-1-event-2",
+        track_id="gtr-1",
         timing=Timing(
             bar_index=1,
-            onset_ticks=0,
+            onset_ticks=480,
             duration_ticks=480,
             ticks_per_quarter=DEFAULT_TICKS_PER_QUARTER,
             notated_duration=NotatedDuration(value="eighth", dots=0),
         ),
         is_rest=False,
-        notes=legacy_notes,
+        notes=[
+            Note(
+                string=1,
+                fret=5,
+                pitch=69,
+                confidence=0.9,
+                provenance=[c1.to_provenance()],
+            ),
+            Note(
+                string=3,
+                fret=7,
+                pitch=62,  # G3 (55) + 7
+                confidence=0.7,
+                provenance=[c2.to_provenance()],
+            ),
+        ],
         text=None,
-        confidence=sum(c.confidence for c in subgroup) / len(subgroup),
-        provenance=[c.to_provenance() for c in subgroup],
+        confidence=0.8,  # (0.9 + 0.7) / 2
+        provenance=[c1.to_provenance(), c2.to_provenance()],
     )
+    assert ev_chord == expected_chord_event
 
-    # Refactored event factory creation
-    factory_event = build_pdf_tab_event_from_subgroup(
-        subgroup,
+    # 3. Representative explicit quarter-rest event
+    c_rest = TabCandidate(
+        id="c-rest",
+        kind="fret",
+        raw_text="quarter_rest",
+        parsed_fret=None,
+        x=20.0,
+        y=10.0,
+        string=1,
+        bar_index=1,
+        system_index=1,
+        staff_index=1,
+        page_index=1,
+        bbox=BoundingBox(page=1, x0=20.0, y0=10.0, x1=25.0, y1=15.0),
+        confidence=0.95,
+    )
+    ev_rest = build_pdf_tab_event_from_subgroup(
+        [c_rest],
         output_bar_idx=1,
-        event_idx=0,
-        onset_ticks=0,
+        event_idx=2,
+        onset_ticks=960,
         grid_spacing=480,
         duration_name="eighth",
     )
+    expected_rest_event = Event(
+        id="bar-1-event-3",
+        track_id="gtr-1",
+        timing=Timing(
+            bar_index=1,
+            onset_ticks=960,
+            duration_ticks=960,
+            ticks_per_quarter=DEFAULT_TICKS_PER_QUARTER,
+            notated_duration=NotatedDuration(value="quarter", dots=0),
+        ),
+        is_rest=True,
+        notes=[],
+        text=None,
+        confidence=0.95,
+        provenance=[c_rest.to_provenance()],
+    )
+    assert ev_rest == expected_rest_event
 
-    assert factory_event.model_dump() == legacy_event.model_dump()
+    # 4. Representative editable-draft first-event text annotation
+    ev_editable = build_pdf_tab_event_from_subgroup(
+        [c1],
+        output_bar_idx=1,
+        event_idx=0,
+        onset_ticks=0,
+        grid_spacing=960,
+        duration_name="quarter",
+        editable_draft=True,
+        tempo_bpm=120.0,
+        tempo_is_explicit=False,
+    )
+    expected_editable_text = (
+        "Editable draft generated from PDF tablature. "
+        "Rhythms defaulted to quarter notes; timing was not recognised. "
+        "Tuning defaulted to E Standard unless corrected by the user. "
+        "Time signature defaulted to 4/4. "
+        "Tempo defaulted to 120 bpm. "
+        "Standard notation and notation/tab alignment were skipped. "
+        "Rests/silence may be omitted."
+    )
+    assert ev_editable.text == expected_editable_text
+    assert ev_editable.timing.duration_ticks == 960
+    assert ev_editable.timing.notated_duration.value == "quarter"
