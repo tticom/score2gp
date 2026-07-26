@@ -9,6 +9,11 @@ from typing import Iterable, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .pdf_tab_measure_timing import (
+    decompose_pdf_tab_measure_remainder_to_rests,
+    select_pdf_tab_grid_spacing_and_duration_name,
+    validate_pdf_tab_measure_capacity,
+)
 from .ascii_alignment import ALIGNMENT_SCHEMA_VERSION, AsciiMusicXmlAlignment, compute_sha256
 from . import __version__
 from .ir import (
@@ -1796,22 +1801,9 @@ def build_ir_from_tabraw_only(
                 message=f"PDF-only tab building refused: too many events ({N}) in bar {output_bar_idx}.",
             )
 
-        if editable_draft:
-            grid_spacing = 960
-            duration_name = "quarter"
-        else:
-            if N <= 8:
-                grid_spacing = 480
-                duration_name = "eighth"
-            elif N <= 16:
-                grid_spacing = 240
-                duration_name = "16th"
-            elif N <= 32:
-                grid_spacing = 120
-                duration_name = "32nd"
-            else:
-                grid_spacing = 60
-                duration_name = "64th"
+        grid_spacing, duration_name = select_pdf_tab_grid_spacing_and_duration_name(
+            N, editable_draft=editable_draft
+        )
 
         events = []
         current_onset = 0
@@ -1841,20 +1833,7 @@ def build_ir_from_tabraw_only(
                 ev_duration_ticks = grid_spacing
                 ev_duration_name = duration_name
 
-            if current_onset + ev_duration_ticks > 3840:
-                raise BuildIrInputRiskError(
-                    category="pdf_only_tab_measure_overcapacity",
-                    stage="measure-assembly",
-                    message=(
-                        f"Candidate note events in bar {output_bar_idx} exceed measure capacity 3840 ticks "
-                        f"(accumulated {current_onset + ev_duration_ticks} ticks)."
-                    ),
-                    details={
-                        "bar_index": str(output_bar_idx),
-                        "accumulated_ticks": str(current_onset + ev_duration_ticks),
-                        "measure_capacity": "3840",
-                    },
-                )
+            validate_pdf_tab_measure_capacity(current_onset, ev_duration_ticks, output_bar_idx)
 
             onset_ticks = current_onset
             current_onset += ev_duration_ticks
@@ -1900,39 +1879,27 @@ def build_ir_from_tabraw_only(
 
         remainder = 3840 - current_onset
         if remainder > 0:
-            rest_hierarchy = [
-                ("whole", 3840),
-                ("half", 1920),
-                ("quarter", 960),
-                ("eighth", 480),
-                ("16th", 240),
-                ("32nd", 120),
-                ("64th", 60),
-            ]
-            seq_idx = 1
-            for rest_name, rest_ticks in rest_hierarchy:
-                while remainder >= rest_ticks:
-                    events.append(
-                        Event(
-                            id=f"bar-{output_bar_idx}-rest-{seq_idx}",
-                            track_id=TRACK_ID,
-                            timing=Timing(
-                                bar_index=output_bar_idx,
-                                onset_ticks=current_onset,
-                                duration_ticks=rest_ticks,
-                                ticks_per_quarter=DEFAULT_TICKS_PER_QUARTER,
-                                notated_duration=NotatedDuration(value=rest_name, dots=0),
-                            ),
-                            is_rest=True,
-                            notes=[],
-                            text=None,
-                            confidence=1.0,
-                            provenance=[],
-                        )
+            rest_descriptors = decompose_pdf_tab_measure_remainder_to_rests(remainder)
+            for seq_idx, desc in enumerate(rest_descriptors, start=1):
+                events.append(
+                    Event(
+                        id=f"bar-{output_bar_idx}-rest-{seq_idx}",
+                        track_id=TRACK_ID,
+                        timing=Timing(
+                            bar_index=output_bar_idx,
+                            onset_ticks=current_onset,
+                            duration_ticks=desc.ticks,
+                            ticks_per_quarter=DEFAULT_TICKS_PER_QUARTER,
+                            notated_duration=NotatedDuration(value=desc.name, dots=0),
+                        ),
+                        is_rest=True,
+                        notes=[],
+                        text=None,
+                        confidence=1.0,
+                        provenance=[],
                     )
-                    current_onset += rest_ticks
-                    remainder -= rest_ticks
-                    seq_idx += 1
+                )
+                current_onset += desc.ticks
 
         bars.append(
             Bar(
