@@ -50,14 +50,21 @@ def test_pdf_only_tab_build_ir_creates_valid_rest_events(tmp_path):
     
     # Verify events
     events = score.bars[0].events
-    # The fixture has two quarter rests
-    assert len(events) == 2
-    
+    # The fixture has two quarter rests (plus 1 decomposed half rest filling the measure to 3840 ticks)
+    assert len(events) == 3
+
     rest_events = [ev for ev in events if ev.is_rest]
-    assert len(rest_events) == 2
+    assert len(rest_events) == 3
     
     for rest_ev in rest_events:
         assert rest_ev.is_rest is True
         assert rest_ev.notes == [] # Ensure notes are cleanly stripped
+
+    # The first two rests are the explicit candidate quarter rests
+    for rest_ev in rest_events[:2]:
         assert rest_ev.timing.duration_ticks == 960 # Must have quarter rest duration
         assert rest_ev.timing.notated_duration.value == "quarter"
+
+    # The third rest is the decomposed half rest filling the remainder measure capacity
+    assert rest_events[2].timing.duration_ticks == 1920
+    assert rest_events[2].timing.notated_duration.value == "half"

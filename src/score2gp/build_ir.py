@@ -1834,15 +1834,27 @@ def build_ir_from_tabraw_only(
                         )
                     )
 
-            if editable_draft:
-                ev_duration_ticks = grid_spacing
-                ev_duration_name = duration_name
-            elif is_rest:
+            if is_rest:
                 ev_duration_ticks = 960
                 ev_duration_name = "quarter"
             else:
-                ev_duration_ticks = grid_spacing if i < N - 1 else max(0, 3840 - current_onset)
+                ev_duration_ticks = grid_spacing
                 ev_duration_name = duration_name
+
+            if current_onset + ev_duration_ticks > 3840:
+                raise BuildIrInputRiskError(
+                    category="pdf_only_tab_measure_overcapacity",
+                    stage="measure-assembly",
+                    message=(
+                        f"Candidate note events in bar {output_bar_idx} exceed measure capacity 3840 ticks "
+                        f"(accumulated {current_onset + ev_duration_ticks} ticks)."
+                    ),
+                    details={
+                        "bar_index": str(output_bar_idx),
+                        "accumulated_ticks": str(current_onset + ev_duration_ticks),
+                        "measure_capacity": "3840",
+                    },
+                )
 
             onset_ticks = current_onset
             current_onset += ev_duration_ticks
@@ -1885,6 +1897,42 @@ def build_ir_from_tabraw_only(
                     provenance=[c.to_provenance() for c in subgroup_candidates],
                 )
             )
+
+        remainder = 3840 - current_onset
+        if remainder > 0:
+            rest_hierarchy = [
+                ("whole", 3840),
+                ("half", 1920),
+                ("quarter", 960),
+                ("eighth", 480),
+                ("16th", 240),
+                ("32nd", 120),
+                ("64th", 60),
+            ]
+            seq_idx = 1
+            for rest_name, rest_ticks in rest_hierarchy:
+                while remainder >= rest_ticks:
+                    events.append(
+                        Event(
+                            id=f"bar-{output_bar_idx}-rest-{seq_idx}",
+                            track_id=TRACK_ID,
+                            timing=Timing(
+                                bar_index=output_bar_idx,
+                                onset_ticks=current_onset,
+                                duration_ticks=rest_ticks,
+                                ticks_per_quarter=DEFAULT_TICKS_PER_QUARTER,
+                                notated_duration=NotatedDuration(value=rest_name, dots=0),
+                            ),
+                            is_rest=True,
+                            notes=[],
+                            text=None,
+                            confidence=1.0,
+                            provenance=[],
+                        )
+                    )
+                    current_onset += rest_ticks
+                    remainder -= rest_ticks
+                    seq_idx += 1
 
         bars.append(
             Bar(
