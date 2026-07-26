@@ -8,7 +8,7 @@ import pytest
 from score2gp.cli import app
 from score2gp.build_ir import build_ir_from_tabraw_only, BuildIrInputRiskError
 from score2gp.tabraw import TabRaw, TabCandidate
-from score2gp.gp_package import inspect_gp, validate_gp
+from score2gp.gp_package import inspect_gp, validate_gp, write_gp
 
 # Public fixtures
 SIMPLE_PDF = Path("tests/fixtures/pdf/generated_pdf_fret_grouped_success.pdf")
@@ -251,10 +251,10 @@ def test_pdf_only_tab_rhythm_inference_policy(tmp_path) -> None:
     # 4 x-groups should lead to eighth notes (grid_spacing = 480)
     assert len(score.bars) == 1
     bar = score.bars[0]
-    # Onsets: 0, 480, 960, 1440
-    # Durations: 480, 480, 480, 2400 (filling to 3840)
+    # Onsets: 0, 480, 960, 1440 for notes; 1920 for rest
+    # Note Durations: 480, 480, 480, 480; Rest Duration: 1920 (half note)
     events = bar.events
-    assert len(events) == 4
+    assert len(events) == 5
 
     assert events[0].timing.onset_ticks == 0
     assert events[0].timing.duration_ticks == 480
@@ -269,7 +269,14 @@ def test_pdf_only_tab_rhythm_inference_policy(tmp_path) -> None:
     assert len(events[2].notes) == 2
 
     assert events[3].timing.onset_ticks == 1440
-    assert events[3].timing.duration_ticks == 2400  # 3840 - 1440
+    assert events[3].timing.duration_ticks == 480
+    assert events[3].timing.notated_duration.value == "eighth"
+
+    assert events[4].is_rest
+    assert events[4].id == "bar-1-rest-1"
+    assert events[4].timing.onset_ticks == 1920
+    assert events[4].timing.duration_ticks == 1920
+    assert events[4].timing.notated_duration.value == "half"
 
     # Provenance warning indicating Timing layout inference is present
     warning_codes = [w.code for w in score.warnings]
@@ -459,8 +466,8 @@ def test_pdf_only_does_not_stack_same_x_across_pages(tmp_path) -> None:
     score, diagnostics = build_ir_from_tabraw_only(tabraw_file)
 
     assert len(score.bars) == 2
-    assert len(score.bars[0].events) == 1
-    assert len(score.bars[1].events) == 1
+    assert len(score.bars[0].events) == 4
+    assert len(score.bars[1].events) == 4
 
 
 def test_pdf_only_duplicate_string_same_event_split_or_refused(tmp_path) -> None:
@@ -509,7 +516,7 @@ def test_pdf_only_duplicate_string_same_event_split_or_refused(tmp_path) -> None
     score, diagnostics = build_ir_from_tabraw_only(tabraw_file)
 
     assert len(score.bars) == 1
-    assert len(score.bars[0].events) == 2
+    assert len(score.bars[0].events) == 4
     assert score.bars[0].events[0].notes[0].fret == 5
     assert score.bars[0].events[1].notes[0].fret == 7
 
@@ -596,8 +603,8 @@ def test_pdf_only_groups_small_x_offsets_across_strings_as_chord(tmp_path) -> No
     score, diagnostics = build_ir_from_tabraw_only(tabraw_file)
 
     assert len(score.bars) == 1
-    # 2 candidates should group into a single chord event
-    assert len(score.bars[0].events) == 1
+    # 2 candidates should group into a single chord event (plus remainder rest events)
+    assert len(score.bars[0].events) == 4
     event = score.bars[0].events[0]
     assert len(event.notes) == 2
     notes_sorted = sorted(event.notes, key=lambda n: n.string)
@@ -649,8 +656,8 @@ def test_pdf_only_keeps_sequential_notes_separate_when_x_gap_is_large(tmp_path) 
     score, diagnostics = build_ir_from_tabraw_only(tabraw_file)
 
     assert len(score.bars) == 1
-    # 2 candidates should remain sequential
-    assert len(score.bars[0].events) == 2
+    # 2 candidates should remain sequential (plus remainder rest events)
+    assert len(score.bars[0].events) == 4
     assert score.bars[0].events[0].notes[0].fret == 5
     assert score.bars[0].events[1].notes[0].fret == 7
 
@@ -699,8 +706,8 @@ def test_pdf_only_does_not_group_duplicate_string_candidates_as_chord(tmp_path) 
     score, diagnostics = build_ir_from_tabraw_only(tabraw_file)
 
     assert len(score.bars) == 1
-    # Must be split into 2 sequential events to protect duplicate string safety
-    assert len(score.bars[0].events) == 2
+    # Must be split into 2 sequential events (plus remainder rest events) to protect duplicate string safety
+    assert len(score.bars[0].events) == 4
     assert score.bars[0].events[0].notes[0].fret == 5
     assert score.bars[0].events[1].notes[0].fret == 7
 
@@ -748,11 +755,11 @@ def test_pdf_only_never_groups_chords_across_source_bar_identity(tmp_path) -> No
 
     score, diagnostics = build_ir_from_tabraw_only(tabraw_file)
 
-    # Must be 2 distinct bars, each with 1 event
+    # Must be 2 distinct bars
     assert len(score.bars) == 2
-    assert len(score.bars[0].events) == 1
+    assert len(score.bars[0].events) == 4
     assert score.bars[0].events[0].notes[0].fret == 5
-    assert len(score.bars[1].events) == 1
+    assert len(score.bars[1].events) == 4
     assert score.bars[1].events[0].notes[0].fret == 7
 
 
@@ -988,3 +995,222 @@ def test_cli_convert_editable_draft_tempo_bpm_option(tmp_path) -> None:
     gp_summary_120 = inspect_gp(out_gp_120)
     assert gp_summary_120["tempo"] is not None
     assert gp_summary_120["tempo"].startswith("120")
+
+
+def test_cr04c_final_event_duration_consistency_n4_single_rest(tmp_path) -> None:
+    # 4 eighth notes (x=10, 30, 50, 70)
+    tabraw_data = {
+        "schema_version": "tabraw.v0.1",
+        "source_pdf": "test.pdf",
+        "pdf_layout_class": "drawn",
+        "pdf_layout_warnings": [],
+        "candidates": [
+            {
+                "id": f"c-000{i+1}",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "line_index": 1,
+                "string": 1,
+                "raw_text": "5",
+                "parsed_fret": 5,
+                "x": 10.0 + i * 20.0,
+                "y": 20.0,
+                "confidence": 0.9,
+            }
+            for i in range(4)
+        ],
+        "warnings": [],
+    }
+    tabraw_file = tmp_path / "tabraw_n4.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+
+    score, _ = build_ir_from_tabraw_only(tabraw_file)
+    assert len(score.bars) == 1
+    bar = score.bars[0]
+    events = bar.events
+    assert len(events) == 5
+
+    for i in range(4):
+        assert not events[i].is_rest
+        assert events[i].timing.duration_ticks == 480
+        assert events[i].timing.notated_duration.value == "eighth"
+        assert events[i].timing.notated_duration.dots == 0
+        assert events[i].timing.onset_ticks == i * 480
+
+    rest_event = events[4]
+    assert rest_event.is_rest
+    assert rest_event.id == "bar-1-rest-1"
+    assert rest_event.timing.onset_ticks == 1920
+    assert rest_event.timing.duration_ticks == 1920
+    assert rest_event.timing.notated_duration.value == "half"
+    assert rest_event.timing.notated_duration.dots == 0
+
+    gp_file = tmp_path / "n4.gp"
+    write_gp(score, gp_file, template=TEMPLATE_GP)
+    assert validate_gp(gp_file)["errors"] == []
+
+
+def test_cr04c_final_event_duration_consistency_n3_remainder(tmp_path) -> None:
+    # 3 eighth notes (x=10, 30, 50)
+    tabraw_data = {
+        "schema_version": "tabraw.v0.1",
+        "source_pdf": "test.pdf",
+        "pdf_layout_class": "drawn",
+        "pdf_layout_warnings": [],
+        "candidates": [
+            {
+                "id": f"c-000{i+1}",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "line_index": 1,
+                "string": 1,
+                "raw_text": "5",
+                "parsed_fret": 5,
+                "x": 10.0 + i * 20.0,
+                "y": 20.0,
+                "confidence": 0.9,
+            }
+            for i in range(3)
+        ],
+        "warnings": [],
+    }
+    tabraw_file = tmp_path / "tabraw_n3.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+
+    score, _ = build_ir_from_tabraw_only(tabraw_file)
+    assert len(score.bars) == 1
+    bar = score.bars[0]
+    events = bar.events
+    assert len(events) == 5  # 3 notes + 2 rests
+
+    for i in range(3):
+        assert not events[i].is_rest
+        assert events[i].timing.duration_ticks == 480
+        assert events[i].timing.notated_duration.value == "eighth"
+
+    r1 = events[3]
+    assert r1.is_rest
+    assert r1.id == "bar-1-rest-1"
+    assert r1.timing.onset_ticks == 1440
+    assert r1.timing.duration_ticks == 1920
+    assert r1.timing.notated_duration.value == "half"
+    assert r1.timing.notated_duration.dots == 0
+
+    r2 = events[4]
+    assert r2.is_rest
+    assert r2.id == "bar-1-rest-2"
+    assert r2.timing.onset_ticks == 3360
+    assert r2.timing.duration_ticks == 480
+    assert r2.timing.notated_duration.value == "eighth"
+    assert r2.timing.notated_duration.dots == 0
+
+    gp_file = tmp_path / "n3.gp"
+    write_gp(score, gp_file, template=TEMPLATE_GP)
+    assert validate_gp(gp_file)["errors"] == []
+
+
+def test_cr04c_final_event_duration_consistency_n1_remainder(tmp_path) -> None:
+    # 1 eighth note (x=10)
+    tabraw_data = {
+        "schema_version": "tabraw.v0.1",
+        "source_pdf": "test.pdf",
+        "pdf_layout_class": "drawn",
+        "pdf_layout_warnings": [],
+        "candidates": [
+            {
+                "id": "c-0001",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "line_index": 1,
+                "string": 1,
+                "raw_text": "5",
+                "parsed_fret": 5,
+                "x": 10.0,
+                "y": 20.0,
+                "confidence": 0.9,
+            }
+        ],
+        "warnings": [],
+    }
+    tabraw_file = tmp_path / "tabraw_n1.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+
+    score, _ = build_ir_from_tabraw_only(tabraw_file)
+    assert len(score.bars) == 1
+    bar = score.bars[0]
+    events = bar.events
+    assert len(events) == 4  # 1 note + 3 rests
+
+    assert not events[0].is_rest
+    assert events[0].timing.duration_ticks == 480
+    assert events[0].timing.notated_duration.value == "eighth"
+
+    # Rest 1: half 1920 at 480
+    assert events[1].is_rest
+    assert events[1].id == "bar-1-rest-1"
+    assert events[1].timing.onset_ticks == 480
+    assert events[1].timing.duration_ticks == 1920
+    assert events[1].timing.notated_duration.value == "half"
+
+    # Rest 2: quarter 960 at 2400
+    assert events[2].is_rest
+    assert events[2].id == "bar-1-rest-2"
+    assert events[2].timing.onset_ticks == 2400
+    assert events[2].timing.duration_ticks == 960
+    assert events[2].timing.notated_duration.value == "quarter"
+
+    # Rest 3: eighth 480 at 3360
+    assert events[3].is_rest
+    assert events[3].id == "bar-1-rest-3"
+    assert events[3].timing.onset_ticks == 3360
+    assert events[3].timing.duration_ticks == 480
+    assert events[3].timing.notated_duration.value == "eighth"
+
+    gp_file = tmp_path / "n1.gp"
+    write_gp(score, gp_file, template=TEMPLATE_GP)
+    assert validate_gp(gp_file)["errors"] == []
+
+
+def test_cr04c_final_event_duration_consistency_overcapacity_refusal(tmp_path) -> None:
+    # 5 candidates in --editable-draft mode (grid_spacing=960 -> 5*960=4800 > 3840)
+    tabraw_data = {
+        "schema_version": "tabraw.v0.1",
+        "source_pdf": "test.pdf",
+        "pdf_layout_class": "drawn",
+        "pdf_layout_warnings": [],
+        "candidates": [
+            {
+                "id": f"c-000{i+1}",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "line_index": 1,
+                "string": 1,
+                "raw_text": "5",
+                "parsed_fret": 5,
+                "x": 10.0 + i * 20.0,
+                "y": 20.0,
+                "confidence": 0.9,
+            }
+            for i in range(5)
+        ],
+        "warnings": [],
+    }
+    tabraw_file = tmp_path / "tabraw_overcapacity.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+
+    with pytest.raises(BuildIrInputRiskError) as exc_info:
+        build_ir_from_tabraw_only(tabraw_file, editable_draft=True)
+
+    assert exc_info.value.category == "pdf_only_tab_measure_overcapacity"
