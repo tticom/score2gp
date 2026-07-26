@@ -76,6 +76,7 @@ def test_build_pdf_tab_event_from_subgroup_single_note() -> None:
         onset_ticks=0,
         grid_spacing=480,
         duration_name="eighth",
+        track_id="gtr-1",
     )
 
     assert event.id == "bar-1-event-1"
@@ -130,6 +131,7 @@ def test_build_pdf_tab_event_from_subgroup_chord() -> None:
         onset_ticks=480,
         grid_spacing=480,
         duration_name="eighth",
+        track_id="gtr-1",
     )
 
     assert event.id == "bar-2-event-2"
@@ -163,6 +165,7 @@ def test_build_pdf_tab_event_from_subgroup_quarter_rest() -> None:
         onset_ticks=960,
         grid_spacing=480,
         duration_name="eighth",
+        track_id="gtr-1",
     )
 
     assert event.id == "bar-1-event-3"
@@ -196,6 +199,7 @@ def test_build_pdf_tab_event_from_subgroup_editable_first_event_text() -> None:
         onset_ticks=0,
         grid_spacing=960,
         duration_name="quarter",
+        track_id="gtr-1",
         editable_draft=True,
         tempo_bpm=120.0,
         tempo_is_explicit=False,
@@ -239,6 +243,7 @@ def test_pdf_tab_event_factory_normalized_before_after_equivalence() -> None:
         onset_ticks=0,
         grid_spacing=480,
         duration_name="eighth",
+        track_id="gtr-1",
     )
     expected_note_event = Event(
         id="bar-1-event-1",
@@ -289,6 +294,7 @@ def test_pdf_tab_event_factory_normalized_before_after_equivalence() -> None:
         onset_ticks=480,
         grid_spacing=480,
         duration_name="eighth",
+        track_id="gtr-1",
     )
     expected_chord_event = Event(
         id="bar-1-event-2",
@@ -346,6 +352,7 @@ def test_pdf_tab_event_factory_normalized_before_after_equivalence() -> None:
         onset_ticks=960,
         grid_spacing=480,
         duration_name="eighth",
+        track_id="gtr-1",
     )
     expected_rest_event = Event(
         id="bar-1-event-3",
@@ -373,6 +380,7 @@ def test_pdf_tab_event_factory_normalized_before_after_equivalence() -> None:
         onset_ticks=0,
         grid_spacing=960,
         duration_name="quarter",
+        track_id="gtr-1",
         editable_draft=True,
         tempo_bpm=120.0,
         tempo_is_explicit=False,

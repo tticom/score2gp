@@ -13,8 +13,6 @@ from .ir import (
 if TYPE_CHECKING:
     from .tabraw import TabCandidate
 
-TRACK_ID = "gtr-1"
-
 _STRING_TO_BASE_PITCH: dict[int, int] = {
     1: 64,  # E4
     2: 59,  # B3
@@ -67,7 +65,7 @@ def build_pdf_tab_event_from_subgroup(
     onset_ticks: int,
     grid_spacing: int,
     duration_name: str,
-    track_id: str = TRACK_ID,
+    track_id: str,
     editable_draft: bool = False,
     tempo_bpm: float = 120.0,
     tempo_is_explicit: bool = False,
