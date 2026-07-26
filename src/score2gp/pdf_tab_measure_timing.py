@@ -45,34 +45,13 @@ def select_pdf_tab_grid_spacing_and_duration_name(
         return 60, "64th"
 
 
-def validate_pdf_tab_measure_capacity(
+def is_within_pdf_tab_measure_capacity(
     current_onset_ticks: int,
     ev_duration_ticks: int,
-    output_bar_idx: int,
     measure_capacity_ticks: int = MEASURE_CAPACITY_TICKS,
-) -> None:
-    """Validate that adding an event of duration `ev_duration_ticks` does not exceed measure capacity.
-
-    Raises:
-        BuildIrInputRiskError(category="pdf_only_tab_measure_overcapacity") if over-capacity.
-    """
-    accumulated_ticks = current_onset_ticks + ev_duration_ticks
-    if accumulated_ticks > measure_capacity_ticks:
-        from score2gp.build_ir import BuildIrInputRiskError
-
-        raise BuildIrInputRiskError(
-            category="pdf_only_tab_measure_overcapacity",
-            stage="measure-assembly",
-            message=(
-                f"Candidate note events in bar {output_bar_idx} exceed measure capacity {measure_capacity_ticks} ticks "
-                f"(accumulated {accumulated_ticks} ticks)."
-            ),
-            details={
-                "bar_index": str(output_bar_idx),
-                "accumulated_ticks": str(accumulated_ticks),
-                "measure_capacity": str(measure_capacity_ticks),
-            },
-        )
+) -> bool:
+    """Return True if adding an event of duration `ev_duration_ticks` fits within `measure_capacity_ticks`."""
+    return (current_onset_ticks + ev_duration_ticks) <= measure_capacity_ticks
 
 
 def decompose_pdf_tab_measure_remainder_to_rests(
@@ -81,6 +60,9 @@ def decompose_pdf_tab_measure_remainder_to_rests(
     """Greedily decompose a non-negative measure tick remainder into standard un-dotted rest descriptors.
 
     The descriptors are ordered by onset appearance and sum strictly to remainder_ticks.
+
+    Raises:
+        ValueError if remainder_ticks is negative or cannot be evenly decomposed (e.g. residual != 0).
     """
     if remainder_ticks < 0:
         raise ValueError(f"Remainder ticks must be non-negative, got {remainder_ticks}")
@@ -91,5 +73,11 @@ def decompose_pdf_tab_measure_remainder_to_rests(
         while rem >= rest_ticks:
             descriptors.append(RestDurationDescriptor(name=rest_name, ticks=rest_ticks))
             rem -= rest_ticks
+
+    if rem != 0:
+        raise ValueError(
+            f"Remainder ticks ({remainder_ticks}) cannot be decomposed into standard rest durations; "
+            f"residual of {rem} ticks remains."
+        )
 
     return descriptors

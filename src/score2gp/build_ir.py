@@ -11,8 +11,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .pdf_tab_measure_timing import (
     decompose_pdf_tab_measure_remainder_to_rests,
+    is_within_pdf_tab_measure_capacity,
     select_pdf_tab_grid_spacing_and_duration_name,
-    validate_pdf_tab_measure_capacity,
 )
 from .ascii_alignment import ALIGNMENT_SCHEMA_VERSION, AsciiMusicXmlAlignment, compute_sha256
 from . import __version__
@@ -1833,7 +1833,20 @@ def build_ir_from_tabraw_only(
                 ev_duration_ticks = grid_spacing
                 ev_duration_name = duration_name
 
-            validate_pdf_tab_measure_capacity(current_onset, ev_duration_ticks, output_bar_idx)
+            if not is_within_pdf_tab_measure_capacity(current_onset, ev_duration_ticks):
+                raise BuildIrInputRiskError(
+                    category="pdf_only_tab_measure_overcapacity",
+                    stage="measure-assembly",
+                    message=(
+                        f"Candidate note events in bar {output_bar_idx} exceed measure capacity 3840 ticks "
+                        f"(accumulated {current_onset + ev_duration_ticks} ticks)."
+                    ),
+                    details={
+                        "bar_index": str(output_bar_idx),
+                        "accumulated_ticks": str(current_onset + ev_duration_ticks),
+                        "measure_capacity": "3840",
+                    },
+                )
 
             onset_ticks = current_onset
             current_onset += ev_duration_ticks
