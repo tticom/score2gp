@@ -59,5 +59,12 @@ def test_pdf_only_tab_build_ir_creates_valid_rest_events(tmp_path):
     for rest_ev in rest_events:
         assert rest_ev.is_rest is True
         assert rest_ev.notes == [] # Ensure notes are cleanly stripped
+
+    # The first two rests are the explicit candidate quarter rests
+    for rest_ev in rest_events[:2]:
         assert rest_ev.timing.duration_ticks == 960 # Must have quarter rest duration
         assert rest_ev.timing.notated_duration.value == "quarter"
+
+    # The third rest is the decomposed half rest filling the remainder measure capacity
+    assert rest_events[2].timing.duration_ticks == 1920
+    assert rest_events[2].timing.notated_duration.value == "half"
