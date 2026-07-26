@@ -1065,3 +1065,15 @@ def test_normalized_bar_equivalence_multi_event_sequential() -> None:
     }
 
     assert bar.model_dump(mode="json") == expected_baseline_bar
+
+
+def test_pdf_tab_helpers_isolation() -> None:
+    """Focused helper test proving fresh objects are returned and caller mutation cannot leak."""
+    c1 = make_pdf_tab_candidate()
+    c2 = make_pdf_tab_candidate()
+    assert c1 is not c2
+    assert c1.bbox is not c2.bbox
+    c1.x = 999.0
+    c1.bbox.x0 = 999.0
+    assert c2.x == 10.0
+    assert c2.bbox.x0 == 10.0
