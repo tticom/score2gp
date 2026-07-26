@@ -9,6 +9,10 @@ from typing import Iterable, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .pdf_tab_event_factory import (
+    build_pdf_tab_event_from_subgroup,
+    determine_pdf_tab_event_duration,
+)
 from .pdf_tab_measure_timing import (
     decompose_pdf_tab_measure_remainder_to_rests,
     is_within_pdf_tab_measure_capacity,
@@ -1808,30 +1812,9 @@ def build_ir_from_tabraw_only(
         events = []
         current_onset = 0
         for i, subgroup_candidates in enumerate(event_subgroups):
-            notes = []
-            is_rest = False
-            for candidate in subgroup_candidates:
-                if candidate.raw_text == "quarter_rest":
-                    is_rest = True
-                else:
-                    base_pitch = _STRING_TO_BASE_PITCH.get(candidate.string, 40)
-                    pitch = base_pitch + (candidate.parsed_fret or 0)
-                    notes.append(
-                        Note(
-                            string=candidate.string,
-                            fret=candidate.parsed_fret or 0,
-                            pitch=pitch,
-                            confidence=candidate.confidence,
-                            provenance=[candidate.to_provenance()],
-                        )
-                    )
-
-            if is_rest:
-                ev_duration_ticks = 960
-                ev_duration_name = "quarter"
-            else:
-                ev_duration_ticks = grid_spacing
-                ev_duration_name = duration_name
+            _, ev_duration_ticks, _ = determine_pdf_tab_event_duration(
+                subgroup_candidates, grid_spacing, duration_name
+            )
 
             if not is_within_pdf_tab_measure_capacity(current_onset, ev_duration_ticks):
                 raise BuildIrInputRiskError(
@@ -1848,47 +1831,19 @@ def build_ir_from_tabraw_only(
                     },
                 )
 
-            onset_ticks = current_onset
-            current_onset += ev_duration_ticks
-
-            event_text = None
-            if editable_draft and output_bar_idx == 1 and i == 0:
-                tempo_fmt = int(tempo_bpm) if tempo_bpm == int(tempo_bpm) else tempo_bpm
-                if tempo_is_explicit:
-                    tempo_phrase = f"Tempo set to {tempo_fmt} bpm."
-                else:
-                    tempo_phrase = f"Tempo defaulted to {tempo_fmt} bpm."
-                event_text = (
-                    "Editable draft generated from PDF tablature. "
-                    "Rhythms defaulted to quarter notes; timing was not recognised. "
-                    "Tuning defaulted to E Standard unless corrected by the user. "
-                    "Time signature defaulted to 4/4. "
-                    f"{tempo_phrase} "
-                    "Standard notation and notation/tab alignment were skipped. "
-                    "Rests/silence may be omitted."
-                )
-
-            if is_rest:
-                notes = []
-
-            events.append(
-                Event(
-                    id=f"bar-{output_bar_idx}-event-{i+1}",
-                    track_id=TRACK_ID,
-                    timing=Timing(
-                        bar_index=output_bar_idx,
-                        onset_ticks=onset_ticks,
-                        duration_ticks=ev_duration_ticks,
-                        ticks_per_quarter=DEFAULT_TICKS_PER_QUARTER,
-                        notated_duration=NotatedDuration(value=ev_duration_name, dots=0),
-                    ),
-                    is_rest=is_rest,
-                    notes=notes,
-                    text=event_text,
-                    confidence=sum(c.confidence for c in subgroup_candidates) / len(subgroup_candidates),
-                    provenance=[c.to_provenance() for c in subgroup_candidates],
-                )
+            event = build_pdf_tab_event_from_subgroup(
+                subgroup_candidates,
+                output_bar_idx=output_bar_idx,
+                event_idx=i,
+                onset_ticks=current_onset,
+                grid_spacing=grid_spacing,
+                duration_name=duration_name,
+                editable_draft=editable_draft,
+                tempo_bpm=tempo_bpm,
+                tempo_is_explicit=tempo_is_explicit,
             )
+            events.append(event)
+            current_onset += ev_duration_ticks
 
         remainder = 3840 - current_onset
         if remainder > 0:
