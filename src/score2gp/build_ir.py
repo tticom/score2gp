@@ -1816,21 +1816,6 @@ def build_ir_from_tabraw_only(
         events = []
         current_onset = 0
         for i, subgroup_candidates in enumerate(event_subgroups):
-            if current_onset + grid_spacing > 3840:
-                raise BuildIrInputRiskError(
-                    category="pdf_only_tab_measure_overcapacity",
-                    stage="measure-assembly",
-                    message=(
-                        f"Candidate note events in bar {output_bar_idx} exceed measure capacity 3840 ticks "
-                        f"(accumulated {current_onset + grid_spacing} ticks)."
-                    ),
-                    details={
-                        "bar_index": str(output_bar_idx),
-                        "accumulated_ticks": str(current_onset + grid_spacing),
-                        "measure_capacity": "3840",
-                    },
-                )
-
             notes = []
             is_rest = False
             for candidate in subgroup_candidates:
@@ -1855,6 +1840,21 @@ def build_ir_from_tabraw_only(
             else:
                 ev_duration_ticks = grid_spacing
                 ev_duration_name = duration_name
+
+            if current_onset + ev_duration_ticks > 3840:
+                raise BuildIrInputRiskError(
+                    category="pdf_only_tab_measure_overcapacity",
+                    stage="measure-assembly",
+                    message=(
+                        f"Candidate note events in bar {output_bar_idx} exceed measure capacity 3840 ticks "
+                        f"(accumulated {current_onset + ev_duration_ticks} ticks)."
+                    ),
+                    details={
+                        "bar_index": str(output_bar_idx),
+                        "accumulated_ticks": str(current_onset + ev_duration_ticks),
+                        "measure_capacity": "3840",
+                    },
+                )
 
             onset_ticks = current_onset
             current_onset += ev_duration_ticks

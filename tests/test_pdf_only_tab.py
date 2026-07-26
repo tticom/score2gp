@@ -1214,3 +1214,63 @@ def test_cr04c_final_event_duration_consistency_overcapacity_refusal(tmp_path) -
         build_ir_from_tabraw_only(tabraw_file, editable_draft=True)
 
     assert exc_info.value.category == "pdf_only_tab_measure_overcapacity"
+
+
+def test_cr04c_final_event_duration_consistency_mixed_rest_overcapacity(tmp_path) -> None:
+    # 5 eighth note candidates (5 * 480 = 2400) + 2 quarter_rest candidates (2 * 960 = 1920)
+    # N = 7 candidates -> grid_spacing = 480 for notes.
+    # Total ticks: 2400 + 1920 = 4320 > 3840 ticks.
+    candidates = [
+        {
+            "id": f"c-000{i+1}",
+            "kind": "fret",
+            "page_index": 1,
+            "system_index": 1,
+            "staff_index": 1,
+            "bar_index": 1,
+            "line_index": 1,
+            "string": 1,
+            "raw_text": "5",
+            "parsed_fret": 5,
+            "x": 10.0 + i * 20.0,
+            "y": 20.0,
+            "confidence": 0.9,
+        }
+        for i in range(5)
+    ]
+    candidates.extend(
+        [
+            {
+                "id": f"c-rest-{i+1}",
+                "kind": "fret",
+                "page_index": 1,
+                "system_index": 1,
+                "staff_index": 1,
+                "bar_index": 1,
+                "line_index": 1,
+                "string": 1,
+                "raw_text": "quarter_rest",
+                "parsed_fret": None,
+                "x": 110.0 + i * 20.0,
+                "y": 20.0,
+                "confidence": 0.9,
+            }
+            for i in range(2)
+        ]
+    )
+    tabraw_data = {
+        "schema_version": "tabraw.v0.1",
+        "source_pdf": "test.pdf",
+        "pdf_layout_class": "drawn",
+        "pdf_layout_warnings": [],
+        "candidates": candidates,
+        "warnings": [],
+    }
+    tabraw_file = tmp_path / "tabraw_mixed_overcapacity.json"
+    tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
+
+    with pytest.raises(BuildIrInputRiskError) as exc_info:
+        build_ir_from_tabraw_only(tabraw_file)
+
+    assert exc_info.value.category == "pdf_only_tab_measure_overcapacity"
+    assert exc_info.value.details.get("accumulated_ticks") == "4320"
