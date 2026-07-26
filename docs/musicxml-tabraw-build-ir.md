@@ -240,3 +240,33 @@ Still out of scope:
 - GPIF writer expansion
 
 The latest controlled private diagnostic experiment produced only sanitized evidence: PDF extraction found many candidates, but no system/bar/string grouping was inferred, and MusicXML timing risk stopped build-ir before ScoreIR output. Those failure classes are now represented by public fixtures; another private run should check whether native `.mxl` intake and the stricter `missing_pdf_grouping` refusal produce clearer summaries without tuning to private material.
+
+## PDF-Only Tab Measure-Assembly Boundary (CR-04D Closure)
+
+The refactoring sequence CR-04D (D1 through D5) extracted PDF-only Tab measure-assembly logic out of `build_ir.py` into dedicated, modular components while maintaining complete behavioral and exception payload compatibility:
+
+* **`pdf_tab_measure_timing.py`**: Owns grid spacing, duration naming, remainder rest decomposition, and measure capacity policy.
+* **`pdf_tab_event_factory.py`**: Owns normalized pitch calculation, note construction, and single-event building from candidate subgroups.
+* **`pdf_tab_bar_assembler.py`**: Owns single PDF-only Tab bar assembly, empty bar construction, remainder rest placement, and capacity checks.
+* **`build_ir.py` (`build_ir_from_tabraw_only()`)**: Owns pipeline orchestration, bar grouping, and translating internal `PdfTabBarAssemblerError` into public `BuildIrInputRiskError`.
+* **`tests/pdf_tab_test_helpers.py`**: Provides test-only Candidate/BoundingBox builder helpers and is not part of the production API.
+
+### Merged Refactoring Commits
+* **CR-04D1**: `56eddc2` (PR #386) - Extract PDF-only Tab measure-duration policy
+* **CR-04D2**: `36b3016` (PR #387) - Extract PDF-only Tab event construction
+* **CR-04D3**: `cea235d83e72e608b841e5d6d55b631077fa1833` (PR #388) - Extract PDF-only Tab bar assembly
+* **CR-04D4**: `a8250ea8a1b71f8b64081ee6cf6408dd77398509` (PR #389) - Consolidate PDF-only Tab test fixtures
+
+### Closure Validation
+Closure was verified via full repository gates:
+1. `pytest`: 1005 passed, 1 skipped
+2. `agent_verify.py`: Overall status: PASS
+3. Schema export & IR validation clean (`validate-ir fixtures/public/tiny_score.ir.json`)
+4. Acyclic import verification and clean range check (`git diff --check`)
+
+### Residual Debt
+1. `assemble_pdf_tab_bar()` retains the historically named `subgroup_candidates` parameter name.
+2. `assemble_pdf_tab_bar()` retains a literal `3840` tick measure capacity value rather than importing a shared named constant.
+3. Characterization tests retain intentionally fixed, verbose normalized-`Bar` dictionary oracles.
+
+*Unauthorised Next Candidate*: Standard-notation staff assembly extraction (e.g., potential CR-05) remains an unauthorised candidate and is not active.
