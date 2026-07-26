@@ -299,7 +299,6 @@ def test_assemble_pdf_tab_bar_internal_error_raised() -> None:
 
 
 def test_build_ir_grouping_unsafe_refusal_exact_payload(tmp_path: Path) -> None:
-    # Test build_ir_from_tabraw_only translates internal PdfTabBarAssemblerError (grouping_unsafe) into BuildIrInputRiskError with exact payload
     candidates = [
         TabCandidate(
             id=f"c-{idx}",
@@ -332,7 +331,6 @@ def test_build_ir_grouping_unsafe_refusal_exact_payload(tmp_path: Path) -> None:
 
 
 def test_build_ir_overcapacity_refusal_exact_payload(tmp_path: Path) -> None:
-    # Test build_ir_from_tabraw_only translates internal PdfTabBarAssemblerError (overcapacity) into BuildIrInputRiskError with exact payload
     candidates: list[TabCandidate] = []
     for idx in range(5):
         candidates.append(
@@ -386,8 +384,9 @@ def test_build_ir_overcapacity_refusal_exact_payload(tmp_path: Path) -> None:
     }
 
 
-# Normalized Bar Equivalence Tests for all 4 required scenarios:
-# Scenario 1: Representative single-event bar
+# Complete Normalized Bar Equivalence Tests for all 4 required scenarios:
+# Each test compares full bar.model_dump(mode="json") against fixed baseline data.
+
 def test_normalized_bar_equivalence_single_event() -> None:
     c1 = TabCandidate(
         id="c-1",
@@ -407,115 +406,444 @@ def test_normalized_bar_equivalence_single_event() -> None:
 
     bar = assemble_pdf_tab_bar([c1], output_bar_idx=1, track_id="gtr-1")
 
-    assert bar.index == 1
-    assert bar.time_signature.numerator == 4
-    assert bar.time_signature.denominator == 4
-    assert len(bar.events) == 4
+    expected_baseline_bar = {
+        "index": 1,
+        "time_signature": {"numerator": 4, "denominator": 4},
+        "key_signature": None,
+        "events": [
+            {
+                "id": "bar-1-event-1",
+                "track_id": "gtr-1",
+                "timing": {
+                    "bar_index": 1,
+                    "onset_ticks": 0,
+                    "duration_ticks": 480,
+                    "ticks_per_quarter": DEFAULT_TICKS_PER_QUARTER,
+                    "voice": 1,
+                    "notated_duration": {"value": "eighth", "dots": 0},
+                    "tuplet": None,
+                    "grace": None,
+                },
+                "notes": [
+                    {
+                        "string": 1,
+                        "fret": 5,
+                        "pitch": 69,
+                        "is_dead": False,
+                        "articulations": [],
+                        "techniques": [],
+                        "left_hand_fingering": None,
+                        "right_hand_fingering": None,
+                        "confidence": 0.9,
+                        "provenance": [
+                            {
+                                "source_stage": "pdf-text",
+                                "page": 1,
+                                "system_id": "system-1",
+                                "staff_id": "staff-1",
+                                "bar_index": 1,
+                                "bbox": {"page": 1, "x0": 10.0, "y0": 10.0, "x1": 15.0, "y1": 15.0},
+                                "raw_token_id": "c-1",
+                                "raw": {"kind": "fret", "raw_text": "5", "parsed_fret": 5, "string": 1, "x": 10.0, "y": 10.0},
+                                "confidence": 0.9,
+                            }
+                        ],
+                        "expression_controller": None,
+                    }
+                ],
+                "is_rest": False,
+                "chord_symbol": None,
+                "chord_diagram": None,
+                "dynamic": None,
+                "hairpin": None,
+                "fermata": None,
+                "arpeggio": None,
+                "arpeggio_duration": None,
+                "brush": None,
+                "brush_duration": None,
+                "text": None,
+                "techniques": [],
+                "confidence": 0.9,
+                "provenance": [
+                    {
+                        "source_stage": "pdf-text",
+                        "page": 1,
+                        "system_id": "system-1",
+                        "staff_id": "staff-1",
+                        "bar_index": 1,
+                        "bbox": {"page": 1, "x0": 10.0, "y0": 10.0, "x1": 15.0, "y1": 15.0},
+                        "raw_token_id": "c-1",
+                        "raw": {"kind": "fret", "raw_text": "5", "parsed_fret": 5, "string": 1, "x": 10.0, "y": 10.0},
+                        "confidence": 0.9,
+                    }
+                ],
+                "expression_controller": None,
+            },
+            {
+                "id": "bar-1-rest-1",
+                "track_id": "gtr-1",
+                "timing": {
+                    "bar_index": 1,
+                    "onset_ticks": 480,
+                    "duration_ticks": 1920,
+                    "ticks_per_quarter": DEFAULT_TICKS_PER_QUARTER,
+                    "voice": 1,
+                    "notated_duration": {"value": "half", "dots": 0},
+                    "tuplet": None,
+                    "grace": None,
+                },
+                "notes": [],
+                "is_rest": True,
+                "chord_symbol": None,
+                "chord_diagram": None,
+                "dynamic": None,
+                "hairpin": None,
+                "fermata": None,
+                "arpeggio": None,
+                "arpeggio_duration": None,
+                "brush": None,
+                "brush_duration": None,
+                "text": None,
+                "techniques": [],
+                "confidence": 1.0,
+                "provenance": [],
+                "expression_controller": None,
+            },
+            {
+                "id": "bar-1-rest-2",
+                "track_id": "gtr-1",
+                "timing": {
+                    "bar_index": 1,
+                    "onset_ticks": 2400,
+                    "duration_ticks": 960,
+                    "ticks_per_quarter": DEFAULT_TICKS_PER_QUARTER,
+                    "voice": 1,
+                    "notated_duration": {"value": "quarter", "dots": 0},
+                    "tuplet": None,
+                    "grace": None,
+                },
+                "notes": [],
+                "is_rest": True,
+                "chord_symbol": None,
+                "chord_diagram": None,
+                "dynamic": None,
+                "hairpin": None,
+                "fermata": None,
+                "arpeggio": None,
+                "arpeggio_duration": None,
+                "brush": None,
+                "brush_duration": None,
+                "text": None,
+                "techniques": [],
+                "confidence": 1.0,
+                "provenance": [],
+                "expression_controller": None,
+            },
+            {
+                "id": "bar-1-rest-3",
+                "track_id": "gtr-1",
+                "timing": {
+                    "bar_index": 1,
+                    "onset_ticks": 3360,
+                    "duration_ticks": 480,
+                    "ticks_per_quarter": DEFAULT_TICKS_PER_QUARTER,
+                    "voice": 1,
+                    "notated_duration": {"value": "eighth", "dots": 0},
+                    "tuplet": None,
+                    "grace": None,
+                },
+                "notes": [],
+                "is_rest": True,
+                "chord_symbol": None,
+                "chord_diagram": None,
+                "dynamic": None,
+                "hairpin": None,
+                "fermata": None,
+                "arpeggio": None,
+                "arpeggio_duration": None,
+                "brush": None,
+                "brush_duration": None,
+                "text": None,
+                "techniques": [],
+                "confidence": 1.0,
+                "provenance": [],
+                "expression_controller": None,
+            },
+        ],
+        "tempo": None,
+        "layout_break": None,
+        "anacrusis": False,
+        "barline": None,
+        "repeat_count": None,
+        "measure_layout": None,
+        "bar_numbering": None,
+        "directions": None,
+        "marker": None,
+        "marker_color": None,
+        "alternate_ending_passes": None,
+        "alternate_ending_is_stop": None,
+        "multi_measure_rest_count": None,
+        "repeat_count_overlay": None,
+        "tempo_automation": None,
+    }
 
-    # Note Event
-    ev1 = bar.events[0]
-    assert ev1.id == "bar-1-event-1"
-    assert ev1.track_id == "gtr-1"
-    assert ev1.is_rest is False
-    assert ev1.timing.bar_index == 1
-    assert ev1.timing.onset_ticks == 0
-    assert ev1.timing.duration_ticks == 480
-    assert ev1.timing.ticks_per_quarter == DEFAULT_TICKS_PER_QUARTER
-    assert ev1.timing.notated_duration.value == "eighth"
-    assert ev1.timing.notated_duration.dots == 0
-    assert len(ev1.notes) == 1
-    assert ev1.notes[0].string == 1
-    assert ev1.notes[0].fret == 5
-    assert ev1.notes[0].pitch == 69
-    assert ev1.notes[0].confidence == 0.9
-    assert len(ev1.notes[0].provenance) == 1
-    assert ev1.notes[0].provenance[0].raw_token_id == "c-1"
-
-    # Remainder Rest Events: 3360 ticks decomposed to 1920 (half), 960 (quarter), 480 (eighth)
-    ev2 = bar.events[1]
-    assert ev2.id == "bar-1-rest-1"
-    assert ev2.is_rest is True
-    assert ev2.timing.onset_ticks == 480
-    assert ev2.timing.duration_ticks == 1920
-    assert ev2.timing.notated_duration.value == "half"
-
-    ev3 = bar.events[2]
-    assert ev3.id == "bar-1-rest-2"
-    assert ev3.is_rest is True
-    assert ev3.timing.onset_ticks == 2400
-    assert ev3.timing.duration_ticks == 960
-    assert ev3.timing.notated_duration.value == "quarter"
-
-    ev4 = bar.events[3]
-    assert ev4.id == "bar-1-rest-3"
-    assert ev4.is_rest is True
-    assert ev4.timing.onset_ticks == 3360
-    assert ev4.timing.duration_ticks == 480
-    assert ev4.timing.notated_duration.value == "eighth"
-
-    assert sum(e.timing.duration_ticks for e in bar.events) == 3840
+    assert bar.model_dump(mode="json") == expected_baseline_bar
 
 
-# Scenario 2: Representative chord bar
 def test_normalized_bar_equivalence_chord() -> None:
     c1 = TabCandidate(
         id="c-1",
         kind="fret",
-        raw_text="3",
-        parsed_fret=3,
+        raw_text="5",
+        parsed_fret=5,
         x=10.0,
         y=10.0,
-        string=6,
+        string=1,
         bar_index=1,
         system_index=1,
         staff_index=1,
         page_index=1,
         bbox=BoundingBox(page=1, x0=10.0, y0=10.0, x1=15.0, y1=15.0),
+        confidence=0.9,
     )
     c2 = TabCandidate(
         id="c-2",
         kind="fret",
-        raw_text="5",
-        parsed_fret=5,
+        raw_text="7",
+        parsed_fret=7,
         x=10.0,
         y=20.0,
-        string=5,
+        string=3,
         bar_index=1,
         system_index=1,
         staff_index=1,
         page_index=1,
         bbox=BoundingBox(page=1, x0=10.0, y0=20.0, x1=15.0, y1=25.0),
+        confidence=0.8,
     )
 
     bar = assemble_pdf_tab_bar([c1, c2], output_bar_idx=2, track_id="gtr-1")
 
-    assert bar.index == 2
-    assert bar.time_signature.numerator == 4
-    assert bar.time_signature.denominator == 4
-    assert len(bar.events) == 4
+    expected_baseline_bar = {
+        "index": 2,
+        "time_signature": {"numerator": 4, "denominator": 4},
+        "key_signature": None,
+        "events": [
+            {
+                "id": "bar-2-event-1",
+                "track_id": "gtr-1",
+                "timing": {
+                    "bar_index": 2,
+                    "onset_ticks": 0,
+                    "duration_ticks": 480,
+                    "ticks_per_quarter": DEFAULT_TICKS_PER_QUARTER,
+                    "voice": 1,
+                    "notated_duration": {"value": "eighth", "dots": 0},
+                    "tuplet": None,
+                    "grace": None,
+                },
+                "notes": [
+                    {
+                        "string": 1,
+                        "fret": 5,
+                        "pitch": 69,
+                        "is_dead": False,
+                        "articulations": [],
+                        "techniques": [],
+                        "left_hand_fingering": None,
+                        "right_hand_fingering": None,
+                        "confidence": 0.9,
+                        "provenance": [
+                            {
+                                "source_stage": "pdf-text",
+                                "page": 1,
+                                "system_id": "system-1",
+                                "staff_id": "staff-1",
+                                "bar_index": 1,
+                                "bbox": {"page": 1, "x0": 10.0, "y0": 10.0, "x1": 15.0, "y1": 15.0},
+                                "raw_token_id": "c-1",
+                                "raw": {"kind": "fret", "raw_text": "5", "parsed_fret": 5, "string": 1, "x": 10.0, "y": 10.0},
+                                "confidence": 0.9,
+                            }
+                        ],
+                        "expression_controller": None,
+                    },
+                    {
+                        "string": 3,
+                        "fret": 7,
+                        "pitch": 62,
+                        "is_dead": False,
+                        "articulations": [],
+                        "techniques": [],
+                        "left_hand_fingering": None,
+                        "right_hand_fingering": None,
+                        "confidence": 0.8,
+                        "provenance": [
+                            {
+                                "source_stage": "pdf-text",
+                                "page": 1,
+                                "system_id": "system-1",
+                                "staff_id": "staff-1",
+                                "bar_index": 1,
+                                "bbox": {"page": 1, "x0": 10.0, "y0": 20.0, "x1": 15.0, "y1": 25.0},
+                                "raw_token_id": "c-2",
+                                "raw": {"kind": "fret", "raw_text": "7", "parsed_fret": 7, "string": 3, "x": 10.0, "y": 20.0},
+                                "confidence": 0.8,
+                            }
+                        ],
+                        "expression_controller": None,
+                    },
+                ],
+                "is_rest": False,
+                "chord_symbol": None,
+                "chord_diagram": None,
+                "dynamic": None,
+                "hairpin": None,
+                "fermata": None,
+                "arpeggio": None,
+                "arpeggio_duration": None,
+                "brush": None,
+                "brush_duration": None,
+                "text": None,
+                "techniques": [],
+                "confidence": (0.9 + 0.8) / 2.0,
+                "provenance": [
+                    {
+                        "source_stage": "pdf-text",
+                        "page": 1,
+                        "system_id": "system-1",
+                        "staff_id": "staff-1",
+                        "bar_index": 1,
+                        "bbox": {"page": 1, "x0": 10.0, "y0": 10.0, "x1": 15.0, "y1": 15.0},
+                        "raw_token_id": "c-1",
+                        "raw": {"kind": "fret", "raw_text": "5", "parsed_fret": 5, "string": 1, "x": 10.0, "y": 10.0},
+                        "confidence": 0.9,
+                    },
+                    {
+                        "source_stage": "pdf-text",
+                        "page": 1,
+                        "system_id": "system-1",
+                        "staff_id": "staff-1",
+                        "bar_index": 1,
+                        "bbox": {"page": 1, "x0": 10.0, "y0": 20.0, "x1": 15.0, "y1": 25.0},
+                        "raw_token_id": "c-2",
+                        "raw": {"kind": "fret", "raw_text": "7", "parsed_fret": 7, "string": 3, "x": 10.0, "y": 20.0},
+                        "confidence": 0.8,
+                    },
+                ],
+                "expression_controller": None,
+            },
+            {
+                "id": "bar-2-rest-1",
+                "track_id": "gtr-1",
+                "timing": {
+                    "bar_index": 2,
+                    "onset_ticks": 480,
+                    "duration_ticks": 1920,
+                    "ticks_per_quarter": DEFAULT_TICKS_PER_QUARTER,
+                    "voice": 1,
+                    "notated_duration": {"value": "half", "dots": 0},
+                    "tuplet": None,
+                    "grace": None,
+                },
+                "notes": [],
+                "is_rest": True,
+                "chord_symbol": None,
+                "chord_diagram": None,
+                "dynamic": None,
+                "hairpin": None,
+                "fermata": None,
+                "arpeggio": None,
+                "arpeggio_duration": None,
+                "brush": None,
+                "brush_duration": None,
+                "text": None,
+                "techniques": [],
+                "confidence": 1.0,
+                "provenance": [],
+                "expression_controller": None,
+            },
+            {
+                "id": "bar-2-rest-2",
+                "track_id": "gtr-1",
+                "timing": {
+                    "bar_index": 2,
+                    "onset_ticks": 2400,
+                    "duration_ticks": 960,
+                    "ticks_per_quarter": DEFAULT_TICKS_PER_QUARTER,
+                    "voice": 1,
+                    "notated_duration": {"value": "quarter", "dots": 0},
+                    "tuplet": None,
+                    "grace": None,
+                },
+                "notes": [],
+                "is_rest": True,
+                "chord_symbol": None,
+                "chord_diagram": None,
+                "dynamic": None,
+                "hairpin": None,
+                "fermata": None,
+                "arpeggio": None,
+                "arpeggio_duration": None,
+                "brush": None,
+                "brush_duration": None,
+                "text": None,
+                "techniques": [],
+                "confidence": 1.0,
+                "provenance": [],
+                "expression_controller": None,
+            },
+            {
+                "id": "bar-2-rest-3",
+                "track_id": "gtr-1",
+                "timing": {
+                    "bar_index": 2,
+                    "onset_ticks": 3360,
+                    "duration_ticks": 480,
+                    "ticks_per_quarter": DEFAULT_TICKS_PER_QUARTER,
+                    "voice": 1,
+                    "notated_duration": {"value": "eighth", "dots": 0},
+                    "tuplet": None,
+                    "grace": None,
+                },
+                "notes": [],
+                "is_rest": True,
+                "chord_symbol": None,
+                "chord_diagram": None,
+                "dynamic": None,
+                "hairpin": None,
+                "fermata": None,
+                "arpeggio": None,
+                "arpeggio_duration": None,
+                "brush": None,
+                "brush_duration": None,
+                "text": None,
+                "techniques": [],
+                "confidence": 1.0,
+                "provenance": [],
+                "expression_controller": None,
+            },
+        ],
+        "tempo": None,
+        "layout_break": None,
+        "anacrusis": False,
+        "barline": None,
+        "repeat_count": None,
+        "measure_layout": None,
+        "bar_numbering": None,
+        "directions": None,
+        "marker": None,
+        "marker_color": None,
+        "alternate_ending_passes": None,
+        "alternate_ending_is_stop": None,
+        "multi_measure_rest_count": None,
+        "repeat_count_overlay": None,
+        "tempo_automation": None,
+    }
 
-    # Chord Event
-    ev1 = bar.events[0]
-    assert ev1.id == "bar-2-event-1"
-    assert ev1.track_id == "gtr-1"
-    assert ev1.is_rest is False
-    assert ev1.timing.bar_index == 2
-    assert ev1.timing.onset_ticks == 0
-    assert ev1.timing.duration_ticks == 480
-    assert ev1.timing.notated_duration.value == "eighth"
-    assert len(ev1.notes) == 2
-    assert ev1.notes[0].string == 5 and ev1.notes[0].fret == 5 and ev1.notes[0].pitch == 50
-    assert ev1.notes[1].string == 6 and ev1.notes[1].fret == 3 and ev1.notes[1].pitch == 43
-
-    # Remainder Rest Events
-    assert bar.events[1].id == "bar-2-rest-1" and bar.events[1].timing.duration_ticks == 1920
-    assert bar.events[2].id == "bar-2-rest-2" and bar.events[2].timing.duration_ticks == 960
-    assert bar.events[3].id == "bar-2-rest-3" and bar.events[3].timing.duration_ticks == 480
-
-    assert sum(e.timing.duration_ticks for e in bar.events) == 3840
+    assert bar.model_dump(mode="json") == expected_baseline_bar
 
 
-# Scenario 3: Representative explicit-rest bar
 def test_normalized_bar_equivalence_explicit_rest() -> None:
     c_rest = TabCandidate(
         id="c-rest",
@@ -535,43 +863,136 @@ def test_normalized_bar_equivalence_explicit_rest() -> None:
 
     bar = assemble_pdf_tab_bar([c_rest], output_bar_idx=3, track_id="gtr-1")
 
-    assert bar.index == 3
-    assert bar.time_signature.numerator == 4
-    assert bar.time_signature.denominator == 4
-    assert len(bar.events) == 3
+    expected_baseline_bar = {
+        "index": 3,
+        "time_signature": {"numerator": 4, "denominator": 4},
+        "key_signature": None,
+        "events": [
+            {
+                "id": "bar-3-event-1",
+                "track_id": "gtr-1",
+                "timing": {
+                    "bar_index": 3,
+                    "onset_ticks": 0,
+                    "duration_ticks": 960,
+                    "ticks_per_quarter": DEFAULT_TICKS_PER_QUARTER,
+                    "voice": 1,
+                    "notated_duration": {"value": "quarter", "dots": 0},
+                    "tuplet": None,
+                    "grace": None,
+                },
+                "notes": [],
+                "is_rest": True,
+                "chord_symbol": None,
+                "chord_diagram": None,
+                "dynamic": None,
+                "hairpin": None,
+                "fermata": None,
+                "arpeggio": None,
+                "arpeggio_duration": None,
+                "brush": None,
+                "brush_duration": None,
+                "text": None,
+                "techniques": [],
+                "confidence": 0.95,
+                "provenance": [
+                    {
+                        "source_stage": "pdf-text",
+                        "page": 1,
+                        "system_id": "system-1",
+                        "staff_id": "staff-1",
+                        "bar_index": 1,
+                        "bbox": {"page": 1, "x0": 10.0, "y0": 10.0, "x1": 15.0, "y1": 15.0},
+                        "raw_token_id": "c-rest",
+                        "raw": {"kind": "fret", "raw_text": "quarter_rest", "parsed_fret": None, "string": 1, "x": 10.0, "y": 10.0},
+                        "confidence": 0.95,
+                    }
+                ],
+                "expression_controller": None,
+            },
+            {
+                "id": "bar-3-rest-1",
+                "track_id": "gtr-1",
+                "timing": {
+                    "bar_index": 3,
+                    "onset_ticks": 960,
+                    "duration_ticks": 1920,
+                    "ticks_per_quarter": DEFAULT_TICKS_PER_QUARTER,
+                    "voice": 1,
+                    "notated_duration": {"value": "half", "dots": 0},
+                    "tuplet": None,
+                    "grace": None,
+                },
+                "notes": [],
+                "is_rest": True,
+                "chord_symbol": None,
+                "chord_diagram": None,
+                "dynamic": None,
+                "hairpin": None,
+                "fermata": None,
+                "arpeggio": None,
+                "arpeggio_duration": None,
+                "brush": None,
+                "brush_duration": None,
+                "text": None,
+                "techniques": [],
+                "confidence": 1.0,
+                "provenance": [],
+                "expression_controller": None,
+            },
+            {
+                "id": "bar-3-rest-2",
+                "track_id": "gtr-1",
+                "timing": {
+                    "bar_index": 3,
+                    "onset_ticks": 2880,
+                    "duration_ticks": 960,
+                    "ticks_per_quarter": DEFAULT_TICKS_PER_QUARTER,
+                    "voice": 1,
+                    "notated_duration": {"value": "quarter", "dots": 0},
+                    "tuplet": None,
+                    "grace": None,
+                },
+                "notes": [],
+                "is_rest": True,
+                "chord_symbol": None,
+                "chord_diagram": None,
+                "dynamic": None,
+                "hairpin": None,
+                "fermata": None,
+                "arpeggio": None,
+                "arpeggio_duration": None,
+                "brush": None,
+                "brush_duration": None,
+                "text": None,
+                "techniques": [],
+                "confidence": 1.0,
+                "provenance": [],
+                "expression_controller": None,
+            },
+        ],
+        "tempo": None,
+        "layout_break": None,
+        "anacrusis": False,
+        "barline": None,
+        "repeat_count": None,
+        "measure_layout": None,
+        "bar_numbering": None,
+        "directions": None,
+        "marker": None,
+        "marker_color": None,
+        "alternate_ending_passes": None,
+        "alternate_ending_is_stop": None,
+        "multi_measure_rest_count": None,
+        "repeat_count_overlay": None,
+        "tempo_automation": None,
+    }
 
-    # Explicit Rest Event
-    ev1 = bar.events[0]
-    assert ev1.id == "bar-3-event-1"
-    assert ev1.track_id == "gtr-1"
-    assert ev1.is_rest is True
-    assert ev1.timing.bar_index == 3
-    assert ev1.timing.onset_ticks == 0
-    assert ev1.timing.duration_ticks == 960
-    assert ev1.timing.notated_duration.value == "quarter"
-    assert ev1.notes == []
-
-    # Remainder Rest Events: 2880 ticks decomposed to 1920 (half), 960 (quarter)
-    ev2 = bar.events[1]
-    assert ev2.id == "bar-3-rest-1"
-    assert ev2.is_rest is True
-    assert ev2.timing.onset_ticks == 960
-    assert ev2.timing.duration_ticks == 1920
-    assert ev2.timing.notated_duration.value == "half"
-
-    ev3 = bar.events[2]
-    assert ev3.id == "bar-3-rest-2"
-    assert ev3.is_rest is True
-    assert ev3.timing.onset_ticks == 2880
-    assert ev3.timing.duration_ticks == 960
-    assert ev3.timing.notated_duration.value == "quarter"
-
-    assert sum(e.timing.duration_ticks for e in bar.events) == 3840
+    assert bar.model_dump(mode="json") == expected_baseline_bar
 
 
-# Scenario 4: Representative multi-event sequential bar
 def test_normalized_bar_equivalence_multi_event_sequential() -> None:
-    c1 = TabCandidate(
+    c_seq1 = TabCandidate(
         id="c-1",
         kind="fret",
         raw_text="0",
@@ -585,7 +1006,7 @@ def test_normalized_bar_equivalence_multi_event_sequential() -> None:
         page_index=1,
         bbox=BoundingBox(page=1, x0=10.0, y0=10.0, x1=15.0, y1=15.0),
     )
-    c2 = TabCandidate(
+    c_seq2 = TabCandidate(
         id="c-2",
         kind="fret",
         raw_text="2",
@@ -599,7 +1020,7 @@ def test_normalized_bar_equivalence_multi_event_sequential() -> None:
         page_index=1,
         bbox=BoundingBox(page=1, x0=30.0, y0=10.0, x1=35.0, y1=15.0),
     )
-    c3 = TabCandidate(
+    c_seq3 = TabCandidate(
         id="c-3",
         kind="fret",
         raw_text="2",
@@ -613,7 +1034,7 @@ def test_normalized_bar_equivalence_multi_event_sequential() -> None:
         page_index=1,
         bbox=BoundingBox(page=1, x0=50.0, y0=10.0, x1=55.0, y1=15.0),
     )
-    c4 = TabCandidate(
+    c_seq4 = TabCandidate(
         id="c-4",
         kind="fret",
         raw_text="1",
@@ -628,45 +1049,331 @@ def test_normalized_bar_equivalence_multi_event_sequential() -> None:
         bbox=BoundingBox(page=1, x0=70.0, y0=10.0, x1=75.0, y1=15.0),
     )
 
-    bar = assemble_pdf_tab_bar([c1, c2, c3, c4], output_bar_idx=4, track_id="gtr-1")
+    bar = assemble_pdf_tab_bar([c_seq1, c_seq2, c_seq3, c_seq4], output_bar_idx=4, track_id="gtr-1")
 
-    assert bar.index == 4
-    assert bar.time_signature.numerator == 4
-    assert bar.time_signature.denominator == 4
+    expected_baseline_bar = {
+        "index": 4,
+        "time_signature": {"numerator": 4, "denominator": 4},
+        "key_signature": None,
+        "events": [
+            {
+                "id": "bar-4-event-1",
+                "track_id": "gtr-1",
+                "timing": {
+                    "bar_index": 4,
+                    "onset_ticks": 0,
+                    "duration_ticks": 480,
+                    "ticks_per_quarter": DEFAULT_TICKS_PER_QUARTER,
+                    "voice": 1,
+                    "notated_duration": {"value": "eighth", "dots": 0},
+                    "tuplet": None,
+                    "grace": None,
+                },
+                "notes": [
+                    {
+                        "string": 6,
+                        "fret": 0,
+                        "pitch": 40,
+                        "is_dead": False,
+                        "articulations": [],
+                        "techniques": [],
+                        "left_hand_fingering": None,
+                        "right_hand_fingering": None,
+                        "confidence": 0.5,
+                        "provenance": [
+                            {
+                                "source_stage": "pdf-text",
+                                "page": 1,
+                                "system_id": "system-1",
+                                "staff_id": "staff-1",
+                                "bar_index": 1,
+                                "bbox": {"page": 1, "x0": 10.0, "y0": 10.0, "x1": 15.0, "y1": 15.0},
+                                "raw_token_id": "c-1",
+                                "raw": {"kind": "fret", "raw_text": "0", "parsed_fret": 0, "string": 6, "x": 10.0, "y": 10.0},
+                                "confidence": 0.5,
+                            }
+                        ],
+                        "expression_controller": None,
+                    }
+                ],
+                "is_rest": False,
+                "chord_symbol": None,
+                "chord_diagram": None,
+                "dynamic": None,
+                "hairpin": None,
+                "fermata": None,
+                "arpeggio": None,
+                "arpeggio_duration": None,
+                "brush": None,
+                "brush_duration": None,
+                "text": None,
+                "techniques": [],
+                "confidence": 0.5,
+                "provenance": [
+                    {
+                        "source_stage": "pdf-text",
+                        "page": 1,
+                        "system_id": "system-1",
+                        "staff_id": "staff-1",
+                        "bar_index": 1,
+                        "bbox": {"page": 1, "x0": 10.0, "y0": 10.0, "x1": 15.0, "y1": 15.0},
+                        "raw_token_id": "c-1",
+                        "raw": {"kind": "fret", "raw_text": "0", "parsed_fret": 0, "string": 6, "x": 10.0, "y": 10.0},
+                        "confidence": 0.5,
+                    }
+                ],
+                "expression_controller": None,
+            },
+            {
+                "id": "bar-4-event-2",
+                "track_id": "gtr-1",
+                "timing": {
+                    "bar_index": 4,
+                    "onset_ticks": 480,
+                    "duration_ticks": 480,
+                    "ticks_per_quarter": DEFAULT_TICKS_PER_QUARTER,
+                    "voice": 1,
+                    "notated_duration": {"value": "eighth", "dots": 0},
+                    "tuplet": None,
+                    "grace": None,
+                },
+                "notes": [
+                    {
+                        "string": 5,
+                        "fret": 2,
+                        "pitch": 47,
+                        "is_dead": False,
+                        "articulations": [],
+                        "techniques": [],
+                        "left_hand_fingering": None,
+                        "right_hand_fingering": None,
+                        "confidence": 0.5,
+                        "provenance": [
+                            {
+                                "source_stage": "pdf-text",
+                                "page": 1,
+                                "system_id": "system-1",
+                                "staff_id": "staff-1",
+                                "bar_index": 1,
+                                "bbox": {"page": 1, "x0": 30.0, "y0": 10.0, "x1": 35.0, "y1": 15.0},
+                                "raw_token_id": "c-2",
+                                "raw": {"kind": "fret", "raw_text": "2", "parsed_fret": 2, "string": 5, "x": 30.0, "y": 10.0},
+                                "confidence": 0.5,
+                            }
+                        ],
+                        "expression_controller": None,
+                    }
+                ],
+                "is_rest": False,
+                "chord_symbol": None,
+                "chord_diagram": None,
+                "dynamic": None,
+                "hairpin": None,
+                "fermata": None,
+                "arpeggio": None,
+                "arpeggio_duration": None,
+                "brush": None,
+                "brush_duration": None,
+                "text": None,
+                "techniques": [],
+                "confidence": 0.5,
+                "provenance": [
+                    {
+                        "source_stage": "pdf-text",
+                        "page": 1,
+                        "system_id": "system-1",
+                        "staff_id": "staff-1",
+                        "bar_index": 1,
+                        "bbox": {"page": 1, "x0": 30.0, "y0": 10.0, "x1": 35.0, "y1": 15.0},
+                        "raw_token_id": "c-2",
+                        "raw": {"kind": "fret", "raw_text": "2", "parsed_fret": 2, "string": 5, "x": 30.0, "y": 10.0},
+                        "confidence": 0.5,
+                    }
+                ],
+                "expression_controller": None,
+            },
+            {
+                "id": "bar-4-event-3",
+                "track_id": "gtr-1",
+                "timing": {
+                    "bar_index": 4,
+                    "onset_ticks": 960,
+                    "duration_ticks": 480,
+                    "ticks_per_quarter": DEFAULT_TICKS_PER_QUARTER,
+                    "voice": 1,
+                    "notated_duration": {"value": "eighth", "dots": 0},
+                    "tuplet": None,
+                    "grace": None,
+                },
+                "notes": [
+                    {
+                        "string": 4,
+                        "fret": 2,
+                        "pitch": 52,
+                        "is_dead": False,
+                        "articulations": [],
+                        "techniques": [],
+                        "left_hand_fingering": None,
+                        "right_hand_fingering": None,
+                        "confidence": 0.5,
+                        "provenance": [
+                            {
+                                "source_stage": "pdf-text",
+                                "page": 1,
+                                "system_id": "system-1",
+                                "staff_id": "staff-1",
+                                "bar_index": 1,
+                                "bbox": {"page": 1, "x0": 50.0, "y0": 10.0, "x1": 55.0, "y1": 15.0},
+                                "raw_token_id": "c-3",
+                                "raw": {"kind": "fret", "raw_text": "2", "parsed_fret": 2, "string": 4, "x": 50.0, "y": 10.0},
+                                "confidence": 0.5,
+                            }
+                        ],
+                        "expression_controller": None,
+                    }
+                ],
+                "is_rest": False,
+                "chord_symbol": None,
+                "chord_diagram": None,
+                "dynamic": None,
+                "hairpin": None,
+                "fermata": None,
+                "arpeggio": None,
+                "arpeggio_duration": None,
+                "brush": None,
+                "brush_duration": None,
+                "text": None,
+                "techniques": [],
+                "confidence": 0.5,
+                "provenance": [
+                    {
+                        "source_stage": "pdf-text",
+                        "page": 1,
+                        "system_id": "system-1",
+                        "staff_id": "staff-1",
+                        "bar_index": 1,
+                        "bbox": {"page": 1, "x0": 50.0, "y0": 10.0, "x1": 55.0, "y1": 15.0},
+                        "raw_token_id": "c-3",
+                        "raw": {"kind": "fret", "raw_text": "2", "parsed_fret": 2, "string": 4, "x": 50.0, "y": 10.0},
+                        "confidence": 0.5,
+                    }
+                ],
+                "expression_controller": None,
+            },
+            {
+                "id": "bar-4-event-4",
+                "track_id": "gtr-1",
+                "timing": {
+                    "bar_index": 4,
+                    "onset_ticks": 1440,
+                    "duration_ticks": 480,
+                    "ticks_per_quarter": DEFAULT_TICKS_PER_QUARTER,
+                    "voice": 1,
+                    "notated_duration": {"value": "eighth", "dots": 0},
+                    "tuplet": None,
+                    "grace": None,
+                },
+                "notes": [
+                    {
+                        "string": 3,
+                        "fret": 1,
+                        "pitch": 56,
+                        "is_dead": False,
+                        "articulations": [],
+                        "techniques": [],
+                        "left_hand_fingering": None,
+                        "right_hand_fingering": None,
+                        "confidence": 0.5,
+                        "provenance": [
+                            {
+                                "source_stage": "pdf-text",
+                                "page": 1,
+                                "system_id": "system-1",
+                                "staff_id": "staff-1",
+                                "bar_index": 1,
+                                "bbox": {"page": 1, "x0": 70.0, "y0": 10.0, "x1": 75.0, "y1": 15.0},
+                                "raw_token_id": "c-4",
+                                "raw": {"kind": "fret", "raw_text": "1", "parsed_fret": 1, "string": 3, "x": 70.0, "y": 10.0},
+                                "confidence": 0.5,
+                            }
+                        ],
+                        "expression_controller": None,
+                    }
+                ],
+                "is_rest": False,
+                "chord_symbol": None,
+                "chord_diagram": None,
+                "dynamic": None,
+                "hairpin": None,
+                "fermata": None,
+                "arpeggio": None,
+                "arpeggio_duration": None,
+                "brush": None,
+                "brush_duration": None,
+                "text": None,
+                "techniques": [],
+                "confidence": 0.5,
+                "provenance": [
+                    {
+                        "source_stage": "pdf-text",
+                        "page": 1,
+                        "system_id": "system-1",
+                        "staff_id": "staff-1",
+                        "bar_index": 1,
+                        "bbox": {"page": 1, "x0": 70.0, "y0": 10.0, "x1": 75.0, "y1": 15.0},
+                        "raw_token_id": "c-4",
+                        "raw": {"kind": "fret", "raw_text": "1", "parsed_fret": 1, "string": 3, "x": 70.0, "y": 10.0},
+                        "confidence": 0.5,
+                    }
+                ],
+                "expression_controller": None,
+            },
+            {
+                "id": "bar-4-rest-1",
+                "track_id": "gtr-1",
+                "timing": {
+                    "bar_index": 4,
+                    "onset_ticks": 1920,
+                    "duration_ticks": 1920,
+                    "ticks_per_quarter": DEFAULT_TICKS_PER_QUARTER,
+                    "voice": 1,
+                    "notated_duration": {"value": "half", "dots": 0},
+                    "tuplet": None,
+                    "grace": None,
+                },
+                "notes": [],
+                "is_rest": True,
+                "chord_symbol": None,
+                "chord_diagram": None,
+                "dynamic": None,
+                "hairpin": None,
+                "fermata": None,
+                "arpeggio": None,
+                "arpeggio_duration": None,
+                "brush": None,
+                "brush_duration": None,
+                "text": None,
+                "techniques": [],
+                "confidence": 1.0,
+                "provenance": [],
+                "expression_controller": None,
+            },
+        ],
+        "tempo": None,
+        "layout_break": None,
+        "anacrusis": False,
+        "barline": None,
+        "repeat_count": None,
+        "measure_layout": None,
+        "bar_numbering": None,
+        "directions": None,
+        "marker": None,
+        "marker_color": None,
+        "alternate_ending_passes": None,
+        "alternate_ending_is_stop": None,
+        "multi_measure_rest_count": None,
+        "repeat_count_overlay": None,
+        "tempo_automation": None,
+    }
 
-    note_events = [e for e in bar.events if not e.is_rest]
-    assert len(note_events) == 4
-
-    # Event 1 (E2)
-    assert note_events[0].id == "bar-4-event-1"
-    assert note_events[0].timing.onset_ticks == 0
-    assert note_events[0].timing.duration_ticks == 480
-    assert note_events[0].notes[0].pitch == 40
-
-    # Event 2 (B2)
-    assert note_events[1].id == "bar-4-event-2"
-    assert note_events[1].timing.onset_ticks == 480
-    assert note_events[1].timing.duration_ticks == 480
-    assert note_events[1].notes[0].pitch == 47
-
-    # Event 3 (E3)
-    assert note_events[2].id == "bar-4-event-3"
-    assert note_events[2].timing.onset_ticks == 960
-    assert note_events[2].timing.duration_ticks == 480
-    assert note_events[2].notes[0].pitch == 52
-
-    # Event 4 (G#3)
-    assert note_events[3].id == "bar-4-event-4"
-    assert note_events[3].timing.onset_ticks == 1440
-    assert note_events[3].timing.duration_ticks == 480
-    assert note_events[3].notes[0].pitch == 56
-
-    # Remainder rest fills remaining 1920 ticks (half rest)
-    rest_events = [e for e in bar.events if e.is_rest]
-    assert len(rest_events) == 1
-    assert rest_events[0].id == "bar-4-rest-1"
-    assert rest_events[0].timing.onset_ticks == 1920
-    assert rest_events[0].timing.duration_ticks == 1920
-    assert rest_events[0].timing.notated_duration.value == "half"
-
-    assert sum(e.timing.duration_ticks for e in bar.events) == 3840
+    assert bar.model_dump(mode="json") == expected_baseline_bar
