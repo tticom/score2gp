@@ -9,7 +9,7 @@ from typing import Iterable, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .pdf_tab_bar_assembly import assemble_pdf_tab_bar
+from .pdf_tab_bar_assembler import PdfTabBarAssemblerError, assemble_pdf_tab_bar
 from .pdf_tab_event_factory import (
     build_pdf_tab_event_from_subgroup,
     determine_pdf_tab_event_duration,
@@ -1769,15 +1769,23 @@ def build_ir_from_tabraw_only(
 
         output_bar_to_frets[output_bar_idx] = bar_frets
 
-        bar = assemble_pdf_tab_bar(
-            bar_frets,
-            output_bar_idx=output_bar_idx,
-            track_id=TRACK_ID,
-            editable_draft=editable_draft,
-            tempo_bpm=tempo_bpm,
-            tempo_is_explicit=tempo_is_explicit,
-            error_factory=BuildIrInputRiskError,
-        )
+        try:
+            bar = assemble_pdf_tab_bar(
+                bar_frets,
+                output_bar_idx=output_bar_idx,
+                track_id=TRACK_ID,
+                editable_draft=editable_draft,
+                tempo_bpm=tempo_bpm,
+                tempo_is_explicit=tempo_is_explicit,
+                chord_x_tolerance_pt=PDF_ONLY_CHORD_X_TOLERANCE_PT,
+            )
+        except PdfTabBarAssemblerError as err:
+            raise BuildIrInputRiskError(
+                category=err.category,
+                stage=err.stage,
+                message=err.message,
+                details=err.details,
+            ) from err
         bars.append(bar)
 
     # Create warnings and add timing inferred timing warning
