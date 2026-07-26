@@ -10,15 +10,6 @@ from typing import Iterable, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from .pdf_tab_bar_assembler import PdfTabBarAssemblerError, assemble_pdf_tab_bar
-from .pdf_tab_event_factory import (
-    build_pdf_tab_event_from_subgroup,
-    determine_pdf_tab_event_duration,
-)
-from .pdf_tab_measure_timing import (
-    decompose_pdf_tab_measure_remainder_to_rests,
-    is_within_pdf_tab_measure_capacity,
-    select_pdf_tab_grid_spacing_and_duration_name,
-)
 from .ascii_alignment import ALIGNMENT_SCHEMA_VERSION, AsciiMusicXmlAlignment, compute_sha256
 from . import __version__
 from .ir import (
@@ -1739,14 +1730,6 @@ def build_ir_from_tabraw_only(
             )
 
     # 2. Rhythmic alignment & ScoreIR generation
-    _STRING_TO_BASE_PITCH = {
-        1: 64,  # E4
-        2: 59,  # B3
-        3: 55,  # G3
-        4: 50,  # D3
-        5: 45,  # A2
-        6: 40,  # E2
-    }
 
 
 
