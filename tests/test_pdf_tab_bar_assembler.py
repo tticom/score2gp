@@ -4,8 +4,9 @@ from pathlib import Path
 
 import pytest
 
+from pdf_tab_test_helpers import make_pdf_quarter_rest_candidate, make_pdf_tab_candidate
 from score2gp.build_ir import BuildIrInputRiskError, build_ir_from_tabraw_only
-from score2gp.ir import BoundingBox, DEFAULT_TICKS_PER_QUARTER
+from score2gp.ir import DEFAULT_TICKS_PER_QUARTER
 from score2gp.pdf_tab_bar_assembler import PdfTabBarAssemblerError, assemble_pdf_tab_bar
 from score2gp.tabraw import TabCandidate, TabRaw
 
@@ -21,21 +22,7 @@ def test_assemble_pdf_tab_bar_empty() -> None:
 
 
 def test_assemble_pdf_tab_bar_single_note() -> None:
-    c1 = TabCandidate(
-        id="c-1",
-        kind="fret",
-        raw_text="5",
-        parsed_fret=5,
-        x=10.0,
-        y=10.0,
-        string=1,
-        bar_index=1,
-        system_index=1,
-        staff_index=1,
-        page_index=1,
-        bbox=BoundingBox(page=1, x0=10.0, y0=10.0, x1=15.0, y1=15.0),
-        confidence=0.9,
-    )
+    c1 = make_pdf_tab_candidate(id="c-1", raw_text="5", parsed_fret=5, string=1, confidence=0.9)
 
     bar = assemble_pdf_tab_bar([c1], output_bar_idx=1, track_id="gtr-1")
 
@@ -50,36 +37,8 @@ def test_assemble_pdf_tab_bar_single_note() -> None:
 
 
 def test_assemble_pdf_tab_bar_chord() -> None:
-    c1 = TabCandidate(
-        id="c-1",
-        kind="fret",
-        raw_text="5",
-        parsed_fret=5,
-        x=10.0,
-        y=10.0,
-        string=1,
-        bar_index=1,
-        system_index=1,
-        staff_index=1,
-        page_index=1,
-        bbox=BoundingBox(page=1, x0=10.0, y0=10.0, x1=15.0, y1=15.0),
-        confidence=0.9,
-    )
-    c2 = TabCandidate(
-        id="c-2",
-        kind="fret",
-        raw_text="7",
-        parsed_fret=7,
-        x=10.0,
-        y=20.0,
-        string=3,
-        bar_index=1,
-        system_index=1,
-        staff_index=1,
-        page_index=1,
-        bbox=BoundingBox(page=1, x0=10.0, y0=20.0, x1=15.0, y1=25.0),
-        confidence=0.8,
-    )
+    c1 = make_pdf_tab_candidate(id="c-1", raw_text="5", parsed_fret=5, string=1, confidence=0.9)
+    c2 = make_pdf_tab_candidate(id="c-2", raw_text="7", parsed_fret=7, y=20.0, string=3, confidence=0.8)
 
     bar = assemble_pdf_tab_bar([c1, c2], output_bar_idx=1, track_id="gtr-1")
 
@@ -91,34 +50,8 @@ def test_assemble_pdf_tab_bar_chord() -> None:
 
 
 def test_assemble_pdf_tab_bar_sequential_notes() -> None:
-    c1 = TabCandidate(
-        id="c-1",
-        kind="fret",
-        raw_text="3",
-        parsed_fret=3,
-        x=10.0,
-        y=10.0,
-        string=6,
-        bar_index=1,
-        system_index=1,
-        staff_index=1,
-        page_index=1,
-        bbox=BoundingBox(page=1, x0=10.0, y0=10.0, x1=15.0, y1=15.0),
-    )
-    c2 = TabCandidate(
-        id="c-2",
-        kind="fret",
-        raw_text="5",
-        parsed_fret=5,
-        x=30.0,
-        y=10.0,
-        string=5,
-        bar_index=1,
-        system_index=1,
-        staff_index=1,
-        page_index=1,
-        bbox=BoundingBox(page=1, x0=30.0, y0=10.0, x1=35.0, y1=15.0),
-    )
+    c1 = make_pdf_tab_candidate(id="c-1", raw_text="3", parsed_fret=3, x=10.0, string=6)
+    c2 = make_pdf_tab_candidate(id="c-2", raw_text="5", parsed_fret=5, x=30.0, string=5)
 
     bar = assemble_pdf_tab_bar([c1, c2], output_bar_idx=1, track_id="gtr-1")
 
@@ -133,36 +66,8 @@ def test_assemble_pdf_tab_bar_sequential_notes() -> None:
 
 def test_assemble_pdf_tab_bar_duplicate_string_candidates() -> None:
     # Two candidates on the exact same string at the exact same x coordinate
-    c1 = TabCandidate(
-        id="c-1",
-        kind="fret",
-        raw_text="5",
-        parsed_fret=5,
-        x=10.0,
-        y=10.0,
-        string=1,
-        bar_index=1,
-        system_index=1,
-        staff_index=1,
-        page_index=1,
-        bbox=BoundingBox(page=1, x0=10.0, y0=10.0, x1=15.0, y1=15.0),
-        confidence=0.9,
-    )
-    c2 = TabCandidate(
-        id="c-2",
-        kind="fret",
-        raw_text="7",
-        parsed_fret=7,
-        x=10.0,
-        y=12.0,
-        string=1,
-        bar_index=1,
-        system_index=1,
-        staff_index=1,
-        page_index=1,
-        bbox=BoundingBox(page=1, x0=10.0, y0=12.0, x1=15.0, y1=17.0),
-        confidence=0.7,
-    )
+    c1 = make_pdf_tab_candidate(id="c-1", raw_text="5", parsed_fret=5, string=1, confidence=0.9)
+    c2 = make_pdf_tab_candidate(id="c-2", raw_text="7", parsed_fret=7, y=12.0, string=1, confidence=0.7)
 
     bar = assemble_pdf_tab_bar([c1, c2], output_bar_idx=1, track_id="gtr-1")
 
@@ -188,21 +93,7 @@ def test_assemble_pdf_tab_bar_duplicate_string_candidates() -> None:
 
 
 def test_assemble_pdf_tab_bar_quarter_rest() -> None:
-    c_rest = TabCandidate(
-        id="c-rest",
-        kind="fret",
-        raw_text="quarter_rest",
-        parsed_fret=None,
-        x=10.0,
-        y=10.0,
-        string=1,
-        bar_index=1,
-        system_index=1,
-        staff_index=1,
-        page_index=1,
-        bbox=BoundingBox(page=1, x0=10.0, y0=10.0, x1=15.0, y1=15.0),
-        confidence=0.95,
-    )
+    c_rest = make_pdf_quarter_rest_candidate(id="c-rest", confidence=0.95)
 
     bar = assemble_pdf_tab_bar([c_rest], output_bar_idx=1, track_id="gtr-1")
 
@@ -213,34 +104,8 @@ def test_assemble_pdf_tab_bar_quarter_rest() -> None:
 
 
 def test_assemble_pdf_tab_bar_custom_chord_x_tolerance() -> None:
-    c1 = TabCandidate(
-        id="c-1",
-        kind="fret",
-        raw_text="3",
-        parsed_fret=3,
-        x=10.0,
-        y=10.0,
-        string=1,
-        bar_index=1,
-        system_index=1,
-        staff_index=1,
-        page_index=1,
-        bbox=BoundingBox(page=1, x0=10.0, y0=10.0, x1=15.0, y1=15.0),
-    )
-    c2 = TabCandidate(
-        id="c-2",
-        kind="fret",
-        raw_text="5",
-        parsed_fret=5,
-        x=15.0,
-        y=20.0,
-        string=2,
-        bar_index=1,
-        system_index=1,
-        staff_index=1,
-        page_index=1,
-        bbox=BoundingBox(page=1, x0=15.0, y0=20.0, x1=20.0, y1=25.0),
-    )
+    c1 = make_pdf_tab_candidate(id="c-1", raw_text="3", parsed_fret=3, x=10.0, string=1)
+    c2 = make_pdf_tab_candidate(id="c-2", raw_text="5", parsed_fret=5, x=15.0, y=20.0, string=2)
 
     bar_separate = assemble_pdf_tab_bar([c1, c2], output_bar_idx=1, track_id="gtr-1", chord_x_tolerance_pt=2.0)
     assert len([e for e in bar_separate.events if not e.is_rest]) == 2
@@ -250,41 +115,13 @@ def test_assemble_pdf_tab_bar_custom_chord_x_tolerance() -> None:
 
 
 def test_assemble_pdf_tab_bar_internal_error_raised() -> None:
-    candidates: list[TabCandidate] = []
-    for idx in range(5):
-        candidates.append(
-            TabCandidate(
-                id=f"c-{idx}",
-                kind="fret",
-                raw_text="5",
-                parsed_fret=5,
-                x=float(idx * 10),
-                y=10.0,
-                string=1,
-                bar_index=1,
-                system_index=1,
-                staff_index=1,
-                page_index=1,
-                bbox=BoundingBox(page=1, x0=float(idx * 10), y0=10.0, x1=float(idx * 10 + 5), y1=15.0),
-            )
-        )
-    for idx in range(5, 7):
-        candidates.append(
-            TabCandidate(
-                id=f"c-{idx}",
-                kind="fret",
-                raw_text="quarter_rest",
-                parsed_fret=None,
-                x=float(idx * 10),
-                y=10.0,
-                string=1,
-                bar_index=1,
-                system_index=1,
-                staff_index=1,
-                page_index=1,
-                bbox=BoundingBox(page=1, x0=float(idx * 10), y0=10.0, x1=float(idx * 10 + 5), y1=15.0),
-            )
-        )
+    candidates = [
+        make_pdf_tab_candidate(id=f"c-{idx}", raw_text="5", parsed_fret=5, x=float(idx * 10))
+        for idx in range(5)
+    ] + [
+        make_pdf_quarter_rest_candidate(id=f"c-{idx}", x=float(idx * 10))
+        for idx in range(5, 7)
+    ]
 
     with pytest.raises(PdfTabBarAssemblerError) as exc_info:
         assemble_pdf_tab_bar(candidates, output_bar_idx=1, track_id="gtr-1")
@@ -300,20 +137,7 @@ def test_assemble_pdf_tab_bar_internal_error_raised() -> None:
 
 def test_build_ir_grouping_unsafe_refusal_exact_payload(tmp_path: Path) -> None:
     candidates = [
-        TabCandidate(
-            id=f"c-{idx}",
-            kind="fret",
-            raw_text="1",
-            parsed_fret=1,
-            x=float(idx * 10),
-            y=10.0,
-            string=1,
-            bar_index=1,
-            system_index=1,
-            staff_index=1,
-            page_index=1,
-            bbox=BoundingBox(page=1, x0=float(idx * 10), y0=10.0, x1=float(idx * 10 + 5), y1=15.0),
-        )
+        make_pdf_tab_candidate(id=f"c-{idx}", raw_text="1", parsed_fret=1, x=float(idx * 10))
         for idx in range(65)
     ]
 
@@ -331,41 +155,13 @@ def test_build_ir_grouping_unsafe_refusal_exact_payload(tmp_path: Path) -> None:
 
 
 def test_build_ir_overcapacity_refusal_exact_payload(tmp_path: Path) -> None:
-    candidates: list[TabCandidate] = []
-    for idx in range(5):
-        candidates.append(
-            TabCandidate(
-                id=f"c-{idx}",
-                kind="fret",
-                raw_text="5",
-                parsed_fret=5,
-                x=float(idx * 10),
-                y=10.0,
-                string=1,
-                bar_index=1,
-                system_index=1,
-                staff_index=1,
-                page_index=1,
-                bbox=BoundingBox(page=1, x0=float(idx * 10), y0=10.0, x1=float(idx * 10 + 5), y1=15.0),
-            )
-        )
-    for idx in range(5, 7):
-        candidates.append(
-            TabCandidate(
-                id=f"c-{idx}",
-                kind="fret",
-                raw_text="quarter_rest",
-                parsed_fret=None,
-                x=float(idx * 10),
-                y=10.0,
-                string=1,
-                bar_index=1,
-                system_index=1,
-                staff_index=1,
-                page_index=1,
-                bbox=BoundingBox(page=1, x0=float(idx * 10), y0=10.0, x1=float(idx * 10 + 5), y1=15.0),
-            )
-        )
+    candidates = [
+        make_pdf_tab_candidate(id=f"c-{idx}", raw_text="5", parsed_fret=5, x=float(idx * 10))
+        for idx in range(5)
+    ] + [
+        make_pdf_quarter_rest_candidate(id=f"c-{idx}", x=float(idx * 10))
+        for idx in range(5, 7)
+    ]
 
     tabraw = TabRaw(candidates=candidates)
     tabraw_file = tmp_path / "tabraw.json"
@@ -388,21 +184,7 @@ def test_build_ir_overcapacity_refusal_exact_payload(tmp_path: Path) -> None:
 # Each test compares full bar.model_dump(mode="json") against fixed baseline data.
 
 def test_normalized_bar_equivalence_single_event() -> None:
-    c1 = TabCandidate(
-        id="c-1",
-        kind="fret",
-        raw_text="5",
-        parsed_fret=5,
-        x=10.0,
-        y=10.0,
-        string=1,
-        bar_index=1,
-        system_index=1,
-        staff_index=1,
-        page_index=1,
-        bbox=BoundingBox(page=1, x0=10.0, y0=10.0, x1=15.0, y1=15.0),
-        confidence=0.9,
-    )
+    c1 = make_pdf_tab_candidate(id="c-1", raw_text="5", parsed_fret=5, string=1, confidence=0.9)
 
     bar = assemble_pdf_tab_bar([c1], output_bar_idx=1, track_id="gtr-1")
 
@@ -591,36 +373,8 @@ def test_normalized_bar_equivalence_single_event() -> None:
 
 
 def test_normalized_bar_equivalence_chord() -> None:
-    c1 = TabCandidate(
-        id="c-1",
-        kind="fret",
-        raw_text="5",
-        parsed_fret=5,
-        x=10.0,
-        y=10.0,
-        string=1,
-        bar_index=1,
-        system_index=1,
-        staff_index=1,
-        page_index=1,
-        bbox=BoundingBox(page=1, x0=10.0, y0=10.0, x1=15.0, y1=15.0),
-        confidence=0.9,
-    )
-    c2 = TabCandidate(
-        id="c-2",
-        kind="fret",
-        raw_text="7",
-        parsed_fret=7,
-        x=10.0,
-        y=20.0,
-        string=3,
-        bar_index=1,
-        system_index=1,
-        staff_index=1,
-        page_index=1,
-        bbox=BoundingBox(page=1, x0=10.0, y0=20.0, x1=15.0, y1=25.0),
-        confidence=0.8,
-    )
+    c1 = make_pdf_tab_candidate(id="c-1", raw_text="5", parsed_fret=5, string=1, confidence=0.9)
+    c2 = make_pdf_tab_candidate(id="c-2", raw_text="7", parsed_fret=7, y=20.0, string=3, confidence=0.8)
 
     bar = assemble_pdf_tab_bar([c1, c2], output_bar_idx=2, track_id="gtr-1")
 
@@ -845,21 +599,7 @@ def test_normalized_bar_equivalence_chord() -> None:
 
 
 def test_normalized_bar_equivalence_explicit_rest() -> None:
-    c_rest = TabCandidate(
-        id="c-rest",
-        kind="fret",
-        raw_text="quarter_rest",
-        parsed_fret=None,
-        x=10.0,
-        y=10.0,
-        string=1,
-        bar_index=1,
-        system_index=1,
-        staff_index=1,
-        page_index=1,
-        bbox=BoundingBox(page=1, x0=10.0, y0=10.0, x1=15.0, y1=15.0),
-        confidence=0.95,
-    )
+    c_rest = make_pdf_quarter_rest_candidate(id="c-rest", confidence=0.95)
 
     bar = assemble_pdf_tab_bar([c_rest], output_bar_idx=3, track_id="gtr-1")
 
@@ -992,62 +732,10 @@ def test_normalized_bar_equivalence_explicit_rest() -> None:
 
 
 def test_normalized_bar_equivalence_multi_event_sequential() -> None:
-    c_seq1 = TabCandidate(
-        id="c-1",
-        kind="fret",
-        raw_text="0",
-        parsed_fret=0,
-        x=10.0,
-        y=10.0,
-        string=6,
-        bar_index=1,
-        system_index=1,
-        staff_index=1,
-        page_index=1,
-        bbox=BoundingBox(page=1, x0=10.0, y0=10.0, x1=15.0, y1=15.0),
-    )
-    c_seq2 = TabCandidate(
-        id="c-2",
-        kind="fret",
-        raw_text="2",
-        parsed_fret=2,
-        x=30.0,
-        y=10.0,
-        string=5,
-        bar_index=1,
-        system_index=1,
-        staff_index=1,
-        page_index=1,
-        bbox=BoundingBox(page=1, x0=30.0, y0=10.0, x1=35.0, y1=15.0),
-    )
-    c_seq3 = TabCandidate(
-        id="c-3",
-        kind="fret",
-        raw_text="2",
-        parsed_fret=2,
-        x=50.0,
-        y=10.0,
-        string=4,
-        bar_index=1,
-        system_index=1,
-        staff_index=1,
-        page_index=1,
-        bbox=BoundingBox(page=1, x0=50.0, y0=10.0, x1=55.0, y1=15.0),
-    )
-    c_seq4 = TabCandidate(
-        id="c-4",
-        kind="fret",
-        raw_text="1",
-        parsed_fret=1,
-        x=70.0,
-        y=10.0,
-        string=3,
-        bar_index=1,
-        system_index=1,
-        staff_index=1,
-        page_index=1,
-        bbox=BoundingBox(page=1, x0=70.0, y0=10.0, x1=75.0, y1=15.0),
-    )
+    c_seq1 = make_pdf_tab_candidate(id="c-1", raw_text="0", parsed_fret=0, x=10.0, string=6)
+    c_seq2 = make_pdf_tab_candidate(id="c-2", raw_text="2", parsed_fret=2, x=30.0, string=5)
+    c_seq3 = make_pdf_tab_candidate(id="c-3", raw_text="2", parsed_fret=2, x=50.0, string=4)
+    c_seq4 = make_pdf_tab_candidate(id="c-4", raw_text="1", parsed_fret=1, x=70.0, string=3)
 
     bar = assemble_pdf_tab_bar([c_seq1, c_seq2, c_seq3, c_seq4], output_bar_idx=4, track_id="gtr-1")
 
@@ -1377,3 +1065,15 @@ def test_normalized_bar_equivalence_multi_event_sequential() -> None:
     }
 
     assert bar.model_dump(mode="json") == expected_baseline_bar
+
+
+def test_pdf_tab_helpers_isolation() -> None:
+    """Focused helper test proving fresh objects are returned and caller mutation cannot leak."""
+    c1 = make_pdf_tab_candidate()
+    c2 = make_pdf_tab_candidate()
+    assert c1 is not c2
+    assert c1.bbox is not c2.bbox
+    c1.x = 999.0
+    c1.bbox.x0 = 999.0
+    assert c2.x == 10.0
+    assert c2.bbox.x0 == 10.0

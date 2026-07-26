@@ -3,21 +3,16 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from score2gp.tabraw import TabCandidate
-from score2gp.pdf_only_chord_event_grouper import PdfOnlyChordEventGrouper
+from pdf_tab_test_helpers import make_pdf_tab_candidate
 from score2gp.build_ir import build_ir_from_tabraw_only
+from score2gp.pdf_only_chord_event_grouper import PdfOnlyChordEventGrouper
 
 
 def test_pdf_only_chord_event_grouper_groups_small_x_offsets_across_strings() -> None:
     # 1. Create candidates within 10.0 pt offset on different strings
     candidates = [
-        TabCandidate(
+        make_pdf_tab_candidate(
             id="c-1",
-            kind="fret",
-            page_index=1,
-            system_index=1,
-            staff_index=1,
-            bar_index=1,
             string=1,
             raw_text="5",
             parsed_fret=5,
@@ -25,13 +20,8 @@ def test_pdf_only_chord_event_grouper_groups_small_x_offsets_across_strings() ->
             y=20.0,
             confidence=0.9,
         ),
-        TabCandidate(
+        make_pdf_tab_candidate(
             id="c-2",
-            kind="fret",
-            page_index=1,
-            system_index=1,
-            staff_index=1,
-            bar_index=1,
             string=2,
             raw_text="7",
             parsed_fret=7,
@@ -53,13 +43,8 @@ def test_pdf_only_chord_event_grouper_groups_small_x_offsets_across_strings() ->
 def test_pdf_only_chord_event_grouper_keeps_large_x_gaps_sequential() -> None:
     # 2. Create candidates with delta > 10.0 pt
     candidates = [
-        TabCandidate(
+        make_pdf_tab_candidate(
             id="c-1",
-            kind="fret",
-            page_index=1,
-            system_index=1,
-            staff_index=1,
-            bar_index=1,
             string=1,
             raw_text="5",
             parsed_fret=5,
@@ -67,13 +52,8 @@ def test_pdf_only_chord_event_grouper_keeps_large_x_gaps_sequential() -> None:
             y=20.0,
             confidence=0.9,
         ),
-        TabCandidate(
+        make_pdf_tab_candidate(
             id="c-2",
-            kind="fret",
-            page_index=1,
-            system_index=1,
-            staff_index=1,
-            bar_index=1,
             string=2,
             raw_text="7",
             parsed_fret=7,
@@ -97,13 +77,8 @@ def test_pdf_only_chord_event_grouper_keeps_large_x_gaps_sequential() -> None:
 def test_pdf_only_chord_event_grouper_splits_duplicate_string_candidates() -> None:
     # 3. Create duplicate string candidates close in x (<= 10.0 pt delta)
     candidates = [
-        TabCandidate(
+        make_pdf_tab_candidate(
             id="c-1",
-            kind="fret",
-            page_index=1,
-            system_index=1,
-            staff_index=1,
-            bar_index=1,
             string=1,
             raw_text="5",
             parsed_fret=5,
@@ -111,13 +86,8 @@ def test_pdf_only_chord_event_grouper_splits_duplicate_string_candidates() -> No
             y=20.0,
             confidence=0.9,
         ),
-        TabCandidate(
+        make_pdf_tab_candidate(
             id="c-2",
-            kind="fret",
-            page_index=1,
-            system_index=1,
-            staff_index=1,
-            bar_index=1,
             string=1,  # Same string!
             raw_text="7",
             parsed_fret=7,
@@ -138,7 +108,7 @@ def test_pdf_only_chord_event_grouper_splits_duplicate_string_candidates() -> No
     assert groups[1][0].id == "c-2"
 
 
-def test_pdf_only_chord_event_grouper_does_not_cross_source_bar_identity(tmp_path) -> None:
+def test_pdf_only_chord_event_grouper_does_not_cross_source_bar_identity(tmp_path: Path) -> None:
     # 4. Verify that when candidates are built via build_ir_from_tabraw_only,
     # grouping does not stack candidates across page/system/staff/bar boundaries.
     tabraw_data = {
