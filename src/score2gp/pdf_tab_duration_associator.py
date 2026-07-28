@@ -94,7 +94,7 @@ def is_barline_stroke(
     context: StaffSystemContext,
     tolerance_x: float = 2.0,
 ) -> bool:
-    """Return True if a vertical stroke matches a known barline position and crosses the staff lines.
+    """Return True if a vertical stroke matches a known barline position and crosses staff lines.
 
     Note: tolerance_x (2.0pt) is an absolute physical alignment threshold.
     """
@@ -140,11 +140,10 @@ def associate_stems_to_events(
     sorted_events = sorted(events_x)
     sorted_stems = sorted(stems, key=lambda s: s.x_coord)
 
-    # Filter out barline strokes
+    # Filter out barline strokes and undersized noise
     valid_stems: list[StemPrimitiveCandidate] = []
     for s in sorted_stems:
         if not is_barline_stroke(s.bbox, context):
-            # Check minimum stem height (scales with staff_space) and staff proximity
             if s.bbox.height >= 0.8 * context.staff_space:
                 near_top = abs(s.bbox.y0 - context.top_y) <= 1.5 * context.staff_space
                 near_bottom = abs(s.bbox.y0 - context.bottom_y) <= 1.5 * context.staff_space or abs(s.bbox.y1 - context.bottom_y) <= 1.5 * context.staff_space
@@ -161,7 +160,6 @@ def associate_stems_to_events(
     assigned_stems: set[int] = set()
 
     for ev_x in sorted_events:
-        # Find candidate stems within stem_tol
         candidates: list[tuple[float, int, StemPrimitiveCandidate]] = []
         for idx, stem in enumerate(valid_stems):
             dist = abs(stem.x_coord - ev_x)
@@ -182,7 +180,6 @@ def associate_stems_to_events(
         ]
 
         if len(competing_events) > 1:
-            # Calculate distance from stem to each competing event
             comp_dists = sorted([(abs(best_stem.x_coord - ex), ex) for ex in competing_events], key=lambda t: t[0])
             d1, e1 = comp_dists[0]
             d2, e2 = comp_dists[1]
@@ -198,12 +195,11 @@ def associate_stems_to_events(
                         result[ex] = diag
                 continue
 
-            # If ev_x is not the uniquely closest event e1, ev_x cannot claim best_stem
             if ev_x != e1:
                 result[ev_x] = None
                 continue
 
-        # Check if event has a second stem candidate that is nearly equidistant
+        # Check if event has a second stem candidate nearly equidistant
         if len(candidates) > 1:
             second_dist = candidates[1][0]
             if abs(second_dist - best_dist) <= 1.0:
@@ -233,7 +229,7 @@ def associate_stem_to_event(
     *,
     custom_stem_tol: float | None = None,
 ) -> StemPrimitiveCandidate | AmbiguityDiagnostic | None:
-    """Convenience wrapper for single event position stem association considering all events."""
+    """Single event stem association helper considering all events."""
     if event_x not in all_events_x:
         all_events_x = list(all_events_x) + [event_x]
     mapping = associate_stems_to_events(all_events_x, stems, context, custom_stem_tol=custom_stem_tol)
@@ -253,7 +249,7 @@ def count_beams_for_stem(
     Evaluates every beam against fixed geometric rules, deduplicating same-level beams (within <= 2.0pt),
     rejecting staff lines, and remaining 100% order-independent.
     """
-    overlap_eps = custom_beam_overlap_eps if custom_beam_overlap_eps is not None else 4.0  # Absolute bound
+    overlap_eps = custom_beam_overlap_eps if custom_beam_overlap_eps is not None else 4.0  # Absolute physical bound
     beam_y_tol = custom_beam_y_tol if custom_beam_y_tol is not None else (1.2 * context.staff_space)  # Scales with staff_space
 
     stem_x = stem.x_coord
@@ -277,16 +273,12 @@ def count_beams_for_stem(
     sorted_y = sorted(eligible_y_centers)
     distinct_levels: list[float] = []
     for y_val in sorted_y:
-        if not distinct_levels or any(abs(y_val - level) <= 2.0 for level in distinct_levels):
-            if not distinct_levels:
-                distinct_levels.append(y_val)
-            else:
-                # Merge into closest level
-                closest_idx = min(range(len(distinct_levels)), key=lambda i: abs(distinct_levels[i] - y_val))
-                if abs(distinct_levels[closest_idx] - y_val) > 2.0:
-                    distinct_levels.append(y_val)
-        else:
+        if not distinct_levels:
             distinct_levels.append(y_val)
+        else:
+            closest_idx = min(range(len(distinct_levels)), key=lambda i: abs(distinct_levels[i] - y_val))
+            if abs(distinct_levels[closest_idx] - y_val) > 2.0:
+                distinct_levels.append(y_val)
 
     return len(distinct_levels)
 
@@ -294,32 +286,54 @@ def count_beams_for_stem(
 def count_flags_for_stem(
     stem: StemPrimitiveCandidate,
     flags: Sequence[FlagPrimitiveCandidate],
+    all_stems: Sequence[StemPrimitiveCandidate] = (),
     *,
     custom_flag_radius: float | None = None,
 ) -> tuple[int, bool]:
     """Deterministically count deduplicated flag candidates attached to a stem free end.
 
-    Returns (flag_count, is_ambiguous).
+    Returns (flag_count, is_ambiguous). If a flag candidate is within contact radius of
+    multiple stems without a clear unique winner (> 1.0pt difference), is_ambiguous is True.
     """
-    flag_radius = custom_flag_radius if custom_flag_radius is not None else 8.0  # Absolute bound
+    flag_radius = custom_flag_radius if custom_flag_radius is not None else 8.0  # Absolute physical bound
     stem_x = stem.x_coord
     free_y = stem.free_end_y
 
-    eligible_flags: list[tuple[float, FlagPrimitiveCandidate]] = []
+    all_stems_list = list(all_stems) if all_stems else [stem]
+    if stem not in all_stems_list:
+        all_stems_list.append(stem)
+
+    eligible_flags: list[FlagPrimitiveCandidate] = []
     for flag in flags:
         dist_start = math.hypot(flag.bbox.x0 - stem_x, flag.bbox.y0 - free_y)
         dist_end = math.hypot(flag.bbox.x1 - stem_x, flag.bbox.y1 - free_y)
-        min_dist = min(dist_start, dist_end)
-        if min_dist <= flag_radius:
-            eligible_flags.append((min_dist, flag))
+        dist = min(dist_start, dist_end)
+
+        if dist <= flag_radius:
+            # Ambiguity check: does this flag also attach to another stem in all_stems_list?
+            other_dists: list[float] = []
+            for os in all_stems_list:
+                if os != stem:
+                    os_dist_start = math.hypot(flag.bbox.x0 - os.x_coord, flag.bbox.y0 - os.free_end_y)
+                    os_dist_end = math.hypot(flag.bbox.x1 - os.x_coord, flag.bbox.y1 - os.free_end_y)
+                    os_min = min(os_dist_start, os_dist_end)
+                    if os_min <= flag_radius:
+                        other_dists.append(os_min)
+
+            if other_dists:
+                min_other = min(other_dists)
+                if abs(min_other - dist) <= 1.0:
+                    return 0, True  # Ambiguous flag assignment
+
+            eligible_flags.append(flag)
 
     if not eligible_flags:
         return 0, False
 
     # Deduplicate flags with near-identical contact points (<= 2.0pt)
-    sorted_flags = sorted(eligible_flags, key=lambda t: (t[1].bbox.x0, t[1].bbox.y0))
+    sorted_flags = sorted(eligible_flags, key=lambda f: (f.bbox.x0, f.bbox.y0))
     distinct_flags: list[FlagPrimitiveCandidate] = []
-    for _, f in sorted_flags:
+    for f in sorted_flags:
         if not any(math.hypot(f.bbox.x0 - df.bbox.x0, f.bbox.y0 - df.bbox.y0) <= 2.0 for df in distinct_flags):
             distinct_flags.append(f)
 
@@ -369,7 +383,6 @@ def resolve_tab_duration_evidence_for_events(
 
         if assigned is None:
             if not has_any_stems:
-                # Ordinary unstemmed event -> fallback placeholder
                 results[ev_x] = TabDurationEvidence(
                     duration_name="quarter",
                     duration_ticks=960,
@@ -383,7 +396,6 @@ def resolve_tab_duration_evidence_for_events(
                     diagnostic_message="Unstemmed staff: using equal-spacing structural placeholder",
                 )
             else:
-                # Stemmed staff where this specific event lacks a stem -> ambiguous/missing stem
                 if fail_on_ambiguity:
                     raise PdfTabDurationAssociatorError(f"Missing stem for event at x={ev_x:.1f} on stemmed staff")
                 results[ev_x] = TabDurationEvidence(
@@ -400,14 +412,14 @@ def resolve_tab_duration_evidence_for_events(
                 )
             continue
 
-        # Stem attached cleanly
         stem = assigned
         beam_count = count_beams_for_stem(stem, beams, context)
-        flag_count, flag_ambiguous = count_flags_for_stem(stem, flags)
+        flag_count, flag_ambiguous = count_flags_for_stem(stem, flags, all_stems=stems)
 
         if flag_ambiguous:
+            msg = f"Ambiguous flag attachment for stem at x={stem.x_coord:.1f}"
             if fail_on_ambiguity:
-                raise PdfTabDurationAssociatorError(f"Ambiguous flag attachment for stem at x={stem.x_coord:.1f}")
+                raise PdfTabDurationAssociatorError(msg)
             results[ev_x] = TabDurationEvidence(
                 duration_name="ambiguous",
                 duration_ticks=0,
@@ -417,11 +429,11 @@ def resolve_tab_duration_evidence_for_events(
                 confidence=0.0,
                 source="ambiguous_conflict",
                 is_ambiguous=True,
-                diagnostic_message="Ambiguous flag attachment",
+                diagnostic_message=msg,
             )
             continue
 
-        # Check for conflicting beam and flag counts
+        # Conflicting beam and flag count check
         if beam_count > 0 and flag_count > 0:
             if beam_count != flag_count:
                 msg = f"Conflicting beam_count ({beam_count}) and flag_count ({flag_count}) on stem at x={stem.x_coord:.1f}"
