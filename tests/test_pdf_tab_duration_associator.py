@@ -35,7 +35,27 @@ def sample_staff_context() -> StaffSystemContext:
     )
 
 
-# 1. Real Neighbouring-Event Ambiguity Detection
+# 1. Direct Barline & Staff-Line Rejection Test
+def test_direct_barline_and_staff_line_rejection(sample_staff_context: StaffSystemContext):
+    """Directly test that barline strokes and staff line strokes are rejected."""
+    # Barline stroke matching barline at x=88.0 crossing staff lines (y=150..220)
+    barline_stroke = SpatialBBox(x0=87.5, y0=150.0, x1=88.5, y1=220.0)
+    assert is_barline_stroke(barline_stroke, sample_staff_context) is True
+
+    barline_stem = StemPrimitiveCandidate(bbox=barline_stroke)
+    mapping = associate_stems_to_events([88.0], [barline_stem], sample_staff_context)
+    assert mapping[88.0] is None
+
+    # Staff line stroke at y=164.0
+    staff_line = SpatialBBox(x0=72.0, y0=163.9, x1=540.0, y1=164.1)
+    assert is_staff_line_stroke(staff_line, sample_staff_context) is True
+
+    staff_line_beam = BeamPrimitiveCandidate(bbox=staff_line)
+    dummy_stem = StemPrimitiveCandidate(bbox=SpatialBBox(x0=150.0, y0=150.0, x1=150.0, y1=180.0))
+    assert count_beams_for_stem(dummy_stem, [staff_line_beam], sample_staff_context) == 0
+
+
+# 2. Real Neighbouring-Event Ambiguity Detection
 def test_neighbouring_event_ambiguity_detection(sample_staff_context: StaffSystemContext):
     """Prove that a midpoint stem placed between two neighbouring events marks both as ambiguous without fabricating 960-tick evidence."""
     events_x = [100.0, 110.0]
@@ -79,7 +99,7 @@ def test_unique_closest_event_assignment(sample_staff_context: StaffSystemContex
     assert mapping_rev[110.0] is None
 
 
-# 2. Distinguish Absence from Ambiguity
+# 3. Distinguish Absence from Ambiguity
 def test_distinguish_unstemmed_absence_from_ambiguity(sample_staff_context: StaffSystemContext):
     """Prove that unstemmed events emit equal-spacing placeholders while ambiguous events fail closed with 0 ticks."""
     # Unstemmed event on unstemmed staff
@@ -109,9 +129,9 @@ def test_distinguish_unstemmed_absence_from_ambiguity(sample_staff_context: Staf
         resolve_tab_duration_evidence(100.0, [midpoint_stem], [], [], sample_staff_context, all_events_x=[100.0, 110.0], fail_on_ambiguity=True)
 
 
-# 3. Exercise Actual Extracted Fixture Geometry (Dynamic Extraction)
+# 4. Exercise Actual Extracted Fixture Geometry (100% Dynamic Context Extraction)
 def test_exercise_actual_extracted_fixture_geometry():
-    """Extract actual primitives, line_y_coords, barline_xs, and text-span event x-coordinates directly from PyMuPDF page objects."""
+    """Extract all primitives, line_y_coords, barline_x_coords, staff_space, and text-span event x-coordinates dynamically from page objects."""
     pdf_path = Path("tests/fixtures/pdf/generated_pdf_tab_duration.pdf")
     assert pdf_path.exists()
     doc = fitz.open(pdf_path)
@@ -132,11 +152,9 @@ def test_exercise_actual_extracted_fixture_geometry():
 
     extracted_event_spans.sort(key=lambda t: t[0])
     extracted_events_x = [t[0] for t in extracted_event_spans]
-
-    # Verify extracted event x-coordinates from fixture text spans (12 fret spans total)
     assert len(extracted_events_x) == 12
 
-    # Dynamic extraction of line_y_coords and barline_x_coords from drawings
+    # Dynamic extraction of drawings, staff line_y_coords, staff_space, and barline_x_coords
     stems: list[StemPrimitiveCandidate] = []
     beams: list[BeamPrimitiveCandidate] = []
     flags: list[FlagPrimitiveCandidate] = []
@@ -158,16 +176,25 @@ def test_exercise_actual_extracted_fixture_geometry():
                 if dy >= 5.0 and dx <= 2.0:
                     stems.append(StemPrimitiveCandidate(bbox=SpatialBBox(ix0, iy0, ix1, iy1), is_downward=True))
                 elif dy <= 1.0 and dx >= 10.0:
-                    # Non-staff horizontal beam
                     if not (149.0 <= iy0 <= 221.0 and dx > 300.0):
                         beams.append(BeamPrimitiveCandidate(bbox=SpatialBBox(ix0, iy0, ix1, iy1)))
                 elif dx >= 3.0 and dy >= 3.0:
                     flags.append(FlagPrimitiveCandidate(bbox=SpatialBBox(ix0, iy0, ix1, iy1)))
 
+    # Dynamically derive staff line_y_coords (> 300pt wide horizontal lines)
+    staff_line_ys = sorted({round(iy0, 1) for (ix0, iy0, ix1, iy1) in drawing_lines if abs(iy0 - iy1) <= 1.0 and abs(ix1 - ix0) >= 300.0})
+    assert len(staff_line_ys) == 6
+    staff_space = (staff_line_ys[-1] - staff_line_ys[0]) / (len(staff_line_ys) - 1)
+    assert staff_space == 14.0
+
+    # Dynamically derive barline_x_coords (> 60pt vertical lines crossing staff)
+    barline_xs = sorted({round((ix0 + ix1) / 2.0, 1) for (ix0, iy0, ix1, iy1) in drawing_lines if abs(ix0 - ix1) <= 1.0 and (iy1 - iy0) >= 60.0 and iy0 <= staff_line_ys[0] + 2.0 and iy1 >= staff_line_ys[-1] - 2.0})
+    assert len(barline_xs) == 3
+
     context = StaffSystemContext(
-        line_y_coords=[150.0, 164.0, 178.0, 192.0, 206.0, 220.0],
-        barline_x_coords=[88.0, 306.0, 526.0],
-        staff_space=14.0,
+        line_y_coords=staff_line_ys,
+        barline_x_coords=barline_xs,
+        staff_space=staff_space,
     )
 
     ev_results = resolve_tab_duration_evidence_for_events(extracted_events_x, stems, beams, flags, context)
@@ -198,7 +225,7 @@ def test_exercise_actual_extracted_fixture_geometry():
         assert ev_results[ev_x].beam_count == 2
 
 
-# 4. Meaningful Scale Validation (Stem Offset, Beam Proximity, Fixed Overlap, Fixed Flag Radius)
+# 5. Meaningful Scale Validation (Stem Offset, Beam Proximity, Fixed Overlap Extension, Fixed Flag Radius)
 @pytest.mark.parametrize(
     "scale, staff_space, inside_stem_offset, outside_stem_offset",
     [
@@ -210,7 +237,7 @@ def test_exercise_actual_extracted_fixture_geometry():
 def test_meaningful_scale_validation(
     scale: float, staff_space: float, inside_stem_offset: float, outside_stem_offset: float
 ):
-    """Test stem offset, beam proximity, fixed beam-overlap boundary (4.0pt), and fixed flag radius (8.0pt) across scales."""
+    """Test stem offset, beam proximity, fixed beam-overlap extension (4.0pt), and fixed flag radius (8.0pt) across scales."""
     base_line_ys = [150.0, 164.0, 178.0, 192.0, 206.0, 220.0]
     line_ys = [y * scale for y in base_line_ys]
     context = StaffSystemContext(line_y_coords=line_ys, barline_x_coords=[], staff_space=staff_space)
@@ -242,10 +269,12 @@ def test_meaningful_scale_validation(
     assert count_beams_for_stem(stem_inside, [beam_inside], context) == 1
     assert count_beams_for_stem(stem_inside, [beam_outside], context) == 0
 
-    # 3. Fixed Beam-Overlap Boundary (eps = 4.0pt, absolute physical bound: does NOT scale with staff_space)
+    # 3. Fixed Beam-Overlap Boundary (eps = 4.0pt, absolute physical bound: testing extension beyond stem position)
     stem_x = stem_inside.x_coord
-    beam_overlap_inside = BeamPrimitiveCandidate(bbox=SpatialBBox(x0=stem_x - 3.9, y0=stem_top + 2.0, x1=stem_x + 20.0, y1=stem_top + 2.0))
-    beam_overlap_outside = BeamPrimitiveCandidate(bbox=SpatialBBox(x0=stem_x - 4.1, y0=stem_top + 2.0, x1=stem_x - 4.05, y1=stem_top + 2.0))
+    # Beam ends at stem_x - 3.9 (distance 3.9pt <= 4.0pt -> inside by eps extension)
+    beam_overlap_inside = BeamPrimitiveCandidate(bbox=SpatialBBox(x0=0.0, y0=stem_top + 2.0, x1=stem_x - 3.9, y1=stem_top + 2.0))
+    # Beam ends at stem_x - 4.1 (distance 4.1pt > 4.0pt -> outside by eps extension)
+    beam_overlap_outside = BeamPrimitiveCandidate(bbox=SpatialBBox(x0=0.0, y0=stem_top + 2.0, x1=stem_x - 4.1, y1=stem_top + 2.0))
 
     assert count_beams_for_stem(stem_inside, [beam_overlap_inside], context) == 1
     assert count_beams_for_stem(stem_inside, [beam_overlap_outside], context) == 0
@@ -261,7 +290,7 @@ def test_meaningful_scale_validation(
     assert count_out == 0 and amb_out is False
 
 
-# 5. Deterministic, Distinct Beam Counting
+# 6. Deterministic, Distinct Beam Counting
 def test_deterministic_distinct_beam_counting(sample_staff_context: StaffSystemContext):
     stem = StemPrimitiveCandidate(bbox=SpatialBBox(x0=100.0, y0=220.0, x1=100.0, y1=238.0))
 
@@ -288,7 +317,7 @@ def test_deterministic_distinct_beam_counting(sample_staff_context: StaffSystemC
     assert ev.beam_count == 2
 
 
-# 6. Flag Ambiguity & Conflict Handling
+# 7. Flag Ambiguity & Conflict Handling
 def test_flag_ambiguity_and_conflict_handling(sample_staff_context: StaffSystemContext):
     # Two neighbouring stems at x1=100.0 and x2=110.0
     stem1 = StemPrimitiveCandidate(bbox=SpatialBBox(x0=100.0, y0=220.0, x1=100.0, y1=238.0))
