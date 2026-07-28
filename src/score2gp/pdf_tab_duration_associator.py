@@ -140,14 +140,18 @@ def associate_stems_to_events(
     sorted_events = sorted(events_x)
     sorted_stems = sorted(stems, key=lambda s: s.x_coord)
 
-    # Filter out barline strokes and undersized noise
+    # Filter out barline strokes and detached vertical strokes
     valid_stems: list[StemPrimitiveCandidate] = []
+    attach_max = 1.5 * context.staff_space
+    min_height = 0.8 * context.staff_space
+
     for s in sorted_stems:
         if not is_barline_stroke(s.bbox, context):
-            if s.bbox.height >= 0.8 * context.staff_space:
-                near_top = abs(s.bbox.y0 - context.top_y) <= 1.5 * context.staff_space
-                near_bottom = abs(s.bbox.y0 - context.bottom_y) <= 1.5 * context.staff_space or abs(s.bbox.y1 - context.bottom_y) <= 1.5 * context.staff_space
-                if near_top or near_bottom or (s.bbox.y0 >= context.bottom_y - 2.0):
+            if s.bbox.height >= min_height:
+                # Stem endpoint must touch or lie within attach_max of top or bottom staff line (Section 5 Rule 1)
+                near_top = (abs(s.bbox.y0 - context.top_y) <= attach_max or abs(s.bbox.y1 - context.top_y) <= attach_max)
+                near_bottom = (abs(s.bbox.y0 - context.bottom_y) <= attach_max or abs(s.bbox.y1 - context.bottom_y) <= attach_max)
+                if near_top or near_bottom:
                     valid_stems.append(s)
 
     stem_tol = (
@@ -300,8 +304,9 @@ def count_flags_for_stem(
 ) -> tuple[int, bool]:
     """Deterministically count deduplicated flag candidates attached to a stem free end.
 
-    Returns (flag_count, is_ambiguous). If a flag candidate is within contact radius of
-    multiple stems without a clear unique winner (distance delta <= 1.0pt), is_ambiguous is True.
+    Returns (flag_count, is_ambiguous). A flag attaches uniquely to its closest stem.
+    If another stem is strictly closer (by > 1.0pt), this stem cannot claim it.
+    If competing stems are equidistant (within <= 1.0pt), is_ambiguous returns True.
     """
     flag_radius = custom_flag_radius if custom_flag_radius is not None else 8.0  # Absolute physical bound
     stem_x = stem.x_coord
@@ -318,7 +323,7 @@ def count_flags_for_stem(
         dist = min(dist_start, dist_end)
 
         if dist <= flag_radius:
-            # Ambiguity check: does this flag also attach to another stem in all_stems_list?
+            # Check contact distance from flag to all other stems
             other_dists: list[float] = []
             for os in all_stems_list:
                 if os != stem:
@@ -332,6 +337,9 @@ def count_flags_for_stem(
                 min_other = min(other_dists)
                 if abs(min_other - dist) <= 1.0:
                     return 0, True  # Ambiguous flag assignment
+                elif min_other < dist - 1.0:
+                    # Another stem is strictly closer to this flag; stem cannot claim it
+                    continue
 
             eligible_flags.append(flag)
 

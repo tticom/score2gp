@@ -55,7 +55,38 @@ def test_direct_barline_and_staff_line_rejection(sample_staff_context: StaffSyst
     assert count_beams_for_stem(dummy_stem, [staff_line_beam], sample_staff_context) == 0
 
 
-# 2. Beam Vertical Tolerance (6.0pt Absolute Bound) Test
+# 2. Detached Vertical Stroke Rejection (Section 5 Rule 1 Boundary Enforcement) Test
+def test_detached_vertical_stroke_rejection(sample_staff_context: StaffSystemContext):
+    """Verify that vertical strokes far below the staff lines (outside delta_y_attach <= 1.5 * staff_space) are rejected."""
+    # Staff bottom line is at y=220.0. Max attach distance is 1.5 * 14.0 = 21.0pt (up to y=241.0).
+    # Detached vertical stroke at y0=300.0, y1=320.0 (dist = 80pt > 21pt)
+    detached_stroke = StemPrimitiveCandidate(
+        bbox=SpatialBBox(x0=100.0, y0=300.0, x1=100.0, y1=320.0),
+        is_downward=True,
+    )
+    mapping = associate_stems_to_events([100.0], [detached_stroke], sample_staff_context)
+    assert mapping[100.0] is None
+
+
+# 3. Unique Flag-to-Stem Assignment Test
+def test_unique_flag_to_stem_assignment(sample_staff_context: StaffSystemContext):
+    """Verify that a flag closer to stem B is claimed ONLY by stem B and NEVER by stem A."""
+    stem1 = StemPrimitiveCandidate(bbox=SpatialBBox(x0=100.0, y0=220.0, x1=100.0, y1=238.0), is_downward=True)
+    stem2 = StemPrimitiveCandidate(bbox=SpatialBBox(x0=110.0, y0=220.0, x1=110.0, y1=238.0), is_downward=True)
+
+    # Flag located at x=109.0 (dist to stem2 free end = 1.0pt, dist to stem1 free end = 9.0pt)
+    flag_near_stem2 = FlagPrimitiveCandidate(bbox=SpatialBBox(x0=109.0, y0=238.0, x1=116.0, y1=248.0))
+
+    # Stem 2 (closer stem) claims the flag cleanly
+    count_stem2, amb_stem2 = count_flags_for_stem(stem2, [flag_near_stem2], all_stems=[stem1, stem2])
+    assert count_stem2 == 1 and amb_stem2 is False
+
+    # Stem 1 (further stem) CANNOT claim the flag
+    count_stem1, amb_stem1 = count_flags_for_stem(stem1, [flag_near_stem2], all_stems=[stem1, stem2])
+    assert count_stem1 == 0 and amb_stem1 is False
+
+
+# 4. Beam Vertical Tolerance (6.0pt Absolute Bound) Test
 def test_beam_vertical_tolerance_absolute_six_points(sample_staff_context: StaffSystemContext):
     """Verify that beam vertical proximity is bounded by 6.0pt per architecture spec."""
     stem = StemPrimitiveCandidate(bbox=SpatialBBox(x0=100.0, y0=220.0, x1=100.0, y1=238.0), is_downward=True)
@@ -69,7 +100,7 @@ def test_beam_vertical_tolerance_absolute_six_points(sample_staff_context: Staff
     assert count_beams_for_stem(stem, [beam_outside], sample_staff_context) == 0
 
 
-# 3. Minimum Beam Width (0.5 * staff_space) Test
+# 5. Minimum Beam Width (0.5 * staff_space) Test
 def test_minimum_beam_width_filter(sample_staff_context: StaffSystemContext):
     """Verify that horizontal strokes narrower than 0.5 * staff_space (7.0pt at 14pt staff_space) are rejected."""
     stem = StemPrimitiveCandidate(bbox=SpatialBBox(x0=100.0, y0=220.0, x1=100.0, y1=238.0), is_downward=True)
@@ -83,7 +114,7 @@ def test_minimum_beam_width_filter(sample_staff_context: StaffSystemContext):
     assert count_beams_for_stem(stem, [valid_beam], sample_staff_context) == 1
 
 
-# 4. Partial Stemming Behavior Test
+# 6. Partial Stemming Behavior Test
 def test_partial_stemming_unstemmed_event_fallback(sample_staff_context: StaffSystemContext):
     """Verify that an unstemmed event on a partially stemmed staff defaults to equal-spacing fallback (quarter note, 960 ticks)."""
     # Event 1 at x=100.0 has a stem; Event 2 at x=200.0 has no stem
@@ -107,7 +138,7 @@ def test_partial_stemming_unstemmed_event_fallback(sample_staff_context: StaffSy
     assert ev_mapping[200.0].is_ambiguous is False
 
 
-# 5. Real Neighbouring-Event Ambiguity Detection
+# 7. Real Neighbouring-Event Ambiguity Detection
 def test_neighbouring_event_ambiguity_detection(sample_staff_context: StaffSystemContext):
     """Prove that a midpoint stem placed between two neighbouring events marks both as ambiguous without fabricating 960-tick evidence."""
     events_x = [100.0, 110.0]
@@ -151,7 +182,7 @@ def test_unique_closest_event_assignment(sample_staff_context: StaffSystemContex
     assert mapping_rev[110.0] is None
 
 
-# 6. Distinguish Absence from Ambiguity
+# 8. Distinguish Absence from Ambiguity
 def test_distinguish_unstemmed_absence_from_ambiguity(sample_staff_context: StaffSystemContext):
     """Prove that unstemmed events emit equal-spacing placeholders while ambiguous events fail closed with 0 ticks."""
     # Unstemmed event on unstemmed staff
@@ -181,7 +212,7 @@ def test_distinguish_unstemmed_absence_from_ambiguity(sample_staff_context: Staf
         resolve_tab_duration_evidence(100.0, [midpoint_stem], [], [], sample_staff_context, all_events_x=[100.0, 110.0], fail_on_ambiguity=True)
 
 
-# 7. Exercise Actual Extracted Fixture Geometry (100% Dynamic Context Extraction)
+# 9. Exercise Actual Extracted Fixture Geometry (100% Dynamic Context Extraction)
 def test_exercise_actual_extracted_fixture_geometry():
     """Extract all primitives, line_y_coords, barline_x_coords, staff_space, and text-span event x-coordinates dynamically from page objects."""
     pdf_path = Path("tests/fixtures/pdf/generated_pdf_tab_duration.pdf")
@@ -277,7 +308,7 @@ def test_exercise_actual_extracted_fixture_geometry():
         assert ev_results[ev_x].beam_count == 2
 
 
-# 8. Meaningful Scale Validation (Stem Offset, Beam Proximity, Fixed Overlap Extension, Fixed Flag Radius)
+# 10. Meaningful Scale Validation (Stem Offset, Beam Proximity, Fixed Overlap Extension, Fixed Flag Radius)
 @pytest.mark.parametrize(
     "scale, staff_space, inside_stem_offset, outside_stem_offset",
     [
@@ -340,7 +371,7 @@ def test_meaningful_scale_validation(
     assert count_out == 0 and amb_out is False
 
 
-# 9. Deterministic, Distinct Beam Counting
+# 11. Deterministic, Distinct Beam Counting
 def test_deterministic_distinct_beam_counting(sample_staff_context: StaffSystemContext):
     stem = StemPrimitiveCandidate(bbox=SpatialBBox(x0=100.0, y0=220.0, x1=100.0, y1=238.0))
 
@@ -367,7 +398,7 @@ def test_deterministic_distinct_beam_counting(sample_staff_context: StaffSystemC
     assert ev.beam_count == 2
 
 
-# 10. Flag Ambiguity & Conflict Handling
+# 12. Flag Ambiguity & Conflict Handling
 def test_flag_ambiguity_and_conflict_handling(sample_staff_context: StaffSystemContext):
     # Two neighbouring stems at x1=100.0 and x2=110.0
     stem1 = StemPrimitiveCandidate(bbox=SpatialBBox(x0=100.0, y0=220.0, x1=100.0, y1=238.0))
