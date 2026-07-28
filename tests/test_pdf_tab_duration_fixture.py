@@ -18,8 +18,8 @@ def test_pdf_tab_duration_fixture_generation_and_reproducibility(tmp_path: Path)
     pdf_path = Path("tests/fixtures/pdf/generated_pdf_tab_duration.pdf")
     assert pdf_path.exists(), "Synthetic PDF fixture must exist"
 
-    # Regenerate fixture to verify reproducibility
-    generated_path = generate_pdf_tab_duration_fixture()
+    # Regenerate fixture to verify reproducibility into temporary path
+    generated_path = generate_pdf_tab_duration_fixture(tmp_path / "reproduced.pdf")
     assert generated_path.exists()
     assert generated_path.stat().st_size > 0
 

@@ -52,8 +52,8 @@ def _draw_flag(page: fitz.Page, stem_x: float, stem_y: float) -> None:
     page.draw_line((stem_x, stem_y), (stem_x + 8, stem_y + 12), color=(0, 0, 0), width=1.0)
 
 
-def generate_pdf_tab_duration_fixture() -> Path:
-    out = Path(__file__).with_name("generated_pdf_tab_duration.pdf")
+def generate_pdf_tab_duration_fixture(out_path: Path | None = None) -> Path:
+    out = out_path if out_path is not None else Path(__file__).with_name("generated_pdf_tab_duration.pdf")
     doc = fitz.open()
     page = doc.new_page(width=612, height=360)
 
