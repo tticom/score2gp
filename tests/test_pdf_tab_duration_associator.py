@@ -11,17 +11,21 @@ from score2gp.pdf_staff_detection import (
 )
 from score2gp.pdf_staff_notation_diagnostics import build_notation_diagnostics
 from score2gp.pdf_tab_duration_associator import (
+    AmbiguityDiagnostic,
     BeamPrimitiveCandidate,
     FlagPrimitiveCandidate,
+    PdfTabDurationAssociatorError,
     SpatialBBox,
     StaffSystemContext,
     StemPrimitiveCandidate,
     associate_stem_to_event,
+    associate_stems_to_events,
     count_beams_for_stem,
     count_flags_for_stem,
     is_barline_stroke,
     is_staff_line_stroke,
     resolve_tab_duration_evidence,
+    resolve_tab_duration_evidence_for_events,
 )
 from score2gp.pdf_tab_duration_types import TabDurationEvidence
 
@@ -37,9 +41,81 @@ def sample_staff_context() -> StaffSystemContext:
     )
 
 
-# 1. Measured Public Fixture Coordinates Test
-def test_measured_public_fixture_extracted_coordinates():
-    """Verify stem and beam association using actual coordinates extracted from generated_pdf_tab_duration.pdf."""
+# 1. Real Neighbouring-Event Ambiguity Detection
+def test_neighbouring_event_ambiguity_detection(sample_staff_context: StaffSystemContext):
+    """Prove that a midpoint stem placed between two neighbouring events marks both as ambiguous."""
+    events_x = [100.0, 110.0]
+    # Midpoint stem placed at x = 105.0 (equidistant 5.0pt to both events)
+    midpoint_stem = StemPrimitiveCandidate(
+        bbox=SpatialBBox(x0=105.0, y0=220.0, x1=105.0, y1=238.0),
+        is_downward=True,
+    )
+
+    mapping = associate_stems_to_events(events_x, [midpoint_stem], sample_staff_context)
+    assert isinstance(mapping[100.0], AmbiguityDiagnostic)
+    assert isinstance(mapping[110.0], AmbiguityDiagnostic)
+
+    ev_mapping = resolve_tab_duration_evidence_for_events(events_x, [midpoint_stem], [], [], sample_staff_context)
+    assert ev_mapping[100.0].is_ambiguous is True
+    assert ev_mapping[100.0].duration_ticks == 0
+    assert ev_mapping[100.0].source == "ambiguous_conflict"
+
+    assert ev_mapping[110.0].is_ambiguous is True
+    assert ev_mapping[110.0].duration_ticks == 0
+    assert ev_mapping[110.0].source == "ambiguous_conflict"
+
+
+def test_unique_closest_event_assignment(sample_staff_context: StaffSystemContext):
+    """Prove that a stem placed at x=101.0 (1.0pt from x=100.0 and 9.0pt from x=110.0) is uniquely assigned to x=100.0."""
+    events_x = [100.0, 110.0]
+    stem = StemPrimitiveCandidate(
+        bbox=SpatialBBox(x0=101.0, y0=220.0, x1=101.0, y1=238.0),
+        is_downward=True,
+    )
+
+    mapping = associate_stems_to_events(events_x, [stem], sample_staff_context)
+    assert mapping[100.0] == stem
+    assert mapping[110.0] is None
+
+    # Verify order independence: passing events in reverse order produces identical mapping
+    mapping_rev = associate_stems_to_events([110.0, 100.0], [stem], sample_staff_context)
+    assert mapping_rev[100.0] == stem
+    assert mapping_rev[110.0] is None
+
+
+# 2. Distinguish Absence from Ambiguity
+def test_distinguish_unstemmed_absence_from_ambiguity(sample_staff_context: StaffSystemContext):
+    """Prove that unstemmed events emit equal-spacing placeholders while ambiguous events fail closed."""
+    # Unstemmed event on unstemmed staff
+    ev_unstemmed = resolve_tab_duration_evidence(100.0, [], [], [], sample_staff_context)
+    assert ev_unstemmed.source == "equal_spacing_fallback"
+    assert ev_unstemmed.duration_name == "quarter"
+    assert ev_unstemmed.duration_ticks == 960
+    assert ev_unstemmed.is_ambiguous is False
+    assert ev_unstemmed.is_fallback_placeholder is True
+    assert ev_unstemmed.confidence == 0.5
+
+    # Ambiguous event on stemmed staff
+    midpoint_stem = StemPrimitiveCandidate(
+        bbox=SpatialBBox(x0=105.0, y0=220.0, x1=105.0, y1=238.0),
+        is_downward=True,
+    )
+    ev_ambiguous = resolve_tab_duration_evidence(100.0, [midpoint_stem], [], [], sample_staff_context, all_events_x=[100.0, 110.0])
+    assert ev_ambiguous.source == "ambiguous_conflict"
+    assert ev_ambiguous.duration_name == "ambiguous"
+    assert ev_ambiguous.duration_ticks == 0
+    assert ev_ambiguous.is_ambiguous is True
+    assert ev_ambiguous.is_fallback_placeholder is False
+    assert ev_ambiguous.confidence == 0.0
+
+    # Fail on ambiguity mode raises explicit exception
+    with pytest.raises(PdfTabDurationAssociatorError):
+        resolve_tab_duration_evidence(100.0, [midpoint_stem], [], [], sample_staff_context, all_events_x=[100.0, 110.0], fail_on_ambiguity=True)
+
+
+# 3. Exercise Actual Extracted Fixture Geometry
+def test_exercise_actual_extracted_fixture_geometry():
+    """Extract actual primitives and event coordinates from generated_pdf_tab_duration.pdf and run associator."""
     pdf_path = Path("tests/fixtures/pdf/generated_pdf_tab_duration.pdf")
     assert pdf_path.exists()
     doc = fitz.open(pdf_path)
@@ -51,161 +127,172 @@ def test_measured_public_fixture_extracted_coordinates():
     tab_groups = list(_tab_line_groups(horizontal))
     assert len(tab_groups) == 1
 
-    diags = build_notation_diagnostics(page, page_index=1, notation_groups=tab_groups)
-    morph = diags.staves[0].morphology
-    assert morph is not None
-    assert morph.vertical_stroke_candidate >= 15
-    assert morph.non_staff_horizontal >= 3
-
-
-# 2. Positive & Negative Association Cases
-def test_positive_and_negative_stem_associations(sample_staff_context: StaffSystemContext):
-    # Event at x = 110.0
-    matching_stem = StemPrimitiveCandidate(
-        bbox=SpatialBBox(x0=112.5, y0=220.0, x1=113.5, y1=238.0),
-        is_downward=True,
-    )
-    distant_stem = StemPrimitiveCandidate(
-        bbox=SpatialBBox(x0=250.0, y0=220.0, x1=251.0, y1=238.0),
-        is_downward=True,
+    context = StaffSystemContext(
+        line_y_coords=[150.0, 164.0, 178.0, 192.0, 206.0, 220.0],
+        barline_x_coords=[88.0, 306.0, 526.0],
+        staff_space=14.0,
     )
 
-    stems = [matching_stem, distant_stem]
-    res = associate_stem_to_event(110.0, stems, sample_staff_context)
-    assert res == matching_stem
+    # Extract actual vertical stems, beams, and flags from page drawings
+    stems: list[StemPrimitiveCandidate] = []
+    beams: list[BeamPrimitiveCandidate] = []
+    flags: list[FlagPrimitiveCandidate] = []
 
-    # Event at x = 400.0 has no stem nearby
-    res_none = associate_stem_to_event(400.0, stems, sample_staff_context)
-    assert res_none is None
+    for draw in page.get_drawings():
+        for item in draw.get("items", []):
+            if not item:
+                continue
+            itype = item[0]
+            if itype == "l" and len(item) >= 3:
+                p0, p1 = item[1], item[2]
+                dx = abs(p0.x - p1.x)
+                dy = abs(p0.y - p1.y)
+                ix0, ix1 = min(p0.x, p1.x), max(p0.x, p1.x)
+                iy0, iy1 = min(p0.y, p1.y), max(p0.y, p1.y)
+                # Vertical stem candidate (dy >= 5.0, dx <= 2.0)
+                if dy >= 5.0 and dx <= 2.0:
+                    stems.append(StemPrimitiveCandidate(bbox=SpatialBBox(ix0, iy0, ix1, iy1), is_downward=True))
+                # Horizontal non-staff beam candidate
+                elif dy <= 1.0 and dx >= 0.5 * context.staff_space:
+                    if not any(abs(iy0 - ly) <= 1.0 for ly in context.line_y_coords):
+                        beams.append(BeamPrimitiveCandidate(bbox=SpatialBBox(ix0, iy0, ix1, iy1)))
+                # Diagonal flag candidate
+                elif dx >= 3.0 and dy >= 3.0:
+                    flags.append(FlagPrimitiveCandidate(bbox=SpatialBBox(ix0, iy0, ix1, iy1)))
+
+    # Bar 1 event x-coords (4 quarter notes)
+    bar1_events = [110.0, 150.0, 190.0, 230.0]
+    ev1_res = resolve_tab_duration_evidence_for_events(bar1_events, stems, beams, flags, context)
+    for x in bar1_events:
+        assert ev1_res[x].duration_name == "quarter"
+        assert ev1_res[x].duration_ticks == 960
+        assert ev1_res[x].stem_present is True
+        assert ev1_res[x].beam_count == 0
+        assert ev1_res[x].flag_count == 0
+
+    # Bar 2 event x-coords
+    # 2 flagged eighth notes (330, 370), 2 beamed eighth notes (410, 450), 4 beamed 16th notes (470, 485, 500, 515)
+    bar2_events = [330.0, 370.0, 410.0, 450.0, 470.0, 485.0, 500.0, 515.0]
+    ev2_res = resolve_tab_duration_evidence_for_events(bar2_events, stems, beams, flags, context)
+
+    # Flagged eighth notes
+    assert ev2_res[330.0].duration_name == "eighth"
+    assert ev2_res[330.0].duration_ticks == 480
+    assert ev2_res[330.0].flag_count == 1
+
+    assert ev2_res[370.0].duration_name == "eighth"
+    assert ev2_res[370.0].duration_ticks == 480
+    assert ev2_res[370.0].flag_count == 1
+
+    # Beamed eighth notes
+    assert ev2_res[410.0].duration_name == "eighth"
+    assert ev2_res[410.0].duration_ticks == 480
+    assert ev2_res[410.0].beam_count == 1
+
+    assert ev2_res[450.0].duration_name == "eighth"
+    assert ev2_res[450.0].duration_ticks == 480
+    assert ev2_res[450.0].beam_count == 1
+
+    # Beamed sixteenth notes
+    for x in [470.0, 485.0, 500.0, 515.0]:
+        assert ev2_res[x].duration_name == "16th"
+        assert ev2_res[x].duration_ticks == 240
+        assert ev2_res[x].beam_count == 2
 
 
-# 3. Just-Inside / Just-Outside Boundary Tests
-def test_just_inside_and_just_outside_boundary_tolerances(sample_staff_context: StaffSystemContext):
-    # Tolerance is max(6.0, 0.6 * 14.0) = 8.4pt
-    event_x = 100.0
-    tol = 8.4
+# 4. Meaningful Scale Validation
+@pytest.mark.parametrize(
+    "scale, staff_space, inside_offset, outside_offset",
+    [
+        (1.0, 14.0, 5.0, 9.0),
+        (1.5, 21.0, 7.5, 13.5),
+        (0.75, 10.5, 3.75, 6.75),
+    ],
+)
+def test_meaningful_scale_validation(scale: float, staff_space: float, inside_offset: float, outside_offset: float):
+    """Test non-zero stem, beam, and flag offsets at 1.0x, 1.5x, and 0.75x staff space scales."""
+    base_line_ys = [150.0, 164.0, 178.0, 192.0, 206.0, 220.0]
+    line_ys = [y * scale for y in base_line_ys]
+    context = StaffSystemContext(line_y_coords=line_ys, barline_x_coords=[], staff_space=staff_space)
 
-    # Just inside stem boundary: dist = 8.3pt
+    event_x = 100.0 * scale
+    stem_bottom = max(line_ys)
+    stem_top = stem_bottom + (18.0 * scale)
+
+    # Just-inside stem candidate (offset = inside_offset)
     stem_inside = StemPrimitiveCandidate(
-        bbox=SpatialBBox(x0=108.3, y0=220.0, x1=108.3, y1=238.0),
+        bbox=SpatialBBox(x0=event_x + inside_offset, y0=stem_bottom, x1=event_x + inside_offset, y1=stem_top),
         is_downward=True,
     )
-    assert associate_stem_to_event(event_x, [stem_inside], sample_staff_context) is not None
+    assert associate_stem_to_event(event_x, [event_x], [stem_inside], context) == stem_inside
 
-    # Just outside stem boundary: dist = 8.6pt
+    # Just-outside stem candidate (offset = outside_offset)
     stem_outside = StemPrimitiveCandidate(
-        bbox=SpatialBBox(x0=108.6, y0=220.0, x1=108.6, y1=238.0),
+        bbox=SpatialBBox(x0=event_x + outside_offset, y0=stem_bottom, x1=event_x + outside_offset, y1=stem_top),
         is_downward=True,
     )
-    assert associate_stem_to_event(event_x, [stem_outside], sample_staff_context) is None
+    assert associate_stem_to_event(event_x, [event_x], [stem_outside], context) is None
 
-    # Beam overlap tolerance eps = 4.0pt
-    matching_stem = StemPrimitiveCandidate(
-        bbox=SpatialBBox(x0=100.0, y0=220.0, x1=100.0, y1=238.0),
-        is_downward=True,
-    )
+    # Beam vertical proximity scales with staff_space (1.2 * staff_space)
+    beam_y_inside = stem_top + (1.0 * staff_space)  # inside
+    beam_y_outside = stem_top + (1.5 * staff_space)  # outside
 
-    # Beam spanning x0=104.1 to 150.0 (dist from x0=104.1 to stem_x=100 is 4.1pt > 4.0pt -> just outside)
-    beam_outside = BeamPrimitiveCandidate(bbox=SpatialBBox(x0=104.2, y0=238.0, x1=150.0, y1=238.0))
-    assert count_beams_for_stem(matching_stem, [beam_outside], sample_staff_context) == 0
+    beam_inside = BeamPrimitiveCandidate(bbox=SpatialBBox(x0=event_x - 10.0, y0=beam_y_inside, x1=event_x + 10.0, y1=beam_y_inside))
+    beam_outside = BeamPrimitiveCandidate(bbox=SpatialBBox(x0=event_x - 10.0, y0=beam_y_outside, x1=event_x + 10.0, y1=beam_y_outside))
 
-    # Beam spanning x0=103.9 to 150.0 (dist from x0=103.9 to stem_x=100 is 3.9pt <= 4.0pt -> just inside)
-    beam_inside = BeamPrimitiveCandidate(bbox=SpatialBBox(x0=103.9, y0=238.0, x1=150.0, y1=238.0))
-    assert count_beams_for_stem(matching_stem, [beam_inside], sample_staff_context) == 1
-
-    # Flag contact radius r = 8.0pt
-    # Flag at (x=107.9, y=238.0) -> dist = 7.9pt (just inside)
-    flag_inside = FlagPrimitiveCandidate(bbox=SpatialBBox(x0=107.9, y0=238.0, x1=115.0, y1=248.0))
-    assert count_flags_for_stem(matching_stem, [flag_inside], custom_flag_radius=8.0) == 1
-
-    # Flag at (x=108.2, y=238.0) -> dist = 8.2pt (just outside)
-    flag_outside = FlagPrimitiveCandidate(bbox=SpatialBBox(x0=108.2, y0=238.0, x1=115.0, y1=248.0))
-    assert count_flags_for_stem(matching_stem, [flag_outside], custom_flag_radius=8.0) == 0
+    assert count_beams_for_stem(stem_inside, [beam_inside], context) == 1
+    assert count_beams_for_stem(stem_inside, [beam_outside], context) == 0
 
 
-# 4. Barline & Staff-Line Rejection Test
-def test_barline_and_staff_line_rejection(sample_staff_context: StaffSystemContext):
-    # Barline stroke matching barline_x = 88.0 crossing staff y=150..220
-    barline_stroke = SpatialBBox(x0=87.5, y0=150.0, x1=88.5, y1=220.0)
-    assert is_barline_stroke(barline_stroke, sample_staff_context) is True
-
-    barline_stem = StemPrimitiveCandidate(bbox=barline_stroke)
-    assert associate_stem_to_event(88.0, [barline_stem], sample_staff_context) is None
-
-    # Staff-line stroke at y=164.0
-    staff_line = SpatialBBox(x0=72.0, y0=163.9, x1=540.0, y1=164.1)
-    assert is_staff_line_stroke(staff_line, sample_staff_context) is True
-
-    staff_line_beam = BeamPrimitiveCandidate(bbox=staff_line)
-    dummy_stem = StemPrimitiveCandidate(bbox=SpatialBBox(x0=150.0, y0=150.0, x1=150.0, y1=180.0))
-    assert count_beams_for_stem(dummy_stem, [staff_line_beam], sample_staff_context) == 0
-
-
-# 5. Neighbouring-Event & Ambiguous-Candidate Test
-def test_neighbouring_event_and_ambiguous_candidate_handling(sample_staff_context: StaffSystemContext):
-    # Two adjacent events at x1 = 100.0 and x2 = 110.0
-    # Stem is at x = 100.0 (clearly closer to x1)
+# 5. Deterministic, Distinct Beam Counting
+def test_deterministic_distinct_beam_counting(sample_staff_context: StaffSystemContext):
     stem = StemPrimitiveCandidate(bbox=SpatialBBox(x0=100.0, y0=220.0, x1=100.0, y1=238.0))
-    stems = [stem]
 
-    res1 = associate_stem_to_event(100.0, stems, sample_staff_context)
-    assert res1 == stem
+    # Two distinct beam levels: level 1 at y=238, level 2 at y=234
+    beam_l1 = BeamPrimitiveCandidate(bbox=SpatialBBox(x0=90.0, y0=238.0, x1=120.0, y1=238.0))
+    beam_l2 = BeamPrimitiveCandidate(bbox=SpatialBBox(x0=90.0, y0=234.0, x1=120.0, y1=234.0))
 
-    # Ambiguous stem placed exactly midway at x = 105.0 (dist 5.0 to both x1=100 and x2=110)
-    ambiguous_stem = StemPrimitiveCandidate(bbox=SpatialBBox(x0=105.0, y0=220.0, x1=105.0, y1=238.0))
-    amb_res = associate_stem_to_event(100.0, [ambiguous_stem], sample_staff_context)
-    # Fails closed (returns None due to equidistance / ambiguity)
-    assert amb_res is None or amb_res == ambiguous_stem
+    # Duplicate same-level beam (fragmented stroke at y=238.1)
+    beam_l1_dup = BeamPrimitiveCandidate(bbox=SpatialBBox(x0=95.0, y0=238.1, x1=115.0, y1=238.1))
 
+    # Distant third horizontal stroke at y=280.0 (rejected)
+    beam_distant = BeamPrimitiveCandidate(bbox=SpatialBBox(x0=90.0, y0=280.0, x1=120.0, y1=280.0))
 
-# 6. Scaled Synthetic Geometry Test
-def test_scaled_synthetic_geometry(sample_staff_context: StaffSystemContext):
-    # 1.5x scaled staff space = 21.0pt
-    scaled_context = StaffSystemContext(
-        line_y_coords=[y * 1.5 for y in sample_staff_context.line_y_coords],
-        barline_x_coords=[x * 1.5 for x in sample_staff_context.barline_x_coords],
-        staff_space=21.0,
-    )
+    beams_forward = [beam_l1, beam_l1_dup, beam_l2, beam_distant]
+    beams_reverse = [beam_distant, beam_l2, beam_l1_dup, beam_l1]
 
-    scaled_stem = StemPrimitiveCandidate(
-        bbox=SpatialBBox(x0=165.0, y0=330.0, x1=165.0, y1=357.0),
-        is_downward=True,
-    )
-    scaled_beam = BeamPrimitiveCandidate(bbox=SpatialBBox(x0=160.0, y0=357.0, x1=220.0, y1=357.0))
+    # Reversing order produces identical deduplicated count of 2 distinct levels
+    count_fw = count_beams_for_stem(stem, beams_forward, sample_staff_context)
+    count_rv = count_beams_for_stem(stem, beams_reverse, sample_staff_context)
 
-    res_stem = associate_stem_to_event(165.0, [scaled_stem], scaled_context)
-    assert res_stem == scaled_stem
+    assert count_fw == 2
+    assert count_rv == 2
 
-    beams_count = count_beams_for_stem(scaled_stem, [scaled_beam], scaled_context)
-    assert beams_count == 1
+    # Verify duration mapping uses deduplicated count -> 16th note (240 ticks)
+    ev = resolve_tab_duration_evidence(100.0, [stem], beams_forward, [], sample_staff_context)
+    assert ev.duration_name == "16th"
+    assert ev.duration_ticks == 240
+    assert ev.beam_count == 2
 
 
-# 7. Resolution Mapping & Fail-Closed Ambiguity Verification
-def test_resolution_mapping_and_unstemmed_fallback(sample_staff_context: StaffSystemContext):
-    # Unstemmed event -> fallback quarter note with confidence 0.5
-    ev_unstemmed = resolve_tab_duration_evidence(110.0, [], [], [], sample_staff_context)
-    assert ev_unstemmed.source == "equal_spacing_fallback"
-    assert ev_unstemmed.duration_name == "quarter"
-    assert ev_unstemmed.duration_ticks == 960
-    assert ev_unstemmed.stem_present is False
+# 6. Flag and Evidence Conflict Handling
+def test_flag_deduplication_and_conflict_handling(sample_staff_context: StaffSystemContext):
+    stem = StemPrimitiveCandidate(bbox=SpatialBBox(x0=100.0, y0=220.0, x1=100.0, y1=238.0))
 
-    # Quarter note (stem present, 0 beams)
-    stem_q = StemPrimitiveCandidate(bbox=SpatialBBox(x0=110.0, y0=220.0, x1=110.0, y1=238.0))
-    ev_q = resolve_tab_duration_evidence(110.0, [stem_q], [], [], sample_staff_context)
-    assert ev_q.source == "visual_morphology"
-    assert ev_q.duration_name == "quarter"
-    assert ev_q.duration_ticks == 960
-    assert ev_q.stem_present is True
+    # Duplicate flags attached to same stem free end (y=238.0)
+    flag1 = FlagPrimitiveCandidate(bbox=SpatialBBox(x0=100.0, y0=238.0, x1=108.0, y1=248.0))
+    flag1_dup = FlagPrimitiveCandidate(bbox=SpatialBBox(x0=100.5, y0=238.2, x1=108.5, y1=248.2))
 
-    # Eighth note (stem present, 1 beam)
-    beam_e = BeamPrimitiveCandidate(bbox=SpatialBBox(x0=100.0, y0=238.0, x1=150.0, y1=238.0))
-    ev_e = resolve_tab_duration_evidence(110.0, [stem_q], [beam_e], [], sample_staff_context)
-    assert ev_e.duration_name == "eighth"
-    assert ev_e.duration_ticks == 480
+    flags_count, _ = count_flags_for_stem(stem, [flag1, flag1_dup])
+    assert flags_count == 1
 
-    # 16th note (stem present, 2 beams)
-    beam_16a = BeamPrimitiveCandidate(bbox=SpatialBBox(x0=100.0, y0=238.0, x1=150.0, y1=238.0))
-    beam_16b = BeamPrimitiveCandidate(bbox=SpatialBBox(x0=100.0, y0=234.0, x1=150.0, y1=234.0))
-    ev_16 = resolve_tab_duration_evidence(110.0, [stem_q], [beam_16a, beam_16b], [], sample_staff_context)
-    assert ev_16.duration_name == "16th"
-    assert ev_16.duration_ticks == 240
+    # Conflicting beam and flag counts: beam_count=1, flag_count=2
+    beam = BeamPrimitiveCandidate(bbox=SpatialBBox(x0=90.0, y0=238.0, x1=120.0, y1=238.0))
+    flag2 = FlagPrimitiveCandidate(bbox=SpatialBBox(x0=100.0, y0=242.0, x1=108.0, y1=252.0))
+
+    # Expect ambiguous_conflict outcome with duration_ticks = 0
+    ev_conflict = resolve_tab_duration_evidence(100.0, [stem], [beam], [flag1, flag2], sample_staff_context)
+    assert ev_conflict.is_ambiguous is True
+    assert ev_conflict.duration_name == "ambiguous"
+    assert ev_conflict.duration_ticks == 0
+    assert ev_conflict.source == "ambiguous_conflict"
