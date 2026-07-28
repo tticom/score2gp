@@ -243,14 +243,19 @@ def count_beams_for_stem(
     *,
     custom_beam_overlap_eps: float | None = None,
     custom_beam_y_tol: float | None = None,
+    custom_min_beam_width: float | None = None,
 ) -> int:
     """Deterministically count distinct deduplicated beam levels associated with a vertical stem.
 
-    Evaluates every beam against fixed geometric rules, deduplicating same-level beams (within <= 2.0pt),
-    rejecting staff lines, and remaining 100% order-independent.
+    Evaluates every beam against fixed geometric rules per design spec:
+    - Minimum beam width: w_B >= 0.5 * staff_space (e.g. 7.0pt for 14pt staff_space).
+    - Absolute beam vertical tolerance: beam_y_tol = 6.0pt from stem free end.
+    - Horizontal overlap: stem_x spans beam with absolute epsilon = 4.0pt.
+    - Order-independent deduplication of same-level beams (within <= 2.0pt).
     """
-    overlap_eps = custom_beam_overlap_eps if custom_beam_overlap_eps is not None else 4.0  # Absolute physical bound
-    beam_y_tol = custom_beam_y_tol if custom_beam_y_tol is not None else (1.2 * context.staff_space)  # Scales with staff_space
+    overlap_eps = custom_beam_overlap_eps if custom_beam_overlap_eps is not None else 4.0  # Absolute physical bound (4.0pt)
+    beam_y_tol = custom_beam_y_tol if custom_beam_y_tol is not None else 6.0  # Absolute physical bound per spec (6.0pt)
+    min_beam_width = custom_min_beam_width if custom_min_beam_width is not None else (0.5 * context.staff_space)  # Minimum beam width
 
     stem_x = stem.x_coord
     free_y = stem.free_end_y
@@ -259,9 +264,12 @@ def count_beams_for_stem(
     for beam in beams:
         if is_staff_line_stroke(beam.bbox, context):
             continue
+        # Minimum beam width check per design spec (Section 5 Rule 2)
+        if beam.bbox.width < min_beam_width:
+            continue
         # Fixed horizontal overlap check: beam spans stem_x (with absolute epsilon threshold)
         if (beam.bbox.x0 - overlap_eps) <= stem_x <= (beam.bbox.x1 + overlap_eps):
-            # Vertical proximity check (scales with staff_space)
+            # Absolute vertical proximity check (6.0pt per spec)
             dist_y = abs(beam.bbox.center_y - free_y)
             if dist_y <= beam_y_tol:
                 eligible_y_centers.append(beam.bbox.center_y)
@@ -293,7 +301,7 @@ def count_flags_for_stem(
     """Deterministically count deduplicated flag candidates attached to a stem free end.
 
     Returns (flag_count, is_ambiguous). If a flag candidate is within contact radius of
-    multiple stems without a clear unique winner (> 1.0pt difference), is_ambiguous is True.
+    multiple stems without a clear unique winner (distance delta <= 1.0pt), is_ambiguous is True.
     """
     flag_radius = custom_flag_radius if custom_flag_radius is not None else 8.0  # Absolute physical bound
     stem_x = stem.x_coord
@@ -351,13 +359,15 @@ def resolve_tab_duration_evidence_for_events(
 ) -> dict[float, TabDurationEvidence]:
     """Resolve TabDurationEvidence for all event subgroup x-positions on a staff system.
 
-    Handles unstemmed fallback, visual duration resolution, deduplication, and explicit ambiguity/conflict states.
+    Per Architecture Spec (Section 6 Item 2):
+    Unstemmed events (whether on an unstemmed staff or a partially stemmed measure) default
+    to equal-spacing fallback (quarter note, 960 ticks, placeholder=True) unless constrained by
+    measure capacity. Ambiguous conflict (0 ticks) is reserved for geometric ambiguities.
     """
     if not events_x:
         return {}
 
     stem_assignments = associate_stems_to_events(events_x, stems, context)
-    has_any_stems = any(isinstance(v, StemPrimitiveCandidate) for v in stem_assignments.values())
 
     results: dict[float, TabDurationEvidence] = {}
 
@@ -382,34 +392,19 @@ def resolve_tab_duration_evidence_for_events(
             continue
 
         if assigned is None:
-            if not has_any_stems:
-                results[ev_x] = TabDurationEvidence(
-                    duration_name="quarter",
-                    duration_ticks=960,
-                    stem_present=False,
-                    beam_count=0,
-                    flag_count=0,
-                    confidence=0.5,
-                    source="equal_spacing_fallback",
-                    is_ambiguous=False,
-                    is_fallback_placeholder=True,
-                    diagnostic_message="Unstemmed staff: using equal-spacing structural placeholder",
-                )
-            else:
-                if fail_on_ambiguity:
-                    raise PdfTabDurationAssociatorError(f"Missing stem for event at x={ev_x:.1f} on stemmed staff")
-                results[ev_x] = TabDurationEvidence(
-                    duration_name="ambiguous",
-                    duration_ticks=0,
-                    stem_present=False,
-                    beam_count=0,
-                    flag_count=0,
-                    confidence=0.0,
-                    source="ambiguous_conflict",
-                    is_ambiguous=True,
-                    is_fallback_placeholder=False,
-                    diagnostic_message=f"Event at x={ev_x:.1f} missing stem candidate on stemmed staff",
-                )
+            # Unstemmed event -> equal-spacing fallback placeholder per spec Section 6 Item 2
+            results[ev_x] = TabDurationEvidence(
+                duration_name="quarter",
+                duration_ticks=960,
+                stem_present=False,
+                beam_count=0,
+                flag_count=0,
+                confidence=0.5,
+                source="equal_spacing_fallback",
+                is_ambiguous=False,
+                is_fallback_placeholder=True,
+                diagnostic_message="Unstemmed event: using equal-spacing structural placeholder",
+            )
             continue
 
         stem = assigned
