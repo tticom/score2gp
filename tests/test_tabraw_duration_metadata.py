@@ -237,6 +237,75 @@ def test_malformed_evidence_boundary():
     assert malformed_candidate_bad_type.duration_evidence is None
 
 
+def test_malformed_dataclass_evidence_boundary():
+    # Invalid duration_name in dataclass instance
+    bad_name_ev = TabDurationEvidence(duration_name="bogus", duration_ticks=480)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="Invalid duration_evidence"):
+        make_tab_candidate(
+            candidate_id="dc-err-1",
+            raw_text="1",
+            page_index=1,
+            bbox_values=[0, 0, 10, 10],
+            confidence=0.5,
+            duration_evidence=bad_name_ev,
+        )
+
+    # Negative duration_ticks in dataclass instance
+    neg_ticks_ev = TabDurationEvidence(duration_name="eighth", duration_ticks=-1)
+    with pytest.raises(ValueError, match="Invalid duration_evidence"):
+        make_tab_candidate(
+            candidate_id="dc-err-2",
+            raw_text="1",
+            page_index=1,
+            bbox_values=[0, 0, 10, 10],
+            confidence=0.5,
+            duration_evidence=neg_ticks_ev,
+        )
+
+    # Out-of-range confidence (> 1.0) in dataclass instance
+    bad_conf_ev = TabDurationEvidence(duration_name="quarter", duration_ticks=960, confidence=2.0)
+    with pytest.raises(ValueError, match="Invalid duration_evidence"):
+        make_tab_candidate(
+            candidate_id="dc-err-3",
+            raw_text="1",
+            page_index=1,
+            bbox_values=[0, 0, 10, 10],
+            confidence=0.5,
+            duration_evidence=bad_conf_ev,
+        )
+
+    # Invalid source in dataclass instance
+    bad_src_ev = TabDurationEvidence(duration_name="quarter", duration_ticks=960, source="unknown_source")  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="Invalid duration_evidence"):
+        make_tab_candidate(
+            candidate_id="dc-err-4",
+            raw_text="1",
+            page_index=1,
+            bbox_values=[0, 0, 10, 10],
+            confidence=0.5,
+            duration_evidence=bad_src_ev,
+        )
+
+    # Dataclass instance in raw dict parameter fails validation in make_tab_candidate
+    with pytest.raises(ValueError, match="Invalid duration_evidence in raw metadata"):
+        make_tab_candidate(
+            candidate_id="dc-err-5",
+            raw_text="1",
+            page_index=1,
+            bbox_values=[0, 0, 10, 10],
+            confidence=0.5,
+            raw={"duration_evidence": neg_ticks_ev},
+        )
+
+    # Direct TabCandidate construction holding invalid dataclass instance returns None via duration_evidence property
+    cand_with_bad_dc = TabCandidate(
+        id="dc-mal-1",
+        raw_text="1",
+        raw={"duration_evidence": bad_name_ev},
+    )
+    assert cand_with_bad_dc.duration_evidence is None
+
+
 def test_absent_duration_evidence():
     candidate = make_tab_candidate(
         candidate_id="plain-1",
@@ -246,3 +315,4 @@ def test_absent_duration_evidence():
         confidence=0.5,
     )
     assert candidate.duration_evidence is None
+

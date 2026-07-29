@@ -39,9 +39,7 @@ class TabCandidate(BaseModel):
         data = self.raw.get("duration_evidence")
         if data is None:
             return None
-        if isinstance(data, TabDurationEvidence):
-            return data
-        if isinstance(data, dict):
+        if isinstance(data, (TabDurationEvidence, dict)):
             return _parse_tab_duration_evidence(data)
         return None
 
@@ -132,7 +130,9 @@ TAB_DURATION_EVIDENCE_FIELDS: set[str] = {
 }
 
 
-def _parse_tab_duration_evidence(data: dict[str, Any]) -> TabDurationEvidence | None:
+def _parse_tab_duration_evidence(data: TabDurationEvidence | dict[str, Any]) -> TabDurationEvidence | None:
+    if isinstance(data, TabDurationEvidence):
+        data = asdict(data)
     if not isinstance(data, dict):
         return None
 
@@ -272,9 +272,7 @@ def make_tab_candidate(
     raw_dict = dict(raw) if raw else {}
 
     if duration_evidence is not None:
-        if isinstance(duration_evidence, TabDurationEvidence):
-            raw_dict["duration_evidence"] = asdict(duration_evidence)
-        elif isinstance(duration_evidence, dict):
+        if isinstance(duration_evidence, (TabDurationEvidence, dict)):
             parsed = _parse_tab_duration_evidence(duration_evidence)
             if parsed is None:
                 raise ValueError(f"Invalid duration_evidence payload: {duration_evidence}")
@@ -285,9 +283,7 @@ def make_tab_candidate(
             )
     elif "duration_evidence" in raw_dict:
         existing = raw_dict["duration_evidence"]
-        if isinstance(existing, TabDurationEvidence):
-            raw_dict["duration_evidence"] = asdict(existing)
-        elif isinstance(existing, dict):
+        if isinstance(existing, (TabDurationEvidence, dict)):
             parsed = _parse_tab_duration_evidence(existing)
             if parsed is None:
                 raise ValueError(f"Invalid duration_evidence in raw metadata: {existing}")
