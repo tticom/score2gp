@@ -57,6 +57,7 @@ def determine_pdf_tab_event_duration(
     if is_rest:
         return True, 960, "quarter"
 
+    explicit_evidences: list[TabDurationEvidence] = []
     for c in subgroup_candidates:
         ev = c.duration_evidence
         if ev is not None:
@@ -72,9 +73,25 @@ def determine_pdf_tab_event_duration(
             if ev.source == "visual_morphology" or (
                 not ev.is_fallback_placeholder and not ev.is_ambiguous and ev.duration_ticks > 0
             ):
-                return False, ev.duration_ticks, ev.duration_name
+                explicit_evidences.append(ev)
+
+    if explicit_evidences:
+        first_ticks = explicit_evidences[0].duration_ticks
+        first_name = explicit_evidences[0].duration_name
+        for ev in explicit_evidences[1:]:
+            if ev.duration_ticks != first_ticks or ev.duration_name != first_name:
+                raise PdfTabBarAssemblerError(
+                    category="pdf_only_tab_ambiguous_duration",
+                    stage="measure-assembly",
+                    message=(
+                        f"Conflicting duration evidence across candidates in chord subgroup: "
+                        f"found {first_name} ({first_ticks} ticks) and {ev.duration_name} ({ev.duration_ticks} ticks)"
+                    ),
+                )
+        return False, first_ticks, first_name
 
     return False, grid_spacing, duration_name
+
 
 
 

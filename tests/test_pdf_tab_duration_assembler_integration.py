@@ -295,3 +295,91 @@ def test_mixed_stemmed_and_unstemmed_subgroup_behavior():
     assert len(note_events) == 2
     assert note_events[0].timing.duration_ticks == 960
     assert note_events[1].timing.duration_ticks == 480  # Unstemmed event falls back to equal spacing grid (N=2 -> eighth)
+
+
+def test_matching_multi_string_chord_duration_evidence():
+    """Verify that a multi-string chord where all candidates share identical explicit duration evidence assembles cleanly."""
+    quarter_ev = TabDurationEvidence(
+        duration_name="quarter",
+        duration_ticks=960,
+        stem_present=True,
+        source="visual_morphology",
+    )
+
+    cand_string1 = make_tab_candidate(
+        candidate_id="chord-s1",
+        raw_text="0",
+        page_index=1,
+        bbox_values=(100.0, 150.0, 104.0, 154.0),
+        confidence=0.9,
+        string=1,
+        duration_evidence=quarter_ev,
+    )
+    cand_string2 = make_tab_candidate(
+        candidate_id="chord-s2",
+        raw_text="1",
+        page_index=1,
+        bbox_values=(100.0, 164.0, 104.0, 168.0),
+        confidence=0.9,
+        string=2,
+        duration_evidence=quarter_ev,
+    )
+    cand_string3 = make_tab_candidate(
+        candidate_id="chord-s3",
+        raw_text="0",
+        page_index=1,
+        bbox_values=(100.0, 178.0, 104.0, 182.0),
+        confidence=0.9,
+        string=3,
+        duration_evidence=quarter_ev,
+    )
+
+    bar = assemble_pdf_tab_bar([cand_string1, cand_string2, cand_string3], output_bar_idx=1, track_id="t1")
+    note_events = [ev for ev in bar.events if not ev.is_rest]
+
+    assert len(note_events) == 1
+    assert len(note_events[0].notes) == 3
+    assert note_events[0].timing.notated_duration.value == "quarter"
+    assert note_events[0].timing.duration_ticks == 960
+
+
+def test_conflicting_multi_string_chord_duration_evidence_fails_closed():
+    """Verify that a multi-string chord containing conflicting explicit duration evidence across candidates fails closed."""
+    quarter_ev = TabDurationEvidence(
+        duration_name="quarter",
+        duration_ticks=960,
+        stem_present=True,
+        source="visual_morphology",
+    )
+    eighth_ev = TabDurationEvidence(
+        duration_name="eighth",
+        duration_ticks=480,
+        stem_present=True,
+        source="visual_morphology",
+    )
+
+    cand_string1 = make_tab_candidate(
+        candidate_id="conflict-s1",
+        raw_text="0",
+        page_index=1,
+        bbox_values=(100.0, 150.0, 104.0, 154.0),
+        confidence=0.9,
+        string=1,
+        duration_evidence=quarter_ev,
+    )
+    cand_string2 = make_tab_candidate(
+        candidate_id="conflict-s2",
+        raw_text="1",
+        page_index=1,
+        bbox_values=(100.0, 164.0, 104.0, 168.0),
+        confidence=0.9,
+        string=2,
+        duration_evidence=eighth_ev,
+    )
+
+    with pytest.raises(PdfTabBarAssemblerError) as exc_info:
+        assemble_pdf_tab_bar([cand_string1, cand_string2], output_bar_idx=1, track_id="t1")
+
+    assert exc_info.value.category == "pdf_only_tab_ambiguous_duration"
+    assert "Conflicting duration evidence across candidates in chord subgroup" in exc_info.value.message
+
