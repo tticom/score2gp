@@ -7,31 +7,13 @@ from .pdf_tab_event_factory import (
     determine_pdf_tab_event_duration,
 )
 from .pdf_tab_measure_timing import (
+    PdfTabBarAssemblerError,
     decompose_pdf_tab_measure_remainder_to_rests,
     is_within_pdf_tab_measure_capacity,
     select_pdf_tab_grid_spacing_and_duration_name,
 )
 from .tabraw import TabCandidate
 
-
-class PdfTabBarAssemblerError(Exception):
-    """Internal structured exception raised during per-bar assembly.
-
-    Translated into BuildIrInputRiskError at the build_ir.py public boundary.
-    """
-
-    def __init__(
-        self,
-        category: str,
-        stage: str,
-        message: str,
-        details: dict[str, str] | None = None,
-    ) -> None:
-        self.category = category
-        self.stage = stage
-        self.message = message
-        self.details = details or {}
-        super().__init__(message)
 
 
 def assemble_pdf_tab_bar(
