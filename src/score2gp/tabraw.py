@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .ir import BoundingBox, Provenance, SourceStage
+from .pdf_tab_duration_types import TabDurationEvidence
 
 TABRAW_SCHEMA_VERSION = "tabraw.v0.1"
 
@@ -31,6 +33,15 @@ class TabCandidate(BaseModel):
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
     source_stage: SourceStage = SourceStage.PDF_TEXT
     raw: dict[str, Any] = Field(default_factory=dict)
+
+    @property
+    def duration_evidence(self) -> TabDurationEvidence | None:
+        data = self.raw.get("duration_evidence")
+        if data is None:
+            return None
+        if isinstance(data, (TabDurationEvidence, dict)):
+            return _parse_tab_duration_evidence(data)
+        return None
 
     def to_provenance(self) -> Provenance:
         return Provenance(
@@ -90,6 +101,98 @@ def parse_fret_text(text: str) -> int | None:
     return None
 
 
+VALID_DURATION_NAMES: set[str] = {
+    "whole",
+    "half",
+    "quarter",
+    "eighth",
+    "16th",
+    "32nd",
+    "64th",
+    "ambiguous",
+}
+VALID_SOURCES: set[str] = {
+    "visual_morphology",
+    "equal_spacing_fallback",
+    "ambiguous_conflict",
+}
+TAB_DURATION_EVIDENCE_FIELDS: set[str] = {
+    "duration_name",
+    "duration_ticks",
+    "stem_present",
+    "beam_count",
+    "flag_count",
+    "confidence",
+    "source",
+    "is_ambiguous",
+    "is_fallback_placeholder",
+    "diagnostic_message",
+}
+
+
+def _parse_tab_duration_evidence(data: TabDurationEvidence | dict[str, Any]) -> TabDurationEvidence | None:
+    if isinstance(data, TabDurationEvidence):
+        data = asdict(data)
+    if not isinstance(data, dict):
+        return None
+
+    if set(data.keys()) - TAB_DURATION_EVIDENCE_FIELDS:
+        return None
+
+    duration_name = data.get("duration_name")
+    if duration_name not in VALID_DURATION_NAMES:
+        return None
+
+    duration_ticks = data.get("duration_ticks")
+    if not isinstance(duration_ticks, int) or isinstance(duration_ticks, bool) or duration_ticks < 0:
+        return None
+
+    stem_present = data.get("stem_present", False)
+    if not isinstance(stem_present, bool):
+        return None
+
+    beam_count = data.get("beam_count", 0)
+    if not isinstance(beam_count, int) or isinstance(beam_count, bool) or beam_count < 0:
+        return None
+
+    flag_count = data.get("flag_count", 0)
+    if not isinstance(flag_count, int) or isinstance(flag_count, bool) or flag_count < 0:
+        return None
+
+    confidence = data.get("confidence", 1.0)
+    if not isinstance(confidence, (int, float)) or isinstance(confidence, bool) or not (0.0 <= confidence <= 1.0):
+        return None
+
+    source = data.get("source", "visual_morphology")
+    if source not in VALID_SOURCES:
+        return None
+
+    is_ambiguous = data.get("is_ambiguous", False)
+    if not isinstance(is_ambiguous, bool):
+        return None
+
+    is_fallback_placeholder = data.get("is_fallback_placeholder", False)
+    if not isinstance(is_fallback_placeholder, bool):
+        return None
+
+    diagnostic_message = data.get("diagnostic_message", "")
+    if not isinstance(diagnostic_message, str):
+        return None
+
+    return TabDurationEvidence(
+        duration_name=duration_name,  # type: ignore[arg-type]
+        duration_ticks=duration_ticks,
+        stem_present=stem_present,
+        beam_count=beam_count,
+        flag_count=flag_count,
+        confidence=float(confidence),
+        source=source,  # type: ignore[arg-type]
+        is_ambiguous=is_ambiguous,
+        is_fallback_placeholder=is_fallback_placeholder,
+        diagnostic_message=diagnostic_message,
+    )
+
+
 def normalize_tabraw_payload(data: dict[str, Any]) -> dict[str, Any]:
     if "candidates" in data:
         # If already normalized to the format, still check for fields
@@ -108,6 +211,13 @@ def normalize_tabraw_payload(data: dict[str, Any]) -> dict[str, Any]:
         parsed_fret = item.get("parsed_fret")
         if parsed_fret is None:
             parsed_fret = parse_fret_text(raw_text)
+
+        raw_meta: dict[str, Any] = {"legacy_item": item}
+        if isinstance(item.get("raw"), dict) and "duration_evidence" in item["raw"]:
+            raw_meta["duration_evidence"] = item["raw"]["duration_evidence"]
+        elif "duration_evidence" in item:
+            raw_meta["duration_evidence"] = item["duration_evidence"]
+
         candidates.append(
             {
                 "id": item.get("id") or f"legacy-candidate-{index:04d}",
@@ -125,7 +235,7 @@ def normalize_tabraw_payload(data: dict[str, Any]) -> dict[str, Any]:
                 "bbox": bbox,
                 "confidence": item.get("confidence", 0.4),
                 "source_stage": item.get("source_stage", SourceStage.PDF_TEXT),
-                "raw": {"legacy_item": item},
+                "raw": raw_meta,
             }
         )
 
@@ -153,10 +263,32 @@ def make_tab_candidate(
     line_index: int | None = None,
     string: int | None = None,
     raw: dict[str, Any] | None = None,
+    duration_evidence: TabDurationEvidence | dict[str, Any] | None = None,
 ) -> TabCandidate:
     bbox = _normalize_bbox(bbox_values, page_index)
     x, y = _bbox_center(bbox)
     parsed_fret = parse_fret_text(raw_text)
+
+    raw_dict = dict(raw) if raw else {}
+
+    if duration_evidence is not None:
+        if isinstance(duration_evidence, (TabDurationEvidence, dict)):
+            parsed = _parse_tab_duration_evidence(duration_evidence)
+            if parsed is None:
+                raise ValueError(f"Invalid duration_evidence payload: {duration_evidence}")
+            raw_dict["duration_evidence"] = asdict(parsed)
+        else:
+            raise TypeError(
+                f"duration_evidence must be TabDurationEvidence or dict, got {type(duration_evidence).__name__}"
+            )
+    elif "duration_evidence" in raw_dict:
+        existing = raw_dict["duration_evidence"]
+        if isinstance(existing, (TabDurationEvidence, dict)):
+            parsed = _parse_tab_duration_evidence(existing)
+            if parsed is None:
+                raise ValueError(f"Invalid duration_evidence in raw metadata: {existing}")
+            raw_dict["duration_evidence"] = asdict(parsed)
+
     return TabCandidate(
         id=candidate_id,
         kind=_candidate_kind(raw_text, parsed_fret),
@@ -172,7 +304,7 @@ def make_tab_candidate(
         y=y,
         bbox=bbox,
         confidence=confidence,
-        raw=raw or {},
+        raw=raw_dict,
     )
 
 
