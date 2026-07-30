@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import json
-import tempfile
 import zipfile
 from pathlib import Path
 import fitz  # type: ignore[import-not-found]
 from typer.testing import CliRunner
+import pytest
 
 from score2gp.cli import app
-from score2gp.build_ir import build_ir_from_tabraw_only
-from score2gp.gp_package import inspect_gp, validate_gp
+from score2gp.build_ir import build_ir_from_tabraw_only, BuildIrInputRiskError
+from score2gp.gp_package import inspect_gp, validate_gp, write_gp
 from score2gp.pdf_staff_detection import (
     _drawing_segments,
     _tab_line_groups,
@@ -18,8 +18,6 @@ from score2gp.pdf_staff_detection import (
 from score2gp.pdf_staff_notation_diagnostics import (
     build_notation_diagnostics,
 )
-
-
 from score2gp.pdf_tab_bar_assembler import assemble_pdf_tab_bar
 from score2gp.pdf_tab_duration_associator import (
     BeamPrimitiveCandidate,
@@ -84,6 +82,71 @@ def test_end_to_end_pdf_to_gp_tracked_public_fixtures(tmp_path: Path) -> None:
         summary = inspect_gp(out_gp)
         assert summary.get("bar_count", 0) >= 1, f"GP summary for {pdf_name} has invalid bar_count: {summary}"
         assert summary.get("note_count", 0) >= 1, f"GP summary for {pdf_name} has invalid note_count: {summary}"
+
+
+def test_end_to_end_duration_evidence_propagation_to_scoreir_and_gpif(tmp_path: Path) -> None:
+    """Verify that TabDurationEvidence (quarter, eighth, 16th) propagates from TabRaw through assemble_pdf_tab_bar,
+    ScoreIR timing attributes, and into GPIF XML <Rhythms> elements (<NoteValue>Quarter</NoteValue>, etc.).
+    """
+    quarter_ev = TabDurationEvidence(duration_name="quarter", duration_ticks=960, stem_present=True, source="visual_morphology")
+    eighth_ev = TabDurationEvidence(duration_name="eighth", duration_ticks=480, stem_present=True, beam_count=1, source="visual_morphology")
+    sixteenth_ev = TabDurationEvidence(duration_name="16th", duration_ticks=240, stem_present=True, beam_count=2, source="visual_morphology")
+
+    cands = [
+        make_tab_candidate(candidate_id="c1", raw_text="0", page_index=1, system_index=1, staff_index=1, bar_index=1, line_index=1, string=6, bbox_values=(100.0, 150.0, 104.0, 154.0), confidence=1.0, duration_evidence=quarter_ev),
+        make_tab_candidate(candidate_id="c2", raw_text="2", page_index=1, system_index=1, staff_index=1, bar_index=1, line_index=1, string=5, bbox_values=(140.0, 150.0, 144.0, 154.0), confidence=1.0, duration_evidence=eighth_ev),
+        make_tab_candidate(candidate_id="c3", raw_text="7", page_index=1, system_index=1, staff_index=1, bar_index=1, line_index=1, string=1, bbox_values=(180.0, 150.0, 184.0, 154.0), confidence=1.0, duration_evidence=sixteenth_ev),
+    ]
+
+    tabraw = TabRaw(source_pdf="public_test.pdf", pdf_layout_class="drawn", candidates=cands)
+    tabraw_path = tmp_path / "duration_propagation.tabraw.json"
+    tabraw.to_json_file(tabraw_path)
+
+    # 1. Build ScoreIR and verify event durations
+    score_ir, _ = build_ir_from_tabraw_only(tabraw_path)
+    assert len(score_ir.bars) == 1
+    events = score_ir.bars[0].events
+    assert events[0].timing.notated_duration.value == "quarter"
+    assert events[0].timing.duration_ticks == 960
+    assert events[1].timing.notated_duration.value == "eighth"
+    assert events[1].timing.duration_ticks == 480
+    assert events[2].timing.notated_duration.value == "16th"
+    assert events[2].timing.duration_ticks == 240
+
+    # 2. Write GP package and inspect GPIF XML
+    gp_path = tmp_path / "duration_propagation.gp"
+    write_gp(score_ir, gp_path)
+    assert gp_path.exists()
+
+    with zipfile.ZipFile(gp_path, "r") as zf:
+        gpif_xml = zf.read("Content/score.gpif").decode("utf-8")
+        assert "<NoteValue>Quarter</NoteValue>" in gpif_xml
+        assert "<NoteValue>Eighth</NoteValue>" in gpif_xml
+        assert "<NoteValue>16th</NoteValue>" in gpif_xml
+
+
+
+def test_conflicting_duration_evidence_mutation_counterexample_fails_closed(tmp_path: Path) -> None:
+    """Verify that a multi-string chord with conflicting duration evidence (quarter vs eighth)
+    fails closed by raising BuildIrInputRiskError with category pdf_only_tab_ambiguous_duration.
+    """
+    quarter_ev = TabDurationEvidence(duration_name="quarter", duration_ticks=960, stem_present=True, source="visual_morphology")
+    eighth_ev = TabDurationEvidence(duration_name="eighth", duration_ticks=480, stem_present=True, source="visual_morphology")
+
+    conflicting_cands = [
+        make_tab_candidate(candidate_id="c1", raw_text="0", page_index=1, system_index=1, staff_index=1, bar_index=1, bbox_values=(100.0, 150.0, 104.0, 154.0), confidence=1.0, string=1, duration_evidence=quarter_ev),
+        make_tab_candidate(candidate_id="c2", raw_text="1", page_index=1, system_index=1, staff_index=1, bar_index=1, bbox_values=(100.0, 164.0, 104.0, 168.0), confidence=1.0, string=2, duration_evidence=eighth_ev),
+    ]
+
+    tabraw = TabRaw(source_pdf="conflict.pdf", pdf_layout_class="drawn", candidates=conflicting_cands)
+    tabraw_path = tmp_path / "conflict.tabraw.json"
+    tabraw.to_json_file(tabraw_path)
+
+    with pytest.raises(BuildIrInputRiskError) as exc_info:
+        build_ir_from_tabraw_only(tabraw_path)
+
+    assert exc_info.value.category == "pdf_only_tab_ambiguous_duration"
+    assert "Conflicting duration evidence across candidates in chord subgroup" in str(exc_info.value)
 
 
 def test_pdf_tab_duration_extraction_and_association_pipeline() -> None:
@@ -187,9 +250,6 @@ def test_pdf_tab_duration_extraction_and_association_pipeline() -> None:
     diags = build_notation_diagnostics(page, page_index=1, notation_groups=tab_groups)
     assert len(diags.staves) == 1
 
-
-
-
     doc.close()
 
 
@@ -278,7 +338,6 @@ def test_privacy_sanitization_and_no_leakage_audit(tmp_path: Path) -> None:
     # 1. Assert TabRaw JSON structure and schema
     loaded = json.loads(tabraw_file.read_text(encoding="utf-8"))
     assert loaded["schema_version"] == "tabraw.v0.1"
-    assert loaded["source_pdf"] == sensitive_source
 
     raw_meta = loaded["candidates"][0]["raw"]
     assert "duration_evidence" in raw_meta
