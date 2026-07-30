@@ -9,9 +9,11 @@ from .ir import (
     Note,
     Timing,
 )
+from .pdf_tab_measure_timing import PdfTabBarAssemblerError
 
 if TYPE_CHECKING:
     from .tabraw import TabCandidate
+
 
 _STRING_TO_BASE_PITCH: dict[int, int] = {
     1: 64,  # E4
@@ -54,7 +56,43 @@ def determine_pdf_tab_event_duration(
     is_rest = any(c.raw_text == "quarter_rest" for c in subgroup_candidates)
     if is_rest:
         return True, 960, "quarter"
+
+    explicit_evidences: list[TabDurationEvidence] = []
+    for c in subgroup_candidates:
+        ev = c.duration_evidence
+        if ev is not None:
+            if ev.is_ambiguous or ev.source == "ambiguous_conflict" or ev.duration_ticks == 0:
+                raise PdfTabBarAssemblerError(
+                    category="pdf_only_tab_ambiguous_duration",
+                    stage="measure-assembly",
+                    message=(
+                        f"Ambiguous duration evidence on event candidate: "
+                        f"{ev.diagnostic_message or 'conflicting or ambiguous duration geometry'}"
+                    ),
+                )
+            if ev.source == "visual_morphology" or (
+                not ev.is_fallback_placeholder and not ev.is_ambiguous and ev.duration_ticks > 0
+            ):
+                explicit_evidences.append(ev)
+
+    if explicit_evidences:
+        first_ticks = explicit_evidences[0].duration_ticks
+        first_name = explicit_evidences[0].duration_name
+        for ev in explicit_evidences[1:]:
+            if ev.duration_ticks != first_ticks or ev.duration_name != first_name:
+                raise PdfTabBarAssemblerError(
+                    category="pdf_only_tab_ambiguous_duration",
+                    stage="measure-assembly",
+                    message=(
+                        f"Conflicting duration evidence across candidates in chord subgroup: "
+                        f"found {first_name} ({first_ticks} ticks) and {ev.duration_name} ({ev.duration_ticks} ticks)"
+                    ),
+                )
+        return False, first_ticks, first_name
+
     return False, grid_spacing, duration_name
+
+
 
 
 def build_pdf_tab_event_from_subgroup(

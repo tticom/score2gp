@@ -21,6 +21,27 @@ class RestDurationDescriptor:
     ticks: int
 
 
+class PdfTabBarAssemblerError(Exception):
+    """Internal structured exception raised during per-bar assembly.
+
+    Translated into BuildIrInputRiskError at the build_ir.py public boundary.
+    """
+
+    def __init__(
+        self,
+        category: str,
+        stage: str,
+        message: str,
+        details: dict[str, str] | None = None,
+    ) -> None:
+        self.category = category
+        self.stage = stage
+        self.message = message
+        self.details = details or {}
+        super().__init__(message)
+
+
+
 def select_pdf_tab_grid_spacing_and_duration_name(
     event_subgroup_count: int,
     *,
