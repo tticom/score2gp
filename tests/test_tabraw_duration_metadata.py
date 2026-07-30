@@ -315,4 +315,3 @@ def test_absent_duration_evidence():
         confidence=0.5,
     )
     assert candidate.duration_evidence is None
-
