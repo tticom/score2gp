@@ -382,4 +382,3 @@ def test_conflicting_multi_string_chord_duration_evidence_fails_closed():
 
     assert exc_info.value.category == "pdf_only_tab_ambiguous_duration"
     assert "Conflicting duration evidence across candidates in chord subgroup" in exc_info.value.message
-
