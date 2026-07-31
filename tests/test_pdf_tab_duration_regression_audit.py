@@ -102,7 +102,7 @@ def test_end_to_end_pdf_to_gp_tracked_public_fixtures(tmp_path: Path) -> None:
                 gpif_xml = zf.read("Content/score.gpif").decode("utf-8")
                 assert "<NoteValue>Quarter</NoteValue>" in gpif_xml
                 assert "<NoteValue>Eighth</NoteValue>" in gpif_xml
-                assert "<NoteValue>Sixteenth</NoteValue>" in gpif_xml
+                assert "<NoteValue>16th</NoteValue>" in gpif_xml
 
 
 def test_end_to_end_duration_evidence_propagation_to_scoreir_and_gpif(tmp_path: Path) -> None:
@@ -409,4 +409,3 @@ def test_privacy_sanitization_and_no_leakage_audit(tmp_path: Path) -> None:
             content = zf.read(zip_info.filename).decode("utf-8", errors="ignore")
             assert "object at 0x" not in content
             assert "unhandled exception" not in content.lower()
-
