@@ -399,13 +399,18 @@ def test_privacy_sanitization_and_no_leakage_audit(tmp_path: Path) -> None:
     assert out_gp.exists()
     assert report_json.exists()
 
-    report_data = json.loads(report_json.read_text(encoding="utf-8"))
+    report_text = report_json.read_text(encoding="utf-8")
+    report_data = json.loads(report_text)
     assert report_data.get("status") == "success"
-    assert "object at 0x" not in json.dumps(report_data)
+    assert "object at 0x" not in report_text
+    assert str(sensitive_pdf.resolve()) not in report_text, "Sensitive absolute path must not appear in JSON report"
+    assert sensitive_pdf.name not in report_text, "Sensitive filename must not appear in JSON report"
 
-    # Read inside the GPIF archive and confirm no raw debug object addresses or invalid memory representations exist
+    # Read inside the GPIF archive and confirm no raw debug object addresses, invalid memory representations, or sensitive path leakage exist
     with zipfile.ZipFile(out_gp, "r") as zf:
         for zip_info in zf.infolist():
             content = zf.read(zip_info.filename).decode("utf-8", errors="ignore")
             assert "object at 0x" not in content
             assert "unhandled exception" not in content.lower()
+            assert str(sensitive_pdf.resolve()) not in content, f"Sensitive absolute path leaked into GP artifact: {zip_info.filename}"
+            assert sensitive_pdf.name not in content, f"Sensitive filename leaked into GP artifact: {zip_info.filename}"
