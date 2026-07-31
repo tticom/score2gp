@@ -499,3 +499,118 @@ def test_upward_stem_duration_extraction_and_direction_counterexample(tmp_path: 
     assert ev_wrong[220.0].beam_count == 0
     assert ev_wrong[140.0].duration_name != "eighth"
     assert ev_wrong[220.0].duration_name != "16th"
+
+
+def test_multisystem_production_path_stem_direction_inference_and_page_global_counterexample(tmp_path: Path) -> None:
+    """End-to-end production path test for multi-system pages containing both downward and upward stems.
+    Proves that pdf.py correctly infers stem direction relative to local PdfStaffSystem bounds rather than
+    page-global bounds, extracting exact quarter, eighth, and 16th note durations into ScoreIR and GPIF XML.
+    Also includes a counterexample demonstrating that the old page-global calculation misclassifies stems
+    on multi-system pages and fails to extract duration evidence.
+    """
+    pdf_path = tmp_path / "multisystem_production_upward.pdf"
+
+    # Construct multi-system PDF with PyMuPDF
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)
+    shape = page.new_shape()
+
+    # System 1: y=100..150 (top system)
+    for ly in [100.0, 110.0, 120.0, 130.0, 140.0, 150.0]:
+        shape.draw_line(fitz.Point(80.0, ly), fitz.Point(300.0, ly))
+    shape.draw_line(fitz.Point(80.0, 100.0), fitz.Point(80.0, 150.0))
+    shape.draw_line(fitz.Point(300.0, 100.0), fitz.Point(300.0, 150.0))
+
+    # System 1 downward stems (y=145..180) and beams
+    for x in [100.0, 140.0, 180.0, 220.0]:
+        shape.draw_line(fitz.Point(x, 145.0), fitz.Point(x, 180.0))
+    shape.draw_line(fitz.Point(135.0, 179.0), fitz.Point(225.0, 179.0))  # single beam
+    shape.draw_line(fitz.Point(175.0, 174.0), fitz.Point(225.0, 174.0))  # double beam
+
+    # System 2: y=400..450 (bottom system)
+    for ly in [400.0, 410.0, 420.0, 430.0, 440.0, 450.0]:
+        shape.draw_line(fitz.Point(80.0, ly), fitz.Point(300.0, ly))
+    shape.draw_line(fitz.Point(80.0, 400.0), fitz.Point(80.0, 450.0))
+    shape.draw_line(fitz.Point(300.0, 400.0), fitz.Point(300.0, 450.0))
+
+    # System 2 upward stems (y=370..405) and beams
+    for x in [100.0, 140.0, 180.0, 220.0]:
+        shape.draw_line(fitz.Point(x, 370.0), fitz.Point(x, 405.0))
+    shape.draw_line(fitz.Point(135.0, 371.0), fitz.Point(225.0, 371.0))  # single beam
+    shape.draw_line(fitz.Point(175.0, 376.0), fitz.Point(225.0, 376.0))  # double beam
+
+    shape.finish(color=(0, 0, 0), width=1.0)
+    shape.commit()
+
+    # Insert text digits for frets
+    page.insert_text(fitz.Point(98.0, 153.0), "0", fontsize=10, fontname="Courier")
+    page.insert_text(fitz.Point(138.0, 153.0), "2", fontsize=10, fontname="Courier")
+    page.insert_text(fitz.Point(178.0, 153.0), "3", fontsize=10, fontname="Courier")
+    page.insert_text(fitz.Point(218.0, 153.0), "5", fontsize=10, fontname="Courier")
+
+    page.insert_text(fitz.Point(98.0, 403.0), "0", fontsize=10, fontname="Courier")
+    page.insert_text(fitz.Point(138.0, 403.0), "2", fontsize=10, fontname="Courier")
+    page.insert_text(fitz.Point(178.0, 403.0), "3", fontsize=10, fontname="Courier")
+    page.insert_text(fitz.Point(218.0, 403.0), "5", fontsize=10, fontname="Courier")
+
+    doc.save(pdf_path)
+    doc.close()
+
+    # 1. Run full end-to-end production CLI conversion on the multi-system PDF
+    out_gp = tmp_path / "multisystem_out.gp"
+    workdir = tmp_path / "multisystem_work"
+    json_report = tmp_path / "multisystem_report.json"
+
+    res = CliRunner().invoke(
+        app,
+        [
+            "convert",
+            "--pdf",
+            str(pdf_path),
+            "--pdf-only-tab",
+            "--out",
+            str(out_gp),
+            "--work-dir",
+            str(workdir),
+            "--json-report",
+            str(json_report),
+        ],
+    )
+    assert res.exit_code == 0, f"Production CLI conversion failed on multi-system PDF: {res.output}"
+    assert out_gp.exists()
+
+    # Assert ScoreIR contains expected eighth and 16th note durations for System 2 (upward stems)
+    score_ir_data = json.loads((workdir / "score.ir.json").read_text(encoding="utf-8"))
+    assert len(score_ir_data["bars"]) >= 1
+
+    # Bar 2 (System 2 with upward stems)
+    bar2_events = [ev for ev in score_ir_data["bars"][-1]["events"] if not ev.get("is_rest")]
+    assert len(bar2_events) == 4
+    assert bar2_events[0]["timing"]["notated_duration"]["value"] == "quarter"
+    assert bar2_events[1]["timing"]["notated_duration"]["value"] == "eighth"
+    assert bar2_events[2]["timing"]["notated_duration"]["value"] == "16th"
+    assert bar2_events[3]["timing"]["notated_duration"]["value"] == "16th"
+
+    # Assert GPIF package contains expected <NoteValue> tags
+    with zipfile.ZipFile(out_gp, "r") as zf:
+        gpif_xml = zf.read("Content/score.gpif").decode("utf-8")
+        assert "<NoteValue>Quarter</NoteValue>" in gpif_xml
+        assert "<NoteValue>Eighth</NoteValue>" in gpif_xml
+        assert "<NoteValue>16th</NoteValue>" in gpif_xml
+
+    # 2. Explicit counterexample demonstrating that the old page-global calculation fails
+    all_page_line_ys = [100.0, 110.0, 120.0, 130.0, 140.0, 150.0, 400.0, 410.0, 420.0, 430.0, 440.0, 450.0]
+    page_top_y = all_page_line_ys[0]      # 100.0 (top of System 1)
+    page_bottom_y = all_page_line_ys[-1]  # 450.0 (bottom of System 2)
+
+    # For System 1 downward stem (iy0=145, iy1=180):
+    top_ext_sys1 = page_top_y - 145.0      # 100 - 145 = -45.0
+    bot_ext_sys1 = 180.0 - page_bottom_y  # 180 - 450 = -270.0
+    is_down_page_global_sys1 = not (top_ext_sys1 > bot_ext_sys1 + 1.0)
+    assert is_down_page_global_sys1 is False, "Old page-global calc wrongly classified System 1 downward stem as upward (False)"
+
+    # For System 2 upward stem (iy0=370, iy1=405):
+    top_ext_sys2 = page_top_y - 370.0      # 100 - 370 = -270.0
+    bot_ext_sys2 = 405.0 - page_bottom_y  # 405 - 450 = -45.0
+    is_down_page_global_sys2 = (bot_ext_sys2 > top_ext_sys2 + 1.0)
+    assert is_down_page_global_sys2 is True, "Old page-global calc wrongly classified System 2 upward stem as downward (True)"
