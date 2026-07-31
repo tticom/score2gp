@@ -6,6 +6,14 @@ from pathlib import Path
 import re
 from typing import Any
 
+from .pdf_tab_duration_associator import (
+    BeamPrimitiveCandidate,
+    FlagPrimitiveCandidate,
+    SpatialBBox,
+    StaffSystemContext,
+    StemPrimitiveCandidate,
+    resolve_tab_duration_evidence_for_events,
+)
 from .report import (
     build_grouping_diagnostics,
     grouping_status_for_tabraw,
@@ -1970,6 +1978,77 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                                     break
 
 
+            # Extract duration morphology primitives (stems, beams, flags) for the page
+            page_stems: list[StemPrimitiveCandidate] = []
+            page_beams: list[BeamPrimitiveCandidate] = []
+            page_flags: list[FlagPrimitiveCandidate] = []
+            all_line_ys = [ly for sys in systems for ly in sys.line_ys]
+
+            for draw in drawings:
+                for item in draw.get("items", []):
+                    if not item:
+                        continue
+                    itype = item[0]
+                    if itype == "l" and len(item) >= 3:
+                        p0, p1 = item[1], item[2]
+                        dx = abs(p0.x - p1.x)
+                        dy = abs(p0.y - p1.y)
+                        ix0, ix1 = min(p0.x, p1.x), max(p0.x, p1.x)
+                        iy0, iy1 = min(p0.y, p1.y), max(p0.y, p1.y)
+
+                        if dy >= 5.0 and dx <= 2.0:
+                            cx = (ix0 + ix1) / 2.0
+                            nearest_sys = _nearest_system_for_stem(systems, cx, iy0, iy1) if systems else None
+                            sys_lines = nearest_sys.line_ys if (nearest_sys is not None and nearest_sys.line_ys) else (all_line_ys if len(systems) <= 1 else [])
+                            if sys_lines:
+                                local_top = sys_lines[0]
+                                local_bottom = sys_lines[-1]
+                                top_ext = local_top - iy0
+                                bot_ext = iy1 - local_bottom
+                                if top_ext > bot_ext + 1.0:
+                                    is_down = False
+                                elif bot_ext > top_ext + 1.0:
+                                    is_down = True
+                                else:
+                                    staff_mid = (local_top + local_bottom) / 2.0
+                                    is_down = ((iy0 + iy1) / 2.0) >= staff_mid
+                                page_stems.append(StemPrimitiveCandidate(bbox=SpatialBBox(ix0, iy0, ix1, iy1), is_downward=is_down))
+                        elif dy <= 1.0 and dx >= 7.0:
+                            is_staff = dx >= 300.0 or any(abs(iy0 - ly) <= 1.0 for ly in all_line_ys)
+                            if not is_staff:
+                                page_beams.append(BeamPrimitiveCandidate(bbox=SpatialBBox(ix0, iy0, ix1, iy1)))
+                        elif dx >= 3.0 and dy >= 3.0:
+                            page_flags.append(FlagPrimitiveCandidate(bbox=SpatialBBox(ix0, iy0, ix1, iy1)))
+                    elif itype == "c" and len(item) >= 2:
+                        pts = item[1:]
+                        ix0, ix1 = min(p.x for p in pts), max(p.x for p in pts)
+                        iy0, iy1 = min(p.y for p in pts), max(p.y for p in pts)
+                        dx = ix1 - ix0
+                        dy = iy1 - iy0
+                        if dx >= 3.0 and dy >= 3.0:
+                            page_flags.append(FlagPrimitiveCandidate(bbox=SpatialBBox(ix0, iy0, ix1, iy1)))
+
+            system_duration_mapping: dict[int, dict[float, Any]] = {}
+            for sys in systems:
+                if not sys.line_ys:
+                    continue
+                context = StaffSystemContext(
+                    line_y_coords=sys.line_ys,
+                    barline_x_coords=sys.barlines,
+                    staff_space=sys.line_spacing,
+                )
+                sys_cands = system_digits_merged.get(sys.system_index, [])
+                sys_playable_xs = sorted(list({
+                    (c["x0"] + c["x1"]) / 2.0
+                    for c in sys_cands
+                    if parse_fret_text(c["text"]) is not None
+                }))
+                if sys_playable_xs:
+                    mapping = resolve_tab_duration_evidence_for_events(
+                        sys_playable_xs, page_stems, page_beams, page_flags, context
+                    )
+                    system_duration_mapping[sys.system_index] = mapping
+
             for pc in all_page_candidates:
                 raw_text = pc["text"]
                 bbox_values = [pc["x0"], pc["y0"], pc["x1"], pc["y1"]]
@@ -1987,6 +2066,16 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
 
                 assignment_warnings = list(pc.get("warnings", []))
                 is_fret_candidate = parse_fret_text(raw_text) is not None and not pc.get("is_tuning_evidence")
+
+                duration_ev_val = None
+                if system is not None and is_fret_candidate:
+                    sys_map = system_duration_mapping.get(system.system_index, {})
+                    duration_ev_val = sys_map.get(x)
+                    if duration_ev_val is None:
+                        for ev_x, ev_val in sys_map.items():
+                            if abs(ev_x - x) <= 1.0:
+                                duration_ev_val = ev_val
+                                break
 
                 # Enforce size / range checks on playable Candidates
                 if is_fret_candidate and pc.get("is_playable_fret"):
@@ -2131,6 +2220,7 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                     bar_index=bar_index,
                     line_index=line_index,
                     string=string,
+                    duration_evidence=duration_ev_val,
                     raw={
                         "pdf_word_index": pc["word_index"],
                         "pdf_block_number": pc["block_no"],
@@ -4306,6 +4396,49 @@ def _nearest_system(systems: list[_TabSystem], x: float | None, y: float | None)
         h_dist = max(0.0, system.x0 - float(x), float(x) - system.x1) if x is not None else 0.0
         return (v_dist, h_dist)
     return min(containing, key=_sort_key)
+
+
+def _nearest_system_for_stem(
+    systems: list[_TabSystem],
+    x: float,
+    y0: float,
+    y1: float,
+) -> _TabSystem | None:
+    """Assign a vertical stem stroke with bbox (x, y0, y1) to its geometrically closest _TabSystem.
+
+    Evaluates vertical distance from stem endpoints [y0, y1] to staff system bounds [top_y, bottom_y],
+    without restricting to text-candidate containment zones.
+    Returns None if systems list is empty or if the stem is equidistant between two competing systems.
+    """
+    valid_systems = [sys for sys in systems if sys.line_ys]
+    if not valid_systems:
+        return None
+
+    stem_cy = (y0 + y1) / 2.0
+
+    def _stem_sys_distance(sys: _TabSystem) -> float:
+        top_y = min(sys.line_ys)
+        bot_y = max(sys.line_ys)
+        if top_y <= stem_cy <= bot_y:
+            v_dist = 0.0
+        elif stem_cy < top_y:
+            v_dist = top_y - y1 if y1 <= top_y else top_y - stem_cy
+        else:
+            v_dist = y0 - bot_y if y0 >= bot_y else stem_cy - bot_y
+
+        h_dist = max(0.0, sys.x0 - x, x - sys.x1) if (sys.x0 is not None and sys.x1 is not None) else 0.0
+        return max(0.0, v_dist) + 0.1 * h_dist
+
+    sorted_sys = sorted(valid_systems, key=_stem_sys_distance)
+    best_sys = sorted_sys[0]
+    best_dist = _stem_sys_distance(best_sys)
+
+    if len(sorted_sys) > 1:
+        second_dist = _stem_sys_distance(sorted_sys[1])
+        if abs(second_dist - best_dist) <= 1.0:
+            return None
+
+    return best_sys
 
 
 
