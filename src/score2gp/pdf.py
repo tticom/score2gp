@@ -1997,11 +1997,9 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                         iy0, iy1 = min(p0.y, p1.y), max(p0.y, p1.y)
 
                         if dy >= 5.0 and dx <= 2.0:
-                            is_down = True
                             cx = (ix0 + ix1) / 2.0
-                            cy = (iy0 + iy1) / 2.0
-                            nearest_sys = _nearest_system(systems, cx, cy) if systems else None
-                            sys_lines = nearest_sys.line_ys if (nearest_sys is not None and nearest_sys.line_ys) else all_line_ys
+                            nearest_sys = _nearest_system_for_stem(systems, cx, iy0, iy1) if systems else None
+                            sys_lines = nearest_sys.line_ys if (nearest_sys is not None and nearest_sys.line_ys) else (all_line_ys if len(systems) <= 1 else [])
                             if sys_lines:
                                 local_top = sys_lines[0]
                                 local_bottom = sys_lines[-1]
@@ -2013,8 +2011,8 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                                     is_down = True
                                 else:
                                     staff_mid = (local_top + local_bottom) / 2.0
-                                    is_down = cy >= staff_mid
-                            page_stems.append(StemPrimitiveCandidate(bbox=SpatialBBox(ix0, iy0, ix1, iy1), is_downward=is_down))
+                                    is_down = ((iy0 + iy1) / 2.0) >= staff_mid
+                                page_stems.append(StemPrimitiveCandidate(bbox=SpatialBBox(ix0, iy0, ix1, iy1), is_downward=is_down))
                         elif dy <= 1.0 and dx >= 7.0:
                             is_staff = dx >= 300.0 or any(abs(iy0 - ly) <= 1.0 for ly in all_line_ys)
                             if not is_staff:
@@ -4398,6 +4396,49 @@ def _nearest_system(systems: list[_TabSystem], x: float | None, y: float | None)
         h_dist = max(0.0, system.x0 - float(x), float(x) - system.x1) if x is not None else 0.0
         return (v_dist, h_dist)
     return min(containing, key=_sort_key)
+
+
+def _nearest_system_for_stem(
+    systems: list[_TabSystem],
+    x: float,
+    y0: float,
+    y1: float,
+) -> _TabSystem | None:
+    """Assign a vertical stem stroke with bbox (x, y0, y1) to its geometrically closest _TabSystem.
+
+    Evaluates vertical distance from stem endpoints [y0, y1] to staff system bounds [top_y, bottom_y],
+    without restricting to text-candidate containment zones.
+    Returns None if systems list is empty or if the stem is equidistant between two competing systems.
+    """
+    valid_systems = [sys for sys in systems if sys.line_ys]
+    if not valid_systems:
+        return None
+
+    stem_cy = (y0 + y1) / 2.0
+
+    def _stem_sys_distance(sys: _TabSystem) -> float:
+        top_y = min(sys.line_ys)
+        bot_y = max(sys.line_ys)
+        if top_y <= stem_cy <= bot_y:
+            v_dist = 0.0
+        elif stem_cy < top_y:
+            v_dist = top_y - y1 if y1 <= top_y else top_y - stem_cy
+        else:
+            v_dist = y0 - bot_y if y0 >= bot_y else stem_cy - bot_y
+
+        h_dist = max(0.0, sys.x0 - x, x - sys.x1) if (sys.x0 is not None and sys.x1 is not None) else 0.0
+        return max(0.0, v_dist) + 0.1 * h_dist
+
+    sorted_sys = sorted(valid_systems, key=_stem_sys_distance)
+    best_sys = sorted_sys[0]
+    best_dist = _stem_sys_distance(best_sys)
+
+    if len(sorted_sys) > 1:
+        second_dist = _stem_sys_distance(sorted_sys[1])
+        if abs(second_dist - best_dist) <= 1.0:
+            return None
+
+    return best_sys
 
 
 

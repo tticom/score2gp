@@ -39,3 +39,11 @@ class TabDurationEvidence:
     is_ambiguous: bool = False
     is_fallback_placeholder: bool = False
     diagnostic_message: str = ""
+
+    def __post_init__(self) -> None:
+        expected_ticks = DURATION_TICKS_MAP.get(self.duration_name)
+        if expected_ticks is not None and self.duration_ticks != expected_ticks:
+            raise ValueError(
+                f"TabDurationEvidence invariant mismatch: duration_name '{self.duration_name}' "
+                f"requires duration_ticks={expected_ticks}, got {self.duration_ticks}"
+            )

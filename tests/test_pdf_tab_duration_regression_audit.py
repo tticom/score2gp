@@ -614,3 +614,110 @@ def test_multisystem_production_path_stem_direction_inference_and_page_global_co
     bot_ext_sys2 = 405.0 - page_bottom_y  # 405 - 450 = -45.0
     is_down_page_global_sys2 = (bot_ext_sys2 > top_ext_sys2 + 1.0)
     assert is_down_page_global_sys2 is True, "Old page-global calc wrongly classified System 2 upward stem as downward (True)"
+
+
+def test_long_downward_stem_and_containment_gate_counterexample(tmp_path: Path) -> None:
+    """Verify that a long downward stem whose center lies >1 line-spacing below its local staff
+    (outside the candidate_zone_contains text-candidate gate) is correctly assigned to its local
+    system by _nearest_system_for_stem via geometric endpoint distance, without falling back to page-global bounds.
+    Also proves that the old candidate_zone_contains gate returns None for this long stem.
+    """
+    pdf_path = tmp_path / "long_downward_stem_multisystem.pdf"
+
+    # Construct multi-system PDF with long downward stems on System 1
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)
+    shape = page.new_shape()
+
+    # System 1: y=100..150 (staff spacing = 10pt)
+    for ly in [100.0, 110.0, 120.0, 130.0, 140.0, 150.0]:
+        shape.draw_line(fitz.Point(80.0, ly), fitz.Point(300.0, ly))
+    shape.draw_line(fitz.Point(80.0, 100.0), fitz.Point(80.0, 150.0))
+    shape.draw_line(fitz.Point(300.0, 100.0), fitz.Point(300.0, 150.0))
+
+    # Long downward stems extending 35pt below staff (iy0=145, iy1=185, center=165)
+    # Note: 165.0 > 150.0 + 10.0, so it sits outside candidate_zone_contains (y_tolerance_max = 10.0)
+    for x in [100.0, 140.0, 180.0, 220.0]:
+        shape.draw_line(fitz.Point(x, 145.0), fitz.Point(x, 185.0))
+    shape.draw_line(fitz.Point(135.0, 184.0), fitz.Point(225.0, 184.0))  # single beam
+    shape.draw_line(fitz.Point(175.0, 179.0), fitz.Point(225.0, 179.0))  # double beam
+
+    # System 2: y=400..450
+    for ly in [400.0, 410.0, 420.0, 430.0, 440.0, 450.0]:
+        shape.draw_line(fitz.Point(80.0, ly), fitz.Point(300.0, ly))
+    shape.draw_line(fitz.Point(80.0, 400.0), fitz.Point(80.0, 450.0))
+    shape.draw_line(fitz.Point(300.0, 400.0), fitz.Point(300.0, 450.0))
+
+    shape.finish(color=(0, 0, 0), width=1.0)
+    shape.commit()
+
+    page.insert_text(fitz.Point(98.0, 153.0), "0", fontsize=10, fontname="Courier")
+    page.insert_text(fitz.Point(138.0, 153.0), "2", fontsize=10, fontname="Courier")
+    page.insert_text(fitz.Point(178.0, 153.0), "3", fontsize=10, fontname="Courier")
+    page.insert_text(fitz.Point(218.0, 153.0), "5", fontsize=10, fontname="Courier")
+
+    doc.save(pdf_path)
+    doc.close()
+
+    # 1. Verify via production helper functions _nearest_system vs _nearest_system_for_stem
+    from score2gp.pdf import _nearest_system, _nearest_system_for_stem, _TabSystem
+
+    sys1 = _TabSystem(page_index=1, system_index=1, staff_index=1, first_bar_index=1, line_ys=[100.0, 110.0, 120.0, 130.0, 140.0, 150.0], x0=80.0, x1=300.0, barlines=[80.0, 300.0])
+    sys2 = _TabSystem(page_index=1, system_index=2, staff_index=2, first_bar_index=2, line_ys=[400.0, 410.0, 420.0, 430.0, 440.0, 450.0], x0=80.0, x1=300.0, barlines=[80.0, 300.0])
+    systems = [sys1, sys2]
+
+    stem_x, stem_y0, stem_y1 = 140.0, 145.0, 185.0
+    stem_cy = (stem_y0 + stem_y1) / 2.0  # 165.0
+
+    # Old containment gate method returns None for long downward stem center (165.0)
+    old_assigned = _nearest_system(systems, stem_x, stem_cy)
+    assert old_assigned is None, "Old candidate_zone_contains gate must return None for stem center >1 line-spacing below staff"
+
+    # New geometric endpoint distance method correctly assigns to System 1
+    new_assigned = _nearest_system_for_stem(systems, stem_x, stem_y0, stem_y1)
+    assert new_assigned is not None, "New _nearest_system_for_stem must assign long downward stem to System 1"
+    assert new_assigned.system_index == 1
+
+    # 2. Run end-to-end production conversion and verify duration evidence extraction for long downward stems
+    out_gp = tmp_path / "long_stem_out.gp"
+    workdir = tmp_path / "long_stem_work"
+    json_report = tmp_path / "long_stem_report.json"
+
+    res = CliRunner().invoke(
+        app,
+        [
+            "convert",
+            "--pdf",
+            str(pdf_path),
+            "--pdf-only-tab",
+            "--out",
+            str(out_gp),
+            "--work-dir",
+            str(workdir),
+            "--json-report",
+            str(json_report),
+        ],
+    )
+    assert res.exit_code == 0
+    score_ir_data = json.loads((workdir / "score.ir.json").read_text(encoding="utf-8"))
+    bar1_events = [ev for ev in score_ir_data["bars"][0]["events"] if not ev.get("is_rest")]
+    assert bar1_events[0]["timing"]["notated_duration"]["value"] == "quarter"
+    assert bar1_events[1]["timing"]["notated_duration"]["value"] == "eighth"
+    assert bar1_events[2]["timing"]["notated_duration"]["value"] == "16th"
+    assert bar1_events[3]["timing"]["notated_duration"]["value"] == "16th"
+
+
+def test_tab_duration_evidence_malformed_invariant_rejection() -> None:
+    """Verify that TabDurationEvidence enforces strict agreement between duration_name and duration_ticks,
+    rejecting malformed evidence where name and ticks disagree.
+    """
+    # Valid evidence
+    ev = TabDurationEvidence(duration_name="eighth", duration_ticks=480)
+    assert ev.duration_name == "eighth"
+    assert ev.duration_ticks == 480
+
+    # Mismatched evidence must raise ValueError
+    with pytest.raises(ValueError) as exc_info:
+        TabDurationEvidence(duration_name="eighth", duration_ticks=960)
+
+    assert "TabDurationEvidence invariant mismatch: duration_name 'eighth' requires duration_ticks=480, got 960" in str(exc_info.value)
