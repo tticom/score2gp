@@ -83,6 +83,27 @@ def test_end_to_end_pdf_to_gp_tracked_public_fixtures(tmp_path: Path) -> None:
         assert summary.get("bar_count", 0) >= 1, f"GP summary for {pdf_name} has invalid bar_count: {summary}"
         assert summary.get("note_count", 0) >= 1, f"GP summary for {pdf_name} has invalid note_count: {summary}"
 
+        if pdf_name == "generated_pdf_tab_duration.pdf":
+            score_ir_data = json.loads((workdir / "score.ir.json").read_text(encoding="utf-8"))
+            bar1_events = [ev for ev in score_ir_data["bars"][0]["events"] if not ev.get("is_rest")]
+            bar2_events = [ev for ev in score_ir_data["bars"][1]["events"] if not ev.get("is_rest")]
+            assert len(bar1_events) == 4, f"Bar 1 expected 4 note events, got {len(bar1_events)}"
+            for ev in bar1_events:
+                assert ev["timing"]["notated_duration"]["value"] == "quarter"
+                assert ev["timing"]["duration_ticks"] == 960
+
+            assert len(bar2_events) == 8, f"Bar 2 expected 8 note events, got {len(bar2_events)}"
+            assert bar2_events[0]["timing"]["notated_duration"]["value"] == "eighth"
+            assert bar2_events[0]["timing"]["duration_ticks"] == 480
+            assert bar2_events[4]["timing"]["notated_duration"]["value"] == "16th"
+            assert bar2_events[4]["timing"]["duration_ticks"] == 240
+
+            with zipfile.ZipFile(out_gp, "r") as zf:
+                gpif_xml = zf.read("Content/score.gpif").decode("utf-8")
+                assert "<NoteValue>Quarter</NoteValue>" in gpif_xml
+                assert "<NoteValue>Eighth</NoteValue>" in gpif_xml
+                assert "<NoteValue>Sixteenth</NoteValue>" in gpif_xml
+
 
 def test_end_to_end_duration_evidence_propagation_to_scoreir_and_gpif(tmp_path: Path) -> None:
     """Verify that TabDurationEvidence (quarter, eighth, 16th) propagates from TabRaw through assemble_pdf_tab_bar,
@@ -304,7 +325,10 @@ def test_privacy_sanitization_and_no_leakage_audit(tmp_path: Path) -> None:
     """Audit privacy sanitization across TabRaw JSON serialization, ScoreIR outputs, and GP packages.
     Asserts zero raw memory pointers (object at 0x) or unhandled private path leakage into public artifacts.
     """
-    sensitive_source = "private/fixture.pdf"
+    sensitive_pdf = tmp_path / "private_fixture_sensitive_input.pdf"
+    sensitive_pdf.write_bytes(Path("tests/fixtures/pdf/generated_pdf_tab_duration.pdf").read_bytes())
+    sensitive_source = str(sensitive_pdf)
+
     quarter_ev = TabDurationEvidence(
         duration_name="quarter",
         duration_ticks=960,
@@ -335,9 +359,10 @@ def test_privacy_sanitization_and_no_leakage_audit(tmp_path: Path) -> None:
     tabraw_file = tmp_path / "private_tabraw.json"
     tabraw.to_json_file(tabraw_file)
 
-    # 1. Assert TabRaw JSON structure and schema
+    # 1. Assert TabRaw JSON structure, schema, and sensitive source path
     loaded = json.loads(tabraw_file.read_text(encoding="utf-8"))
     assert loaded["schema_version"] == "tabraw.v0.1"
+    assert loaded["source_pdf"] == sensitive_source
 
     raw_meta = loaded["candidates"][0]["raw"]
     assert "duration_evidence" in raw_meta
@@ -350,8 +375,7 @@ def test_privacy_sanitization_and_no_leakage_audit(tmp_path: Path) -> None:
     ir_json_str = score_ir.model_dump_json()
     assert "object at 0x" not in ir_json_str
 
-    # 3. Perform CLI convert end-to-end on public fixture and audit output GP package
-    public_pdf = Path("tests/fixtures/pdf/generated_pdf_tab_duration.pdf")
+    # 3. Perform CLI convert end-to-end directly on the sensitive PDF input fixture and audit output GP package
     out_gp = tmp_path / "privacy_test.gp"
     workdir = tmp_path / "privacy_work"
     report_json = tmp_path / "privacy_report.json"
@@ -361,7 +385,7 @@ def test_privacy_sanitization_and_no_leakage_audit(tmp_path: Path) -> None:
         [
             "convert",
             "--pdf",
-            str(public_pdf),
+            str(sensitive_pdf),
             "--pdf-only-tab",
             "--out",
             str(out_gp),
@@ -371,8 +395,13 @@ def test_privacy_sanitization_and_no_leakage_audit(tmp_path: Path) -> None:
             str(report_json),
         ],
     )
-    assert res.exit_code == 0
+    assert res.exit_code == 0, f"CLI convert failed on sensitive input: {res.output}"
     assert out_gp.exists()
+    assert report_json.exists()
+
+    report_data = json.loads(report_json.read_text(encoding="utf-8"))
+    assert report_data.get("status") == "success"
+    assert "object at 0x" not in json.dumps(report_data)
 
     # Read inside the GPIF archive and confirm no raw debug object addresses or invalid memory representations exist
     with zipfile.ZipFile(out_gp, "r") as zf:
@@ -380,3 +409,4 @@ def test_privacy_sanitization_and_no_leakage_audit(tmp_path: Path) -> None:
             content = zf.read(zip_info.filename).decode("utf-8", errors="ignore")
             assert "object at 0x" not in content
             assert "unhandled exception" not in content.lower()
+
