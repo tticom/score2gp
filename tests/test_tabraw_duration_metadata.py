@@ -238,29 +238,13 @@ def test_malformed_evidence_boundary():
 
 
 def test_malformed_dataclass_evidence_boundary():
-    # Invalid duration_name in dataclass instance
-    bad_name_ev = TabDurationEvidence(duration_name="bogus", duration_ticks=480)  # type: ignore[arg-type]
-    with pytest.raises(ValueError, match="Invalid duration_evidence"):
-        make_tab_candidate(
-            candidate_id="dc-err-1",
-            raw_text="1",
-            page_index=1,
-            bbox_values=[0, 0, 10, 10],
-            confidence=0.5,
-            duration_evidence=bad_name_ev,
-        )
+    # Invalid duration_name in dataclass instance raises ValueError on construction
+    with pytest.raises(ValueError, match="TabDurationEvidence invariant mismatch"):
+        TabDurationEvidence(duration_name="bogus", duration_ticks=480)  # type: ignore[arg-type]
 
-    # Negative duration_ticks in dataclass instance
-    neg_ticks_ev = TabDurationEvidence(duration_name="eighth", duration_ticks=-1)
-    with pytest.raises(ValueError, match="Invalid duration_evidence"):
-        make_tab_candidate(
-            candidate_id="dc-err-2",
-            raw_text="1",
-            page_index=1,
-            bbox_values=[0, 0, 10, 10],
-            confidence=0.5,
-            duration_evidence=neg_ticks_ev,
-        )
+    # Negative duration_ticks in dataclass instance raises ValueError on construction
+    with pytest.raises(ValueError, match="TabDurationEvidence invariant mismatch"):
+        TabDurationEvidence(duration_name="eighth", duration_ticks=-1)
 
     # Out-of-range confidence (> 1.0) in dataclass instance
     bad_conf_ev = TabDurationEvidence(duration_name="quarter", duration_ticks=960, confidence=2.0)
@@ -294,14 +278,14 @@ def test_malformed_dataclass_evidence_boundary():
             page_index=1,
             bbox_values=[0, 0, 10, 10],
             confidence=0.5,
-            raw={"duration_evidence": neg_ticks_ev},
+            raw={"duration_evidence": bad_conf_ev},
         )
 
-    # Direct TabCandidate construction holding invalid dataclass instance returns None via duration_evidence property
+    # Direct TabCandidate construction holding invalid dict evidence returns None via duration_evidence property
     cand_with_bad_dc = TabCandidate(
         id="dc-mal-1",
         raw_text="1",
-        raw={"duration_evidence": bad_name_ev},
+        raw={"duration_evidence": {"duration_name": "bogus", "duration_ticks": 480}},
     )
     assert cand_with_bad_dc.duration_evidence is None
 

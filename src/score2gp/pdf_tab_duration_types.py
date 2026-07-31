@@ -41,8 +41,12 @@ class TabDurationEvidence:
     diagnostic_message: str = ""
 
     def __post_init__(self) -> None:
-        expected_ticks = DURATION_TICKS_MAP.get(self.duration_name)
-        if expected_ticks is not None and self.duration_ticks != expected_ticks:
+        if self.duration_name not in DURATION_TICKS_MAP:
+            raise ValueError(
+                f"TabDurationEvidence invariant mismatch: unknown duration_name '{self.duration_name}'"
+            )
+        expected_ticks = DURATION_TICKS_MAP[self.duration_name]
+        if self.duration_ticks != expected_ticks:
             raise ValueError(
                 f"TabDurationEvidence invariant mismatch: duration_name '{self.duration_name}' "
                 f"requires duration_ticks={expected_ticks}, got {self.duration_ticks}"
