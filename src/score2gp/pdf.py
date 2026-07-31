@@ -1997,7 +1997,18 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                         iy0, iy1 = min(p0.y, p1.y), max(p0.y, p1.y)
 
                         if dy >= 5.0 and dx <= 2.0:
-                            page_stems.append(StemPrimitiveCandidate(bbox=SpatialBBox(ix0, iy0, ix1, iy1), is_downward=True))
+                            is_down = True
+                            if all_line_ys:
+                                top_ext = all_line_ys[0] - iy0
+                                bot_ext = iy1 - all_line_ys[-1]
+                                if top_ext > bot_ext + 1.0:
+                                    is_down = False
+                                elif bot_ext > top_ext + 1.0:
+                                    is_down = True
+                                else:
+                                    staff_mid = (all_line_ys[0] + all_line_ys[-1]) / 2.0
+                                    is_down = ((iy0 + iy1) / 2.0) >= staff_mid
+                            page_stems.append(StemPrimitiveCandidate(bbox=SpatialBBox(ix0, iy0, ix1, iy1), is_downward=is_down))
                         elif dy <= 1.0 and dx >= 7.0:
                             is_staff = dx >= 300.0 or any(abs(iy0 - ly) <= 1.0 for ly in all_line_ys)
                             if not is_staff:

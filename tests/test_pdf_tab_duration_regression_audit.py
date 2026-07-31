@@ -414,3 +414,88 @@ def test_privacy_sanitization_and_no_leakage_audit(tmp_path: Path) -> None:
             assert "unhandled exception" not in content.lower()
             assert str(sensitive_pdf.resolve()) not in content, f"Sensitive absolute path leaked into GP artifact: {zip_info.filename}"
             assert sensitive_pdf.name not in content, f"Sensitive filename leaked into GP artifact: {zip_info.filename}"
+
+
+def test_upward_stem_duration_extraction_and_direction_counterexample(tmp_path: Path) -> None:
+    """Verify that upward stems (is_downward=False) correctly resolve free_end_y (top of stem),
+    matching beams/flags located above the staff and propagating duration evidence (eighth, 16th)
+    into assemble_pdf_tab_bar, ScoreIR, and GPIF XML.
+    Also verifies that forcing the wrong direction (is_downward=True on upward stems) causes beam/flag
+    counting to miss the rhythm marks, falling back to equal-spacing grid placeholder heuristics.
+    """
+    staff_line_ys = [150.0, 164.0, 178.0, 192.0, 206.0, 220.0]
+    staff_space = 14.0
+    context = StaffSystemContext(
+        line_y_coords=staff_line_ys,
+        barline_x_coords=[80.0, 300.0],
+        staff_space=staff_space,
+    )
+
+    # 4 event x-positions
+    events_x = [100.0, 140.0, 180.0, 220.0]
+
+    # Upward stems: extend UP from string 1 (y=150.0) to y=120.0 (above staff)
+    upward_stems = [
+        StemPrimitiveCandidate(bbox=SpatialBBox(x - 1.0, 120.0, x + 1.0, 150.0), is_downward=False)
+        for x in events_x
+    ]
+
+    # Beams/flags located near top of stems (y=120.0)
+    flags = [FlagPrimitiveCandidate(bbox=SpatialBBox(138.0, 118.0, 142.0, 122.0))]  # flag at x=140
+    beams = [
+        BeamPrimitiveCandidate(bbox=SpatialBBox(175.0, 119.5, 185.0, 120.5)),  # single beam at x=180
+        BeamPrimitiveCandidate(bbox=SpatialBBox(215.0, 119.5, 225.0, 120.5)),  # double beam 1 at x=220
+        BeamPrimitiveCandidate(bbox=SpatialBBox(215.0, 114.5, 225.0, 115.5)),  # double beam 2 at x=220
+    ]
+
+    # 1. Positive case: resolve_tab_duration_evidence_for_events with correct upward stems
+    ev_results = resolve_tab_duration_evidence_for_events(events_x, upward_stems, beams, flags, context)
+    assert ev_results[100.0].duration_name == "quarter"
+    assert ev_results[100.0].duration_ticks == 960
+    assert ev_results[140.0].duration_name == "eighth"
+    assert ev_results[140.0].duration_ticks == 480
+    assert ev_results[180.0].duration_name == "eighth"
+    assert ev_results[180.0].duration_ticks == 480
+    assert ev_results[220.0].duration_name == "16th"
+    assert ev_results[220.0].duration_ticks == 240
+
+    # Build candidates with resolved upward stem duration evidence and test pipeline to ScoreIR & GPIF
+    cands = [
+        make_tab_candidate(candidate_id="u1", raw_text="0", page_index=1, system_index=1, staff_index=1, bar_index=1, line_index=1, string=6, bbox_values=(98.0, 148.0, 102.0, 152.0), confidence=1.0, duration_evidence=ev_results[100.0]),
+        make_tab_candidate(candidate_id="u2", raw_text="2", page_index=1, system_index=1, staff_index=1, bar_index=1, line_index=1, string=5, bbox_values=(138.0, 148.0, 142.0, 152.0), confidence=1.0, duration_evidence=ev_results[140.0]),
+        make_tab_candidate(candidate_id="u3", raw_text="3", page_index=1, system_index=1, staff_index=1, bar_index=1, line_index=1, string=4, bbox_values=(178.0, 148.0, 182.0, 152.0), confidence=1.0, duration_evidence=ev_results[180.0]),
+        make_tab_candidate(candidate_id="u4", raw_text="5", page_index=1, system_index=1, staff_index=1, bar_index=1, line_index=1, string=3, bbox_values=(218.0, 148.0, 222.0, 152.0), confidence=1.0, duration_evidence=ev_results[220.0]),
+    ]
+    tabraw = TabRaw(source_pdf="upward_test.pdf", pdf_layout_class="drawn", candidates=cands)
+    tabraw_path = tmp_path / "upward_tabraw.json"
+    tabraw.to_json_file(tabraw_path)
+
+    score_ir, _ = build_ir_from_tabraw_only(tabraw_path)
+    evs = score_ir.bars[0].events
+    assert evs[0].timing.notated_duration.value == "quarter"
+    assert evs[1].timing.notated_duration.value == "eighth"
+    assert evs[2].timing.notated_duration.value == "eighth"
+    assert evs[3].timing.notated_duration.value == "16th"
+
+    gp_path = tmp_path / "upward_test.gp"
+    write_gp(score_ir, gp_path)
+    with zipfile.ZipFile(gp_path, "r") as zf:
+        gpif_xml = zf.read("Content/score.gpif").decode("utf-8")
+        assert "<NoteValue>Quarter</NoteValue>" in gpif_xml
+        assert "<NoteValue>Eighth</NoteValue>" in gpif_xml
+        assert "<NoteValue>16th</NoteValue>" in gpif_xml
+
+    # 2. Negative case: forcing wrong direction (is_downward=True) on upward stem geometry
+    wrong_stems = [
+        StemPrimitiveCandidate(bbox=SpatialBBox(x - 1.0, 120.0, x + 1.0, 150.0), is_downward=True)
+        for x in events_x
+    ]
+    ev_wrong = resolve_tab_duration_evidence_for_events(events_x, wrong_stems, beams, flags, context)
+
+    # With is_downward=True, free_end_y evaluates to 150.0 (bottom, down at staff line),
+    # which is >6.0pt away from beams/flags at y=120.0, so beam/flag counting returns 0.
+    assert ev_wrong[140.0].flag_count == 0
+    assert ev_wrong[180.0].beam_count == 0
+    assert ev_wrong[220.0].beam_count == 0
+    assert ev_wrong[140.0].duration_name != "eighth"
+    assert ev_wrong[220.0].duration_name != "16th"
