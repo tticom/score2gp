@@ -4,7 +4,7 @@
 
 This document establishes a generic, testable, and decoupled technical architecture for score2gp PDF conversion to independently classify:
 
-1. **Ordinary and double barlines** (with explicit vector stroke-width contracts for future final-barline classification);
+1. **Ordinary, double, and final barlines** (with explicit vector stroke-width contracts for future final-barline classification);
 2. **System and page layout breaks** (separating single-staff tab systems and multi-staff connected systems);
 3. **Phrase or piece titles and their ownership by a system or measure**.
 
@@ -30,16 +30,37 @@ This document establishes a generic, testable, and decoupled technical architect
 
 Source-code tracing across `src/score2gp/pdf.py`, `src/score2gp/pdf_staff_geometry.py`, `src/score2gp/report.py`, `src/score2gp/whole_note_recogniser.py`, `src/score2gp/cli.py`, and `src/score2gp/build_ir.py` establishes the following empirical facts:
 
-### 3.1 PDF-Tab Barline Classification Seam
+### 3.1 PDF-Tab Barline Classification Seam & Live Detail Probe
 - **Exact File & Functions**: `src/score2gp/pdf.py:filter_tab_barline_candidates()` (lines 3730–3850) and `_detect_tab_systems()` (lines 3880–4112).
 - **Producer / Consumer Path**:
   - `_detect_tab_systems()` extracts vertical `_LineSegment` candidates from page vector drawings.
   - `filter_tab_barline_candidates()` performs single-linkage clustering using `DOUBLE_BARLINE_CLUSTERING_TOLERANCE` (12.0 pt).
   - For a 2-stroke cluster, it picks a single representative x-coordinate for `valid_barlines` and marks secondary strokes as rejected under the code `pdf_barline_double_secondary`.
   - Details are stored in `barline_candidates_details` dicts attached to `_TabSystem` and reported in `report.py`.
-- **Verified Defect & Seam Disconnect**:
+- **Verified Live Candidate Detail Keys**:
+  - Running a live Python probe on `filter_tab_barline_candidates()`:
+    ```python
+    from score2gp.pdf import _LineSegment, filter_tab_barline_candidates
+    filter_tab_barline_candidates([_LineSegment(100,160,100,165)], 154, 186, [154, 160.4, 166.8, 173.2, 179.6, 186], 36, 575)
+    ```
+    returns:
+    ```python
+    {
+        'x': 100.0, 'y_min': 160.0, 'y_max': 165.0, 'height': 5.0, 'staff_height': 32.0,
+        'coverage_ratio': 0.156, 'gaps_crossed': 0,
+        'absolute_height_decision': 'rejected',
+        'relative_staff_crossing_decision': 'rejected',
+        'final_decision': 'rejected',
+        'rejection_reason': 'pdf_barline_crosses_insufficient_string_gaps'
+    }
+    ```
+- **Verified Defect & Additive Seam Requirements**:
   - `StructuralSkeletonBarlineCandidate` in `src/score2gp/pdf_staff_geometry.py` belongs *only* to `pdf_staff_notation_diagnostics.py` (standard notation path) and is **not** consumed or produced by the PDF-tab path (`filter_tab_barline_candidates()`).
-  - To record barline style in the PDF-tab conversion path, typed fields (`barline_style: Literal["regular", "double", "ambiguous"]`) must be added directly to the tab-specific candidate details dictionary produced by `filter_tab_barline_candidates()` and carried on `_TabSystem.barline_candidates_details`.
+  - The live tab producer emits candidate detail dictionaries for both accepted and rejected strokes.
+  - To preserve 100% losslessness without fabricating cluster/style values for rejected strokes, the new fields must be added as optional/nullable:
+    - `barline_style: Literal["regular", "double", "final", "ambiguous", "unclassified_stroke"] | None = None`
+    - `cluster_size: int | None = Field(default=None, ge=1)`
+  - Rejected strokes receive `barline_style = "unclassified_stroke"` and `cluster_size = None`. Accepted strokes receive `barline_style = "regular"` (cluster size 1), `"double"` (cluster size 2), `"final"` (thick-thin), or `"ambiguous"` (cluster size > 2).
 - **Public Reproducer / Verification Command & Observations**:
   - Command: `python -m pytest tests/test_pdf.py::test_double_barline_ambiguity_resolution`
   - Public Fixture: `tests/fixtures/pdf/generated_paired_notation_tab_system_double_barline.pdf` (generated from `fixtures/public/generated_paired_notation_tab_system_double_barline.json`, containing two vertical strokes at x=572.0 and x=575.0).
@@ -75,7 +96,7 @@ Source-code tracing across `src/score2gp/pdf.py`, `src/score2gp/pdf_staff_geomet
 
 | ID | Subject / Claim | Status | Controlling Facts & Seams | Unknown / Deferred Boundary |
 |---|-----------------|--------|---------------------------|-----------------------------|
-| **H-01** | Multi-stroke barline clusters (12pt) can be typed as `double` on the PDF-tab seam | Verified Fact | `pdf.py:filter_tab_barline_candidates()` cluster logic | Verified for 2-stroke clusters. Final barline requires vector stroke-width acquisition. |
+| **H-01** | Multi-stroke barline clusters (12pt) can be typed as `double` on the PDF-tab seam | Provisional / Hypothesis | `pdf.py:filter_tab_barline_candidates()` cluster logic | Geometric clustering is verified on test fixtures; semantic universal correctness requires a negative oracle for close parallel non-barline vector strokes. Final barline requires vector stroke-width acquisition. |
 | **H-02** | System breaks can be represented independently of barline presence | Provisional / Unverified | `pdf.py:_detect_tab_systems()` staff line grouping | Multi-staff connector grouping (`bracket_curve`, `brace_curve`, `leading_barline`) requires explicit connector alignment research. |
 | **H-03** | Title text can be classified via font-size ratio from `page.get_text("dict")` | Provisional / Unverified | `page.get_text("dict")` span metadata | Empirical font-size ratio threshold across diverse PDF publisher templates (A4 vs Letter vs custom booklet) requires dynamic fixture probing. |
 | **H-04** | Title-to-system ownership can be made exclusive via absolute boundary distance ranking | Provisional / Unverified | Page-level text candidates vs system bounding boxes | Multi-line title blocks and subtitle handling require multi-span bounding box merging. |
@@ -132,46 +153,46 @@ Source-code tracing across `src/score2gp/pdf.py`, `src/score2gp/pdf_staff_geomet
    - Filter candidates that cross at least 4 string gaps ($y_{min} \le y_0 + 3.0$ and $y_{max} \ge y_1 - 3.0$).
    - Cluster accepted candidates by horizontal distance: candidates $s_i, s_j$ belong to the same cluster if $|x_i - x_j| \le 12.0$ pt.
 2. **Style Assignment & Vector Stroke-Width Seam**:
+   - **Initially Rejected Candidates**:
+     - Detail dict: `barline_style = "unclassified_stroke"`, `cluster_size = None`.
    - **Cluster Size == 1**:
-     - `barline_style = "regular"`.
+     - `barline_style = "regular"`, `cluster_size = 1`.
      - `primary_x = round(s[0].x, 3)`.
      - Add `primary_x` to `valid_barlines`.
    - **Cluster Size == 2**:
      - **CR-05A Bounded Rule**: Classify as **`barline_style = "double"`** when stroke widths are equal or untyped ($W_1 \approx W_2$).
-     - **Future Final Barline Vector Seam Contract (Deferred Non-Goal)**: Vector stroke width is extracted from PyMuPDF `page.get_drawings()` vector drawing dictionaries (`drawing["width"]` / line items `("l", p0, p1)`). A 2-stroke cluster is classified as `final` **only if** rightmost stroke width $W_{right} \ge 2.5 \times W_{left}$ (thin-thick final barline morphology). When $W_{right} \approx W_{left}$, classify as `double`.
+     - **Durable Final Barline Vector Seam Contract**: Durable architecture represents `regular`, `double`, `final`, `ambiguous`, and `unclassified_stroke`. Vector stroke width is extracted from PyMuPDF `page.get_drawings()` vector drawing dictionaries (`drawing["width"]` / line items `("l", p0, p1)`). A 2-stroke cluster is classified as `final` **only if** rightmost stroke width $W_{right} \ge 2.5 \times W_{left}$ (thin-thick final barline morphology). When $W_{right} \approx W_{left}$, classify as `double`.
      - Representative `primary_x` = rightmost stroke if at right system edge ($x \ge x_1 - 10.0$), leftmost stroke if at left system edge ($x \le x_0 + 10.0$), or leftmost stroke if internal.
-     - Primary candidate detail: `final_decision = "accepted"`, `barline_style = "double"`.
-     - Secondary candidate detail: `final_decision = "rejected"`, `rejection_reason = "pdf_barline_double_secondary"`, `barline_style = "double"`.
+     - Primary candidate detail: `final_decision = "accepted"`, `barline_style = "double"`, `cluster_size = 2`.
+     - Secondary candidate detail: `final_decision = "rejected"`, `rejection_reason = "pdf_barline_double_secondary"`, `barline_style = "double"`, `cluster_size = 2`.
      - Add `primary_x` to `valid_barlines`.
    - **Cluster Size > 2**:
-     - All candidates in cluster: `final_decision = "rejected"`, `rejection_reason = "pdf_barline_ambiguous"`, `barline_style = "ambiguous"`.
-3. **Exact Additive Producer/Consumer Data Seam**:
-   - Producer: `pdf.py:filter_tab_barline_candidates()`.
-   - Output Dictionary inside `barline_candidates_details` (preserving all live keys while adding `barline_style` and `cluster_size`):
+     - All candidates in cluster: `final_decision = "rejected"`, `rejection_reason = "pdf_barline_ambiguous"`, `barline_style = "ambiguous"`, `cluster_size = len(cluster)`.
+3. **Exact Additive Producer Output Schema (`barline_candidates_details` in `pdf.py`)**:
+   - Preserves 100% of live producer keys and adds optional `barline_style` and `cluster_size`:
      ```python
      {
-         "idx": int,
          "x": float,
          "y_min": float,
          "y_max": float,
          "height": float,
-         "relative_height_ok": bool,
-         "absolute_height_ok": bool,
+         "staff_height": float,
+         "coverage_ratio": float,
          "gaps_crossed": int,
-         "intersects": bool,
-         "in_bounds": bool,
-         "initially_accepted": bool,
+         "absolute_height_decision": "accepted" | "rejected",
+         "relative_staff_crossing_decision": "accepted" | "rejected",
          "final_decision": "accepted" | "rejected",
          "rejection_reason": str | None,
-         "barline_style": "regular" | "double" | "ambiguous",
-         "cluster_size": int
+         "inherited": bool | None,  # Present when barline is inherited from partner staff
+         "barline_style": "regular" | "double" | "final" | "ambiguous" | "unclassified_stroke" | None,
+         "cluster_size": int | None
      }
      ```
    - Diagnostic Consumer: `_TabSystem.barline_candidates_details` -> `report.py` HTML report & JSON payload.
 
 ---
 
-### 6.3 Ordered Text Classification & Absolute Ownership Algorithm
+### 6.3 Ordered Text Classification & Executable Ownership Algorithms
 
 #### Span Metadata Source
 - Span metadata is extracted from PyMuPDF `page.get_text("dict")` structured blocks: `span["text"]`, `span["bbox"]`, `span["size"]`, `span["flags"]`.
@@ -201,7 +222,7 @@ To eliminate non-deterministic classification (e.g. preventing a large `Allegro`
 7. **Priority 6 — Unclassified Fallback**:
    - All other text spans: `category = "unclassified"`.
 
-#### Absolute Ownership Geometry & Ambiguity Controls
+#### Executable Title-to-System Ownership Algorithm
 
 ```
                         Page Header / Title Zone
@@ -228,7 +249,7 @@ To eliminate non-deterministic classification (e.g. preventing a large `Allegro`
 
 1. **Document-Level Ownership (`TitleDocumentOwnership`)**:
    - Candidate spans with `category = "piece_title"` on Page 1 are sorted by font size $f_{size}$ (descending) then $y_0$ (ascending).
-   - The top candidate is assigned to `TitleDocumentOwnership(title_text_id=..., title_text=...)`.
+   - The top candidate is assigned to `TitleDocumentOwnership(title_text_id=..., piece_title=...)`.
 2. **Absolute System Ownership Geometry (`TitleSystemOwnership`)**:
    - For a phrase title candidate positioned between System $k$ and System $k+1$ ($\text{system}_k.y_1 < y_{center} < \text{system}_{k+1}.y_0$):
      - Distance to upper system bottom: $D_{upper} = |y_{center} - \text{system}_k.y_1|$.
@@ -238,8 +259,39 @@ To eliminate non-deterministic classification (e.g. preventing a large `Allegro`
      - If $y_{center} \in [y_{mid} - 5.0, y_{mid} + 5.0]$ (midpoint ambiguity band), mark `exclusivity_status = "ambiguous_ownership"` and fail closed.
      - If $D_{upper} < D_{lower} - 5.0$ pt, assign exclusively to System $k$ (`spatial_relation = "below_system"`).
      - If $D_{lower} < D_{upper} - 5.0$ pt, assign exclusively to System $k+1$ (`spatial_relation = "above_system"`).
-3. **Measure-Level Ownership (`TitleMeasureOwnership`)**:
-   - Map text candidate horizontal midpoint $x_{center} = (x_0 + x_1) / 2$ to Measure Region $m$ of System $k$ via `system.bar_for_x(x_center)`.
+
+#### Executable Title-to-Measure Ownership & Live API Call Path
+To map a title/text candidate to a measure region using the live `score2gp` API:
+
+```python
+# 1. Execute live API call for bar index and warnings
+bar_index, warnings = system.bar_for_x(x_center)
+
+# 2. Execute live API call for bar bounding box
+bar_bounds = system.bar_bounds_for_x(x_center)
+
+# 3. Complete unwrap, bounds, overlap, and error-handling path:
+if bar_index is None or bar_bounds is None or "pdf_bar_box_outside_system_bounds" in warnings:
+    # Fail closed for out-of-bounds or invalid bar box
+    ownership_status = "ambiguous_measure_ownership"
+else:
+    start_x, end_x = bar_bounds
+    span_width = max(1.0, text_span.x1 - text_span.x0)
+    overlap_width = max(0.0, min(text_span.x1, end_x) - max(text_span.x0, start_x))
+    overlap_ratio = overlap_width / span_width
+
+    if overlap_ratio >= 0.50:
+        title_measure_ownership = TitleMeasureOwnership(
+            title_text_id=text_span.id,
+            system_index=system.system_index,
+            measure_region_index=bar_index,
+            start_x=start_x,
+            end_x=end_x,
+            overlap_ratio=round(overlap_ratio, 3)
+        )
+    else:
+        ownership_status = "insufficient_measure_overlap"
+```
 
 ---
 
@@ -252,23 +304,22 @@ from pydantic import BaseModel, Field
 class PdfTabBarlineCandidateDetail(BaseModel):
     """
     Typed candidate detail item produced by filter_tab_barline_candidates on the PDF-tab seam.
-    Fully additive with existing live pdf.py candidate detail dictionary keys.
+    Fully additive and lossless with existing live pdf.py candidate detail dictionary keys.
     """
-    idx: int
     x: float
     y_min: float
     y_max: float
     height: float
-    relative_height_ok: bool
-    absolute_height_ok: bool
+    staff_height: float
+    coverage_ratio: float
     gaps_crossed: int
-    intersects: bool
-    in_bounds: bool
-    initially_accepted: bool
+    absolute_height_decision: Literal["accepted", "rejected"]
+    relative_staff_crossing_decision: Literal["accepted", "rejected"]
     final_decision: Literal["accepted", "rejected"]
     rejection_reason: str | None = None
-    barline_style: Literal["regular", "double", "ambiguous"]
-    cluster_size: int = Field(ge=1)
+    inherited: bool | None = None
+    barline_style: Literal["regular", "double", "final", "ambiguous", "unclassified_stroke"] | None = None
+    cluster_size: int | None = Field(default=None, ge=1)
 
 class SystemLayoutBreakEvidence(BaseModel):
     """Decoupled system break evidence structure."""
@@ -377,14 +428,16 @@ class StructuralAmbiguousEvidence(BaseModel):
   - Synthetic 2-barline double-stroke test fixture in `tests/test_cr05_barline_style_classification.py`
 - **Production Seam**:
   - Producer: `src/score2gp/pdf.py:filter_tab_barline_candidates()`
-  - Update candidate details dictionaries to include `barline_style: Literal["regular", "double", "ambiguous"]` and `cluster_size: int`.
-  - For a 2-stroke cluster within `DOUBLE_BARLINE_CLUSTERING_TOLERANCE` (12.0 pt), mark `barline_style = "double"` on both primary (accepted) and secondary (rejected) candidate dictionaries.
-  - For 1-stroke candidates, mark `barline_style = "regular"`.
+  - Update candidate details dictionaries to include `barline_style: Literal["regular", "double", "final", "ambiguous", "unclassified_stroke"] | None` and `cluster_size: int | None`.
+  - For initially rejected strokes: set `barline_style = "unclassified_stroke"` and `cluster_size = None`.
+  - For a 2-stroke cluster within `DOUBLE_BARLINE_CLUSTERING_TOLERANCE` (12.0 pt), set `barline_style = "double"` and `cluster_size = 2` on both primary (accepted) and secondary (rejected) candidate dictionaries.
+  - For 1-stroke candidates, set `barline_style = "regular"` and `cluster_size = 1`.
   - Pass `barline_candidates_details` through `_TabSystem` to `report.py` diagnostics.
 - **Acceptance Assertions**:
   1. 2-stroke clusters in `filter_tab_barline_candidates()` produce `barline_style = "double"` in `barline_candidates_details`.
   2. Single vertical strokes produce `barline_style = "regular"`.
-  3. `valid_barlines` float array and system bounds remain 100% backward-compatible.
+  3. Initially rejected strokes produce `barline_style = "unclassified_stroke"`.
+  4. `valid_barlines` float array and system bounds remain 100% backward-compatible.
 - **Negative Controls**:
   1. Single vertical line produces `barline_style = "regular"`.
   2. No system breaks are added or removed when converting double barline scores.
