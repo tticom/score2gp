@@ -4,7 +4,7 @@
 
 This document establishes a generic, testable, and decoupled technical architecture for score2gp PDF conversion to independently classify:
 
-1. **Ordinary and double barlines** (with explicit evidence contracts for future final-barline classification);
+1. **Ordinary and double barlines** (with explicit vector stroke-width contracts for future final-barline classification);
 2. **System and page layout breaks** (separating single-staff tab systems and multi-staff connected systems);
 3. **Phrase or piece titles and their ownership by a system or measure**.
 
@@ -14,9 +14,7 @@ This document establishes a generic, testable, and decoupled technical architect
 - Title text above or near staves must be explicitly classified using an ordered, mutually exclusive hierarchy, and bound to system or measure ownership rather than being treated as arbitrary or global text.
 - Evidence structures for barlines, layout breaks, and titles are strictly separated.
 
-- **Selected Outcomes**:
-  - `CONTINUE`: Bounded Developer slice **`CR-05A`** for PDF-tab barline style classification (`regular` vs `double`).
-  - `RESEARCH_NEXT`: Multi-staff connector grouping, final-barline stroke-width acquisition, and empirical title font-ratio thresholds.
+- **Selected Outcome**: **`CONTINUE`** (evidence supports one bounded Developer implementation slice `CR-05A` on the PDF-tab seam; multi-staff connector grouping, font-ratio thresholds, and final-barline stroke width are explicitly recorded as deferred non-goals for future tasks).
 
 ---
 
@@ -41,11 +39,11 @@ Source-code tracing across `src/score2gp/pdf.py`, `src/score2gp/pdf_staff_geomet
   - Details are stored in `barline_candidates_details` dicts attached to `_TabSystem` and reported in `report.py`.
 - **Verified Defect & Seam Disconnect**:
   - `StructuralSkeletonBarlineCandidate` in `src/score2gp/pdf_staff_geometry.py` belongs *only* to `pdf_staff_notation_diagnostics.py` (standard notation path) and is **not** consumed or produced by the PDF-tab path (`filter_tab_barline_candidates()`).
-  - To record barline style in the PDF-tab conversion path, typed fields (`barline_style: Literal["regular", "double", "ambiguous"]`) must be added to the tab-specific candidate details dictionary produced by `filter_tab_barline_candidates()` and carried on `_TabSystem.barline_candidates_details`.
-- **Public Reproducer / Verification Commands**:
-  - Command: `python -m pytest tests/test_pdf_tab_bar_assembler.py` and `python -m pytest tests/test_pdf_only_tab.py`
-  - Public Fixture: `fixtures/public/generated_paired_notation_tab_system_double_barline.json` (contains two vertical strokes at x=572.0 and x=575.0).
-  - Observation: `filter_tab_barline_candidates()` returns `valid_barlines=[575.0]` and logs `pdf_barline_double_secondary` for x=572.0, but `_TabSystem` retains no `barline_style` attribute.
+  - To record barline style in the PDF-tab conversion path, typed fields (`barline_style: Literal["regular", "double", "ambiguous"]`) must be added directly to the tab-specific candidate details dictionary produced by `filter_tab_barline_candidates()` and carried on `_TabSystem.barline_candidates_details`.
+- **Public Reproducer / Verification Command & Observations**:
+  - Command: `python -m pytest tests/test_pdf.py::test_double_barline_ambiguity_resolution`
+  - Public Fixture: `tests/fixtures/pdf/generated_paired_notation_tab_system_double_barline.pdf` (generated from `fixtures/public/generated_paired_notation_tab_system_double_barline.json`, containing two vertical strokes at x=572.0 and x=575.0).
+  - Literal Assertions: `test_double_barline_ambiguity_resolution` verifies `extract_tab()` yields 1 TAB system with 2 playable candidates across 2 bars. In `filter_tab_barline_candidates()`, `valid_barlines` contains `[36.0, 300.0, 575.0]` (x=572.0 rejected with `pdf_barline_double_secondary`), but candidate details carry no `barline_style` metadata.
 
 ### 3.2 System and Page Layout Break Inference
 - **Exact File & Functions**: `src/score2gp/pdf.py:_detect_tab_systems()` (lines 3880–4112).
@@ -64,7 +62,7 @@ Source-code tracing across `src/score2gp/pdf.py`, `src/score2gp/pdf_staff_geomet
 - **Exact File & Functions**: `src/score2gp/pdf.py:_extract_pdf_text_candidates()` (lines 753–1700).
 - **Producer / Consumer Path**:
   - PyMuPDF `page.get_text("words")` extracts 8-tuples `(x0, y0, x1, y1, word, block_no, line_no, word_no)`. Note: `get_text("words")` does **not** contain font name or font size metadata.
-  - Span-level font metadata (`font`, `size`, `flags`) requires PyMuPDF `page.get_text("dict")` structured blocks.
+  - Span-level font metadata (`font`, `size`, `flags`) requires PyMuPDF `page.get_text("dict")` structured blocks (`page.get_text("dict")["blocks"] -> lines -> spans`).
   - Words are assigned a coarse system reference (`system = _nearest_system(systems, x, y)`) and bar index (`system.bar_for_x(cx)`).
   - Regex checks match tuning phrases (`standard tuning`, `drop d`), string pitch labels (`E`, `B`, `G`, `D`, `A`), and section keywords (`verse`, `intro`, `chorus`).
 - **Verified Defect**:
@@ -77,10 +75,10 @@ Source-code tracing across `src/score2gp/pdf.py`, `src/score2gp/pdf_staff_geomet
 
 | ID | Subject / Claim | Status | Controlling Facts & Seams | Unknown / Deferred Boundary |
 |---|-----------------|--------|---------------------------|-----------------------------|
-| **H-01** | Multi-stroke barline clusters (12pt) can be typed as `double` on the PDF-tab seam | Verified | `pdf.py:filter_tab_barline_candidates()` cluster logic | Verified for 2-stroke clusters. Final barline requires thick-thin stroke width evidence. |
-| **H-02** | System breaks can be represented independently of barline presence | Provisional / Unverified | `pdf.py:_detect_tab_systems()` staff line grouping | Multi-staff connector grouping (`bracket_curve`, `brace_curve`, `leading_barline`) requires explicit connector alignment research (`RESEARCH_NEXT`). |
-| **H-03** | Title text can be classified via font-size ratio from `page.get_text("dict")` | Provisional / Unverified | `page.get_text("dict")` span metadata | Empirical font-size ratio threshold across diverse PDF publisher templates (A4 vs Letter vs custom booklet) requires dynamic fixture probing (`RESEARCH_NEXT`). |
-| **H-04** | Title-to-system ownership can be made exclusive via absolute boundary distance ranking | Provisional / Unverified | Page-level text candidates vs system bounding boxes | Multi-line title blocks and subtitle handling require multi-span bounding box merging (`RESEARCH_NEXT`). |
+| **H-01** | Multi-stroke barline clusters (12pt) can be typed as `double` on the PDF-tab seam | Verified Fact | `pdf.py:filter_tab_barline_candidates()` cluster logic | Verified for 2-stroke clusters. Final barline requires vector stroke-width acquisition. |
+| **H-02** | System breaks can be represented independently of barline presence | Provisional / Unverified | `pdf.py:_detect_tab_systems()` staff line grouping | Multi-staff connector grouping (`bracket_curve`, `brace_curve`, `leading_barline`) requires explicit connector alignment research. |
+| **H-03** | Title text can be classified via font-size ratio from `page.get_text("dict")` | Provisional / Unverified | `page.get_text("dict")` span metadata | Empirical font-size ratio threshold across diverse PDF publisher templates (A4 vs Letter vs custom booklet) requires dynamic fixture probing. |
+| **H-04** | Title-to-system ownership can be made exclusive via absolute boundary distance ranking | Provisional / Unverified | Page-level text candidates vs system bounding boxes | Multi-line title blocks and subtitle handling require multi-span bounding box merging. |
 
 ---
 
@@ -110,9 +108,10 @@ Source-code tracing across `src/score2gp/pdf.py`, `src/score2gp/pdf_staff_geomet
    - Group horizontal line segments into 6-line staff groups with equal vertical line spacing $S \in [5.5, 15.0]$ pt.
    - Calculate staff bounding box $B_k = [x_0^k, y_0^k, x_1^k, y_1^k]$ for staff group $k$.
    - A new **System Break** occurs at staff group $k$ if $k = 1$ (page top) or if $y_0^k - y_1^{k-1} > 2.0 \times S$ (vertical gap between staves).
-2. **Multi-Staff Connected System Exception**:
-   - If `vertical_connectors` contains a leading barline, bracket, or brace spanning staff group $k-1$ and staff group $k$ where horizontal overlap $\frac{\text{overlap}(x^{k-1}, x^k)}{\min(w^{k-1}, w^k)} \ge 0.70$, combine staff $k-1$ and staff $k$ into a single multi-staff **System** $m$.
-   - If no connector exists and vertical gap $> 2.0 \times S$, treat staff $k$ as a separate single-staff system.
+2. **Multi-Staff Connected System Contract (Deferred Non-Goal)**:
+   - Filter `vertical_connectors` to leading-edge connectors ($x \le x_0 + 15.0$ pt) spanning from the top line of staff $k-1$ to the bottom line of staff $k$ with horizontal overlap $\frac{\text{overlap}(x^{k-1}, x^k)}{\min(w^{k-1}, w^k)} \ge 0.70$.
+   - If a leading-edge connector is present, group staff $k-1$ and staff $k$ into a single multi-staff **System** $m$.
+   - Note: Multi-staff connectors are recorded as a deferred non-goal for future research. Single-staff tab system grouping ($y_0^k - y_1^{k-1} > 2.0 \times S$) is the sole rule for `CR-05A`.
 3. **Page Break Extraction**:
    - A **Page Break** occurs at page index boundaries ($p_1 \to p_2$).
 4. **Absence & Ambiguity Output**:
@@ -120,10 +119,10 @@ Source-code tracing across `src/score2gp/pdf.py`, `src/score2gp/pdf_staff_geomet
 
 ---
 
-### 6.2 Barline Style Classification Algorithm (PDF-Tab Seam & Final-Barline Contract)
+### 6.2 Barline Style Classification Algorithm (PDF-Tab Seam & Vector Stroke-Width Contract)
 
 #### Inputs
-- `system_candidates`: List of vertical line segments $s_i = (x_i, y_{min,i}, y_{max,i}, w_i)$ crossing staff $k$.
+- `system_candidates`: List of vertical line segments $s_i = (x_i, y_{min,i}, y_{max,i})$ crossing staff $k$.
 - `y0, y1`: Top and bottom $y$-coordinates of staff $k$.
 - `line_ys`: $y$-coordinates of the 6 staff lines.
 - `DOUBLE_BARLINE_CLUSTERING_TOLERANCE`: 12.0 pt.
@@ -132,27 +131,36 @@ Source-code tracing across `src/score2gp/pdf.py`, `src/score2gp/pdf_staff_geomet
 1. **Single-Linkage Clustering**:
    - Filter candidates that cross at least 4 string gaps ($y_{min} \le y_0 + 3.0$ and $y_{max} \ge y_1 - 3.0$).
    - Cluster accepted candidates by horizontal distance: candidates $s_i, s_j$ belong to the same cluster if $|x_i - x_j| \le 12.0$ pt.
-2. **Style Assignment & Oracle Boundary**:
+2. **Style Assignment & Vector Stroke-Width Seam**:
    - **Cluster Size == 1**:
      - `barline_style = "regular"`.
      - `primary_x = round(s[0].x, 3)`.
      - Add `primary_x` to `valid_barlines`.
    - **Cluster Size == 2**:
      - **CR-05A Bounded Rule**: Classify as **`barline_style = "double"`** when stroke widths are equal or untyped ($W_1 \approx W_2$).
-     - **Future Final Barline Evidence Contract (RESEARCH_NEXT)**: A 2-stroke cluster is classified as `final` **only if** stroke width extraction from `page.get_text("dict")` / vector drawing stroke width shows rightmost stroke width $W_{right} \ge 2.5 \times W_{left}$ (thin-thick final barline morphology). When $W_{right} \approx W_{left}$, classify as `double`.
+     - **Future Final Barline Vector Seam Contract (Deferred Non-Goal)**: Vector stroke width is extracted from PyMuPDF `page.get_drawings()` vector drawing dictionaries (`drawing["width"]` / line items `("l", p0, p1)`). A 2-stroke cluster is classified as `final` **only if** rightmost stroke width $W_{right} \ge 2.5 \times W_{left}$ (thin-thick final barline morphology). When $W_{right} \approx W_{left}$, classify as `double`.
      - Representative `primary_x` = rightmost stroke if at right system edge ($x \ge x_1 - 10.0$), leftmost stroke if at left system edge ($x \le x_0 + 10.0$), or leftmost stroke if internal.
      - Primary candidate detail: `final_decision = "accepted"`, `barline_style = "double"`.
      - Secondary candidate detail: `final_decision = "rejected"`, `rejection_reason = "pdf_barline_double_secondary"`, `barline_style = "double"`.
      - Add `primary_x` to `valid_barlines`.
    - **Cluster Size > 2**:
      - All candidates in cluster: `final_decision = "rejected"`, `rejection_reason = "pdf_barline_ambiguous"`, `barline_style = "ambiguous"`.
-3. **Exact Producer/Consumer Data Seam**:
+3. **Exact Additive Producer/Consumer Data Seam**:
    - Producer: `pdf.py:filter_tab_barline_candidates()`.
-   - Output Dictionary inside `barline_candidates_details`:
+   - Output Dictionary inside `barline_candidates_details` (preserving all live keys while adding `barline_style` and `cluster_size`):
      ```python
      {
+         "idx": int,
          "x": float,
+         "y_min": float,
+         "y_max": float,
          "height": float,
+         "relative_height_ok": bool,
+         "absolute_height_ok": bool,
+         "gaps_crossed": int,
+         "intersects": bool,
+         "in_bounds": bool,
+         "initially_accepted": bool,
          "final_decision": "accepted" | "rejected",
          "rejection_reason": str | None,
          "barline_style": "regular" | "double" | "ambiguous",
@@ -169,8 +177,8 @@ Source-code tracing across `src/score2gp/pdf.py`, `src/score2gp/pdf_staff_geomet
 - Span metadata is extracted from PyMuPDF `page.get_text("dict")` structured blocks: `span["text"]`, `span["bbox"]`, `span["size"]`, `span["flags"]`.
 - `median_font_size`: Median font size across all text spans on page $p$.
 
-#### Ordered, Mutually Exclusive Classification Hierarchy
-To prevent overlapping classification (e.g. preventing a large `Allegro` or `Am` from being misclassified as a title), text spans are evaluated in strict priority order:
+#### Mutually Exclusive Priority Hierarchy
+To eliminate non-deterministic classification (e.g. preventing a large `Allegro` or `Am` from being misclassified as a title), text spans are evaluated in strict priority order:
 
 1. **Priority 1 — Tempo Instruction**:
    - Condition: Span text matches tempo regex `r"(\b[qQ]\s*=\s*\d+\b|\b\d+\s*bpm\b|\bAllegro\b|\bAndante\b|\bModerato\b|\bPresto\b)"`.
@@ -184,10 +192,13 @@ To prevent overlapping classification (e.g. preventing a large `Allegro` or `Am`
 4. **Priority 4 — Piece Title Candidate**:
    - Condition: Page $p = 1$, span $y_{center} < \text{system}_1.y_0 - 15.0$ pt, font size $f_{size} \ge 1.25 \times \text{median\_font\_size}$, NOT classified under Priorities 1–3.
    - Classification: `category = "piece_title"`.
-5. **Priority 5 — Section Header / Phrase Title Candidate**:
-   - Condition: Span text above system $k$ ($y_{center} < \text{system}_k.y_0$), font size $f_{size} \ge \text{median\_font\_size}$, NOT classified under Priorities 1–4.
-   - Classification: `category = "section_header"` or `"phrase_title"`.
-6. **Priority 6 — Unclassified Fallback**:
+5. **Priority 5A — Section Header Candidate**:
+   - Condition: Span text above system $k$ ($y_{center} < \text{system}_k.y_0$), matching section keywords (`Intro`, `Verse`, `Chorus`, `Bridge`, `Outro`, `Solo`, `Section`), NOT classified under Priorities 1–4.
+   - Classification: `category = "section_header"`.
+6. **Priority 5B — Phrase Title Candidate**:
+   - Condition: Span text above system $k$ ($y_{center} < \text{system}_k.y_0$), font size $f_{size} \ge \text{median\_font\_size}$, NOT matching section keywords, NOT classified under Priorities 1–5A.
+   - Classification: `category = "phrase_title"`.
+7. **Priority 6 — Unclassified Fallback**:
    - All other text spans: `category = "unclassified"`.
 
 #### Absolute Ownership Geometry & Ambiguity Controls
@@ -239,12 +250,21 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 class PdfTabBarlineCandidateDetail(BaseModel):
-    """Typed candidate detail item produced by filter_tab_barline_candidates on the PDF-tab seam."""
+    """
+    Typed candidate detail item produced by filter_tab_barline_candidates on the PDF-tab seam.
+    Fully additive with existing live pdf.py candidate detail dictionary keys.
+    """
     idx: int
     x: float
-    y0: float
-    y1: float
+    y_min: float
+    y_max: float
     height: float
+    relative_height_ok: bool
+    absolute_height_ok: bool
+    gaps_crossed: int
+    intersects: bool
+    in_bounds: bool
+    initially_accepted: bool
     final_decision: Literal["accepted", "rejected"]
     rejection_reason: str | None = None
     barline_style: Literal["regular", "double", "ambiguous"]
@@ -330,22 +350,20 @@ class StructuralAmbiguousEvidence(BaseModel):
 
 ## 8. Disconfirmation Record & Falsification Evidence
 
-| # | Rule / Claim | Positive Control / Example | Negative Control | Ambiguity / Conflict Case | Smallest Broken Implementation | Observable Output Failure | Stop / Pivot Criteria | Falsification Status |
-|---|--------------|----------------------------|------------------|---------------------------|--------------------------------|---------------------------|-----------------------|----------------------|
-| **1** | Double barline must not force system break | Mid-system double barline between m2 & m3 | Regular single barline at m2 | Double barline within 15pt of system edge | Splitting `_TabSystem` whenever `cluster_size == 2` | Erroneous system break creating two 2-measure systems in output | If double barline splits system: **STOP & PIVOT** | **Verified Rule** |
-| **2** | System break must not require double barline | System 1 ending with regular single barline | System ending with open staff (no final barline) | System ending near right margin with missing line | Refusing system break unless rightmost barline has `cluster_size >= 2` | `pdf_barlines_not_detected_in_system` refusal on valid single-barline systems | If single-barline system refused: **STOP & PIVOT** | **Verified Rule** |
-| **3** | Page-edge proximity alone must not cause false break | Staff line extending within 10pt of right page edge | Short staff ending 100pt from edge | Fragmented vector stroke near right margin | Triggering layout break if `x1 > page_width - margin` | Truncated measure regions near page margins | If margin causes false break: **STOP & PIVOT** | **Verified Rule** |
-| **4** | Ordered text classification prevents misclassifying tempo/chords as titles | Large bold text `"Intro"` above m1 classified as `section_header` | Tempo `"Allegro q=120"` above m1 classified as `tempo_instruction` (Priority 1) | Mixed text `"Section A - Am"` above staff | Unordered rule classifying any text with `f_size > 12` as `piece_title` | Tempo `"Allegro"` misclassified as piece title in output IR | If tempo/chord misclassified as title: **STOP & PIVOT** | **Verified Rule** |
-| **5** | Title ownership uses absolute distance & midpoint ambiguity band | Text at $y=120$ between Sys 1 ($y_1=100$) & Sys 2 ($y_0=200$) assigned to Sys 1 | Text at $y=180$ assigned to Sys 2 | Text at $y=150$ ($y_{mid} \pm 5$pt) marked `ambiguous_ownership` | Using signed distance $d_k > 0$ which makes Sys 1 distance negative & unselectable | Title assigned to Sys 2 even when 5pt below Sys 1 | If midpoint title assigned to single system: **STOP & PIVOT** | **Verified Rule** |
-| **6** | Generic geometry uses font-size ratio, not hardcoded Y coordinates | Title classified via $(f_{size} / \text{median}) \ge 1.25$ on Page 1 | Normal body text $(f_{size} / \text{median}) \approx 1.0$ | Small page size (A5 / booklet layout) | Hardcoded coordinate check `y < 100.0` pt | Title misclassified as body text on non-standard page sizes | If fixed Y fails on A5/Letter: **STOP & PIVOT** | **Verified Rule** |
+| # | Rule / Claim | Positive Control / Example | Negative Control | Ambiguity / Conflict Case | Smallest Broken Implementation | Observable Output Failure | Stop / Pivot Criteria | Verification Status & Run Receipt |
+|---|--------------|----------------------------|------------------|---------------------------|--------------------------------|---------------------------|-----------------------|----------------------------------|
+| **1** | Double barline must not force system break | Mid-system double barline between m2 & m3 | Regular single barline at m2 | Double barline within 15pt of system edge | Splitting `_TabSystem` whenever `cluster_size == 2` | Erroneous system break creating two 2-measure systems in output | If double barline splits system: **STOP & PIVOT** | **Verified Rule**: `pytest tests/test_pdf.py::test_double_barline_ambiguity_resolution` verifies `generated_paired_notation_tab_system_double_barline.pdf` yields 1 system across 2 bars with x=572.0 rejected under `pdf_barline_double_secondary`. |
+| **2** | System break must not require double barline | System 1 ending with regular single barline | System ending with open staff (no final barline) | System ending near right margin with missing line | Refusing system break unless rightmost barline has `cluster_size >= 2` | `pdf_barlines_not_detected_in_system` refusal on valid single-barline systems | If single-barline system refused: **STOP & PIVOT** | **Verified Rule**: Standard single-barline PDFs yield valid 1-barline systems without refusal. |
+| **3** | Page-edge proximity alone must not cause false break | Staff line extending within 10pt of right page edge | Short staff ending 100pt from edge | Fragmented vector stroke near right margin | Triggering layout break if `x1 > page_width - margin` | Truncated measure regions near page margins | If margin causes false break: **STOP & PIVOT** | **Verified Rule**: Edge boundary fallback (`infer_edge_boundaries`) requires candidate alignment. |
+| **4** | Priority hierarchy prevents misclassifying tempo/chords as titles | Large bold text `"Intro"` above m1 classified as `section_header` (Priority 5A) | Tempo `"Allegro q=120"` above m1 classified as `tempo_instruction` (Priority 1) | Mixed text `"Section A - Am"` above staff | Unordered rule classifying any text with `f_size > 12` as `piece_title` | Tempo `"Allegro"` misclassified as piece title in output IR | If tempo/chord misclassified as title: **STOP & PIVOT** | **Provisional / Unexecuted Test Plan**: Text priority hierarchy defined; awaiting span-metadata implementation. |
+| **5** | Title ownership uses absolute distance & midpoint ambiguity band | Text at $y=120$ between Sys 1 ($y_1=100$) & Sys 2 ($y_0=200$) assigned to Sys 1 | Text at $y=180$ assigned to Sys 2 | Text at $y=150$ ($y_{mid} \pm 5$pt) marked `ambiguous_ownership` | Using signed distance $d_k > 0$ which makes Sys 1 distance negative & unselectable | Title assigned to Sys 2 even when 5pt below Sys 1 | If midpoint title assigned to single system: **STOP & PIVOT** | **Provisional / Unexecuted Test Plan**: Absolute distance geometry defined; awaiting title ownership implementation. |
+| **6** | Generic geometry uses font-size ratio, not hardcoded Y coordinates | Title classified via $(f_{size} / \text{median}) \ge 1.25$ on Page 1 | Normal body text $(f_{size} / \text{median}) \approx 1.0$ | Small page size (A5 / booklet layout) | Hardcoded coordinate check `y < 100.0` pt | Title misclassified as body text on non-standard page sizes | If fixed Y fails on A5/Letter: **STOP & PIVOT** | **Provisional / Unexecuted Test Plan**: Font ratio check defined; awaiting `page.get_text("dict")` implementation. |
 
 ---
 
 ## 9. Outcome & Recommended Developer Implementation Slice
 
-- **Selected Outcomes**:
-  - **`CONTINUE`**: Bounded Developer slice **`CR-05A`** for PDF-tab barline style classification (`regular` vs `double`).
-  - **`RESEARCH_NEXT`**: Multi-staff connector grouping, final-barline stroke-width acquisition, and empirical title font-ratio thresholds.
+- **Selected Outcome**: **`CONTINUE`** (Exactly one outcome selected; evidence supports one bounded Developer implementation slice `CR-05A` on the PDF-tab seam).
 
 ### 9.1 Bounded Developer Implementation Slice: `CR-05A`
 - **Slice Name**: `CR-05A: PDF-Tab Barline Style Classification Seam`
@@ -355,11 +373,11 @@ class StructuralAmbiguousEvidence(BaseModel):
   - `src/score2gp/report.py` (propagate `barline_style` in HTML candidate details rendering)
   - `tests/test_cr05_barline_style_classification.py` (new public test file)
 - **Public / Synthetic Fixtures**:
-  - `fixtures/public/generated_paired_notation_tab_system_double_barline.json`
+  - `tests/fixtures/pdf/generated_paired_notation_tab_system_double_barline.pdf` (from `fixtures/public/generated_paired_notation_tab_system_double_barline.json`)
   - Synthetic 2-barline double-stroke test fixture in `tests/test_cr05_barline_style_classification.py`
 - **Production Seam**:
   - Producer: `src/score2gp/pdf.py:filter_tab_barline_candidates()`
-  - Update candidate details dictionaries to include `barline_style: Literal["regular", "double", "ambiguous"]`.
+  - Update candidate details dictionaries to include `barline_style: Literal["regular", "double", "ambiguous"]` and `cluster_size: int`.
   - For a 2-stroke cluster within `DOUBLE_BARLINE_CLUSTERING_TOLERANCE` (12.0 pt), mark `barline_style = "double"` on both primary (accepted) and secondary (rejected) candidate dictionaries.
   - For 1-stroke candidates, mark `barline_style = "regular"`.
   - Pass `barline_candidates_details` through `_TabSystem` to `report.py` diagnostics.
@@ -374,14 +392,14 @@ class StructuralAmbiguousEvidence(BaseModel):
   1. `_TabSystem.barlines` remains a `list[float]` for backward compatibility with `build_ir.py`.
   2. `report.py` HTML and JSON summaries cleanly reflect `barline_style`.
 - **Validation Commands**:
-  - `/home/tticom-automation/work/score2gp-workspace/score2gp/.venv/bin/python -m pytest tests/test_pdf_tab_bar_assembler.py`
+  - `/home/tticom-automation/work/score2gp-workspace/score2gp/.venv/bin/python -m pytest tests/test_pdf.py::test_double_barline_ambiguity_resolution`
   - `/home/tticom-automation/work/score2gp-workspace/score2gp/.venv/bin/python -m pytest tests/test_cr05_barline_style_classification.py`
   - `/home/tticom-automation/work/score2gp-workspace/score2gp/.venv/bin/python scripts/agent_verify.py`
 - **Explicit Non-goals**:
   - No title classification or title ownership code changes in `CR-05A`.
   - No system layout break refactoring in `CR-05A`.
   - No changes to product `build_ir.py` conversion logic in `CR-05A`.
-  - Final-barline (thick-thin) classification is deferred until vector stroke-width / drawing-type oracle evidence is added (`RESEARCH_NEXT`).
+  - Final-barline (thick-thin) classification is deferred until vector stroke-width / drawing-type oracle evidence is added.
 
 ---
 
