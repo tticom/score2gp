@@ -233,3 +233,18 @@ def test_cr05a_filled_rect_sub_pt_canonical_right_edge() -> None:
     assert details[0]["final_decision"] == "accepted"
     assert details[0]["barline_style"] == "regular"
     assert details[0]["cluster_size"] == 1
+
+
+def test_cr05a_horizontal_segment_merge_provenance_preservation() -> None:
+    """Verifies that merge_collinear_horizontal_segments preserves provenance via merge_with."""
+    from score2gp.pdf_geometry import merge_collinear_horizontal_segments
+
+    seg1 = _LineSegment(0.0, 100.0, 100.0, 100.0, primitive_kind="line", primitive_id="d0_i0", stroke_width=1.25)
+    seg2 = _LineSegment(100.0, 100.0, 200.0, 100.0, primitive_kind="line", primitive_id="d0_i1", stroke_width=2.0)
+
+    merged = merge_collinear_horizontal_segments([seg1, seg2])
+    assert len(merged) == 1
+    m = merged[0]
+    assert m.primitive_kind == "line"
+    assert m.primitive_id is None
+    assert m.stroke_width == 2.0

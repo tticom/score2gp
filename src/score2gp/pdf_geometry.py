@@ -114,7 +114,7 @@ def merge_collinear_horizontal_segments(segments: list[_LineSegment], tolerance_
                 new_x1 = max(last_x1, seg_x1)
                 new_y0 = (last.y0 + seg.y0) / 2
                 new_y1 = (last.y1 + seg.y1) / 2
-                pass1_merged[-1] = _LineSegment(new_x0, new_y0, new_x1, new_y1)
+                pass1_merged[-1] = last.merge_with(seg, new_x0, new_y0, new_x1, new_y1)
                 continue
         pass1_merged.append(seg)
 
@@ -209,7 +209,7 @@ def merge_collinear_horizontal_segments(segments: list[_LineSegment], tolerance_
                 new_x1 = max(last_x1, seg_x1)
                 new_y0 = (last.y0 + seg.y0) / 2
                 new_y1 = (last.y1 + seg.y1) / 2
-                merged[-1] = _LineSegment(new_x0, new_y0, new_x1, new_y1)
+                merged[-1] = last.merge_with(seg, new_x0, new_y0, new_x1, new_y1)
                 continue
 
         merged.append(seg)
