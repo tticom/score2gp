@@ -3673,13 +3673,17 @@ def filter_tab_barline_candidates(
         "pdf_barline_rejected_relative_height": 0,
         "pdf_barline_double_secondary": 0,
         "pdf_barline_inherited_too_close": 0,
+        "pdf_barline_mixed_primitive_provenance": 0,
+        "pdf_barline_ambiguous_rect_width": 0,
+        "pdf_barline_decorative_fill_or_wide_rect": 0,
+        "pdf_barline_rect_secondary": 0,
     }
     valid_barlines = []
     rejected_count = 0
     details = []
     staff_height = y1 - y0
 
-    # Pass 1: Pre-calculate baseline acceptance properties for each candidate
+    # Pass 1: Pre-calculate baseline acceptance properties and special provenance/width rejections
     candidate_data = []
     ys = sorted(line_ys)
     for idx, s in enumerate(candidates):
@@ -3688,32 +3692,46 @@ def filter_tab_barline_candidates(
         y_max = max(s.y0, s.y1)
         height = y_max - y_min
 
-        # 1. Check horizontal bounds
-        in_bounds = not (x_val < x0 - 8.0 or x_val > x1 + 8.0)
+        special_rejection_reason = None
+        special_barline_style = None
 
-        # 2. Check staff intersection
+        if s.primitive_kind == "mixed":
+            special_rejection_reason = "pdf_barline_mixed_primitive_provenance"
+            special_barline_style = "ambiguous"
+        elif s.primitive_kind == "rect_edge" and s.source_rect_width is not None:
+            w = s.source_rect_width
+            if w > 12.0:
+                special_rejection_reason = "pdf_barline_decorative_fill_or_wide_rect"
+                special_barline_style = "ambiguous"
+            elif 4.0 < w <= 12.0:
+                special_rejection_reason = "pdf_barline_ambiguous_rect_width"
+                special_barline_style = "ambiguous"
+
+        in_bounds = not (x_val < x0 - 8.0 or x_val > x1 + 8.0)
         intersects = not (y_max < y0 or y_min > y1)
 
-        # Calculate gaps crossed
         gaps_crossed = 0
         for i in range(len(ys) - 1):
             if y_min <= ys[i] + 1.5 and y_max >= ys[i+1] - 1.5:
                 gaps_crossed += 1
 
-        # Intersection height and coverage ratio
         overlap_y_min = max(y_min, y0)
         overlap_y_max = min(y_max, y1)
         overlap_height = max(0.0, overlap_y_max - overlap_y_min)
         coverage_ratio = overlap_height / staff_height if staff_height > 0 else 0.0
 
         crosses_entire_staff = (y_min <= y0 + 4.0 and y_max >= y1 - 4.0) or (gaps_crossed >= len(ys) - 1)
-
         absolute_height_ok = (height >= 40.0)
         relative_height_ok = crosses_entire_staff
         is_accepted_relative = (height >= 20.0 and relative_height_ok)
 
-        # Initially accepted is True if it would pass all individual checks
-        initially_accepted = in_bounds and intersects and (absolute_height_ok or is_accepted_relative) and relative_height_ok
+        initially_accepted = (
+            special_rejection_reason is None
+            and in_bounds
+            and intersects
+            and (absolute_height_ok or is_accepted_relative)
+            and relative_height_ok
+        )
 
         candidate_data.append({
             "idx": idx,
@@ -3729,9 +3747,11 @@ def filter_tab_barline_candidates(
             "in_bounds": in_bounds,
             "intersects": intersects,
             "initially_accepted": initially_accepted,
+            "special_rejection_reason": special_rejection_reason,
+            "special_barline_style": special_barline_style,
         })
 
-    # Pass 2: Perform single-linkage clustering on initially accepted candidates
+    # Pass 2: Single-linkage clustering on initially accepted candidates
     accepted_candidates = [item for item in candidate_data if item["initially_accepted"]]
     accepted_candidates.sort(key=lambda item: item["x"])
 
@@ -3749,69 +3769,93 @@ def filter_tab_barline_candidates(
     if current_cluster:
         clusters.append(current_cluster)
 
-    # Assign decisions based on cluster membership and initial status
-    final_decisions = {}  # idx -> (is_accepted, rejection_reason)
+    final_decisions = {}  # idx -> (is_accepted, rejection_reason, barline_style, cluster_size)
 
-    # Put all clusters' results into decisions
     for cluster in clusters:
-        if len(cluster) > 1:
-            is_rightmost_edge = any(item["x"] >= x1 - 10.0 for item in cluster)
-            is_leftmost_edge = any(item["x"] <= x0 + 10.0 for item in cluster)
-
-            if is_rightmost_edge:
-                # Multi-line rightmost edge cluster (double barline). Choose the rightmost candidate.
-                representative = cluster[-1]
-                final_decisions[representative["idx"]] = (True, None)
-                for item in cluster[:-1]:
-                    final_decisions[item["idx"]] = (False, "pdf_barline_double_secondary")
-            elif is_leftmost_edge:
-                # Multi-line leftmost edge cluster (double barline). Choose the leftmost candidate.
-                representative = cluster[0]
-                final_decisions[representative["idx"]] = (True, None)
-                for item in cluster[1:]:
-                    final_decisions[item["idx"]] = (False, "pdf_barline_double_secondary")
+        if len(cluster) == 1:
+            item = cluster[0]
+            final_decisions[item["idx"]] = (True, None, "regular", 1)
+        elif len(cluster) == 2:
+            c0, c1 = cluster[0], cluster[1]
+            p0_id = c0["segment"].primitive_id
+            p1_id = c1["segment"].primitive_id
+            if p0_id is not None and p0_id == p1_id and c0["segment"].primitive_kind == "rect_edge":
+                representative = c1
+                secondary = c0
+                final_decisions[representative["idx"]] = (True, None, "regular", 1)
+                final_decisions[secondary["idx"]] = (False, "pdf_barline_rect_secondary", "regular", 1)
             else:
-                # Internal cluster of close barlines.
-                if len(cluster) == 2:
-                    # Select the leftmost candidate as the representative for v0.1.
-                    # This is limited to size-2 close clusters; larger internal clusters remain ambiguous.
+                is_rightmost_edge = any(item["x"] >= x1 - 10.0 for item in cluster)
+                is_leftmost_edge = any(item["x"] <= x0 + 10.0 for item in cluster)
+                if is_rightmost_edge:
+                    representative = cluster[-1]
+                    for item in cluster:
+                        if item is representative:
+                            final_decisions[item["idx"]] = (True, None, "double", 2)
+                        else:
+                            final_decisions[item["idx"]] = (False, "pdf_barline_double_secondary", "double", 2)
+                elif is_leftmost_edge:
+                    representative = cluster[0]
+                    for item in cluster:
+                        if item is representative:
+                            final_decisions[item["idx"]] = (True, None, "double", 2)
+                        else:
+                            final_decisions[item["idx"]] = (False, "pdf_barline_double_secondary", "double", 2)
+                else:
                     representative = cluster[0]
                     secondary = cluster[1]
-                    final_decisions[representative["idx"]] = (True, None)
-                    final_decisions[secondary["idx"]] = (False, "pdf_barline_double_secondary")
-                else:
-                    # Treat clusters of size 3 or more as ambiguous!
-                    for item in cluster:
-                        final_decisions[item["idx"]] = (False, "pdf_barline_ambiguous")
+                    final_decisions[representative["idx"]] = (True, None, "double", 2)
+                    final_decisions[secondary["idx"]] = (False, "pdf_barline_double_secondary", "double", 2)
         else:
-            # Single-line cluster. They are default accepted initially,
-            # but will be verified by the ambiguity check below.
-            for item in cluster:
-                final_decisions[item["idx"]] = (True, None)
+            is_rightmost_edge = any(item["x"] >= x1 - 10.0 for item in cluster)
+            is_leftmost_edge = any(item["x"] <= x0 + 10.0 for item in cluster)
+            if is_rightmost_edge:
+                representative = cluster[-1]
+                for item in cluster:
+                    if item is representative:
+                        final_decisions[item["idx"]] = (True, None, "ambiguous", len(cluster))
+                    else:
+                        final_decisions[item["idx"]] = (False, "pdf_barline_double_secondary", "ambiguous", len(cluster))
+            elif is_leftmost_edge:
+                representative = cluster[0]
+                for item in cluster:
+                    if item is representative:
+                        final_decisions[item["idx"]] = (True, None, "ambiguous", len(cluster))
+                    else:
+                        final_decisions[item["idx"]] = (False, "pdf_barline_double_secondary", "ambiguous", len(cluster))
+            else:
+                for item in cluster:
+                    final_decisions[item["idx"]] = (False, "pdf_barline_ambiguous", "ambiguous", len(cluster))
 
-    # For candidates that were NOT initially accepted, determine their rejection reason
     for item in candidate_data:
         if not item["initially_accepted"]:
-            reason = None
-            if not item["in_bounds"]:
-                reason = "pdf_barline_outside_system_bounds"
-            elif not item["intersects"]:
-                reason = "pdf_barline_outside_staff_region"
-            elif not item["relative_height_ok"]:
-                if item["gaps_crossed"] < len(ys) - 2:
-                    reason = "pdf_barline_crosses_insufficient_string_gaps"
-                else:
-                    reason = "pdf_barline_partial_staff_crossing"
-            elif not (item["absolute_height_ok"] or (item["height"] >= 20.0 and item["relative_height_ok"])):
-                reason = "pdf_barline_too_short_absolute"
+            if item["special_rejection_reason"] is not None:
+                final_decisions[item["idx"]] = (
+                    False,
+                    item["special_rejection_reason"],
+                    item["special_barline_style"],
+                    None,
+                )
+            else:
+                reason = None
+                if not item["in_bounds"]:
+                    reason = "pdf_barline_outside_system_bounds"
+                elif not item["intersects"]:
+                    reason = "pdf_barline_outside_staff_region"
+                elif not item["relative_height_ok"]:
+                    if item["gaps_crossed"] < len(ys) - 2:
+                        reason = "pdf_barline_crosses_insufficient_string_gaps"
+                    else:
+                        reason = "pdf_barline_partial_staff_crossing"
+                elif not (item["absolute_height_ok"] or (item["height"] >= 20.0 and item["relative_height_ok"])):
+                    reason = "pdf_barline_too_short_absolute"
 
-            if reason is None:
-                reason = "pdf_barline_rejected_relative_height"
+                if reason is None:
+                    reason = "pdf_barline_rejected_relative_height"
 
-            final_decisions[item["idx"]] = (False, reason)
+                final_decisions[item["idx"]] = (False, reason, "unclassified_stroke", None)
 
-    # Perform ambiguity check among currently accepted candidates
-    accepted_indices = {idx for idx, (accepted, _) in final_decisions.items() if accepted}
+    accepted_indices = {idx for idx, (accepted, _, _, _) in final_decisions.items() if accepted}
     for idx in list(accepted_indices):
         item = next(it for it in candidate_data if it["idx"] == idx)
         is_ambiguous = False
@@ -3824,12 +3868,12 @@ def filter_tab_barline_candidates(
                 break
 
         if is_ambiguous:
-            final_decisions[idx] = (False, "pdf_barline_ambiguous")
+            _, _, _, size = final_decisions[idx]
+            final_decisions[idx] = (False, "pdf_barline_ambiguous", "ambiguous", size)
 
-    # Construct the final returned structures
     for item in candidate_data:
         idx = item["idx"]
-        is_accepted, reason = final_decisions[idx]
+        is_accepted, reason, barline_style, cluster_size = final_decisions[idx]
 
         if is_accepted:
             valid_barlines.append(round(item["x"], 3))
@@ -3839,7 +3883,6 @@ def filter_tab_barline_candidates(
                 if reason in rejection_reasons:
                     rejection_reasons[reason] += 1
 
-                # Increment general categories matching original logic
                 if reason == "pdf_barline_outside_staff_region":
                     rejection_reasons["pdf_barline_does_not_cross_staff"] += 1
                 elif reason == "pdf_barline_crosses_insufficient_string_gaps":
@@ -3854,7 +3897,7 @@ def filter_tab_barline_candidates(
             if item["height"] < 40.0:
                 rejection_reasons["pdf_barline_too_short"] += 1
 
-        details.append({
+        detail_entry = {
             "x": round(item["x"], 3),
             "y_min": round(item["y_min"], 3),
             "y_max": round(item["y_max"], 3),
@@ -3866,7 +3909,15 @@ def filter_tab_barline_candidates(
             "relative_staff_crossing_decision": "accepted" if item["relative_height_ok"] else "rejected",
             "final_decision": "accepted" if is_accepted else "rejected",
             "rejection_reason": reason,
-        })
+            "barline_style": barline_style,
+            "cluster_size": cluster_size,
+        }
+        if "inherited" in item["segment"].__dict__ or hasattr(item["segment"], "inherited"):
+            inherited_val = getattr(item["segment"], "inherited", None)
+            if inherited_val is not None:
+                detail_entry["inherited"] = inherited_val
+
+        details.append(detail_entry)
 
     valid_barlines = _unique_sorted(valid_barlines)
     return {
@@ -3874,6 +3925,7 @@ def filter_tab_barline_candidates(
         "rejected_count": rejected_count,
         "rejection_reasons": rejection_reasons,
         "details": details,
+        "barline_candidates_details": details,
     }
 
 
@@ -3903,7 +3955,7 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
                 new_y_min = min(y_min_s, y_min_e)
                 new_y_max = max(y_max_s, y_max_e)
                 new_x = (x_s + x_e) / 2
-                deduped_verticals[i] = _LineSegment(new_x, new_y_min, new_x, new_y_max)
+                deduped_verticals[i] = existing.merge_with(s, new_x, new_y_min, new_x, new_y_max)
                 found_similar = True
                 break
         if not found_similar:
