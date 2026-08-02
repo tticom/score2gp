@@ -233,4 +233,3 @@ def test_cr05a_filled_rect_sub_pt_canonical_right_edge() -> None:
     assert details[0]["final_decision"] == "accepted"
     assert details[0]["barline_style"] == "regular"
     assert details[0]["cluster_size"] == 1
-
