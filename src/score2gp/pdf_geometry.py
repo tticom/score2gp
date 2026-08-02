@@ -14,7 +14,7 @@ def is_exact_duplicate_or_reverse(s1: _LineSegment, s2: _LineSegment) -> bool:
 
     x1 = (s1.x0 + s1.x1) / 2.0
     x2 = (s2.x0 + s2.x1) / 2.0
-    if abs(x1 - x2) > 0.5:
+    if abs(x1 - x2) > 1e-3:
         return False
 
     y1_0, y1_1 = s1.y0, s1.y1

@@ -347,3 +347,31 @@ def test_cr05a_pymupdf_two_barline_strokes_reverse_duplicate_removed() -> None:
     assert len(details) == 1
     assert details[0]["barline_style"] == "double"
     assert details[0]["cluster_size"] == 2
+
+
+def test_cr05a_distinct_strokes_point_four_pt_apart_classified_as_double() -> None:
+    """Proves that two distinct barline strokes 0.4 pt apart (x=100.0 vs x=100.4) remain distinct and classify as double."""
+    from score2gp.pdf import _detect_tab_systems
+
+    doc = fitz.open()
+    page = doc.new_page()
+    shape = page.new_shape()
+    for y in [154.0, 160.4, 166.8, 173.2, 179.6, 186.0]:
+        shape.draw_line(fitz.Point(36.0, y), fitz.Point(575.0, y))
+    shape.draw_line(fitz.Point(100.0, 150.0), fitz.Point(100.0, 190.0))
+    shape.finish(color=(0, 0, 0))
+    shape.commit()
+
+    shape2 = page.new_shape()
+    shape2.draw_line(fitz.Point(100.4, 150.0), fitz.Point(100.4, 190.0))
+    shape2.finish(color=(0, 0, 0))
+    shape2.commit()
+
+    systems = _detect_tab_systems(page, 1)
+    assert len(systems) == 1
+    # Strokes at x=100.0 and x=100.4 remain distinct candidates and classify as double barline
+    assert systems[0].barlines == [100.0]
+    details = [d for d in systems[0].barline_candidates_details if d.get("final_decision") == "accepted"]
+    assert len(details) == 1
+    assert details[0]["barline_style"] == "double"
+    assert details[0]["cluster_size"] == 2
