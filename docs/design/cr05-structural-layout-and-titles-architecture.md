@@ -4,7 +4,7 @@
 
 This document establishes a generic, testable, and decoupled technical architecture for score2gp PDF conversion to independently classify:
 
-1. **Ordinary and double barlines** (with explicit vector stroke-width contracts for future final-barline classification);
+1. **Ordinary, double, and final barlines** (with explicit vector stroke-width contracts for future final-barline classification);
 2. **System and page layout breaks** (separating single-staff tab systems and multi-staff connected systems);
 3. **Phrase or piece titles and their ownership by a system or measure**.
 
@@ -75,7 +75,7 @@ Source-code tracing across `src/score2gp/pdf.py`, `src/score2gp/pdf_staff_geomet
   - To preserve 100% losslessness without fabricating cluster/style values for rejected strokes, the new fields are added as optional/nullable:
     - `barline_style: Literal["regular", "double", "final", "ambiguous", "unclassified_stroke"] | None = None`
     - `cluster_size: int | None = Field(default=None, ge=1)`
-  - Rejected strokes receive `barline_style = "unclassified_stroke"`, `cluster_size = None`. Accepted/clustered strokes receive `barline_style = "regular"` (cluster size 1), `"double"` (cluster size 2), `"final"` (thick-thin), or `"ambiguous"` (internal cluster size > 2).
+  - Rejected strokes receive `barline_style = "unclassified_stroke"`, `cluster_size = None`. Accepted/clustered strokes receive `barline_style = "regular"` (cluster size 1), `"double"` (cluster size 2), `"final"` (thick-thin), or `"ambiguous"` (cluster size > 2 or 3+ stroke edge cluster).
 - **Public Reproducer / Verification Command & Observations**:
   - Command: `python -m pytest tests/test_pdf.py::test_double_barline_ambiguity_resolution`
   - Public Fixture: `tests/fixtures/pdf/generated_paired_notation_tab_system_double_barline.pdf` (derived from `fixtures/public/generated_paired_notation_tab_system_double_barline.json`, containing vertical strokes at x=36.0, 300.0, 572.0, 575.0).
@@ -164,25 +164,26 @@ Source-code tracing across `src/score2gp/pdf.py`, `src/score2gp/pdf_staff_geomet
 - `DOUBLE_BARLINE_CLUSTERING_TOLERANCE`: 12.0 pt.
 
 #### Deterministic Rules (Bounded for CR-05A)
-1. **Single-Linkage Clustering**:
+1. **Single-Linkage Clustering & Pre-filtering**:
    - Filter candidates that cross at least 4 string gaps ($y_{min} \le y_0 + 3.0$ and $y_{max} \ge y_1 - 3.0$). Candidates failing height/gap crossing receive `barline_style = "unclassified_stroke"`, `cluster_size = None`.
    - Cluster accepted candidates by horizontal distance: candidates $s_i, s_j$ belong to the same cluster if $|x_i - x_j| \le 12.0$ pt.
-2. **Edge & Internal Decision Behavior**:
+2. **Edge Representative & Semantic Style Disambiguation**:
    - **Cluster Size == 1**:
      - `barline_style = "regular"`, `cluster_size = 1`.
-     - `primary_x = round(s[0].x, 3)`.
-     - Add `primary_x` to `valid_barlines`.
-   - **Multi-Stroke Rightmost Edge Cluster** ($x \ge x_1 - 10.0$ pt):
-     - Representative is rightmost stroke (`final_decision = "accepted"`, `barline_style = "double"`, `cluster_size = len(cluster)`). Add rightmost x to `valid_barlines`.
-     - Preceding strokes in cluster: `final_decision = "rejected"`, `rejection_reason = "pdf_barline_double_secondary"`, `barline_style = "double"`, `cluster_size = len(cluster)`.
-   - **Multi-Stroke Leftmost Edge Cluster** ($x \le x_0 + 10.0$ pt):
-     - Representative is leftmost stroke (`final_decision = "accepted"`, `barline_style = "double"`, `cluster_size = len(cluster)`). Add leftmost x to `valid_barlines`.
-     - Succeeding strokes in cluster: `final_decision = "rejected"`, `rejection_reason = "pdf_barline_double_secondary"`, `barline_style = "double"`, `cluster_size = len(cluster)`.
-   - **Internal Cluster** ($x_0 + 10.0 < x < x_1 - 10.0$ pt):
-     - Cluster Size == 2: Representative is leftmost stroke (`final_decision = "accepted"`, `barline_style = "double"`, `cluster_size = 2`). Other stroke: `final_decision = "rejected"`, `rejection_reason = "pdf_barline_double_secondary"`, `barline_style = "double"`, `cluster_size = 2`. Add leftmost x to `valid_barlines`.
-     - Cluster Size > 2: All strokes in cluster: `final_decision = "rejected"`, `rejection_reason = "pdf_barline_ambiguous"`, `barline_style = "ambiguous"`, `cluster_size = len(cluster)`.
-3. **Negative Oracle for Parallel Non-Barline Strokes**:
-   - Short vertical strokes (e.g. note stems, drawn embellishments, or TAB fret digit strokes) failing staff gap crossing ($y_{min} > y_0 + 3.0$ or $y_{max} < y_1 - 3.0$) are rejected before clustering with `barline_style = "unclassified_stroke"`, `cluster_size = None` and are **never** clustered into a `double` barline or added to `valid_barlines`.
+     - Add `primary_x = round(s[0].x, 3)` to `valid_barlines`.
+   - **2-Stroke Edge or Internal Cluster** (`cluster_size == 2`):
+     - Representative is rightmost stroke for rightmost edge ($x \ge x_1 - 10.0$ pt), or leftmost stroke for leftmost edge / internal cluster. Add representative x to `valid_barlines`.
+     - Both candidate detail dicts in cluster: `barline_style = "double"`, `cluster_size = 2`.
+     - Secondary stroke detail: `final_decision = "rejected"`, `rejection_reason = "pdf_barline_double_secondary"`.
+   - **3+ Stroke Edge Cluster** (`cluster_size >= 3`, $x \ge x_1 - 10.0$ or $x \le x_0 + 10.0$):
+     - **Boundary Retention**: Retain representative edge stroke in `valid_barlines` for 100% backward-compatible system bounding box calculation.
+     - **Semantic Style Disambiguation**: Mark **`barline_style = "ambiguous"`** and `cluster_size = len(cluster)` on all candidate detail dicts in the 3+ stroke cluster (separating edge boundary retention from double-barline style assignment).
+   - **3+ Stroke Internal Cluster** (`cluster_size >= 3`, $x_0 + 10.0 < x < x_1 - 10.0$):
+     - All candidates in cluster: `final_decision = "rejected"`, `rejection_reason = "pdf_barline_ambiguous"`, `barline_style = "ambiguous"`, `cluster_size = len(cluster)`.
+3. **Full-Height Parallel Non-Barline Negative Oracle**:
+   - Test: Two full-height parallel vertical strokes ($x_1=100.0, x_2=103.0$, passing height/gap crossing).
+   - Discriminator: If vector drawing primitive metadata or layer context indicates non-barline primitive type (e.g. curve fill rectangle or non-stroke primitive), set `barline_style = "ambiguous"` or `final_decision = "rejected"`.
+   - If untyped vector stroke segments pass height/gap crossing and cluster size == 2 without drawing primitive metadata, set `barline_style = "double"` for the bounded CR-05A geometric double barline seam.
 4. **Durable Vector Stroke-Width Seam Contract (Deferred Non-Goal)**:
    - Vector stroke width is extracted from PyMuPDF `page.get_drawings()` vector drawing dictionaries (`drawing["width"]` / line items `("l", p0, p1)`).
    - A 2-stroke cluster is classified as `final` **only if** rightmost stroke width $W_{right} \ge 2.5 \times W_{left}$ (thin-thick final barline morphology). When $W_{right} \approx W_{left}$, classify as `double`.
@@ -286,7 +287,7 @@ To map a text candidate `text_span` (`TextClassificationEvidence`) to a measure 
 if any(w in system.grouping_warnings for w in ("pdf_bar_box_outside_system_bounds", "pdf_bar_box_too_narrow", "pdf_bar_box_overlaps_neighbor")):
     # Fail closed for invalid system bar boxes
     return StructuralAmbiguousEvidence(
-        feature_kind="conflicting_titles",
+        feature_kind="invalid_measure_geometry",
         competing_candidates=[text_span.text_id],
         resolution_status="unresolved_refusal"
     )
@@ -298,14 +299,22 @@ x_center = (text_span.bbox[0] + text_span.bbox[2]) / 2.0
 bar_index, bar_warnings = system.bar_for_x(x_center)
 bar_bounds = system.bar_bounds_for_x(x_center)
 
-# 4. Complete unwrap, bounds, overlap, and error-handling path:
-if bar_index is None or bar_bounds is None or bar_warnings:
+# 4. Handle boundary ambiguity or unassigned measure boundaries:
+if bar_index is None or bar_bounds is None:
     return StructuralAbsenceOfEvidence(
-        target_feature="title",
+        target_feature="measure_ownership",
         location_scope=f"system_{system.system_index}",
-        reason="below_detection_threshold"
+        reason="measure_boundary_unassigned"
     )
 
+if bar_warnings:
+    return StructuralAmbiguousEvidence(
+        feature_kind="measure_overlap_ambiguity",
+        competing_candidates=[text_span.text_id],
+        resolution_status="unresolved_refusal"
+    )
+
+# 5. Compute measure region overlap
 start_x, end_x = bar_bounds
 span_width = max(1.0, text_span.bbox[2] - text_span.bbox[0])
 overlap_width = max(0.0, min(text_span.bbox[2], end_x) - max(text_span.bbox[0], start_x))
@@ -322,7 +331,7 @@ if overlap_ratio >= 0.50:
     )
 else:
     return StructuralAbsenceOfEvidence(
-        target_feature="title",
+        target_feature="measure_ownership",
         location_scope=f"measure_{bar_index}",
         reason="suppressed_by_rule"
     )
@@ -421,13 +430,13 @@ class TitleMeasureOwnership(BaseModel):
 
 class StructuralAbsenceOfEvidence(BaseModel):
     """Explicit model for absence of evidence vs detection failure."""
-    target_feature: Literal["barline", "system_break", "page_break", "title"]
+    target_feature: Literal["barline", "system_break", "page_break", "title", "measure_ownership"]
     location_scope: str
-    reason: Literal["no_vector_primitives", "below_detection_threshold", "suppressed_by_rule"]
+    reason: Literal["no_vector_primitives", "below_detection_threshold", "suppressed_by_rule", "measure_boundary_unassigned"]
 
 class StructuralAmbiguousEvidence(BaseModel):
     """Explicit model for unresolved structural evidence."""
-    feature_kind: Literal["barline_cluster", "overlapping_systems", "conflicting_titles"]
+    feature_kind: Literal["barline_cluster", "overlapping_systems", "conflicting_titles", "invalid_measure_geometry", "measure_overlap_ambiguity"]
     competing_candidates: list[str]
     resolution_status: Literal["unresolved_refusal", "deferred_to_user"]
 ```
@@ -438,12 +447,14 @@ class StructuralAmbiguousEvidence(BaseModel):
 
 | # | Rule / Claim | Positive Control / Example | Negative Control | Ambiguity / Conflict Case | Smallest Broken Implementation | Observable Output Failure | Stop / Pivot Criteria | Verification Status & Run Receipt |
 |---|--------------|----------------------------|------------------|---------------------------|--------------------------------|---------------------------|-----------------------|----------------------------------|
-| **1** | Double barline must not force system break | Mid-system double barline between m2 & m3 | Regular single barline at m2 | Double barline within 15pt of system edge | Splitting `_TabSystem` whenever `cluster_size == 2` | Erroneous system break creating two 2-measure systems in output | If double barline splits system: **STOP & PIVOT** | **Verified Rule**: `pytest tests/test_pdf.py::test_double_barline_ambiguity_resolution` verifies `extract_tab()` yields 1 system across 2 bars with x=572.0 rejected under `pdf_barline_double_secondary`. Live probe: `valid_barlines=[36.0, 300.0, 575.0]`. |
-| **2** | System break must not require double barline | System 1 ending with regular single barline | System ending with open staff (no final barline) | System ending near right margin with missing line | Refusing system break unless rightmost barline has `cluster_size >= 2` | `pdf_barlines_not_detected_in_system` refusal on valid single-barline systems | If single-barline system refused: **STOP & PIVOT** | **Verified Rule**: `pytest tests/test_pdf.py::test_edge_boundary_fallback` verifies single-barline systems construct valid 1-barline systems without refusal. |
-| **3** | Page-edge proximity alone must not cause false break | Staff line extending within 10pt of right page edge | Short staff ending 100pt from edge | Fragmented vector stroke near right margin | Triggering layout break if `x1 > page_width - margin` | Truncated measure regions near page margins | If margin causes false break: **STOP & PIVOT** | **Verified Rule**: `pytest tests/test_pdf_only_tab.py` verifies edge boundary fallback (`infer_edge_boundaries`) requires candidate alignment. |
+| **1** | Double barline must not force system break | Mid-system double barline between m2 & m3 | Regular single barline at m2 | Double barline within 15pt of system edge | Splitting `_TabSystem` whenever `cluster_size == 2` | Erroneous system break creating two 2-measure systems in output | If double barline splits system: **STOP & PIVOT** | **Verified Rule**: `pytest tests/test_pdf.py::test_double_barline_ambiguity_resolution` verifies `extract_tab()` yields 1 system across 2 bars (`len(system_indices)==1`, `playable[0].bar_index==1`, `playable[1].bar_index==2`) with x=572.0 rejected under `pdf_barline_double_secondary`. |
+| **2** | System break must not require double barline | System 1 ending with regular single barline | System ending with open staff (no final barline) | System ending near right margin with missing line | Refusing system break unless rightmost barline has `cluster_size >= 2` | `pdf_barlines_not_detected_in_system` refusal on valid single-barline systems | If single-barline system refused: **STOP & PIVOT** | **Verified Rule**: `pytest tests/test_pdf.py::test_refined_system_detected_no_bars_diagnostics` verifies single-barline systems construct valid 1-barline systems without refusal. |
+| **3** | Page-edge proximity alone must not cause false break | Staff line extending within 10pt of right page edge | Short staff ending 100pt from edge | Fragmented vector stroke near right margin | Triggering layout break if `x1 > page_width - margin` | Truncated measure regions near page margins | If margin causes false break: **STOP & PIVOT** | **Verified Rule**: `pytest tests/test_pdf_only_tab.py::test_pdf_only_does_not_stack_same_x_across_pages` verifies page/edge boundary independence. |
 | **4** | Priority hierarchy prevents misclassifying tempo/chords as titles | Large bold text `"Intro"` above m1 classified as `section_header` (Priority 5A) | Tempo `"Allegro q=120"` above m1 classified as `tempo_instruction` (Priority 1) | Mixed text `"Section A - Am"` above staff | Unordered rule classifying any text with `f_size > 12` as `piece_title` | Tempo `"Allegro"` misclassified as piece title in output IR | If tempo/chord misclassified as title: **STOP & PIVOT** | **Provisional / Unexecuted Test Plan**: Text priority hierarchy defined; awaiting span-metadata implementation. |
 | **5** | Title ownership uses absolute distance & midpoint ambiguity band | Text at $y=120$ between Sys 1 ($y_1=100$) & Sys 2 ($y_0=200$) assigned to Sys 1 | Text at $y=180$ assigned to Sys 2 | Text at $y=150$ ($y_{mid} \pm 5$pt) marked `ambiguous_ownership` | Using signed distance $d_k > 0$ which makes Sys 1 distance negative & unselectable | Title assigned to Sys 2 even when 5pt below Sys 1 | If midpoint title assigned to single system: **STOP & PIVOT** | **Provisional / Unexecuted Test Plan**: Absolute distance geometry defined; awaiting title ownership implementation. |
 | **6** | Generic geometry uses font-size ratio, not hardcoded Y coordinates | Title classified via $(f_{size} / \text{median}) \ge 1.25$ on Page 1 | Normal body text $(f_{size} / \text{median}) \approx 1.0$ | Small page size (A5 / booklet layout) | Hardcoded coordinate check `y < 100.0` pt | Title misclassified as body text on non-standard page sizes | If fixed Y fails on A5/Letter: **STOP & PIVOT** | **Provisional / Unexecuted Test Plan**: Font ratio check defined; awaiting `page.get_text("dict")` implementation. |
+| **7** | CR-05A 2-stroke double barline style assignment | 2 vertical strokes within 12pt classified as `double` | Single vertical stroke classified as `regular` | Short non-crossing strokes classified as `unclassified_stroke` | Omitting `barline_style` in candidate details | IR retains no barline style information | If 2-stroke double barline lost: **STOP & PIVOT** | **Provisional / Unexecuted Test Plan**: Authorized for CR-05A implementation slice. |
+| **8** | 3+ Stroke edge cluster separates boundary retention from double style | 3 strokes at right edge ($x=88, 94, 100$) retain $x=100.0$ in `valid_barlines` | 2-stroke edge cluster produces `barline_style = "double"` | 3-stroke edge cluster marked `barline_style = "ambiguous"` | Labeling 3+ stroke edge cluster as `double` | Fabricated double-barline style for 3+ stroke edge cluster | If 3+ edge cluster labeled double: **STOP & PIVOT** | **Provisional / Unexecuted Test Plan**: Authorized for CR-05A implementation slice. |
 
 ---
 
@@ -467,11 +478,16 @@ class StructuralAmbiguousEvidence(BaseModel):
   - For initially rejected strokes: set `barline_style = "unclassified_stroke"` and `cluster_size = None`.
   - For a 2-stroke cluster within `DOUBLE_BARLINE_CLUSTERING_TOLERANCE` (12.0 pt), set `barline_style = "double"` and `cluster_size = 2` on both primary (accepted) and secondary (rejected) candidate dictionaries.
   - For 1-stroke candidates, set `barline_style = "regular"` and `cluster_size = 1`.
+  - For 3+ stroke edge clusters, retain representative edge stroke in `valid_barlines` for backward compatibility, but set `barline_style = "ambiguous"` and `cluster_size = len(cluster)` on candidate detail dicts.
   - Pass `barline_candidates_details` through `_TabSystem` to `report.py` diagnostics.
 - **Authorized Negative Oracle Test**:
   - Test Name: `test_cr05a_parallel_non_barline_rejection` in `tests/test_cr05_barline_style_classification.py`.
-  - Input: Two close parallel vertical line segments ($x_1=100.0, x_2=103.0$) failing staff line gap crossing ($y_{min} > y_0 + 3.0$ or $y_{max} < y_1 - 3.0$, e.g. note stems or TAB fret digit strokes).
-  - Assertion: Both strokes are rejected during height filtering with `final_decision = "rejected"`, `barline_style = "unclassified_stroke"`, `cluster_size = None` and are **never** clustered into a `double` barline or added to `valid_barlines`.
+  - Input: Two full-height parallel vertical line segments ($x_1=100.0, x_2=103.0$, passing height/gap crossing).
+  - Discriminator Assertion: If drawing primitive metadata indicates non-barline primitive type, set `barline_style = "ambiguous"` or `final_decision = "rejected"`. Untyped segments passing height/gap crossing produce `barline_style = "double"` for bounded CR-05A geometric double barline classification.
+- **Authorized Edge Triple-Cluster Test**:
+  - Test Name: `test_cr05a_edge_triple_cluster_style_ambiguous` in `tests/test_cr05_barline_style_classification.py`.
+  - Input: Three full-height parallel vertical line segments ($x_1=88.0, x_2=94.0, x_3=100.0$) at right system edge $x=100.0$.
+  - Assertion: Retains $x=100.0$ in `valid_barlines` for backward-compatible system boundary calculation, but marks `barline_style = "ambiguous"` and `cluster_size = 3` on candidate detail dicts.
 - **Acceptance Assertions**:
   1. 2-stroke clusters in `filter_tab_barline_candidates()` produce `barline_style = "double"` in `barline_candidates_details`.
   2. Single vertical strokes produce `barline_style = "regular"`.
@@ -479,7 +495,7 @@ class StructuralAmbiguousEvidence(BaseModel):
   4. Multi-stroke edge clusters preserve existing edge representative selection (`valid_barlines` float array and system bounds remain 100% backward-compatible).
 - **Negative Controls**:
   1. Single vertical line produces `barline_style = "regular"`.
-  2. Parallel non-barline strokes fail height check and produce `barline_style = "unclassified_stroke"`.
+  2. Parallel non-barline strokes failing height check produce `barline_style = "unclassified_stroke"`.
   3. No system breaks are added or removed when converting double barline scores.
 - **Compatibility Requirements**:
   1. `_TabSystem.barlines` remains a `list[float]` for backward compatibility with `build_ir.py`.
