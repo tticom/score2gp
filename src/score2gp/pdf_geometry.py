@@ -17,6 +17,7 @@ class _LineSegment:
     primitive_id: str | None = None
     stroke_width: float | None = None
     source_rect_width: float | None = None
+    drawing_idx: int | None = None
 
     @property
     def is_horizontal(self) -> bool:
@@ -27,7 +28,11 @@ class _LineSegment:
         return abs(self.x0 - self.x1) <= 1.0 and abs(self.y1 - self.y0) >= 40.0
 
     def merge_with(self, other: _LineSegment, new_x0: float, new_y0: float, new_x1: float, new_y1: float) -> _LineSegment:
-        if self.primitive_kind == other.primitive_kind and self.primitive_id == other.primitive_id and self.primitive_id is not None:
+        if (
+            self.primitive_kind == other.primitive_kind
+            and self.primitive_id == other.primitive_id
+            and self.primitive_id is not None
+        ):
             merged_kind = self.primitive_kind
             merged_id = self.primitive_id
             merged_rect_w = self.source_rect_width
@@ -56,41 +61,38 @@ def _drawing_segments(drawings: list[dict[str, Any]]) -> list[_LineSegment]:
     segments = []
     for drawing_idx, drawing in enumerate(drawings):
         pen_width = float(drawing.get("width", 1.0)) if drawing.get("width") is not None else None
-        d_rect = drawing.get("rect")
         d_fill = drawing.get("fill")
-        is_filled_rect_dwg = False
-        dwg_rect_w = None
-        if d_fill is not None and d_rect is not None:
-            w = abs(float(d_rect.x1) - float(d_rect.x0))
-            if 0.0 < w <= 4.0:
-                is_filled_rect_dwg = True
-                dwg_rect_w = w
+        d_type = drawing.get("type")
+        d_rect = drawing.get("rect")
+        is_filled_path = (d_fill is not None) or (d_type in ("f", "fs"))
+        dwg_rect_w = abs(float(d_rect.width)) if (is_filled_path and d_rect is not None and 0.0 < float(d_rect.width) <= 4.0) else None
 
         for item_idx, item in enumerate(drawing.get("items", [])):
             if not item:
                 continue
-            if is_filled_rect_dwg:
-                item_id = f"drawing_{drawing_idx}"
-                item_kind = "rect_edge"
-                item_rect_w = dwg_rect_w
-            else:
-                item_id = f"drawing_{drawing_idx}_item_{item_idx}"
-                item_kind = "line"
-                item_rect_w = None
-
+            item_id = f"drawing_{drawing_idx}_item_{item_idx}"
             if item[0] == "l" and len(item) >= 3:
                 p0 = item[1]
                 p1 = item[2]
+                if is_filled_path and dwg_rect_w is not None:
+                    p_kind = "rect_edge"
+                    p_id = f"drawing_{drawing_idx}"
+                    p_rect_w = dwg_rect_w
+                else:
+                    p_kind = "line"
+                    p_id = item_id
+                    p_rect_w = None
+
                 segments.append(
                     _LineSegment(
                         float(p0.x),
                         float(p0.y),
                         float(p1.x),
                         float(p1.y),
-                        primitive_kind=item_kind,
-                        primitive_id=item_id,
+                        primitive_kind=p_kind,
+                        primitive_id=p_id,
                         stroke_width=pen_width,
-                        source_rect_width=item_rect_w,
+                        source_rect_width=p_rect_w,
                     )
                 )
             elif item[0] == "re" and len(item) >= 2:
