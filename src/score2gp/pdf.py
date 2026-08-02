@@ -3687,7 +3687,10 @@ def filter_tab_barline_candidates(
     candidate_data = []
     ys = sorted(line_ys)
     for idx, s in enumerate(candidates):
-        x_val = (s.x0 + s.x1) / 2
+        if s.primitive_kind == "rect_edge":
+            x_val = max(s.x0, s.x1)
+        else:
+            x_val = (s.x0 + s.x1) / 2
         y_min = min(s.y0, s.y1)
         y_max = max(s.y0, s.y1)
         height = y_max - y_min
@@ -3954,7 +3957,10 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
             if abs(x_s - x_e) <= 1.0 and not (y_max_s < y_min_e or y_max_e < y_min_s):
                 new_y_min = min(y_min_s, y_min_e)
                 new_y_max = max(y_max_s, y_max_e)
-                new_x = (x_s + x_e) / 2
+                if existing.primitive_kind == "rect_edge" and s.primitive_kind == "rect_edge" and existing.primitive_id is not None and existing.primitive_id == s.primitive_id:
+                    new_x = max(max(existing.x0, existing.x1), max(s.x0, s.x1))
+                else:
+                    new_x = (x_s + x_e) / 2
                 deduped_verticals[i] = existing.merge_with(s, new_x, new_y_min, new_x, new_y_max)
                 found_similar = True
                 break

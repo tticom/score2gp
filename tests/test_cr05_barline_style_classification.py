@@ -209,3 +209,28 @@ def test_cr05a_report_html_rendering_barline_style() -> None:
 
     leg_html = _grouping_system_html(legacy_system)
     assert "Candidate at x=100.0" in leg_html
+
+
+def test_cr05a_filled_rect_sub_pt_canonical_right_edge() -> None:
+    """End-to-end PyMuPDF pipeline test verifying 0.8pt rectangle preserves canonical right edge (100.8)."""
+    from score2gp.pdf import _detect_tab_systems
+
+    doc = fitz.open()
+    page = doc.new_page()
+    shape = page.new_shape()
+    for y in [154.0, 160.4, 166.8, 173.2, 179.6, 186.0]:
+        shape.draw_line(fitz.Point(36.0, y), fitz.Point(575.0, y))
+    shape.draw_rect(fitz.Rect(100.0, 150.0, 100.8, 190.0))
+    shape.finish(fill=(0, 0, 0))
+    shape.commit()
+
+    systems = _detect_tab_systems(page, 1)
+    assert len(systems) == 1
+    assert systems[0].barlines == [100.8]
+    details = systems[0].barline_candidates_details
+    assert len(details) == 1
+    assert details[0]["x"] == 100.8
+    assert details[0]["final_decision"] == "accepted"
+    assert details[0]["barline_style"] == "regular"
+    assert details[0]["cluster_size"] == 1
+
