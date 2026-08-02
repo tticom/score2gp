@@ -245,6 +245,35 @@ def test_cr05a_horizontal_segment_merge_provenance_preservation() -> None:
     merged = merge_collinear_horizontal_segments([seg1, seg2])
     assert len(merged) == 1
     m = merged[0]
-    assert m.primitive_kind == "line"
+    assert m.primitive_kind == "mixed"
     assert m.primitive_id is None
     assert m.stroke_width == 2.0
+
+
+def test_cr05a_coincident_different_primitives_fail_closed_mixed_provenance() -> None:
+    """Coincident vertical primitives with different primitive IDs merge to mixed and fail closed downstream."""
+    from score2gp.pdf import _detect_tab_systems
+
+    doc = fitz.open()
+    page = doc.new_page()
+    shape = page.new_shape()
+    for y in [154.0, 160.4, 166.8, 173.2, 179.6, 186.0]:
+        shape.draw_line(fitz.Point(36.0, y), fitz.Point(575.0, y))
+    # Two overlapping vertical lines from separate draw operations at x=100.0 and x=100.4 (within 1.0pt dedup)
+    shape.draw_line(fitz.Point(100.0, 150.0), fitz.Point(100.0, 190.0))
+    shape.finish(color=(0, 0, 0))
+    shape.commit()
+
+    shape2 = page.new_shape()
+    shape2.draw_line(fitz.Point(100.4, 150.0), fitz.Point(100.4, 190.0))
+    shape2.finish(color=(0, 0, 0))
+    shape2.commit()
+
+    systems = _detect_tab_systems(page, 1)
+    assert len(systems) == 1
+    assert systems[0].barlines == []
+    details = systems[0].barline_candidates_details
+    assert len(details) == 1
+    assert details[0]["final_decision"] == "rejected"
+    assert details[0]["barline_style"] == "ambiguous"
+    assert details[0]["rejection_reason"] == "pdf_barline_mixed_primitive_provenance"
