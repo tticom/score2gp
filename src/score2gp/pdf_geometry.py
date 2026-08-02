@@ -2,9 +2,28 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import statistics
-from typing import Any
+from typing import Any, Literal
 
 FRAGMENTED_STAFF_LINE_NEIGHBOR_MAX_GAP = 360.0
+
+
+def is_exact_duplicate_or_reverse(s1: _LineSegment, s2: _LineSegment) -> bool:
+    """Returns True if s1 and s2 are exact geometric duplicates or reverse duplicates of the same line segment."""
+    if s1.primitive_kind != s2.primitive_kind or s1.primitive_kind is None:
+        return False
+
+    x1 = (s1.x0 + s1.x1) / 2.0
+    x2 = (s2.x0 + s2.x1) / 2.0
+    if abs(x1 - x2) > 1e-3:
+        return False
+
+    y1_0, y1_1 = s1.y0, s1.y1
+    y2_0, y2_1 = s2.y0, s2.y1
+
+    forward_match = abs(y1_0 - y2_0) <= 1.0 and abs(y1_1 - y2_1) <= 1.0
+    reverse_match = abs(y1_0 - y2_1) <= 1.0 and abs(y1_1 - y2_0) <= 1.0
+
+    return forward_match or reverse_match
 
 
 @dataclass(frozen=True)
@@ -13,6 +32,10 @@ class _LineSegment:
     y0: float
     x1: float
     y1: float
+    primitive_kind: Literal["line", "rect_edge", "mixed"] | None = None
+    primitive_id: str | None = None
+    stroke_width: float | None = None
+    source_rect_width: float | None = None
 
     @property
     def is_horizontal(self) -> bool:
@@ -22,25 +45,68 @@ class _LineSegment:
     def is_vertical(self) -> bool:
         return abs(self.x0 - self.x1) <= 1.0 and abs(self.y1 - self.y0) >= 40.0
 
+    def merge_with(self, other: _LineSegment, new_x0: float, new_y0: float, new_x1: float, new_y1: float) -> _LineSegment:
+        is_exact_dup = is_exact_duplicate_or_reverse(self, other)
+        if (
+            self.primitive_kind == other.primitive_kind
+            and (is_exact_dup or (self.primitive_id == other.primitive_id and self.primitive_id is not None))
+        ):
+            merged_kind = self.primitive_kind
+            merged_id = self.primitive_id or other.primitive_id
+            merged_rect_w = self.source_rect_width
+        else:
+            merged_kind = "mixed"
+            merged_id = None
+            rect_widths = [w for w in (self.source_rect_width, other.source_rect_width) if w is not None]
+            merged_rect_w = max(rect_widths) if rect_widths else None
+
+        widths = [w for w in (self.stroke_width, other.stroke_width) if w is not None]
+        merged_stroke_w = max(widths) if widths else None
+
+        return _LineSegment(
+            x0=new_x0,
+            y0=new_y0,
+            x1=new_x1,
+            y1=new_y1,
+            primitive_kind=merged_kind,
+            primitive_id=merged_id,
+            stroke_width=merged_stroke_w,
+            source_rect_width=merged_rect_w,
+        )
+
 
 def _drawing_segments(drawings: list[dict[str, Any]]) -> list[_LineSegment]:
     segments = []
-    for drawing in drawings:
-        for item in drawing.get("items", []):
+    for drawing_idx, drawing in enumerate(drawings):
+        pen_width = float(drawing.get("width", 1.0)) if drawing.get("width") is not None else None
+        for item_idx, item in enumerate(drawing.get("items", [])):
             if not item:
                 continue
+            item_id = f"drawing_{drawing_idx}_item_{item_idx}"
             if item[0] == "l" and len(item) >= 3:
                 p0 = item[1]
                 p1 = item[2]
-                segments.append(_LineSegment(float(p0.x), float(p0.y), float(p1.x), float(p1.y)))
+                segments.append(
+                    _LineSegment(
+                        float(p0.x),
+                        float(p0.y),
+                        float(p1.x),
+                        float(p1.y),
+                        primitive_kind="line",
+                        primitive_id=item_id,
+                        stroke_width=pen_width,
+                        source_rect_width=None,
+                    )
+                )
             elif item[0] == "re" and len(item) >= 2:
                 rect = item[1]
+                rect_w = abs(float(rect.x1) - float(rect.x0))
                 segments.extend(
                     [
-                        _LineSegment(float(rect.x0), float(rect.y0), float(rect.x1), float(rect.y0)),
-                        _LineSegment(float(rect.x1), float(rect.y0), float(rect.x1), float(rect.y1)),
-                        _LineSegment(float(rect.x1), float(rect.y1), float(rect.x0), float(rect.y1)),
-                        _LineSegment(float(rect.x0), float(rect.y1), float(rect.x0), float(rect.y0)),
+                        _LineSegment(float(rect.x0), float(rect.y0), float(rect.x1), float(rect.y0), primitive_kind="rect_edge", primitive_id=item_id, stroke_width=pen_width, source_rect_width=rect_w),
+                        _LineSegment(float(rect.x1), float(rect.y0), float(rect.x1), float(rect.y1), primitive_kind="rect_edge", primitive_id=item_id, stroke_width=pen_width, source_rect_width=rect_w),
+                        _LineSegment(float(rect.x1), float(rect.y1), float(rect.x0), float(rect.y1), primitive_kind="rect_edge", primitive_id=item_id, stroke_width=pen_width, source_rect_width=rect_w),
+                        _LineSegment(float(rect.x0), float(rect.y1), float(rect.x0), float(rect.y0), primitive_kind="rect_edge", primitive_id=item_id, stroke_width=pen_width, source_rect_width=rect_w),
                     ]
                 )
     return segments
@@ -68,7 +134,7 @@ def merge_collinear_horizontal_segments(segments: list[_LineSegment], tolerance_
                 new_x1 = max(last_x1, seg_x1)
                 new_y0 = (last.y0 + seg.y0) / 2
                 new_y1 = (last.y1 + seg.y1) / 2
-                pass1_merged[-1] = _LineSegment(new_x0, new_y0, new_x1, new_y1)
+                pass1_merged[-1] = last.merge_with(seg, new_x0, new_y0, new_x1, new_y1)
                 continue
         pass1_merged.append(seg)
 
@@ -163,7 +229,7 @@ def merge_collinear_horizontal_segments(segments: list[_LineSegment], tolerance_
                 new_x1 = max(last_x1, seg_x1)
                 new_y0 = (last.y0 + seg.y0) / 2
                 new_y1 = (last.y1 + seg.y1) / 2
-                merged[-1] = _LineSegment(new_x0, new_y0, new_x1, new_y1)
+                merged[-1] = last.merge_with(seg, new_x0, new_y0, new_x1, new_y1)
                 continue
 
         merged.append(seg)
