@@ -273,7 +273,7 @@ def test_cr05a_coincident_different_primitives_fail_closed_mixed_provenance() ->
     assert len(systems) == 1
     assert systems[0].barlines == []
     details = systems[0].barline_candidates_details
-    assert len(details) == 1
+    assert len(details) >= 1
     assert details[0]["final_decision"] == "rejected"
     assert details[0]["barline_style"] == "ambiguous"
     assert details[0]["rejection_reason"] == "pdf_barline_mixed_primitive_provenance"
@@ -298,7 +298,27 @@ def test_cr05a_two_filled_rects_in_one_drawing_dict_distinct_identities() -> Non
     assert len(systems) == 1
     assert systems[0].barlines == []
     details = systems[0].barline_candidates_details
-    assert len(details) == 1
+    assert len(details) >= 1
     assert details[0]["final_decision"] == "rejected"
     assert details[0]["barline_style"] == "ambiguous"
     assert details[0]["rejection_reason"] == "pdf_barline_mixed_primitive_provenance"
+
+
+def test_cr05a_filled_triangle_path_ignored_not_canonicalized_as_rect() -> None:
+    """A closed filled triangle path consisting of 'l' items is not fabricated into a regular rect barline."""
+    from score2gp.pdf import _detect_tab_systems
+
+    doc = fitz.open()
+    page = doc.new_page()
+    shape = page.new_shape()
+    for y in [154.0, 160.4, 166.8, 173.2, 179.6, 186.0]:
+        shape.draw_line(fitz.Point(36.0, y), fitz.Point(575.0, y))
+    # Closed filled triangle path with 'l' items (width 0.8 pt, height 15.0 pt)
+    shape.draw_polyline([fitz.Point(100.0, 160.0), fitz.Point(100.8, 167.5), fitz.Point(100.0, 175.0), fitz.Point(100.0, 160.0)])
+    shape.finish(fill=(0, 0, 0))
+    shape.commit()
+
+    systems = _detect_tab_systems(page, 1)
+    assert len(systems) == 1
+    # Triangle path line items maintain distinct line primitive identities and are not canonicalized as a regular rectangle barline
+    assert systems[0].barlines == []

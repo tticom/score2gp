@@ -17,7 +17,6 @@ class _LineSegment:
     primitive_id: str | None = None
     stroke_width: float | None = None
     source_rect_width: float | None = None
-    drawing_idx: int | None = None
 
     @property
     def is_horizontal(self) -> bool:
@@ -61,12 +60,6 @@ def _drawing_segments(drawings: list[dict[str, Any]]) -> list[_LineSegment]:
     segments = []
     for drawing_idx, drawing in enumerate(drawings):
         pen_width = float(drawing.get("width", 1.0)) if drawing.get("width") is not None else None
-        d_fill = drawing.get("fill")
-        d_type = drawing.get("type")
-        d_rect = drawing.get("rect")
-        is_filled_path = (d_fill is not None) or (d_type in ("f", "fs"))
-        dwg_rect_w = abs(float(d_rect.width)) if (is_filled_path and d_rect is not None and 0.0 < float(d_rect.width) <= 4.0) else None
-
         for item_idx, item in enumerate(drawing.get("items", [])):
             if not item:
                 continue
@@ -74,25 +67,16 @@ def _drawing_segments(drawings: list[dict[str, Any]]) -> list[_LineSegment]:
             if item[0] == "l" and len(item) >= 3:
                 p0 = item[1]
                 p1 = item[2]
-                if is_filled_path and dwg_rect_w is not None:
-                    p_kind = "rect_edge"
-                    p_id = f"drawing_{drawing_idx}"
-                    p_rect_w = dwg_rect_w
-                else:
-                    p_kind = "line"
-                    p_id = item_id
-                    p_rect_w = None
-
                 segments.append(
                     _LineSegment(
                         float(p0.x),
                         float(p0.y),
                         float(p1.x),
                         float(p1.y),
-                        primitive_kind=p_kind,
-                        primitive_id=p_id,
+                        primitive_kind="line",
+                        primitive_id=item_id,
                         stroke_width=pen_width,
-                        source_rect_width=p_rect_w,
+                        source_rect_width=None,
                     )
                 )
             elif item[0] == "re" and len(item) >= 2:

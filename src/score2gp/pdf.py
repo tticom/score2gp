@@ -3782,12 +3782,14 @@ def filter_tab_barline_candidates(
             c0, c1 = cluster[0], cluster[1]
             p0_id = c0["segment"].primitive_id
             p1_id = c1["segment"].primitive_id
-            if p0_id is not None and p0_id == p1_id and c0["segment"].primitive_kind == "rect_edge":
+            p0_kind = c0["segment"].primitive_kind
+            p1_kind = c1["segment"].primitive_kind
+            if p0_id is not None and p0_id == p1_id and p0_kind == "rect_edge":
                 representative = c1
                 secondary = c0
                 final_decisions[representative["idx"]] = (True, None, "regular", 1)
                 final_decisions[secondary["idx"]] = (False, "pdf_barline_rect_secondary", "regular", 1)
-            else:
+            elif p0_kind in ("line", None) and p1_kind in ("line", None):
                 is_rightmost_edge = any(item["x"] >= x1 - 10.0 for item in cluster)
                 is_leftmost_edge = any(item["x"] <= x0 + 10.0 for item in cluster)
                 if is_rightmost_edge:
@@ -3809,26 +3811,35 @@ def filter_tab_barline_candidates(
                     secondary = cluster[1]
                     final_decisions[representative["idx"]] = (True, None, "double", 2)
                     final_decisions[secondary["idx"]] = (False, "pdf_barline_double_secondary", "double", 2)
-        else:
-            is_rightmost_edge = any(item["x"] >= x1 - 10.0 for item in cluster)
-            is_leftmost_edge = any(item["x"] <= x0 + 10.0 for item in cluster)
-            if is_rightmost_edge:
-                representative = cluster[-1]
-                for item in cluster:
-                    if item is representative:
-                        final_decisions[item["idx"]] = (True, None, "ambiguous", len(cluster))
-                    else:
-                        final_decisions[item["idx"]] = (False, "pdf_barline_double_secondary", "ambiguous", len(cluster))
-            elif is_leftmost_edge:
-                representative = cluster[0]
-                for item in cluster:
-                    if item is representative:
-                        final_decisions[item["idx"]] = (True, None, "ambiguous", len(cluster))
-                    else:
-                        final_decisions[item["idx"]] = (False, "pdf_barline_double_secondary", "ambiguous", len(cluster))
             else:
                 for item in cluster:
-                    final_decisions[item["idx"]] = (False, "pdf_barline_ambiguous", "ambiguous", len(cluster))
+                    final_decisions[item["idx"]] = (False, "pdf_barline_mixed_primitive_provenance", "ambiguous", 2)
+        else:
+            primitive_ids = {item["segment"].primitive_id for item in cluster if item["segment"].primitive_id is not None}
+            has_rect = any(item["segment"].primitive_kind == "rect_edge" for item in cluster)
+            if len(primitive_ids) > 1 and has_rect:
+                for item in cluster:
+                    final_decisions[item["idx"]] = (False, "pdf_barline_mixed_primitive_provenance", "ambiguous", len(cluster))
+            else:
+                is_rightmost_edge = any(item["x"] >= x1 - 10.0 for item in cluster)
+                is_leftmost_edge = any(item["x"] <= x0 + 10.0 for item in cluster)
+                if is_rightmost_edge:
+                    representative = cluster[-1]
+                    for item in cluster:
+                        if item is representative:
+                            final_decisions[item["idx"]] = (True, None, "ambiguous", len(cluster))
+                        else:
+                            final_decisions[item["idx"]] = (False, "pdf_barline_double_secondary", "ambiguous", len(cluster))
+                elif is_leftmost_edge:
+                    representative = cluster[0]
+                    for item in cluster:
+                        if item is representative:
+                            final_decisions[item["idx"]] = (True, None, "ambiguous", len(cluster))
+                        else:
+                            final_decisions[item["idx"]] = (False, "pdf_barline_double_secondary", "ambiguous", len(cluster))
+                else:
+                    for item in cluster:
+                        final_decisions[item["idx"]] = (False, "pdf_barline_ambiguous", "ambiguous", len(cluster))
 
     for item in candidate_data:
         if not item["initially_accepted"]:
@@ -3954,10 +3965,10 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
             x_e = (existing.x0 + existing.x1) / 2
             y_min_e = min(existing.y0, existing.y1)
             y_max_e = max(existing.y0, existing.y1)
-            if abs(x_s - x_e) <= 1.0 and not (y_max_s < y_min_e or y_max_e < y_min_s):
+            if existing.primitive_id is not None and existing.primitive_id == s.primitive_id and abs(x_s - x_e) <= 1.0 and not (y_max_s < y_min_e or y_max_e < y_min_s):
                 new_y_min = min(y_min_s, y_min_e)
                 new_y_max = max(y_max_s, y_max_e)
-                if existing.primitive_kind == "rect_edge" and s.primitive_kind == "rect_edge" and existing.primitive_id is not None and existing.primitive_id == s.primitive_id:
+                if existing.primitive_kind == "rect_edge" and s.primitive_kind == "rect_edge":
                     new_x = max(max(existing.x0, existing.x1), max(s.x0, s.x1))
                 else:
                     new_x = (x_s + x_e) / 2
