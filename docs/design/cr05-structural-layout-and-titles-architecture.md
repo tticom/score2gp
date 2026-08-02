@@ -33,17 +33,25 @@ Source-code tracing across `src/score2gp/pdf.py`, `src/score2gp/pdf_staff_geomet
 ### 3.1 PDF-Tab Barline Seam, Live Detail Probes & Provenance Pipeline
 - **Exact File & Functions**: `src/score2gp/pdf.py:filter_tab_barline_candidates()` (lines 3730–3850), `_detect_tab_systems()` (lines 3880–4112), and `src/score2gp/pdf_geometry.py:_drawing_segments()`.
 - **Producer / Consumer Path**:
-  - `_detect_tab_systems()` calls `_drawing_segments(page.get_drawings())` to extract vertical `_LineSegment` candidates from page vector drawings.
+  - `_detect_tab_systems()` calls `_drawing_segments(page.get_drawings())` to extract vertical `_LineSegment` candidates from page vector drawings (`"l"` line items and `"re"` rectangle items). Note: curves `"c"` are not processed.
   - `filter_tab_barline_candidates()` performs single-linkage clustering using `DOUBLE_BARLINE_CLUSTERING_TOLERANCE` (12.0 pt).
   - Multi-stroke edge clusters (rightmost or leftmost) retain one edge representative as `final_decision = "accepted"` and mark secondary strokes as `final_decision = "rejected"`, `rejection_reason = "pdf_barline_double_secondary"`. Internal clusters of size 2 accept the leftmost stroke; internal clusters of size > 2 mark all strokes as `pdf_barline_ambiguous`.
   - Details are stored in `barline_candidates_details` dicts attached to `_TabSystem` and reported in `report.py`.
 - **Factual Seam Disconnect & Provenance Propagation Contract**:
-  - `_LineSegment` in `src/score2gp/pdf_geometry.py` currently preserves only 4 coordinate fields (`x0, y0, x1, y1`). `_drawing_segments()` converts line primitives, rectangle edges, and curve bounding boxes into `_LineSegment` instances, discarding primitive kind (`"line"`, `"rect_edge"`, `"curve"`), line width, fill, and drawing ID.
-  - `CR-05A` is authorized to extend `_LineSegment` in `src/score2gp/pdf_geometry.py` with `primitive_kind: str | None = None` and `stroke_width: float | None = None`. Standard constructor calls `_LineSegment(x0, y0, x1, y1)` default these to `None`, ensuring 100% backward compatibility for all existing notation and PDF geometry callers.
+  - `_LineSegment` in `src/score2gp/pdf_geometry.py` currently preserves only 4 coordinate fields (`x0, y0, x1, y1`). `_drawing_segments()` converts line items (`"l"`) and rectangle items (`"re"`) into `_LineSegment` instances, discarding primitive kind (`"line"`, `"rect_edge"`), stroke pen width, geometric rectangle width, and source drawing index.
+  - `CR-05A` is authorized to extend `_LineSegment` in `src/score2gp/pdf_geometry.py` with:
+    - `primitive_kind: str | None = None` (`"line"`, `"rect_edge"`, `"mixed"`)
+    - `stroke_width: float | None = None` (pen stroke width from `drawing.get("width", 1.0)`)
+    - `source_rect_width: float | None = None` (geometric rectangle width $|rect.x1 - rect.x0|$)
+    - `drawing_id: int | str | None = None` (source drawing index/ID)
+  - Standard constructor calls `_LineSegment(x0, y0, x1, y1)` default these optional fields to `None`, ensuring 100% backward compatibility for all existing notation and PDF geometry callers.
+  - In `_drawing_segments()`:
+    - For `"l"` line items: `primitive_kind = "line"`, `stroke_width = float(drawing.get("width", 1.0))`, `source_rect_width = None`, `drawing_id = drawing_idx`.
+    - For `"re"` rectangle items: `primitive_kind = "rect_edge"`, `stroke_width = float(drawing.get("width", 1.0))`, `source_rect_width = float(abs(rect.x1 - rect.x0))`, `drawing_id = drawing_idx`.
   - When `_LineSegment` instances are deduplicated or vertically merged in `pdf_geometry.py` / `_detect_tab_systems()`:
-    - If merged segments share identical `primitive_kind`, preserve `primitive_kind`. If mixed, set `primitive_kind = "mixed"`.
-    - Preserve `stroke_width = max(s.stroke_width for s in segments if s.stroke_width is not None)`.
-  - In `filter_tab_barline_candidates()`, candidates originating from wide filled background rectangles ($W > 12.0$ pt) or non-vertical curves are rejected (`final_decision = "rejected"`, `rejection_reason = "pdf_barline_decorative_fill_or_wide_rect"`), while narrow vertical line primitives and narrow rectangle edges ($W \le 4.0$ pt) retain representation invariance for system bounding box calculation.
+    - If merged segments share identical `primitive_kind` and `drawing_id`, preserve `primitive_kind`, `drawing_id`, and `source_rect_width`.
+    - If merged segments have mixed `primitive_kind` or different `drawing_id`, set `primitive_kind = "mixed"`, `drawing_id = None`, `source_rect_width = max(...)`.
+    - Set `stroke_width = max(s.stroke_width for s in segments if s.stroke_width is not None)`.
 - **Verified Live Candidate Detail Keys**:
   - Running a live Python probe on `filter_tab_barline_candidates()` for a rejected short stroke:
     ```python
@@ -72,17 +80,12 @@ Source-code tracing across `src/score2gp/pdf.py`, `src/score2gp/pdf_staff_geomet
         {'x': 103.0, 'y_min': 150, 'y_max': 190, 'height': 40, 'staff_height': 32, 'coverage_ratio': 1.0, 'gaps_crossed': 5, 'absolute_height_decision': 'accepted', 'relative_staff_crossing_decision': 'accepted', 'final_decision': 'rejected', 'rejection_reason': 'pdf_barline_double_secondary'}
     ]
     ```
-  - Running a live Python probe for a 3-stroke edge cluster (x=88, 94, 100 on right edge x=100):
-    ```python
-    filter_tab_barline_candidates([_LineSegment(88,150,88,190), _LineSegment(94,150,94,190), _LineSegment(100,150,100,190)], 154, 186, [154, 160.4, 166.8, 173.2, 179.6, 186], 36, 100)
-    ```
-    returns: `valid_barlines=[100.0]`, with x=100 accepted and x=88, 94 rejected as `pdf_barline_double_secondary`.
 - **Verified Defect & Additive Seam Requirements**:
   - `StructuralSkeletonBarlineCandidate` in `src/score2gp/pdf_staff_geometry.py` belongs *only* to `pdf_staff_notation_diagnostics.py` (standard notation path) and is **not** consumed or produced by the PDF-tab path (`filter_tab_barline_candidates()`).
   - To preserve 100% losslessness without fabricating cluster/style values for rejected strokes, the new fields are added as optional/nullable:
     - `barline_style: Literal["regular", "double", "final", "ambiguous", "unclassified_stroke"] | None = None`
     - `cluster_size: int | None = Field(default=None, ge=1)`
-  - Rejected strokes receive `barline_style = "unclassified_stroke"`, `cluster_size = None`. Accepted/clustered strokes receive `barline_style = "regular"` (cluster size 1), `"double"` (cluster size 2), `"final"` (thick-thin), or `"ambiguous"` (cluster size > 2 or 3+ stroke edge cluster).
+  - Rejected strokes receive `barline_style = "unclassified_stroke"`, `cluster_size = None`. Accepted/clustered strokes receive `barline_style = "regular"` (cluster size 1 or canonicalized filled rectangle), `"double"` (cluster size 2 from independent drawings/lines), `"final"` (thick-thin), or `"ambiguous"` (cluster size > 2 or 3+ stroke edge cluster).
 - **Public Reproducer / Verification Command & Observations**:
   - Command: `python -m pytest tests/test_pdf.py::test_double_barline_ambiguity_resolution`
   - Public Fixture: `tests/fixtures/pdf/generated_paired_notation_tab_system_double_barline.pdf` (derived from `fixtures/public/generated_paired_notation_tab_system_double_barline.json`, containing vertical strokes at x=36.0, 300.0, 572.0, 575.0).
@@ -118,7 +121,7 @@ Source-code tracing across `src/score2gp/pdf.py`, `src/score2gp/pdf_staff_geomet
 
 | ID | Subject / Claim | Status | Controlling Facts & Seams | Unknown / Deferred Boundary |
 |---|-----------------|--------|---------------------------|-----------------------------|
-| **H-01** | Multi-stroke barline clusters (12pt) can be typed as `double` on the PDF-tab seam | Provisional / Hypothesis | `pdf.py:filter_tab_barline_candidates()` & `pdf_geometry.py:_drawing_segments()` | Vector primitive provenance extension (`primitive_kind`) is authorized for CR-05A to distinguish line strokes and narrow rectangle edges from wide decorative fills. Final barline requires vector stroke-width acquisition. |
+| **H-01** | Multi-stroke barline clusters (12pt) can be typed as `double` on the PDF-tab seam | Provisional / Hypothesis | `pdf.py:filter_tab_barline_candidates()` & `pdf_geometry.py:_drawing_segments()` | Vector primitive provenance extension (`primitive_kind`, `drawing_id`, `source_rect_width`) is authorized for CR-05A to distinguish line strokes and narrow rectangle edges from wide decorative fills. Final barline requires vector stroke-width acquisition. |
 | **H-02** | System breaks can be represented independently of barline presence | Provisional / Unverified | `pdf.py:_detect_tab_systems()` staff line grouping | Multi-staff connector grouping (`bracket_curve`, `brace_curve`, `leading_barline`) requires explicit connector alignment research. |
 | **H-03** | Title text can be classified via font-size ratio from `page.get_text("dict")` | Provisional / Unverified | `page.get_text("dict")` span metadata | Empirical font-size ratio threshold across diverse PDF publisher templates (A4 vs Letter vs custom booklet) requires dynamic fixture probing. |
 | **H-04** | Title-to-system ownership can be made exclusive via absolute boundary distance ranking | Provisional / Unverified | Page-level text candidates vs system bounding boxes | Multi-line title blocks and subtitle handling require multi-span bounding box merging. |
@@ -165,7 +168,7 @@ Source-code tracing across `src/score2gp/pdf.py`, `src/score2gp/pdf_staff_geomet
 ### 6.2 Barline Style Classification Algorithm (PDF-Tab Seam & Vector Stroke-Width Contract)
 
 #### Inputs
-- `system_candidates`: List of vertical `_LineSegment` items carrying `x0, y0, x1, y1, primitive_kind, stroke_width`.
+- `system_candidates`: List of vertical `_LineSegment` items carrying `x0, y0, x1, y1, primitive_kind, stroke_width, source_rect_width, drawing_id`.
 - `y0, y1`: Top and bottom $y$-coordinates of staff $k$.
 - `line_ys`: $y$-coordinates of the 6 staff lines.
 - `DOUBLE_BARLINE_CLUSTERING_TOLERANCE`: 12.0 pt.
@@ -173,24 +176,18 @@ Source-code tracing across `src/score2gp/pdf.py`, `src/score2gp/pdf_staff_geomet
 #### Deterministic Rules (Bounded for CR-05A)
 1. **Single-Linkage Clustering & Pre-filtering**:
    - Filter candidates that cross at least 4 string gaps ($y_{min} \le y_0 + 3.0$ and $y_{max} \ge y_1 - 3.0$). Candidates failing height/gap crossing receive `barline_style = "unclassified_stroke"`, `cluster_size = None`.
-   - Filter decorative wide fills: Candidates carrying `primitive_kind="rect_edge"` with width $W > 12.0$ pt or non-vertical curves receive `final_decision = "rejected"`, `rejection_reason = "pdf_barline_decorative_fill_or_wide_rect"`, `barline_style = "ambiguous"`. Narrow rectangle edges ($W \le 4.0$ pt) and line primitives (`primitive_kind="line"`) pass pre-filtering under representation invariance.
-   - Cluster accepted line and narrow-edge candidates by horizontal distance: candidates $s_i, s_j$ belong to the same cluster if $|x_i - x_j| \le 12.0$ pt.
-2. **Edge Representative & Semantic Style Disambiguation**:
-   - **Cluster Size == 1**:
-     - `barline_style = "regular"`, `cluster_size = 1`.
-     - Add `primary_x = round(s[0].x, 3)` to `valid_barlines`.
-   - **2-Stroke Edge or Internal Cluster** (`cluster_size == 2`):
-     - Representative is rightmost stroke for rightmost edge ($x \ge x_1 - 10.0$ pt), or leftmost stroke for leftmost edge / internal cluster. Add representative x to `valid_barlines`.
-     - Both candidate detail dicts in cluster: `barline_style = "double"`, `cluster_size = 2`.
-     - Secondary stroke detail: `final_decision = "rejected"`, `rejection_reason = "pdf_barline_double_secondary"`.
-   - **3+ Stroke Edge Cluster** (`cluster_size >= 3`, $x \ge x_1 - 10.0$ or $x \le x_0 + 10.0$):
-     - **Boundary Retention**: Retain representative edge stroke in `valid_barlines` for 100% backward-compatible system bounding box calculation.
-     - **Semantic Style Disambiguation**: Mark **`barline_style = "ambiguous"`** and `cluster_size = len(cluster)` on all candidate detail dicts in the 3+ stroke cluster (separating edge boundary retention from double-barline style assignment).
-   - **3+ Stroke Internal Cluster** (`cluster_size >= 3`, $x_0 + 10.0 < x < x_1 - 10.0$):
-     - All candidates in cluster: `final_decision = "rejected"`, `rejection_reason = "pdf_barline_ambiguous"`, `barline_style = "ambiguous"`, `cluster_size = len(cluster)`.
-3. **Representation Invariance & Decorative Rectangle Negative Oracle**:
-   - Representation Invariance Control: A narrow vertical filled rectangle ($W \in [1.0, 4.0]$ pt) or double-rectangle edge pair spanning $\ge 4$ string gaps retains representative $x$ in `valid_barlines` and receives `barline_style = "regular"` (single filled barline) or `"double"` (2-edge double barline).
-   - Decorative Fill Negative Oracle: Wide filled rectangles ($W > 12.0$ pt) receive `barline_style = "ambiguous"`, `final_decision = "rejected"`.
+   - Filter decorative wide fills & ambiguous rect widths:
+     - If candidate carries `primitive_kind="rect_edge"` and geometric rectangle width $W_{rect} = \text{source\_rect\_width} > 12.0$ pt: reject (`final_decision = "rejected"`, `rejection_reason = "pdf_barline_decorative_fill_or_wide_rect"`, `barline_style = "ambiguous"`).
+     - If $4.0 < W_{rect} \le 12.0$ pt: reject (`final_decision = "rejected"`, `rejection_reason = "pdf_barline_ambiguous_rect_width"`, `barline_style = "ambiguous"`).
+     - Narrow rectangle edges ($W_{rect} \le 4.0$ pt) and line primitives (`primitive_kind="line"`) pass pre-filtering under representation invariance.
+   - Cluster accepted candidates by horizontal distance: candidates $s_i, s_j$ belong to the same cluster if $|x_i - x_j| \le 12.0$ pt.
+2. **Single Filled Barline vs Double Barline Disambiguation**:
+   - **Single Filled Barline Rule**: A 2-candidate cluster where both candidates share the same `drawing_id` (originating from two edges of a single narrow rectangle primitive $W_{rect} \le 4.0$ pt) represents **one single filled barline**. Add representative $x$ to `valid_barlines`. Representative candidate receives `barline_style = "regular"`, `cluster_size = 1`. Secondary edge receives `final_decision = "rejected"`, `rejection_reason = "pdf_barline_rect_secondary"`, `barline_style = "regular"`, `cluster_size = 1`.
+   - **Double Barline Rule**: A 2-candidate cluster originating from two different `drawing_id` values or independent line primitives represents a **double barline** (`barline_style = "double"`, `cluster_size = 2`). Add representative $x$ to `valid_barlines`.
+3. **Edge Representative & 3+ Stroke Style Disambiguation**:
+   - **Cluster Size == 1**: `barline_style = "regular"`, `cluster_size = 1`. Add `primary_x` to `valid_barlines`.
+   - **3+ Stroke Edge Cluster** (`cluster_size >= 3`, $x \ge x_1 - 10.0$ or $x \le x_0 + 10.0$): Retain representative edge stroke in `valid_barlines` for 100% backward-compatible system bounding box calculation. Set **`barline_style = "ambiguous"`** and `cluster_size = len(cluster)` on all candidate detail dicts.
+   - **3+ Stroke Internal Cluster** (`cluster_size >= 3`, $x_0 + 10.0 < x < x_1 - 10.0$): All candidates in cluster: `final_decision = "rejected"`, `rejection_reason = "pdf_barline_ambiguous"`, `barline_style = "ambiguous"`, `cluster_size = len(cluster)`.
 4. **Durable Vector Stroke-Width Seam Contract (Deferred Non-Goal)**:
    - Vector stroke width is extracted from PyMuPDF `page.get_drawings()` vector drawing dictionaries (`drawing["width"]` / line items `("l", p0, p1)`).
    - A 2-stroke cluster is classified as `final` **only if** rightmost stroke width $W_{right} \ge 2.5 \times W_{left}$ (thin-thick final barline morphology). When $W_{right} \approx W_{left}$, classify as `double`.
@@ -455,14 +452,14 @@ class StructuralAmbiguousEvidence(BaseModel):
 | # | Rule / Claim | Positive Control / Example | Negative Control | Ambiguity / Conflict Case | Smallest Broken Implementation | Observable Output Failure | Stop / Pivot Criteria | Verification Status & Run Receipt |
 |---|--------------|----------------------------|------------------|---------------------------|--------------------------------|---------------------------|-----------------------|----------------------------------|
 | **1** | Double barline must not force system break | Mid-system double barline between m2 & m3 | Regular single barline at m2 | Double barline within 15pt of system edge | Splitting `_TabSystem` whenever `cluster_size == 2` | Erroneous system break creating two 2-measure systems in output | If double barline splits system: **STOP & PIVOT** | **Verified Rule**: `pytest tests/test_pdf.py::test_double_barline_ambiguity_resolution` verifies `extract_tab()` yields 1 system across 2 bars (`len(system_indices)==1`, `playable[0].bar_index==1`, `playable[1].bar_index==2`) with x=572.0 rejected under `pdf_barline_double_secondary`. |
-| **2** | System break must not require double barline | System 1 ending with regular single barline | System ending with open staff (no final barline) | System ending near right margin with missing line | Refusing system break unless rightmost barline has `cluster_size >= 2` | `pdf_barlines_not_detected_in_system` refusal on valid single-barline systems | If single-barline system refused: **STOP & PIVOT** | **Verified Rule**: `pytest tests/test_pdf.py::test_partial_pdf_missing_barlines_reports_partial_grouping` verifies single-barline and missing-barline partial grouping rules without system break refusal. |
-| **3** | Page-edge proximity alone must not cause false break | Staff line extending within 10pt of right page edge | Short staff ending 100pt from edge | Fragmented vector stroke near right margin | Triggering layout break if `x1 > page_width - margin` | Truncated measure regions near page margins | If margin causes false break: **STOP & PIVOT** | **Verified Rule**: `pytest tests/test_pdf.py::test_unstructured_pdf_preserves_candidates_but_reports_missing_grouping` verifies page/edge proximity preserves text/digit candidates without false system break creation. |
+| **2** | System break must not require double barline | System 1 ending with regular single barline | System ending with open staff (no final barline) | System ending near right margin with missing line | Refusing system break unless rightmost barline has `cluster_size >= 2` | `pdf_barlines_not_detected_in_system` refusal on valid single-barline systems | If single-barline system refused: **STOP & PIVOT** | **Verified Rule**: `pytest tests/test_pdf.py::test_partial_pdf_missing_barlines_reports_partial_grouping` verifies single-barline systems and missing-barline partial grouping rules construct valid candidates (`len(fret_candidates)==4`, `system_index==1`) without refusal. |
+| **3** | Page-edge proximity alone must not cause false break | Staff line extending within 10pt of right page edge | Short staff ending 100pt from edge | Fragmented vector stroke near right margin | Triggering layout break if `x1 > page_width - margin` | Truncated measure regions near page margins | If margin causes false break: **STOP & PIVOT** | **Verified Rule**: `pytest tests/test_pdf.py::test_unstructured_pdf_preserves_candidates_but_reports_missing_grouping` verifies page/edge proximity preserves candidates without false system break creation (`system_index==None`). |
 | **4** | Priority hierarchy prevents misclassifying tempo/chords as titles | Large bold text `"Intro"` above m1 classified as `section_header` (Priority 5A) | Tempo `"Allegro q=120"` above m1 classified as `tempo_instruction` (Priority 1) | Mixed text `"Section A - Am"` above staff | Unordered rule classifying any text with `f_size > 12` as `piece_title` | Tempo `"Allegro"` misclassified as piece title in output IR | If tempo/chord misclassified as title: **STOP & PIVOT** | **Provisional / Unexecuted Test Plan**: Text priority hierarchy defined; awaiting span-metadata implementation. |
 | **5** | Title ownership uses absolute distance & midpoint ambiguity band | Text at $y=120$ between Sys 1 ($y_1=100$) & Sys 2 ($y_0=200$) assigned to Sys 1 | Text at $y=180$ assigned to Sys 2 | Text at $y=150$ ($y_{mid} \pm 5$pt) marked `ambiguous_ownership` | Using signed distance $d_k > 0$ which makes Sys 1 distance negative & unselectable | Title assigned to Sys 2 even when 5pt below Sys 1 | If midpoint title assigned to single system: **STOP & PIVOT** | **Provisional / Unexecuted Test Plan**: Absolute distance geometry defined; awaiting title ownership implementation. |
 | **6** | Generic geometry uses font-size ratio, not hardcoded Y coordinates | Title classified via $(f_{size} / \text{median}) \ge 1.25$ on Page 1 | Normal body text $(f_{size} / \text{median}) \approx 1.0$ | Small page size (A5 / booklet layout) | Hardcoded coordinate check `y < 100.0` pt | Title misclassified as body text on non-standard page sizes | If fixed Y fails on A5/Letter: **STOP & PIVOT** | **Provisional / Unexecuted Test Plan**: Font ratio check defined; awaiting `page.get_text("dict")` implementation. |
 | **7** | CR-05A 2-stroke double barline style assignment | 2 vertical strokes within 12pt classified as `double` | Single vertical stroke classified as `regular` | Short non-crossing strokes classified as `unclassified_stroke` | Omitting `barline_style` in candidate details | IR retains no barline style information | If 2-stroke double barline lost: **STOP & PIVOT** | **Provisional / Unexecuted Test Plan**: Authorized for CR-05A implementation slice. |
 | **8** | 3+ Stroke edge cluster separates boundary retention from double style | 3 strokes at right edge ($x=88, 94, 100$) retain $x=100.0$ in `valid_barlines` | 2-stroke edge cluster produces `barline_style = "double"` | 3-stroke edge cluster marked `barline_style = "ambiguous"` | Labeling 3+ stroke edge cluster as `double` | Fabricated double-barline style for 3+ stroke edge cluster | If 3+ edge cluster labeled double: **STOP & PIVOT** | **Provisional / Unexecuted Test Plan**: Authorized for CR-05A implementation slice. |
-| **9** | Representation invariance for narrow rect edges vs wide fill negative oracle | Narrow rect edge ($W \le 4$pt) produces `regular`/`double` | Wide background fill ($W > 12$pt) marked `ambiguous` | Non-vertical curve edge | Blanket rejecting all `rect_edge` primitives | Legitimate filled barlines rejected | If filled barline rejected: **STOP & PIVOT** | **Provisional / Unexecuted Test Plan**: Authorized for CR-05A implementation slice (`_LineSegment` provenance extension). |
+| **9** | Narrow filled rect canonicalization & wide fill negative oracle | Single narrow filled rect ($W \le 4$pt) produces `regular` | Wide background fill ($W > 12$pt) marked `ambiguous` | Ambiguous rect width ($4 < W \le 12$pt) marked `ambiguous` | Treating filled rect edges as 2 independent double strokes | Single filled barline misclassified as double barline | If filled barline produces double barline: **STOP & PIVOT** | **Provisional / Unexecuted Test Plan**: Authorized for CR-05A implementation slice (`_LineSegment` provenance extension). |
 | **10** | Measure ownership handles ambiguity warnings before absence | Invalid bar box with warnings returns `measure_overlap_ambiguity` | Valid measure region returns `TitleMeasureOwnership` | Text midpoint outside all bars returns `measure_boundary_unassigned` | Checking `bar_index is None` before inspecting `bar_warnings` | Ambiguity warnings swallowed by absence branch | If ambiguity warning returns absence: **STOP & PIVOT** | **Provisional / Unexecuted Test Plan**: Executable call path defined; awaiting title ownership implementation. |
 | **11** | Final barline thin-thick stroke width acquisition (Deferred) | Rightmost stroke $W_{right} \ge 2.5 \times W_{left}$ classified as `final` | Equal width strokes $W_1 \approx W_2$ classified as `double` | Untyped stroke widths | Hardcoding all 2-stroke clusters as `final` | Double barlines misclassified as final barlines | If double misclassified as final: **STOP & PIVOT** | **Provisional / Deferred Missing Evidence**: Vector stroke-width acquisition deferred (`RESEARCH_NEXT`). |
 
@@ -476,7 +473,7 @@ class StructuralAmbiguousEvidence(BaseModel):
 - **Slice Name**: `CR-05A: PDF-Tab Barline Style Classification Seam`
 - **Authorized Product Files**:
   - `docs/design/cr05-structural-layout-and-titles-architecture.md` (this report)
-  - `src/score2gp/pdf_geometry.py` (extend `_LineSegment` with `primitive_kind` and `stroke_width` fields; update `_drawing_segments()` and merge helpers to preserve primitive metadata from `page.get_drawings()`)
+  - `src/score2gp/pdf_geometry.py` (extend `_LineSegment` with `primitive_kind`, `stroke_width`, `source_rect_width`, and `drawing_id` fields; update `_drawing_segments()` and merge helpers to preserve primitive metadata from `page.get_drawings()`)
   - `src/score2gp/pdf.py` (update `filter_tab_barline_candidates()` to populate `barline_style` and `cluster_size` in candidate details)
   - `src/score2gp/report.py` (propagate `barline_style` in HTML candidate details rendering)
   - `tests/test_cr05_barline_style_classification.py` (new public test file)
@@ -487,25 +484,27 @@ class StructuralAmbiguousEvidence(BaseModel):
   - Producer: `src/score2gp/pdf.py:filter_tab_barline_candidates()` consuming `_LineSegment` primitives from `pdf_geometry.py:_drawing_segments()`.
   - Update candidate details dictionaries to include `barline_style: Literal["regular", "double", "final", "ambiguous", "unclassified_stroke"] | None` and `cluster_size: int | None`.
   - For initially rejected strokes: set `barline_style = "unclassified_stroke"` and `cluster_size = None`.
-  - For a 2-stroke cluster of line or narrow rect-edge primitives (`primitive_kind` in `"line"`, `"rect_edge"`) within `DOUBLE_BARLINE_CLUSTERING_TOLERANCE` (12.0 pt), set `barline_style = "double"` and `cluster_size = 2` on both primary (accepted) and secondary (rejected) candidate dictionaries.
+  - For a 2-stroke cluster of line or narrow rect-edge primitives (`primitive_kind` in `"line"`, `"rect_edge"`):
+    - If candidates share the same `drawing_id` (single narrow filled rectangle $W_{rect} \le 4.0$ pt): set `barline_style = "regular"`, `cluster_size = 1`.
+    - If candidates originate from different `drawing_id` values or independent line primitives: set `barline_style = "double"`, `cluster_size = 2`.
   - For 1-stroke candidates, set `barline_style = "regular"` and `cluster_size = 1`.
   - For 3+ stroke edge clusters, retain representative edge stroke in `valid_barlines` for backward compatibility, but set `barline_style = "ambiguous"` and `cluster_size = len(cluster)` on candidate detail dicts.
   - Pass `barline_candidates_details` through `_TabSystem` to `report.py` diagnostics.
-- **Authorized End-to-End Extraction Pipeline Test**:
-  - Test Name: `test_cr05a_drawing_dict_provenance_pipeline` in `tests/test_cr05_barline_style_classification.py`.
-  - Input: PyMuPDF drawing dictionaries (`page.get_drawings()`) containing `"l"` line items and `"re"` rectangle items.
-  - Assertion: Verifies end-to-end provenance propagation through `_drawing_segments()`, `_detect_tab_systems()`, and vertical deduplication/merging to `filter_tab_barline_candidates()`, maintaining representation invariance for narrow rectangle edges.
+- **Authorized End-to-End Extraction Pipeline & Filled Rect Canonicalization Test**:
+  - Test Name: `test_cr05a_filled_rect_canonicalization_pipeline` in `tests/test_cr05_barline_style_classification.py`.
+  - Input: PyMuPDF drawing dictionaries (`page.get_drawings()`) containing a single narrow filled rectangle ($W_{rect} = 2.0$ pt, pen width 1.0 pt) vs two independent line primitives ($x_1=100.0, x_2=103.0$).
+  - Assertion: Verifies one rectangle-rendered barline becomes `barline_style = "regular"`, `cluster_size = 1`, while two independently drawn line strokes become `barline_style = "double"`, `cluster_size = 2`.
 - **Authorized Decorative Rect Negative Oracle Test**:
   - Test Name: `test_cr05a_decorative_rect_negative_oracle` in `tests/test_cr05_barline_style_classification.py`.
-  - Input: Wide vertical rectangle fill ($W > 12.0$ pt, e.g. background fill or decorative box).
+  - Input: Wide vertical rectangle fill ($W_{rect} = 20.0$ pt, pen width 1.0 pt, e.g. background fill or decorative box).
   - Assertion: Candidate detail dict receives `barline_style = "ambiguous"`, `final_decision = "rejected"`, `rejection_reason = "pdf_barline_decorative_fill_or_wide_rect"`.
 - **Authorized Edge Triple-Cluster Test**:
   - Test Name: `test_cr05a_edge_triple_cluster_style_ambiguous` in `tests/test_cr05_barline_style_classification.py`.
   - Input: Three full-height parallel vertical line segments ($x_1=88.0, x_2=94.0, x_3=100.0$) at right system edge $x=100.0$.
   - Assertion: Retains $x=100.0$ in `valid_barlines` for backward-compatible system boundary calculation, but marks `barline_style = "ambiguous"` and `cluster_size = 3` on candidate detail dicts.
 - **Acceptance Assertions**:
-  1. 2-stroke clusters in `filter_tab_barline_candidates()` produce `barline_style = "double"` in `barline_candidates_details`.
-  2. Single vertical strokes produce `barline_style = "regular"`.
+  1. 2-stroke clusters from independent drawings in `filter_tab_barline_candidates()` produce `barline_style = "double"` in `barline_candidates_details`.
+  2. Single vertical strokes and single narrow filled rectangles produce `barline_style = "regular"`.
   3. Initially rejected strokes produce `barline_style = "unclassified_stroke"`.
   4. Multi-stroke edge clusters preserve existing edge representative selection (`valid_barlines` float array and system bounds remain 100% backward-compatible).
 - **Negative Controls**:
