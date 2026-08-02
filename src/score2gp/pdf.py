@@ -251,6 +251,7 @@ def extract_tab(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
 from .pdf_geometry import (
     _LineSegment,
     _drawing_segments,
+    is_exact_duplicate_or_reverse,
     merge_collinear_horizontal_segments,
     FRAGMENTED_STAFF_LINE_NEIGHBOR_MAX_GAP,
 )
@@ -3965,7 +3966,9 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
             x_e = (existing.x0 + existing.x1) / 2
             y_min_e = min(existing.y0, existing.y1)
             y_max_e = max(existing.y0, existing.y1)
-            if existing.primitive_id is not None and existing.primitive_id == s.primitive_id and abs(x_s - x_e) <= 1.0 and not (y_max_s < y_min_e or y_max_e < y_min_s):
+            is_same_id = (existing.primitive_id is not None and existing.primitive_id == s.primitive_id)
+            is_exact_dup = is_exact_duplicate_or_reverse(existing, s)
+            if (is_same_id or is_exact_dup) and abs(x_s - x_e) <= 1.0 and not (y_max_s < y_min_e or y_max_e < y_min_s):
                 new_y_min = min(y_min_s, y_min_e)
                 new_y_max = max(y_max_s, y_max_e)
                 if existing.primitive_kind == "rect_edge" and s.primitive_kind == "rect_edge":

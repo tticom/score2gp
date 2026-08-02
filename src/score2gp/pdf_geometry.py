@@ -7,6 +7,25 @@ from typing import Any, Literal
 FRAGMENTED_STAFF_LINE_NEIGHBOR_MAX_GAP = 360.0
 
 
+def is_exact_duplicate_or_reverse(s1: _LineSegment, s2: _LineSegment) -> bool:
+    """Returns True if s1 and s2 are exact geometric duplicates or reverse duplicates of the same line segment."""
+    if s1.primitive_kind != s2.primitive_kind or s1.primitive_kind is None:
+        return False
+
+    x1 = (s1.x0 + s1.x1) / 2.0
+    x2 = (s2.x0 + s2.x1) / 2.0
+    if abs(x1 - x2) > 0.5:
+        return False
+
+    y1_0, y1_1 = s1.y0, s1.y1
+    y2_0, y2_1 = s2.y0, s2.y1
+
+    forward_match = abs(y1_0 - y2_0) <= 1.0 and abs(y1_1 - y2_1) <= 1.0
+    reverse_match = abs(y1_0 - y2_1) <= 1.0 and abs(y1_1 - y2_0) <= 1.0
+
+    return forward_match or reverse_match
+
+
 @dataclass(frozen=True)
 class _LineSegment:
     x0: float
@@ -27,13 +46,13 @@ class _LineSegment:
         return abs(self.x0 - self.x1) <= 1.0 and abs(self.y1 - self.y0) >= 40.0
 
     def merge_with(self, other: _LineSegment, new_x0: float, new_y0: float, new_x1: float, new_y1: float) -> _LineSegment:
+        is_exact_dup = is_exact_duplicate_or_reverse(self, other)
         if (
             self.primitive_kind == other.primitive_kind
-            and self.primitive_id == other.primitive_id
-            and self.primitive_id is not None
+            and (is_exact_dup or (self.primitive_id == other.primitive_id and self.primitive_id is not None))
         ):
             merged_kind = self.primitive_kind
-            merged_id = self.primitive_id
+            merged_id = self.primitive_id or other.primitive_id
             merged_rect_w = self.source_rect_width
         else:
             merged_kind = "mixed"

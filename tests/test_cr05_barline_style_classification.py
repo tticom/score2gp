@@ -322,3 +322,28 @@ def test_cr05a_filled_triangle_path_ignored_not_canonicalized_as_rect() -> None:
     assert len(systems) == 1
     # Triangle path line items maintain distinct line primitive identities and are not canonicalized as a regular rectangle barline
     assert systems[0].barlines == []
+
+
+def test_cr05a_pymupdf_two_barline_strokes_reverse_duplicate_removed() -> None:
+    """Proves that drawing two barline strokes in one PyMuPDF shape removes reverse duplicates and classifies the pair as double."""
+    from score2gp.pdf import _detect_tab_systems
+
+    doc = fitz.open()
+    page = doc.new_page()
+    shape = page.new_shape()
+    for y in [154.0, 160.4, 166.8, 173.2, 179.6, 186.0]:
+        shape.draw_line(fitz.Point(36.0, y), fitz.Point(575.0, y))
+    # Two independent barline strokes drawn in a single PyMuPDF shape
+    shape.draw_line(fitz.Point(100.0, 150.0), fitz.Point(100.0, 190.0))
+    shape.draw_line(fitz.Point(103.0, 150.0), fitz.Point(103.0, 190.0))
+    shape.finish(color=(0, 0, 0))
+    shape.commit()
+
+    systems = _detect_tab_systems(page, 1)
+    assert len(systems) == 1
+    # PyMuPDF reverse duplicate of the second stroke is removed, remaining pair classified as double barline
+    assert systems[0].barlines == [100.0]
+    details = [d for d in systems[0].barline_candidates_details if d.get("final_decision") == "accepted"]
+    assert len(details) == 1
+    assert details[0]["barline_style"] == "double"
+    assert details[0]["cluster_size"] == 2
