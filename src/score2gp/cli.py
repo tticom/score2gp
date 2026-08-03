@@ -22,6 +22,7 @@ from .ir import ScoreIR, compare_score_ir, export_scoreir_schema, validate_score
 from .pdf import extract_tab as extract_tab_file
 from .pdf import inspect_pdf as inspect_pdf_file
 from .report import write_conversion_report, write_warnings
+from .sidecar_evaluator import evaluate_sidecar
 
 def parse_page_range(pages_str: str | None) -> tuple[int, int] | None:
     if not pages_str:
@@ -1414,6 +1415,28 @@ def notation_sixty_fourth_note_export_command(
     """Explicit, opt-in CLI route for single standard-notation sixty-fourth-note GP export (v0)."""
     _run_single_note_export_command(pdf, out, ir_out, "64th")
 
+@app.command("eval-sidecar")
+def eval_sidecar_command(
+    sidecar: Path = typer.Option(..., "--sidecar", help="Path to candidate MusicXML/MXL sidecar file"),
+    pdf: Optional[Path] = typer.Option(None, "--pdf", help="Optional path to PDF fixture"),
+    as_json: bool = typer.Option(False, "--json", help="Output result in JSON format"),
+) -> None:
+    """Evaluate candidate MusicXML/MXL sidecar against common evaluation contract."""
+    result = evaluate_sidecar(sidecar, pdf_fixture_path=pdf)
+    if as_json:
+        typer.echo(json.dumps(result.model_dump(mode="json"), indent=2))
+    else:
+        typer.echo(f"Sidecar Evaluation Status: {result.status}")
+        typer.echo(f"  Note count: {result.note_count}")
+        typer.echo(f"  Rest count: {result.rest_count}")
+        typer.echo(f"  Pitch count: {result.pitch_count}")
+        typer.echo(f"  Measure count: {result.measure_count}")
+        typer.echo(f"  ScoreIR event count: {result.score_ir_event_count}")
+        typer.echo(f"  Matched TAB candidates: {result.matched_tab_candidate_count}")
+        if result.refusal_reason:
+            typer.echo(f"  Refusal reason: {result.refusal_reason}")
+
 if __name__ == "__main__":
+
     app()
 
