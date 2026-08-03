@@ -1353,9 +1353,11 @@ def _grouping_system_html(system: dict[str, Any]) -> str:
     if details:
         details_items = []
         for d in details:
+            style_str = f", style={d.get('barline_style')}" if d.get("barline_style") is not None else ""
+            cluster_str = f", cluster_size={d.get('cluster_size')}" if d.get("cluster_size") is not None else ""
             details_items.append(
                 f"Candidate at x={d.get('x')} (height={d.get('height')}, crossed={d.get('gaps_crossed')} gaps, staff_h={d.get('staff_height')}, coverage={d.get('coverage_ratio')}) "
-                f"decision: {d.get('final_decision')} (reasons: absolute_height={d.get('absolute_height_decision')}, relative_crossing={d.get('relative_staff_crossing_decision')}, error={d.get('rejection_reason') or 'none'})"
+                f"decision: {d.get('final_decision')} (reasons: absolute_height={d.get('absolute_height_decision')}, relative_crossing={d.get('relative_staff_crossing_decision')}, error={d.get('rejection_reason') or 'none'}{style_str}{cluster_str})"
             )
         details_html = "<br/>&nbsp;&nbsp;&nbsp;&nbsp;Candidates details:<ul>" + "".join(f"<li>{html.escape(item)}</li>" for item in details_items) + "</ul>"
 

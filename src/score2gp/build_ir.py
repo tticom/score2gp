@@ -9,6 +9,7 @@ from typing import Iterable, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .pdf_tab_bar_assembler import PdfTabBarAssemblerError, assemble_pdf_tab_bar
 from .ascii_alignment import ALIGNMENT_SCHEMA_VERSION, AsciiMusicXmlAlignment, compute_sha256
 from . import __version__
 from .ir import (
@@ -1729,14 +1730,6 @@ def build_ir_from_tabraw_only(
             )
 
     # 2. Rhythmic alignment & ScoreIR generation
-    _STRING_TO_BASE_PITCH = {
-        1: 64,  # E4
-        2: 59,  # B3
-        3: 55,  # G3
-        4: 50,  # D3
-        5: 45,  # A2
-        6: 40,  # E2
-    }
 
 
 
@@ -1759,188 +1752,24 @@ def build_ir_from_tabraw_only(
 
         output_bar_to_frets[output_bar_idx] = bar_frets
 
-        if not bar_frets:
-            # Create a rest event filling the bar (should be unreachable as keys are from fret_candidates)
-            rest_event = Event(
-                id=f"bar-{output_bar_idx}-rest",
+        try:
+            bar = assemble_pdf_tab_bar(
+                bar_frets,
+                output_bar_idx=output_bar_idx,
                 track_id=TRACK_ID,
-                timing=Timing(
-                    bar_index=output_bar_idx,
-                    onset_ticks=0,
-                    duration_ticks=3840,
-                    ticks_per_quarter=DEFAULT_TICKS_PER_QUARTER,
-                    notated_duration=NotatedDuration(value="whole", dots=0),
-                ),
-                is_rest=True,
-                notes=[],
-                confidence=1.0,
+                editable_draft=editable_draft,
+                tempo_bpm=tempo_bpm,
+                tempo_is_explicit=tempo_is_explicit,
+                chord_x_tolerance_pt=PDF_ONLY_CHORD_X_TOLERANCE_PT,
             )
-            bars.append(
-                Bar(
-                    index=output_bar_idx,
-                    time_signature=TimeSignature(numerator=4, denominator=4),
-                    events=[rest_event],
-                )
-            )
-            continue
-
-        # Group candidates into sequential event subgroups using PdfOnlyChordEventGrouper
-        grouper = PdfOnlyChordEventGrouper(tolerance=PDF_ONLY_CHORD_X_TOLERANCE_PT)
-        event_subgroups = grouper.group_bar_candidates(bar_frets)
-
-        N = len(event_subgroups)
-        if N > 64:
+        except PdfTabBarAssemblerError as err:
             raise BuildIrInputRiskError(
-                category="pdf_only_tab_grouping_unsafe",
-                stage="layout-gating",
-                message=f"PDF-only tab building refused: too many events ({N}) in bar {output_bar_idx}.",
-            )
-
-        if editable_draft:
-            grid_spacing = 960
-            duration_name = "quarter"
-        else:
-            if N <= 8:
-                grid_spacing = 480
-                duration_name = "eighth"
-            elif N <= 16:
-                grid_spacing = 240
-                duration_name = "16th"
-            elif N <= 32:
-                grid_spacing = 120
-                duration_name = "32nd"
-            else:
-                grid_spacing = 60
-                duration_name = "64th"
-
-        events = []
-        current_onset = 0
-        for i, subgroup_candidates in enumerate(event_subgroups):
-            notes = []
-            is_rest = False
-            for candidate in subgroup_candidates:
-                if candidate.raw_text == "quarter_rest":
-                    is_rest = True
-                else:
-                    base_pitch = _STRING_TO_BASE_PITCH.get(candidate.string, 40)
-                    pitch = base_pitch + (candidate.parsed_fret or 0)
-                    notes.append(
-                        Note(
-                            string=candidate.string,
-                            fret=candidate.parsed_fret or 0,
-                            pitch=pitch,
-                            confidence=candidate.confidence,
-                            provenance=[candidate.to_provenance()],
-                        )
-                    )
-
-            if is_rest:
-                ev_duration_ticks = 960
-                ev_duration_name = "quarter"
-            else:
-                ev_duration_ticks = grid_spacing
-                ev_duration_name = duration_name
-
-            if current_onset + ev_duration_ticks > 3840:
-                raise BuildIrInputRiskError(
-                    category="pdf_only_tab_measure_overcapacity",
-                    stage="measure-assembly",
-                    message=(
-                        f"Candidate note events in bar {output_bar_idx} exceed measure capacity 3840 ticks "
-                        f"(accumulated {current_onset + ev_duration_ticks} ticks)."
-                    ),
-                    details={
-                        "bar_index": str(output_bar_idx),
-                        "accumulated_ticks": str(current_onset + ev_duration_ticks),
-                        "measure_capacity": "3840",
-                    },
-                )
-
-            onset_ticks = current_onset
-            current_onset += ev_duration_ticks
-
-            event_text = None
-            if editable_draft and output_bar_idx == 1 and i == 0:
-                tempo_fmt = int(tempo_bpm) if tempo_bpm == int(tempo_bpm) else tempo_bpm
-                if tempo_is_explicit:
-                    tempo_phrase = f"Tempo set to {tempo_fmt} bpm."
-                else:
-                    tempo_phrase = f"Tempo defaulted to {tempo_fmt} bpm."
-                event_text = (
-                    "Editable draft generated from PDF tablature. "
-                    "Rhythms defaulted to quarter notes; timing was not recognised. "
-                    "Tuning defaulted to E Standard unless corrected by the user. "
-                    "Time signature defaulted to 4/4. "
-                    f"{tempo_phrase} "
-                    "Standard notation and notation/tab alignment were skipped. "
-                    "Rests/silence may be omitted."
-                )
-
-            if is_rest:
-                notes = []
-
-            events.append(
-                Event(
-                    id=f"bar-{output_bar_idx}-event-{i+1}",
-                    track_id=TRACK_ID,
-                    timing=Timing(
-                        bar_index=output_bar_idx,
-                        onset_ticks=onset_ticks,
-                        duration_ticks=ev_duration_ticks,
-                        ticks_per_quarter=DEFAULT_TICKS_PER_QUARTER,
-                        notated_duration=NotatedDuration(value=ev_duration_name, dots=0),
-                    ),
-                    is_rest=is_rest,
-                    notes=notes,
-                    text=event_text,
-                    confidence=sum(c.confidence for c in subgroup_candidates) / len(subgroup_candidates),
-                    provenance=[c.to_provenance() for c in subgroup_candidates],
-                )
-            )
-
-        remainder = 3840 - current_onset
-        if remainder > 0:
-            rest_hierarchy = [
-                ("whole", 3840),
-                ("half", 1920),
-                ("quarter", 960),
-                ("eighth", 480),
-                ("16th", 240),
-                ("32nd", 120),
-                ("64th", 60),
-            ]
-            seq_idx = 1
-            for rest_name, rest_ticks in rest_hierarchy:
-                while remainder >= rest_ticks:
-                    events.append(
-                        Event(
-                            id=f"bar-{output_bar_idx}-rest-{seq_idx}",
-                            track_id=TRACK_ID,
-                            timing=Timing(
-                                bar_index=output_bar_idx,
-                                onset_ticks=current_onset,
-                                duration_ticks=rest_ticks,
-                                ticks_per_quarter=DEFAULT_TICKS_PER_QUARTER,
-                                notated_duration=NotatedDuration(value=rest_name, dots=0),
-                            ),
-                            is_rest=True,
-                            notes=[],
-                            text=None,
-                            confidence=1.0,
-                            provenance=[],
-                        )
-                    )
-                    current_onset += rest_ticks
-                    remainder -= rest_ticks
-                    seq_idx += 1
-
-        bars.append(
-            Bar(
-                index=output_bar_idx,
-                time_signature=TimeSignature(numerator=4, denominator=4),
-                events=events,
-            )
-        )
+                category=err.category,
+                stage=err.stage,
+                message=err.message,
+                details=err.details,
+            ) from err
+        bars.append(bar)
 
     # Create warnings and add timing inferred timing warning
     warnings_list = [

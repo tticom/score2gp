@@ -6,6 +6,14 @@ from pathlib import Path
 import re
 from typing import Any
 
+from .pdf_tab_duration_associator import (
+    BeamPrimitiveCandidate,
+    FlagPrimitiveCandidate,
+    SpatialBBox,
+    StaffSystemContext,
+    StemPrimitiveCandidate,
+    resolve_tab_duration_evidence_for_events,
+)
 from .report import (
     build_grouping_diagnostics,
     grouping_status_for_tabraw,
@@ -243,6 +251,7 @@ def extract_tab(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
 from .pdf_geometry import (
     _LineSegment,
     _drawing_segments,
+    is_exact_duplicate_or_reverse,
     merge_collinear_horizontal_segments,
     FRAGMENTED_STAFF_LINE_NEIGHBOR_MAX_GAP,
 )
@@ -1970,6 +1979,77 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                                     break
 
 
+            # Extract duration morphology primitives (stems, beams, flags) for the page
+            page_stems: list[StemPrimitiveCandidate] = []
+            page_beams: list[BeamPrimitiveCandidate] = []
+            page_flags: list[FlagPrimitiveCandidate] = []
+            all_line_ys = [ly for sys in systems for ly in sys.line_ys]
+
+            for draw in drawings:
+                for item in draw.get("items", []):
+                    if not item:
+                        continue
+                    itype = item[0]
+                    if itype == "l" and len(item) >= 3:
+                        p0, p1 = item[1], item[2]
+                        dx = abs(p0.x - p1.x)
+                        dy = abs(p0.y - p1.y)
+                        ix0, ix1 = min(p0.x, p1.x), max(p0.x, p1.x)
+                        iy0, iy1 = min(p0.y, p1.y), max(p0.y, p1.y)
+
+                        if dy >= 5.0 and dx <= 2.0:
+                            cx = (ix0 + ix1) / 2.0
+                            nearest_sys = _nearest_system_for_stem(systems, cx, iy0, iy1) if systems else None
+                            sys_lines = nearest_sys.line_ys if (nearest_sys is not None and nearest_sys.line_ys) else (all_line_ys if len(systems) <= 1 else [])
+                            if sys_lines:
+                                local_top = sys_lines[0]
+                                local_bottom = sys_lines[-1]
+                                top_ext = local_top - iy0
+                                bot_ext = iy1 - local_bottom
+                                if top_ext > bot_ext + 1.0:
+                                    is_down = False
+                                elif bot_ext > top_ext + 1.0:
+                                    is_down = True
+                                else:
+                                    staff_mid = (local_top + local_bottom) / 2.0
+                                    is_down = ((iy0 + iy1) / 2.0) >= staff_mid
+                                page_stems.append(StemPrimitiveCandidate(bbox=SpatialBBox(ix0, iy0, ix1, iy1), is_downward=is_down))
+                        elif dy <= 1.0 and dx >= 7.0:
+                            is_staff = dx >= 300.0 or any(abs(iy0 - ly) <= 1.0 for ly in all_line_ys)
+                            if not is_staff:
+                                page_beams.append(BeamPrimitiveCandidate(bbox=SpatialBBox(ix0, iy0, ix1, iy1)))
+                        elif dx >= 3.0 and dy >= 3.0:
+                            page_flags.append(FlagPrimitiveCandidate(bbox=SpatialBBox(ix0, iy0, ix1, iy1)))
+                    elif itype == "c" and len(item) >= 2:
+                        pts = item[1:]
+                        ix0, ix1 = min(p.x for p in pts), max(p.x for p in pts)
+                        iy0, iy1 = min(p.y for p in pts), max(p.y for p in pts)
+                        dx = ix1 - ix0
+                        dy = iy1 - iy0
+                        if dx >= 3.0 and dy >= 3.0:
+                            page_flags.append(FlagPrimitiveCandidate(bbox=SpatialBBox(ix0, iy0, ix1, iy1)))
+
+            system_duration_mapping: dict[int, dict[float, Any]] = {}
+            for sys in systems:
+                if not sys.line_ys:
+                    continue
+                context = StaffSystemContext(
+                    line_y_coords=sys.line_ys,
+                    barline_x_coords=sys.barlines,
+                    staff_space=sys.line_spacing,
+                )
+                sys_cands = system_digits_merged.get(sys.system_index, [])
+                sys_playable_xs = sorted(list({
+                    (c["x0"] + c["x1"]) / 2.0
+                    for c in sys_cands
+                    if parse_fret_text(c["text"]) is not None
+                }))
+                if sys_playable_xs:
+                    mapping = resolve_tab_duration_evidence_for_events(
+                        sys_playable_xs, page_stems, page_beams, page_flags, context
+                    )
+                    system_duration_mapping[sys.system_index] = mapping
+
             for pc in all_page_candidates:
                 raw_text = pc["text"]
                 bbox_values = [pc["x0"], pc["y0"], pc["x1"], pc["y1"]]
@@ -1987,6 +2067,16 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
 
                 assignment_warnings = list(pc.get("warnings", []))
                 is_fret_candidate = parse_fret_text(raw_text) is not None and not pc.get("is_tuning_evidence")
+
+                duration_ev_val = None
+                if system is not None and is_fret_candidate:
+                    sys_map = system_duration_mapping.get(system.system_index, {})
+                    duration_ev_val = sys_map.get(x)
+                    if duration_ev_val is None:
+                        for ev_x, ev_val in sys_map.items():
+                            if abs(ev_x - x) <= 1.0:
+                                duration_ev_val = ev_val
+                                break
 
                 # Enforce size / range checks on playable Candidates
                 if is_fret_candidate and pc.get("is_playable_fret"):
@@ -2131,6 +2221,7 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                     bar_index=bar_index,
                     line_index=line_index,
                     string=string,
+                    duration_evidence=duration_ev_val,
                     raw={
                         "pdf_word_index": pc["word_index"],
                         "pdf_block_number": pc["block_no"],
@@ -3583,47 +3674,68 @@ def filter_tab_barline_candidates(
         "pdf_barline_rejected_relative_height": 0,
         "pdf_barline_double_secondary": 0,
         "pdf_barline_inherited_too_close": 0,
+        "pdf_barline_mixed_primitive_provenance": 0,
+        "pdf_barline_ambiguous_rect_width": 0,
+        "pdf_barline_decorative_fill_or_wide_rect": 0,
+        "pdf_barline_rect_secondary": 0,
     }
     valid_barlines = []
     rejected_count = 0
     details = []
     staff_height = y1 - y0
 
-    # Pass 1: Pre-calculate baseline acceptance properties for each candidate
+    # Pass 1: Pre-calculate baseline acceptance properties and special provenance/width rejections
     candidate_data = []
     ys = sorted(line_ys)
     for idx, s in enumerate(candidates):
-        x_val = (s.x0 + s.x1) / 2
+        if s.primitive_kind == "rect_edge":
+            x_val = max(s.x0, s.x1)
+        else:
+            x_val = (s.x0 + s.x1) / 2
         y_min = min(s.y0, s.y1)
         y_max = max(s.y0, s.y1)
         height = y_max - y_min
 
-        # 1. Check horizontal bounds
-        in_bounds = not (x_val < x0 - 8.0 or x_val > x1 + 8.0)
+        special_rejection_reason = None
+        special_barline_style = None
 
-        # 2. Check staff intersection
+        if s.primitive_kind == "mixed":
+            special_rejection_reason = "pdf_barline_mixed_primitive_provenance"
+            special_barline_style = "ambiguous"
+        elif s.primitive_kind == "rect_edge" and s.source_rect_width is not None:
+            w = s.source_rect_width
+            if w > 12.0:
+                special_rejection_reason = "pdf_barline_decorative_fill_or_wide_rect"
+                special_barline_style = "ambiguous"
+            elif 4.0 < w <= 12.0:
+                special_rejection_reason = "pdf_barline_ambiguous_rect_width"
+                special_barline_style = "ambiguous"
+
+        in_bounds = not (x_val < x0 - 8.0 or x_val > x1 + 8.0)
         intersects = not (y_max < y0 or y_min > y1)
 
-        # Calculate gaps crossed
         gaps_crossed = 0
         for i in range(len(ys) - 1):
             if y_min <= ys[i] + 1.5 and y_max >= ys[i+1] - 1.5:
                 gaps_crossed += 1
 
-        # Intersection height and coverage ratio
         overlap_y_min = max(y_min, y0)
         overlap_y_max = min(y_max, y1)
         overlap_height = max(0.0, overlap_y_max - overlap_y_min)
         coverage_ratio = overlap_height / staff_height if staff_height > 0 else 0.0
 
         crosses_entire_staff = (y_min <= y0 + 4.0 and y_max >= y1 - 4.0) or (gaps_crossed >= len(ys) - 1)
-
         absolute_height_ok = (height >= 40.0)
         relative_height_ok = crosses_entire_staff
         is_accepted_relative = (height >= 20.0 and relative_height_ok)
 
-        # Initially accepted is True if it would pass all individual checks
-        initially_accepted = in_bounds and intersects and (absolute_height_ok or is_accepted_relative) and relative_height_ok
+        initially_accepted = (
+            special_rejection_reason is None
+            and in_bounds
+            and intersects
+            and (absolute_height_ok or is_accepted_relative)
+            and relative_height_ok
+        )
 
         candidate_data.append({
             "idx": idx,
@@ -3639,9 +3751,11 @@ def filter_tab_barline_candidates(
             "in_bounds": in_bounds,
             "intersects": intersects,
             "initially_accepted": initially_accepted,
+            "special_rejection_reason": special_rejection_reason,
+            "special_barline_style": special_barline_style,
         })
 
-    # Pass 2: Perform single-linkage clustering on initially accepted candidates
+    # Pass 2: Single-linkage clustering on initially accepted candidates
     accepted_candidates = [item for item in candidate_data if item["initially_accepted"]]
     accepted_candidates.sort(key=lambda item: item["x"])
 
@@ -3659,69 +3773,104 @@ def filter_tab_barline_candidates(
     if current_cluster:
         clusters.append(current_cluster)
 
-    # Assign decisions based on cluster membership and initial status
-    final_decisions = {}  # idx -> (is_accepted, rejection_reason)
+    final_decisions = {}  # idx -> (is_accepted, rejection_reason, barline_style, cluster_size)
 
-    # Put all clusters' results into decisions
     for cluster in clusters:
-        if len(cluster) > 1:
-            is_rightmost_edge = any(item["x"] >= x1 - 10.0 for item in cluster)
-            is_leftmost_edge = any(item["x"] <= x0 + 10.0 for item in cluster)
-
-            if is_rightmost_edge:
-                # Multi-line rightmost edge cluster (double barline). Choose the rightmost candidate.
-                representative = cluster[-1]
-                final_decisions[representative["idx"]] = (True, None)
-                for item in cluster[:-1]:
-                    final_decisions[item["idx"]] = (False, "pdf_barline_double_secondary")
-            elif is_leftmost_edge:
-                # Multi-line leftmost edge cluster (double barline). Choose the leftmost candidate.
-                representative = cluster[0]
-                final_decisions[representative["idx"]] = (True, None)
-                for item in cluster[1:]:
-                    final_decisions[item["idx"]] = (False, "pdf_barline_double_secondary")
-            else:
-                # Internal cluster of close barlines.
-                if len(cluster) == 2:
-                    # Select the leftmost candidate as the representative for v0.1.
-                    # This is limited to size-2 close clusters; larger internal clusters remain ambiguous.
+        if len(cluster) == 1:
+            item = cluster[0]
+            final_decisions[item["idx"]] = (True, None, "regular", 1)
+        elif len(cluster) == 2:
+            c0, c1 = cluster[0], cluster[1]
+            p0_id = c0["segment"].primitive_id
+            p1_id = c1["segment"].primitive_id
+            p0_kind = c0["segment"].primitive_kind
+            p1_kind = c1["segment"].primitive_kind
+            if p0_id is not None and p0_id == p1_id and p0_kind == "rect_edge":
+                representative = c1
+                secondary = c0
+                final_decisions[representative["idx"]] = (True, None, "regular", 1)
+                final_decisions[secondary["idx"]] = (False, "pdf_barline_rect_secondary", "regular", 1)
+            elif p0_kind in ("line", None) and p1_kind in ("line", None):
+                is_rightmost_edge = any(item["x"] >= x1 - 10.0 for item in cluster)
+                is_leftmost_edge = any(item["x"] <= x0 + 10.0 for item in cluster)
+                if is_rightmost_edge:
+                    representative = cluster[-1]
+                    for item in cluster:
+                        if item is representative:
+                            final_decisions[item["idx"]] = (True, None, "double", 2)
+                        else:
+                            final_decisions[item["idx"]] = (False, "pdf_barline_double_secondary", "double", 2)
+                elif is_leftmost_edge:
+                    representative = cluster[0]
+                    for item in cluster:
+                        if item is representative:
+                            final_decisions[item["idx"]] = (True, None, "double", 2)
+                        else:
+                            final_decisions[item["idx"]] = (False, "pdf_barline_double_secondary", "double", 2)
+                else:
                     representative = cluster[0]
                     secondary = cluster[1]
-                    final_decisions[representative["idx"]] = (True, None)
-                    final_decisions[secondary["idx"]] = (False, "pdf_barline_double_secondary")
-                else:
-                    # Treat clusters of size 3 or more as ambiguous!
-                    for item in cluster:
-                        final_decisions[item["idx"]] = (False, "pdf_barline_ambiguous")
+                    final_decisions[representative["idx"]] = (True, None, "double", 2)
+                    final_decisions[secondary["idx"]] = (False, "pdf_barline_double_secondary", "double", 2)
+            else:
+                for item in cluster:
+                    final_decisions[item["idx"]] = (False, "pdf_barline_mixed_primitive_provenance", "ambiguous", 2)
         else:
-            # Single-line cluster. They are default accepted initially,
-            # but will be verified by the ambiguity check below.
-            for item in cluster:
-                final_decisions[item["idx"]] = (True, None)
+            primitive_ids = {item["segment"].primitive_id for item in cluster if item["segment"].primitive_id is not None}
+            has_rect = any(item["segment"].primitive_kind == "rect_edge" for item in cluster)
+            if len(primitive_ids) > 1 and has_rect:
+                for item in cluster:
+                    final_decisions[item["idx"]] = (False, "pdf_barline_mixed_primitive_provenance", "ambiguous", len(cluster))
+            else:
+                is_rightmost_edge = any(item["x"] >= x1 - 10.0 for item in cluster)
+                is_leftmost_edge = any(item["x"] <= x0 + 10.0 for item in cluster)
+                if is_rightmost_edge:
+                    representative = cluster[-1]
+                    for item in cluster:
+                        if item is representative:
+                            final_decisions[item["idx"]] = (True, None, "ambiguous", len(cluster))
+                        else:
+                            final_decisions[item["idx"]] = (False, "pdf_barline_double_secondary", "ambiguous", len(cluster))
+                elif is_leftmost_edge:
+                    representative = cluster[0]
+                    for item in cluster:
+                        if item is representative:
+                            final_decisions[item["idx"]] = (True, None, "ambiguous", len(cluster))
+                        else:
+                            final_decisions[item["idx"]] = (False, "pdf_barline_double_secondary", "ambiguous", len(cluster))
+                else:
+                    for item in cluster:
+                        final_decisions[item["idx"]] = (False, "pdf_barline_ambiguous", "ambiguous", len(cluster))
 
-    # For candidates that were NOT initially accepted, determine their rejection reason
     for item in candidate_data:
         if not item["initially_accepted"]:
-            reason = None
-            if not item["in_bounds"]:
-                reason = "pdf_barline_outside_system_bounds"
-            elif not item["intersects"]:
-                reason = "pdf_barline_outside_staff_region"
-            elif not item["relative_height_ok"]:
-                if item["gaps_crossed"] < len(ys) - 2:
-                    reason = "pdf_barline_crosses_insufficient_string_gaps"
-                else:
-                    reason = "pdf_barline_partial_staff_crossing"
-            elif not (item["absolute_height_ok"] or (item["height"] >= 20.0 and item["relative_height_ok"])):
-                reason = "pdf_barline_too_short_absolute"
+            if item["special_rejection_reason"] is not None:
+                final_decisions[item["idx"]] = (
+                    False,
+                    item["special_rejection_reason"],
+                    item["special_barline_style"],
+                    None,
+                )
+            else:
+                reason = None
+                if not item["in_bounds"]:
+                    reason = "pdf_barline_outside_system_bounds"
+                elif not item["intersects"]:
+                    reason = "pdf_barline_outside_staff_region"
+                elif not item["relative_height_ok"]:
+                    if item["gaps_crossed"] < len(ys) - 2:
+                        reason = "pdf_barline_crosses_insufficient_string_gaps"
+                    else:
+                        reason = "pdf_barline_partial_staff_crossing"
+                elif not (item["absolute_height_ok"] or (item["height"] >= 20.0 and item["relative_height_ok"])):
+                    reason = "pdf_barline_too_short_absolute"
 
-            if reason is None:
-                reason = "pdf_barline_rejected_relative_height"
+                if reason is None:
+                    reason = "pdf_barline_rejected_relative_height"
 
-            final_decisions[item["idx"]] = (False, reason)
+                final_decisions[item["idx"]] = (False, reason, "unclassified_stroke", None)
 
-    # Perform ambiguity check among currently accepted candidates
-    accepted_indices = {idx for idx, (accepted, _) in final_decisions.items() if accepted}
+    accepted_indices = {idx for idx, (accepted, _, _, _) in final_decisions.items() if accepted}
     for idx in list(accepted_indices):
         item = next(it for it in candidate_data if it["idx"] == idx)
         is_ambiguous = False
@@ -3734,12 +3883,12 @@ def filter_tab_barline_candidates(
                 break
 
         if is_ambiguous:
-            final_decisions[idx] = (False, "pdf_barline_ambiguous")
+            _, _, _, size = final_decisions[idx]
+            final_decisions[idx] = (False, "pdf_barline_ambiguous", "ambiguous", size)
 
-    # Construct the final returned structures
     for item in candidate_data:
         idx = item["idx"]
-        is_accepted, reason = final_decisions[idx]
+        is_accepted, reason, barline_style, cluster_size = final_decisions[idx]
 
         if is_accepted:
             valid_barlines.append(round(item["x"], 3))
@@ -3749,7 +3898,6 @@ def filter_tab_barline_candidates(
                 if reason in rejection_reasons:
                     rejection_reasons[reason] += 1
 
-                # Increment general categories matching original logic
                 if reason == "pdf_barline_outside_staff_region":
                     rejection_reasons["pdf_barline_does_not_cross_staff"] += 1
                 elif reason == "pdf_barline_crosses_insufficient_string_gaps":
@@ -3764,7 +3912,7 @@ def filter_tab_barline_candidates(
             if item["height"] < 40.0:
                 rejection_reasons["pdf_barline_too_short"] += 1
 
-        details.append({
+        detail_entry = {
             "x": round(item["x"], 3),
             "y_min": round(item["y_min"], 3),
             "y_max": round(item["y_max"], 3),
@@ -3776,7 +3924,15 @@ def filter_tab_barline_candidates(
             "relative_staff_crossing_decision": "accepted" if item["relative_height_ok"] else "rejected",
             "final_decision": "accepted" if is_accepted else "rejected",
             "rejection_reason": reason,
-        })
+            "barline_style": barline_style,
+            "cluster_size": cluster_size,
+        }
+        if "inherited" in item["segment"].__dict__ or hasattr(item["segment"], "inherited"):
+            inherited_val = getattr(item["segment"], "inherited", None)
+            if inherited_val is not None:
+                detail_entry["inherited"] = inherited_val
+
+        details.append(detail_entry)
 
     valid_barlines = _unique_sorted(valid_barlines)
     return {
@@ -3784,6 +3940,7 @@ def filter_tab_barline_candidates(
         "rejected_count": rejected_count,
         "rejection_reasons": rejection_reasons,
         "details": details,
+        "barline_candidates_details": details,
     }
 
 
@@ -3809,11 +3966,16 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
             x_e = (existing.x0 + existing.x1) / 2
             y_min_e = min(existing.y0, existing.y1)
             y_max_e = max(existing.y0, existing.y1)
-            if abs(x_s - x_e) <= 1.0 and not (y_max_s < y_min_e or y_max_e < y_min_s):
+            is_same_id = (existing.primitive_id is not None and existing.primitive_id == s.primitive_id)
+            is_exact_dup = is_exact_duplicate_or_reverse(existing, s)
+            if (is_same_id or is_exact_dup) and abs(x_s - x_e) <= 1.0 and not (y_max_s < y_min_e or y_max_e < y_min_s):
                 new_y_min = min(y_min_s, y_min_e)
                 new_y_max = max(y_max_s, y_max_e)
-                new_x = (x_s + x_e) / 2
-                deduped_verticals[i] = _LineSegment(new_x, new_y_min, new_x, new_y_max)
+                if existing.primitive_kind == "rect_edge" and s.primitive_kind == "rect_edge":
+                    new_x = max(max(existing.x0, existing.x1), max(s.x0, s.x1))
+                else:
+                    new_x = (x_s + x_e) / 2
+                deduped_verticals[i] = existing.merge_with(s, new_x, new_y_min, new_x, new_y_max)
                 found_similar = True
                 break
         if not found_similar:
@@ -4306,6 +4468,49 @@ def _nearest_system(systems: list[_TabSystem], x: float | None, y: float | None)
         h_dist = max(0.0, system.x0 - float(x), float(x) - system.x1) if x is not None else 0.0
         return (v_dist, h_dist)
     return min(containing, key=_sort_key)
+
+
+def _nearest_system_for_stem(
+    systems: list[_TabSystem],
+    x: float,
+    y0: float,
+    y1: float,
+) -> _TabSystem | None:
+    """Assign a vertical stem stroke with bbox (x, y0, y1) to its geometrically closest _TabSystem.
+
+    Evaluates vertical distance from stem endpoints [y0, y1] to staff system bounds [top_y, bottom_y],
+    without restricting to text-candidate containment zones.
+    Returns None if systems list is empty or if the stem is equidistant between two competing systems.
+    """
+    valid_systems = [sys for sys in systems if sys.line_ys]
+    if not valid_systems:
+        return None
+
+    stem_cy = (y0 + y1) / 2.0
+
+    def _stem_sys_distance(sys: _TabSystem) -> float:
+        top_y = min(sys.line_ys)
+        bot_y = max(sys.line_ys)
+        if top_y <= stem_cy <= bot_y:
+            v_dist = 0.0
+        elif stem_cy < top_y:
+            v_dist = top_y - y1 if y1 <= top_y else top_y - stem_cy
+        else:
+            v_dist = y0 - bot_y if y0 >= bot_y else stem_cy - bot_y
+
+        h_dist = max(0.0, sys.x0 - x, x - sys.x1) if (sys.x0 is not None and sys.x1 is not None) else 0.0
+        return max(0.0, v_dist) + 0.1 * h_dist
+
+    sorted_sys = sorted(valid_systems, key=_stem_sys_distance)
+    best_sys = sorted_sys[0]
+    best_dist = _stem_sys_distance(best_sys)
+
+    if len(sorted_sys) > 1:
+        second_dist = _stem_sys_distance(sorted_sys[1])
+        if abs(second_dist - best_dist) <= 1.0:
+            return None
+
+    return best_sys
 
 
 
