@@ -18,7 +18,14 @@ class TabCandidate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str
-    kind: Literal["fret", "chord-symbol", "technique-text", "candidate-text"] = "candidate-text"
+    kind: Literal[
+        "fret",
+        "chord-symbol",
+        "technique-text",
+        "candidate-text",
+        "visual-vibrato",
+        "visual-slide",
+    ] = "candidate-text"
     page_index: int | None = Field(default=None, ge=1)
     system_index: int | None = Field(default=None, ge=1)
     staff_index: int | None = Field(default=None, ge=1)
@@ -262,6 +269,7 @@ def make_tab_candidate(
     bar_index: int | None = None,
     line_index: int | None = None,
     string: int | None = None,
+    kind: str | None = None,
     raw: dict[str, Any] | None = None,
     duration_evidence: TabDurationEvidence | dict[str, Any] | None = None,
 ) -> TabCandidate:
@@ -291,7 +299,7 @@ def make_tab_candidate(
 
     return TabCandidate(
         id=candidate_id,
-        kind=_candidate_kind(raw_text, parsed_fret),
+        kind=kind or _candidate_kind(raw_text, parsed_fret),
         page_index=page_index,
         system_index=system_index,
         staff_index=staff_index,
@@ -355,4 +363,60 @@ def _bbox_center(bbox: dict[str, Any] | None) -> tuple[float | None, float | Non
     return (
         (float(bbox["x0"]) + float(bbox["x1"])) / 2,
         (float(bbox["y0"]) + float(bbox["y1"])) / 2,
+    )
+
+
+def make_visual_vibrato_candidate(
+    *,
+    candidate_id: str,
+    raw_text: str = "vibrato",
+    page_index: int | None = None,
+    system_index: int | None = None,
+    staff_index: int | None = None,
+    bar_index: int | None = None,
+    bbox_values: list[float] | tuple[float, float, float, float] | None = None,
+    confidence: float = 0.85,
+    cycles: int = 2,
+    amplitude: float = 1.0,
+) -> TabCandidate:
+    return make_tab_candidate(
+        candidate_id=candidate_id,
+        raw_text=raw_text,
+        page_index=page_index,
+        system_index=system_index,
+        staff_index=staff_index,
+        bar_index=bar_index,
+        bbox_values=bbox_values,
+        confidence=confidence,
+        kind="visual-vibrato",
+        raw={"cycles": cycles, "amplitude": amplitude},
+    )
+
+
+def make_visual_slide_candidate(
+    *,
+    candidate_id: str,
+    raw_text: str = "slide",
+    page_index: int | None = None,
+    system_index: int | None = None,
+    staff_index: int | None = None,
+    bar_index: int | None = None,
+    string: int | None = None,
+    bbox_values: list[float] | tuple[float, float, float, float] | None = None,
+    confidence: float = 0.85,
+    slope: float = 1.0,
+    direction: str = "up",
+) -> TabCandidate:
+    return make_tab_candidate(
+        candidate_id=candidate_id,
+        raw_text=raw_text,
+        page_index=page_index,
+        system_index=system_index,
+        staff_index=staff_index,
+        bar_index=bar_index,
+        string=string,
+        bbox_values=bbox_values,
+        confidence=confidence,
+        kind="visual-slide",
+        raw={"slope": slope, "direction": direction},
     )

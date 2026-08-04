@@ -183,3 +183,81 @@ def test_real_pdf_fixture_drawing_extraction():
         for s in slides:
             assert s.direction in ("up", "down")
             assert 0.15 <= abs(s.slope) <= 3.0
+
+
+def test_end_to_end_visual_vibrato_and_slide_scoreir_attachment(tmp_path):
+    from score2gp.tabraw import (
+        TabRaw,
+        make_tab_candidate,
+        make_visual_vibrato_candidate,
+        make_visual_slide_candidate,
+    )
+    from score2gp.build_ir import build_ir_from_tabraw_only
+
+    vibrato_cand = make_visual_vibrato_candidate(
+        candidate_id="vib-01",
+        raw_text="vibrato",
+        page_index=1,
+        system_index=1,
+        staff_index=1,
+        bar_index=1,
+        bbox_values=(100.0, 20.0, 120.0, 30.0),
+        cycles=3,
+        amplitude=4.0,
+    )
+    slide_cand = make_visual_slide_candidate(
+        candidate_id="slide-01",
+        raw_text="slide",
+        page_index=1,
+        system_index=1,
+        staff_index=1,
+        bar_index=1,
+        string=1,
+        bbox_values=(115.0, 20.0, 155.0, 30.0),
+        slope=1.0,
+        direction="up",
+    )
+
+    fret1 = make_tab_candidate(
+        candidate_id="fret-01",
+        raw_text="5",
+        page_index=1,
+        system_index=1,
+        staff_index=1,
+        bar_index=1,
+        string=1,
+        bbox_values=(100.0, 20.0, 110.0, 30.0),
+        confidence=0.9,
+    )
+    fret2 = make_tab_candidate(
+        candidate_id="fret-02",
+        raw_text="7",
+        page_index=1,
+        system_index=1,
+        staff_index=1,
+        bar_index=1,
+        string=1,
+        bbox_values=(160.0, 20.0, 170.0, 30.0),
+        confidence=0.9,
+    )
+
+    tabraw = TabRaw(candidates=[fret1, fret2, vibrato_cand, slide_cand])
+    tabraw_file = tmp_path / "tabraw.json"
+    tabraw.to_json_file(tabraw_file)
+
+    score, _ = build_ir_from_tabraw_only(tabraw_file)
+
+    assert len(score.bars) >= 1
+    bar = score.bars[0]
+    notes = [note for ev in bar.events for note in ev.notes]
+    assert len(notes) >= 2
+
+    note1 = notes[0]
+    vib_techs = [t for t in note1.techniques if getattr(t, "kind", None) == "vibrato"]
+    assert len(vib_techs) == 1
+    assert vib_techs[0].width == "wide"
+
+    slide_techs = [t for t in note1.techniques if getattr(t, "kind", None) == "slide"]
+    assert len(slide_techs) == 1
+    assert slide_techs[0].direction == "up"
+    assert slide_techs[0].style == "shift"

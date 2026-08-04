@@ -3902,7 +3902,7 @@ def _attach_symbols_and_techniques(score: ScoreIR, tabraw: TabRaw) -> None:
     bars_by_index = {bar.index: bar for bar in score.bars}
 
     for candidate in tabraw.candidates:
-        if candidate.kind not in ("chord-symbol", "technique-text"):
+        if candidate.kind not in ("chord-symbol", "technique-text", "visual-vibrato", "visual-slide"):
             continue
 
         bar_idx = candidate.bar_index
@@ -4207,6 +4207,112 @@ def _attach_symbols_and_techniques(score: ScoreIR, tabraw: TabRaw) -> None:
 
                 target_note.techniques.append(tech)
                 target_note.provenance.append(candidate.to_provenance())
+                _remove_not_aligned_warning(score, candidate)
+
+        elif candidate.kind == "visual-vibrato":
+            playable_events = [ev for ev in bar.events if not ev.is_rest and ev.notes]
+            if not playable_events:
+                score.warnings.append(
+                    WarningItem(
+                        code="technique_attachment_requires_note_target",
+                        message=f"Visual vibrato requires note targets in bar {bar_idx}.",
+                        severity="warning",
+                        provenance=[candidate.to_provenance()],
+                    )
+                )
+                continue
+
+            target_event = None
+            if candidate.x is not None:
+                event_dists = []
+                for ev in playable_events:
+                    note_xs = [_get_note_x(n) for n in ev.notes if _get_note_x(n) is not None]
+                    if note_xs:
+                        ev_x = sum(note_xs) / len(note_xs)
+                        dist = abs(ev_x - candidate.x)
+                        if dist <= 60.0:
+                            event_dists.append((dist, ev))
+
+                if event_dists:
+                    event_dists.sort(key=lambda item: item[0])
+                    target_event = event_dists[0][1]
+
+            if target_event is None:
+                target_event = playable_events[0]
+
+            amp = candidate.raw.get("amplitude", 1.0)
+            width_val = "wide" if amp > 3.0 else "slight"
+            tech = VibratoTechnique(kind="vibrato", width=width_val, speed="unknown")
+
+            for note in target_event.notes:
+                if not any(t.kind == "vibrato" for t in note.techniques):
+                    note.techniques.append(tech)
+                note.provenance.append(candidate.to_provenance())
+
+            _remove_not_aligned_warning(score, candidate)
+
+        elif candidate.kind == "visual-slide":
+            playable_events = [ev for ev in bar.events if not ev.is_rest and ev.notes]
+            if not playable_events:
+                score.warnings.append(
+                    WarningItem(
+                        code="technique_attachment_requires_note_target",
+                        message=f"Visual slide requires note targets in bar {bar_idx}.",
+                        severity="warning",
+                        provenance=[candidate.to_provenance()],
+                    )
+                )
+                continue
+
+            target_string = candidate.string
+            direction = candidate.raw.get("direction", "unknown")
+            slide_style = "shift" if direction == "up" else "out_down"
+
+            cand_x0 = candidate.bbox.x0 if candidate.bbox else candidate.x
+
+            notes_on_string = []
+            for ev in playable_events:
+                for note in ev.notes:
+                    if target_string is None or note.string == target_string:
+                        x_val = _get_note_x(note)
+                        notes_on_string.append((ev, note, x_val))
+
+            if not notes_on_string:
+                for ev in playable_events:
+                    for note in ev.notes:
+                        notes_on_string.append((ev, note, _get_note_x(note)))
+
+            if notes_on_string:
+                if cand_x0 is not None:
+                    notes_on_string.sort(
+                        key=lambda item: (
+                            0 if item[2] is not None and item[2] <= cand_x0 + 15.0 else 1,
+                            abs(item[2] - cand_x0) if item[2] is not None else float("inf"),
+                        )
+                    )
+
+                source_ev, source_note, _ = notes_on_string[0]
+
+                target_event_id = None
+                source_onset = source_ev.timing.onset_ticks
+                seq_targets = [
+                    ev for ev in playable_events
+                    if ev.timing.onset_ticks > source_onset and any(n.string == source_note.string for n in ev.notes)
+                ]
+                if seq_targets:
+                    seq_targets.sort(key=lambda ev: ev.timing.onset_ticks)
+                    target_event_id = seq_targets[0].id
+
+                tech = SlideTechnique(
+                    kind="slide",
+                    style=slide_style,
+                    direction=direction,
+                    target_event_id=target_event_id,
+                )
+                if not any(t.kind == "slide" for t in source_note.techniques):
+                    source_note.techniques.append(tech)
+                source_note.provenance.append(candidate.to_provenance())
+
                 _remove_not_aligned_warning(score, candidate)
 
 
