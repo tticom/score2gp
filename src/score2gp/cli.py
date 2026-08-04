@@ -234,12 +234,18 @@ def _format_diagnostics_report(data: dict) -> str:
         key_info = sem.get("logical_key_signature", {})
         key_text = "Unknown"
         if key_info:
-            if key_info.get("status") == "assumed_default":
-                key_text = f"{key_info.get('key_name', 'C Major')} (Assumed)"
+            status = key_info.get("status")
+            key_name = key_info.get("key_name")
+            if status == "assumed_default":
+                key_text = f"{key_name or 'Unknown'} (Assumed)"
+            elif status in ("UNKNOWN", "unknown"):
+                key_text = "Unknown"
+            elif status in ("AMBIGUOUS", "ambiguous"):
+                key_text = "Ambiguous"
             else:
-                key_text = key_info.get("key_name", "Unknown")
+                key_text = key_name if key_name else "Unknown"
         else:
-            key_text = "C Major"
+            key_text = "Unknown"
         lines.append(f"Key Signature: {key_text}")
         lines.append("")
 
