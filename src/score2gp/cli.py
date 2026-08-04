@@ -1479,8 +1479,38 @@ def eval_sidecar_command(
         typer.echo(f"  Measure count: {result.measure_count}")
         typer.echo(f"  ScoreIR event count: {result.score_ir_event_count}")
         typer.echo(f"  Matched TAB candidates: {result.matched_tab_candidate_count}")
-        if result.refusal_reason:
-            typer.echo(f"  Refusal reason: {result.refusal_reason}")
+@app.command("generate-sidecar")
+def generate_sidecar_command(
+    pdf: Path = typer.Option(..., "--pdf", help="Path to the PDF score"),
+    out: Path = typer.Option(..., "--out", help="Output path for the generated MusicXML sidecar"),
+) -> None:
+    """Generate a timing-safe, validated MusicXML sidecar from a PDF score using OMR notation extraction."""
+    from score2gp.notation_omr.pipeline import run_recognition_on_file
+    from score2gp.notation_omr.musicxml_generator import generate_musicxml_from_omr
+
+    typer.echo(f"Running OMR recognition on {pdf}...")
+    recognition_result = run_recognition_on_file(
+        pdf,
+        include_flag_beam_candidates=True,
+        assume_treble_clef=True
+    )
+    if not recognition_result:
+        typer.echo("Error: OMR recognition failed.", err=True)
+        raise typer.Exit(1)
+
+    typer.echo("Compiling timeline to MusicXML...")
+    xml_str = generate_musicxml_from_omr(
+        recognition_result["read_only_recognition_outcomes"],
+        recognition_result.get("semantic_candidates"),
+        recognition_result.get("staff_geometry")
+    )
+    if not xml_str:
+        typer.echo("Error: MusicXML compilation failed.", err=True)
+        raise typer.Exit(1)
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(xml_str, encoding="utf-8")
+    typer.echo(f"Successfully generated sidecar: {out}")
 
 if __name__ == "__main__":
 
