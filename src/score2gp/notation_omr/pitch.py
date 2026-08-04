@@ -197,28 +197,42 @@ def map_clef_resolved_staff_pitch(
         if clef not in ("treble", "bass", "alto"):
             continue
 
-        # Resolve key signature
-        key_sig = "C Major"
+        # Resolve key signature & evidence status
+        key_sig: str | None = None
+        key_signature_status: str = "UNKNOWN"
+
         if explicit_key_signature is not None:
-            key_sig = explicit_key_signature
+            if explicit_key_signature in KEY_SIGNATURE_ALTERATIONS:
+                key_sig = explicit_key_signature
+                key_signature_status = "EVIDENCED"
+            else:
+                key_signature_status = "AMBIGUOUS"
         elif semantic_candidates is not None:
             for sc in semantic_candidates:
                 sc_page = sc.get("page_index")
                 sc_sys = sc.get("system_index")
                 sc_staff = sc.get("staff_index")
                 if sc_page == key[0] and sc_sys == key[1] and sc_staff == key[2]:
-                    # Nested key signature candidate check
                     ks_obj = sc.get("key_signature")
                     if isinstance(ks_obj, dict):
-                        key_sig = ks_obj.get("key_kind", "C Major")
+                        status = ks_obj.get("status", "key_signature_candidate")
+                        key_kind = ks_obj.get("key_kind")
+                        if status == "key_signature_candidate" and key_kind in KEY_SIGNATURE_ALTERATIONS:
+                            key_sig = key_kind
+                            key_signature_status = "EVIDENCED"
+                        elif status in ("ambiguous", "AMBIGUOUS"):
+                            key_signature_status = "AMBIGUOUS"
+                        elif key_kind in KEY_SIGNATURE_ALTERATIONS:
+                            key_sig = key_kind
+                            key_signature_status = "EVIDENCED"
                     elif sc.get("symbol_type") == "key_signature_candidate":
-                        key_sig = sc.get("key_kind", "C Major")
+                        key_kind = sc.get("key_kind")
+                        if key_kind in KEY_SIGNATURE_ALTERATIONS:
+                            key_sig = key_kind
+                            key_signature_status = "EVIDENCED"
                     break
 
-        if key_sig not in KEY_SIGNATURE_ALTERATIONS:
-            key_sig = "C Major"
-
-        sig_alts = KEY_SIGNATURE_ALTERATIONS[key_sig]
+        sig_alts = KEY_SIGNATURE_ALTERATIONS[key_sig] if (key_sig and key_sig in KEY_SIGNATURE_ALTERATIONS) else {}
 
         # Sort candidates chronologically (by x coord)
         sorted_cands = sorted(cands, key=get_x_coord)
@@ -291,5 +305,7 @@ def map_clef_resolved_staff_pitch(
                 final_midi = natural_midi + modifier
                 cand["clef_resolved_staff_pitch"] = get_spelled_note_name(natural_midi, modifier)
                 cand["clef_resolved_midi_pitch"] = final_midi
+                cand["key_signature_status"] = key_signature_status
+                cand["resolved_key_signature"] = key_sig
             except Exception:
                 continue
