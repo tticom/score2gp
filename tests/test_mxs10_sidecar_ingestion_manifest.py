@@ -240,4 +240,3 @@ def test_mxs10_manifest_rejection_directory_path(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="PDF path is not a file"):
         validate_sidecar_manifest(manifest_path, GOOD_SIDECAR, pdf_path=dir_path)
-
