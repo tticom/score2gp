@@ -158,6 +158,14 @@ def inspect_pdf(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
                 "pdf_staff_notation_diagnostics": diags_dict,
                 "geometry_candidates": candidates,
                 "semantic_candidates": semantic_candidates,
+                "visual_vibrato_evidence": [
+                    v.model_dump(mode="json")
+                    for v in extract_visual_vibrato_evidence(drawings, diags_model.staves if hasattr(diags_model, "staves") else None)
+                ],
+                "visual_slide_evidence": [
+                    s.model_dump(mode="json")
+                    for s in extract_visual_slide_evidence(drawings, diags_model.staves if hasattr(diags_model, "staves") else None)
+                ],
             }
             summary["pages"].append(page_info)
 
@@ -254,6 +262,10 @@ from .pdf_geometry import (
     is_exact_duplicate_or_reverse,
     merge_collinear_horizontal_segments,
     FRAGMENTED_STAFF_LINE_NEIGHBOR_MAX_GAP,
+    VisualVibratoEvidence,
+    VisualSlideEvidence,
+    extract_visual_vibrato_evidence,
+    extract_visual_slide_evidence,
 )
 
 
