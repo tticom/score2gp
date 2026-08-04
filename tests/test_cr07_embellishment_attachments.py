@@ -183,4 +183,3 @@ def test_real_pdf_fixture_drawing_extraction():
         for s in slides:
             assert s.direction in ("up", "down")
             assert 0.15 <= abs(s.slope) <= 3.0
-
