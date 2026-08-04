@@ -30,6 +30,7 @@ class VisualSlideEvidence(BaseModel):
     bbox: tuple[float, float, float, float]
     slope: float
     direction: str  # "up" | "down"
+    staff_index: int | None = None
     string_index: int | None = None
 
     @field_validator("direction")
@@ -40,20 +41,31 @@ class VisualSlideEvidence(BaseModel):
         return v
 
 
-def _get_coord(pt: Any, name: str, idx: int) -> float:
-    if isinstance(pt, (int, float)):
-        return float(pt)
-    val = getattr(pt, name, None)
-    if val is not None:
-        return float(val)
-    return float(pt[idx])
+def _get_coord(pt: Any, name: str, idx: int) -> float | None:
+    """Safely extract coordinate with error handling for malformed points."""
+    try:
+        if isinstance(pt, (int, float)):
+            return float(pt)
+        val = getattr(pt, name, None)
+        if val is not None:
+            return float(val)
+        if hasattr(pt, "__getitem__"):
+            return float(pt[idx])
+    except (AttributeError, TypeError, ValueError, IndexError):
+        pass
+    return None
 
 
 def extract_visual_vibrato_evidence(
     drawings: list[dict[str, Any]],
     staves: list[Any] | None = None,
+    max_proximity_y: float = 25.0,
 ) -> list[VisualVibratoEvidence]:
-    """Detect wavy bezier curve sequences ('c') near TAB staves as VisualVibratoEvidence."""
+    """Detect wavy bezier curve sequences ('c') near TAB staves as VisualVibratoEvidence.
+
+    Performs spatial proximity clustering to split page-wide drawings into local curve groups,
+    and requires cycles >= 2 to filter out single slurs and ties.
+    """
     vibratos: list[VisualVibratoEvidence] = []
     for drawing in drawings:
         items = drawing.get("items", [])
@@ -61,58 +73,95 @@ def extract_visual_vibrato_evidence(
         if not curve_items:
             continue
 
-        xs: list[float] = []
-        ys: list[float] = []
+        # Spatial clustering of curve items: group contiguous curves within gap_x <= 20.0
+        clusters: list[list[Any]] = []
+        current_cluster: list[Any] = []
+
         for item in curve_items:
-            for pt in item[1:5]:
-                xs.append(_get_coord(pt, "x", 0))
-                ys.append(_get_coord(pt, "y", 1))
+            p1_x = _get_coord(item[1], "x", 0)
+            if p1_x is None:
+                continue
 
-        if not xs or not ys:
-            continue
+            if not current_cluster:
+                current_cluster.append(item)
+            else:
+                prev_last_x = _get_coord(current_cluster[-1][4], "x", 0)
+                if prev_last_x is not None and abs(p1_x - prev_last_x) <= 20.0:
+                    current_cluster.append(item)
+                else:
+                    clusters.append(current_cluster)
+                    current_cluster = [item]
+        if current_cluster:
+            clusters.append(current_cluster)
 
-        min_x, max_x = min(xs), max(xs)
-        min_y, max_y = min(ys), max(ys)
-        amp = (max_y - min_y) / 2.0
+        for cluster in clusters:
+            # Wavy vibratos require at least 2 cycles (filters out single slurs / ties)
+            if len(cluster) < 2:
+                continue
 
-        if amp <= 0.5 or len(curve_items) < 1:
-            continue
+            xs: list[float] = []
+            ys: list[float] = []
+            valid = True
+            for item in cluster:
+                for pt in item[1:5]:
+                    cx = _get_coord(pt, "x", 0)
+                    cy = _get_coord(pt, "y", 1)
+                    if cx is None or cy is None:
+                        valid = False
+                        break
+                    xs.append(cx)
+                    ys.append(cy)
+                if not valid:
+                    break
 
-        bbox = (round(min_x, 3), round(min_y, 3), round(max_x, 3), round(max_y, 3))
-        cycles = len(curve_items)
+            if not valid or not xs or not ys:
+                continue
 
-        staff_idx = None
-        if staves:
-            best_dist = float("inf")
-            mid_y = (bbox[1] + bbox[3]) / 2.0
-            for idx, staff in enumerate(staves, start=1):
-                staff_y0 = getattr(staff, "y0", None)
-                staff_y1 = getattr(staff, "y1", None)
-                line_ys = getattr(staff, "line_ys", [])
-                if staff_y0 is None and line_ys:
-                    staff_y0 = line_ys[0]
-                if staff_y1 is None and line_ys:
-                    staff_y1 = line_ys[-1]
-                if staff_y0 is not None and staff_y1 is not None:
-                    dist = abs(mid_y - (staff_y0 + staff_y1) / 2.0)
-                    if dist < best_dist:
-                        best_dist = dist
-                        staff_idx = idx
+            min_x, max_x = min(xs), max(xs)
+            min_y, max_y = min(ys), max(ys)
+            amp = (max_y - min_y) / 2.0
 
-        vibratos.append(
-            VisualVibratoEvidence(
-                bbox=bbox,
-                cycles=cycles,
-                amplitude=round(amp, 4),
-                staff_index=staff_idx,
+            if amp <= 0.5:
+                continue
+
+            bbox = (round(min_x, 3), round(min_y, 3), round(max_x, 3), round(max_y, 3))
+            cycles = len(cluster)
+
+            staff_idx = None
+            if staves:
+                best_dist = float("inf")
+                mid_y = (bbox[1] + bbox[3]) / 2.0
+                for idx, staff in enumerate(staves, start=1):
+                    staff_y0 = getattr(staff, "y0", None)
+                    staff_y1 = getattr(staff, "y1", None)
+                    line_ys = getattr(staff, "line_ys", [])
+                    if staff_y0 is None and line_ys:
+                        staff_y0 = line_ys[0]
+                    if staff_y1 is None and line_ys:
+                        staff_y1 = line_ys[-1]
+                    if staff_y0 is not None and staff_y1 is not None:
+                        staff_mid_y = (staff_y0 + staff_y1) / 2.0
+                        dist = abs(mid_y - staff_mid_y)
+                        if dist < best_dist and dist <= max_proximity_y:
+                            best_dist = dist
+                            staff_idx = idx
+
+            vibratos.append(
+                VisualVibratoEvidence(
+                    bbox=bbox,
+                    cycles=cycles,
+                    amplitude=round(amp, 4),
+                    staff_index=staff_idx,
+                )
             )
-        )
     return vibratos
 
 
 def extract_visual_slide_evidence(
     drawings: list[dict[str, Any]],
     staves: list[Any] | None = None,
+    max_proximity_y: float = 25.0,
+    max_string_proximity_y: float = 15.0,
 ) -> list[VisualSlideEvidence]:
     """Detect diagonal line primitives near TAB fret numbers as VisualSlideEvidence."""
     slides: list[VisualSlideEvidence] = []
@@ -127,14 +176,21 @@ def extract_visual_slide_evidence(
             x1 = _get_coord(p1, "x", 0)
             y1 = _get_coord(p1, "y", 1)
 
+            if x0 is None or y0 is None or x1 is None or y1 is None:
+                continue
+
             dx = x1 - x0
             dy = y1 - y0
+            length = (dx * dx + dy * dy) ** 0.5
 
-            if abs(dy) <= 1.0 or abs(dx) <= 1.0:
+            if not (5.0 <= length <= 50.0):
+                continue
+
+            if abs(dx) < 1e-3:
                 continue
 
             slope = dy / dx
-            if not (0.05 <= abs(slope) <= 10.0):
+            if not (0.15 <= abs(slope) <= 3.0):
                 continue
 
             if (dx > 0 and dy < 0) or (dx < 0 and dy > 0):
@@ -149,16 +205,35 @@ def extract_visual_slide_evidence(
                 round(max(y0, y1), 3),
             )
 
+            staff_idx = None
             string_idx = None
             if staves:
-                best_dist = float("inf")
                 mid_y = (bbox[1] + bbox[3]) / 2.0
-                for staff in staves:
+                best_staff_dist = float("inf")
+                matched_staff = None
+                for idx, staff in enumerate(staves, start=1):
+                    staff_y0 = getattr(staff, "y0", None)
+                    staff_y1 = getattr(staff, "y1", None)
                     line_ys = getattr(staff, "line_ys", [])
+                    if staff_y0 is None and line_ys:
+                        staff_y0 = line_ys[0]
+                    if staff_y1 is None and line_ys:
+                        staff_y1 = line_ys[-1]
+                    if staff_y0 is not None and staff_y1 is not None:
+                        staff_mid_y = (staff_y0 + staff_y1) / 2.0
+                        dist = abs(mid_y - staff_mid_y)
+                        if dist < best_staff_dist and dist <= max_proximity_y:
+                            best_staff_dist = dist
+                            staff_idx = idx
+                            matched_staff = staff
+
+                if matched_staff:
+                    line_ys = getattr(matched_staff, "line_ys", [])
+                    best_string_dist = float("inf")
                     for s_idx, s_y in enumerate(line_ys, start=1):
-                        dist = abs(mid_y - s_y)
-                        if dist < best_dist:
-                            best_dist = dist
+                        s_dist = abs(mid_y - s_y)
+                        if s_dist < best_string_dist and s_dist <= max_string_proximity_y:
+                            best_string_dist = s_dist
                             string_idx = s_idx
 
             slides.append(
@@ -166,6 +241,7 @@ def extract_visual_slide_evidence(
                     bbox=bbox,
                     slope=round(slope, 4),
                     direction=direction,
+                    staff_index=staff_idx,
                     string_index=string_idx,
                 )
             )
