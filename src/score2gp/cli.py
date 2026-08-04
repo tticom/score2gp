@@ -22,7 +22,7 @@ from .ir import ScoreIR, compare_score_ir, export_scoreir_schema, validate_score
 from .pdf import extract_tab as extract_tab_file
 from .pdf import inspect_pdf as inspect_pdf_file
 from .report import write_conversion_report, write_warnings
-from .sidecar_evaluator import evaluate_sidecar
+from .sidecar_evaluator import evaluate_sidecar, validate_sidecar_manifest
 
 def parse_page_range(pages_str: str | None) -> tuple[int, int] | None:
     if not pages_str:
@@ -811,6 +811,7 @@ def convert_command(
     require_precise_timing: bool = typer.Option(False, "--require-precise-timing", help="Reject input if reliable precise timing evidence is missing."),
     tempo_bpm: Optional[float] = typer.Option(None, "--tempo-bpm", help="Explicit tempo override in BPM for PDF-only TabRaw conversion."),
     ref_gp: Optional[Path] = typer.Option(None, "--ref-gp", help="Path to optional reference GP package for semantic comparison"),
+    sidecar_manifest: Optional[Path] = typer.Option(None, "--sidecar-manifest", help="Path to sidecar provenance manifest JSON file"),
 ) -> None:
     """Run the complete conversion pipeline: extraction, alignment, IR generation, and GP7 package writing."""
     actual_work_dir = work_dir or workdir
@@ -879,6 +880,45 @@ def convert_command(
     actual_work_dir.mkdir(parents=True, exist_ok=True)
     warnings = []
     summary = {}
+
+    if sidecar_manifest is not None:
+        if musicxml is None:
+            typer.echo("Error: --sidecar-manifest requires --musicxml sidecar path.", err=True)
+            if json_report:
+                _write_convert_report(
+                    report_path=json_report,
+                    status="refused",
+                    stage="argument-validation",
+                    exit_code=1,
+                    work_dir=actual_work_dir,
+                    error_type="ValueError",
+                    refusal_code="sidecar_manifest_missing_musicxml",
+                    recommended_action="Provide --musicxml when using --sidecar-manifest.",
+                    output_written=False,
+                    strict=strict,
+                    musicxml_sidecar_info=mxl_info,
+                )
+            raise typer.Exit(1)
+        try:
+            manifest_obj = validate_sidecar_manifest(sidecar_manifest, musicxml, pdf_path=pdf)
+            summary["sidecar_manifest"] = manifest_obj.model_dump(mode="json")
+        except Exception as exc:
+            typer.echo(f"Error: Sidecar manifest validation failed: {exc}", err=True)
+            if json_report:
+                _write_convert_report(
+                    report_path=json_report,
+                    status="refused",
+                    stage="sidecar-manifest-validation",
+                    exit_code=1,
+                    work_dir=actual_work_dir,
+                    error_type=type(exc).__name__,
+                    refusal_code="sidecar_manifest_invalid",
+                    recommended_action=f"Ensure --sidecar-manifest matches sidecar SHA-256 and has eval_status == 'passed'. Error: {exc}",
+                    output_written=False,
+                    strict=strict,
+                    musicxml_sidecar_info=mxl_info,
+                )
+            raise typer.Exit(1)
 
     # Stage 1: Inspect PDF and Extract Tab Candidates
     try:

@@ -19,13 +19,27 @@ def write_conversion_report(path: str | Path, title: str, warnings: list[dict[st
         f"<li><strong>{html.escape(item.get('code', 'warning'))}</strong>: {html.escape(item.get('message', ''))}</li>"
         for item in warnings
     )
+    manifest_section = ""
+    sidecar_manifest = summary.get("sidecar_manifest")
+    if sidecar_manifest and isinstance(sidecar_manifest, dict):
+        manifest_section = f"""<h2>Sidecar Provenance Manifest</h2>
+<ul>
+  <li><strong>Generator Tool:</strong> {html.escape(str(sidecar_manifest.get('generator_tool', '')))}</li>
+  <li><strong>Generator Version:</strong> {html.escape(str(sidecar_manifest.get('generator_version', '')))}</li>
+  <li><strong>Operator ID:</strong> {html.escape(str(sidecar_manifest.get('operator_id', '')))}</li>
+  <li><strong>Operator Labor Minutes:</strong> {html.escape(str(sidecar_manifest.get('operator_labor_minutes', '')))}</li>
+  <li><strong>Sidecar SHA-256:</strong> {html.escape(str(sidecar_manifest.get('sidecar_sha256', '')))}</li>
+  <li><strong>PDF SHA-256:</strong> {html.escape(str(sidecar_manifest.get('pdf_sha256', 'None')))}</li>
+  <li><strong>Eval Status:</strong> {html.escape(str(sidecar_manifest.get('eval_status', '')))}</li>
+</ul>
+"""
     body = f"""<!doctype html>
 <html lang="en">
 <head><meta charset="utf-8"><title>{html.escape(title)}</title></head>
 <body>
 <h1>{html.escape(title)}</h1>
 <p>This report is a first-pass conversion diagnostic. It lists uncertainty instead of hiding it.</p>
-<h2>Warnings</h2>
+{manifest_section}<h2>Warnings</h2>
 <ul>{warning_items}</ul>
 <h2>Summary</h2>
 <pre>{html.escape(json.dumps(summary, indent=2))}</pre>
