@@ -900,7 +900,7 @@ def convert_command(
                 )
             raise typer.Exit(1)
         try:
-            manifest_obj = validate_sidecar_manifest(sidecar_manifest, musicxml)
+            manifest_obj = validate_sidecar_manifest(sidecar_manifest, musicxml, pdf_path=pdf)
             summary["sidecar_manifest"] = manifest_obj.model_dump(mode="json")
         except Exception as exc:
             typer.echo(f"Error: Sidecar manifest validation failed: {exc}", err=True)

@@ -43,34 +43,52 @@ class SidecarProvenanceManifest(BaseModel):
         "other",
     ]
     generator_version: str
-    operator_id: str
-    operator_labor_minutes: float
-    sidecar_sha256: str
-    pdf_sha256: str | None = None
+    operator_id: str = Field(..., min_length=1)
+    operator_labor_minutes: float = Field(..., ge=0.0)
+    sidecar_sha256: str = Field(..., pattern=r"^[0-9a-fA-F]{64}$")
+    pdf_sha256: str | None = Field(None, pattern=r"^[0-9a-fA-F]{64}$")
     eval_status: str
 
 
 def validate_sidecar_manifest(
-    manifest_path: Path, sidecar_path: Path
+    manifest_path: Path, sidecar_path: Path, pdf_path: Path | None = None
 ) -> SidecarProvenanceManifest:
     manifest_path = Path(manifest_path)
     sidecar_path = Path(sidecar_path)
 
     if not manifest_path.exists():
         raise FileNotFoundError(f"Sidecar manifest file not found: {manifest_path}")
+    if not manifest_path.is_file():
+        raise ValueError(f"Sidecar manifest path is not a file: {manifest_path}")
 
     if not sidecar_path.exists():
         raise FileNotFoundError(f"Sidecar file not found: {sidecar_path}")
+    if not sidecar_path.is_file():
+        raise ValueError(f"Sidecar path is not a file: {sidecar_path}")
+
+    if pdf_path is not None:
+        pdf_path = Path(pdf_path)
+        if not pdf_path.exists():
+            raise FileNotFoundError(f"PDF file not found: {pdf_path}")
+        if not pdf_path.is_file():
+            raise ValueError(f"PDF path is not a file: {pdf_path}")
 
     manifest_bytes = manifest_path.read_bytes()
     manifest_data = json.loads(manifest_bytes.decode("utf-8"))
     manifest = SidecarProvenanceManifest.model_validate(manifest_data)
 
     actual_sidecar_sha256 = _compute_sha256(sidecar_path)
-    if actual_sidecar_sha256 != manifest.sidecar_sha256:
+    if actual_sidecar_sha256 is None or actual_sidecar_sha256.lower() != manifest.sidecar_sha256.lower():
         raise ValueError(
             f"Sidecar SHA-256 mismatch: manifest expected {manifest.sidecar_sha256}, got {actual_sidecar_sha256}"
         )
+
+    if manifest.pdf_sha256 is not None and pdf_path is not None:
+        actual_pdf_sha256 = _compute_sha256(pdf_path)
+        if actual_pdf_sha256 is None or actual_pdf_sha256.lower() != manifest.pdf_sha256.lower():
+            raise ValueError(
+                f"PDF SHA-256 mismatch: manifest expected {manifest.pdf_sha256}, got {actual_pdf_sha256}"
+            )
 
     if manifest.eval_status != "passed":
         raise ValueError(

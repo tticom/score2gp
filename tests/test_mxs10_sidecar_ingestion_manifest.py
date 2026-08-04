@@ -126,3 +126,118 @@ def test_mxs10_cli_convert_with_sidecar_manifest(tmp_path: Path) -> None:
     assert "Sidecar Provenance Manifest" in html_content
     assert "pdftomusic_pro" in html_content
     assert "op_cli_01" in html_content
+
+
+GOOD_PDF = Path("tests/fixtures/pdf/generated_tiny_tab.pdf")
+
+
+def test_mxs10_manifest_validation_uppercase_sha(tmp_path: Path) -> None:
+    sha = _compute_sha256(GOOD_SIDECAR)
+    assert sha is not None
+
+    manifest_data = {
+        "generator_tool": "musescore_manual",
+        "generator_version": "4.2.1",
+        "operator_id": "op_test_upper",
+        "operator_labor_minutes": 10.0,
+        "sidecar_sha256": sha.upper(),
+        "pdf_sha256": None,
+        "eval_status": "passed",
+    }
+    manifest_path = tmp_path / "uppercase_manifest.json"
+    manifest_path.write_text(json.dumps(manifest_data), encoding="utf-8")
+
+    result = validate_sidecar_manifest(manifest_path, GOOD_SIDECAR)
+    assert isinstance(result, SidecarProvenanceManifest)
+    assert result.sidecar_sha256 == sha.upper()
+
+
+def test_mxs10_manifest_validation_pdf_sha_cross_validation(tmp_path: Path) -> None:
+    sidecar_sha = _compute_sha256(GOOD_SIDECAR)
+    pdf_sha = _compute_sha256(GOOD_PDF)
+    assert sidecar_sha is not None
+    assert pdf_sha is not None
+
+    # Valid PDF SHA
+    manifest_data_valid = {
+        "generator_tool": "musescore_manual",
+        "generator_version": "4.2.1",
+        "operator_id": "op_test_pdf_sha",
+        "operator_labor_minutes": 12.0,
+        "sidecar_sha256": sidecar_sha,
+        "pdf_sha256": pdf_sha.upper(),
+        "eval_status": "passed",
+    }
+    manifest_path_valid = tmp_path / "valid_pdf_sha_manifest.json"
+    manifest_path_valid.write_text(json.dumps(manifest_data_valid), encoding="utf-8")
+
+    res = validate_sidecar_manifest(manifest_path_valid, GOOD_SIDECAR, pdf_path=GOOD_PDF)
+    assert res.pdf_sha256 == pdf_sha.upper()
+
+    # Mismatched PDF SHA
+    manifest_data_invalid = {
+        "generator_tool": "musescore_manual",
+        "generator_version": "4.2.1",
+        "operator_id": "op_test_pdf_sha",
+        "operator_labor_minutes": 12.0,
+        "sidecar_sha256": sidecar_sha,
+        "pdf_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "eval_status": "passed",
+    }
+    manifest_path_invalid = tmp_path / "invalid_pdf_sha_manifest.json"
+    manifest_path_invalid.write_text(json.dumps(manifest_data_invalid), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="PDF SHA-256 mismatch"):
+        validate_sidecar_manifest(manifest_path_invalid, GOOD_SIDECAR, pdf_path=GOOD_PDF)
+
+
+def test_mxs10_manifest_rejection_negative_labor_minutes(tmp_path: Path) -> None:
+    from pydantic import ValidationError
+
+    sha = _compute_sha256(GOOD_SIDECAR)
+    assert sha is not None
+
+    manifest_data = {
+        "generator_tool": "photoscore_ultimate",
+        "generator_version": "2024.1",
+        "operator_id": "op_test_neg",
+        "operator_labor_minutes": -5.0,
+        "sidecar_sha256": sha,
+        "pdf_sha256": None,
+        "eval_status": "passed",
+    }
+    manifest_path = tmp_path / "neg_labor_manifest.json"
+    manifest_path.write_text(json.dumps(manifest_data), encoding="utf-8")
+
+    with pytest.raises(ValidationError):
+        validate_sidecar_manifest(manifest_path, GOOD_SIDECAR)
+
+
+def test_mxs10_manifest_rejection_directory_path(tmp_path: Path) -> None:
+    sha = _compute_sha256(GOOD_SIDECAR)
+    assert sha is not None
+
+    manifest_data = {
+        "generator_tool": "photoscore_ultimate",
+        "generator_version": "2024.1",
+        "operator_id": "op_dir_test",
+        "operator_labor_minutes": 5.0,
+        "sidecar_sha256": sha,
+        "pdf_sha256": None,
+        "eval_status": "passed",
+    }
+    manifest_path = tmp_path / "dir_manifest.json"
+    manifest_path.write_text(json.dumps(manifest_data), encoding="utf-8")
+
+    dir_path = tmp_path / "test_dir"
+    dir_path.mkdir()
+
+    with pytest.raises(ValueError, match="Sidecar manifest path is not a file"):
+        validate_sidecar_manifest(dir_path, GOOD_SIDECAR)
+
+    with pytest.raises(ValueError, match="Sidecar path is not a file"):
+        validate_sidecar_manifest(manifest_path, dir_path)
+
+    with pytest.raises(ValueError, match="PDF path is not a file"):
+        validate_sidecar_manifest(manifest_path, GOOD_SIDECAR, pdf_path=dir_path)
+
