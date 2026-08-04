@@ -3,8 +3,173 @@ from __future__ import annotations
 from dataclasses import dataclass
 import statistics
 from typing import Any, Literal
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 FRAGMENTED_STAFF_LINE_NEIGHBOR_MAX_GAP = 360.0
+
+
+class VisualVibratoEvidence(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    bbox: tuple[float, float, float, float]
+    cycles: int
+    amplitude: float
+    staff_index: int | None = None
+
+    @field_validator("cycles")
+    @classmethod
+    def validate_cycles(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("cycles must be non-negative")
+        return v
+
+
+class VisualSlideEvidence(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    bbox: tuple[float, float, float, float]
+    slope: float
+    direction: str  # "up" | "down"
+    string_index: int | None = None
+
+    @field_validator("direction")
+    @classmethod
+    def validate_direction(cls, v: str) -> str:
+        if v not in ("up", "down"):
+            raise ValueError("direction must be 'up' or 'down'")
+        return v
+
+
+def _get_coord(pt: Any, name: str, idx: int) -> float:
+    if isinstance(pt, (int, float)):
+        return float(pt)
+    val = getattr(pt, name, None)
+    if val is not None:
+        return float(val)
+    return float(pt[idx])
+
+
+def extract_visual_vibrato_evidence(
+    drawings: list[dict[str, Any]],
+    staves: list[Any] | None = None,
+) -> list[VisualVibratoEvidence]:
+    """Detect wavy bezier curve sequences ('c') near TAB staves as VisualVibratoEvidence."""
+    vibratos: list[VisualVibratoEvidence] = []
+    for drawing in drawings:
+        items = drawing.get("items", [])
+        curve_items = [item for item in items if item and item[0] == "c" and len(item) >= 5]
+        if not curve_items:
+            continue
+
+        xs: list[float] = []
+        ys: list[float] = []
+        for item in curve_items:
+            for pt in item[1:5]:
+                xs.append(_get_coord(pt, "x", 0))
+                ys.append(_get_coord(pt, "y", 1))
+
+        if not xs or not ys:
+            continue
+
+        min_x, max_x = min(xs), max(xs)
+        min_y, max_y = min(ys), max(ys)
+        amp = (max_y - min_y) / 2.0
+
+        if amp <= 0.5 or len(curve_items) < 1:
+            continue
+
+        bbox = (round(min_x, 3), round(min_y, 3), round(max_x, 3), round(max_y, 3))
+        cycles = len(curve_items)
+
+        staff_idx = None
+        if staves:
+            best_dist = float("inf")
+            mid_y = (bbox[1] + bbox[3]) / 2.0
+            for idx, staff in enumerate(staves, start=1):
+                staff_y0 = getattr(staff, "y0", None)
+                staff_y1 = getattr(staff, "y1", None)
+                line_ys = getattr(staff, "line_ys", [])
+                if staff_y0 is None and line_ys:
+                    staff_y0 = line_ys[0]
+                if staff_y1 is None and line_ys:
+                    staff_y1 = line_ys[-1]
+                if staff_y0 is not None and staff_y1 is not None:
+                    dist = abs(mid_y - (staff_y0 + staff_y1) / 2.0)
+                    if dist < best_dist:
+                        best_dist = dist
+                        staff_idx = idx
+
+        vibratos.append(
+            VisualVibratoEvidence(
+                bbox=bbox,
+                cycles=cycles,
+                amplitude=round(amp, 4),
+                staff_index=staff_idx,
+            )
+        )
+    return vibratos
+
+
+def extract_visual_slide_evidence(
+    drawings: list[dict[str, Any]],
+    staves: list[Any] | None = None,
+) -> list[VisualSlideEvidence]:
+    """Detect diagonal line primitives near TAB fret numbers as VisualSlideEvidence."""
+    slides: list[VisualSlideEvidence] = []
+    for drawing in drawings:
+        items = drawing.get("items", [])
+        for item in items:
+            if not item or item[0] != "l" or len(item) < 3:
+                continue
+            p0, p1 = item[1], item[2]
+            x0 = _get_coord(p0, "x", 0)
+            y0 = _get_coord(p0, "y", 1)
+            x1 = _get_coord(p1, "x", 0)
+            y1 = _get_coord(p1, "y", 1)
+
+            dx = x1 - x0
+            dy = y1 - y0
+
+            if abs(dy) <= 1.0 or abs(dx) <= 1.0:
+                continue
+
+            slope = dy / dx
+            if not (0.05 <= abs(slope) <= 10.0):
+                continue
+
+            if (dx > 0 and dy < 0) or (dx < 0 and dy > 0):
+                direction = "up"
+            else:
+                direction = "down"
+
+            bbox = (
+                round(min(x0, x1), 3),
+                round(min(y0, y1), 3),
+                round(max(x0, x1), 3),
+                round(max(y0, y1), 3),
+            )
+
+            string_idx = None
+            if staves:
+                best_dist = float("inf")
+                mid_y = (bbox[1] + bbox[3]) / 2.0
+                for staff in staves:
+                    line_ys = getattr(staff, "line_ys", [])
+                    for s_idx, s_y in enumerate(line_ys, start=1):
+                        dist = abs(mid_y - s_y)
+                        if dist < best_dist:
+                            best_dist = dist
+                            string_idx = s_idx
+
+            slides.append(
+                VisualSlideEvidence(
+                    bbox=bbox,
+                    slope=round(slope, 4),
+                    direction=direction,
+                    string_index=string_idx,
+                )
+            )
+    return slides
 
 
 def is_exact_duplicate_or_reverse(s1: _LineSegment, s2: _LineSegment) -> bool:
