@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import tempfile
 from pathlib import Path
 from typing import Literal
@@ -29,6 +30,54 @@ class SidecarEvaluationResult(BaseModel):
     matched_tab_candidate_count: int = Field(ge=0)
     refusal_reason: str | None = None
     provenance: dict = Field(default_factory=dict)
+
+
+class SidecarProvenanceManifest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    generator_tool: Literal[
+        "pdftomusic_pro",
+        "photoscore_ultimate",
+        "scanscore",
+        "musescore_manual",
+        "other",
+    ]
+    generator_version: str
+    operator_id: str
+    operator_labor_minutes: float
+    sidecar_sha256: str
+    pdf_sha256: str | None = None
+    eval_status: str
+
+
+def validate_sidecar_manifest(
+    manifest_path: Path, sidecar_path: Path
+) -> SidecarProvenanceManifest:
+    manifest_path = Path(manifest_path)
+    sidecar_path = Path(sidecar_path)
+
+    if not manifest_path.exists():
+        raise FileNotFoundError(f"Sidecar manifest file not found: {manifest_path}")
+
+    if not sidecar_path.exists():
+        raise FileNotFoundError(f"Sidecar file not found: {sidecar_path}")
+
+    manifest_bytes = manifest_path.read_bytes()
+    manifest_data = json.loads(manifest_bytes.decode("utf-8"))
+    manifest = SidecarProvenanceManifest.model_validate(manifest_data)
+
+    actual_sidecar_sha256 = _compute_sha256(sidecar_path)
+    if actual_sidecar_sha256 != manifest.sidecar_sha256:
+        raise ValueError(
+            f"Sidecar SHA-256 mismatch: manifest expected {manifest.sidecar_sha256}, got {actual_sidecar_sha256}"
+        )
+
+    if manifest.eval_status != "passed":
+        raise ValueError(
+            f"Sidecar evaluation status is '{manifest.eval_status}', expected 'passed'"
+        )
+
+    return manifest
 
 
 def _compute_sha256(path: Path) -> str | None:
