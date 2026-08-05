@@ -3912,7 +3912,7 @@ def _attach_symbols_and_techniques(score: ScoreIR, tabraw: TabRaw) -> None:
     bars_by_index = {bar.index: bar for bar in score.bars}
 
     fret_candidates = [c for c in tabraw.candidates if c.kind == "fret" and c.bar_index is not None]
-    source_bar_keys = sorted(list({(c.page_index or 1, c.system_index, c.staff_index or 1, c.bar_index) for c in fret_candidates}))
+    source_bar_keys = sorted(list({(c.page_index or 1, c.system_index or 1, c.staff_index or 1, c.bar_index) for c in fret_candidates}))
     bar_key_to_output_idx = {
         key: idx for idx, key in enumerate(source_bar_keys, start=1)
     }
@@ -3922,8 +3922,8 @@ def _attach_symbols_and_techniques(score: ScoreIR, tabraw: TabRaw) -> None:
             continue
 
         bar_idx = candidate.bar_index
-        if bar_idx is not None and candidate.system_index is not None:
-            cand_key = (candidate.page_index or 1, candidate.system_index, candidate.staff_index or 1, bar_idx)
+        if bar_idx is not None:
+            cand_key = (candidate.page_index or 1, candidate.system_index or 1, candidate.staff_index or 1, bar_idx)
             if cand_key in bar_key_to_output_idx:
                 bar_idx = bar_key_to_output_idx[cand_key]
         # If candidate lacks a bar index, or the target bar does not exist:

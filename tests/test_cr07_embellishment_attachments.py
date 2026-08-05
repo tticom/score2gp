@@ -406,3 +406,55 @@ def test_downward_slide_style_and_chord_vibrato_snapping(tmp_path):
     assert len(slide_techs) == 1
     assert slide_techs[0].style == "shift"
     assert slide_techs[0].direction == "down"
+
+
+def test_fret_candidate_none_system_index_no_crash(tmp_path):
+    from score2gp.tabraw import TabRaw, make_tab_candidate, make_visual_vibrato_candidate
+    from score2gp.build_ir import _attach_symbols_and_techniques, build_ir_from_tabraw_only
+
+    # Candidate with explicit system_index=1
+    fret1 = make_tab_candidate(
+        candidate_id="fret-1",
+        raw_text="3",
+        page_index=1,
+        system_index=1,
+        staff_index=1,
+        bar_index=1,
+        string=1,
+        bbox_values=(100.0, 20.0, 110.0, 30.0),
+        confidence=0.9,
+    )
+    # Unparsed/raw fret candidate with system_index=None (kind="fret")
+    fret_none_sys = make_tab_candidate(
+        candidate_id="fret-none-sys",
+        raw_text="?",
+        page_index=1,
+        system_index=None,
+        staff_index=1,
+        bar_index=1,
+        string=1,
+        bbox_values=(120.0, 20.0, 130.0, 30.0),
+        confidence=0.1,
+    )
+    vibrato = make_visual_vibrato_candidate(
+        candidate_id="vib-none-sys",
+        raw_text="vibrato",
+        page_index=1,
+        system_index=1,
+        staff_index=1,
+        bar_index=1,
+        bbox_values=(100.0, 15.0, 120.0, 25.0),
+        cycles=3,
+        amplitude=4.0,
+    )
+
+    tabraw = TabRaw(candidates=[fret1, fret_none_sys, vibrato])
+    tabraw_valid = TabRaw(candidates=[fret1, vibrato])
+    tabraw_file = tmp_path / "tabraw_valid.json"
+    tabraw_valid.to_json_file(tabraw_file)
+
+    score, _ = build_ir_from_tabraw_only(tabraw_file)
+
+    # Verify that calling _attach_symbols_and_techniques with mixed None/int system_index does not raise TypeError
+    _attach_symbols_and_techniques(score, tabraw)
+    assert len(score.bars) >= 1
