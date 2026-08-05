@@ -406,4 +406,3 @@ def test_downward_slide_style_and_chord_vibrato_snapping(tmp_path):
     assert len(slide_techs) == 1
     assert slide_techs[0].style == "shift"
     assert slide_techs[0].direction == "down"
-
