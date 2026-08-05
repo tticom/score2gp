@@ -4270,15 +4270,28 @@ def _attach_symbols_and_techniques(score: ScoreIR, tabraw: TabRaw) -> None:
                 else:
                     tech = LetRingTechnique(end_event_id=end_event_id)
 
-                target_notes = []
-                if candidate.string is not None:
-                    target_notes = [n for n in start_ev.notes if n.string == candidate.string]
-                if not target_notes:
-                    target_notes = start_ev.notes
+                if candidate.string is None:
+                    for target_note in start_ev.notes:
+                        target_note.techniques.append(tech)
+                        target_note.provenance.append(candidate.to_provenance())
 
-                for target_note in target_notes:
-                    target_note.techniques.append(tech)
-                    target_note.provenance.append(candidate.to_provenance())
+                    if end_event_id is not None:
+                        for inter_ev in candidate_end_events:
+                            if inter_ev.id != start_ev.id:
+                                inter_tech = PalmMuteTechnique() if kind == "palm-mute" else LetRingTechnique()
+                                for inter_note in inter_ev.notes:
+                                    if not any(t.kind == kind for t in inter_note.techniques):
+                                        inter_note.techniques.append(inter_tech)
+                                        inter_note.provenance.append(candidate.to_provenance())
+                else:
+                    target_notes = [n for n in start_ev.notes if n.string == candidate.string]
+                    if not target_notes:
+                        target_notes = start_ev.notes
+
+                    for target_note in target_notes:
+                        target_note.techniques.append(tech)
+                        target_note.provenance.append(candidate.to_provenance())
+
                 _remove_not_aligned_warning(score, candidate)
 
             else:

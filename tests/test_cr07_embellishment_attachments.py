@@ -565,3 +565,78 @@ def test_palm_mute_and_let_ring_span_attachments(tmp_path):
 
     let_ring_notes, palm_mute_notes = _find_span_notes(score_lr)
     assert len(let_ring_notes) == 3
+
+
+def test_track_wide_span_multi_string_propagation(tmp_path):
+    from score2gp.tabraw import (
+        TabRaw,
+        make_tab_candidate,
+        make_palm_mute_candidate,
+    )
+    from score2gp.build_ir import build_ir_from_tabraw_only
+    from score2gp.gpif import _find_span_notes
+
+    # Event 1 on String 1 (x=100)
+    fret1 = make_tab_candidate(
+        candidate_id="fret-1",
+        raw_text="3",
+        page_index=1,
+        system_index=1,
+        staff_index=1,
+        bar_index=1,
+        string=1,
+        bbox_values=(100.0, 20.0, 110.0, 30.0),
+        confidence=0.9,
+    )
+    # Event 2 on String 2 (x=140) — different string!
+    fret2 = make_tab_candidate(
+        candidate_id="fret-2",
+        raw_text="5",
+        page_index=1,
+        system_index=1,
+        staff_index=1,
+        bar_index=1,
+        string=2,
+        bbox_values=(140.0, 30.0, 150.0, 40.0),
+        confidence=0.9,
+    )
+    # Event 3 on String 1 (x=180)
+    fret3 = make_tab_candidate(
+        candidate_id="fret-3",
+        raw_text="7",
+        page_index=1,
+        system_index=1,
+        staff_index=1,
+        bar_index=1,
+        string=1,
+        bbox_values=(180.0, 20.0, 190.0, 30.0),
+        confidence=0.9,
+    )
+
+    # Track-wide P.M. candidate (string=None) spanning x0=95 to x1=185
+    pm_trackwide = make_palm_mute_candidate(
+        candidate_id="pm-trackwide",
+        raw_text="P.M.",
+        page_index=1,
+        system_index=1,
+        staff_index=1,
+        bar_index=1,
+        string=None,  # Track-wide span!
+        bbox_values=(95.0, 10.0, 185.0, 18.0),
+    )
+
+    tabraw = TabRaw(candidates=[fret1, fret2, fret3, pm_trackwide])
+    tabraw_file = tmp_path / "tabraw_pm_trackwide.json"
+    tabraw.to_json_file(tabraw_file)
+
+    score, _ = build_ir_from_tabraw_only(tabraw_file)
+    bar = score.bars[0]
+    events = [ev for ev in bar.events if not ev.is_rest and ev.notes]
+    assert len(events) == 3
+
+    # All 3 notes across strings 1 and 2 must be collected into palm_mute_notes in GPIF
+    _, palm_mute_notes = _find_span_notes(score)
+    assert len(palm_mute_notes) == 3
+    assert (bar.index, events[0].timing.onset_ticks, 1) in palm_mute_notes
+    assert (bar.index, events[1].timing.onset_ticks, 2) in palm_mute_notes
+    assert (bar.index, events[2].timing.onset_ticks, 1) in palm_mute_notes
