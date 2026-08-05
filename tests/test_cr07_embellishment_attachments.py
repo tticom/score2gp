@@ -436,6 +436,7 @@ def test_fret_candidate_none_system_index_no_crash(tmp_path):
         bbox_values=(120.0, 20.0, 130.0, 30.0),
         confidence=0.1,
     )
+    fret_none_sys.kind = "fret"
     vibrato = make_visual_vibrato_candidate(
         candidate_id="vib-none-sys",
         raw_text="vibrato",
