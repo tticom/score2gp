@@ -177,6 +177,8 @@ def test_real_pdf_fixture_drawing_extraction():
 
         assert isinstance(vibratos, list)
         assert isinstance(slides, list)
+        assert len(vibratos) > 0
+        assert len(slides) > 0
         for v in vibratos:
             assert v.cycles >= 2
             assert v.amplitude > 0.5
@@ -261,3 +263,147 @@ def test_end_to_end_visual_vibrato_and_slide_scoreir_attachment(tmp_path):
     assert len(slide_techs) == 1
     assert slide_techs[0].direction == "up"
     assert slide_techs[0].style == "shift"
+
+
+def test_multi_system_bar_index_alignment(tmp_path):
+    from score2gp.tabraw import TabRaw, make_tab_candidate, make_visual_vibrato_candidate
+    from score2gp.build_ir import build_ir_from_tabraw_only
+
+    fret_sys1 = make_tab_candidate(
+        candidate_id="fret-s1",
+        raw_text="3",
+        page_index=1,
+        system_index=1,
+        staff_index=1,
+        bar_index=1,
+        string=1,
+        bbox_values=(100.0, 20.0, 110.0, 30.0),
+        confidence=0.9,
+    )
+    fret_sys2 = make_tab_candidate(
+        candidate_id="fret-s2",
+        raw_text="5",
+        page_index=1,
+        system_index=2,
+        staff_index=1,
+        bar_index=1,
+        string=1,
+        bbox_values=(100.0, 60.0, 110.0, 70.0),
+        confidence=0.9,
+    )
+    vibrato_sys2 = make_visual_vibrato_candidate(
+        candidate_id="vib-s2",
+        raw_text="vibrato",
+        page_index=1,
+        system_index=2,
+        staff_index=1,
+        bar_index=1,
+        bbox_values=(100.0, 55.0, 120.0, 65.0),
+        cycles=3,
+        amplitude=4.0,
+    )
+
+    tabraw = TabRaw(candidates=[fret_sys1, fret_sys2, vibrato_sys2])
+    tabraw_file = tmp_path / "tabraw_multi_sys.json"
+    tabraw.to_json_file(tabraw_file)
+
+    score, _ = build_ir_from_tabraw_only(tabraw_file)
+
+    assert len(score.bars) == 2
+    bar1_notes = [n for ev in score.bars[0].events for n in ev.notes]
+    assert not any(getattr(t, "kind", None) == "vibrato" for n in bar1_notes for t in n.techniques)
+
+    bar2_notes = [n for ev in score.bars[1].events for n in ev.notes]
+    assert any(getattr(t, "kind", None) == "vibrato" for n in bar2_notes for t in n.techniques)
+
+
+def test_downward_slide_style_and_chord_vibrato_snapping(tmp_path):
+    from score2gp.tabraw import (
+        TabRaw,
+        make_tab_candidate,
+        make_visual_vibrato_candidate,
+        make_visual_slide_candidate,
+    )
+    from score2gp.build_ir import build_ir_from_tabraw_only
+
+    slide_down = make_visual_slide_candidate(
+        candidate_id="slide-down",
+        raw_text="slide",
+        page_index=1,
+        system_index=1,
+        staff_index=1,
+        bar_index=1,
+        string=2,
+        bbox_values=(100.0, 20.0, 130.0, 30.0),
+        slope=-1.0,
+        direction="down",
+    )
+
+    vib_cand = make_visual_vibrato_candidate(
+        candidate_id="vib-chord",
+        raw_text="vibrato",
+        page_index=1,
+        system_index=1,
+        staff_index=1,
+        bar_index=1,
+        string=2,
+        bbox_values=(100.0, 20.0, 120.0, 30.0),
+        cycles=3,
+        amplitude=4.0,
+    )
+
+    fret_c1_s1 = make_tab_candidate(
+        candidate_id="fret-1a",
+        raw_text="3",
+        page_index=1,
+        system_index=1,
+        staff_index=1,
+        bar_index=1,
+        string=1,
+        bbox_values=(100.0, 20.0, 110.0, 25.0),
+        confidence=0.9,
+    )
+    fret_c1_s2 = make_tab_candidate(
+        candidate_id="fret-1b",
+        raw_text="5",
+        page_index=1,
+        system_index=1,
+        staff_index=1,
+        bar_index=1,
+        string=2,
+        bbox_values=(100.0, 30.0, 110.0, 35.0),
+        confidence=0.9,
+    )
+    fret_c2_s2 = make_tab_candidate(
+        candidate_id="fret-2",
+        raw_text="3",
+        page_index=1,
+        system_index=1,
+        staff_index=1,
+        bar_index=1,
+        string=2,
+        bbox_values=(140.0, 30.0, 150.0, 35.0),
+        confidence=0.9,
+    )
+
+    tabraw = TabRaw(candidates=[fret_c1_s1, fret_c1_s2, fret_c2_s2, slide_down, vib_cand])
+    tabraw_file = tmp_path / "tabraw_chord_slide.json"
+    tabraw.to_json_file(tabraw_file)
+
+    score, _ = build_ir_from_tabraw_only(tabraw_file)
+    bar = score.bars[0]
+    ev1_notes = bar.events[0].notes
+    assert len(ev1_notes) == 2
+
+    n_s1 = next(n for n in ev1_notes if n.string == 1)
+    assert not any(getattr(t, "kind", None) == "vibrato" for t in n_s1.techniques)
+
+    n_s2 = next(n for n in ev1_notes if n.string == 2)
+    vib_techs = [t for t in n_s2.techniques if getattr(t, "kind", None) == "vibrato"]
+    assert len(vib_techs) == 1
+
+    slide_techs = [t for t in n_s2.techniques if getattr(t, "kind", None) == "slide"]
+    assert len(slide_techs) == 1
+    assert slide_techs[0].style == "shift"
+    assert slide_techs[0].direction == "down"
+

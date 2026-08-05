@@ -3891,6 +3891,16 @@ def _get_note_x(note: Note) -> float | None:
     return None
 
 
+def _get_note_y(note: Note) -> float | None:
+    for prov in note.provenance:
+        if prov.raw and prov.raw.get("y") is not None:
+            try:
+                return float(prov.raw["y"])
+            except (ValueError, TypeError):
+                pass
+    return None
+
+
 def _remove_not_aligned_warning(score: ScoreIR, candidate: TabCandidate) -> None:
     score.warnings = [
         w for w in score.warnings
@@ -3901,11 +3911,21 @@ def _remove_not_aligned_warning(score: ScoreIR, candidate: TabCandidate) -> None
 def _attach_symbols_and_techniques(score: ScoreIR, tabraw: TabRaw) -> None:
     bars_by_index = {bar.index: bar for bar in score.bars}
 
+    fret_candidates = [c for c in tabraw.candidates if c.kind == "fret" and c.bar_index is not None]
+    source_bar_keys = sorted(list({(c.page_index or 1, c.system_index, c.staff_index or 1, c.bar_index) for c in fret_candidates}))
+    bar_key_to_output_idx = {
+        key: idx for idx, key in enumerate(source_bar_keys, start=1)
+    }
+
     for candidate in tabraw.candidates:
         if candidate.kind not in ("chord-symbol", "technique-text", "visual-vibrato", "visual-slide"):
             continue
 
         bar_idx = candidate.bar_index
+        if bar_idx is not None and candidate.system_index is not None:
+            cand_key = (candidate.page_index or 1, candidate.system_index, candidate.staff_index or 1, bar_idx)
+            if cand_key in bar_key_to_output_idx:
+                bar_idx = bar_key_to_output_idx[cand_key]
         # If candidate lacks a bar index, or the target bar does not exist:
         if bar_idx is None or bar_idx not in bars_by_index:
             if candidate.kind == "chord-symbol":
@@ -4244,10 +4264,30 @@ def _attach_symbols_and_techniques(score: ScoreIR, tabraw: TabRaw) -> None:
             width_val = "wide" if amp > 3.0 else "slight"
             tech = VibratoTechnique(kind="vibrato", width=width_val, speed="unknown")
 
-            for note in target_event.notes:
-                if not any(t.kind == "vibrato" for t in note.techniques):
-                    note.techniques.append(tech)
-                note.provenance.append(candidate.to_provenance())
+            # Snap vibrato to the closest note in the target event rather than chord-wide
+            target_note = None
+            if candidate.string is not None:
+                for note in target_event.notes:
+                    if note.string == candidate.string:
+                        target_note = note
+                        break
+
+            if target_note is None and candidate.y is not None:
+                notes_with_y = []
+                for note in target_event.notes:
+                    y_val = _get_note_y(note)
+                    if y_val is not None:
+                        notes_with_y.append((abs(y_val - candidate.y), note))
+                if notes_with_y:
+                    notes_with_y.sort(key=lambda item: item[0])
+                    target_note = notes_with_y[0][1]
+
+            if target_note is None:
+                target_note = target_event.notes[0]
+
+            if not any(t.kind == "vibrato" for t in target_note.techniques):
+                target_note.techniques.append(tech)
+            target_note.provenance.append(candidate.to_provenance())
 
             _remove_not_aligned_warning(score, candidate)
 
@@ -4266,7 +4306,6 @@ def _attach_symbols_and_techniques(score: ScoreIR, tabraw: TabRaw) -> None:
 
             target_string = candidate.string
             direction = candidate.raw.get("direction", "unknown")
-            slide_style = "shift" if direction == "up" else "out_down"
 
             cand_x0 = candidate.bbox.x0 if candidate.bbox else candidate.x
 
@@ -4302,6 +4341,11 @@ def _attach_symbols_and_techniques(score: ScoreIR, tabraw: TabRaw) -> None:
                 if seq_targets:
                     seq_targets.sort(key=lambda ev: ev.timing.onset_ticks)
                     target_event_id = seq_targets[0].id
+
+                if target_event_id is not None:
+                    slide_style = "shift"
+                else:
+                    slide_style = "slide-out" if direction == "down" else ("slide-in" if direction == "up" else "unknown")
 
                 tech = SlideTechnique(
                     kind="slide",
