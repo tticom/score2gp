@@ -422,3 +422,59 @@ def make_visual_slide_candidate(
         kind="visual-slide",
         raw={"slope": slope, "direction": direction},
     )
+
+
+def make_palm_mute_candidate(
+    *,
+    candidate_id: str,
+    raw_text: str = "P.M.",
+    page_index: int | None = None,
+    system_index: int | None = None,
+    staff_index: int | None = None,
+    bar_index: int | None = None,
+    string: int | None = None,
+    bbox_values: list[float] | tuple[float, float, float, float] | None = None,
+    confidence: float = 0.85,
+    x_end: float | None = None,
+) -> TabCandidate:
+    return make_tab_candidate(
+        candidate_id=candidate_id,
+        raw_text=raw_text,
+        page_index=page_index,
+        system_index=system_index,
+        staff_index=staff_index,
+        bar_index=bar_index,
+        string=string,
+        bbox_values=bbox_values,
+        confidence=confidence,
+        kind="technique-text",
+        raw={"x_end": x_end} if x_end is not None else None,
+    )
+
+
+def make_let_ring_candidate(
+    *,
+    candidate_id: str,
+    raw_text: str = "let ring",
+    page_index: int | None = None,
+    system_index: int | None = None,
+    staff_index: int | None = None,
+    bar_index: int | None = None,
+    string: int | None = None,
+    bbox_values: list[float] | tuple[float, float, float, float] | None = None,
+    confidence: float = 0.85,
+    x_end: float | None = None,
+) -> TabCandidate:
+    return make_tab_candidate(
+        candidate_id=candidate_id,
+        raw_text=raw_text,
+        page_index=page_index,
+        system_index=system_index,
+        staff_index=staff_index,
+        bar_index=bar_index,
+        string=string,
+        bbox_values=bbox_values,
+        confidence=confidence,
+        kind="technique-text",
+        raw={"x_end": x_end} if x_end is not None else None,
+    )
