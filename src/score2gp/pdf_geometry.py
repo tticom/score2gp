@@ -72,6 +72,7 @@ def extract_visual_vibrato_evidence(
         curve_items = [item for item in items if item and item[0] == "c" and len(item) >= 5]
         if not curve_items:
             continue
+        curve_items.sort(key=lambda item: _get_coord(item[1], "x", 0) if _get_coord(item[1], "x", 0) is not None else 0.0)
 
         # Spatial clustering of curve items: group contiguous curves within gap_x <= 20.0
         clusters: list[list[Any]] = []
