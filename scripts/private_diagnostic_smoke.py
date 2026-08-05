@@ -31,6 +31,22 @@ def main(argv: list[str] | None = None) -> int:
         out_dir=args.out_dir,
         include_polyphony_diagnostics=True,
     )
+
+    from score2gp.runtime_provenance import create_runtime_provenance_record
+
+    raw_argv = argv if argv is not None else sys.argv
+    prov_record = create_runtime_provenance_record(
+        exact_command=raw_argv,
+        input_classification="pdf-tab-musicxml" if args.musicxml else "pdf-tab-only",
+        output_report_path=str(args.out_dir / "diagnostics.json"),
+        exit_status=0,
+        output_written=args.out_dir.exists(),
+        stage="completed",
+    )
+    args.out_dir.mkdir(parents=True, exist_ok=True)
+    prov_path = args.out_dir / "provenance.json"
+    prov_path.write_text(prov_record.model_dump_json(indent=2), encoding="utf-8")
+
     print(json.dumps(summary, indent=2, sort_keys=True))
     return 0
 

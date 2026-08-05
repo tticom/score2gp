@@ -281,6 +281,21 @@ def main():
     master_md_path.write_text(markdown_content, encoding="utf-8")
     print(f"Wrote master Markdown report to {master_md_path}")
 
+    # Write runtime provenance sidecar
+    from score2gp.runtime_provenance import create_runtime_provenance_record
+    prov_record = create_runtime_provenance_record(
+        exact_command=sys.argv,
+        input_classification="private-e2e-smoke",
+        output_report_path=str(master_json_path),
+        exit_status=0,
+        output_written=master_json_path.exists(),
+        stage="completed",
+        structural_counts={"inputs_processed": len(summaries)},
+    )
+    prov_json_path = output_base / "provenance.json"
+    prov_json_path.write_text(prov_record.model_dump_json(indent=2), encoding="utf-8")
+    print(f"Wrote runtime provenance sidecar to {prov_json_path}")
+
 
 def generate_markdown_summary(summaries: List[Dict[str, Any]]) -> str:
     """Generate a clean private-safe Markdown summary from results."""
