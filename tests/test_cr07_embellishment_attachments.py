@@ -459,3 +459,109 @@ def test_fret_candidate_none_system_index_no_crash(tmp_path):
     # Verify that calling _attach_symbols_and_techniques with mixed None/int system_index does not raise TypeError
     _attach_symbols_and_techniques(score, tabraw)
     assert len(score.bars) >= 1
+
+
+def test_palm_mute_and_let_ring_span_attachments(tmp_path):
+    from score2gp.tabraw import (
+        TabRaw,
+        make_tab_candidate,
+        make_palm_mute_candidate,
+        make_let_ring_candidate,
+    )
+    from score2gp.build_ir import build_ir_from_tabraw_only
+    from score2gp.gpif import _find_span_notes
+
+    # 3 sequential fret events in Bar 1 (x=100, x=140, x=180)
+    fret1 = make_tab_candidate(
+        candidate_id="fret-1",
+        raw_text="3",
+        page_index=1,
+        system_index=1,
+        staff_index=1,
+        bar_index=1,
+        string=1,
+        bbox_values=(100.0, 20.0, 110.0, 30.0),
+        confidence=0.9,
+    )
+    fret2 = make_tab_candidate(
+        candidate_id="fret-2",
+        raw_text="5",
+        page_index=1,
+        system_index=1,
+        staff_index=1,
+        bar_index=1,
+        string=1,
+        bbox_values=(140.0, 20.0, 150.0, 30.0),
+        confidence=0.9,
+    )
+    fret3 = make_tab_candidate(
+        candidate_id="fret-3",
+        raw_text="7",
+        page_index=1,
+        system_index=1,
+        staff_index=1,
+        bar_index=1,
+        string=1,
+        bbox_values=(180.0, 20.0, 190.0, 30.0),
+        confidence=0.9,
+    )
+
+    # Palm mute candidate spanning x0=95 to x1=185
+    pm_cand = make_palm_mute_candidate(
+        candidate_id="pm-1",
+        raw_text="P.M.",
+        page_index=1,
+        system_index=1,
+        staff_index=1,
+        bar_index=1,
+        string=1,
+        bbox_values=(95.0, 10.0, 185.0, 18.0),
+    )
+
+    tabraw = TabRaw(candidates=[fret1, fret2, fret3, pm_cand])
+    tabraw_file = tmp_path / "tabraw_pm.json"
+    tabraw.to_json_file(tabraw_file)
+
+    score, _ = build_ir_from_tabraw_only(tabraw_file)
+
+    bar = score.bars[0]
+    events = [ev for ev in bar.events if not ev.is_rest and ev.notes]
+    assert len(events) == 3
+
+    # Check start note technique has end_event_id pointing to event 3
+    start_note = events[0].notes[0]
+    pm_techs = [t for t in start_note.techniques if getattr(t, "kind", None) == "palm-mute"]
+    assert len(pm_techs) == 1
+    assert pm_techs[0].end_event_id == events[2].id
+
+    # Verify GPIF span resolution marks all 3 notes in the span
+    let_ring_notes, palm_mute_notes = _find_span_notes(score)
+    assert len(palm_mute_notes) == 3
+    assert (bar.index, events[0].timing.onset_ticks, 1) in palm_mute_notes
+    assert (bar.index, events[1].timing.onset_ticks, 1) in palm_mute_notes
+    assert (bar.index, events[2].timing.onset_ticks, 1) in palm_mute_notes
+
+    # Test Let Ring span candidate
+    lr_cand = make_let_ring_candidate(
+        candidate_id="lr-1",
+        raw_text="let ring",
+        page_index=1,
+        system_index=1,
+        staff_index=1,
+        bar_index=1,
+        string=1,
+        bbox_values=(95.0, 10.0, 185.0, 18.0),
+    )
+    tabraw_lr = TabRaw(candidates=[fret1, fret2, fret3, lr_cand])
+    tabraw_lr_file = tmp_path / "tabraw_lr.json"
+    tabraw_lr.to_json_file(tabraw_lr_file)
+
+    score_lr, _ = build_ir_from_tabraw_only(tabraw_lr_file)
+    lr_events = [ev for ev in score_lr.bars[0].events if not ev.is_rest and ev.notes]
+    lr_start_note = lr_events[0].notes[0]
+    lr_techs = [t for t in lr_start_note.techniques if getattr(t, "kind", None) == "let-ring"]
+    assert len(lr_techs) == 1
+    assert lr_techs[0].end_event_id == lr_events[2].id
+
+    let_ring_notes, palm_mute_notes = _find_span_notes(score_lr)
+    assert len(let_ring_notes) == 3

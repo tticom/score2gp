@@ -4147,7 +4147,7 @@ def _attach_symbols_and_techniques(score: ScoreIR, tabraw: TabRaw) -> None:
                     note1.provenance.append(candidate.to_provenance())
                     _remove_not_aligned_warning(score, candidate)
 
-            elif kind in ("slide", "palm-mute", "let-ring"):
+            elif kind == "slide":
                 attached = False
                 if candidate.x is not None:
                     notes_with_x = []
@@ -4172,12 +4172,7 @@ def _attach_symbols_and_techniques(score: ScoreIR, tabraw: TabRaw) -> None:
                             )
                         else:
                             best_dist, target_note = notes_with_x[0]
-                            if kind == "slide":
-                                tech = SlideTechnique(kind="slide", style="unknown", direction="unknown", target_event_id=None)
-                            elif kind == "palm-mute":
-                                tech = PalmMuteTechnique()
-                            else:
-                                tech = LetRingTechnique()
+                            tech = SlideTechnique(kind="slide", style="unknown", direction="unknown", target_event_id=None)
                             target_note.techniques.append(tech)
                             target_note.provenance.append(candidate.to_provenance())
                             _remove_not_aligned_warning(score, candidate)
@@ -4196,15 +4191,95 @@ def _attach_symbols_and_techniques(score: ScoreIR, tabraw: TabRaw) -> None:
                         continue
 
                     target_note = notes[0]
-                    if kind == "slide":
-                        tech = SlideTechnique(kind="slide", style="unknown", direction="unknown", target_event_id=None)
-                    elif kind == "palm-mute":
-                        tech = PalmMuteTechnique()
-                    else:
-                        tech = LetRingTechnique()
+                    tech = SlideTechnique(kind="slide", style="unknown", direction="unknown", target_event_id=None)
                     target_note.techniques.append(tech)
                     target_note.provenance.append(candidate.to_provenance())
                     _remove_not_aligned_warning(score, candidate)
+
+            elif kind in ("palm-mute", "let-ring"):
+                playable_events = [ev for ev in bar.events if not ev.is_rest and ev.notes]
+                if not playable_events:
+                    score.warnings.append(
+                        WarningItem(
+                            code="technique_attachment_requires_note_target",
+                            message=f"Technique '{candidate.raw_text}' requires a note target in bar {bar_idx}.",
+                            severity="warning",
+                            provenance=[candidate.to_provenance()],
+                        )
+                    )
+                    continue
+
+                # Determine start event
+                cand_x0 = candidate.bbox.x0 if candidate.bbox else candidate.x
+                start_ev = None
+                if cand_x0 is not None:
+                    ev_dists = []
+                    for ev in playable_events:
+                        note_xs = [_get_note_x(n) for n in ev.notes if _get_note_x(n) is not None]
+                        if note_xs:
+                            ev_x = sum(note_xs) / len(note_xs)
+                            ev_dists.append((abs(ev_x - cand_x0), ev))
+                    if ev_dists:
+                        ev_dists.sort(key=lambda item: item[0])
+                        if len(ev_dists) > 1 and abs(ev_dists[0][0] - ev_dists[1][0]) < TECHNIQUE_ATTACHMENT_AMBIGUITY_EPSILON:
+                            score.warnings.append(
+                                WarningItem(
+                                    code="ambiguous_technique_attachment",
+                                    message=f"Technique '{candidate.raw_text}' has ambiguous visual targets in bar {bar_idx}.",
+                                    severity="warning",
+                                    provenance=[candidate.to_provenance()],
+                                )
+                            )
+                            continue
+                        start_ev = ev_dists[0][1]
+
+                if start_ev is None:
+                    if len(playable_events) > 1:
+                        score.warnings.append(
+                            WarningItem(
+                                code="ambiguous_technique_attachment",
+                                message=f"Technique '{candidate.raw_text}' requires a single target event or visual x-coordinate in bar {bar_idx}.",
+                                severity="warning",
+                                provenance=[candidate.to_provenance()],
+                            )
+                        )
+                        continue
+                    start_ev = playable_events[0]
+
+                # Determine end_event_id from x_end
+                cand_x1 = candidate.bbox.x1 if candidate.bbox else (candidate.raw.get("x_end") if candidate.raw else None)
+                end_event_id = None
+                if cand_x1 is not None and (cand_x0 is None or cand_x1 > cand_x0):
+                    start_onset = start_ev.timing.onset_ticks
+                    candidate_end_events = []
+                    for ev in playable_events:
+                        if ev.timing.onset_ticks >= start_onset:
+                            note_xs = [_get_note_x(n) for n in ev.notes if _get_note_x(n) is not None]
+                            if note_xs:
+                                ev_x = sum(note_xs) / len(note_xs)
+                                if ev_x <= cand_x1 + 15.0:
+                                    candidate_end_events.append(ev)
+                    if candidate_end_events:
+                        candidate_end_events.sort(key=lambda ev: ev.timing.onset_ticks)
+                        last_ev = candidate_end_events[-1]
+                        if last_ev.id != start_ev.id:
+                            end_event_id = last_ev.id
+
+                if kind == "palm-mute":
+                    tech = PalmMuteTechnique(end_event_id=end_event_id)
+                else:
+                    tech = LetRingTechnique(end_event_id=end_event_id)
+
+                target_notes = []
+                if candidate.string is not None:
+                    target_notes = [n for n in start_ev.notes if n.string == candidate.string]
+                if not target_notes:
+                    target_notes = start_ev.notes
+
+                for target_note in target_notes:
+                    target_note.techniques.append(tech)
+                    target_note.provenance.append(candidate.to_provenance())
+                _remove_not_aligned_warning(score, candidate)
 
             else:
                 # Bend, Vibrato (original logic)
