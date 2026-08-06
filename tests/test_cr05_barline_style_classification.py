@@ -1,3 +1,5 @@
+"""Tests for CR-05A PDF-tab barline style classification seam."""
+
 from __future__ import annotations
 
 from typing import Any
