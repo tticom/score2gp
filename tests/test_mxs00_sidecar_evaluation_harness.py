@@ -1,3 +1,5 @@
+"""Tests for MXS-00 candidate-neutral sidecar evaluation harness."""
+
 from __future__ import annotations
 
 import json
