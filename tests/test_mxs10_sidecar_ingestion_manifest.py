@@ -240,3 +240,26 @@ def test_mxs10_manifest_rejection_directory_path(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="PDF path is not a file"):
         validate_sidecar_manifest(manifest_path, GOOD_SIDECAR, pdf_path=dir_path)
+
+
+def test_mxs10_manifest_rejection_nonexistent_paths(tmp_path: Path) -> None:
+    nonexistent = tmp_path / "nonexistent.json"
+    with pytest.raises(FileNotFoundError, match="Sidecar manifest file not found"):
+        validate_sidecar_manifest(nonexistent, GOOD_SIDECAR)
+
+    sha = _compute_sha256(GOOD_SIDECAR)
+    assert sha is not None
+    manifest_data = {
+        "generator_tool": "photoscore_ultimate",
+        "generator_version": "2024.1",
+        "operator_id": "op_nonexist_test",
+        "operator_labor_minutes": 5.0,
+        "sidecar_sha256": sha,
+        "pdf_sha256": None,
+        "eval_status": "passed",
+    }
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest_data), encoding="utf-8")
+
+    with pytest.raises(FileNotFoundError, match="Sidecar file not found"):
+        validate_sidecar_manifest(manifest_path, nonexistent)
