@@ -263,3 +263,7 @@ def test_mxs10_manifest_rejection_nonexistent_paths(tmp_path: Path) -> None:
 
     with pytest.raises(FileNotFoundError, match="Sidecar file not found"):
         validate_sidecar_manifest(manifest_path, nonexistent)
+
+    nonexistent_pdf = tmp_path / "nonexistent.pdf"
+    with pytest.raises(FileNotFoundError, match="PDF file not found"):
+        validate_sidecar_manifest(manifest_path, GOOD_SIDECAR, pdf_path=nonexistent_pdf)
