@@ -3,7 +3,8 @@ import sys
 import argparse
 from pathlib import Path
 
-import fitz
+import pymupdf as fitz
+fitz = sys.modules.get("fitz", fitz)
 
 from score2gp.pdf_raster_staff_diagnostics import (
     build_raster_notation_diagnostics,

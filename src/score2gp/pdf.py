@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 import re
+import sys
 from typing import Any
 
 from .pdf_tab_duration_associator import (
@@ -63,7 +64,8 @@ def inspect_pdf(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
         "warnings": [],
     }
     try:
-        import fitz  # type: ignore[import-not-found]
+        import pymupdf as fitz  # type: ignore[import-not-found]
+        fitz = sys.modules.get("fitz", fitz)
     except Exception as exc:  # noqa: BLE001
         summary["warnings"].append({"code": "pymupdf-unavailable", "message": str(exc)})
         (out / "inspect_pdf.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
@@ -89,8 +91,8 @@ def inspect_pdf(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
             try:
                 systems = _detect_tab_systems(page, index)
                 total_systems += len(systems)
-                for sys in systems:
-                    if sys.barline_candidates_count > 0:
+                for system in systems:
+                    if system.barline_candidates_count > 0:
                         systems_with_barline_candidates += 1
             except Exception:
                 pass
@@ -242,7 +244,8 @@ def extract_tab(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
     }
 
     try:
-        import fitz  # type: ignore[import-not-found]
+        import pymupdf as fitz  # type: ignore[import-not-found]
+        fitz = sys.modules.get("fitz", fitz)
     except Exception as exc:  # noqa: BLE001
         raw["warnings"].append({"code": "pymupdf-unavailable", "message": str(exc), "severity": "error"})
     else:
@@ -764,7 +767,8 @@ def _split_technique_mixed_words(words: list[tuple[float, float, float, float, s
 
 
 def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]], meta: dict[str, int]) -> list[dict[str, Any]]:
-    import fitz  # type: ignore[import-not-found]
+    import pymupdf as fitz  # type: ignore[import-not-found]
+    fitz = sys.modules.get("fitz", fitz)
 
     candidates = []
     filtered_index = 0
@@ -1186,13 +1190,13 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
 
                 # Check if some systems are unboxed while others are boxed on this page
                 has_any_unboxed_system = any(
-                    (len(sys.barlines) < 2 or any(w in sys.grouping_warnings for w in ("pdf_bar_box_too_narrow", "pdf_bar_box_outside_system_bounds", "pdf_bar_box_overlaps_neighbor")))
-                    and sys.system_index in systems_with_playable_candidates
-                    for sys in systems
+                    (len(s.barlines) < 2 or any(w in s.grouping_warnings for w in ("pdf_bar_box_too_narrow", "pdf_bar_box_outside_system_bounds", "pdf_bar_box_overlaps_neighbor")))
+                    and s.system_index in systems_with_playable_candidates
+                    for s in systems
                 )
                 has_any_boxed_system = any(
-                    len(sys.barlines) >= 2 and not any(w in sys.grouping_warnings for w in ("pdf_bar_box_too_narrow", "pdf_bar_box_outside_system_bounds", "pdf_bar_box_overlaps_neighbor"))
-                    for sys in systems
+                    len(s.barlines) >= 2 and not any(w in s.grouping_warnings for w in ("pdf_bar_box_too_narrow", "pdf_bar_box_outside_system_bounds", "pdf_bar_box_overlaps_neighbor"))
+                    for s in systems
                 )
                 if has_any_unboxed_system and has_any_boxed_system:
                     warnings.append({
@@ -1309,16 +1313,16 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
             if systems:
                 from .quarter_rest_recogniser import extract_quarter_rest_candidates
                 page_outcomes = []
-                for sys in systems:
-                    if len(sys.line_ys) < 6:
+                for system in systems:
+                    if len(system.line_ys) < 6:
                         continue
-                    staff_space = sys.line_spacing
+                    staff_space = system.line_spacing
                     if staff_space <= 0.0:
                         continue
-                    y0_limit = min(sys.line_ys) - 3.0 * staff_space
-                    y1_limit = max(sys.line_ys) + 3.0 * staff_space
-                    x0_limit = sys.x0
-                    x1_limit = sys.x1
+                    y0_limit = min(system.line_ys) - 3.0 * staff_space
+                    y1_limit = max(system.line_ys) + 3.0 * staff_space
+                    x0_limit = system.x0
+                    x1_limit = system.x1
                     
                     flag_candidates = []
                     flag_idx = len(page_outcomes) + 1
@@ -1349,9 +1353,9 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                                             "symbol_type": "flag_candidate",
                                             "bbox": [p_x0, p_y0, p_x1, p_y1],
                                             "page_index": page_number,
-                                            "system_index": sys.system_index,
-                                            "staff_index": sys.staff_index,
-                                            "system_staff_index": sys.staff_index,
+                                            "system_index": system.system_index,
+                                            "staff_index": system.staff_index,
+                                            "system_staff_index": system.staff_index,
                                             "candidate_id": f"flag_candidate_{flag_idx}",
                                             "staff_space": staff_space
                                         })
@@ -1668,8 +1672,8 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                     if "pdf_tuning_label_unassociated" not in w["warnings"]:
                         w["warnings"].append("pdf_tuning_label_unassociated")
 
-            system_digits = {sys.system_index: [] for sys in systems}
-            system_digits_merged = {sys.system_index: [] for sys in systems}
+            system_digits = {s.system_index: [] for s in systems}
+            system_digits_merged = {s.system_index: [] for s in systems}
             non_playable_words = []
 
             for rw in refined_words:
@@ -1954,8 +1958,8 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                                 mc["warnings"].append("pdf_fret_refinement_not_enough_for_build_ir")
 
             all_page_candidates = []
-            for sys in systems:
-                all_page_candidates.extend(system_digits_merged[sys.system_index])
+            for system in systems:
+                all_page_candidates.extend(system_digits_merged[system.system_index])
             all_page_candidates.extend(non_playable_words)
 
             all_page_candidates.sort(key=lambda c: (round(c["y0"], 3), round(c["x0"], 3), c["text"]))
@@ -1995,7 +1999,7 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
             page_stems: list[StemPrimitiveCandidate] = []
             page_beams: list[BeamPrimitiveCandidate] = []
             page_flags: list[FlagPrimitiveCandidate] = []
-            all_line_ys = [ly for sys in systems for ly in sys.line_ys]
+            all_line_ys = [ly for s in systems for ly in s.line_ys]
 
             for draw in drawings:
                 for item in draw.get("items", []):
@@ -2042,15 +2046,15 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                             page_flags.append(FlagPrimitiveCandidate(bbox=SpatialBBox(ix0, iy0, ix1, iy1)))
 
             system_duration_mapping: dict[int, dict[float, Any]] = {}
-            for sys in systems:
-                if not sys.line_ys:
+            for system in systems:
+                if not system.line_ys:
                     continue
                 context = StaffSystemContext(
-                    line_y_coords=sys.line_ys,
-                    barline_x_coords=sys.barlines,
-                    staff_space=sys.line_spacing,
+                    line_y_coords=system.line_ys,
+                    barline_x_coords=system.barlines,
+                    staff_space=system.line_spacing,
                 )
-                sys_cands = system_digits_merged.get(sys.system_index, [])
+                sys_cands = system_digits_merged.get(system.system_index, [])
                 sys_playable_xs = sorted(list({
                     (c["x0"] + c["x1"]) / 2.0
                     for c in sys_cands
@@ -2060,7 +2064,7 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                     mapping = resolve_tab_duration_evidence_for_events(
                         sys_playable_xs, page_stems, page_beams, page_flags, context
                     )
-                    system_duration_mapping[sys.system_index] = mapping
+                    system_duration_mapping[system.system_index] = mapping
 
             for pc in all_page_candidates:
                 raw_text = pc["text"]
@@ -3425,7 +3429,8 @@ def _write_grouping_overlays(
     overlays_dir: Path,
     grouping_status: str,
 ) -> list[Path]:
-    import fitz  # type: ignore[import-not-found]
+    import pymupdf as fitz  # type: ignore[import-not-found]
+    fitz = sys.modules.get("fitz", fitz)
 
     overlays_dir.mkdir(parents=True, exist_ok=True)
     candidates_by_page: dict[int, list[dict[str, Any]]] = {}
@@ -4189,9 +4194,9 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
 
     # Re-index remaining systems
     final_systems = []
-    for idx, sys in enumerate(non_ghost_systems, start=1):
+    for idx, system in enumerate(non_ghost_systems, start=1):
         from dataclasses import replace
-        final_systems.append(replace(sys, system_index=idx))
+        final_systems.append(replace(system, system_index=idx))
     return final_systems
 
 
@@ -4494,15 +4499,15 @@ def _nearest_system_for_stem(
     without restricting to text-candidate containment zones.
     Returns None if systems list is empty or if the stem is equidistant between two competing systems.
     """
-    valid_systems = [sys for sys in systems if sys.line_ys]
+    valid_systems = [s for s in systems if s.line_ys]
     if not valid_systems:
         return None
 
     stem_cy = (y0 + y1) / 2.0
 
-    def _stem_sys_distance(sys: _TabSystem) -> float:
-        top_y = min(sys.line_ys)
-        bot_y = max(sys.line_ys)
+    def _stem_sys_distance(system: _TabSystem) -> float:
+        top_y = min(system.line_ys)
+        bot_y = max(system.line_ys)
         if top_y <= stem_cy <= bot_y:
             v_dist = 0.0
         elif stem_cy < top_y:
@@ -4510,7 +4515,7 @@ def _nearest_system_for_stem(
         else:
             v_dist = y0 - bot_y if y0 >= bot_y else stem_cy - bot_y
 
-        h_dist = max(0.0, sys.x0 - x, x - sys.x1) if (sys.x0 is not None and sys.x1 is not None) else 0.0
+        h_dist = max(0.0, system.x0 - x, x - system.x1) if (system.x0 is not None and system.x1 is not None) else 0.0
         return max(0.0, v_dist) + 0.1 * h_dist
 
     sorted_sys = sorted(valid_systems, key=_stem_sys_distance)

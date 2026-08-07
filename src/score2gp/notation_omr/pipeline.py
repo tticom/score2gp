@@ -55,7 +55,8 @@ def run_recognition_on_file(
     assume_treble_clef: bool = False
 ) -> dict | None:
     import sys
-    import fitz  # type: ignore
+    import pymupdf as fitz  # type: ignore[import-not-found]
+    fitz = sys.modules.get("fitz", fitz)
     from score2gp.pdf_staff_notation_diagnostics import (
         _extract_whole_note_candidates,
         _extract_half_note_candidates,

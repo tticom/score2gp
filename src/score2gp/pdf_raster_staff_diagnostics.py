@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-import fitz  # type: ignore[import-not-found]
+import sys
+import pymupdf as fitz  # type: ignore[import-not-found]
+fitz = sys.modules.get("fitz", fitz)
 from PIL import Image
 
 def classify_raster_opening_symbol_candidate(staff: dict) -> dict:
