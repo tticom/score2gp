@@ -105,6 +105,37 @@ def compare_ir_command(expected_ir: Path, actual_ir: Path) -> None:
         raise typer.Exit(1)
 
 
+@app.command("compare-bars")
+def compare_bars_command(
+    actual: Path = typer.Argument(..., help="Path to actual score file (GPIF .gp, ScoreIR .json, or MusicXML)"),
+    expected: Optional[Path] = typer.Option(None, "--expected", "-e", "--ref", help="Optional path to reference score file"),
+    json_report: bool = typer.Option(False, "--json", help="Output result as JSON instead of formatted text"),
+    out: Optional[Path] = typer.Option(None, "--out", "-o", help="Optional output path for text or JSON report"),
+) -> None:
+    """Compare score representations bar-by-bar or check bar invariants."""
+    from .compare import compare_bar_scores, format_mismatch_report
+
+    try:
+        result = compare_bar_scores(actual, expected)
+    except Exception as exc:
+        typer.echo(f"Error executing bar comparator: {exc}", err=True)
+        raise typer.Exit(1)
+
+    if json_report:
+        report_text = json.dumps(result, indent=2, sort_keys=True)
+    else:
+        report_text = format_mismatch_report(result)
+
+    typer.echo(report_text)
+
+    if out:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(report_text, encoding="utf-8")
+
+    if not result["matches"]:
+        raise typer.Exit(1)
+
+
 @app.command("write-gp")
 def write_gp_command(
     ir_json: Path,
