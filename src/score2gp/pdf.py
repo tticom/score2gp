@@ -63,7 +63,7 @@ def inspect_pdf(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
         "warnings": [],
     }
     try:
-        import fitz  # type: ignore[import-not-found]
+        import pymupdf as fitz  # type: ignore[import-not-found]
     except Exception as exc:  # noqa: BLE001
         summary["warnings"].append({"code": "pymupdf-unavailable", "message": str(exc)})
         (out / "inspect_pdf.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
@@ -242,7 +242,7 @@ def extract_tab(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
     }
 
     try:
-        import fitz  # type: ignore[import-not-found]
+        import pymupdf as fitz  # type: ignore[import-not-found]
     except Exception as exc:  # noqa: BLE001
         raw["warnings"].append({"code": "pymupdf-unavailable", "message": str(exc), "severity": "error"})
     else:
@@ -764,7 +764,7 @@ def _split_technique_mixed_words(words: list[tuple[float, float, float, float, s
 
 
 def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]], meta: dict[str, int]) -> list[dict[str, Any]]:
-    import fitz  # type: ignore[import-not-found]
+    import pymupdf as fitz  # type: ignore[import-not-found]
 
     candidates = []
     filtered_index = 0
@@ -3425,7 +3425,7 @@ def _write_grouping_overlays(
     overlays_dir: Path,
     grouping_status: str,
 ) -> list[Path]:
-    import fitz  # type: ignore[import-not-found]
+    import pymupdf as fitz  # type: ignore[import-not-found]
 
     overlays_dir.mkdir(parents=True, exist_ok=True)
     candidates_by_page: dict[int, list[dict[str, Any]]] = {}
