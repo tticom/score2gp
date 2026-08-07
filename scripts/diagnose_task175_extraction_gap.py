@@ -1,7 +1,8 @@
 from __future__ import annotations
 import sys
 from pathlib import Path
-import fitz  # type: ignore
+import pymupdf as fitz  # type: ignore
+fitz = sys.modules.get("fitz", fitz)
 
 try:
     from score2gp.pdf_staff_notation_diagnostics import extract_notation_diagnostics_dict

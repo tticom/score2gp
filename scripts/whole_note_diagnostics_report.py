@@ -10,7 +10,8 @@ import argparse
 import json
 from pathlib import Path
 
-import fitz  # type: ignore
+import pymupdf as fitz  # type: ignore
+fitz = sys.modules.get("fitz", fitz)
 
 def build_whole_note_diagnostics(page: fitz.Page, page_index: int) -> dict:
     from score2gp.pdf_staff_notation_diagnostics import _extract_whole_note_candidates

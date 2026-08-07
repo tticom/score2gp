@@ -10,7 +10,8 @@ SRC_ROOT = REPO_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-import fitz  # type: ignore[import-not-found]
+import pymupdf as fitz  # type: ignore[import-not-found]
+fitz = sys.modules.get("fitz", fitz)
 from score2gp.pdf_raster_staff_diagnostics import (  # noqa: E402
     build_raster_notation_diagnostics,
     summarize_raster_treble_clef_diagnostics,
