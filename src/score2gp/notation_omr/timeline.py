@@ -4,7 +4,8 @@
 def build_staff_timeline_preview(
     outcomes: list[dict],
     semantic_candidates: list[dict] | None = None,
-    all_staff_geometries: list[dict] | None = None
+    all_staff_geometries: list[dict] | None = None,
+    scale_durations: bool = False
 ) -> list[dict]:
     # Group note and barline candidates by (page, sys, staff)
     staves = {}
@@ -162,16 +163,14 @@ def build_staff_timeline_preview(
             if current_slice:
                 time_slices.append(current_slice)
 
-            cursor_1 = 0
-            cursor_2 = 0
-            measure_events = []
-            invalid = False
-
+            # Pre-pass to compute voice assignments and total sequential durations
+            slice_voice_assignments = []
+            tot_dur_v1 = 0
+            tot_dur_v2 = 0
             for slice_cands in time_slices:
-                slice_v1 = []
-                slice_v2 = []
+                v1_cands = []
+                v2_cands = []
                 for c in slice_cands:
-                    # Resolve voice assignment
                     voice = 1
                     if "voice" in c:
                         voice = c["voice"]
@@ -180,7 +179,6 @@ def build_staff_timeline_preview(
                         if isinstance(stem, str) and "down" in stem.lower():
                             voice = 2
                     elif "rest" in c.get("symbol_type", ""):
-                        # Determine rest vertical position
                         y_center = None
                         if "bbox" in c and isinstance(c["bbox"], (list, tuple)) and len(c["bbox"]) >= 4:
                             y_center = (c["bbox"][1] + c["bbox"][3]) / 2.0
@@ -192,10 +190,50 @@ def build_staff_timeline_preview(
                                 voice = 2
 
                     if voice == 2:
-                        slice_v2.append(c)
+                        v2_cands.append(c)
                     else:
-                        slice_v1.append(c)
+                        v1_cands.append(c)
 
+                slice_voice_assignments.append((v1_cands, v2_cands))
+                if v1_cands:
+                    tot_dur_v1 += max(TICK_MAPPINGS.get(c.get("symbol_type"), 960) for c in v1_cands)
+                if v2_cands:
+                    tot_dur_v2 += max(TICK_MAPPINGS.get(c.get("symbol_type"), 960) for c in v2_cands)
+
+            # Resolve dynamic measure duration
+            D_measure = 3840
+            if semantic_candidates:
+                for sc in semantic_candidates:
+                    ts = sc.get("time_signature") or sc.get("logical_time_signature") or sc.get("meter")
+                    if isinstance(ts, dict):
+                        b = ts.get("beats") or ts.get("num") or ts.get("numerator")
+                        bt = ts.get("beat_type") or ts.get("den") or ts.get("denominator")
+                        if b and bt and int(bt) > 0:
+                            D_measure = int(b) * (3840 // int(bt))
+                            break
+                    elif "beats" in sc and "beat_type" in sc and int(sc["beat_type"]) > 0:
+                        D_measure = int(sc["beats"]) * (3840 // int(sc["beat_type"]))
+                        break
+                    elif "time_signature_num" in sc and "time_signature_den" in sc and int(sc["time_signature_den"]) > 0:
+                        D_measure = int(sc["time_signature_num"]) * (3840 // int(sc["time_signature_den"]))
+                        break
+
+            if scale_durations:
+                factor_1 = min(1.0, D_measure / tot_dur_v1) if tot_dur_v1 > 0 else 1.0
+                factor_2 = min(1.0, D_measure / tot_dur_v2) if tot_dur_v2 > 0 else 1.0
+            else:
+                factor_1 = 1.0
+                factor_2 = 1.0
+
+            cursor_1 = 0
+            cursor_2 = 0
+            measure_events = []
+            invalid = False
+
+            if tot_dur_v1 > D_measure or tot_dur_v2 > D_measure:
+                invalid = True
+
+            for slice_v1, slice_v2 in slice_voice_assignments:
                 # Compute slice start tick
                 if slice_v1 and slice_v2:
                     start_tick = max(cursor_1, cursor_2)
@@ -217,6 +255,9 @@ def build_staff_timeline_preview(
                     dur = TICK_MAPPINGS.get(c.get("symbol_type"), 960)
                     if "duration_ticks" in c:
                         dur = c["duration_ticks"]
+                    dur = int(round(dur * factor_1))
+                    dur = max(60, dur)
+
                     c_start = c.get("start_tick", start_tick)
                     c["timeline_start_tick"] = c_start
                     c["timeline_duration_ticks"] = dur
@@ -238,6 +279,9 @@ def build_staff_timeline_preview(
                     dur = TICK_MAPPINGS.get(c.get("symbol_type"), 960)
                     if "duration_ticks" in c:
                         dur = c["duration_ticks"]
+                    dur = int(round(dur * factor_2))
+                    dur = max(60, dur)
+
                     c_start = c.get("start_tick", start_tick)
                     c["timeline_start_tick"] = c_start
                     c["timeline_duration_ticks"] = dur

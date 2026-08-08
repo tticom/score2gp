@@ -772,9 +772,10 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
 
     candidates = []
     filtered_index = 0
+    running_bar_index = 1
     with fitz.open(pdf_path) as doc:
         for page_number, page in enumerate(doc, start=1):
-            systems = _detect_tab_systems(page, page_number)
+            systems = _detect_tab_systems(page, page_number, start_bar_index=running_bar_index)
             ascii_blocks = _detect_ascii_tab_blocks(page, page_number, first_system_index=len(systems) + 1)
 
             words = sorted(
@@ -1867,15 +1868,19 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
 
                             if -3.0 <= gap <= 5.0:
                                 if vertical_offset <= 2.0:
-                                    merged_text += d2["text"]
-                                    merged_x1 = d2["x1"]
-                                    merged_y0 = min(merged_y0, d2["y0"])
-                                    merged_y1 = max(merged_y1, d2["y1"])
-                                    merged_warnings.append("pdf_fret_digits_merged")
-                                    merged_warnings.append("pdf_fret_split_text_span_merged")
-                                    merged_gaps.append(gap)
-                                    merged_y_deltas.append(vertical_offset)
-                                    j += 1
+                                    proposed = merged_text + d2["text"]
+                                    if proposed.isdigit() and int(proposed) <= 24:
+                                        merged_text += d2["text"]
+                                        merged_x1 = d2["x1"]
+                                        merged_y0 = min(merged_y0, d2["y0"])
+                                        merged_y1 = max(merged_y1, d2["y1"])
+                                        merged_warnings.append("pdf_fret_digits_merged")
+                                        merged_warnings.append("pdf_fret_split_text_span_merged")
+                                        merged_gaps.append(gap)
+                                        merged_y_deltas.append(vertical_offset)
+                                        j += 1
+                                    else:
+                                        break
                                 else:
                                     d2["warnings"].append("pdf_fret_digits_not_merged_vertical_misalignment")
                                     d2["warnings"].append("pdf_fret_refinement_not_enough_for_build_ir")
@@ -2303,6 +2308,13 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                     continue
                 filtered_index += 1
                 candidates.append(candidate.model_dump(mode="json", exclude_none=True))
+
+            max_bar = 0
+            for system in systems:
+                for box in system.bar_boxes:
+                    max_bar = max(max_bar, box.get("bar_index", 0))
+            if max_bar > 0:
+                running_bar_index = max_bar + 1
     return candidates
 
 
@@ -3961,7 +3973,7 @@ def filter_tab_barline_candidates(
     }
 
 
-def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
+def _detect_tab_systems(page: Any, page_index: int, start_bar_index: int = 1) -> list[_TabSystem]:
     segments = list(_drawing_segments(page.get_drawings()))
     raw_horizontal = sorted((segment for segment in segments if segment.is_horizontal), key=lambda segment: segment.y0)
     horizontal = sorted(merge_collinear_horizontal_segments(raw_horizontal), key=lambda segment: segment.y0)
@@ -4000,7 +4012,7 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
 
     systems = []
     system_index = 1
-    next_bar_index = 1
+    next_bar_index = start_bar_index
 
     for group in _tab_line_groups(horizontal):
         classification = classify_staff_line_group(group, page)

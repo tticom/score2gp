@@ -64,17 +64,37 @@ def parse_resolved_pitch(pitch_str: str | None) -> tuple[str, int | None, int] |
 def generate_musicxml_from_omr(
     outcomes: list[dict],
     semantic_candidates: list[dict] | None = None,
-    all_staff_geometries: list[dict] | None = None
+    all_staff_geometries: list[dict] | None = None,
+    scale_durations: bool = True
 ) -> str:
     """Compile OMR recognition outcomes into a valid MusicXML string."""
 
     # 1. Build the timeline preview
-    previews = build_staff_timeline_preview(outcomes, semantic_candidates, all_staff_geometries)
+    previews = build_staff_timeline_preview(outcomes, semantic_candidates, all_staff_geometries, scale_durations=scale_durations)
     if not previews:
         return ""
 
-    # For now, generate a single partwise score from the first staff preview
-    preview = previews[0]
+    # Gather all measures sequentially from all previews
+    all_measures = []
+    previews_sorted = sorted(previews, key=lambda p: (p.get("page_index", 0), p.get("system_index", 0), p.get("staff_index", 0)))
+    for p in previews_sorted:
+        all_measures.extend(p["measures"])
+
+    # Calculate global divisions based on the maximum number of notes in any measure to prevent truncation
+    max_notes = 4
+    for m in all_measures:
+        events = m.get("events", [])
+        v1_len = len([e for e in events if e.get("voice") == 1 and "note" in e.get("symbol_type", "")])
+        v2_len = len([e for e in events if e.get("voice") == 2 and "note" in e.get("symbol_type", "")])
+        max_notes = max(max_notes, v1_len, v2_len)
+
+    global_divisions = 8
+    if max_notes > 32:
+        global_divisions = 32
+    elif max_notes > 16:
+        global_divisions = 16
+
+    ticks_per_division = 960 // global_divisions
 
     # Resolve global attributes from semantic candidates
     fifths = 0
@@ -131,15 +151,15 @@ def generate_musicxml_from_omr(
     part = ET.SubElement(score, "part", id="P1")
 
     # Generate measures
-    for m_data in preview["measures"]:
-        m_idx = m_data["measure_index"]
+    for m_idx_0, m_data in enumerate(all_measures):
+        m_idx = m_idx_0 + 1
         measure = ET.SubElement(part, "measure", number=str(m_idx))
 
         # Write attributes on the first measure
         if m_idx == 1:
             attrs = ET.SubElement(measure, "attributes")
             divisions = ET.SubElement(attrs, "divisions")
-            divisions.text = "8"
+            divisions.text = str(global_divisions)
 
             key = ET.SubElement(attrs, "key")
             fifths_el = ET.SubElement(key, "fifths")
@@ -188,7 +208,7 @@ def generate_musicxml_from_omr(
                 rest_node = ET.SubElement(measure, "note")
                 ET.SubElement(rest_node, "rest")
                 dur = ET.SubElement(rest_node, "duration")
-                dur.text = str(max(1, gap_ticks // 120))
+                dur.text = str(max(1, gap_ticks // ticks_per_division))
                 voice_el = ET.SubElement(rest_node, "voice")
                 voice_el.text = "1"
                 type_el = ET.SubElement(rest_node, "type")
@@ -213,7 +233,7 @@ def generate_musicxml_from_omr(
                 ET.SubElement(note, "rest")
 
             dur_ticks = ev.get("duration_ticks", 960)
-            dur_val = max(1, dur_ticks // 120)
+            dur_val = max(1, dur_ticks // ticks_per_division)
             dur = ET.SubElement(note, "duration")
             dur.text = str(dur_val)
 
@@ -231,7 +251,7 @@ def generate_musicxml_from_omr(
             # Backup to the beginning of the measure (or final xml_cursor)
             backup = ET.SubElement(measure, "backup")
             duration_el = ET.SubElement(backup, "duration")
-            duration_el.text = str(max(1, xml_cursor // 120))
+            duration_el.text = str(max(1, xml_cursor // ticks_per_division))
 
             xml_cursor = 0
             last_written_pitch_start_tick = -1
@@ -254,7 +274,7 @@ def generate_musicxml_from_omr(
                     rest_node = ET.SubElement(measure, "note")
                     ET.SubElement(rest_node, "rest")
                     dur = ET.SubElement(rest_node, "duration")
-                    dur.text = str(max(1, gap_ticks // 120))
+                    dur.text = str(max(1, gap_ticks // ticks_per_division))
                     voice_el = ET.SubElement(rest_node, "voice")
                     voice_el.text = "2"
                     type_el = ET.SubElement(rest_node, "type")
@@ -279,7 +299,7 @@ def generate_musicxml_from_omr(
                     ET.SubElement(note, "rest")
 
                 dur_ticks = ev.get("duration_ticks", 960)
-                dur_val = max(1, dur_ticks // 120)
+                dur_val = max(1, dur_ticks // ticks_per_division)
                 dur = ET.SubElement(note, "duration")
                 dur.text = str(dur_val)
 

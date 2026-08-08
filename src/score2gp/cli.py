@@ -1523,7 +1523,8 @@ def generate_sidecar_command(
     recognition_result = run_recognition_on_file(
         pdf,
         include_flag_beam_candidates=True,
-        assume_treble_clef=True
+        assume_treble_clef=True,
+        include_barline_candidates=True
     )
     if not recognition_result:
         typer.echo("Error: OMR recognition failed.", err=True)

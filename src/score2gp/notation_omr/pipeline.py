@@ -52,7 +52,8 @@ def run_recognition_on_file(
     include_left_margin_candidates: bool = False,
     include_ledger_line_candidates: bool = False,
     include_flag_beam_candidates: bool = False,
-    assume_treble_clef: bool = False
+    assume_treble_clef: bool = False,
+    include_barline_candidates: bool = False
 ) -> dict | None:
     import sys
     import pymupdf as fitz  # type: ignore[import-not-found]
@@ -85,6 +86,7 @@ def run_recognition_on_file(
     clef_locations = []
     tuplet_marker_locations = []
     semantic_candidates = []
+    barline_locations = []
 
     all_staff_geometries = []
 
@@ -263,7 +265,35 @@ def run_recognition_on_file(
         except Exception:
             pass
 
+        # Extract barlines from PDF tab system diagnostics
+        if include_barline_candidates:
+            from score2gp.pdf import _detect_tab_systems
+            try:
+                tab_systems = _detect_tab_systems(page, page_index)
+                for sys_idx_0, sys in enumerate(tab_systems):
+                    sys_idx = sys_idx_0 + 1
+                    details = sys.barline_candidates_details or []
+                    for b in details:
+                        if b.get("final_decision") == "accepted":
+                            for staff in page_diags.get("staves", []):
+                                s_geom = staff.get("staff") or staff
+                                s_sys = s_geom.get("system_index") if isinstance(s_geom, dict) else getattr(s_geom, "system_index", None)
+                                s_idx = s_geom.get("staff_index") if isinstance(s_geom, dict) else getattr(s_geom, "staff_index", None)
+                                if s_sys == sys_idx:
+                                    barline_locations.append({
+                                        "symbol_type": "barline_candidate",
+                                        "page_index": page_index,
+                                        "system_index": sys_idx,
+                                        "staff_index": s_idx,
+                                        "x0": b.get("x"),
+                                        "y0": b.get("y_min") or 0.0,
+                                        "bbox": [b.get("x"), b.get("y_min") or 0.0, b.get("x"), b.get("y_max") or 0.0]
+                                    })
+            except Exception:
+                pass
+
     outcomes = map_whole_note_candidates_to_read_only_outcomes(whole_note_locations)
+    outcomes.extend(barline_locations)
     outcomes.extend(map_half_note_candidates_to_read_only_outcomes(half_note_locations))
     outcomes.extend(map_quarter_note_candidates_to_read_only_outcomes(quarter_note_locations))
     outcomes.extend(map_treble_clef_candidates_to_read_only_outcomes(clef_locations))
@@ -306,7 +336,12 @@ def run_recognition_on_file(
 
 
     try:
-        timeline_preview = build_staff_timeline_preview(outcomes, semantic_candidates, all_staff_geometries)
+        timeline_preview = build_staff_timeline_preview(
+            outcomes,
+            semantic_candidates,
+            all_staff_geometries,
+            scale_durations=include_barline_candidates
+        )
     except Exception:
         timeline_preview = []
 
