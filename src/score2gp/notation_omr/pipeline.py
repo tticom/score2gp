@@ -85,6 +85,7 @@ def run_recognition_on_file(
     clef_locations = []
     tuplet_marker_locations = []
     semantic_candidates = []
+    barline_locations = []
 
     all_staff_geometries = []
 
@@ -263,10 +264,35 @@ def run_recognition_on_file(
         except Exception:
             pass
 
+        # Extract confirmed barlines from structural skeleton
+        try:
+            from score2gp.pdf_staff_notation_diagnostics import extract_structural_skeleton_diagnostics_dict
+            skeleton = extract_structural_skeleton_diagnostics_dict(page, page_index)
+            for p in skeleton.get("pages", []):
+                for sys in p.get("systems", []):
+                    sys_idx = sys.get("system_index")
+                    for staff in sys.get("staves", []):
+                        staff_idx = staff.get("staff_index")
+                        for b in staff.get("barline_candidates", []):
+                            if b.get("classification") == "confirmed_barline":
+                                barline_locations.append({
+                                    "symbol_type": "barline_candidate",
+                                    "x0": b.get("x0"),
+                                    "x1": b.get("x1"),
+                                    "y0": b.get("y0"),
+                                    "y1": b.get("y1"),
+                                    "page_index": page_index,
+                                    "system_index": sys_idx,
+                                    "staff_index": staff_idx,
+                                })
+        except Exception:
+            pass
+
     outcomes = map_whole_note_candidates_to_read_only_outcomes(whole_note_locations)
     outcomes.extend(map_half_note_candidates_to_read_only_outcomes(half_note_locations))
     outcomes.extend(map_quarter_note_candidates_to_read_only_outcomes(quarter_note_locations))
     outcomes.extend(map_treble_clef_candidates_to_read_only_outcomes(clef_locations))
+    outcomes.extend(barline_locations)
 
     if include_x_aligned_clusters:
         outcomes.extend(map_x_aligned_cluster_candidates_to_read_only_outcomes(x_aligned_cluster_locations))

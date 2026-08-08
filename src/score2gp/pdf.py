@@ -30,7 +30,7 @@ _ASCII_TAB_TOKEN_RE = re.compile(r"\d{1,2}|[\\/hpbvr~]+")
 _ASCII_TECHNIQUE_MARKERS = {"/", "\\", "h", "p", "b", "r", "v", "~"}
 
 DOUBLE_BARLINE_CLUSTERING_TOLERANCE = 12.0
-MIN_INHERITED_INTERNAL_BAR_WIDTH = 130.0
+MIN_INHERITED_INTERNAL_BAR_WIDTH = 30.0
 
 MIN_FRET_DIGIT_WIDTH_FOR_CONFIDENCE = 4.0
 MIN_NARROW_FONT_FRET_DIGIT_WIDTH = 2.8
@@ -3744,7 +3744,7 @@ def filter_tab_barline_candidates(
         crosses_entire_staff = (y_min <= y0 + 4.0 and y_max >= y1 - 4.0) or (gaps_crossed >= len(ys) - 1)
         absolute_height_ok = (height >= 40.0)
         relative_height_ok = crosses_entire_staff
-        is_accepted_relative = (height >= 20.0 and relative_height_ok)
+        is_accepted_relative = (height >= min(15.0, staff_height - 2.0) and relative_height_ok)
 
         initially_accepted = (
             special_rejection_reason is None
@@ -3830,12 +3830,24 @@ def filter_tab_barline_candidates(
                     final_decisions[representative["idx"]] = (True, None, "double", 2)
                     final_decisions[secondary["idx"]] = (False, "pdf_barline_double_secondary", "double", 2)
             else:
-                for item in cluster:
-                    final_decisions[item["idx"]] = (False, "pdf_barline_mixed_primitive_provenance", "ambiguous", 2)
+                is_rightmost_edge = any(item["x"] >= x1 - 10.0 for item in cluster)
+                is_leftmost_edge = any(item["x"] <= x0 + 10.0 for item in cluster)
+                if is_leftmost_edge or is_rightmost_edge:
+                    representative = cluster[-1] if is_rightmost_edge else cluster[0]
+                    for item in cluster:
+                        if item is representative:
+                            final_decisions[item["idx"]] = (True, None, "double", 2)
+                        else:
+                            final_decisions[item["idx"]] = (False, "pdf_barline_double_secondary", "double", 2)
+                else:
+                    for item in cluster:
+                        final_decisions[item["idx"]] = (False, "pdf_barline_mixed_primitive_provenance", "ambiguous", 2)
         else:
             primitive_ids = {item["segment"].primitive_id for item in cluster if item["segment"].primitive_id is not None}
             has_rect = any(item["segment"].primitive_kind == "rect_edge" for item in cluster)
-            if len(primitive_ids) > 1 and has_rect:
+            is_rightmost_edge = any(item["x"] >= x1 - 10.0 for item in cluster)
+            is_leftmost_edge = any(item["x"] <= x0 + 10.0 for item in cluster)
+            if len(primitive_ids) > 1 and has_rect and not (is_leftmost_edge or is_rightmost_edge):
                 for item in cluster:
                     final_decisions[item["idx"]] = (False, "pdf_barline_mixed_primitive_provenance", "ambiguous", len(cluster))
             else:
@@ -3879,7 +3891,7 @@ def filter_tab_barline_candidates(
                         reason = "pdf_barline_crosses_insufficient_string_gaps"
                     else:
                         reason = "pdf_barline_partial_staff_crossing"
-                elif not (item["absolute_height_ok"] or (item["height"] >= 20.0 and item["relative_height_ok"])):
+                elif not (item["absolute_height_ok"] or (item["height"] >= min(15.0, staff_height - 2.0) and item["relative_height_ok"])):
                     reason = "pdf_barline_too_short_absolute"
 
                 if reason is None:
@@ -4080,10 +4092,9 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
 
                 for pb in partner_valid:
                     # a) Check boundaries if we have outer TAB boundaries
-                    if tab_left is not None and tab_right is not None:
-                        if pb <= tab_left + 15.0 or pb >= tab_right - 15.0:
-                            rejected_inherited[pb] = "pdf_barline_outside_system_bounds"
-                            continue
+                    if pb < x0 - 8.0 or pb > x1 + 8.0:
+                        rejected_inherited[pb] = "pdf_barline_outside_system_bounds"
+                        continue
 
                     # b) Check if too close to any explicit TAB barline (anchors)
                     if any(15.0 < abs(pb - tb) < MIN_INHERITED_INTERNAL_BAR_WIDTH for tb in valid_barlines):

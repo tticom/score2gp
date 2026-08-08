@@ -928,6 +928,20 @@ def extract_structural_skeleton_diagnostics_dict(page: Any, page_index: int) -> 
         notation_groups = _detect_notation_staff_groups(page)
         drawings = page.get_drawings()
 
+        # Extract noteheads to distinguish stems from barlines
+        notehead_xs = []
+        try:
+            notation_diags = build_notation_diagnostics(page, page_index, notation_groups)
+            notes_tuple = _extract_note_candidates(page, notation_diags.staves)
+            for note_list in notes_tuple:
+                for note in note_list:
+                    if hasattr(note, "bbox"):
+                        bbox = note.bbox
+                        if bbox and len(bbox) >= 4:
+                            notehead_xs.append((bbox[0], bbox[2]))
+        except Exception:
+            pass
+
         group_bounds = [_notation_group_bounds(g) for g in notation_groups]
         connected_systems, connectors_found = _group_notation_groups_by_system_connectors(drawings, group_bounds)
 
@@ -989,9 +1003,22 @@ def extract_structural_skeleton_diagnostics_dict(page: Any, page_index: int) -> 
                         covers_bottom = (vy1 >= y1 - 0.25 * staff_space)
 
                         if height_in_spaces >= 3.8 and covers_top and covers_bottom:
-                            cls = "confirmed_barline"
-                            reason = None
-                            confirmed_count += 1
+                            # Check if it overlaps horizontally with any notehead
+                            is_stem = False
+                            vx_center = (vx0 + vx1) / 2.0
+                            for nx0, nx1 in notehead_xs:
+                                if nx0 - 1.0 <= vx_center <= nx1 + 1.0:
+                                    is_stem = True
+                                    break
+
+                            if is_stem:
+                                cls = "ambiguous_stem"
+                                reason = "Vertical stroke overlaps horizontally with a notehead candidate; likely a note stem"
+                                ambiguous_count += 1
+                            else:
+                                cls = "confirmed_barline"
+                                reason = None
+                                confirmed_count += 1
                         elif height_in_spaces >= 2.5:
                             cls = "ambiguous_stem"
                             if height_in_spaces >= 3.8:

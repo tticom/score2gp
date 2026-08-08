@@ -73,8 +73,15 @@ def generate_musicxml_from_omr(
     if not previews:
         return ""
 
-    # For now, generate a single partwise score from the first staff preview
-    preview = previews[0]
+    # Sort previews by (page_index, system_index, staff_index)
+    previews_sorted = sorted(
+        previews,
+        key=lambda p: (p.get("page_index", 1), p.get("system_index", 1), p.get("staff_index", 1))
+    )
+
+    combined_measures = []
+    for p_data in previews_sorted:
+        combined_measures.extend(p_data["measures"])
 
     # Resolve global attributes from semantic candidates
     fifths = 0
@@ -131,12 +138,11 @@ def generate_musicxml_from_omr(
     part = ET.SubElement(score, "part", id="P1")
 
     # Generate measures
-    for m_data in preview["measures"]:
-        m_idx = m_data["measure_index"]
-        measure = ET.SubElement(part, "measure", number=str(m_idx))
+    for global_m_idx, m_data in enumerate(combined_measures, start=1):
+        measure = ET.SubElement(part, "measure", number=str(global_m_idx))
 
         # Write attributes on the first measure
-        if m_idx == 1:
+        if global_m_idx == 1:
             attrs = ET.SubElement(measure, "attributes")
             divisions = ET.SubElement(attrs, "divisions")
             divisions.text = "8"
