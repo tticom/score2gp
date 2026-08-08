@@ -37,22 +37,44 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
     valid_durations = ["whole", "half", "quarter", "eighth", "sixteenth", "thirty_second", "sixty_fourth"]
     valid_outcomes = []
     
+    REST_SYMBOL_TO_EXPECTED_DURATION = {
+        "whole_rest_candidate": {"whole"},
+        "whole_rest": {"whole"},
+        "half_rest_candidate": {"half"},
+        "half_rest": {"half"},
+        "quarter_rest_candidate": {"quarter"},
+        "quarter_rest": {"quarter"},
+        "eighth_rest_candidate": {"eighth"},
+        "eighth_rest": {"eighth"},
+        "sixteenth_rest_candidate": {"sixteenth", "16th"},
+        "sixteenth_rest": {"sixteenth", "16th"},
+        "thirty_second_rest_candidate": {"thirty_second", "32nd"},
+        "thirty_second_rest": {"thirty_second", "32nd"},
+        "sixty_fourth_rest_candidate": {"sixty_fourth", "64th"},
+        "sixty_fourth_rest": {"sixty_fourth", "64th"},
+    }
+
     for outcome in outcomes:
         sym_type = outcome.get("symbol_type")
-        if sym_type not in [
+        is_rest = sym_type in REST_SYMBOL_TO_EXPECTED_DURATION
+        is_note = sym_type in [
             "whole_note_candidate", "half_note_candidate", "quarter_note_candidate",
             "eighth_note_candidate", "sixteenth_note_candidate", "thirty_second_note_candidate",
-            "sixty_fourth_note_candidate", "quarter_rest_candidate"
-        ]:
+            "sixty_fourth_note_candidate"
+        ]
+        if not (is_rest or is_note):
             continue
+
         if outcome.get("association_status") != "success":
             continue
+
         duration = outcome.get("duration")
         if duration not in valid_durations:
             continue
-            
-        if sym_type == "quarter_rest_candidate":
-            if duration != "quarter":
+
+        if is_rest:
+            expected_durs = REST_SYMBOL_TO_EXPECTED_DURATION[sym_type]
+            if duration not in expected_durs:
                 continue
             bbox = outcome.get("bbox")
             if not isinstance(bbox, (list, tuple)) or len(bbox) < 4:
@@ -65,11 +87,11 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
             expected_sym_type = f"{duration}_note_candidate"
             if sym_type != expected_sym_type:
                 continue
-            
+
             pitch_str = outcome.get("clef_resolved_staff_pitch")
             if not pitch_str:
                 continue
-            
+
         valid_outcomes.append(outcome)
 
     if len(valid_outcomes) == 0:
@@ -121,7 +143,8 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
 
     grouped_outcomes = []
     for outcome in valid_outcomes:
-        is_rest = outcome.get("symbol_type") == "quarter_rest_candidate"
+        sym = outcome.get("symbol_type")
+        is_rest = sym in REST_SYMBOL_TO_EXPECTED_DURATION
         page = outcome.get("page_index")
         sys = outcome.get("system_index")
         staff = outcome.get("staff_index", outcome.get("system_staff_index"))
@@ -133,7 +156,8 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
             if grouped_outcomes:
                 last_group = grouped_outcomes[-1]
                 first_in_last = last_group[0]
-                last_is_rest = first_in_last.get("symbol_type") == "quarter_rest_candidate"
+                last_sym = first_in_last.get("symbol_type")
+                last_is_rest = last_sym in REST_SYMBOL_TO_EXPECTED_DURATION
                 
                 if not last_is_rest and has_position_evidence(first_in_last):
                     last_page = first_in_last.get("page_index")
@@ -267,7 +291,8 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
 
     for i, group in enumerate(grouped_outcomes):
         first_outcome = group[0]
-        is_rest = first_outcome.get("symbol_type") == "quarter_rest_candidate"
+        sym = first_outcome.get("symbol_type")
+        is_rest = sym in REST_SYMBOL_TO_EXPECTED_DURATION
 
         if is_rest:
             note_list = []

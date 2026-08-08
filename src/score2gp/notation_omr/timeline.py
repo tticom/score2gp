@@ -268,7 +268,7 @@ def build_staff_timeline_preview(
             elif cursor_1 > D_measure:
                 invalid = True
 
-            if cursor_2 < D_measure:
+            if 0 < cursor_2 < D_measure:
                 measure_events.append({
                     "candidate_id": None,
                     "symbol_type": "padding_rest",

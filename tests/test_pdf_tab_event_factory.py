@@ -397,3 +397,66 @@ def test_pdf_tab_event_factory_normalized_before_after_equivalence() -> None:
     assert ev_editable.text == expected_editable_text
     assert ev_editable.timing.duration_ticks == 960
     assert ev_editable.timing.notated_duration.value == "quarter"
+
+
+def test_determine_pdf_tab_event_duration_all_rest_types() -> None:
+    from score2gp.pdf_tab_duration_types import TabDurationEvidence
+
+    for raw_rest, exp_ticks, exp_name in [
+        ("whole_rest", 3840, "whole"),
+        ("half_rest", 1920, "half"),
+        ("quarter_rest", 960, "quarter"),
+        ("eighth_rest", 480, "eighth"),
+        ("sixteenth_rest", 240, "16th"),
+        ("32nd_rest", 120, "32nd"),
+        ("64th_rest", 60, "64th"),
+    ]:
+        cand = TabCandidate(
+            id=f"c-{raw_rest}",
+            kind="fret",
+            raw_text=raw_rest,
+            parsed_fret=None,
+            x=10.0,
+            y=10.0,
+            string=1,
+            bar_index=1,
+            system_index=1,
+            staff_index=1,
+            page_index=1,
+            bbox=BoundingBox(page=1, x0=10.0, y0=10.0, x1=15.0, y1=15.0),
+        )
+        is_rest, ticks, name = determine_pdf_tab_event_duration([cand], 480, "eighth")
+        assert is_rest is True
+        assert ticks == exp_ticks
+        assert name == exp_name
+
+
+def test_build_pdf_tab_event_from_subgroup_with_dotted_note() -> None:
+    cand = TabCandidate(
+        id="c-dotted",
+        kind="fret",
+        raw_text="3",
+        parsed_fret=3,
+        x=10.0,
+        y=10.0,
+        string=1,
+        bar_index=1,
+        system_index=1,
+        staff_index=1,
+        page_index=1,
+        bbox=BoundingBox(page=1, x0=10.0, y0=10.0, x1=15.0, y1=15.0),
+    )
+
+    event = build_pdf_tab_event_from_subgroup(
+        [cand],
+        output_bar_idx=1,
+        event_idx=0,
+        onset_ticks=0,
+        grid_spacing=1440,
+        duration_name="quarter",
+        track_id="gtr-1",
+    )
+
+    assert event.timing.duration_ticks == 1440
+    assert event.timing.notated_duration.value == "quarter"
+    assert event.timing.notated_duration.dots == 1
