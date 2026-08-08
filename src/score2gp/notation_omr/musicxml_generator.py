@@ -167,9 +167,20 @@ def generate_musicxml_from_omr(
 
         # Write Voice 1
         xml_cursor = 0
+        last_written_pitch_start_tick = -1
         for i, ev in enumerate(v1_events):
-            # Check if this note is part of a chord
-            is_chord = i > 0 and ev["start_tick"] == v1_events[i - 1]["start_tick"]
+            pitch_data = parse_resolved_pitch(ev.get("resolved_pitch"))
+            is_note = "note" in ev.get("symbol_type", "")
+            
+            if is_note and pitch_data is None:
+                continue
+
+            is_chord = False
+            if pitch_data is not None:
+                if ev["start_tick"] == last_written_pitch_start_tick:
+                    is_chord = True
+                else:
+                    last_written_pitch_start_tick = ev["start_tick"]
 
             if not is_chord and ev["start_tick"] > xml_cursor:
                 # Write a rest to fill the gap
@@ -184,9 +195,8 @@ def generate_musicxml_from_omr(
                 type_el.text = get_note_type(gap_ticks)
                 xml_cursor = ev["start_tick"]
 
-            pitch_data = parse_resolved_pitch(ev.get("resolved_pitch"))
             note = ET.SubElement(measure, "note")
-            if is_chord and pitch_data is not None:
+            if is_chord:
                 ET.SubElement(note, "chord")
 
             if pitch_data:
@@ -224,8 +234,20 @@ def generate_musicxml_from_omr(
             duration_el.text = str(max(1, xml_cursor // 120))
 
             xml_cursor = 0
+            last_written_pitch_start_tick = -1
             for i, ev in enumerate(v2_events):
-                is_chord = i > 0 and ev["start_tick"] == v2_events[i - 1]["start_tick"]
+                pitch_data = parse_resolved_pitch(ev.get("resolved_pitch"))
+                is_note = "note" in ev.get("symbol_type", "")
+                
+                if is_note and pitch_data is None:
+                    continue
+
+                is_chord = False
+                if pitch_data is not None:
+                    if ev["start_tick"] == last_written_pitch_start_tick:
+                        is_chord = True
+                    else:
+                        last_written_pitch_start_tick = ev["start_tick"]
 
                 if not is_chord and ev["start_tick"] > xml_cursor:
                     gap_ticks = ev["start_tick"] - xml_cursor
@@ -239,9 +261,8 @@ def generate_musicxml_from_omr(
                     type_el.text = get_note_type(gap_ticks)
                     xml_cursor = ev["start_tick"]
 
-                pitch_data = parse_resolved_pitch(ev.get("resolved_pitch"))
                 note = ET.SubElement(measure, "note")
-                if is_chord and pitch_data is not None:
+                if is_chord:
                     ET.SubElement(note, "chord")
 
                 if pitch_data:
