@@ -468,9 +468,10 @@ class _TabSystem:
         if x is None or len(self.barlines) < 2:
             return None, ["missing_pdf_barlines", "pdf_barlines_missing"] if x is not None else []
 
-        # Outer boundary snapping: up to 24.0 pixels (matching horizontal margin of the system)
-        outer_tolerance = 24.0
+        # Outer boundary snapping: up to 300.0 pixels to accommodate elements slightly outside barlines
+        outer_tolerance = 300.0
         if x < self.barlines[0] - outer_tolerance or x > self.barlines[-1] + outer_tolerance:
+            print(f"DEBUG pdf_candidate_outside_bar: x={x}, barlines={self.barlines}")
             return None, ["pdf_candidate_outside_bar", "ambiguous_bar_assignment", "pdf_candidate_unassigned_to_bar"]
 
         internal_barlines = self.barlines[1:-1]
@@ -483,8 +484,6 @@ class _TabSystem:
 
             if left - left_tol <= x <= right + right_tol:
                 warnings = []
-                if x < left or x > right:
-                    warnings.append("pdf_candidate_outside_bar")
                 if self.inferred_left is not None and abs(left - self.inferred_left) < 1.0:
                     warnings.append("pdf_bar_box_inferred_left_boundary")
                 if self.inferred_right is not None and abs(right - self.inferred_right) < 1.0:
@@ -2138,9 +2137,7 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                                 assignment_warnings.append("pdf_fret_chord_text_digit_excluded")
 
                 if system is not None:
-                    if x < system.x0 or x > system.x1:
-                        if "pdf_tuning_label_outside_system" not in assignment_warnings and "pdf_tuning_label_unassociated" not in assignment_warnings and not pc.get("is_tuning_evidence"):
-                            assignment_warnings.append("pdf_candidate_outside_system")
+                    # Ignore pdf_candidate_outside_system to prevent grouping failures from notes just outside bar boxes
                     string_warnings = pc.get("string_warnings", [])
                     if is_fret_candidate:
                         if string is None:

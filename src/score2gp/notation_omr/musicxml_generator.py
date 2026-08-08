@@ -70,6 +70,9 @@ def generate_musicxml_from_omr(
 
     # 1. Build the timeline preview
     previews = build_staff_timeline_preview(outcomes, semantic_candidates, all_staff_geometries)
+    import json
+    with open("work/previews_debug.json", "w") as f:
+        json.dump(previews, f, indent=2)
     if not previews:
         return ""
 
@@ -139,7 +142,7 @@ def generate_musicxml_from_omr(
         if m_idx == 1:
             attrs = ET.SubElement(measure, "attributes")
             divisions = ET.SubElement(attrs, "divisions")
-            divisions.text = "8"
+            divisions.text = "24"
 
             key = ET.SubElement(attrs, "key")
             fifths_el = ET.SubElement(key, "fifths")
@@ -188,7 +191,7 @@ def generate_musicxml_from_omr(
                 rest_node = ET.SubElement(measure, "note")
                 ET.SubElement(rest_node, "rest")
                 dur = ET.SubElement(rest_node, "duration")
-                dur.text = str(max(1, gap_ticks // 120))
+                dur.text = str(max(1, round(gap_ticks / 40.0)))
                 voice_el = ET.SubElement(rest_node, "voice")
                 voice_el.text = "1"
                 type_el = ET.SubElement(rest_node, "type")
@@ -213,7 +216,7 @@ def generate_musicxml_from_omr(
                 ET.SubElement(note, "rest")
 
             dur_ticks = ev.get("duration_ticks", 960)
-            dur_val = max(1, dur_ticks // 120)
+            dur_val = max(1, round(dur_ticks / 40.0))
             dur = ET.SubElement(note, "duration")
             dur.text = str(dur_val)
 
@@ -221,7 +224,30 @@ def generate_musicxml_from_omr(
             voice_el.text = "1"
 
             type_el = ET.SubElement(note, "type")
-            type_el.text = get_note_type(dur_ticks)
+            sym_type = ev.get("symbol_type", "")
+            if sym_type.endswith("_note_candidate"):
+                type_name = sym_type.replace("_note_candidate", "")
+                if type_name == "thirty_second":
+                    type_name = "32nd"
+                elif type_name == "sixty_fourth":
+                    type_name = "64th"
+                type_el.text = type_name
+            else:
+                type_el.text = get_note_type(dur_ticks)
+
+            tuplet_assoc = ev.get("tuplet_association")
+            if tuplet_assoc:
+                ratio_str = tuplet_assoc.get("ratio", "3:2")
+                try:
+                    num, den = ratio_str.split(":")
+                    num_notes = int(num)
+                    normal_notes = int(den)
+                except ValueError:
+                    num_notes = 3
+                    normal_notes = 2
+                tm = ET.SubElement(note, "time-modification")
+                ET.SubElement(tm, "actual-notes").text = str(num_notes)
+                ET.SubElement(tm, "normal-notes").text = str(normal_notes)
 
             if not is_chord:
                 xml_cursor += dur_ticks

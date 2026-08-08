@@ -61,8 +61,10 @@ def run_recognition_on_file(
         _extract_whole_note_candidates,
         _extract_half_note_candidates,
         _extract_quarter_note_candidates,
-        extract_notation_diagnostics_dict
+        extract_notation_diagnostics_dict,
+        extract_structural_skeleton_diagnostics_dict
     )
+    from score2gp.pdf import _detect_tab_systems
 
     if not pdf_path.exists():
         print(f"Error: File {pdf_path} not found", file=sys.stderr)
@@ -85,6 +87,7 @@ def run_recognition_on_file(
     clef_locations = []
     tuplet_marker_locations = []
     semantic_candidates = []
+    barline_candidates = []
 
     all_staff_geometries = []
 
@@ -96,6 +99,51 @@ def run_recognition_on_file(
         staves = page_diags.get("staves", [])
 
         all_staff_geometries.extend(map_staff_geometry_to_read_only_report(staves))
+
+        tab_systems = _detect_tab_systems(page, page_index)
+        
+        if tab_systems:
+            # Use Tablature barlines as they are more reliable for tab pairs
+            for ts in tab_systems:
+                # Find matching notation staff
+                notation_staff = None
+                for sg in all_staff_geometries:
+                    if sg["page_index"] == page_index and sg["system_index"] == ts.system_index and sg["staff_index"] == ts.staff_index:
+                        notation_staff = sg
+                        break
+                
+                if notation_staff:
+                    y0 = notation_staff["bbox"][1]
+                    y1 = notation_staff["bbox"][3]
+                    for x in ts.barlines:
+                        barline_candidates.append({
+                            "symbol_type": "barline_candidate",
+                            "page_index": page_index,
+                            "system_index": ts.system_index,
+                            "staff_index": ts.staff_index,
+                            "x0": x,
+                            "x1": x,
+                            "y0": y0,
+                            "y1": y1
+                        })
+        else:
+            # Fall back to structural skeleton for standard notation
+            skel = extract_structural_skeleton_diagnostics_dict(page, page_index)
+            for skel_page in skel.get("pages", []):
+                for system in skel_page.get("systems", []):
+                    for staff in system.get("staves", []):
+                        for bc in staff.get("barline_candidates", []):
+                            if bc.get("classification") == "confirmed_barline":
+                                barline_candidates.append({
+                                    "symbol_type": "barline_candidate",
+                                    "page_index": page_index,
+                                    "system_index": system.get("system_index"),
+                                    "staff_index": staff.get("staff_index"),
+                                    "x0": bc.get("x0"),
+                                    "x1": bc.get("x1"),
+                                    "y0": bc.get("y0"),
+                                    "y1": bc.get("y1")
+                                })
 
         raw_text_elements = []
         try:
@@ -287,6 +335,8 @@ def run_recognition_on_file(
         from score2gp.quarter_rest_recogniser import extract_quarter_rest_candidates
         quarter_rests = extract_quarter_rest_candidates(outcomes)
         outcomes.extend(quarter_rests)
+
+    outcomes.extend(barline_candidates)
 
     map_staff_position_to_read_only_outcomes(outcomes, all_staff_geometries)
     if include_ledger_line_candidates:

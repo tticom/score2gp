@@ -1523,6 +1523,7 @@ def generate_sidecar_command(
     recognition_result = run_recognition_on_file(
         pdf,
         include_flag_beam_candidates=True,
+        include_ledger_line_candidates=True,
         assume_treble_clef=True
     )
     if not recognition_result:

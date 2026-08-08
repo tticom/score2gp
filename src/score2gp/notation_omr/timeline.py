@@ -138,7 +138,8 @@ def build_staff_timeline_preview(
                     measures.append(current_measure_cands)
                     current_measure_cands = []
             else:
-                current_measure_cands.append(cand)
+                if cand.get("association_status") not in ("suppressed", "failed"):
+                    current_measure_cands.append(cand)
         if current_measure_cands:
             measures.append(current_measure_cands)
 
@@ -217,6 +218,17 @@ def build_staff_timeline_preview(
                     dur = TICK_MAPPINGS.get(c.get("symbol_type"), 960)
                     if "duration_ticks" in c:
                         dur = c["duration_ticks"]
+                    if "tuplet_association" in c:
+                        ratio_str = c["tuplet_association"].get("ratio", "3:2")
+                        if ratio_str == "3:2":
+                            c["symbol_type"] = "eighth_note_candidate"
+                            dur = 480
+                        try:
+                            num, den = ratio_str.split(":")
+                            dur = int(dur * int(den) / int(num))
+                        except (ValueError, ZeroDivisionError):
+                            pass
+
                     c_start = c.get("start_tick", start_tick)
                     c["timeline_start_tick"] = c_start
                     c["timeline_duration_ticks"] = dur
@@ -238,6 +250,17 @@ def build_staff_timeline_preview(
                     dur = TICK_MAPPINGS.get(c.get("symbol_type"), 960)
                     if "duration_ticks" in c:
                         dur = c["duration_ticks"]
+                    if "tuplet_association" in c:
+                        ratio_str = c["tuplet_association"].get("ratio", "3:2")
+                        if ratio_str == "3:2":
+                            c["symbol_type"] = "eighth_note_candidate"
+                            dur = 480
+                        try:
+                            num, den = ratio_str.split(":")
+                            dur = int(dur * int(den) / int(num))
+                        except (ValueError, ZeroDivisionError):
+                            pass
+
                     c_start = c.get("start_tick", start_tick)
                     c["timeline_start_tick"] = c_start
                     c["timeline_duration_ticks"] = dur

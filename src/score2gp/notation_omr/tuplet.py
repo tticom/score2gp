@@ -221,8 +221,8 @@ def extract_tuplet_marker_evidence(
                         "system_index": sys_idx,
                         "staff_index": staff_idx,
                         "top_line_y": top_y,
-                        "lane_top": top_y - 2.0 * spacing,  # Strict 2.0 staff spaces above top line
-                        "lane_bottom": top_y + 0.5,
+                        "lane_top": top_y - 6.0 * spacing,
+                        "lane_bottom": bot_y + 6.0 * spacing,
                         "x0": x0 - 10.0,
                         "x1": x1 + 10.0,
                     })
@@ -465,8 +465,9 @@ def associate_local_tuplets(
             continue
 
         marker_y_center = (marker.bbox[1] + marker.bbox[3]) / 2.0
-        lane_top = top_line_y - 2.0 * staff_spacing  # Strict 2.0 staff spaces above top line
-        lane_bottom = top_line_y + 0.5
+        bot_line_y = top_line_y + 4.0 * staff_spacing
+        lane_top = top_line_y - 6.0 * staff_spacing
+        lane_bottom = bot_line_y + 6.0 * staff_spacing
 
         if not (lane_top - 0.5 <= marker_y_center <= lane_bottom):
             continue
@@ -480,7 +481,7 @@ def associate_local_tuplets(
         for i in range(len(events) - 2):
             g = events[i : i + 3]
             if not all(
-                e.get("symbol_type") in ("eighth_note_candidate", "eighth_note")
+                e.get("symbol_type") in ("eighth_note_candidate", "eighth_note", "quarter_note_candidate", "quarter_note")
                 for e in g
             ):
                 continue
