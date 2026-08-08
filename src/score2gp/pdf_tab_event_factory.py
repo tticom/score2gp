@@ -47,15 +47,53 @@ def build_pdf_tab_editable_draft_annotation_text(
     )
 
 
+_REST_CANDIDATE_MAP: dict[str, tuple[int, str]] = {
+    "whole_rest": (3840, "whole"),
+    "whole_rest_candidate": (3840, "whole"),
+    "whole": (3840, "whole"),
+    "half_rest": (1920, "half"),
+    "half_rest_candidate": (1920, "half"),
+    "half": (1920, "half"),
+    "quarter_rest": (960, "quarter"),
+    "quarter_rest_candidate": (960, "quarter"),
+    "quarter": (960, "quarter"),
+    "eighth_rest": (480, "eighth"),
+    "eighth_rest_candidate": (480, "eighth"),
+    "eighth": (480, "eighth"),
+    "sixteenth_rest": (240, "16th"),
+    "sixteenth_rest_candidate": (240, "16th"),
+    "16th_rest": (240, "16th"),
+    "16th_rest_candidate": (240, "16th"),
+    "16th": (240, "16th"),
+    "sixteenth": (240, "16th"),
+    "thirty_second_rest": (120, "32nd"),
+    "thirty_second_rest_candidate": (120, "32nd"),
+    "32nd_rest": (120, "32nd"),
+    "32nd": (120, "32nd"),
+    "thirty_second": (120, "32nd"),
+    "sixty_fourth_rest": (60, "64th"),
+    "sixty_fourth_rest_candidate": (60, "64th"),
+    "64th_rest": (60, "64th"),
+    "64th": (60, "64th"),
+    "sixty_fourth": (60, "64th"),
+}
+
+
 def determine_pdf_tab_event_duration(
     subgroup_candidates: Sequence[TabCandidate],
     grid_spacing: int,
     duration_name: str,
 ) -> tuple[bool, int, str]:
     """Determine if a subgroup candidate list is a rest, and return (is_rest, ev_duration_ticks, ev_duration_name)."""
-    is_rest = any(c.raw_text == "quarter_rest" for c in subgroup_candidates)
-    if is_rest:
-        return True, 960, "quarter"
+    for c in subgroup_candidates:
+        r_text = (c.raw_text or "").lower()
+        r_kind = (c.kind or "").lower()
+        if r_text in _REST_CANDIDATE_MAP:
+            ticks, name = _REST_CANDIDATE_MAP[r_text]
+            return True, ticks, name
+        if r_kind in _REST_CANDIDATE_MAP and r_kind not in ("fret", "chord-symbol", "technique-text"):
+            ticks, name = _REST_CANDIDATE_MAP[r_kind]
+            return True, ticks, name
 
     explicit_evidences: list[TabDurationEvidence] = []
     for c in subgroup_candidates:
@@ -95,6 +133,26 @@ def determine_pdf_tab_event_duration(
 
 
 
+_BASE_DURATION_TICKS: dict[str, int] = {
+    "whole": 3840,
+    "half": 1920,
+    "quarter": 960,
+    "eighth": 480,
+    "16th": 240,
+    "32nd": 120,
+    "64th": 60,
+}
+
+
+def _infer_dots_from_duration(ticks: int, name: str) -> int:
+    base = _BASE_DURATION_TICKS.get(name, 0)
+    if base > 0 and ticks == int(base * 1.5):
+        return 1
+    if base > 0 and ticks == int(base * 1.75):
+        return 2
+    return 0
+
+
 def build_pdf_tab_event_from_subgroup(
     subgroup_candidates: Sequence[TabCandidate],
     *,
@@ -112,6 +170,11 @@ def build_pdf_tab_event_from_subgroup(
     is_rest, ev_duration_ticks, ev_duration_name = determine_pdf_tab_event_duration(
         subgroup_candidates, grid_spacing, duration_name
     )
+
+    ev_dots = _infer_dots_from_duration(ev_duration_ticks, ev_duration_name)
+    for c in subgroup_candidates:
+        if c.duration_evidence and getattr(c.duration_evidence, "dots", 0) > 0:
+            ev_dots = max(ev_dots, getattr(c.duration_evidence, "dots", 0))
 
     notes: list[Note] = []
     if not is_rest:
@@ -148,7 +211,7 @@ def build_pdf_tab_event_from_subgroup(
             onset_ticks=onset_ticks,
             duration_ticks=ev_duration_ticks,
             ticks_per_quarter=DEFAULT_TICKS_PER_QUARTER,
-            notated_duration=NotatedDuration(value=ev_duration_name, dots=0),
+            notated_duration=NotatedDuration(value=ev_duration_name, dots=ev_dots),
         ),
         is_rest=is_rest,
         notes=notes,
