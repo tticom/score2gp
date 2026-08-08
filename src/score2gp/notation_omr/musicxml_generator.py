@@ -80,6 +80,8 @@ def generate_musicxml_from_omr(
     fifths = 0
     clef_sign = "G"
     clef_line = 2
+    beats_val = 4
+    beat_type_val = 4
 
     if semantic_candidates:
         sc = semantic_candidates[0]
@@ -98,6 +100,25 @@ def generate_musicxml_from_omr(
             elif kind == "alto":
                 clef_sign = "C"
                 clef_line = 3
+
+        # Resolve time signature
+        for cand in semantic_candidates:
+            ts = cand.get("time_signature") or cand.get("logical_time_signature") or cand.get("meter")
+            if isinstance(ts, dict):
+                b = ts.get("beats") or ts.get("num") or ts.get("numerator")
+                bt = ts.get("beat_type") or ts.get("den") or ts.get("denominator")
+                if b and bt and int(bt) > 0:
+                    beats_val = int(b)
+                    beat_type_val = int(bt)
+                    break
+            elif "beats" in cand and "beat_type" in cand and int(cand["beat_type"]) > 0:
+                beats_val = int(cand["beats"])
+                beat_type_val = int(cand["beat_type"])
+                break
+            elif "time_signature_num" in cand and "time_signature_den" in cand and int(cand["time_signature_den"]) > 0:
+                beats_val = int(cand["time_signature_num"])
+                beat_type_val = int(cand["time_signature_den"])
+                break
 
     # Build standard XML skeleton
     score = ET.Element("score-partwise", version="4.0")
@@ -126,9 +147,9 @@ def generate_musicxml_from_omr(
 
             time = ET.SubElement(attrs, "time")
             beats = ET.SubElement(time, "beats")
-            beats.text = "4"
+            beats.text = str(beats_val)
             beat_type = ET.SubElement(time, "beat-type")
-            beat_type.text = "4"
+            beat_type.text = str(beat_type_val)
 
             clef = ET.SubElement(attrs, "clef")
             sign = ET.SubElement(clef, "sign")
@@ -163,11 +184,11 @@ def generate_musicxml_from_omr(
                 type_el.text = get_note_type(gap_ticks)
                 xml_cursor = ev["start_tick"]
 
+            pitch_data = parse_resolved_pitch(ev.get("resolved_pitch"))
             note = ET.SubElement(measure, "note")
-            if is_chord:
+            if is_chord and pitch_data is not None:
                 ET.SubElement(note, "chord")
 
-            pitch_data = parse_resolved_pitch(ev.get("resolved_pitch"))
             if pitch_data:
                 step, alter, octave = pitch_data
                 pitch = ET.SubElement(note, "pitch")
@@ -218,11 +239,11 @@ def generate_musicxml_from_omr(
                     type_el.text = get_note_type(gap_ticks)
                     xml_cursor = ev["start_tick"]
 
+                pitch_data = parse_resolved_pitch(ev.get("resolved_pitch"))
                 note = ET.SubElement(measure, "note")
-                if is_chord:
+                if is_chord and pitch_data is not None:
                     ET.SubElement(note, "chord")
 
-                pitch_data = parse_resolved_pitch(ev.get("resolved_pitch"))
                 if pitch_data:
                     step, alter, octave = pitch_data
                     pitch = ET.SubElement(note, "pitch")

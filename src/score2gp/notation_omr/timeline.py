@@ -217,44 +217,81 @@ def build_staff_timeline_preview(
                     dur = TICK_MAPPINGS.get(c.get("symbol_type"), 960)
                     if "duration_ticks" in c:
                         dur = c["duration_ticks"]
-                    c["timeline_start_tick"] = start_tick
+                    c_start = c.get("start_tick", start_tick)
+                    c["timeline_start_tick"] = c_start
                     c["timeline_duration_ticks"] = dur
                     evt1 = {
                         "candidate_id": c.get("candidate_id"),
                         "symbol_type": c.get("symbol_type"),
                         "voice": 1,
-                        "start_tick": start_tick,
+                        "start_tick": c_start,
                         "duration_ticks": dur,
                         "resolved_pitch": c.get("clef_resolved_staff_pitch")
                     }
                     if "tuplet_association" in c:
                         evt1["tuplet_association"] = c["tuplet_association"]
                     measure_events.append(evt1)
-                    cursor_1 = max(cursor_1, start_tick + dur)
+                    cursor_1 = max(cursor_1, c_start + dur)
 
                 # Process voice 2
                 for c in slice_v2:
                     dur = TICK_MAPPINGS.get(c.get("symbol_type"), 960)
                     if "duration_ticks" in c:
                         dur = c["duration_ticks"]
-                    c["timeline_start_tick"] = start_tick
+                    c_start = c.get("start_tick", start_tick)
+                    c["timeline_start_tick"] = c_start
                     c["timeline_duration_ticks"] = dur
                     evt2 = {
                         "candidate_id": c.get("candidate_id"),
                         "symbol_type": c.get("symbol_type"),
                         "voice": 2,
-                        "start_tick": start_tick,
+                        "start_tick": c_start,
                         "duration_ticks": dur,
                         "resolved_pitch": c.get("clef_resolved_staff_pitch")
                     }
                     if "tuplet_association" in c:
                         evt2["tuplet_association"] = c["tuplet_association"]
                     measure_events.append(evt2)
-                    cursor_2 = max(cursor_2, start_tick + dur)
+                    cursor_2 = max(cursor_2, c_start + dur)
 
+
+            # Resolve dynamic measure duration
+            D_measure = 3840
+            if semantic_candidates:
+                for sc in semantic_candidates:
+                    ts = sc.get("time_signature") or sc.get("logical_time_signature") or sc.get("meter")
+                    if isinstance(ts, dict):
+                        b = ts.get("beats") or ts.get("num") or ts.get("numerator")
+                        bt = ts.get("beat_type") or ts.get("den") or ts.get("denominator")
+                        if b and bt and int(bt) > 0:
+                            D_measure = int(b) * (3840 // int(bt))
+                            break
+                    elif "beats" in sc and "beat_type" in sc and int(sc["beat_type"]) > 0:
+                        D_measure = int(sc["beats"]) * (3840 // int(sc["beat_type"]))
+                        break
+                    elif "time_signature_num" in sc and "time_signature_den" in sc and int(sc["time_signature_den"]) > 0:
+                        D_measure = int(sc["time_signature_num"]) * (3840 // int(sc["time_signature_den"]))
+                        break
+
+            # Truncate same-voice overlaps
+            v1_evts = [e for e in measure_events if e.get("voice") == 1]
+            v2_evts = [e for e in measure_events if e.get("voice") == 2]
+
+            for v_evts in (v1_evts, v2_evts):
+                v_evts.sort(key=lambda e: (e["start_tick"], e.get("candidate_id") or ""))
+                for idx in range(len(v_evts) - 1):
+                    curr_e = v_evts[idx]
+                    next_e = v_evts[idx + 1]
+                    if curr_e["start_tick"] < next_e["start_tick"]:
+                        if curr_e["start_tick"] + curr_e["duration_ticks"] > next_e["start_tick"]:
+                            curr_e["duration_ticks"] = next_e["start_tick"] - curr_e["start_tick"]
+
+            if v1_evts:
+                cursor_1 = max(e["start_tick"] + e["duration_ticks"] for e in v1_evts)
+            if v2_evts:
+                cursor_2 = max(e["start_tick"] + e["duration_ticks"] for e in v2_evts)
 
             # Pad measure voices up to expected duration
-            D_measure = 3840
             if cursor_1 < D_measure:
                 measure_events.append({
                     "candidate_id": None,
