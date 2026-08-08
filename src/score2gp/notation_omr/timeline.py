@@ -127,6 +127,9 @@ def build_staff_timeline_preview(
         # Sort all candidates chronologically by horizontal coordinate
         sorted_cands = sorted(cands, key=get_x_coord)
 
+        # Check if staff has any explicit barlines
+        has_explicit_barlines = any(c.get("symbol_type") in ("barline_candidate", "barline") for c in sorted_cands)
+
         # Split candidates into measures separated by barlines
         measures = []
         current_measure_cands = []
@@ -142,13 +145,32 @@ def build_staff_timeline_preview(
         if current_measure_cands:
             measures.append(current_measure_cands)
 
-        timeline_measures = []
+        # Resolve dynamic measure duration
+        D_measure = 3840
+        if semantic_candidates:
+            for sc in semantic_candidates:
+                ts = sc.get("time_signature") or sc.get("logical_time_signature") or sc.get("meter")
+                if isinstance(ts, dict):
+                    b = ts.get("beats") or ts.get("num") or ts.get("numerator")
+                    bt = ts.get("beat_type") or ts.get("den") or ts.get("denominator")
+                    if b and bt and int(bt) > 0:
+                        D_measure = int(b) * (3840 // int(bt))
+                        break
+                elif "beats" in sc and "beat_type" in sc and int(sc["beat_type"]) > 0:
+                    D_measure = int(sc["beats"]) * (3840 // int(sc["beat_type"]))
+                    break
+                elif "time_signature_num" in sc and "time_signature_den" in sc and int(sc["time_signature_den"]) > 0:
+                    D_measure = int(sc["time_signature_num"]) * (3840 // int(sc["time_signature_den"]))
+                    break
 
-        for m_idx, m_cands in enumerate(measures):
+        timeline_measures = []
+        global_measure_idx = 1
+
+        for m_group in measures:
             # Cluster measure candidates into vertical time slices
             time_slices = []
             current_slice = []
-            for c in sorted(m_cands, key=get_x_coord):
+            for c in sorted(m_group, key=get_x_coord):
                 if not current_slice:
                     current_slice.append(c)
                 else:
@@ -167,6 +189,85 @@ def build_staff_timeline_preview(
             measure_events = []
             invalid = False
 
+            def _finalize_current_measure(evts, c1, c2):
+                nonlocal global_measure_idx
+                if not evts and c1 == 0 and c2 == 0:
+                    return
+                # Truncate same-voice overlaps by onset groups
+                v1_evts = [e for e in evts if e.get("voice") == 1]
+                v2_evts = [e for e in evts if e.get("voice") == 2]
+
+                for v_evts in (v1_evts, v2_evts):
+                    if not v_evts:
+                        continue
+                    # Deduplicate identical pitch/rest candidates at same start_tick
+                    deduped = {}
+                    for e in v_evts:
+                        key = (e["start_tick"], e.get("resolved_pitch"))
+                        if key not in deduped or e["duration_ticks"] > deduped[key]["duration_ticks"]:
+                            deduped[key] = e
+                    v_evts_clean = list(deduped.values())
+
+                    onset_map = {}
+                    for e in v_evts_clean:
+                        st = e["start_tick"]
+                        if st not in onset_map:
+                            onset_map[st] = []
+                        onset_map[st].append(e)
+
+                    sorted_onsets = sorted(onset_map.keys())
+                    for idx in range(len(sorted_onsets) - 1):
+                        curr_st = sorted_onsets[idx]
+                        next_st = sorted_onsets[idx + 1]
+                        curr_group = onset_map[curr_st]
+                        max_dur = max(e["duration_ticks"] for e in curr_group)
+                        if curr_st < next_st and curr_st + max_dur > next_st:
+                            trunc_dur = next_st - curr_st
+                            for e in curr_group:
+                                e["duration_ticks"] = min(e["duration_ticks"], trunc_dur)
+
+                    # Replace contents of v_evts with deduped and truncated events
+                    v_evts.clear()
+                    v_evts.extend(v_evts_clean)
+
+                if v1_evts:
+                    c1 = max(e["start_tick"] + e["duration_ticks"] for e in v1_evts)
+                if v2_evts:
+                    c2 = max(e["start_tick"] + e["duration_ticks"] for e in v2_evts)
+
+                if c1 < D_measure:
+                    evts.append({
+                        "candidate_id": None,
+                        "symbol_type": "padding_rest",
+                        "voice": 1,
+                        "start_tick": c1,
+                        "duration_ticks": D_measure - c1,
+                        "resolved_pitch": None
+                    })
+                    c1 = D_measure
+
+                if 0 < c2 < D_measure:
+                    evts.append({
+                        "candidate_id": None,
+                        "symbol_type": "padding_rest",
+                        "voice": 2,
+                        "start_tick": c2,
+                        "duration_ticks": D_measure - c2,
+                        "resolved_pitch": None
+                    })
+                    c2 = D_measure
+
+                evts = sorted(evts, key=lambda e: (e["start_tick"], e["voice"]))
+                is_valid = (c1 <= D_measure) and (c2 <= D_measure)
+                timeline_measures.append({
+                    "measure_index": global_measure_idx,
+                    "valid": is_valid,
+                    "voice_1_final_tick": c1,
+                    "voice_2_final_tick": c2,
+                    "events": evts
+                })
+                global_measure_idx += 1
+
             for slice_cands in time_slices:
                 slice_v1 = []
                 slice_v2 = []
@@ -180,7 +281,6 @@ def build_staff_timeline_preview(
                         if isinstance(stem, str) and "down" in stem.lower():
                             voice = 2
                     elif "rest" in c.get("symbol_type", ""):
-                        # Determine rest vertical position
                         y_center = None
                         if "bbox" in c and isinstance(c["bbox"], (list, tuple)) and len(c["bbox"]) >= 4:
                             y_center = (c["bbox"][1] + c["bbox"][3]) / 2.0
@@ -205,6 +305,14 @@ def build_staff_timeline_preview(
                     start_tick = cursor_2
                 else:
                     continue
+
+                # Check measure capacity overflow if no explicit barlines present
+                if not has_explicit_barlines and start_tick >= D_measure:
+                    _finalize_current_measure(measure_events, cursor_1, cursor_2)
+                    measure_events = []
+                    cursor_1 = 0
+                    cursor_2 = 0
+                    start_tick = 0
 
                 # Align cursors
                 if slice_v1:
@@ -254,80 +362,8 @@ def build_staff_timeline_preview(
                     measure_events.append(evt2)
                     cursor_2 = max(cursor_2, c_start + dur)
 
-
-            # Resolve dynamic measure duration
-            D_measure = 3840
-            if semantic_candidates:
-                for sc in semantic_candidates:
-                    ts = sc.get("time_signature") or sc.get("logical_time_signature") or sc.get("meter")
-                    if isinstance(ts, dict):
-                        b = ts.get("beats") or ts.get("num") or ts.get("numerator")
-                        bt = ts.get("beat_type") or ts.get("den") or ts.get("denominator")
-                        if b and bt and int(bt) > 0:
-                            D_measure = int(b) * (3840 // int(bt))
-                            break
-                    elif "beats" in sc and "beat_type" in sc and int(sc["beat_type"]) > 0:
-                        D_measure = int(sc["beats"]) * (3840 // int(sc["beat_type"]))
-                        break
-                    elif "time_signature_num" in sc and "time_signature_den" in sc and int(sc["time_signature_den"]) > 0:
-                        D_measure = int(sc["time_signature_num"]) * (3840 // int(sc["time_signature_den"]))
-                        break
-
-            # Truncate same-voice overlaps
-            v1_evts = [e for e in measure_events if e.get("voice") == 1]
-            v2_evts = [e for e in measure_events if e.get("voice") == 2]
-
-            for v_evts in (v1_evts, v2_evts):
-                v_evts.sort(key=lambda e: (e["start_tick"], e.get("candidate_id") or ""))
-                for idx in range(len(v_evts) - 1):
-                    curr_e = v_evts[idx]
-                    next_e = v_evts[idx + 1]
-                    if curr_e["start_tick"] < next_e["start_tick"]:
-                        if curr_e["start_tick"] + curr_e["duration_ticks"] > next_e["start_tick"]:
-                            curr_e["duration_ticks"] = next_e["start_tick"] - curr_e["start_tick"]
-
-            if v1_evts:
-                cursor_1 = max(e["start_tick"] + e["duration_ticks"] for e in v1_evts)
-            if v2_evts:
-                cursor_2 = max(e["start_tick"] + e["duration_ticks"] for e in v2_evts)
-
-            # Pad measure voices up to expected duration
-            if cursor_1 < D_measure:
-                measure_events.append({
-                    "candidate_id": None,
-                    "symbol_type": "padding_rest",
-                    "voice": 1,
-                    "start_tick": cursor_1,
-                    "duration_ticks": D_measure - cursor_1,
-                    "resolved_pitch": None
-                })
-                cursor_1 = D_measure
-            elif cursor_1 > D_measure:
-                invalid = True
-
-            if 0 < cursor_2 < D_measure:
-                measure_events.append({
-                    "candidate_id": None,
-                    "symbol_type": "padding_rest",
-                    "voice": 2,
-                    "start_tick": cursor_2,
-                    "duration_ticks": D_measure - cursor_2,
-                    "resolved_pitch": None
-                })
-                cursor_2 = D_measure
-            elif cursor_2 > D_measure:
-                invalid = True
-
-            # Sort events by start_tick then voice
-            measure_events = sorted(measure_events, key=lambda e: (e["start_tick"], e["voice"]))
-
-            timeline_measures.append({
-                "measure_index": m_idx + 1,
-                "valid": not invalid,
-                "voice_1_final_tick": cursor_1,
-                "voice_2_final_tick": cursor_2,
-                "events": measure_events
-            })
+            # Finalize remaining measure events
+            _finalize_current_measure(measure_events, cursor_1, cursor_2)
 
         timeline_previews.append({
             "page_index": page,

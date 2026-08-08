@@ -130,114 +130,51 @@ def generate_musicxml_from_omr(
 
     part = ET.SubElement(score, "part", id="P1")
 
-    # Generate measures
-    for m_data in preview["measures"]:
-        m_idx = m_data["measure_index"]
-        measure = ET.SubElement(part, "measure", number=str(m_idx))
+    # Generate measures across all staves and pages
+    global_measure_idx = 1
+    for staff_preview in previews:
+        for m_data in staff_preview["measures"]:
+            measure = ET.SubElement(part, "measure", number=str(global_measure_idx))
 
-        # Write attributes on the first measure
-        if m_idx == 1:
-            attrs = ET.SubElement(measure, "attributes")
-            divisions = ET.SubElement(attrs, "divisions")
-            divisions.text = "8"
+            # Write attributes on the first measure
+            if global_measure_idx == 1:
+                attrs = ET.SubElement(measure, "attributes")
+                divisions = ET.SubElement(attrs, "divisions")
+                divisions.text = "8"
 
-            key = ET.SubElement(attrs, "key")
-            fifths_el = ET.SubElement(key, "fifths")
-            fifths_el.text = str(fifths)
+                key = ET.SubElement(attrs, "key")
+                fifths_el = ET.SubElement(key, "fifths")
+                fifths_el.text = str(fifths)
 
-            time = ET.SubElement(attrs, "time")
-            beats = ET.SubElement(time, "beats")
-            beats.text = str(beats_val)
-            beat_type = ET.SubElement(time, "beat-type")
-            beat_type.text = str(beat_type_val)
+                time = ET.SubElement(attrs, "time")
+                beats = ET.SubElement(time, "beats")
+                beats.text = str(beats_val)
+                beat_type = ET.SubElement(time, "beat-type")
+                beat_type.text = str(beat_type_val)
 
-            clef = ET.SubElement(attrs, "clef")
-            sign = ET.SubElement(clef, "sign")
-            sign.text = clef_sign
-            line = ET.SubElement(clef, "line")
-            line.text = str(clef_line)
+                clef = ET.SubElement(attrs, "clef")
+                sign = ET.SubElement(clef, "sign")
+                sign.text = clef_sign
+                line = ET.SubElement(clef, "line")
+                line.text = str(clef_line)
 
-        # Group events by voice
-        events = m_data.get("events", [])
-        v1_events = sorted([e for e in events if e.get("voice") == 1], key=lambda e: e["start_tick"])
-        v2_events = sorted([e for e in events if e.get("voice") == 2], key=lambda e: e["start_tick"])
+            # Group events by voice
+            events = m_data.get("events", [])
+            v1_events = sorted([e for e in events if e.get("voice") == 1], key=lambda e: e["start_tick"])
+            v2_events = sorted([e for e in events if e.get("voice") == 2], key=lambda e: e["start_tick"])
 
-        # Only write Voice 2 if it contains actual musical events (not just padding rests)
-        v2_has_music = any(e.get("symbol_type") != "padding_rest" for e in v2_events)
+            # Only write Voice 2 if it contains actual musical events (not just padding rests)
+            v2_has_music = any(e.get("symbol_type") != "padding_rest" for e in v2_events)
 
-        # Write Voice 1
-        xml_cursor = 0
-        last_written_pitch_start_tick = -1
-        for i, ev in enumerate(v1_events):
-            pitch_data = parse_resolved_pitch(ev.get("resolved_pitch"))
-            is_note = "note" in ev.get("symbol_type", "")
-            
-            if is_note and pitch_data is None:
-                continue
-
-            is_chord = False
-            if pitch_data is not None:
-                if ev["start_tick"] == last_written_pitch_start_tick:
-                    is_chord = True
-                else:
-                    last_written_pitch_start_tick = ev["start_tick"]
-
-            if not is_chord and ev["start_tick"] > xml_cursor:
-                # Write a rest to fill the gap
-                gap_ticks = ev["start_tick"] - xml_cursor
-                rest_node = ET.SubElement(measure, "note")
-                ET.SubElement(rest_node, "rest")
-                dur = ET.SubElement(rest_node, "duration")
-                dur.text = str(max(1, gap_ticks // 120))
-                voice_el = ET.SubElement(rest_node, "voice")
-                voice_el.text = "1"
-                type_el = ET.SubElement(rest_node, "type")
-                type_el.text = get_note_type(gap_ticks)
-                xml_cursor = ev["start_tick"]
-
-            note = ET.SubElement(measure, "note")
-            if is_chord:
-                ET.SubElement(note, "chord")
-
-            if pitch_data:
-                step, alter, octave = pitch_data
-                pitch = ET.SubElement(note, "pitch")
-                s = ET.SubElement(pitch, "step")
-                s.text = step
-                if alter is not None:
-                    alt = ET.SubElement(pitch, "alter")
-                    alt.text = str(alter)
-                oct_el = ET.SubElement(pitch, "octave")
-                oct_el.text = str(octave)
-            else:
-                ET.SubElement(note, "rest")
-
-            dur_ticks = ev.get("duration_ticks", 960)
-            dur_val = max(1, dur_ticks // 120)
-            dur = ET.SubElement(note, "duration")
-            dur.text = str(dur_val)
-
-            voice_el = ET.SubElement(note, "voice")
-            voice_el.text = "1"
-
-            type_el = ET.SubElement(note, "type")
-            type_el.text = get_note_type(dur_ticks)
-
-            if not is_chord:
-                xml_cursor += dur_ticks
-
-        # Write Voice 2 if present and has musical content
-        if v2_events and v2_has_music:
-            # Backup to the beginning of the measure (or final xml_cursor)
-            backup = ET.SubElement(measure, "backup")
-            duration_el = ET.SubElement(backup, "duration")
-            duration_el.text = str(max(1, xml_cursor // 120))
-
+            measure_capacity_ticks = beats_val * (3840 // beat_type_val)
             xml_cursor = 0
             last_written_pitch_start_tick = -1
-            for i, ev in enumerate(v2_events):
+            for i, ev in enumerate(v1_events):
+                if xml_cursor >= measure_capacity_ticks:
+                    continue
+
                 pitch_data = parse_resolved_pitch(ev.get("resolved_pitch"))
-                is_note = "note" in ev.get("symbol_type", "")
+                is_note = "note" in ev.get("symbol_type", "") and ev.get("symbol_type") != "padding_rest"
                 
                 if is_note and pitch_data is None:
                     continue
@@ -250,16 +187,27 @@ def generate_musicxml_from_omr(
                         last_written_pitch_start_tick = ev["start_tick"]
 
                 if not is_chord and ev["start_tick"] > xml_cursor:
-                    gap_ticks = ev["start_tick"] - xml_cursor
-                    rest_node = ET.SubElement(measure, "note")
-                    ET.SubElement(rest_node, "rest")
-                    dur = ET.SubElement(rest_node, "duration")
-                    dur.text = str(max(1, gap_ticks // 120))
-                    voice_el = ET.SubElement(rest_node, "voice")
-                    voice_el.text = "2"
-                    type_el = ET.SubElement(rest_node, "type")
-                    type_el.text = get_note_type(gap_ticks)
-                    xml_cursor = ev["start_tick"]
+                    gap_ticks = min(ev["start_tick"] - xml_cursor, measure_capacity_ticks - xml_cursor)
+                    if gap_ticks > 0:
+                        rest_node = ET.SubElement(measure, "note")
+                        ET.SubElement(rest_node, "rest")
+                        dur = ET.SubElement(rest_node, "duration")
+                        dur.text = str(max(1, gap_ticks // 120))
+                        voice_el = ET.SubElement(rest_node, "voice")
+                        voice_el.text = "1"
+                        type_el = ET.SubElement(rest_node, "type")
+                        type_el.text = get_note_type(gap_ticks)
+                        xml_cursor += gap_ticks
+
+                if xml_cursor >= measure_capacity_ticks:
+                    continue
+
+                dur_ticks = ev.get("duration_ticks", 960)
+                if xml_cursor + dur_ticks > measure_capacity_ticks:
+                    dur_ticks = measure_capacity_ticks - xml_cursor
+
+                if dur_ticks <= 0:
+                    continue
 
                 note = ET.SubElement(measure, "note")
                 if is_chord:
@@ -278,19 +226,99 @@ def generate_musicxml_from_omr(
                 else:
                     ET.SubElement(note, "rest")
 
-                dur_ticks = ev.get("duration_ticks", 960)
                 dur_val = max(1, dur_ticks // 120)
                 dur = ET.SubElement(note, "duration")
                 dur.text = str(dur_val)
 
                 voice_el = ET.SubElement(note, "voice")
-                voice_el.text = "2"
+                voice_el.text = "1"
 
                 type_el = ET.SubElement(note, "type")
                 type_el.text = get_note_type(dur_ticks)
 
                 if not is_chord:
                     xml_cursor += dur_ticks
+
+            measure_capacity_ticks = beats_val * (3840 // beat_type_val)
+            if xml_cursor < measure_capacity_ticks:
+                gap_ticks = measure_capacity_ticks - xml_cursor
+                rest_node = ET.SubElement(measure, "note")
+                ET.SubElement(rest_node, "rest")
+                dur = ET.SubElement(rest_node, "duration")
+                dur.text = str(max(1, gap_ticks // 120))
+                voice_el = ET.SubElement(rest_node, "voice")
+                voice_el.text = "1"
+                type_el = ET.SubElement(rest_node, "type")
+                type_el.text = get_note_type(gap_ticks)
+                xml_cursor = measure_capacity_ticks
+
+            # Write Voice 2 if present and has musical content
+            if v2_events and v2_has_music:
+                # Backup to the beginning of the measure (or final xml_cursor)
+                backup = ET.SubElement(measure, "backup")
+                duration_el = ET.SubElement(backup, "duration")
+                duration_el.text = str(max(1, xml_cursor // 120))
+
+                xml_cursor = 0
+                last_written_pitch_start_tick = -1
+                for i, ev in enumerate(v2_events):
+                    pitch_data = parse_resolved_pitch(ev.get("resolved_pitch"))
+                    is_note = "note" in ev.get("symbol_type", "")
+                    
+                    if is_note and pitch_data is None:
+                        continue
+
+                    is_chord = False
+                    if pitch_data is not None:
+                        if ev["start_tick"] == last_written_pitch_start_tick:
+                            is_chord = True
+                        else:
+                            last_written_pitch_start_tick = ev["start_tick"]
+
+                    if not is_chord and ev["start_tick"] > xml_cursor:
+                        gap_ticks = ev["start_tick"] - xml_cursor
+                        rest_node = ET.SubElement(measure, "note")
+                        ET.SubElement(rest_node, "rest")
+                        dur = ET.SubElement(rest_node, "duration")
+                        dur.text = str(max(1, gap_ticks // 120))
+                        voice_el = ET.SubElement(rest_node, "voice")
+                        voice_el.text = "2"
+                        type_el = ET.SubElement(rest_node, "type")
+                        type_el.text = get_note_type(gap_ticks)
+                        xml_cursor = ev["start_tick"]
+
+                    note = ET.SubElement(measure, "note")
+                    if is_chord:
+                        ET.SubElement(note, "chord")
+
+                    if pitch_data:
+                        step, alter, octave = pitch_data
+                        pitch = ET.SubElement(note, "pitch")
+                        s = ET.SubElement(pitch, "step")
+                        s.text = step
+                        if alter is not None:
+                            alt = ET.SubElement(pitch, "alter")
+                            alt.text = str(alter)
+                        oct_el = ET.SubElement(pitch, "octave")
+                        oct_el.text = str(octave)
+                    else:
+                        ET.SubElement(note, "rest")
+
+                    dur_ticks = ev.get("duration_ticks", 960)
+                    dur_val = max(1, dur_ticks // 120)
+                    dur = ET.SubElement(note, "duration")
+                    dur.text = str(dur_val)
+
+                    voice_el = ET.SubElement(note, "voice")
+                    voice_el.text = "2"
+
+                    type_el = ET.SubElement(note, "type")
+                    type_el.text = get_note_type(dur_ticks)
+
+                    if not is_chord:
+                        xml_cursor += dur_ticks
+
+            global_measure_idx += 1
 
     # Generate pretty formatted string
     xml_str = ET.tostring(score, encoding="utf-8")

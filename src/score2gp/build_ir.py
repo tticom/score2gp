@@ -607,16 +607,17 @@ def build_ir_from_files(
 
 
 def build_ir_with_diagnostics_from_files(
-    musicxml_path: str | Path | None,
-    tabraw_path: str | Path,
-    out_path: str | Path | None = None,
-    ascii_alignment_path: str | Path | None = None,
+    musicxml_path: Path | str | None,
+    tabraw_path: Path | str,
+    out_path: Path | str | None = None,
+    ascii_alignment_path: Path | str | None = None,
     *,
     allow_remediation: bool = False,
     allow_skip_unboxed: bool = False,
     optimize_fret_snapping: bool = False,
     page_range: tuple[int, int] | None = None,
     include_polyphony_diagnostics: bool = False,
+    synthesize_missing_tab: bool = False,
 ) -> tuple[ScoreIR, BuildIrDiagnostics]:
     tabraw = TabRaw.from_json_file(tabraw_path)
 
@@ -717,6 +718,7 @@ def build_ir_with_diagnostics_from_files(
         optimize_fret_snapping=optimize_fret_snapping,
         page_range=page_range,
         include_polyphony_diagnostics=include_polyphony_diagnostics,
+        synthesize_missing_tab=synthesize_missing_tab,
     )
     if out_path is not None:
         out = Path(out_path)
@@ -1223,6 +1225,7 @@ def build_ir_with_diagnostics_from_imports(
     optimize_fret_snapping: bool = False,
     page_range: tuple[int, int] | None = None,
     include_polyphony_diagnostics: bool = False,
+    synthesize_missing_tab: bool = False,
 ) -> tuple[ScoreIR, BuildIrDiagnostics]:
     from .musicxml import deduplicate_suspected_staff_tab_voices
     musicxml = deduplicate_suspected_staff_tab_voices(musicxml)
@@ -1576,7 +1579,7 @@ def build_ir_with_diagnostics_from_imports(
         for measure in part.measures:
             measure.notes = [note for note in measure.notes if (note.staff is None or note.staff == target_staff) and not note.is_suppressed]
             bar_warnings: list[WarningItem] = []
-            events = _measure_events(measure, candidate_pools, bar_warnings)
+            events = _measure_events(measure, candidate_pools, bar_warnings, synthesize_missing_tab=synthesize_missing_tab)
             warnings.extend(bar_warnings)
             bars.append(
                 Bar(
@@ -2228,6 +2231,7 @@ def _measure_events(
     measure: MusicXmlMeasure,
     candidate_pools: "CandidatePools",
     warnings: list[WarningItem],
+    synthesize_missing_tab: bool = False,
 ) -> list[Event]:
     events: list[Event] = []
     harmony_by_onset = _harmony_by_onset(measure)
@@ -2300,14 +2304,46 @@ def _measure_events(
                 continue
             candidate = candidate_pools.pop(measure.index, event_id=event_id, musicxml_note_id=xml_note.id)
             if candidate is None:
-                warnings.append(
-                    _event_warning(
-                        "tab-candidate-missing",
-                        xml_note,
-                        "No TabRaw fret/string candidate was available for this MusicXML note.",
+                if synthesize_missing_tab:
+                    # Synthesize string and fret from MusicXML pitch using standard guitar tuning
+                    p_midi = xml_note.pitch.midi
+                    tuning_pitches = [(1, 64), (2, 59), (3, 55), (4, 50), (5, 45), (6, 40)]
+                    best_string = 1
+                    best_fret = 0
+                    min_fret = 999
+                    for s_num, open_p in tuning_pitches:
+                        fret = p_midi - open_p
+                        if 0 <= fret <= 24 and fret < min_fret:
+                            min_fret = fret
+                            best_string = s_num
+                            best_fret = fret
+                    if min_fret == 999:
+                        if p_midi < 40:
+                            best_string = 6
+                            best_fret = max(0, p_midi - 40)
+                        else:
+                            best_string = 1
+                            best_fret = min(24, p_midi - 64)
+
+                    candidate = TabCandidate(
+                        id=f"synth-{event_id}-{p_midi}",
+                        kind="fret",
+                        bar_index=measure.index,
+                        string=best_string,
+                        raw_text=str(best_fret),
+                        parsed_fret=best_fret,
+                        confidence=0.8,
                     )
-                )
-                continue
+                else:
+                    warnings.append(
+                        _event_warning(
+                            "tab-candidate-missing",
+                            xml_note,
+                            "No TabRaw fret/string candidate was available for this MusicXML note.",
+                        )
+                    )
+                    continue
+
             note = _aligned_note(xml_note, candidate, measure, warnings)
             if note is not None:
                 notes.append(note)
@@ -2507,6 +2543,9 @@ class CandidatePools:
             )
             return candidate
         return None
+
+    def has_any_candidates(self) -> bool:
+        return any(len(pool) > 0 for pool in self.pools.values()) or bool(self.consumed)
 
     def unused(self) -> list[TabCandidate]:
         return [candidate for pool in self.pools.values() for candidate in pool]
