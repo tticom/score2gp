@@ -1540,7 +1540,20 @@ def generate_sidecar_command(
         raise typer.Exit(1)
 
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(xml_str, encoding="utf-8")
+    if out.suffix.lower() == ".mxl":
+        container_xml = (
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">\n'
+            '  <rootfiles>\n'
+            '    <rootfile full-path="score.xml" media-type="application/vnd.recordare.musicxml+xml"/>\n'
+            '  </rootfiles>\n'
+            '</container>\n'
+        )
+        with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("META-INF/container.xml", container_xml)
+            zf.writestr("score.xml", xml_str)
+    else:
+        out.write_text(xml_str, encoding="utf-8")
     typer.echo(f"Successfully generated sidecar: {out}")
 
 if __name__ == "__main__":

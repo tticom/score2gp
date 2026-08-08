@@ -77,3 +77,43 @@ def test_musicxml_generator_roundtrip(tmp_path):
     measure = imported.parts[0].measures[0]
     assert len(measure.notes) == 4
     assert [n.pitch.step for n in measure.notes] == ["C", "E", "G", "C"]
+
+
+def test_generate_sidecar_cli_plain_xml_and_zipped_mxl(tmp_path):
+    import zipfile
+    from pathlib import Path
+    from typer.testing import CliRunner
+    from score2gp.cli import app
+
+    pdf_fixture = Path("fixtures/public/mutopia-bwv-anh-120-minuet-a-minor-a4.pdf")
+    assert pdf_fixture.exists()
+
+    # 1. Plain text MusicXML output
+    out_xml = tmp_path / "sidecar.musicxml"
+    runner = CliRunner()
+    result_xml = runner.invoke(app, ["generate-sidecar", "--pdf", str(pdf_fixture), "--out", str(out_xml)])
+    assert result_xml.exit_code == 0
+    assert out_xml.exists()
+    assert not zipfile.is_zipfile(out_xml)
+    xml_text = out_xml.read_text(encoding="utf-8")
+    assert "<score-partwise" in xml_text
+
+    imported_xml = parse_musicxml(out_xml)
+    assert imported_xml is not None
+    assert len(imported_xml.parts) >= 1
+
+    # 2. Zipped MXL package output
+    out_mxl = tmp_path / "sidecar.mxl"
+    result_mxl = runner.invoke(app, ["generate-sidecar", "--pdf", str(pdf_fixture), "--out", str(out_mxl)])
+    assert result_mxl.exit_code == 0
+    assert out_mxl.exists()
+    assert zipfile.is_zipfile(out_mxl)
+
+    with zipfile.ZipFile(out_mxl, "r") as zf:
+        namelist = zf.namelist()
+        assert "META-INF/container.xml" in namelist
+        assert "score.xml" in namelist
+
+    imported_mxl = parse_musicxml(out_mxl)
+    assert imported_mxl is not None
+    assert len(imported_mxl.parts) >= 1
