@@ -3432,4 +3432,3 @@ def test_page_continuous_measure_indexing_and_cumulative_offsets() -> None:
         # Confirm Y coordinates are monotonically increasing across page boundaries
         assert min(page_ys[2]) > max(page_ys[1])
         assert min(page_ys[3]) > max(page_ys[2])
-
