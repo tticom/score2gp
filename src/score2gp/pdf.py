@@ -30,7 +30,7 @@ _ASCII_TAB_TOKEN_RE = re.compile(r"\d{1,2}|[\\/hpbvr~]+")
 _ASCII_TECHNIQUE_MARKERS = {"/", "\\", "h", "p", "b", "r", "v", "~"}
 
 DOUBLE_BARLINE_CLUSTERING_TOLERANCE = 12.0
-MIN_INHERITED_INTERNAL_BAR_WIDTH = 130.0
+MIN_INHERITED_INTERNAL_BAR_WIDTH = 20.0
 
 MIN_FRET_DIGIT_WIDTH_FOR_CONFIDENCE = 4.0
 MIN_NARROW_FONT_FRET_DIGIT_WIDTH = 2.8
@@ -3744,7 +3744,8 @@ def filter_tab_barline_candidates(
         crosses_entire_staff = (y_min <= y0 + 4.0 and y_max >= y1 - 4.0) or (gaps_crossed >= len(ys) - 1)
         absolute_height_ok = (height >= 40.0)
         relative_height_ok = crosses_entire_staff
-        is_accepted_relative = (height >= 20.0 and relative_height_ok)
+        min_barline_height = min(15.0, staff_height - 2.0) if staff_height > 0 else 15.0
+        is_accepted_relative = (height >= min_barline_height and relative_height_ok)
 
         initially_accepted = (
             special_rejection_reason is None
