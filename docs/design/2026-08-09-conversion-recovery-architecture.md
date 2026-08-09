@@ -1,10 +1,10 @@
 # Conversion Recovery Target Architecture & Migration Decision
 
-**Date**: 2026-08-09  
-**Author**: Architect & Researcher (`tticom-automation`)  
-**Repository**: `tticom/score2gp`  
-**Branch**: `agy/conversion-recovery-architecture`  
-**Base Commit**: `4a4f5c339e09987b9f41641397f1db7e8ab1be5d`  
+**Date**: 2026-08-09
+**Author**: Architect & Researcher (`tticom-automation`)
+**Repository**: `tticom/score2gp`
+**Branch**: `agy/conversion-recovery-architecture`
+**Base Commit**: `4a4f5c339e09987b9f41641397f1db7e8ab1be5d`
 
 ---
 
@@ -164,8 +164,8 @@ class VisualTabCandidate:
 # 3. Biomechanical Position Solver Interface
 class PositionOptimizer:
     def optimize_fingerings(
-        self, 
-        pitches: List[int], 
+        self,
+        pitches: List[int],
         visual_candidates: List[VisualTabCandidate]
     ) -> List[Tuple[int, int]]:  # Returns List of (string, fret)
         """Minimizes hand movement cost: Cost = alpha * fret_jump + beta * string_stretch"""
