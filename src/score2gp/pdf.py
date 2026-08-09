@@ -933,7 +933,7 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                         })
                     reasons = system.rejection_reasons or {}
                     has_usable_barlines = (len(system.barlines) >= 2)
-                    
+
                     def add_barline_warning(code, message, severity="warning", grouping_status="partial"):
                         if has_usable_barlines and severity == "warning":
                             warnings.append({
@@ -953,7 +953,7 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                                 "page_index": page_number,
                                 "system_index": system.system_index,
                             })
-                            
+
                     if reasons.get("pdf_barline_too_short", 0) > 0:
                         add_barline_warning(
                             "pdf_barline_too_short",
@@ -1323,7 +1323,7 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                     y1_limit = max(system.line_ys) + 3.0 * staff_space
                     x0_limit = system.x0
                     x1_limit = system.x1
-                    
+
                     flag_candidates = []
                     flag_idx = len(page_outcomes) + 1
                     for drawing in drawings:
@@ -4037,15 +4037,15 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
         for other_group in _tab_line_groups(horizontal):
             if other_group == group:
                 continue
-            
+
             other_class = classify_staff_line_group(other_group, page)
             if other_class not in ("notation", "ambiguous"):
                 continue
-                
+
             other_ys = [round((line.y0 + line.y1) / 2, 3) for line in other_group]
             other_y0 = min(other_ys)
             other_y1 = max(other_ys)
-            
+
             # If the other group is above the TAB staff and within 250 points
             if other_y1 < y0 and y0 - other_y1 <= 250.0:
                 # Check horizontal overlap alignment
@@ -4058,7 +4058,7 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
                     if dist < best_partner_dist:
                         best_partner_dist = dist
                         best_partner = (other_group, other_y0, other_y1, other_x0, other_x1, other_ys)
-            
+
             if best_partner is not None:
                 other_group, other_y0, other_y1, other_x0, other_x1, other_ys = best_partner
                 other_candidates = []
@@ -4068,7 +4068,7 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
                     y_max = max(s.y0, s.y1)
                     if y_max >= other_y0 - 15.0 and y_min <= other_y1 + 15.0 and other_x0 - 25.0 <= x_val <= other_x1 + 25.0:
                         other_candidates.append(s)
-                
+
                 other_filtered = filter_tab_barline_candidates(other_candidates, other_y0, other_y1, other_ys, other_x0, other_x1)
                 partner_valid = other_filtered["valid_barlines"]
 
@@ -4132,7 +4132,7 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
                                 rejection_reasons["pdf_barline_outside_system_bounds"] = rejection_reasons.get("pdf_barline_outside_system_bounds", 0) + 1
                                 rejected_count += 1
                     details.append(det_copy)
-        
+
         # Merge and deduplicate barlines within 15.0 points only if we actually inherited partner barlines
         if partner_barlines:
             all_barlines = sorted(list(set(valid_barlines + partner_barlines)))
@@ -4249,7 +4249,7 @@ def _tab_line_groups(lines: list[_LineSegment]) -> list[list[_LineSegment]]:
             failed = False
             for step in range(2, 6):
                 target_y = y0 + step * gap
-                
+
                 # Collect all candidates at this target Y Y-level
                 candidates_at_y = []
                 for j in range(group_indices[-1] + 1, n):
@@ -4259,7 +4259,7 @@ def _tab_line_groups(lines: list[_LineSegment]) -> list[list[_LineSegment]]:
                     diff = abs(yj - target_y)
                     if diff < 2.5:
                         candidates_at_y.append((diff, j))
-                
+
                 best_idx = None
                 if len(candidates_at_y) == 1:
                     best_idx = candidates_at_y[0][1]
@@ -4268,7 +4268,7 @@ def _tab_line_groups(lines: list[_LineSegment]) -> list[list[_LineSegment]]:
                     ref_line = sorted_lines[group_indices[0]]
                     group_x0 = min(ref_line.x0, ref_line.x1)
                     group_x1 = max(ref_line.x0, ref_line.x1)
-                    
+
                     valid_candidates = []
                     for diff, j in candidates_at_y:
                         jx0 = min(sorted_lines[j].x0, sorted_lines[j].x1)
@@ -4276,14 +4276,14 @@ def _tab_line_groups(lines: list[_LineSegment]) -> list[list[_LineSegment]]:
                         candidate_w = max(1e-5, jx1 - jx0)
                         overlap = max(0.0, min(jx1, group_x1) - max(jx0, group_x0))
                         norm_overlap = overlap / candidate_w
-                        
+
                         if norm_overlap >= 0.5:
                             valid_candidates.append((norm_overlap, overlap, j))
-                            
+
                     if valid_candidates:
                         valid_candidates.sort(key=lambda x: (x[0], x[1]), reverse=True)
                         best_idx = valid_candidates[0][2]
-                
+
                 if best_idx is not None:
                     group_indices.append(best_idx)
                 else:
@@ -4316,7 +4316,7 @@ def _tab_line_groups(lines: list[_LineSegment]) -> list[list[_LineSegment]]:
             failed = False
             for step in range(2, 5):
                 target_y = y0 + step * gap
-                
+
                 # Collect all candidates at this target Y Y-level
                 candidates_at_y = []
                 for j in range(group_indices[-1] + 1, n):
@@ -4326,7 +4326,7 @@ def _tab_line_groups(lines: list[_LineSegment]) -> list[list[_LineSegment]]:
                     diff = abs(yj - target_y)
                     if diff < 2.5:
                         candidates_at_y.append((diff, j))
-                
+
                 best_idx = None
                 if len(candidates_at_y) == 1:
                     best_idx = candidates_at_y[0][1]
@@ -4335,7 +4335,7 @@ def _tab_line_groups(lines: list[_LineSegment]) -> list[list[_LineSegment]]:
                     ref_line = sorted_lines[group_indices[0]]
                     group_x0 = min(ref_line.x0, ref_line.x1)
                     group_x1 = max(ref_line.x0, ref_line.x1)
-                    
+
                     valid_candidates = []
                     for diff, j in candidates_at_y:
                         jx0 = min(sorted_lines[j].x0, sorted_lines[j].x1)
@@ -4343,14 +4343,14 @@ def _tab_line_groups(lines: list[_LineSegment]) -> list[list[_LineSegment]]:
                         candidate_w = max(1e-5, jx1 - jx0)
                         overlap = max(0.0, min(jx1, group_x1) - max(jx0, group_x0))
                         norm_overlap = overlap / candidate_w
-                        
+
                         if norm_overlap >= 0.5:
                             valid_candidates.append((norm_overlap, overlap, j))
-                            
+
                     if valid_candidates:
                         valid_candidates.sort(key=lambda x: (x[0], x[1]), reverse=True)
                         best_idx = valid_candidates[0][2]
-                
+
                 if best_idx is not None:
                     group_indices.append(best_idx)
                 else:
