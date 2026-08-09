@@ -63,7 +63,7 @@ Ledger lines should be represented as standalone **generic read-only candidates*
 A new `generated_standard_staff_ledger_lines.json` fixture is required to test stacked ledger lines above and below the staff, ensuring bounding boxes are accurately reported and separated from standard staff lines.
 
 ## Known Limitations and Risks
-* **Grouping Complexity:** Multiple notes sharing the same ledger line (e.g., chords) will require many-to-one mapping in `associated_note_candidate_ids`. 
+* **Grouping Complexity:** Multiple notes sharing the same ledger line (e.g., chords) will require many-to-one mapping in `associated_note_candidate_ids`.
 * **Noise:** Fret numbers or textual lines might be misidentified as `horizontal_stroke` primitives in some noisy PDFs.
 
 ## Non-Goals Confirmed
@@ -83,7 +83,7 @@ Title: Product Task 162 — Implement read-only ledger-line candidate extraction
 
 Context:
 You are the product agent working in `tticom/score2gp`.
-Product Task 161 discovered that ledger lines are currently represented as `horizontal_stroke` primitives inside `x_aligned_cluster_candidate` outcomes. 
+Product Task 161 discovered that ledger lines are currently represented as `horizontal_stroke` primitives inside `x_aligned_cluster_candidate` outcomes.
 The design document `docs/design/read-only-ledger-line-candidate-boundary.md` outlines a standalone `ledger_line_candidate` output boundary.
 
 Goal:
