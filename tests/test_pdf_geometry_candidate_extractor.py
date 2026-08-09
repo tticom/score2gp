@@ -200,3 +200,60 @@ def test_extract_x_aligned_cluster_candidates_validation_error_not_swallowed() -
     ]
     with pytest.raises(ValidationError):
         extractor.extract_x_aligned_cluster_candidates(1, 1, 1, cluster_evidence)
+
+def test_filter_tab_barline_candidates_compact_height_bounds() -> None:
+    from score2gp.pdf import filter_tab_barline_candidates, _LineSegment
+    # Staff y0=100.0, y1=116.0 (staff_height = 16.0). min_barline_height = min(15.0, 14.0) = 14.0
+    line_ys = [100.0, 104.0, 108.0, 112.0, 116.0]
+
+    # Candidate 1: height = 14.0 (y0=101.0, y1=115.0), crosses staff -> ACCEPTED
+    c1 = _LineSegment(x0=200.0, y0=101.0, x1=200.0, y1=115.0, primitive_kind="draw")
+    # Candidate 2: height = 10.0 (y0=103.0, y1=113.0), too short -> REJECTED
+    c2 = _LineSegment(x0=300.0, y0=103.0, x1=300.0, y1=113.0, primitive_kind="draw")
+
+    res = filter_tab_barline_candidates([c1, c2], y0=100.0, y1=116.0, line_ys=line_ys, x0=100.0, x1=800.0)
+    valid_xs = [d["x"] for d in res["details"] if d["final_decision"] == "accepted"]
+    assert 200.0 in valid_xs
+    assert 300.0 not in valid_xs
+
+def test_filter_tab_barline_candidates_inherited_20pt_bar_width_limit() -> None:
+    from score2gp.pdf import _detect_tab_systems
+    from collections import namedtuple
+
+    Point = namedtuple('Point', ['x', 'y'])
+    drawings = []
+
+    # TAB staff lines (6 lines: y = 200..230)
+    for y in [200.0, 206.0, 212.0, 218.0, 224.0, 230.0]:
+        drawings.append({"items": [("l", Point(100.0, y), Point(800.0, y))]})
+
+    # Notation staff lines (5 lines: y = 100..132)
+    for y in [100.0, 108.0, 116.0, 124.0, 132.0]:
+        drawings.append({"items": [("l", Point(100.0, y), Point(800.0, y))]})
+
+    # Explicit TAB barlines at x = 100.0 and x = 800.0
+    for x in [100.0, 800.0]:
+        drawings.append({"items": [("l", Point(x, 200.0), Point(x, 230.0))]})
+
+    # Partner candidates crossing notation staff:
+    # x = 117.0 (17.0pt from 100.0, < 20.0pt) -> REJECTED
+    # x = 350.0 (250.0pt from 100.0, >= 20.0pt) -> ACCEPTED
+    for x in [117.0, 350.0]:
+        drawings.append({"items": [("l", Point(x, 100.0), Point(x, 132.0))]})
+
+    class MockPage:
+        def get_drawings(self):
+            return drawings
+        def get_text(self, kind):
+            return []
+
+    page = MockPage()
+    systems = _detect_tab_systems(page, page_index=1)
+    assert len(systems) == 1
+    system = systems[0]
+
+    assert 100.0 in system.barlines
+    assert 800.0 in system.barlines
+    assert 350.0 in system.barlines
+    assert 117.0 not in system.barlines
+
