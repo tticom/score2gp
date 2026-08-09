@@ -256,4 +256,3 @@ def test_filter_tab_barline_candidates_inherited_20pt_bar_width_limit() -> None:
     assert 800.0 in system.barlines
     assert 350.0 in system.barlines
     assert 117.0 not in system.barlines
-
