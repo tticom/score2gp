@@ -3102,13 +3102,12 @@ def test_notation_to_tab_barline_inheritance_filter() -> None:
         })
 
     # 4. Partner barlines (candidates):
-    # Let's add multiple candidates crossing notation staff (y from 100 to 132):
-    # Candidate a: x = 200.0 -> distance to 100.0 is 100.0 (< 130.0). Should be REJECTED.
-    # Candidate b: x = 350.0 -> distance to 100.0 (250) and 800.0 (450) are both >= 130.0. Should be ACCEPTED.
-    # Candidates c1, c2: close together (e.g. x = 500.0 and x = 582.65, difference 82.65).
-    # Since difference 82.65 < 130.0, BOTH should be REJECTED to avoid order dependency.
+    # Candidate a: x = 117.0 -> distance to 100.0 is 17.0 (< 20.0). Should be REJECTED.
+    # Candidate b: x = 350.0 -> distance to 100.0 (250) and 800.0 (450) are both >= 20.0. Should be ACCEPTED.
+    # Candidates c1, c2: close together (e.g. x = 500.0 and x = 517.0, difference 17.0).
+    # Since difference 17.0 < 20.0, BOTH should be REJECTED to avoid order dependency.
     # Explicit TAB barlines (x=100.0, x=800.0) must NOT be rejected by this filter.
-    for x in [200.0, 350.0, 500.0, 582.65]:
+    for x in [117.0, 350.0, 500.0, 517.0]:
         drawings.append({
             "items": [
                 ("l", Point(x, 100.0), Point(x, 132.0))
@@ -3130,14 +3129,14 @@ def test_notation_to_tab_barline_inheritance_filter() -> None:
     # Valid barlines should include:
     # - explicit barlines: 100.0, 800.0
     # - accepted inherited barline: 350.0
-    # It must NOT include 200.0 (too close to 100.0), or 500.0 / 582.65 (close to each other).
+    # It must NOT include 117.0 (too close to 100.0), or 500.0 / 517.0 (close to each other).
     assert 100.0 in system.barlines
     assert 800.0 in system.barlines
     assert 350.0 in system.barlines
 
-    assert 200.0 not in system.barlines
+    assert 117.0 not in system.barlines
     assert 500.0 not in system.barlines
-    assert 582.65 not in system.barlines
+    assert 517.0 not in system.barlines
 
     # Check detail decisions
     details = {d["x"]: d for d in system.barline_candidates_details}
@@ -3152,19 +3151,19 @@ def test_notation_to_tab_barline_inheritance_filter() -> None:
     assert details[350.0]["final_decision"] == "accepted"
     assert details[350.0]["inherited"] is True
 
-    # Inherited 200.0 is rejected as inherited too close
-    assert details[200.0]["final_decision"] == "rejected"
-    assert details[200.0]["rejection_reason"] == "pdf_barline_inherited_too_close"
-    assert details[200.0]["inherited"] is True
+    # Inherited 117.0 is rejected as inherited too close
+    assert details[117.0]["final_decision"] == "rejected"
+    assert details[117.0]["rejection_reason"] == "pdf_barline_inherited_too_close"
+    assert details[117.0]["inherited"] is True
 
-    # Inherited 500.0 and 582.65 are BOTH rejected as inherited too close
+    # Inherited 500.0 and 517.0 are BOTH rejected as inherited too close
     assert details[500.0]["final_decision"] == "rejected"
     assert details[500.0]["rejection_reason"] == "pdf_barline_inherited_too_close"
     assert details[500.0]["inherited"] is True
 
-    assert details[582.65]["final_decision"] == "rejected"
-    assert details[582.65]["rejection_reason"] == "pdf_barline_inherited_too_close"
-    assert details[582.65]["inherited"] is True
+    assert details[517.0]["final_decision"] == "rejected"
+    assert details[517.0]["rejection_reason"] == "pdf_barline_inherited_too_close"
+    assert details[517.0]["inherited"] is True
 
 
 def test_filter_tab_barline_candidates_internal_double_barline() -> None:
