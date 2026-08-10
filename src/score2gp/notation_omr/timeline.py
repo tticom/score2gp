@@ -215,6 +215,12 @@ def build_staff_timeline_preview(
                 # Process voice 1
                 for c in slice_v1:
                     dur = TICK_MAPPINGS.get(c.get("symbol_type"), 960)
+                    tuplet = c.get("tuplet_association") or c.get("tuplet")
+                    if isinstance(tuplet, dict):
+                        actual = tuplet.get("actual_notes") or tuplet.get("actual", 3)
+                        normal = tuplet.get("normal_notes") or tuplet.get("normal", 2)
+                        if actual > 0 and normal > 0:
+                            dur = int(dur * normal / actual)
                     if "duration_ticks" in c:
                         dur = c["duration_ticks"]
                     c_start = c.get("start_tick", start_tick)
@@ -236,6 +242,12 @@ def build_staff_timeline_preview(
                 # Process voice 2
                 for c in slice_v2:
                     dur = TICK_MAPPINGS.get(c.get("symbol_type"), 960)
+                    tuplet = c.get("tuplet_association") or c.get("tuplet")
+                    if isinstance(tuplet, dict):
+                        actual = tuplet.get("actual_notes") or tuplet.get("actual", 3)
+                        normal = tuplet.get("normal_notes") or tuplet.get("normal", 2)
+                        if actual > 0 and normal > 0:
+                            dur = int(dur * normal / actual)
                     if "duration_ticks" in c:
                         dur = c["duration_ticks"]
                     c_start = c.get("start_tick", start_tick)
