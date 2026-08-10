@@ -45,3 +45,124 @@ def shape_candidate_evidence(
                     cand_dict[f] = getattr(cand, f)
         shaped.append(cand_dict)
     return shaped
+
+
+# Recognition Adapter Seam Data Structures & Adapters (CRP-08)
+from enum import Enum
+from dataclasses import dataclass, field
+from typing import Tuple, List, Optional, Dict, Any
+
+
+class SourceModality(Enum):
+    TEXT = "text"
+    VECTOR = "vector"
+    RASTER = "raster"
+    HYBRID = "hybrid"
+
+
+@dataclass(frozen=True)
+class EvidenceRecord:
+    candidate_id: str
+    modality: SourceModality
+    bbox: Tuple[float, float, float, float]
+    page_index: int
+    system_index: Optional[int] = None
+    staff_index: Optional[int] = None
+    raw_symbol: str = ""
+    confidence: float = 1.0
+    is_absent: bool = False
+    is_ambiguous: bool = False
+    is_conflicted: bool = False
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+class CandidateAdapter:
+    """Adapts raw diagnostic candidate objects/dicts into typed EvidenceRecord objects."""
+
+    def adapt(self, candidate: Any) -> EvidenceRecord:
+        if isinstance(candidate, dict):
+            c_dict = candidate
+        elif hasattr(candidate, "model_dump"):
+            c_dict = candidate.model_dump()
+        elif hasattr(candidate, "dict"):
+            c_dict = candidate.dict()
+        else:
+            c_dict = getattr(candidate, "__dict__", {})
+
+        cand_id = c_dict.get("candidate_id") or c_dict.get("id") or "cand_unknown"
+        page_idx = c_dict.get("page_index") or c_dict.get("page") or 1
+        sys_idx = c_dict.get("system_index")
+        staff_idx = c_dict.get("staff_index")
+        raw_sym = str(c_dict.get("raw_symbol") or c_dict.get("raw_text") or c_dict.get("text") or "")
+        conf = float(c_dict.get("confidence", 1.0))
+        absent = bool(c_dict.get("is_absent", False))
+        ambiguous = bool(c_dict.get("is_ambiguous", False))
+        conflicted = bool(c_dict.get("is_conflicted", False))
+
+        raw_mod = c_dict.get("modality") or c_dict.get("source_stage") or c_dict.get("source_method")
+        if isinstance(raw_mod, SourceModality):
+            modality = raw_mod
+        elif isinstance(raw_mod, str):
+            val_lower = raw_mod.lower()
+            if "vector" in val_lower or "line" in val_lower:
+                modality = SourceModality.VECTOR
+            elif "raster" in val_lower or "image" in val_lower:
+                modality = SourceModality.RASTER
+            elif "hybrid" in val_lower:
+                modality = SourceModality.HYBRID
+            else:
+                modality = SourceModality.TEXT
+        else:
+            modality = SourceModality.TEXT
+
+        raw_bbox = c_dict.get("bbox")
+        if isinstance(raw_bbox, (list, tuple)) and len(raw_bbox) == 4:
+            bbox = (float(raw_bbox[0]), float(raw_bbox[1]), float(raw_bbox[2]), float(raw_bbox[3]))
+        elif isinstance(raw_bbox, dict):
+            bbox = (
+                float(raw_bbox.get("x0", 0.0)),
+                float(raw_bbox.get("y0", 0.0)),
+                float(raw_bbox.get("x1", 0.0)),
+                float(raw_bbox.get("y1", 0.0)),
+            )
+        else:
+            bbox = (0.0, 0.0, 0.0, 0.0)
+
+        meta = {
+            k: v
+            for k, v in c_dict.items()
+            if k not in (
+                "candidate_id",
+                "id",
+                "page_index",
+                "page",
+                "system_index",
+                "staff_index",
+                "raw_symbol",
+                "raw_text",
+                "text",
+                "confidence",
+                "is_absent",
+                "is_ambiguous",
+                "is_conflicted",
+                "modality",
+                "source_stage",
+                "source_method",
+                "bbox",
+            )
+        }
+
+        return EvidenceRecord(
+            candidate_id=cand_id,
+            modality=modality,
+            bbox=bbox,
+            page_index=int(page_idx),
+            system_index=sys_idx,
+            staff_index=staff_idx,
+            raw_symbol=raw_sym,
+            confidence=conf,
+            is_absent=absent,
+            is_ambiguous=ambiguous,
+            is_conflicted=conflicted,
+            metadata=meta,
+        )
