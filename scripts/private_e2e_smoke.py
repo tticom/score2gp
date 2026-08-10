@@ -114,11 +114,8 @@ def run_pipeline_for_input(
     if score_ir_written:
         try:
             score = ScoreIR.from_json_file(ir_path)
+            # Enforce process-level reference isolation: do not pass reference .gp as template during generation
             gp_template = None
-            if pdf_path:
-                possible_template = pdf_path.with_suffix(".gp")
-                if possible_template.exists():
-                    gp_template = possible_template
             warnings = write_gp(score, gp_path, template=gp_template)
             gp_written = gp_path.exists()
             if gp_written:
