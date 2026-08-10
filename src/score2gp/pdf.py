@@ -1887,7 +1887,11 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
 
                             if -3.0 <= gap <= 5.0:
                                 if vertical_offset <= 2.0:
-                                    merged_text += d2["text"]
+                                    proposed_text = merged_text + d2["text"]
+                                    if proposed_text.isdigit() and int(proposed_text) > 24:
+                                        d2["warnings"].append("pdf_fret_digits_not_merged_exceeds_max_fret")
+                                        break
+                                    merged_text = proposed_text
                                     merged_x1 = d2["x1"]
                                     merged_y0 = min(merged_y0, d2["y0"])
                                     merged_y1 = max(merged_y1, d2["y1"])
