@@ -241,3 +241,91 @@ def map_ledger_lines_to_note_candidates(outcomes: list[dict]) -> None:
 
         if attached:
             note["attached_ledger_line_candidate_ids"] = sorted(attached)
+
+
+# Document Topology Data Structures & Seam Contract (CRP-07)
+from dataclasses import dataclass, field
+from typing import Tuple, List, Optional, Dict
+
+
+@dataclass(frozen=True)
+class PageTopology:
+    page_number: int
+    page_width: float
+    page_height: float
+    system_count: int
+
+
+@dataclass(frozen=True)
+class PairedStaffTopology:
+    system_index: int
+    staff_index: int
+    notation_staff_bbox: Optional[Tuple[float, float, float, float]] = None
+    tab_staff_bbox: Optional[Tuple[float, float, float, float]] = None
+
+
+@dataclass(frozen=True)
+class PhysicalBarTopology:
+    bar_index: int
+    system_index: int
+    local_bar_index: int
+    x0: float
+    x1: float
+    y0: float
+    y1: float
+
+
+@dataclass(frozen=True)
+class GlobalMeasureIdentity:
+    global_measure_index: int
+    page_number: int
+    system_index: int
+    local_measure_index: int
+
+
+@dataclass(frozen=True)
+class SystemTopology:
+    system_index: int
+    page_number: int
+    notation_staff_bbox: Optional[Tuple[float, float, float, float]] = None
+    tab_staff_bbox: Optional[Tuple[float, float, float, float]] = None
+    locked_barline_xs: List[float] = field(default_factory=list)
+    global_bar_indices: List[int] = field(default_factory=list)
+    physical_bars: List[PhysicalBarTopology] = field(default_factory=list)
+
+
+def is_valid_barline_primitive(
+    x0: float, y0: float, x1: float, y1: float, staff_y0: float, staff_y1: float
+) -> bool:
+    """Invariant 1: Stems and connectors are not misclassified as barlines.
+
+    Barlines must cross at least 75% of staff height and have narrow width <= 3.0.
+    """
+    height = abs(y1 - y0)
+    width = abs(x1 - x0)
+    staff_height = abs(staff_y1 - staff_y0)
+    if width > 3.0:
+        return False
+    if height < staff_height * 0.75:
+        return False
+    # Check vertical overlap with staff region
+    if max(y0, y1) < staff_y0 or min(y0, y1) > staff_y1:
+        return False
+    return True
+
+
+def prevent_cross_system_barline_snap(
+    barline_x: float,
+    sys_x0: float,
+    sys_x1: float,
+    sys_y0: float,
+    sys_y1: float,
+    barline_y0: float,
+    barline_y1: float,
+) -> bool:
+    """Invariant 2: Barlines do not cross-snap across disconnected systems."""
+    if barline_x < sys_x0 - 5.0 or barline_x > sys_x1 + 5.0:
+        return False
+    if max(barline_y0, barline_y1) < sys_y0 - 10.0 or min(barline_y0, barline_y1) > sys_y1 + 10.0:
+        return False
+    return True
