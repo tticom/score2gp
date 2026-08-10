@@ -166,3 +166,78 @@ class CandidateAdapter:
             is_conflicted=conflicted,
             metadata=meta,
         )
+
+
+# Paired-Staff Evidence Fusion (CRP-09)
+from .staff_geometry import SystemTopology
+
+
+@dataclass
+class PairedStaffEvidenceFusion:
+    system_index: int
+    page_number: int
+    notation_candidates: List[Dict[str, Any]] = field(default_factory=list)
+    tab_candidates: List[Dict[str, Any]] = field(default_factory=list)
+    ownership_status: str = "one_to_one"  # "one_to_one" | "ambiguous" | "unassociated"
+    ambiguity_reason: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "system_index": self.system_index,
+            "page_number": self.page_number,
+            "notation_candidate_count": len(self.notation_candidates),
+            "tab_candidate_count": len(self.tab_candidates),
+            "ownership_status": self.ownership_status,
+            "ambiguity_reason": self.ambiguity_reason,
+        }
+
+
+class PairedStaffFusionEngine:
+    """Associates notation, TAB, bars, and techniques by SystemTopology staff pairs."""
+
+    def fuse(
+        self,
+        notation_candidates: List[Dict[str, Any]],
+        tab_candidates: List[Dict[str, Any]],
+        systems: List[SystemTopology],
+    ) -> List[PairedStaffEvidenceFusion]:
+        fusions: List[PairedStaffEvidenceFusion] = []
+
+        sys_map = {sys.system_index: sys for sys in systems}
+
+        for sys in systems:
+            # Filter candidates strictly within this system and page boundary (Prevent cross-system snapping)
+            sys_notation = [
+                c
+                for c in notation_candidates
+                if c.get("system_index") == sys.system_index
+                and (c.get("page_index") is None or c.get("page_index") == sys.page_number)
+            ]
+            sys_tab = [
+                c
+                for c in tab_candidates
+                if c.get("system_index") == sys.system_index
+                and (c.get("page_index") is None or c.get("page_index") == sys.page_number)
+            ]
+
+            status = "one_to_one"
+            reason = None
+
+            # Check ambiguity
+            ambiguous_cands = [c for c in sys_notation + sys_tab if c.get("association_status") == "failed"]
+            if ambiguous_cands:
+                status = "ambiguous"
+                reason = "ambiguous_candidate_association"
+
+            fusions.append(
+                PairedStaffEvidenceFusion(
+                    system_index=sys.system_index,
+                    page_number=sys.page_number,
+                    notation_candidates=sys_notation,
+                    tab_candidates=sys_tab,
+                    ownership_status=status,
+                    ambiguity_reason=reason,
+                )
+            )
+
+        return fusions
