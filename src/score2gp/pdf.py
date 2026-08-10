@@ -772,13 +772,33 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
 
     candidates = []
     filtered_index = 0
+    running_bar_index = 1
+    cumulative_y_offset = 0.0
     with fitz.open(pdf_path) as doc:
         for page_number, page in enumerate(doc, start=1):
-            systems = _detect_tab_systems(page, page_number)
-            ascii_blocks = _detect_ascii_tab_blocks(page, page_number, first_system_index=len(systems) + 1)
+            page_height = float(page.rect.height)
+            systems = _detect_tab_systems(
+                page, page_number, first_bar_index=running_bar_index, cumulative_y_offset=cumulative_y_offset
+            )
+            ascii_blocks = _detect_ascii_tab_blocks(
+                page, page_number, first_system_index=len(systems) + 1, cumulative_y_offset=cumulative_y_offset
+            )
 
-            words = sorted(
-                page.get_text("words"),
+            raw_words = page.get_text("words")
+            words = [
+                (
+                    float(w[0]),
+                    float(w[1]) + cumulative_y_offset,
+                    float(w[2]),
+                    float(w[3]) + cumulative_y_offset,
+                    str(w[4]),
+                    int(w[5]) if len(w) > 5 else 0,
+                    int(w[6]) if len(w) > 6 else 0,
+                    int(w[7]) if len(w) > 7 else 0,
+                )
+                for w in raw_words
+            ]
+            words.sort(
                 key=lambda word: (round(float(word[1]), 3), round(float(word[0]), 3), str(word[4])),
             )
             # Identify systems that actually contain at least one playable candidate
@@ -1336,13 +1356,13 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                             if itype == "l" and len(item) >= 3:
                                 p0, p1 = item[1], item[2]
                                 p_x0, p_x1 = min(p0.x, p1.x), max(p0.x, p1.x)
-                                p_y0, p_y1 = min(p0.y, p1.y), max(p0.y, p1.y)
+                                p_y0, p_y1 = min(p0.y, p1.y) + cumulative_y_offset, max(p0.y, p1.y) + cumulative_y_offset
                                 if (p_x1 - p_x0) > 1.0 and (p_y1 - p_y0) > 1.0:
                                     is_flag = True
                             elif itype == "c" and len(item) >= 2:
                                 pts = item[1:]
                                 p_x0, p_x1 = min(p.x for p in pts), max(p.x for p in pts)
-                                p_y0, p_y1 = min(p.y for p in pts), max(p.y for p in pts)
+                                p_y0, p_y1 = min(p.y for p in pts) + cumulative_y_offset, max(p.y for p in pts) + cumulative_y_offset
                                 is_flag = True
 
                             if is_flag:
@@ -2011,7 +2031,7 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                         dx = abs(p0.x - p1.x)
                         dy = abs(p0.y - p1.y)
                         ix0, ix1 = min(p0.x, p1.x), max(p0.x, p1.x)
-                        iy0, iy1 = min(p0.y, p1.y), max(p0.y, p1.y)
+                        iy0, iy1 = min(p0.y, p1.y) + cumulative_y_offset, max(p0.y, p1.y) + cumulative_y_offset
 
                         if dy >= 5.0 and dx <= 2.0:
                             cx = (ix0 + ix1) / 2.0
@@ -2039,7 +2059,7 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                     elif itype == "c" and len(item) >= 2:
                         pts = item[1:]
                         ix0, ix1 = min(p.x for p in pts), max(p.x for p in pts)
-                        iy0, iy1 = min(p.y for p in pts), max(p.y for p in pts)
+                        iy0, iy1 = min(p.y for p in pts) + cumulative_y_offset, max(p.y for p in pts) + cumulative_y_offset
                         dx = ix1 - ix0
                         dy = iy1 - iy0
                         if dx >= 3.0 and dy >= 3.0:
@@ -2303,11 +2323,21 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                     continue
                 filtered_index += 1
                 candidates.append(candidate.model_dump(mode="json", exclude_none=True))
+            if systems:
+                last_sys = systems[-1]
+                running_bar_index = last_sys.first_bar_index + max(1, len(last_sys.barlines) - 1)
+            cumulative_y_offset += page_height
     return candidates
 
 
-def _detect_ascii_tab_blocks(page: Any, page_index: int, *, first_system_index: int = 1) -> list[_AsciiTabBlock]:
-    rows = _ascii_tab_rows(page, page_index)
+def _detect_ascii_tab_blocks(
+    page: Any,
+    page_index: int,
+    *,
+    first_system_index: int = 1,
+    cumulative_y_offset: float = 0.0,
+) -> list[_AsciiTabBlock]:
+    rows = _ascii_tab_rows(page, page_index, cumulative_y_offset=cumulative_y_offset)
     if not rows:
         return []
     blocks: list[_AsciiTabBlock] = []
@@ -2339,7 +2369,11 @@ def _detect_ascii_tab_blocks(page: Any, page_index: int, *, first_system_index: 
     return blocks
 
 
-def _ascii_tab_rows(page: Any, page_index: int) -> list[_AsciiTabRow]:
+def _ascii_tab_rows(
+    page: Any,
+    page_index: int,
+    cumulative_y_offset: float = 0.0,
+) -> list[_AsciiTabRow]:
     rows: list[_AsciiTabRow] = []
     data = page.get_text("dict")
     for block_number, block in enumerate(data.get("blocks", []), start=1):
@@ -2353,6 +2387,12 @@ def _ascii_tab_rows(page: Any, page_index: int) -> list[_AsciiTabRow]:
             bbox_values = line.get("bbox") or block.get("bbox")
             if not bbox_values or len(bbox_values) != 4:
                 continue
+            bbox_offset = (
+                float(bbox_values[0]),
+                float(bbox_values[1]) + cumulative_y_offset,
+                float(bbox_values[2]),
+                float(bbox_values[3]) + cumulative_y_offset,
+            )
             rows.append(
                 _AsciiTabRow(
                     page_index=page_index,
@@ -2361,7 +2401,7 @@ def _ascii_tab_rows(page: Any, page_index: int) -> list[_AsciiTabRow]:
                     label=label,
                     body=body,
                     text=text,
-                    bbox=tuple(float(value) for value in bbox_values),
+                    bbox=bbox_offset,
                     body_start=body_start,
                 )
             )
@@ -3962,7 +4002,12 @@ def filter_tab_barline_candidates(
     }
 
 
-def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
+def _detect_tab_systems(
+    page: Any,
+    page_index: int,
+    first_bar_index: int = 1,
+    cumulative_y_offset: float = 0.0,
+) -> list[_TabSystem]:
     segments = list(_drawing_segments(page.get_drawings()))
     raw_horizontal = sorted((segment for segment in segments if segment.is_horizontal), key=lambda segment: segment.y0)
     horizontal = sorted(merge_collinear_horizontal_segments(raw_horizontal), key=lambda segment: segment.y0)
@@ -4001,7 +4046,7 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
 
     systems = []
     system_index = 1
-    next_bar_index = 1
+    next_bar_index = first_bar_index
 
     for group in _tab_line_groups(horizontal):
         classification = classify_staff_line_group(group, page)
@@ -4153,7 +4198,7 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
                 system_index=system_index,
                 staff_index=1,
                 first_bar_index=next_bar_index,
-                line_ys=line_ys,
+                line_ys=[round(ly + cumulative_y_offset, 3) for ly in line_ys],
                 x0=x0,
                 x1=x1,
                 barlines=valid_barlines,
@@ -4194,9 +4239,11 @@ def _detect_tab_systems(page: Any, page_index: int) -> list[_TabSystem]:
 
     # Re-index remaining systems
     final_systems = []
+    cur_bar = first_bar_index
     for idx, system in enumerate(non_ghost_systems, start=1):
         from dataclasses import replace
-        final_systems.append(replace(system, system_index=idx))
+        final_systems.append(replace(system, system_index=idx, first_bar_index=cur_bar))
+        cur_bar += max(1, len(system.barlines) - 1)
     return final_systems
 
 

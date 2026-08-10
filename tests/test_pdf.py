@@ -3366,3 +3366,69 @@ def test_build_ir_gating_unsupported_layouts(tmp_path) -> None:
         )
     assert exc_info.value.category == "pdf_input_class_no_extractable_tab_geometry"
     assert exc_info.value.stage == "layout-gating"
+
+
+def test_page_continuous_measure_indexing_and_cumulative_offsets() -> None:
+    from collections import namedtuple
+    from score2gp.pdf import _detect_tab_systems, _extract_pdf_text_candidates
+    from pathlib import Path
+
+    Point = namedtuple('Point', ['x', 'y'])
+
+    def make_mock_drawings(y_start: float):
+        drawings = []
+        # TAB staff lines: 6 lines
+        for y in [y_start + 0.0, y_start + 6.0, y_start + 12.0, y_start + 18.0, y_start + 24.0, y_start + 30.0]:
+            drawings.append({"items": [("l", Point(100.0, y), Point(800.0, y))]})
+        # Explicit TAB barlines (3 barlines = 2 measures)
+        for x in [100.0, 450.0, 800.0]:
+            drawings.append({"items": [("l", Point(x, y_start), Point(x, y_start + 30.0))]})
+        return drawings
+
+    class MockPage:
+        def __init__(self, drawings, height=500.0):
+            self.drawings = drawings
+            self.rect = namedtuple('Rect', ['height'])(height)
+        def get_drawings(self):
+            return self.drawings
+        def get_text(self, kind):
+            return []
+
+    # Page 1: system with 2 measures starting at bar 1
+    page1 = MockPage(make_mock_drawings(100.0))
+    systems_p1 = _detect_tab_systems(page1, page_index=1, first_bar_index=1, cumulative_y_offset=0.0)
+    assert len(systems_p1) == 1
+    assert systems_p1[0].first_bar_index == 1
+    assert systems_p1[0].line_ys[0] == 100.0
+
+    # Page 2: system starting at bar 3 (after Page 1's 2 measures) with cumulative Y offset 500.0
+    page2 = MockPage(make_mock_drawings(100.0))
+    systems_p2 = _detect_tab_systems(page2, page_index=2, first_bar_index=3, cumulative_y_offset=500.0)
+    assert len(systems_p2) == 1
+    assert systems_p2[0].first_bar_index == 3
+    assert systems_p2[0].line_ys[0] == 600.0  # 100.0 + 500.0
+
+    # Real fixture check if available
+    lesson5_path = Path("fixtures/private/Lesson-5.pdf")
+    if lesson5_path.exists():
+        warnings, meta = [], {"detected_systems": 0, "detected_staves": 0, "detected_bar_boxes": 0, "detected_string_lines": 0}
+        cands = _extract_pdf_text_candidates(lesson5_path, warnings, meta)
+        page_bars = {}
+        page_ys = {}
+        for c in cands:
+            p = c.get("page_index")
+            b = c.get("bar_index")
+            y = c.get("y")
+            if p is not None and b is not None:
+                page_bars.setdefault(p, set()).add(b)
+            if p is not None and y is not None:
+                page_ys.setdefault(p, []).append(y)
+
+        # Confirm Page 2 measure indexing continues after Page 1
+        assert min(page_bars[2]) == max(page_bars[1]) + 1
+        # Confirm Page 3 measure indexing continues after Page 2
+        assert min(page_bars[3]) == max(page_bars[2]) + 1
+
+        # Confirm Y coordinates are monotonically increasing across page boundaries
+        assert min(page_ys[2]) > max(page_ys[1])
+        assert min(page_ys[3]) > max(page_ys[2])
