@@ -1,4 +1,67 @@
-"""Staff timeline preview generation."""
+"""Staff timeline preview generation and topologically locked bar timelines."""
+
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
+
+
+@dataclass
+class TopologicallyLockedBarTimeline:
+    """Owner of timing truth for a single topologically locked bar timeline."""
+
+    measure_index: int
+    capacity_ticks: int = 3840
+    voice_1_final_tick: int = 0
+    voice_2_final_tick: int = 0
+    valid: bool = True
+    events: list[dict[str, Any]] = field(default_factory=list)
+
+    def validate_capacity(self) -> bool:
+        """Enforces metre and bar capacity invariants without scaling or partition hacks."""
+        if self.voice_1_final_tick > self.capacity_ticks:
+            return False
+        if self.voice_2_final_tick > self.capacity_ticks:
+            return False
+        return self.valid
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "measure_index": self.measure_index,
+            "valid": self.validate_capacity(),
+            "voice_1_final_tick": self.voice_1_final_tick,
+            "voice_2_final_tick": self.voice_2_final_tick,
+            "events": self.events,
+        }
+
+
+def resolve_tuplet_duration(c: dict[str, Any], base_dur: int) -> int:
+    """Resolves event duration considering 3:2 and custom tuplet ratios."""
+    tuplet = c.get("tuplet_association") or c.get("tuplet")
+    if tuplet:
+        actual, normal = None, None
+        if isinstance(tuplet, dict):
+            actual = tuplet.get("actual_notes") or tuplet.get("actual")
+            normal = tuplet.get("normal_notes") or tuplet.get("normal")
+            if actual is None or normal is None:
+                ratio = tuplet.get("ratio")
+                if isinstance(ratio, (tuple, list)) and len(ratio) == 2:
+                    actual, normal = ratio[0], ratio[1]
+                elif isinstance(ratio, str) and ":" in ratio:
+                    parts = ratio.split(":")
+                    actual, normal = int(parts[0]), int(parts[1])
+        elif hasattr(tuplet, "ratio"):
+            ratio = getattr(tuplet, "ratio")
+            if isinstance(ratio, (tuple, list)) and len(ratio) == 2:
+                actual, normal = ratio[0], ratio[1]
+            elif isinstance(ratio, str) and ":" in ratio:
+                parts = ratio.split(":")
+                actual, normal = int(parts[0]), int(parts[1])
+
+        if actual and normal and int(actual) > 0 and int(normal) > 0:
+            return int(base_dur * int(normal) / int(actual))
+
+    if "duration_ticks" in c:
+        return c["duration_ticks"]
+    return base_dur
 
 
 def build_staff_timeline_preview(
@@ -214,15 +277,8 @@ def build_staff_timeline_preview(
 
                 # Process voice 1
                 for c in slice_v1:
-                    dur = TICK_MAPPINGS.get(c.get("symbol_type"), 960)
-                    tuplet = c.get("tuplet_association") or c.get("tuplet")
-                    if isinstance(tuplet, dict):
-                        actual = tuplet.get("actual_notes") or tuplet.get("actual", 3)
-                        normal = tuplet.get("normal_notes") or tuplet.get("normal", 2)
-                        if actual > 0 and normal > 0:
-                            dur = int(dur * normal / actual)
-                    if "duration_ticks" in c:
-                        dur = c["duration_ticks"]
+                    base_dur = TICK_MAPPINGS.get(c.get("symbol_type"), 960)
+                    dur = resolve_tuplet_duration(c, base_dur)
                     c_start = c.get("start_tick", start_tick)
                     c["timeline_start_tick"] = c_start
                     c["timeline_duration_ticks"] = dur
@@ -241,15 +297,8 @@ def build_staff_timeline_preview(
 
                 # Process voice 2
                 for c in slice_v2:
-                    dur = TICK_MAPPINGS.get(c.get("symbol_type"), 960)
-                    tuplet = c.get("tuplet_association") or c.get("tuplet")
-                    if isinstance(tuplet, dict):
-                        actual = tuplet.get("actual_notes") or tuplet.get("actual", 3)
-                        normal = tuplet.get("normal_notes") or tuplet.get("normal", 2)
-                        if actual > 0 and normal > 0:
-                            dur = int(dur * normal / actual)
-                    if "duration_ticks" in c:
-                        dur = c["duration_ticks"]
+                    base_dur = TICK_MAPPINGS.get(c.get("symbol_type"), 960)
+                    dur = resolve_tuplet_duration(c, base_dur)
                     c_start = c.get("start_tick", start_tick)
                     c["timeline_start_tick"] = c_start
                     c["timeline_duration_ticks"] = dur
@@ -265,7 +314,6 @@ def build_staff_timeline_preview(
                         evt2["tuplet_association"] = c["tuplet_association"]
                     measure_events.append(evt2)
                     cursor_2 = max(cursor_2, c_start + dur)
-
 
             # Resolve dynamic measure duration
             D_measure = 3840
@@ -333,13 +381,16 @@ def build_staff_timeline_preview(
             # Sort events by start_tick then voice
             measure_events = sorted(measure_events, key=lambda e: (e["start_tick"], e["voice"]))
 
-            timeline_measures.append({
-                "measure_index": m_idx + 1,
-                "valid": not invalid,
-                "voice_1_final_tick": cursor_1,
-                "voice_2_final_tick": cursor_2,
-                "events": measure_events
-            })
+            bar_timeline = TopologicallyLockedBarTimeline(
+                measure_index=m_idx + 1,
+                capacity_ticks=D_measure,
+                voice_1_final_tick=cursor_1,
+                voice_2_final_tick=cursor_2,
+                valid=not invalid,
+                events=measure_events,
+            )
+
+            timeline_measures.append(bar_timeline.to_dict())
 
         timeline_previews.append({
             "page_index": page,
