@@ -43,7 +43,7 @@ from .tuplet import (
     extract_tuplet_marker_evidence,
 )
 from .timeline import build_staff_timeline_preview
-
+from .position_optimizer import BiomechanicalPositionOptimizer
 
 
 def run_recognition_on_file(
@@ -304,11 +304,13 @@ def run_recognition_on_file(
             if cand.get("candidate_id") in target_ids:
                 cand["tuplet_association"] = assoc.to_dict()
 
-
     try:
         timeline_preview = build_staff_timeline_preview(outcomes, semantic_candidates, all_staff_geometries)
     except Exception:
         timeline_preview = []
+
+    optimizer = BiomechanicalPositionOptimizer()
+    fretboard_ownership = optimizer.optimize_sequence(outcomes)
 
     return {
         "source": pdf_path.name,
@@ -318,5 +320,6 @@ def run_recognition_on_file(
         "clef_resolved_pitch_coverage": coverage_report,
         "semantic_candidates": semantic_candidates,
         "timeline_preview": timeline_preview,
-        "tuplet_associations": [a.to_dict() for a in tuplet_associations]
+        "tuplet_associations": [a.to_dict() for a in tuplet_associations],
+        "fretboard_position_ownership": [o.to_dict() for o in fretboard_ownership]
     }
