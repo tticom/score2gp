@@ -174,16 +174,10 @@ class ScoreIRCompiler:
                                 )
                             )
                         else:
-                            notes.append(
-                                Note(
-                                    string=1,
-                                    fret=0,
-                                    pitch=self.tuning_pitches[0],
-                                )
-                            )
+                            raise ValueError(f"Strict invariant failed: compiler received unowned note '{tid}'")
 
                     if not notes:
-                        notes.append(Note(string=1, fret=0, pitch=self.tuning_pitches[0]))
+                        raise ValueError("Strict invariant failed: event has no notes and is not a rest")
 
                     bar_events.append(
                         Event(

@@ -287,8 +287,10 @@ def build_staff_timeline_preview(
                         "symbol_type": c.get("symbol_type"),
                         "voice": 1,
                         "start_tick": c_start,
+                        "onset_ticks": c_start,
                         "duration_ticks": dur,
-                        "resolved_pitch": c.get("clef_resolved_staff_pitch")
+                        "resolved_pitch": c.get("clef_resolved_staff_pitch"),
+                        "is_rest": "rest" in c.get("symbol_type", "")
                     }
                     if "tuplet_association" in c:
                         evt1["tuplet_association"] = c["tuplet_association"]
@@ -307,8 +309,10 @@ def build_staff_timeline_preview(
                         "symbol_type": c.get("symbol_type"),
                         "voice": 2,
                         "start_tick": c_start,
+                        "onset_ticks": c_start,
                         "duration_ticks": dur,
-                        "resolved_pitch": c.get("clef_resolved_staff_pitch")
+                        "resolved_pitch": c.get("clef_resolved_staff_pitch"),
+                        "is_rest": "rest" in c.get("symbol_type", "")
                     }
                     if "tuplet_association" in c:
                         evt2["tuplet_association"] = c["tuplet_association"]
@@ -358,8 +362,10 @@ def build_staff_timeline_preview(
                     "symbol_type": "padding_rest",
                     "voice": 1,
                     "start_tick": cursor_1,
+                    "onset_ticks": cursor_1,
                     "duration_ticks": D_measure - cursor_1,
-                    "resolved_pitch": None
+                    "resolved_pitch": None,
+                    "is_rest": True
                 })
                 cursor_1 = D_measure
             elif cursor_1 > D_measure:
@@ -371,8 +377,10 @@ def build_staff_timeline_preview(
                     "symbol_type": "padding_rest",
                     "voice": 2,
                     "start_tick": cursor_2,
+                    "onset_ticks": cursor_2,
                     "duration_ticks": D_measure - cursor_2,
-                    "resolved_pitch": None
+                    "resolved_pitch": None,
+                    "is_rest": True
                 })
                 cursor_2 = D_measure
             elif cursor_2 > D_measure:
