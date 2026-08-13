@@ -32,8 +32,6 @@ def test_digit_merging_fret_limit_prevention() -> None:
 def test_tab_digit_recognition_reference_isolation() -> None:
     """Verify TAB digit candidate recognition operates without requiring reference .gp file inputs."""
     lesson5_pdf = PROJECT_ROOT / "fixtures" / "private" / "Lesson-5.pdf"
-    if not lesson5_pdf.exists():
-        pytest.skip("Private fixture Lesson-5.pdf not present in test environment")
 
     warnings: list[dict] = []
     meta: dict[str, int] = {"detected_systems": 0, "detected_staves": 0, "detected_bar_boxes": 0, "detected_string_lines": 0}

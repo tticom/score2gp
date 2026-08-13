@@ -152,8 +152,6 @@ def test_timeline_reference_isolation() -> None:
 def test_private_fixture_lesson6_smoke_preservation() -> None:
     """Verify pipeline recognition on Lesson-6.pdf preserves 4/4 triplet timing."""
     lesson6_pdf = PROJECT_ROOT / "fixtures" / "private" / "Lesson-6.pdf"
-    if not lesson6_pdf.exists():
-        pytest.skip("Private fixture Lesson-6.pdf not present in test environment")
 
     result = run_recognition_on_file(lesson6_pdf, assume_treble_clef=True)
     assert result is not None

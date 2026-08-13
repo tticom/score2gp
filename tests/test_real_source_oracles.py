@@ -41,7 +41,5 @@ def test_real_source_oracle_contract() -> None:
     private_dir = PROJECT_ROOT / "fixtures" / "private"
     lesson5_pdf = private_dir / "Lesson-5.pdf"
 
-    if not lesson5_pdf.exists():
-        pytest.skip("Private fixture Lesson-5.pdf not present in local test environment")
 
     assert lesson5_pdf.exists()
