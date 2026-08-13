@@ -99,8 +99,6 @@ def test_sidecar_outcome_selection() -> None:
 def test_sidecar_bakeoff_reference_isolation() -> None:
     """Verify sidecar bakeoff evaluation runs without requiring reference .gp file inputs."""
     lesson6_pdf = PROJECT_ROOT / "fixtures" / "private" / "Lesson-6.pdf"
-    if not lesson6_pdf.exists():
-        pytest.skip("Private fixture Lesson-6.pdf not present in test environment")
 
     # Reference .gp path is never accessed or passed during evaluation
     reference_gp = lesson6_pdf.with_suffix(".gp")

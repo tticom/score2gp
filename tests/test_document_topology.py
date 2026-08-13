@@ -99,8 +99,6 @@ def test_topology_extraction_invariants() -> None:
 def test_document_topology_reference_isolation() -> None:
     """Verify document topology extraction operates without receiving reference .gp files."""
     lesson5_pdf = PROJECT_ROOT / "fixtures" / "private" / "Lesson-5.pdf"
-    if not lesson5_pdf.exists():
-        pytest.skip("Private fixture Lesson-5.pdf not present in test environment")
 
     # Reference .gp path is never accessed during topology extraction
     reference_gp = lesson5_pdf.with_suffix(".gp")

@@ -80,8 +80,6 @@ def test_compiler_reference_gp_isolation():
 
 def test_private_fixture_lesson6_gp_compilation():
     lesson6 = Path("fixtures/private/Lesson-6.pdf")
-    if not lesson6.exists():
-        pytest.skip("Private fixture Lesson-6.pdf not present")
 
     res = run_recognition_on_file(lesson6, assume_treble_clef=True)
     assert res is not None

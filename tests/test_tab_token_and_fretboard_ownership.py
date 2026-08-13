@@ -96,8 +96,6 @@ def test_no_reference_gp_isolation():
 
 def test_private_fixture_lesson5_tab_token_preservation():
     lesson5 = Path("fixtures/private/Lesson-5.pdf")
-    if not lesson5.exists():
-        pytest.skip("Private fixture Lesson-5.pdf not present")
 
     res = run_recognition_on_file(lesson5, assume_treble_clef=True)
     assert res is not None

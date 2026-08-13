@@ -167,8 +167,6 @@ def test_real_pdf_fixture_drawing_extraction():
     import fitz
     from pathlib import Path
     pdf_path = Path("fixtures/public/Derek Trucks BB King.pdf")
-    if not pdf_path.exists():
-        pytest.skip("Public PDF fixture not available")
 
     with fitz.open(pdf_path) as doc:
         drawings = doc[0].get_drawings()
