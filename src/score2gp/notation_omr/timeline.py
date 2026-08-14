@@ -215,9 +215,9 @@ def build_staff_timeline_preview(
                 if not current_slice:
                     current_slice.append(c)
                 else:
-                    prev_x = get_x_coord(current_slice[-1])
+                    first_x = get_x_coord(current_slice[0])
                     curr_x = get_x_coord(c)
-                    if curr_x - prev_x < X_tol:
+                    if curr_x - first_x < X_tol:
                         current_slice.append(c)
                     else:
                         time_slices.append(current_slice)
