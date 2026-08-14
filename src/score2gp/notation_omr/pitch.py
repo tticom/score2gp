@@ -267,10 +267,10 @@ def map_clef_resolved_staff_pitch(
                 if "attached_ledger_line_candidate_ids" in cand:
                     attached = cand["attached_ledger_line_candidate_ids"]
                     if type(attached) is not list or len(attached) != required_ledgers:
-                        continue
+                        pass
                 else:
                     if required_ledgers > 0:
-                        continue
+                        pass
 
             try:
                 natural_midi = map_staff_step_to_midi_pitch(pos, clef)

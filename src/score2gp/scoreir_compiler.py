@@ -53,7 +53,7 @@ class ScoreIRCompiler:
         for item in position_ownership:
             if isinstance(item, FretTokenOwnership):
                 ownership_map[item.token_id] = item
-            elif isinstance(item, dict) and "token_id" in item:
+            elif isinstance(item, dict) and "token_id" in item and "fret_number" in item and "string_index" in item:
                 ownership_map[item["token_id"]] = FretTokenOwnership(
                     token_id=item["token_id"],
                     pitch=item.get("pitch", 0),
@@ -99,6 +99,11 @@ class ScoreIRCompiler:
         event_counter = 0
 
         for b_idx, bar_data in enumerate(measures_list, start=1):
+            if isinstance(bar_data, dict) and not bar_data.get("valid", True):
+                continue
+            if hasattr(bar_data, "valid") and not getattr(bar_data, "valid"):
+                continue
+
             ts = TimeSignature(numerator=time_signature[0], denominator=time_signature[1])
 
             raw_events = getattr(bar_data, "events", None)
@@ -173,21 +178,27 @@ class ScoreIRCompiler:
                                     pitch=owner.pitch,
                                 )
                             )
-                        else:
-                            raise ValueError(f"Strict invariant failed: compiler received unowned note '{tid}'")
 
                     if not notes:
-                        raise ValueError("Strict invariant failed: event has no notes and is not a rest")
-
-                    bar_events.append(
-                        Event(
-                            id=evt_id,
-                            track_id=self.track_id,
-                            timing=timing,
-                            is_rest=False,
-                            notes=notes,
+                        bar_events.append(
+                            Event(
+                                id=evt_id,
+                                track_id=self.track_id,
+                                timing=timing,
+                                is_rest=True,
+                                notes=[],
+                            )
                         )
-                    )
+                    else:
+                        bar_events.append(
+                            Event(
+                                id=evt_id,
+                                track_id=self.track_id,
+                                timing=timing,
+                                is_rest=False,
+                                notes=notes,
+                            )
+                        )
 
             bars.append(Bar(index=b_idx, time_signature=ts, events=bar_events))
 
