@@ -215,9 +215,9 @@ def build_staff_timeline_preview(
                 if not current_slice:
                     current_slice.append(c)
                 else:
-                    prev_x = get_x_coord(current_slice[-1])
+                    first_x = get_x_coord(current_slice[0])
                     curr_x = get_x_coord(c)
-                    if curr_x - prev_x < X_tol:
+                    if curr_x - first_x < X_tol:
                         current_slice.append(c)
                     else:
                         time_slices.append(current_slice)
@@ -337,7 +337,7 @@ def build_staff_timeline_preview(
                         D_measure = int(sc["time_signature_num"]) * (3840 // int(sc["time_signature_den"]))
                         break
 
-            # Truncate same-voice overlaps
+            # Group identical chords and invalidate on overlap/polyphony
             v1_evts = [e for e in measure_events if e.get("voice") == 1]
             v2_evts = [e for e in measure_events if e.get("voice") == 2]
 
@@ -346,45 +346,24 @@ def build_staff_timeline_preview(
                 for idx in range(len(v_evts) - 1):
                     curr_e = v_evts[idx]
                     next_e = v_evts[idx + 1]
-                    if curr_e["start_tick"] < next_e["start_tick"]:
+                    if curr_e["start_tick"] == next_e["start_tick"]:
+                        if curr_e["duration_ticks"] != next_e["duration_ticks"]:
+                            invalid = True
+                        elif curr_e["is_rest"] != next_e["is_rest"]:
+                            invalid = True
+                    elif curr_e["start_tick"] < next_e["start_tick"]:
                         if curr_e["start_tick"] + curr_e["duration_ticks"] > next_e["start_tick"]:
-                            curr_e["duration_ticks"] = next_e["start_tick"] - curr_e["start_tick"]
+                            invalid = True
 
             if v1_evts:
                 cursor_1 = max(e["start_tick"] + e["duration_ticks"] for e in v1_evts)
+            if cursor_1 != D_measure:
+                invalid = True
+
             if v2_evts:
                 cursor_2 = max(e["start_tick"] + e["duration_ticks"] for e in v2_evts)
-
-            # Pad measure voices up to expected duration
-            if cursor_1 < D_measure:
-                measure_events.append({
-                    "candidate_id": None,
-                    "symbol_type": "padding_rest",
-                    "voice": 1,
-                    "start_tick": cursor_1,
-                    "onset_ticks": cursor_1,
-                    "duration_ticks": D_measure - cursor_1,
-                    "resolved_pitch": None,
-                    "is_rest": True
-                })
-                cursor_1 = D_measure
-            elif cursor_1 > D_measure:
-                invalid = True
-
-            if 0 < cursor_2 < D_measure:
-                measure_events.append({
-                    "candidate_id": None,
-                    "symbol_type": "padding_rest",
-                    "voice": 2,
-                    "start_tick": cursor_2,
-                    "onset_ticks": cursor_2,
-                    "duration_ticks": D_measure - cursor_2,
-                    "resolved_pitch": None,
-                    "is_rest": True
-                })
-                cursor_2 = D_measure
-            elif cursor_2 > D_measure:
-                invalid = True
+                if cursor_2 != D_measure:
+                    invalid = True
 
             # Sort events by start_tick then voice
             measure_events = sorted(measure_events, key=lambda e: (e["start_tick"], e["voice"]))
