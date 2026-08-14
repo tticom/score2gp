@@ -132,6 +132,9 @@ def generate_musicxml_from_omr(
 
     # Generate measures
     for m_data in preview["measures"]:
+        if not m_data.get("valid", True):
+            raise ValueError(f"Capacity mismatch: Measure {m_data['measure_index']} is invalid")
+            
         m_idx = m_data["measure_index"]
         measure = ET.SubElement(part, "measure", number=str(m_idx))
 

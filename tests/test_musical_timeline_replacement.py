@@ -146,7 +146,34 @@ def test_timeline_reference_isolation() -> None:
     ]
     previews = build_staff_timeline_preview(outcomes)
     assert len(previews) == 1
-    assert previews[0]["measures"][0]["valid"] is True
+    # Short measure now triggers invalid=True (which means valid=False)
+    assert previews[0]["measures"][0]["valid"] is False
+
+
+def test_strict_chord_equivalence_and_invalidation() -> None:
+    """Verify chords are properly grouped and conflicting durations trigger invalidation."""
+    # 1. Valid chord (two whole notes at the same time)
+    valid_outcomes = [
+        {"symbol_type": "whole_note_candidate", "page_index": 1, "system_index": 1, "staff_index": 1, "x0": 100.0, "voice": 1},
+        {"symbol_type": "whole_note_candidate", "page_index": 1, "system_index": 1, "staff_index": 1, "x0": 100.0, "voice": 1},
+    ]
+    previews = build_staff_timeline_preview(valid_outcomes)
+    m = previews[0]["measures"][0]
+    assert m["valid"] is True
+    assert m["voice_1_final_tick"] == 3840
+
+    # 2. Invalid polyphony (whole note and quarter note at the same time in same voice)
+    # The quarter note makes duration 960 while the whole note is 3840.
+    # We pad the rest of the measure to 3840 using two half notes to ensure capacity doesn't fail first.
+    invalid_outcomes = [
+        {"symbol_type": "whole_note_candidate", "page_index": 1, "system_index": 2, "staff_index": 1, "x0": 100.0, "voice": 1},
+        {"symbol_type": "quarter_note_candidate", "page_index": 1, "system_index": 2, "staff_index": 1, "x0": 100.0, "voice": 1},
+        {"symbol_type": "half_note_candidate", "page_index": 1, "system_index": 2, "staff_index": 1, "x0": 200.0, "voice": 1},
+        {"symbol_type": "quarter_note_candidate", "page_index": 1, "system_index": 2, "staff_index": 1, "x0": 300.0, "voice": 1},
+    ]
+    previews2 = build_staff_timeline_preview(invalid_outcomes)
+    m2 = previews2[0]["measures"][0]
+    assert m2["valid"] is False
 
 
 def test_private_fixture_lesson6_smoke_preservation() -> None:

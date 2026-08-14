@@ -120,15 +120,13 @@ def test_rhythm_timeline_rests_and_voices():
     # --- Measure 2 ---
     # Beat 1 (x=300): Voice 1 quarter note (dur=960). Cursor V1=960, V2=0.
     # Beat 2 (x=350): Voice 2 half rest (dur=1920). Start tick = cursor_2 = 0. Cursor V1=960, V2=1920.
-    # End of measure: padded to 3840 ticks.
-    # Voice 1 padding: dur = 3840 - 960 = 2880 ticks.
-    # Voice 2 padding: dur = 3840 - 1920 = 1920 ticks.
+    # End of measure: previously padded to 3840 ticks, now stays short and triggers invalid=True.
     m2 = measures[1]
     assert m2["measure_index"] == 2
-    assert m2["valid"] is True
-    assert m2["voice_1_final_tick"] == 3840
-    assert m2["voice_2_final_tick"] == 3840
+    assert m2["valid"] is False
+    assert m2["voice_1_final_tick"] == 960
+    assert m2["voice_2_final_tick"] == 1920
 
     events_m2 = m2["events"]
-    # 4 events: Note (V1, 0, 960), Half Rest (V2, 0, 1920), Padding Rest (V1, 960, 2880), Padding Rest (V2, 1920, 1920)
-    assert len(events_m2) == 4
+    # 2 events: Note (V1, 0, 960), Half Rest (V2, 0, 1920)
+    assert len(events_m2) == 2

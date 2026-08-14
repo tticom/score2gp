@@ -8,7 +8,8 @@ def test_generate_monophonic_musicxml():
     outcomes = [
         {"symbol_type": "quarter_note_candidate", "staff_position_index": 2, "x0": 10.0, "page_index": 1, "system_index": 1, "staff_index": 1, "clef_resolved_staff_pitch": "C5"},
         {"symbol_type": "quarter_note_candidate", "staff_position_index": 4, "x0": 50.0, "page_index": 1, "system_index": 1, "staff_index": 1, "clef_resolved_staff_pitch": "E5"},
-        {"symbol_type": "quarter_note_candidate", "staff_position_index": 6, "x0": 90.0, "page_index": 1, "system_index": 1, "staff_index": 1, "clef_resolved_staff_pitch": "G5"}
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": 6, "x0": 90.0, "page_index": 1, "system_index": 1, "staff_index": 1, "clef_resolved_staff_pitch": "G5"},
+        {"symbol_type": "quarter_note_candidate", "staff_position_index": 8, "x0": 130.0, "page_index": 1, "system_index": 1, "staff_index": 1, "clef_resolved_staff_pitch": "C6"}
     ]
 
     # 1 barline candidate to define a bar ending
@@ -25,8 +26,8 @@ def test_generate_monophonic_musicxml():
 def test_generate_polyphonic_musicxml():
     # Setup outcomes for Voice 1 (stems up, e.g. G5 at x=10) and Voice 2 (stems down, e.g. C4 at x=10)
     outcomes = [
-        {"symbol_type": "quarter_note_candidate", "staff_position_index": 6, "x0": 10.0, "page_index": 1, "system_index": 1, "staff_index": 1, "clef_resolved_staff_pitch": "G5", "stem_direction": "up"},
-        {"symbol_type": "quarter_note_candidate", "staff_position_index": -4, "x0": 10.0, "page_index": 1, "system_index": 1, "staff_index": 1, "clef_resolved_staff_pitch": "C4", "stem_direction": "down"}
+        {"symbol_type": "whole_note_candidate", "staff_position_index": 6, "x0": 10.0, "page_index": 1, "system_index": 1, "staff_index": 1, "clef_resolved_staff_pitch": "G5", "stem_direction": "up"},
+        {"symbol_type": "whole_note_candidate", "staff_position_index": -4, "x0": 10.0, "page_index": 1, "system_index": 1, "staff_index": 1, "clef_resolved_staff_pitch": "C4", "stem_direction": "down"}
     ]
     outcomes.append({"symbol_type": "barline_candidate", "x0": 150.0, "page_index": 1, "system_index": 1, "staff_index": 1})
 
@@ -40,8 +41,8 @@ def test_generate_polyphonic_musicxml():
 def test_generate_chord_musicxml():
     # Setup outcomes for 2 notes at the exact same horizontal coordinate (C5 and E5 at x=10)
     outcomes = [
-        {"symbol_type": "quarter_note_candidate", "staff_position_index": 2, "x0": 10.0, "page_index": 1, "system_index": 1, "staff_index": 1, "clef_resolved_staff_pitch": "C5"},
-        {"symbol_type": "quarter_note_candidate", "staff_position_index": 4, "x0": 10.1, "page_index": 1, "system_index": 1, "staff_index": 1, "clef_resolved_staff_pitch": "E5"}
+        {"symbol_type": "whole_note_candidate", "staff_position_index": 2, "x0": 10.0, "page_index": 1, "system_index": 1, "staff_index": 1, "clef_resolved_staff_pitch": "C5"},
+        {"symbol_type": "whole_note_candidate", "staff_position_index": 4, "x0": 10.1, "page_index": 1, "system_index": 1, "staff_index": 1, "clef_resolved_staff_pitch": "E5"}
     ]
     outcomes.append({"symbol_type": "barline_candidate", "x0": 150.0, "page_index": 1, "system_index": 1, "staff_index": 1})
 
@@ -122,8 +123,8 @@ def test_generate_sidecar_cli_plain_xml_and_zipped_mxl(tmp_path):
 def test_rest_chord_prevention():
     # Setup outcomes where a rest and note occur at the same start_tick
     outcomes = [
-        {"symbol_type": "quarter_note_candidate", "x0": 10.0, "page_index": 1, "system_index": 1, "staff_index": 1, "clef_resolved_staff_pitch": "C4"},
-        {"symbol_type": "quarter_rest_candidate", "x0": 10.0, "page_index": 1, "system_index": 1, "staff_index": 1, "clef_resolved_staff_pitch": None},
+        {"symbol_type": "whole_note_candidate", "x0": 10.0, "page_index": 1, "system_index": 1, "staff_index": 1, "clef_resolved_staff_pitch": "C4"},
+        {"symbol_type": "whole_rest_candidate", "x0": 10.0, "page_index": 1, "system_index": 1, "staff_index": 1, "clef_resolved_staff_pitch": None},
     ]
     xml_str = generate_musicxml_from_omr(outcomes)
     import xml.etree.ElementTree as ET
@@ -142,12 +143,9 @@ def test_timing_overlap_resolution_same_voice():
     ]
     from score2gp.notation_omr.timeline import build_staff_timeline_preview
     previews = build_staff_timeline_preview(outcomes)
-    v1_evts = [e for e in previews[0]["measures"][0]["events"] if e["voice"] == 1 and e["symbol_type"] != "padding_rest"]
-    assert len(v1_evts) == 2
-    # The first note's duration should be truncated from 960 to 480 to prevent overlap with the note at tick 480
-    assert v1_evts[0]["start_tick"] == 0
-    assert v1_evts[0]["duration_ticks"] == 480
-    assert v1_evts[1]["start_tick"] == 480
+    m1 = previews[0]["measures"][0]
+    # Overlap now invalidates the measure instead of truncating
+    assert m1["valid"] is False
 
 
 def test_dynamic_time_signature_and_measure_capacity():
@@ -162,12 +160,11 @@ def test_dynamic_time_signature_and_measure_capacity():
             "time_signature": {"beats": 12, "beat_type": 8}
         }
     ]
-    xml_str = generate_musicxml_from_omr(outcomes, semantic_candidates=semantic_cands)
-    assert "<beats>12</beats>" in xml_str
-    assert "<beat-type>8</beat-type>" in xml_str
+    with pytest.raises(ValueError, match="Capacity mismatch"):
+        xml_str = generate_musicxml_from_omr(outcomes, semantic_candidates=semantic_cands)
 
     from score2gp.notation_omr.timeline import build_staff_timeline_preview
     previews = build_staff_timeline_preview(outcomes, semantic_candidates=semantic_cands)
     m1 = previews[0]["measures"][0]
-    # D_measure should be 12 * 480 = 5760
-    assert m1["voice_1_final_tick"] == 5760
+    # D_measure should be 12 * 480 = 5760, but since it's short, it's invalid
+    assert m1["valid"] is False
