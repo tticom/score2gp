@@ -349,13 +349,14 @@ def build_staff_timeline_preview(
                     if curr_e["start_tick"] == next_e["start_tick"]:
                         if curr_e["duration_ticks"] != next_e["duration_ticks"]:
                             invalid = True
+                        elif curr_e["is_rest"] != next_e["is_rest"]:
+                            invalid = True
                     elif curr_e["start_tick"] < next_e["start_tick"]:
                         if curr_e["start_tick"] + curr_e["duration_ticks"] > next_e["start_tick"]:
                             invalid = True
 
             if v1_evts:
                 cursor_1 = max(e["start_tick"] + e["duration_ticks"] for e in v1_evts)
-            
             if cursor_1 != D_measure:
                 invalid = True
 

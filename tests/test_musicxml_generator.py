@@ -126,13 +126,8 @@ def test_rest_chord_prevention():
         {"symbol_type": "whole_note_candidate", "x0": 10.0, "page_index": 1, "system_index": 1, "staff_index": 1, "clef_resolved_staff_pitch": "C4"},
         {"symbol_type": "whole_rest_candidate", "x0": 10.0, "page_index": 1, "system_index": 1, "staff_index": 1, "clef_resolved_staff_pitch": None},
     ]
-    xml_str = generate_musicxml_from_omr(outcomes)
-    import xml.etree.ElementTree as ET
-    root = ET.fromstring(xml_str)
-    notes = root.findall(".//note")
-    for note in notes:
-        if note.find("rest") is not None:
-            assert note.find("chord") is None, "Rest note element must never contain <chord/>"
+    with pytest.raises(ValueError, match="Capacity mismatch: Measure 1 is invalid"):
+        generate_musicxml_from_omr(outcomes)
 
 
 def test_timing_overlap_resolution_same_voice():
