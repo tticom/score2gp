@@ -1,3 +1,4 @@
+from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
 from pathlib import Path
 from score2gp.pdf import inspect_pdf
 

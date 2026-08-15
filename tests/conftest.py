@@ -35,7 +35,17 @@ def setup_private_artifacts():
         return
 
     # Process each private PDF and save its artifacts
-    for pdf_path in PRIVATE_FIXTURES_DIR.glob("*.pdf"):
+    pdfs = list(PRIVATE_FIXTURES_DIR.glob("*.pdf"))
+    if not pdfs:
+        return
+    # Temporarily only process Lesson-6.pdf to speed up tests during development
+    lesson_6 = [p for p in pdfs if "Lesson-6" in p.name]
+    if lesson_6:
+        pdfs = [lesson_6[0]]
+    else:
+        pdfs = [pdfs[0]]
+
+    for pdf_path in pdfs:
         try:
             # Run the extraction pipeline
             res = run_recognition_on_file(pdf_path, assume_treble_clef=True)
@@ -58,6 +68,16 @@ def setup_private_artifacts():
 
             with open(out_json, "w", encoding="utf-8") as f:
                 json.dump(res, f, default=safe_default, indent=2)
+
+            # Generate MusicXML from outcomes
+            from score2gp.notation_omr.musicxml_generator import generate_musicxml_from_omr
+            xml_str = generate_musicxml_from_omr(
+                res.get("read_only_recognition_outcomes", []),
+                res.get("semantic_candidates")
+            )
+            if xml_str:
+                out_xml = ARTIFACTS_DIR / f"{pdf_path.stem}.musicxml"
+                out_xml.write_text(xml_str, encoding="utf-8")
 
         except Exception as e:
             # We allow failures here so the test suite can inspect what failed

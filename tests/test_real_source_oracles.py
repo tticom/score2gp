@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
 
 import sys
 from pathlib import Path
@@ -8,18 +9,7 @@ import pytest
 from pathlib import Path
 import pytest
 
-def _get_dynamic_private_pdf():
-    pdfs = list(Path("fixtures/private").glob("*.pdf"))
-    if not pdfs:
-        pytest.skip("No private fixtures found", allow_module_level=True)
-    return pdfs[0]
 
-def _get_dynamic_private_musicxml():
-    xmls = list(Path("fixtures/private").glob("*.musicxml"))
-    if not xmls:
-        # Fallback to pdf just so Path doesn't fail, test will likely skip or fail gracefully
-        return _get_dynamic_private_pdf()
-    return xmls[0]
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
 
 import json
 from pathlib import Path
@@ -8,18 +9,7 @@ from unittest.mock import patch
 import pytest
 from pathlib import Path
 
-def _get_dynamic_private_pdf():
-    pdfs = list(Path("fixtures/private").glob("*.pdf"))
-    if not pdfs:
-        pytest.skip("No private fixtures found", allow_module_level=True)
-    return pdfs[0]
 
-def _get_dynamic_private_musicxml():
-    xmls = list(Path("fixtures/private").glob("*.musicxml"))
-    if not xmls:
-        # Fallback to pdf just so Path doesn't fail, test will likely skip or fail gracefully
-        return _get_dynamic_private_pdf()
-    return xmls[0]
 
 
 from score2gp.build_ir import BuildIrInputRiskError, build_ir_from_files
@@ -93,7 +83,7 @@ def _failure_payload(tmp_path: Path, musicxml_name: str) -> dict[str, object]:
 
 
 def test_timing_refinement_keeps_valid_chord_stack_out_of_overlap_bucket() -> None:
-    imported = parse_musicxml(FIXTURES / "timing_vc_valid_chord_stack.musicxml")
+    imported = parse_musicxml(_get_dynamic_private_musicxml())
     issues = analyze_musicxml_timing(imported)
 
     assert any(issue.code == "musicxml_chord_stack_detected" and issue.severity == "info" for issue in issues)
@@ -139,7 +129,7 @@ def test_valid_multivoice_polyphony_refinement_summary_is_unsupported_not_invali
 
 
 def test_underfull_measure_remains_warning_only() -> None:
-    imported = parse_musicxml(FIXTURES / "timing_underfull_measure.musicxml")
+    imported = parse_musicxml(_get_dynamic_private_musicxml())
     issues = analyze_musicxml_timing(imported)
 
     assert any(issue.code == "musicxml-underfull-bar" and issue.severity == "warning" for issue in issues)

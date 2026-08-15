@@ -1,5 +1,6 @@
 """Tests for MXS-00 candidate-neutral sidecar evaluation harness."""
 from __future__ import annotations
+from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
 import pytest
 
 import json
@@ -87,7 +88,7 @@ def test_mxs00_timing_invalid_classified(tmp_path: Path) -> None:
 
 
 def test_mxs00_cli_eval_sidecar() -> None:
-    good_path = "tests/fixtures/musicxml/generated_tiny_tab.musicxml"
+    good_path = _get_dynamic_private_musicxml()
 
     # Text mode
     res_text = runner.invoke(app, ["eval-sidecar", "--sidecar", good_path])

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
 import pytest
 
 import json

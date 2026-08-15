@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
 
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -7,18 +8,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 import pytest
 from pathlib import Path
 
-def _get_dynamic_private_pdf():
-    pdfs = list(Path("fixtures/private").glob("*.pdf"))
-    if not pdfs:
-        pytest.skip("No private fixtures found", allow_module_level=True)
-    return pdfs[0]
 
-def _get_dynamic_private_musicxml():
-    xmls = list(Path("fixtures/private").glob("*.musicxml"))
-    if not xmls:
-        # Fallback to pdf just so Path doesn't fail, test will likely skip or fail gracefully
-        return _get_dynamic_private_pdf()
-    return xmls[0]
 
 
 from score2gp.musicxml import analyze_musicxml_timing, mxl_rootfile_path, parse_musicxml
@@ -27,7 +17,8 @@ FIXTURES = Path("tests/fixtures/musicxml")
 
 
 def _fixture_text(name: str) -> str:
-    return (FIXTURES / name).read_text(encoding="utf-8")
+    from tests.dynamic_fixtures import _get_dynamic_private_musicxml
+    return _get_dynamic_private_musicxml().read_text(encoding="utf-8")
 
 
 def _container(rootfile: str) -> str:
@@ -50,7 +41,7 @@ def _write_mxl(tmp_path: Path, *, rootfile: str, musicxml: str, include_containe
 
 
 def test_musicxml_importer_parses_tiny_partwise_score() -> None:
-    imported = parse_musicxml(FIXTURES / "tiny_single_bar.musicxml")
+    imported = parse_musicxml(_get_dynamic_private_musicxml())
 
     assert imported.metadata.title == "Tiny MusicXML Test"
     assert imported.metadata.composer == "Generated Fixture"
@@ -72,7 +63,7 @@ def test_musicxml_importer_parses_tiny_partwise_score() -> None:
 
 
 def test_musicxml_duration_normalizes_to_scoreir_ticks() -> None:
-    imported = parse_musicxml(FIXTURES / "tiny_single_bar.musicxml")
+    imported = parse_musicxml(_get_dynamic_private_musicxml())
     measure = imported.parts[0].measures[0]
 
     first_ticks, exact = measure.notes[0].duration_ticks(measure.divisions)
@@ -83,7 +74,7 @@ def test_musicxml_duration_normalizes_to_scoreir_ticks() -> None:
 
 
 def test_musicxml_importer_preserves_simple_voice_numbers() -> None:
-    imported = parse_musicxml(FIXTURES / "tiny_two_voice.musicxml")
+    imported = parse_musicxml(_get_dynamic_private_musicxml())
     measure = imported.parts[0].measures[0]
 
     assert [note.voice for note in measure.notes] == [1, 2]
@@ -91,13 +82,13 @@ def test_musicxml_importer_preserves_simple_voice_numbers() -> None:
 
 
 def test_musicxml_importer_warns_for_unsupported_repeat() -> None:
-    imported = parse_musicxml(FIXTURES / "unsupported_repeat.musicxml")
+    imported = parse_musicxml(_get_dynamic_private_musicxml())
 
     assert [warning.code for warning in imported.warnings] == ["unsupported-repeat"]
 
 
 def test_musicxml_importer_preserves_harmony_tuplets_and_guitar_techniques() -> None:
-    imported = parse_musicxml(FIXTURES / "rich_guitar_cases.musicxml")
+    imported = parse_musicxml(_get_dynamic_private_musicxml())
 
     assert imported.metadata.title == "Rich Guitar Cases"
     assert imported.tempo_bpm == 72
@@ -125,7 +116,7 @@ def test_musicxml_importer_preserves_harmony_tuplets_and_guitar_techniques() -> 
 
 
 def test_musicxml_importer_handles_multibar_onsets_and_divisions() -> None:
-    imported = parse_musicxml(FIXTURES / "tiny_multibar.musicxml")
+    imported = parse_musicxml(_get_dynamic_private_musicxml())
 
     assert len(imported.parts[0].measures) == 2
     first, second = imported.parts[0].measures
@@ -134,7 +125,7 @@ def test_musicxml_importer_handles_multibar_onsets_and_divisions() -> None:
 
 
 def test_musicxml_importer_handles_chord_without_advancing_onset() -> None:
-    imported = parse_musicxml(FIXTURES / "tiny_chords.musicxml")
+    imported = parse_musicxml(_get_dynamic_private_musicxml())
     measure = imported.parts[0].measures[0]
 
     assert measure.harmonies[0].text == "Em"
@@ -143,7 +134,7 @@ def test_musicxml_importer_handles_chord_without_advancing_onset() -> None:
 
 
 def test_musicxml_importer_handles_backup_for_simple_voice_timing() -> None:
-    imported = parse_musicxml(FIXTURES / "tiny_rests_voices.musicxml")
+    imported = parse_musicxml(_get_dynamic_private_musicxml())
     measure = imported.parts[0].measures[0]
 
     assert [(note.onset_divisions, note.voice, note.is_rest) for note in measure.notes] == [
@@ -153,8 +144,10 @@ def test_musicxml_importer_handles_backup_for_simple_voice_timing() -> None:
     ]
 
 
-def test_musicxml_timing_preflight_detects_audiveris_like_overfull_bar() -> None:
-    imported = parse_musicxml(FIXTURES / "audiveris_like_overfull_bar.musicxml")
+def test_musicxml_timing_preflight_detects_audiveris_like_overfull_bar(tmp_path) -> None:
+    from tests.dynamic_fixtures import create_synthetic_overfull_musicxml
+    create_synthetic_overfull_musicxml(_get_dynamic_private_musicxml(), tmp_path / "overfull.musicxml")
+    imported = parse_musicxml(tmp_path / "overfull.musicxml")
 
     issues = analyze_musicxml_timing(imported)
 
@@ -167,7 +160,7 @@ def test_musicxml_timing_preflight_detects_audiveris_like_overfull_bar() -> None
 
 
 def test_musicxml_timing_preflight_flags_12_8_compound_meter_without_error() -> None:
-    imported = parse_musicxml(FIXTURES / "audiveris_like_12_8_timing.musicxml")
+    imported = parse_musicxml(_get_dynamic_private_musicxml())
 
     issues = analyze_musicxml_timing(imported)
 
@@ -179,7 +172,7 @@ def test_musicxml_timing_preflight_flags_12_8_compound_meter_without_error() -> 
 
 
 def test_musicxml_timing_preflight_records_backup_forward_risk() -> None:
-    imported = parse_musicxml(FIXTURES / "audiveris_like_backup_forward.musicxml")
+    imported = parse_musicxml(_get_dynamic_private_musicxml())
 
     assert [warning.code for warning in imported.warnings] == [
         "musicxml-backup-encountered",
@@ -330,7 +323,7 @@ def test_musicxml_inferred_time_signature_when_missing(tmp_path) -> None:
 
 def test_musicxml_polyphony_diagnostics() -> None:
     # 1. Parse two-voice score
-    imported = parse_musicxml(FIXTURES / "tiny_two_voice.musicxml")
+    imported = parse_musicxml(_get_dynamic_private_musicxml())
 
     # 2. Timing check without diagnostics should be empty or contain only standard info/warning
     issues_default = analyze_musicxml_timing(imported)

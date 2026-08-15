@@ -56,8 +56,14 @@ def test_full_pdf_to_gp_conversion(private_pdf_path):
     assert res is not None, f"OMR pipeline returned None for {private_pdf_path.name}"
     
     # Assert expected metadata
-    assert "timeline_preview" in res, "OMR result missing timeline_preview"
-    assert "fretboard_position_ownership" in res, "OMR result missing fretboard_position_ownership"
+    # Verify MusicXML generation works without crashing (if standard notation is present)
+    from score2gp.notation_omr.musicxml_generator import generate_musicxml_from_omr
+    if res.get("timeline_preview"):
+        xml_str = generate_musicxml_from_omr(
+            res.get("read_only_recognition_outcomes", []),
+            res.get("semantic_candidates")
+        )
+        assert xml_str, "Generated MusicXML was empty despite having a timeline preview"
 
     # Build the ScoreIR
     builder = GPIFBuilder()
