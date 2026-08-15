@@ -135,43 +135,7 @@ class BiomechanicalPositionOptimizer:
                 )
                 continue
 
-            # If pitch exists, perform biomechanical position inference
-            pitch_val = (
-                evt.get("clef_resolved_staff_pitch")
-                or evt.get("clef_resolved_staff_pitch_midi")
-                or evt.get("resolved_pitch")
-                or evt.get("pitch")
-            )
-            pitch = parse_pitch_to_midi(pitch_val)
-
-            if pitch is not None:
-                cands = self.candidate_positions_for_pitch(pitch)
-                if cands:
-                    best_cand = cands[0]
-                    min_cost = float("inf")
-                    prev_pos = (results[-1].string_index, results[-1].fret_number) if results else None
-
-                    for str_idx, fret in cands:
-                        if prev_pos:
-                            fret_diff = abs(fret - prev_pos[1])
-                            str_diff = abs(str_idx - prev_pos[0])
-                            cost = self.alpha_fret_jump * fret_diff + self.beta_string_stretch * str_diff
-                        else:
-                            cost = abs(fret - 3) * 0.2
-
-                        if cost < min_cost:
-                            min_cost = cost
-                            best_cand = (str_idx, fret)
-
-                    results.append(
-                        FretTokenOwnership(
-                            token_id=token_id,
-                            pitch=pitch,
-                            string_index=best_cand[0],
-                            fret_number=best_cand[1],
-                            modality="inferred_position",
-                            cost=round(min_cost, 2),
-                        )
-                    )
+            # If pitch exists but no explicit TAB was found, we drop it!
+            # ADR 2026-08-13 explicitly forbids biomechanical position inference.
 
         return results

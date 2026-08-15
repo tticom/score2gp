@@ -178,17 +178,11 @@ class ScoreIRCompiler:
                                     pitch=owner.pitch,
                                 )
                             )
+                        else:
+                            raise ValueError(f"Event {evt_id} contains an unowned note (token_id: {tid}). The ScoreIRCompiler requires all non-rest notes to have explicit fretboard position ownership.")
 
                     if not notes:
-                        bar_events.append(
-                            Event(
-                                id=evt_id,
-                                track_id=self.track_id,
-                                timing=timing,
-                                is_rest=True,
-                                notes=[],
-                            )
-                        )
+                        raise ValueError(f"Event {evt_id} resulted in empty notes but is not a rest.")
                     else:
                         bar_events.append(
                             Event(
