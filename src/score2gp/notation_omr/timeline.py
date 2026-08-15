@@ -294,10 +294,10 @@ def build_staff_timeline_preview(
                     }
                     if "tuplet_association" in c:
                         evt1["tuplet_association"] = c["tuplet_association"]
-                    
-                    if not evt1["is_rest"] and evt1["resolved_pitch"] is None:
+
+                    if not evt1["is_rest"] and not evt1["resolved_pitch"]:
                         invalid = True
-                        
+
                     measure_events.append(evt1)
                     cursor_1 = max(cursor_1, c_start + dur)
 
@@ -320,10 +320,10 @@ def build_staff_timeline_preview(
                     }
                     if "tuplet_association" in c:
                         evt2["tuplet_association"] = c["tuplet_association"]
-                    
-                    if not evt2["is_rest"] and evt2["resolved_pitch"] is None:
+
+                    if not evt2["is_rest"] and not evt2["resolved_pitch"]:
                         invalid = True
-                        
+
                     measure_events.append(evt2)
                     cursor_2 = max(cursor_2, c_start + dur)
 

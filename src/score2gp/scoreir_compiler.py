@@ -180,15 +180,7 @@ class ScoreIRCompiler:
                             )
 
                     if not notes:
-                        bar_events.append(
-                            Event(
-                                id=evt_id,
-                                track_id=self.track_id,
-                                timing=timing,
-                                is_rest=True,
-                                notes=[],
-                            )
-                        )
+                        raise ValueError(f"Unowned note: event group at bar {b_idx}, voice {voice}, onset {onset} has no valid pitch/fret ownership")
                     else:
                         bar_events.append(
                             Event(
