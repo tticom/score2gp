@@ -5,6 +5,19 @@ from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from score2gp.private_diagnostics import SUMMARY_SCHEMA_VERSION, run_private_diagnostic_smoke
+import pytest
+
+def _get_dynamic_private_pdf():
+    pdfs = list(Path("fixtures/private").glob("*.pdf"))
+    if not pdfs:
+        pytest.skip("No private fixtures found")
+    return pdfs[0]
+
+def _get_dynamic_private_musicxml():
+    xmls = list(Path("fixtures/private").glob("*.musicxml"))
+    if not xmls:
+        return _get_dynamic_private_pdf()
+    return xmls[0]
 
 
 SCORELIKE_PDF = _get_dynamic_private_pdf()

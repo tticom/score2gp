@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import pytest
+import pytest
 from score2gp.notation_omr.position_optimizer import (
     BiomechanicalPositionOptimizer,
     FretTokenOwnership,
@@ -16,6 +17,8 @@ from score2gp.notation_omr.pipeline import run_recognition_on_file
 
 def test_private_fixture_lesson5_tab_token_preservation():
     lesson5 = Path("fixtures/private/Lesson-5.pdf")
+    if not lesson5.exists():
+        import pytest; pytest.skip("Missing fixture")
 
     res = run_recognition_on_file(lesson5, assume_treble_clef=True)
     assert res is not None
