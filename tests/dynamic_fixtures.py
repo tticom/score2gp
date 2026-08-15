@@ -1,3 +1,4 @@
+import pytest
 from pathlib import Path
 import os
 import xml.etree.ElementTree as ET
@@ -12,6 +13,7 @@ def _get_dynamic_private_pdf() -> Path:
                 if "Lesson-6" in p.name:
                     return p
             return pdfs[0]
+    pytest.skip("No private fixtures found", allow_module_level=True)
     return Path("fixtures/private/dummy.pdf")
 
 def _get_dynamic_private_musicxml() -> Path:
@@ -24,6 +26,7 @@ def _get_dynamic_private_musicxml() -> Path:
                 if "Lesson-6" in m.name:
                     return m
             return mxmls[0]
+    pytest.skip("No private fixtures found", allow_module_level=True)
     return Path("tests/artifacts/dummy.musicxml")
 
 def create_synthetic_overfull_musicxml(base_musicxml: Path, out_path: Path) -> Path:
@@ -49,3 +52,16 @@ def create_synthetic_overfull_musicxml(base_musicxml: Path, out_path: Path) -> P
     # Fallback if no notes found
     tree.write(out_path, encoding="utf-8")
     return out_path
+
+
+def _get_safe_dynamic_private_pdf() -> Path:
+    private_dir = Path("fixtures/private")
+    if private_dir.exists():
+        pdfs = list(private_dir.glob("*.pdf"))
+        if pdfs:
+            for p in pdfs:
+                if "Lesson-5" in p.name:
+                    return p
+            return pdfs[0]
+    pytest.skip("No private fixtures found", allow_module_level=True)
+    return Path("fixtures/private/dummy.pdf")
