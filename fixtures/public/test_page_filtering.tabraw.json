@@ -1,0 +1,43 @@
+{
+  "schema_version": "tabraw.v0.1",
+  "source_pdf": "test_page_filtering.pdf",
+  "candidates": [
+    {
+      "id": "c1",
+      "kind": "fret",
+      "page_index": 1,
+      "system_index": 1,
+      "bar_index": 1,
+      "string": 1,
+      "raw_text": "0",
+      "parsed_fret": 0,
+      "x": 100.0,
+      "y": 500.0,
+      "confidence": 0.95,
+      "raw": {}
+    },
+    {
+      "id": "c2",
+      "kind": "fret",
+      "page_index": 2,
+      "system_index": 1,
+      "bar_index": 2,
+      "string": 1,
+      "raw_text": "3",
+      "parsed_fret": 3,
+      "x": 100.0,
+      "y": 300.0,
+      "confidence": 0.95,
+      "raw": {}
+    }
+  ],
+  "warnings": [
+    {
+      "code": "pdf_barlines_not_detected_in_system",
+      "message": "Barlines not detected on page 2 system 1.",
+      "severity": "warning",
+      "page_index": 2,
+      "system_index": 1
+    }
+  ]
+}

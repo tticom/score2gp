@@ -1,9 +1,6 @@
 """Tests for MXS-00 candidate-neutral sidecar evaluation harness."""
+
 from __future__ import annotations
-import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
-import pytest
 
 import json
 from pathlib import Path
@@ -16,7 +13,7 @@ runner = CliRunner()
 
 
 def test_mxs00_known_good_sidecar_passes() -> None:
-    good_path = _get_dynamic_private_musicxml()
+    good_path = Path("tests/fixtures/musicxml/generated_tiny_tab.musicxml")
     result = evaluate_sidecar(good_path)
     assert result.status == "passed"
     assert result.note_count > 0
@@ -53,7 +50,6 @@ def test_mxs00_empty_musicxml_classified(tmp_path: Path) -> None:
     assert result.refusal_reason == "zero_notes_and_rests"
 
 
-@pytest.mark.skip(reason="Requires specifically invalid synthetic fixture")
 def test_mxs00_timing_invalid_classified(tmp_path: Path) -> None:
     invalid_xml = """<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="3.1">
@@ -90,7 +86,7 @@ def test_mxs00_timing_invalid_classified(tmp_path: Path) -> None:
 
 
 def test_mxs00_cli_eval_sidecar() -> None:
-    good_path = _get_dynamic_private_musicxml()
+    good_path = "tests/fixtures/musicxml/generated_tiny_tab.musicxml"
 
     # Text mode
     res_text = runner.invoke(app, ["eval-sidecar", "--sidecar", good_path])

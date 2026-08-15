@@ -1,16 +1,8 @@
 from __future__ import annotations
-import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
 
 import sys
 from pathlib import Path
-
 import pytest
-from pathlib import Path
-
-
-
 
 # Add scripts to sys.path so we can import from it
 PROJECT_ROOT = Path(__file__).resolve().parent.parent

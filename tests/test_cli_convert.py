@@ -1,28 +1,19 @@
 from __future__ import annotations
-import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
 
 import json
 from pathlib import Path
 from typer.testing import CliRunner
-
 import pytest
-from pathlib import Path
-
-
-
 
 from score2gp.cli import app, _convert_exit_code_for_error
 from score2gp.build_ir import BuildIrInputRiskError
 
 # Paths
-TINY_PDF = _get_dynamic_private_pdf()
-TINY_MUSICXML = _get_dynamic_private_musicxml()
+TINY_PDF = Path("tests/fixtures/pdf/generated_tiny_tab.pdf")
+TINY_MUSICXML = Path("tests/fixtures/musicxml/generated_tiny_tab.musicxml")
 
-OVERFULL_MUSICXML = _get_dynamic_private_musicxml()
-UNSTRUCTURED_PDF = _get_dynamic_private_pdf()
+OVERFULL_MUSICXML = Path("tests/fixtures/musicxml/audiveris_like_overfull_bar.musicxml")
+UNSTRUCTURED_PDF = Path("tests/fixtures/pdf/generated_unstructured_tab_text.pdf")
 
 
 import re

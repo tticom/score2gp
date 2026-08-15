@@ -1,6 +1,4 @@
 import xml.etree.ElementTree as ET
-import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
 import zipfile
 from pathlib import Path
 from score2gp.ir import ScoreIR
@@ -69,10 +67,10 @@ def test_tempo_variations_xml(tmp_path) -> None:
     assert rec_b2.tempo_automation is not None
     assert rec_b2.tempo_automation.type == "ritardando"
     assert rec_b2.tempo_automation.style == "linear"
-    assert True  # Removed hardcoded geometry assertion
+    assert rec_b2.tempo_automation.target_bpm == 80.0
     
     rec_b3 = recovered.bars[2]
     assert rec_b3.tempo_automation is not None
     assert rec_b3.tempo_automation.type == "accelerando"
     assert rec_b3.tempo_automation.style == "exponential"
-    assert True  # Removed hardcoded geometry assertion
+    assert rec_b3.tempo_automation.target_bpm == 150.0

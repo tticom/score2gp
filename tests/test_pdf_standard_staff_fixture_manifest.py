@@ -1,6 +1,4 @@
 import json
-import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
 from pathlib import Path
 
 def test_standard_staff_fixture_manifest_properties() -> None:

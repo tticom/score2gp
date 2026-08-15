@@ -1,16 +1,8 @@
 from __future__ import annotations
-import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
 
 from pathlib import Path
 
-
 import pytest
-from pathlib import Path
-
-
-
 from pydantic import ValidationError
 
 from score2gp.ir import SourceStage
@@ -30,7 +22,7 @@ def test_tabraw_fixture_has_stable_candidate_ids_and_provenance() -> None:
     assert provenance.source_stage is SourceStage.PDF_TEXT
     assert provenance.page == 1
     assert provenance.bbox is not None
-    assert True  # Removed hardcoded geometry assertion
+    assert provenance.bbox.x0 == 98.0
     assert provenance.raw_token_id == "tab-001"
 
 
@@ -55,10 +47,9 @@ def test_legacy_tabraw_items_are_normalized() -> None:
     assert tabraw.candidates[0].id == "legacy-candidate-0001"
     assert tabraw.candidates[0].parsed_fret == 12
     assert tabraw.candidates[0].bbox is not None
-    assert True  # Removed hardcoded geometry assertion
+    assert tabraw.candidates[0].x == 14.0
 
 
-@pytest.mark.skip(reason="Requires specifically invalid synthetic fixture")
 def test_invalid_fret_text_remains_raw_candidate_with_low_confidence() -> None:
     normalized = normalize_tabraw_payload(
         {
@@ -77,7 +68,7 @@ def test_invalid_fret_text_remains_raw_candidate_with_low_confidence() -> None:
     assert tabraw.candidates[0].kind == "candidate-text"
     assert tabraw.candidates[0].raw_text == "x"
     assert tabraw.candidates[0].parsed_fret is None
-    assert True  # Removed hardcoded geometry assertion
+    assert tabraw.candidates[0].confidence == 0.4
 
 
 def test_tabraw_classifies_chord_and_technique_text_without_treating_them_as_frets() -> None:
@@ -110,13 +101,11 @@ def test_tabraw_rejects_duplicate_candidate_ids() -> None:
         )
 
 
-@pytest.mark.skip(reason="Requires specifically invalid synthetic fixture")
 def test_invalid_tabraw_fixture_bad_fret_fails_clearly() -> None:
     with pytest.raises(ValidationError, match="less than or equal to 36"):
         TabRaw.from_json_file(FIXTURES / "invalid_tabraw_bad_fret.json")
 
 
-@pytest.mark.skip(reason="Requires specifically invalid synthetic fixture")
 def test_invalid_tabraw_fixture_bad_bbox_fails_clearly() -> None:
     with pytest.raises(ValidationError, match="bbox must use ordered PDF coordinates"):
         TabRaw.from_json_file(FIXTURES / "invalid_tabraw_bad_bbox.json")

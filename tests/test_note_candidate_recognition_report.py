@@ -1,6 +1,3 @@
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
-import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
 import json
 import subprocess
 import sys
@@ -8,7 +5,7 @@ from pathlib import Path
 
 def test_note_candidate_recognition_report_public_fixture():
     script_path = Path("scripts/note_candidate_recognition_report.py")
-    fixture_path = _get_dynamic_private_pdf()
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
 
     assert script_path.exists()
     assert fixture_path.exists()
@@ -49,7 +46,7 @@ def test_note_candidate_recognition_report_public_fixture():
 
 def test_note_candidate_recognition_report_half_note_fixture():
     script_path = Path("scripts/note_candidate_recognition_report.py")
-    fixture_path = _get_dynamic_private_pdf()
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_half_note.pdf")
 
     assert script_path.exists()
     assert fixture_path.exists()
@@ -79,7 +76,7 @@ def test_note_candidate_recognition_report_half_note_fixture():
 
 def test_note_candidate_recognition_report_quarter_note_fixture():
     script_path = Path("scripts/note_candidate_recognition_report.py")
-    fixture_path = _get_dynamic_private_pdf()
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_quarter_note.pdf")
 
     assert script_path.exists()
     assert fixture_path.exists()
@@ -108,7 +105,7 @@ def test_note_candidate_recognition_report_quarter_note_fixture():
 
 def test_note_candidate_recognition_report_eighth_note_fixture():
     script_path = Path("scripts/note_candidate_recognition_report.py")
-    fixture_path = _get_dynamic_private_pdf()
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_eighth_notes.pdf")
 
     assert script_path.exists()
     assert fixture_path.exists()
@@ -172,7 +169,7 @@ def test_note_candidate_recognition_report_eighth_note_fixture():
 
 def test_note_candidate_recognition_report_x_aligned_cluster_fixture():
     script_path = Path("scripts/note_candidate_recognition_report.py")
-    fixture_path = _get_dynamic_private_pdf()
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_complex_cluster.pdf")
 
     assert script_path.exists()
     assert fixture_path.exists()
@@ -195,7 +192,7 @@ def test_note_candidate_recognition_report_x_aligned_cluster_fixture():
 
 def test_note_candidate_recognition_report_left_margin_candidate_fixture():
     script_path = Path("scripts/note_candidate_recognition_report.py")
-    fixture_path = _get_dynamic_private_pdf()
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_complex_cluster.pdf")
 
     assert script_path.exists()
     assert fixture_path.exists()
@@ -218,7 +215,7 @@ def test_note_candidate_recognition_report_left_margin_candidate_fixture():
 
 def test_note_candidate_recognition_report_flag_beam_candidates():
     script_path = Path("scripts/note_candidate_recognition_report.py")
-    fixture_path = _get_dynamic_private_pdf()
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_complex_cluster.pdf")
 
     assert script_path.exists()
     assert fixture_path.exists()
@@ -258,7 +255,7 @@ def test_note_candidate_recognition_report_flag_beam_candidates():
 
 def test_note_candidate_recognition_report_ledger_lines():
     script_path = Path("scripts/note_candidate_recognition_report.py")
-    fixture_path = _get_dynamic_private_pdf()
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_ledger_lines.pdf")
 
     assert script_path.exists()
     assert fixture_path.exists()
@@ -486,7 +483,7 @@ def test_compose_eighth_note_candidates_negative_boundaries():
 
 def test_note_candidate_recognition_report_staff_geometry_exposure():
     script_path = Path("scripts/note_candidate_recognition_report.py")
-    fixture_path = _get_dynamic_private_pdf()
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
 
     assert script_path.exists()
     assert fixture_path.exists()
@@ -648,7 +645,7 @@ def test_map_ledger_lines_to_note_candidates_edge_cases():
 
 def test_assume_treble_clef_enabled_public_fixture():
     script_path = Path("scripts/note_candidate_recognition_report.py")
-    fixture_path = _get_dynamic_private_pdf()
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
 
     assert script_path.exists()
     assert fixture_path.exists()

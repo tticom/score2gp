@@ -1,12 +1,4 @@
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
 import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
-
-import pytest
-from pathlib import Path
-
-
-
 from src.score2gp.notation_omr.musicxml_generator import generate_musicxml_from_omr
 from src.score2gp.musicxml import parse_musicxml, analyze_musicxml_timing
 import xml.etree.ElementTree as ET
@@ -94,7 +86,7 @@ def test_generate_sidecar_cli_plain_xml_and_zipped_mxl(tmp_path):
     from typer.testing import CliRunner
     from score2gp.cli import app
 
-    pdf_fixture = _get_dynamic_private_pdf()
+    pdf_fixture = Path("fixtures/public/mutopia-bwv-anh-120-minuet-a-minor-a4.pdf")
     assert pdf_fixture.exists()
 
     # 1. Plain text MusicXML output

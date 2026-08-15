@@ -1,18 +1,10 @@
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
 import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
-
-import pytest
-from pathlib import Path
-
-
-
 from pathlib import Path
 from src.score2gp.whole_note_recogniser import run_recognition_on_file
 from src.score2gp.notation_bridge import build_ir_from_notation_outcomes
 
 def test_multinote_sequencing_4_quarter_notes():
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("fixtures/public/generated_simple/simple/4QuarterNotes.pdf")
     res = run_recognition_on_file(
         pdf_path,
         include_x_aligned_clusters=True,
@@ -35,7 +27,7 @@ def test_multinote_sequencing_4_quarter_notes():
         assert ev.timing.onset_ticks == i * 960
 
 def test_multinote_sequencing_2_eighth_notes():
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("fixtures/public/generated_simple/simple/2EighthNotes.pdf")
     res = run_recognition_on_file(
         pdf_path,
         include_x_aligned_clusters=True,
@@ -58,7 +50,7 @@ def test_multinote_sequencing_2_eighth_notes():
         assert ev.timing.onset_ticks == i * 480
 
 def test_multinote_sequencing_4_sixteenth_notes():
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("fixtures/public/generated_simple/simple/4SixteenthNotes.pdf")
     res = run_recognition_on_file(
         pdf_path,
         include_x_aligned_clusters=True,

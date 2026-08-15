@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import pytest
 from pathlib import Path
-import pytest
 from score2gp.pdf import _extract_pdf_text_candidates
 from score2gp.tabraw import parse_fret_text
 
@@ -33,8 +32,6 @@ def test_digit_merging_fret_limit_prevention() -> None:
 def test_tab_digit_recognition_reference_isolation() -> None:
     """Verify TAB digit candidate recognition operates without requiring reference .gp file inputs."""
     lesson5_pdf = PROJECT_ROOT / "fixtures" / "private" / "Lesson-5.pdf"
-    if not lesson5_pdf.exists():
-        import pytest; pytest.skip("Missing fixture")
 
     warnings: list[dict] = []
     meta: dict[str, int] = {"detected_systems": 0, "detected_staves": 0, "detected_bar_boxes": 0, "detected_string_lines": 0}

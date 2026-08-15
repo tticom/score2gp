@@ -1,6 +1,4 @@
 from __future__ import annotations
-import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
 
 import sys
 from pathlib import Path
@@ -30,43 +28,60 @@ def test_anonymize_name() -> None:
     assert anonymize_name(p2_alt) == "private_input_2"
 
     # 3. Test unknown/fallback name anonymization
-    p3 = Path(_get_dynamic_private_pdf())
+    p3 = Path("fixtures/public/tiny_score.pdf")
     assert anonymize_name(p3) == "private_input_custom"
 
 
 def test_run_pipeline_for_input(tmp_path) -> None:
-    # Use real private fixture
-    pdf_path = Path("fixtures/private/Lesson-5.pdf")
+    # Use public synthetic fixtures
+    pdf_path = Path("tests/fixtures/pdf/generated_ascii_tab_scoreir_gate.pdf")
+    musicxml_path = Path("tests/fixtures/musicxml/ascii_scoreir_gate_simple.musicxml")
 
     # Run the private E2E runner for this input targeting the temp directory
     summary = run_pipeline_for_input(
         pdf_path=pdf_path,
-        musicxml_path=None,
+        musicxml_path=musicxml_path,
         output_base=tmp_path,
     )
 
     # Assert expected metadata keys exist and are safe
-    assert summary["input_label"] == "private_input_custom_lesson_5"
+    assert summary["input_label"] == "private_input_custom"
+    assert summary["input_type_classification"] == "pdf-tab-musicxml"
     assert summary["page_count"] > 0
     assert summary["whether_text_extraction_succeeded"] is True
-    # Lesson-5 is apparently detected as an ascii tab or has ascii tab qualities
-    assert "whether_ascii_tab_detected" in summary
-    assert "whether_scoreir_written" in summary
+    assert summary["whether_ascii_tab_detected"] is True
+    assert summary["whether_scoreir_written"] is False
+    assert summary["whether_gp_written"] is False
+    assert summary["primary_failure_refusal_reason"] == "pdf_input_class_ascii_tab_requires_alignment"
+
+    # Redaction checks: verify no raw file path or title containing actual filenames exists in summary values
+    summary_str = str(summary)
+    assert "derek" not in summary_str.lower()
+    assert "bb king" not in summary_str.lower()
+    assert "caged" not in summary_str.lower()
+    assert str(pdf_path.name) not in summary_str
 
     # Candidate counts checks
     counts = summary["candidate_counts"]
     assert counts["total_candidates"] > 0
     assert counts["playable_candidates"] > 0
+    assert counts["non_playable_candidates"] >= 0
 
     # Ensure output files were written under correct subdirectory
-    out_dir = tmp_path / "private_input_custom_lesson_5"
+    out_dir = tmp_path / "private_input_custom"
     assert out_dir.exists()
+    assert (out_dir / "extracted.tabraw.json").exists()
+    assert (out_dir / "build_error.json").exists()
+    assert not (out_dir / "score.ir.json").exists()
+    assert not (out_dir / "diagnostics.json").exists()
+    assert not (out_dir / "smoke.gp").exists()
 
 
 def test_private_smoke_cli(tmp_path, monkeypatch) -> None:
     from private_e2e_smoke import main
 
-    pdf_path = Path("fixtures/private/Lesson-5.pdf")
+    pdf_path = Path("tests/fixtures/pdf/generated_ascii_tab_scoreir_gate.pdf")
+    musicxml_path = Path("tests/fixtures/musicxml/ascii_scoreir_gate_simple.musicxml")
 
     # Mock command line arguments
     monkeypatch.setattr(
@@ -76,6 +91,8 @@ def test_private_smoke_cli(tmp_path, monkeypatch) -> None:
             "private_e2e_smoke.py",
             "--pdf",
             str(pdf_path),
+            "--musicxml",
+            str(musicxml_path),
             "--out",
             str(tmp_path),
         ],
@@ -91,12 +108,35 @@ def test_private_smoke_cli(tmp_path, monkeypatch) -> None:
     assert master_md.exists()
 
     # Check that individual output files exist as well
-    out_dir = tmp_path / "private_input_custom_lesson_5"
+    out_dir = tmp_path / "private_input_custom"
     assert out_dir.exists()
+    assert (out_dir / "extracted.tabraw.json").exists()
+    assert (out_dir / "build_error.json").exists()
 
 
-@pytest.mark.skip(reason="Requires unrecoverable timing MusicXML sidecar (synthetic fixture deleted)")
 def test_private_smoke_unrecoverable_timing_artifacts(tmp_path) -> None:
-    pass
+    # Run the private E2E runner for an overfull timing MusicXML to trigger unrecoverable timing
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_valid_grouped_counterpart.pdf")
+    musicxml_path = Path("tests/fixtures/musicxml/timing_overfull_measure.musicxml")
+
+    summary = run_pipeline_for_input(
+        pdf_path=pdf_path,
+        musicxml_path=musicxml_path,
+        output_base=tmp_path,
+    )
+
+    assert summary["timing_status"] == "failed"
+    
+    # Verify that the unrecoverable reports exist on disk
+    out_dir = tmp_path / "private_input_custom"
+    assert (out_dir / "musicxml-unrecoverable-timing-report.json").exists()
+    assert (out_dir / "musicxml-unrecoverable-timing-report.html").exists()
+
+    # Verify that artifact paths include the report relative paths
+    artifact_paths = summary["artifact_paths"]
+    assert "musicxml_unrecoverable_timing_report_json" in artifact_paths
+    assert "musicxml_unrecoverable_timing_report_html" in artifact_paths
+    assert artifact_paths["musicxml_unrecoverable_timing_report_json"] == "private_input_custom/musicxml-unrecoverable-timing-report.json"
+    assert artifact_paths["musicxml_unrecoverable_timing_report_html"] == "private_input_custom/musicxml-unrecoverable-timing-report.html"
 
 

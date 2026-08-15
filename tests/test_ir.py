@@ -1,17 +1,9 @@
 from __future__ import annotations
-import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
 
 import json
 from pathlib import Path
 
-
 import pytest
-from pathlib import Path
-
-
-
 from pydantic import ValidationError
 
 from score2gp.ir import ScoreIR, export_scoreir_schema, validate_score_ir_file
@@ -46,7 +38,6 @@ def test_ir_rejects_unknown_track() -> None:
         ("impossible_guitar_pitch_high.ir.json", "physically playable pitch range of a standard guitar"),
     ],
 )
-@pytest.mark.skip(reason="Requires specifically invalid synthetic fixture")
 def test_invalid_ir_fixtures_fail_with_readable_messages(fixture_name: str, expected: str) -> None:
     _, errors = validate_score_ir_file(Path("fixtures/public/invalid") / fixture_name)
     joined = "\n".join(errors)
@@ -96,7 +87,7 @@ def test_defensive_preflight_sanitization_and_clamping() -> None:
         "pitch": 140  # clamp to 127
     })
     assert n.string == 12
-    assert True  # Removed hardcoded fret assertion
+    assert n.fret == 0
     assert n.pitch == 127
 
 

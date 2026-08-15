@@ -1,17 +1,9 @@
 from __future__ import annotations
-import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
 
 import json
 from pathlib import Path
 
-
 import pytest
-from pathlib import Path
-
-
-
 
 from score2gp.build_ir import BuildIrInputRiskError, build_ir_from_files
 from score2gp.ir import validate_score_ir_file
@@ -19,38 +11,38 @@ from score2gp.pdf import extract_tab, inspect_pdf
 from score2gp.tabraw import TabRaw
 from score2gp.report import grouping_status_for_tabraw
 
-GENERATED_PDF = _get_dynamic_private_pdf()
-GENERATED_MUSICXML = _get_dynamic_private_musicxml()
-SCORELIKE_PDF = _get_dynamic_private_pdf()
-SCORELIKE_MUSICXML = _get_dynamic_private_musicxml()
-UNEVEN_PDF = _get_dynamic_private_pdf()
-UNEVEN_MUSICXML = _get_dynamic_private_musicxml()
-UNSTRUCTURED_PDF = _get_dynamic_private_pdf()
-PARTIAL_MISSING_BARLINES_PDF = _get_dynamic_private_pdf()
-PARTIAL_INCOMPLETE_STAFF_PDF = _get_dynamic_private_pdf()
-PARTIAL_AMBIGUOUS_STRING_PDF = _get_dynamic_private_pdf()
-PARTIAL_AMBIGUOUS_BAR_PDF = _get_dynamic_private_pdf()
-ASCII_SIMPLE_PDF = _get_dynamic_private_pdf()
-ASCII_TECHNIQUES_PDF = _get_dynamic_private_pdf()
-ASCII_MALFORMED_PDF = _get_dynamic_private_pdf()
-ASCII_BARRED_PDF = _get_dynamic_private_pdf()
-ASCII_EQUAL_WIDTH_PDF = _get_dynamic_private_pdf()
-ASCII_UNEVEN_TIMING_PDF = _get_dynamic_private_pdf()
-ASCII_NO_BARS_PDF = _get_dynamic_private_pdf()
+GENERATED_PDF = Path("tests/fixtures/pdf/generated_tiny_tab.pdf")
+GENERATED_MUSICXML = Path("tests/fixtures/musicxml/generated_tiny_tab.musicxml")
+SCORELIKE_PDF = Path("tests/fixtures/pdf/generated_scorelike_tab.pdf")
+SCORELIKE_MUSICXML = Path("tests/fixtures/musicxml/generated_scorelike_tab.musicxml")
+UNEVEN_PDF = Path("tests/fixtures/pdf/generated_uneven_spacing_tab.pdf")
+UNEVEN_MUSICXML = Path("tests/fixtures/musicxml/generated_uneven_spacing_tab.musicxml")
+UNSTRUCTURED_PDF = Path("tests/fixtures/pdf/generated_unstructured_tab_text.pdf")
+PARTIAL_MISSING_BARLINES_PDF = Path("tests/fixtures/pdf/generated_partial_missing_barlines_tab.pdf")
+PARTIAL_INCOMPLETE_STAFF_PDF = Path("tests/fixtures/pdf/generated_partial_incomplete_staff_tab.pdf")
+PARTIAL_AMBIGUOUS_STRING_PDF = Path("tests/fixtures/pdf/generated_partial_ambiguous_string_tab.pdf")
+PARTIAL_AMBIGUOUS_BAR_PDF = Path("tests/fixtures/pdf/generated_partial_ambiguous_bar_tab.pdf")
+ASCII_SIMPLE_PDF = Path("tests/fixtures/pdf/generated_ascii_tab_simple.pdf")
+ASCII_TECHNIQUES_PDF = Path("tests/fixtures/pdf/generated_ascii_tab_techniques.pdf")
+ASCII_MALFORMED_PDF = Path("tests/fixtures/pdf/generated_ascii_tab_malformed.pdf")
+ASCII_BARRED_PDF = Path("tests/fixtures/pdf/generated_ascii_tab_barred.pdf")
+ASCII_EQUAL_WIDTH_PDF = Path("tests/fixtures/pdf/generated_ascii_tab_equal_width.pdf")
+ASCII_UNEVEN_TIMING_PDF = Path("tests/fixtures/pdf/generated_ascii_tab_uneven_timing.pdf")
+ASCII_NO_BARS_PDF = Path("tests/fixtures/pdf/generated_ascii_tab_no_bars.pdf")
 
-NEW_OUTSIDE_SYSTEM_PDF = _get_dynamic_private_pdf()
-NEW_OUTSIDE_BAR_PDF = _get_dynamic_private_pdf()
-NEW_MULTI_SYSTEM_PDF = _get_dynamic_private_pdf()
-NEW_CONFLICT_LAYOUT_PDF = _get_dynamic_private_pdf()
-NEW_PROSE_LEGEND_PDF = _get_dynamic_private_pdf()
+NEW_OUTSIDE_SYSTEM_PDF = Path("tests/fixtures/pdf/generated_pdf_candidate_outside_system.pdf")
+NEW_OUTSIDE_BAR_PDF = Path("tests/fixtures/pdf/generated_pdf_candidate_outside_bar.pdf")
+NEW_MULTI_SYSTEM_PDF = Path("tests/fixtures/pdf/generated_pdf_multi_system_order_ambiguous.pdf")
+NEW_CONFLICT_LAYOUT_PDF = Path("tests/fixtures/pdf/generated_pdf_ascii_and_drawn_layout_conflict.pdf")
+NEW_PROSE_LEGEND_PDF = Path("tests/fixtures/pdf/generated_pdf_prose_legend_text.pdf")
 
-NEW_TEXT_GEOM_NO_SYSTEM_PDF = _get_dynamic_private_pdf()
-NEW_TAB_CANDIDATES_NO_SYSTEM_PDF = _get_dynamic_private_pdf()
-NEW_LINES_FRAGMENTED_PDF = _get_dynamic_private_pdf()
-NEW_CANDIDATES_BETWEEN_SYSTEMS_PDF = _get_dynamic_private_pdf()
-NEW_CANDIDATES_UNASSIGNED_TO_STRING_PDF = _get_dynamic_private_pdf()
-NEW_ORDER_AMBIGUOUS_CLOSE_PDF = _get_dynamic_private_pdf()
-NEW_MIXED_PROSE_TAB_NUMBERS_PDF = _get_dynamic_private_pdf()
+NEW_TEXT_GEOM_NO_SYSTEM_PDF = Path("tests/fixtures/pdf/generated_pdf_text_geometry_present_but_no_safe_system.pdf")
+NEW_TAB_CANDIDATES_NO_SYSTEM_PDF = Path("tests/fixtures/pdf/generated_pdf_tab_candidates_present_but_system_not_detected.pdf")
+NEW_LINES_FRAGMENTED_PDF = Path("tests/fixtures/pdf/generated_pdf_tab_staff_lines_fragmented.pdf")
+NEW_CANDIDATES_BETWEEN_SYSTEMS_PDF = Path("tests/fixtures/pdf/generated_pdf_candidates_between_systems.pdf")
+NEW_CANDIDATES_UNASSIGNED_TO_STRING_PDF = Path("tests/fixtures/pdf/generated_pdf_candidates_unassigned_to_string.pdf")
+NEW_ORDER_AMBIGUOUS_CLOSE_PDF = Path("tests/fixtures/pdf/generated_pdf_system_order_ambiguous_close.pdf")
+NEW_MIXED_PROSE_TAB_NUMBERS_PDF = Path("tests/fixtures/pdf/generated_pdf_mixed_prose_tab_numbers.pdf")
 
 
 def test_pdf_inspection_reports_missing_pymupdf_or_empty_pdf(tmp_path) -> None:
@@ -483,7 +475,6 @@ def test_partial_pdf_ambiguous_bar_assignment_is_not_high_confidence(tmp_path) -
     assert sorted((tabraw_path.parent / "overlays").glob("*-grouping.png"))
 
 
-@pytest.mark.skip(reason="Requires specifically malformed synthetic fixture")
 def test_build_ir_refuses_unstructured_pdf_tabraw_before_scoreir_output(tmp_path) -> None:
     tabraw_path = tmp_path / "generated_unstructured_tab_text.tabraw.json"
     ir_path = tmp_path / "generated_unstructured_tab_text.ir.json"
@@ -511,7 +502,6 @@ def test_build_ir_refuses_unstructured_pdf_tabraw_before_scoreir_output(tmp_path
         (PARTIAL_AMBIGUOUS_BAR_PDF, "ambiguous_bar_assignment"),
     ],
 )
-@pytest.mark.skip(reason="Requires specifically malformed synthetic fixture")
 def test_build_ir_refuses_public_partial_grouping_fixtures(tmp_path, pdf_path: Path, expected_warning: str) -> None:
     tabraw_path = tmp_path / f"{pdf_path.stem}.tabraw.json"
     ir_path = tmp_path / f"{pdf_path.stem}.ir.json"
@@ -677,7 +667,6 @@ def test_malformed_ascii_tab_pdf_reports_partial_grouping(tmp_path) -> None:
     assert sorted((tabraw_path.parent / "overlays").glob("*-grouping.png"))
 
 
-@pytest.mark.skip(reason="Requires specifically malformed synthetic fixture")
 def test_build_ir_refuses_ascii_tab_without_timing_alignment(tmp_path) -> None:
     tabraw_path = tmp_path / "generated_ascii_tab_simple.tabraw.json"
     ir_path = tmp_path / "generated_ascii_tab_simple.ir.json"
@@ -695,7 +684,6 @@ def test_build_ir_refuses_ascii_tab_without_timing_alignment(tmp_path) -> None:
     assert payload["details"]["primary_reason_code"] == "pdf_input_class_ascii_tab_requires_alignment"
 
 
-@pytest.mark.skip(reason="Requires specifically malformed synthetic fixture")
 def test_build_ir_refuses_partial_ascii_tab_timing(tmp_path) -> None:
     tabraw_path = tmp_path / "generated_ascii_tab_barred.tabraw.json"
     ir_path = tmp_path / "generated_ascii_tab_barred.ir.json"
@@ -714,7 +702,6 @@ def test_build_ir_refuses_partial_ascii_tab_timing(tmp_path) -> None:
     assert payload["details"]["primary_reason_code"] == "pdf_input_class_ascii_tab_requires_alignment"
 
 
-@pytest.mark.skip(reason="Requires specifically malformed synthetic fixture")
 def test_build_ir_refuses_ambiguous_ascii_tab_timing(tmp_path) -> None:
     tabraw_path = tmp_path / "generated_ascii_tab_uneven_timing.tabraw.json"
     ir_path = tmp_path / "generated_ascii_tab_uneven_timing.ir.json"
@@ -731,7 +718,6 @@ def test_build_ir_refuses_ambiguous_ascii_tab_timing(tmp_path) -> None:
     assert payload["details"]["primary_reason_code"] == "pdf_input_class_ascii_tab_requires_alignment"
 
 
-@pytest.mark.skip(reason="Requires specifically malformed synthetic fixture")
 def test_build_ir_refuses_partial_ascii_tab_grouping(tmp_path) -> None:
     tabraw_path = tmp_path / "generated_ascii_tab_malformed.tabraw.json"
     ir_path = tmp_path / "generated_ascii_tab_malformed.ir.json"
@@ -1022,7 +1008,7 @@ def test_refined_overlapping_systems_diagnostics(tmp_path) -> None:
 
 
 def test_refined_vertical_overlap_resolved_diagnostics(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_vertical_overlap_resolved.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "vertical_overlap_resolved.tabraw.json"
     tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
@@ -1061,7 +1047,7 @@ def test_refined_vertical_overlap_resolved_diagnostics(tmp_path) -> None:
 
 
 def test_refined_ascii_three_blocks_no_bars_diagnostics(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_ascii_tab_three_blocks_no_bars.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "three_blocks.tabraw.json"
 
@@ -1100,7 +1086,7 @@ def test_refined_mixed_drawn_ascii_diagnostics(tmp_path) -> None:
 
 
 def test_refined_system_detected_no_bars_diagnostics(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_system_detected_no_barlines.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "no_barlines.tabraw.json"
 
@@ -1123,7 +1109,7 @@ def test_refined_system_detected_no_bars_diagnostics(tmp_path) -> None:
 
 
 def test_refined_valid_grouped_counterpart_diagnostics(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_valid_grouped_counterpart.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "valid_counterpart.tabraw.json"
 
@@ -1146,7 +1132,7 @@ def test_refined_valid_grouped_counterpart_diagnostics(tmp_path) -> None:
 
 
 def test_refined_barlines_do_not_cross_staff_diagnostics(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_barlines_do_not_cross_staff.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "do_not_cross.tabraw.json"
 
@@ -1167,7 +1153,7 @@ def test_refined_barlines_do_not_cross_staff_diagnostics(tmp_path) -> None:
 
 
 def test_refined_barlines_too_short_diagnostics(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_barlines_too_short.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "too_short.tabraw.json"
 
@@ -1188,7 +1174,7 @@ def test_refined_barlines_too_short_diagnostics(tmp_path) -> None:
 
 
 def test_refined_barlines_outside_bounds_diagnostics(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_barlines_outside_bounds.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "outside_bounds.tabraw.json"
 
@@ -1209,7 +1195,7 @@ def test_refined_barlines_outside_bounds_diagnostics(tmp_path) -> None:
 
 
 def test_refined_barlines_ambiguous_diagnostics(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_barlines_ambiguous.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "ambiguous.tabraw.json"
 
@@ -1230,7 +1216,7 @@ def test_refined_barlines_ambiguous_diagnostics(tmp_path) -> None:
 
 
 def test_refined_bar_boxes_not_constructible_diagnostics(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_bar_boxes_not_constructible.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "not_constructible.tabraw.json"
 
@@ -1251,7 +1237,6 @@ def test_refined_bar_boxes_not_constructible_diagnostics(tmp_path) -> None:
     assert report["primary_blocker_stage"] in ("none", "timing_alignment")
 
 
-@pytest.mark.skip(reason="Requires specifically malformed synthetic fixture")
 def test_build_ir_refuses_unsafe_bar_detection_cases(tmp_path) -> None:
     fixtures = [
         ("generated_pdf_system_detected_no_barlines.pdf", "pdf_bar_boxes_not_constructible"),
@@ -1284,7 +1269,7 @@ def test_build_ir_refuses_unsafe_bar_detection_cases(tmp_path) -> None:
 
 def test_refined_barline_validation_boundaries(tmp_path) -> None:
     # 1. compact barline crossing all string lines is accepted (below absolute threshold but crossing staff)
-    pdf1 = _get_dynamic_private_pdf()
+    pdf1 = Path("tests/fixtures/pdf/generated_pdf_barlines_below_threshold_crossing_staff.pdf")
     assert pdf1.exists()
     tabraw1 = TabRaw.model_validate(extract_tab(pdf1, tmp_path / "below_threshold_crossing_staff.tabraw.json"))
     # Confirms relative-height accepted fixture constructs bar boxes
@@ -1304,7 +1289,7 @@ def test_refined_barline_validation_boundaries(tmp_path) -> None:
     assert details1[0]["height"] >= 20.0
 
     # 2. compact barline crossing too few lines/partial staff is rejected
-    pdf2 = _get_dynamic_private_pdf()
+    pdf2 = Path("tests/fixtures/pdf/generated_pdf_barlines_below_threshold_crossing_partial_staff.pdf")
     tabraw2 = TabRaw.model_validate(extract_tab(pdf2, tmp_path / "below_threshold_crossing_partial_staff.tabraw.json"))
     warning_codes2 = {w["code"] for w in tabraw2.warnings}
     assert "pdf_barline_does_not_cross_staff" in warning_codes2
@@ -1315,7 +1300,7 @@ def test_refined_barline_validation_boundaries(tmp_path) -> None:
     assert details2[0]["final_decision"] == "rejected"
 
     # 3. tall barline outside staff region is rejected
-    pdf3 = _get_dynamic_private_pdf()
+    pdf3 = Path("tests/fixtures/pdf/generated_pdf_barlines_above_threshold_outside_staff_region.pdf")
     tabraw3 = TabRaw.model_validate(extract_tab(pdf3, tmp_path / "above_threshold_outside_staff_region.tabraw.json"))
     warning_codes3 = {w["code"] for w in tabraw3.warnings}
     assert "pdf_barline_outside_staff_region" in warning_codes3 or "pdf_barline_does_not_cross_staff" in warning_codes3
@@ -1326,7 +1311,7 @@ def test_refined_barline_validation_boundaries(tmp_path) -> None:
     assert details3[0]["final_decision"] == "rejected"
 
     # 4. barline crossing top/bottom strings but missing middle staff lines (insufficient gaps)
-    pdf4 = _get_dynamic_private_pdf()
+    pdf4 = Path("tests/fixtures/pdf/generated_pdf_barlines_crossing_top_bottom_missing_middle.pdf")
     tabraw4 = TabRaw.model_validate(extract_tab(pdf4, tmp_path / "crossing_top_bottom_missing_middle.tabraw.json"))
     warning_codes4 = {w["code"] for w in tabraw4.warnings}
     assert "pdf_bar_boxes_not_constructible" in warning_codes4
@@ -1336,7 +1321,7 @@ def test_refined_barline_validation_boundaries(tmp_path) -> None:
     assert details4[0]["final_decision"] == "rejected"
 
     # 5. barline crossing all gaps short absolute (compact spacing accepted)
-    pdf5 = _get_dynamic_private_pdf()
+    pdf5 = Path("tests/fixtures/pdf/generated_pdf_barlines_crossing_all_gaps_short_absolute.pdf")
     tabraw5 = TabRaw.model_validate(extract_tab(pdf5, tmp_path / "crossing_all_gaps_short_absolute.tabraw.json"))
     warning_codes5 = {w["code"] for w in tabraw5.warnings}
     assert "pdf_bar_boxes_constructed" in warning_codes5
@@ -1345,7 +1330,7 @@ def test_refined_barline_validation_boundaries(tmp_path) -> None:
     assert details5[0]["final_decision"] == "accepted"
 
     # 6. barline crossing only some gaps is rejected
-    pdf6 = _get_dynamic_private_pdf()
+    pdf6 = Path("tests/fixtures/pdf/generated_pdf_barlines_crossing_only_some_gaps.pdf")
     tabraw6 = TabRaw.model_validate(extract_tab(pdf6, tmp_path / "crossing_only_some_gaps.tabraw.json"))
     warning_codes6 = {w["code"] for w in tabraw6.warnings}
     assert "pdf_bar_boxes_not_constructible" in warning_codes6
@@ -1357,7 +1342,7 @@ def test_refined_barline_validation_boundaries(tmp_path) -> None:
 
 def test_refined_compact_barline_success_and_failures(tmp_path) -> None:
     # 7. Multiple compact valid barlines creating safe bar boxes -> grouped
-    pdf7 = _get_dynamic_private_pdf()
+    pdf7 = Path("tests/fixtures/pdf/generated_pdf_compact_barlines_safe_boxes.pdf")
     assert pdf7.exists()
     tabraw7 = TabRaw.model_validate(extract_tab(pdf7, tmp_path / "compact_safe_boxes.tabraw.json"))
     warning_codes7 = {w["code"] for w in tabraw7.warnings}
@@ -1367,7 +1352,7 @@ def test_refined_compact_barline_success_and_failures(tmp_path) -> None:
     assert "pdf_bar_box_construction_not_enough_for_build_ir" not in warning_codes7
 
     # 8. Compact valid barlines but candidate outside bars (barline validation succeeds, downstream bar assignment blocks)
-    pdf8 = _get_dynamic_private_pdf()
+    pdf8 = Path("tests/fixtures/pdf/generated_pdf_compact_barlines_candidate_outside.pdf")
     assert pdf8.exists()
     tabraw8 = TabRaw.model_validate(extract_tab(pdf8, tmp_path / "compact_candidate_outside.tabraw.json"))
     warning_codes8 = {w["code"] for w in tabraw8.warnings}
@@ -1400,7 +1385,7 @@ def test_refined_compact_barline_success_and_failures(tmp_path) -> None:
         assert expected_warning in payload["details"]["warning_codes"]
 
     # 10. valid counterpart passes build-ir
-    pdf_valid = _get_dynamic_private_pdf()
+    pdf_valid = Path("tests/fixtures/pdf/generated_pdf_compact_barlines_safe_boxes.pdf")
     tabraw_valid = tmp_path / "compact_valid.tabraw.json"
     ir_valid = tmp_path / "compact_valid.ir.json"
     extract_tab(pdf_valid, tabraw_valid)
@@ -1411,7 +1396,7 @@ def test_refined_compact_barline_success_and_failures(tmp_path) -> None:
 
 
 def test_synthetic_one_bar_box_constructed(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_one_bar_box.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "one_bar_box.tabraw.json"
     tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
@@ -1431,7 +1416,7 @@ def test_synthetic_one_bar_box_constructed(tmp_path) -> None:
 
 
 def test_synthetic_one_accepted_barline(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_one_accepted_barline.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "one_accepted_barline.tabraw.json"
     tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
@@ -1451,7 +1436,7 @@ def test_synthetic_one_accepted_barline(tmp_path) -> None:
 
 
 def test_synthetic_bar_box_too_narrow(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_bar_box_too_narrow.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "bar_box_too_narrow.tabraw.json"
     tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
@@ -1487,7 +1472,7 @@ def test_tab_system_overlaps_neighbor() -> None:
 
 
 def test_synthetic_bar_box_outside_system(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_bar_box_outside_system.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "bar_box_outside.tabraw.json"
     tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
@@ -1507,7 +1492,7 @@ def test_synthetic_bar_box_outside_system(tmp_path) -> None:
 
 
 def test_synthetic_candidate_left_of_boxes(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_candidate_left_of_boxes.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "left_of_boxes.tabraw.json"
     tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
@@ -1516,7 +1501,7 @@ def test_synthetic_candidate_left_of_boxes(tmp_path) -> None:
 
 
 def test_synthetic_candidate_on_boundary(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_candidate_on_boundary.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "on_boundary.tabraw.json"
     tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
@@ -1527,7 +1512,7 @@ def test_synthetic_candidate_on_boundary(tmp_path) -> None:
 
 
 def test_synthetic_multi_system_one_failed(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_multi_system_one_failed.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "multi_failed.tabraw.json"
     tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
@@ -1547,7 +1532,7 @@ def test_synthetic_multi_system_one_failed(tmp_path) -> None:
 
 
 def test_synthetic_multi_system_all_valid(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_multi_system_all_valid.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "multi_all_valid.tabraw.json"
     tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
@@ -1567,7 +1552,7 @@ def test_synthetic_multi_system_all_valid(tmp_path) -> None:
 
 
 def test_synthetic_empty_system_policy(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_empty_system_policy.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "empty_policy.tabraw.json"
     tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
@@ -1589,7 +1574,7 @@ def test_synthetic_empty_system_policy(tmp_path) -> None:
 
 
 def test_synthetic_one_accepted_one_rejected(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_one_accepted_one_rejected.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "one_acc_one_rej.tabraw.json"
     tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
@@ -1610,7 +1595,7 @@ def test_synthetic_one_accepted_one_rejected(tmp_path) -> None:
 
 
 def test_synthetic_two_short_barlines(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_two_short_barlines.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "two_short.tabraw.json"
     tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
@@ -1631,7 +1616,6 @@ def test_synthetic_two_short_barlines(tmp_path) -> None:
     assert report["primary_blocker_stage"] == "bar_detection"
 
 
-@pytest.mark.skip(reason="Requires specifically malformed synthetic fixture")
 def test_build_ir_refuses_bar_box_construction_failures(tmp_path) -> None:
     unsafe_fixtures = [
         ("generated_pdf_bar_box_too_narrow.pdf", "pdf_bar_box_too_narrow"),
@@ -1659,7 +1643,7 @@ def test_build_ir_refuses_bar_box_construction_failures(tmp_path) -> None:
 
 
 def test_synthetic_edge_left_fallback(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_edge_left_fallback.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "edge_left_fallback.tabraw.json"
     tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
@@ -1702,7 +1686,7 @@ def test_synthetic_edge_left_fallback(tmp_path) -> None:
 
 
 def test_synthetic_edge_right_fallback(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_edge_right_fallback.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "edge_right_fallback.tabraw.json"
     tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
@@ -1712,7 +1696,7 @@ def test_synthetic_edge_right_fallback(tmp_path) -> None:
 
 
 def test_synthetic_edge_ambiguous_fallback(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_edge_ambiguous_fallback.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "edge_ambig.tabraw.json"
     tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
@@ -1723,7 +1707,7 @@ def test_synthetic_edge_ambiguous_fallback(tmp_path) -> None:
 
 
 def test_synthetic_edge_too_narrow_fallback(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_edge_too_narrow_fallback.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "too_narrow.tabraw.json"
     tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
@@ -1733,7 +1717,7 @@ def test_synthetic_edge_too_narrow_fallback(tmp_path) -> None:
 
 
 def test_synthetic_edge_candidate_near_inferred(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_edge_candidate_near_inferred.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "near_inferred.tabraw.json"
     tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
@@ -1743,7 +1727,7 @@ def test_synthetic_edge_candidate_near_inferred(tmp_path) -> None:
 
 
 def test_synthetic_multi_system_safe_fallback(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_multi_system_safe_fallback.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "multi_safe.tabraw.json"
     tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
@@ -1754,7 +1738,7 @@ def test_synthetic_multi_system_safe_fallback(tmp_path) -> None:
 
 
 def test_synthetic_multi_system_partial_fallback(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_multi_system_partial_fallback.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "multi_partial.tabraw.json"
     tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
@@ -1764,7 +1748,7 @@ def test_synthetic_multi_system_partial_fallback(tmp_path) -> None:
 
 
 def test_synthetic_next_blocker_string_assignment(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_next_blocker_string_assignment.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "next_blocker.tabraw.json"
     tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
@@ -1773,7 +1757,7 @@ def test_synthetic_next_blocker_string_assignment(tmp_path) -> None:
 
 
 def test_synthetic_empty_system_policy_fallback(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_empty_system_policy_fallback.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "empty_policy.tabraw.json"
     tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
@@ -1783,7 +1767,7 @@ def test_synthetic_empty_system_policy_fallback(tmp_path) -> None:
 
 
 def test_build_ir_allows_safe_fallback_fixture(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_edge_left_fallback.pdf")
     tabraw_path = tmp_path / "safe.tabraw.json"
     ir_path = tmp_path / "safe.ir.json"
 
@@ -1793,7 +1777,7 @@ def test_build_ir_allows_safe_fallback_fixture(tmp_path) -> None:
 
 
 def test_pdf_edge_boundary_report(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_edge_ambiguous_fallback.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "edge_ambig.tabraw.json"
 
@@ -2101,7 +2085,6 @@ def test_pdf_fret_grouped_success(tmp_path) -> None:
     assert grouping_status_for_tabraw(raw.model_dump(mode="json")) == "grouped"
 
 
-@pytest.mark.skip(reason="Requires specifically malformed synthetic fixture")
 def test_build_ir_refuses_fret_refinement_blockers(tmp_path) -> None:
     assert PDF_FRET_GAP_TOO_LARGE.exists()
     tabraw_path = tmp_path / "fret_gap_refuse.tabraw.json"
@@ -2118,7 +2101,6 @@ def test_build_ir_refuses_fret_refinement_blockers(tmp_path) -> None:
     assert "pdf_fret_digits_not_merged_gap_too_large" in payload["details"]["warning_codes"]
 
 
-@pytest.mark.skip(reason="Requires specifically malformed synthetic fixture")
 def test_build_ir_does_not_refuse_excluded_non_playable_without_string_bar(tmp_path) -> None:
     assert PDF_FRET_PAGE_LEGEND_EXCLUDED.exists()
     tabraw_path = tmp_path / "fret_legend_pass.tabraw.json"
@@ -2150,7 +2132,6 @@ def test_pdf_fret_overlapping_digits_ambiguous(tmp_path) -> None:
     assert "pdf_fret_refinement_not_enough_for_build_ir" in warning_codes
 
 
-@pytest.mark.skip(reason="Requires specifically malformed synthetic fixture")
 def test_build_ir_refuses_overlapping_digits_ambiguous(tmp_path) -> None:
     assert PDF_FRET_OVERLAPPING_DIGITS_AMBIGUOUS.exists()
     tabraw_path = tmp_path / "fret_overlapping_ambig_refuse.tabraw.json"
@@ -2394,7 +2375,6 @@ def test_pdf_tuning_timing_unimplemented(tmp_path) -> None:
     assert report["candidate_classifications"]["non_playable_tuning_text"] > 0
 
 
-@pytest.mark.skip(reason="Requires specifically malformed synthetic fixture")
 def test_build_ir_refuses_tuning_blockers(tmp_path) -> None:
     assert PDF_TUNING_CONFLICT.exists()
     tabraw_path = tmp_path / "tuning_refuse.tabraw.json"
@@ -2447,7 +2427,6 @@ def test_pdf_fret_ligature_overlapping_ambiguous(tmp_path) -> None:
     assert all(c.confidence < 0.70 for c in fret_candidates)
 
 
-@pytest.mark.skip(reason="Requires specifically malformed synthetic fixture")
 def test_build_ir_refuses_ligature_overlapping_ambiguous(tmp_path) -> None:
     pdf_path = Path(__file__).parent / "fixtures" / "pdf" / "generated_pdf_fret_ligature_overlapping_ambiguous.pdf"
     tabraw_path = tmp_path / "fret_ligature_refuse.tabraw.json"
@@ -2568,9 +2547,8 @@ def test_synthetic_unboxed_system_skipper(tmp_path) -> None:
     assert any(w.code == "pdf_unboxed_system_skipped" for w in score.warnings)
 
 
-@pytest.mark.skip(reason="Requires specifically malformed synthetic fixture")
 def test_pdf_system_overlap_same_column_refused(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_system_overlap_same_column.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "same_column.tabraw.json"
     ir_path = tmp_path / "same_column.ir.json"
@@ -2587,9 +2565,8 @@ def test_pdf_system_overlap_same_column_refused(tmp_path) -> None:
     assert "pdf_system_order_ambiguous" in payload["details"]["tabraw_warning_codes"] or "pdf_multi_system_order_ambiguous" in payload["details"]["tabraw_warning_codes"]
 
 
-@pytest.mark.skip(reason="Requires specifically malformed synthetic fixture")
 def test_pdf_system_overlap_ambiguous_bbox_refused(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_system_overlap_ambiguous_bbox.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "ambiguous_bbox.tabraw.json"
     ir_path = tmp_path / "ambiguous_bbox.ir.json"
@@ -2607,7 +2584,7 @@ def test_pdf_system_overlap_ambiguous_bbox_refused(tmp_path) -> None:
 
 
 def test_pdf_system_overlap_dense_adjacent_safely_ordered(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_system_overlap_dense_adjacent.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "dense_adjacent.tabraw.json"
     ir_path = tmp_path / "dense_adjacent.ir.json"
@@ -2626,7 +2603,7 @@ def test_pdf_system_overlap_dense_adjacent_safely_ordered(tmp_path) -> None:
 
 
 def test_pdf_system_overlap_safe_counterpart_safely_ordered(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_system_overlap_safe_counterpart.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "safe_counterpart.tabraw.json"
     ir_path = tmp_path / "safe_counterpart.ir.json"
@@ -2645,7 +2622,7 @@ def test_pdf_system_overlap_safe_counterpart_safely_ordered(tmp_path) -> None:
 
 
 def test_pdf_dense_string_assignment_safe(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_dense_string_assignment_safe.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "dense_string_safe.tabraw.json"
     ir_path = tmp_path / "dense_string_safe.ir.json"
@@ -2665,7 +2642,7 @@ def test_pdf_dense_string_assignment_safe(tmp_path) -> None:
 
 
 def test_pdf_dense_string_assignment_ambiguous(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_dense_string_assignment_ambiguous.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "dense_string_ambig.tabraw.json"
     ir_path = tmp_path / "dense_string_ambig.ir.json"
@@ -2685,7 +2662,7 @@ def test_pdf_dense_string_assignment_ambiguous(tmp_path) -> None:
 
 
 def test_pdf_multi_column_layout_safe(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_multi_column_layout.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "multi_column.tabraw.json"
     ir_path = tmp_path / "multi_column.ir.json"
@@ -2731,7 +2708,7 @@ def test_pdf_multi_column_layout_safe(tmp_path) -> None:
 
 
 def test_edge_candidate_snapping(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_edge_candidate_snapping.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "edge_snap.tabraw.json"
 
@@ -2766,7 +2743,7 @@ def test_edge_candidate_snapping(tmp_path) -> None:
 
 def test_paired_notation_tab_grid_merging_and_filtering(tmp_path) -> None:
     # 1. Load the compiled public paired notation+TAB PDF
-    paired_pdf = _get_dynamic_private_pdf()
+    paired_pdf = Path("tests/fixtures/pdf/generated_paired_notation_tab_system.pdf")
     assert paired_pdf.exists()
     tabraw_path_paired = tmp_path / "paired.tabraw.json"
     tabraw_paired = TabRaw.model_validate(extract_tab(paired_pdf, tabraw_path_paired))
@@ -2802,7 +2779,7 @@ def test_paired_notation_tab_grid_merging_and_filtering(tmp_path) -> None:
     assert playable[2].bar_index == 2
 
     # 2. Load the compiled ambiguous damaged PDF
-    amb_pdf = _get_dynamic_private_pdf()
+    amb_pdf = Path("tests/fixtures/pdf/generated_paired_notation_tab_system_ambiguous.pdf")
     assert amb_pdf.exists()
     tabraw_path_amb = tmp_path / "ambiguous.tabraw.json"
     tabraw_amb = TabRaw.model_validate(extract_tab(amb_pdf, tabraw_path_amb))
@@ -2872,8 +2849,8 @@ def test_merge_collinear_horizontal_segments_direct() -> None:
     merged = merge_collinear_horizontal_segments(segments)
     merged_y_166 = [s for s in merged if abs((s.y0+s.y1)/2 - 166.8) < 0.1]
     assert len(merged_y_166) == 1
-    assert True  # Removed hardcoded geometry assertion
-    assert True  # Removed hardcoded geometry assertion
+    assert merged_y_166[0].x0 == 36.0
+    assert merged_y_166[0].x1 == 575.0
 
     # 2. Unrelated columns/systems do not merge (no continuous neighbor across the gap)
     segments_cols = [
@@ -2923,7 +2900,7 @@ def test_filter_tab_barline_candidates_direct() -> None:
 
 def test_paired_tab_row_fragmentation_merging(tmp_path) -> None:
     # 1. Load the compiled public row fragmentation PDF
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_paired_tab_row_fragmentation.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "fragmentation.tabraw.json"
     tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
@@ -2971,12 +2948,12 @@ def test_merge_collinear_horizontal_segments_row_fragmentation_direct() -> None:
     # They should all merge successfully since they form a matching collinear split staff row of 6 parallel lines
     assert len(merged) == 6
     for line in merged:
-        assert True  # Removed hardcoded geometry assertion
-        assert True  # Removed hardcoded geometry assertion
+        assert line.x0 == 36.0
+        assert line.x1 == 575.0
 
 
 def test_double_barline_ambiguity_resolution(tmp_path) -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_paired_notation_tab_system_double_barline.pdf")
     assert pdf_path.exists()
     tabraw_path = tmp_path / "double_barline.tabraw.json"
     tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
@@ -3040,8 +3017,8 @@ def test_fragmented_staff_line_merging_wide_gap_positive() -> None:
     y_166_lines = [s for s in merged if abs((s.y0 + s.y1)/2 - 166.8) < 0.1]
     # They should merge
     assert len(y_166_lines) == 1
-    assert True  # Removed hardcoded geometry assertion
-    assert True  # Removed hardcoded geometry assertion
+    assert y_166_lines[0].x0 == 36.0
+    assert y_166_lines[0].x1 == 575.0
 
 
 def test_fragmented_staff_line_merging_wide_gap_negative_one_neighbor() -> None:
@@ -3086,8 +3063,8 @@ def test_fragmented_staff_line_merging_regression_close_gap() -> None:
     y_166_lines = [s for s in merged if abs((s.y0 + s.y1)/2 - 166.8) < 0.1]
     # Should merge
     assert len(y_166_lines) == 1
-    assert True  # Removed hardcoded geometry assertion
-    assert True  # Removed hardcoded geometry assertion
+    assert y_166_lines[0].x0 == 36.0
+    assert y_166_lines[0].x1 == 575.0
 
 
 def test_notation_to_tab_barline_inheritance_filter() -> None:
@@ -3422,14 +3399,14 @@ def test_page_continuous_measure_indexing_and_cumulative_offsets() -> None:
     systems_p1 = _detect_tab_systems(page1, page_index=1, first_bar_index=1, cumulative_y_offset=0.0)
     assert len(systems_p1) == 1
     assert systems_p1[0].first_bar_index == 1
-    assert True  # Removed hardcoded geometry assertion
+    assert systems_p1[0].line_ys[0] == 100.0
 
     # Page 2: system starting at bar 3 (after Page 1's 2 measures) with cumulative Y offset 500.0
     page2 = MockPage(make_mock_drawings(100.0))
     systems_p2 = _detect_tab_systems(page2, page_index=2, first_bar_index=3, cumulative_y_offset=500.0)
     assert len(systems_p2) == 1
     assert systems_p2[0].first_bar_index == 3
-    assert True  # Removed hardcoded geometry assertion  # 100.0 + 500.0
+    assert systems_p2[0].line_ys[0] == 600.0  # 100.0 + 500.0
 
     # Real fixture check if available
     lesson5_path = Path("fixtures/private/Lesson-5.pdf")

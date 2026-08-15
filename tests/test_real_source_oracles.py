@@ -1,18 +1,8 @@
 from __future__ import annotations
-import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
 
 import sys
 from pathlib import Path
 import pytest
-
-import pytest
-from pathlib import Path
-import pytest
-
-
-
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
@@ -22,8 +12,8 @@ from private_e2e_smoke import run_pipeline_for_input, anonymize_name
 
 def test_process_level_reference_isolation(tmp_path) -> None:
     """Verify that private_e2e_smoke does not pass reference .gp template into write_gp during generation."""
-    pdf_path = _get_dynamic_private_pdf()
-    musicxml_path = _get_dynamic_private_musicxml()
+    pdf_path = Path("tests/fixtures/pdf/generated_ascii_tab_scoreir_gate.pdf")
+    musicxml_path = Path("tests/fixtures/musicxml/ascii_scoreir_gate_simple.musicxml")
 
     # Run private_e2e_smoke pipeline
     summary = run_pipeline_for_input(
@@ -51,5 +41,5 @@ def test_real_source_oracle_contract() -> None:
     private_dir = PROJECT_ROOT / "fixtures" / "private"
     lesson5_pdf = private_dir / "Lesson-5.pdf"
 
-    if not lesson5_pdf.exists():
-        pytest.skip("Private fixtures not mounted")
+
+    assert lesson5_pdf.exists()

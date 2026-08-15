@@ -1,0 +1,46 @@
+{
+  "path": "tests\\fixtures\\pdf\\generated_unboxed_system_tab.pdf",
+  "page_count": 1,
+  "kind": "born-digital",
+  "pages": [
+    {
+      "page": 1,
+      "width": 420.0,
+      "height": 320.0,
+      "text_block_count": 3,
+      "drawing_count": 6,
+      "image_count": 0,
+      "rendered_image": "tests\\fixtures\\pdf\\inspect\\pages\\page-001.png",
+      "text_blocks": [
+        {
+          "bbox": [
+            72.0,
+            59.099998474121094,
+            217.37997436523438,
+            75.58799743652344
+          ],
+          "text": "Unboxed System Recovery"
+        },
+        {
+          "bbox": [
+            120.0,
+            113.68000030517578,
+            126.0,
+            126.16999816894531
+          ],
+          "text": "3"
+        },
+        {
+          "bbox": [
+            240.0,
+            127.68000030517578,
+            246.0,
+            140.1699981689453
+          ],
+          "text": "5"
+        }
+      ]
+    }
+  ],
+  "warnings": []
+}

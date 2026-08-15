@@ -1,22 +1,16 @@
 from __future__ import annotations
-import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
 
 import json
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from score2gp.private_diagnostics import SUMMARY_SCHEMA_VERSION, run_private_diagnostic_smoke
-import pytest
 
 
-
-
-SCORELIKE_PDF = _get_dynamic_private_pdf()
-SCORELIKE_MUSICXML = _get_dynamic_private_musicxml()
-OVERFULL_MUSICXML = _get_dynamic_private_musicxml()
-UNSTRUCTURED_PDF = _get_dynamic_private_pdf()
+SCORELIKE_PDF = Path("tests/fixtures/pdf/generated_scorelike_tab.pdf")
+SCORELIKE_MUSICXML = Path("tests/fixtures/musicxml/generated_scorelike_tab.musicxml")
+OVERFULL_MUSICXML = Path("tests/fixtures/musicxml/audiveris_like_overfull_bar.musicxml")
+UNSTRUCTURED_PDF = Path("tests/fixtures/pdf/generated_unstructured_tab_text.pdf")
 
 
 def _write_public_mxl(tmp_path: Path, source: Path) -> Path:

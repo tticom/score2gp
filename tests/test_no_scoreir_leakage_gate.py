@@ -1,6 +1,3 @@
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
-import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
 import json
 import subprocess
 import sys
@@ -17,8 +14,8 @@ def _get_subprocess_env():
 
 def test_candidate_gate_isolation(tmp_path):
     # Public fixtures
-    pdf_path = _get_dynamic_private_pdf()
-    musicxml_path = _get_dynamic_private_musicxml()
+    pdf_path = Path("tests/fixtures/pdf/generated_tiny_tab.pdf")
+    musicxml_path = Path("tests/fixtures/musicxml/generated_tiny_tab.musicxml")
     assert pdf_path.exists()
     assert musicxml_path.exists()
 
@@ -84,7 +81,7 @@ def test_scoreir_identical_regardless_of_diagnostics(tmp_path):
     from score2gp.build_ir import build_ir_from_files
     from score2gp.ir import validate_score_ir_file
 
-    musicxml_path = _get_dynamic_private_musicxml()
+    musicxml_path = Path("tests/fixtures/musicxml/tiny_single_bar.musicxml")
     tabraw_path = Path("tests/fixtures/tabraw/tiny_single_bar_tabraw.json")
     assert musicxml_path.exists()
     assert tabraw_path.exists()

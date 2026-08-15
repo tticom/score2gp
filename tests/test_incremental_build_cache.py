@@ -1,8 +1,4 @@
 from __future__ import annotations
-import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
-import pytest
 
 import json
 import shutil
@@ -41,10 +37,9 @@ def test_incremental_build_cache_flow(tmp_path) -> None:
         assert Path(res["output_path"]).exists()
 
 
-@pytest.mark.skip(reason="Requires specifically invalid synthetic fixture")
 def test_cache_invalidation_on_config_change(tmp_path) -> None:
     # Build custom temp payload
-    musicxml_src = _get_dynamic_private_musicxml()
+    musicxml_src = Path("tests/fixtures/musicxml/tiny_single_bar.musicxml")
     tabraw_src = Path("tests/fixtures/tabraw/tiny_single_bar_tabraw.json")
     
     musicxml_temp = tmp_path / "test.musicxml"
@@ -81,9 +76,8 @@ def test_cache_invalidation_on_config_change(tmp_path) -> None:
     assert res3["cache_hit_count"] == 0
 
 
-@pytest.mark.skip(reason="Requires specifically invalid synthetic fixture")
 def test_cache_invalidation_on_file_content_change(tmp_path) -> None:
-    musicxml_src = _get_dynamic_private_musicxml()
+    musicxml_src = Path("tests/fixtures/musicxml/tiny_single_bar.musicxml")
     tabraw_src = Path("tests/fixtures/tabraw/tiny_single_bar_tabraw.json")
     
     musicxml_temp = tmp_path / "test_file.musicxml"
@@ -117,7 +111,6 @@ def test_cache_invalidation_on_file_content_change(tmp_path) -> None:
     assert res2["cache_hit_count"] == 0
 
 
-@pytest.mark.skip(reason="Requires specifically invalid synthetic fixture")
 def test_cache_invalidation_on_missing_artifact(tmp_path) -> None:
     manifest_path = Path("fixtures/public/test_cache_execution_manifest.json")
     workdir = tmp_path / "cache_work_artifact"

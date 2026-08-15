@@ -1,19 +1,11 @@
 from __future__ import annotations
-import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
 
 import json
 import zipfile
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
-
 import pytest
-from pathlib import Path
-
-
-
 
 from score2gp.ascii_alignment import align_ascii_musicxml_files
 from score2gp.build_ir import build_ir_from_files
@@ -21,8 +13,8 @@ from score2gp.gp_package import inspect_gp, validate_gp, write_gp
 from score2gp.ir import validate_score_ir_file
 from score2gp.pdf import extract_tab
 
-ASCII_GATE_PDF = _get_dynamic_private_pdf()
-ASCII_GATE_MUSICXML = _get_dynamic_private_musicxml()
+ASCII_GATE_PDF = Path("tests/fixtures/pdf/generated_ascii_tab_scoreir_gate.pdf")
+ASCII_GATE_MUSICXML = Path("tests/fixtures/musicxml/ascii_scoreir_gate_simple.musicxml")
 
 
 def test_public_e2e_pdf_to_gp_smoke_proof(tmp_path) -> None:

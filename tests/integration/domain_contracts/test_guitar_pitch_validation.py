@@ -1,6 +1,4 @@
 import pytest
-import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
 from pathlib import Path
 from score2gp.ir import validate_score_ir_file
 

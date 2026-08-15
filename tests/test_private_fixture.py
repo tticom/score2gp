@@ -8,13 +8,11 @@ from score2gp.gp_package import inspect_gp
 PRIVATE_GP = Path("fixtures/private/Derek Trucks BB King.gp")
 
 
-import pytest
 def test_private_gp_fixture_inspects() -> None:
-    if not PRIVATE_GP.is_file():
-        pytest.skip(
-            "mandatory real-source corpus is unavailable; CI must mount "
-            "score2gp-private-fixtures before running tests"
-        )
+    assert PRIVATE_GP.is_file(), (
+        "mandatory real-source corpus is unavailable; CI must mount "
+        "score2gp-private-fixtures before running tests"
+    )
     summary = inspect_gp(PRIVATE_GP)
     assert summary["package"]["is_zip"] is True
     assert summary["package"]["xml_well_formed"] is True

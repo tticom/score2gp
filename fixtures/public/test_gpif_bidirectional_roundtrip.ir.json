@@ -1,0 +1,234 @@
+{
+  "schema_version": "0.1.0",
+  "metadata": {
+    "title": "Bidirectional Roundtrip Symmetrical Test",
+    "artist": "Roundtrip Artist",
+    "composer": "Roundtrip Composer",
+    "transcriber": "score2gp",
+    "copyright": "Roundtrip Copyright"
+  },
+  "conversion": {
+    "tool_name": "score2gp",
+    "tool_version": "0.1.0",
+    "conversion_timestamp": "2026-05-26T00:00:00Z",
+    "source_file_hash": "sha256:test-roundtrip",
+    "source_page_count": 1
+  },
+  "tempo": {
+    "bpm": 140,
+    "text": "Allegro"
+  },
+  "layout": {
+    "page_setup": {
+      "width": 210.0,
+      "height": 297.0,
+      "margins": {
+        "top": 20.0,
+        "bottom": 20.0,
+        "left": 20.0,
+        "right": 20.0
+      },
+      "scale": 1.1
+    },
+    "track_order": ["vln-1", "gt-1"],
+    "score_systems_layout": 3,
+    "master_mixer": {
+      "volume": 0.85,
+      "pan": 0.1,
+      "reverb": 20.0,
+      "chorus": 10.0
+    },
+    "preset_cascade": {
+      "preset_name": "symphonic_room",
+      "target_engine": "gp7",
+      "options": {
+        "depth": 80,
+        "pre_delay": 20
+      }
+    }
+  },
+  "tracks": [
+    {
+      "id": "vln-1",
+      "name": "Violin",
+      "instrument": "violin",
+      "capo": 0,
+      "tablature_enabled": false,
+      "staff_count": 1,
+      "tuning": {
+        "name": "Violin Tuning",
+        "strings": [
+          { "number": 1, "pitch": 76, "name": "E5" },
+          { "number": 2, "pitch": 69, "name": "A4" },
+          { "number": 3, "pitch": 62, "name": "D4" },
+          { "number": 4, "pitch": 55, "name": "G3" }
+        ]
+      },
+      "mixer": {
+        "volume": 0.9,
+        "pan": -0.4,
+        "mute": false,
+        "solo": true
+      },
+      "color": "#FF0000",
+      "expressions": [
+        {
+          "bar_index": 1,
+          "text": "pizzicato"
+        }
+      ],
+      "layout_preferences": {
+        "tab_only": false,
+        "stem_direction": "up",
+        "line_sizing": "small",
+        "view_mode": "page",
+        "brackets_visible": true,
+        "stems_visible": true,
+        "line_sizing_per_system": "standard"
+      }
+    },
+    {
+      "id": "gt-1",
+      "name": "Guitar",
+      "instrument": "guitar",
+      "capo": 2,
+      "tablature_enabled": true,
+      "staff_count": 1,
+      "tuning": {
+        "name": "Standard Guitar Tuning",
+        "strings": [
+          { "number": 1, "pitch": 64, "name": "E4", "volume_offset": -1.5, "fine_tune": 0.5 },
+          { "number": 2, "pitch": 59, "name": "B3", "volume_offset": -1.0, "fine_tune": 0.0 },
+          { "number": 3, "pitch": 55, "name": "G3", "volume_offset": 0.0, "fine_tune": -0.2 },
+          { "number": 4, "pitch": 50, "name": "D3", "volume_offset": 0.0, "fine_tune": 0.0 },
+          { "number": 5, "pitch": 45, "name": "A2", "volume_offset": 0.5, "fine_tune": 0.1 },
+          { "number": 6, "pitch": 40, "name": "E2", "volume_offset": 1.0, "fine_tune": 0.2 }
+        ]
+      },
+      "mixer": {
+        "volume": 0.8,
+        "pan": 0.3,
+        "mute": false,
+        "solo": false
+      },
+      "color": "#0000FF",
+      "automations": [
+        {
+          "type": "Volume",
+          "bar_index": 1,
+          "value": 0.75
+        },
+        {
+          "type": "Pan",
+          "bar_index": 2,
+          "value": 0.2
+        }
+      ]
+    }
+  ],
+  "bars": [
+    {
+      "index": 1,
+      "time_signature": {
+        "numerator": 4,
+        "denominator": 4
+      },
+      "events": [
+        {
+          "id": "e1",
+          "track_id": "vln-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 0,
+            "duration_ticks": 1920,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "half", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 3,
+              "fret": 2,
+              "pitch": 64,
+              "confidence": 1.0
+            }
+          ],
+          "confidence": 1.0
+        },
+        {
+          "id": "e2",
+          "track_id": "gt-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 0,
+            "duration_ticks": 1920,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "half", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 3,
+              "fret": 2,
+              "pitch": 57,
+              "confidence": 1.0
+            }
+          ],
+          "confidence": 1.0
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "time_signature": {
+        "numerator": 4,
+        "denominator": 4
+      },
+      "events": [
+        {
+          "id": "e3",
+          "track_id": "vln-1",
+          "timing": {
+            "bar_index": 2,
+            "onset_ticks": 0,
+            "duration_ticks": 1920,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "half", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 3,
+              "fret": 4,
+              "pitch": 66,
+              "confidence": 1.0
+            }
+          ],
+          "confidence": 1.0
+        },
+        {
+          "id": "e4",
+          "track_id": "gt-1",
+          "timing": {
+            "bar_index": 2,
+            "onset_ticks": 0,
+            "duration_ticks": 1920,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "half", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 3,
+              "fret": 4,
+              "pitch": 59,
+              "confidence": 1.0
+            }
+          ],
+          "confidence": 1.0
+        }
+      ]
+    }
+  ],
+  "warnings": []
+}

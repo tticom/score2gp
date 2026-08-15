@@ -1,16 +1,8 @@
 from __future__ import annotations
-import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
 
 from pathlib import Path
 import fitz  # type: ignore[import-not-found]
-
 import pytest
-from pathlib import Path
-
-
-
 
 from score2gp.pdf_staff_notation_diagnostics import build_notation_diagnostics
 from score2gp.pdf_tab_bar_assembler import PdfTabBarAssemblerError, assemble_pdf_tab_bar
@@ -30,7 +22,7 @@ def test_pdf_tab_duration_assembler_oracle_integration():
     """Verify that assemble_pdf_tab_bar processes candidates with visual TabDurationEvidence
     extracted from generated_pdf_tab_duration.pdf, matching the exact expected oracle.
     """
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_tab_duration.pdf")
     assert pdf_path.exists()
     doc = fitz.open(pdf_path)
     page = doc[0]

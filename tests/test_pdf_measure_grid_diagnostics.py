@@ -1,45 +1,37 @@
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
 import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
-
-import pytest
-from pathlib import Path
-
-
-
 import fitz
 from score2gp.pdf_staff_notation_diagnostics import extract_measure_grid_diagnostics_dict
 
 def test_measure_grid_quarter_note_exact_bounds():
-    doc = fitz.open(_get_dynamic_private_pdf())
+    doc = fitz.open("tests/fixtures/pdf/generated_standard_staff_quarter_note.pdf")
     diag = extract_measure_grid_diagnostics_dict(doc[0], 1)
 
     assert diag["pages"][0]["diagnostic_status"] == "pass"
     systems = diag["pages"][0]["systems"]
-    assert len(systems) > 0
+    assert len(systems) == 1
     staves = systems[0]["staves"]
-    assert len(staves) > 0
+    assert len(staves) == 1
 
     staff = staves[0]
     regions = staff["measure_regions"]
 
     # 1 region starting at staff x0 (50.0) and ending at the trailing barline (550.0)
-    assert len(regions) > 0
+    assert len(regions) == 1
     assert regions[0]["start_x"] == 50.0
     assert regions[0]["end_x"] == 550.0
 
 def test_measure_grid_multi_staff_regions_per_staff():
-    doc = fitz.open(_get_dynamic_private_pdf())
+    doc = fitz.open("tests/fixtures/pdf/generated_standard_staff_multi_staff.pdf")
     diag = extract_measure_grid_diagnostics_dict(doc[0], 1)
 
     assert diag["pages"][0]["diagnostic_status"] == "pass"
     staves = diag["pages"][0]["systems"][0]["staves"]
-    assert len(staves) > 0
+    assert len(staves) == 2
 
     for staff in staves:
         regions = staff["measure_regions"]
         # Internal barline at 250.0 and staff end at 545.28 means 2 regions
-        assert len(regions) > 0
+        assert len(regions) == 2
 
         # First region
         assert regions[0]["start_x"] == 50.0
@@ -50,7 +42,7 @@ def test_measure_grid_multi_staff_regions_per_staff():
         assert regions[1]["end_x"] == 545.28
 
 def test_measure_grid_ledger_lines_no_false_grids():
-    doc = fitz.open(_get_dynamic_private_pdf())
+    doc = fitz.open("tests/fixtures/pdf/generated_standard_staff_ledger_lines.pdf")
     diag = extract_measure_grid_diagnostics_dict(doc[0], 1)
 
     assert diag["pages"][0]["diagnostic_status"] == "pass"
@@ -58,7 +50,7 @@ def test_measure_grid_ledger_lines_no_false_grids():
     regions = staff["measure_regions"]
 
     # Ledger line stems must not split the region. It should remain 1 region.
-    assert len(regions) > 0
+    assert len(regions) == 1
     assert regions[0]["start_x"] == 50.0
     assert regions[0]["end_x"] == 550.0
 
@@ -73,7 +65,7 @@ def test_measure_grid_failure_handling_is_private_safe():
     assert "NoneType" not in diag["failure_reasons"][0]
 
 def test_measure_grid_double_barline_collapsed():
-    doc = fitz.open(_get_dynamic_private_pdf())
+    doc = fitz.open("tests/fixtures/pdf/generated_paired_notation_tab_system_double_barline.pdf")
     diag = extract_measure_grid_diagnostics_dict(doc[0], 1)
 
     assert diag["pages"][0]["diagnostic_status"] == "pass"

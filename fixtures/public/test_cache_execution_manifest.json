@@ -1,0 +1,12 @@
+[
+  {
+    "id": "cache_payload_1",
+    "musicxml": "tests/fixtures/musicxml/tiny_single_bar.musicxml",
+    "tabraw": "tests/fixtures/tabraw/tiny_single_bar_tabraw.json"
+  },
+  {
+    "id": "cache_payload_2",
+    "musicxml": "tests/fixtures/musicxml/tiny_rests_voices.musicxml",
+    "tabraw": "tests/fixtures/tabraw/tiny_rests_voices_tabraw.json"
+  }
+]

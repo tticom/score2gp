@@ -1,14 +1,6 @@
 from __future__ import annotations
-import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
-
 
 import pytest
-from pathlib import Path
-
-
-
 import fitz  # type: ignore[import-not-found]
 from pathlib import Path
 
@@ -17,12 +9,12 @@ from score2gp.pdf_raster_staff_diagnostics import build_raster_notation_diagnost
 
 @pytest.fixture
 def treble_staff_paper_path() -> Path:
-    return _get_dynamic_private_pdf()
+    return Path("fixtures/public/generated_simple/raster-treble-clef/treble-staff-paper.pdf")
 
 
 @pytest.fixture
 def flash_cards_path() -> Path:
-    return _get_dynamic_private_pdf()
+    return Path("fixtures/public/generated_simple/raster-treble-clef/FlashCardsValues.pdf")
 
 
 def test_build_raster_notation_diagnostics_on_treble_staff_paper(treble_staff_paper_path: Path):
@@ -341,17 +333,17 @@ def test_summarize_raster_treble_clef_diagnostics_no_mutation():
 
 @pytest.fixture
 def negative_blank_path() -> Path:
-    return _get_dynamic_private_pdf()
+    return Path("tests/fixtures/pdf/generated_standard_staff_negative_blank.pdf")
 
 
 @pytest.fixture
 def negative_tab_path() -> Path:
-    return _get_dynamic_private_pdf()
+    return Path("tests/fixtures/pdf/generated_standard_staff_negative_tab.pdf")
 
 
 @pytest.fixture
 def negative_noise_path() -> Path:
-    return _get_dynamic_private_pdf()
+    return Path("tests/fixtures/pdf/generated_standard_staff_negative_noise.pdf")
 
 
 def test_raster_treble_clef_diagnostics_reject_blank_staff(negative_blank_path: Path):

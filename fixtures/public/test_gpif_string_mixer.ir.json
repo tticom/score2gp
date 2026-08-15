@@ -1,0 +1,104 @@
+{
+  "schema_version": "0.1.0",
+  "metadata": {
+    "title": "String Mixer Test",
+    "artist": "Generated Fixture",
+    "composer": "Generated Fixture",
+    "transcriber": "score2gp",
+    "copyright": "Public domain generated test fixture",
+    "source": "hand-authored synthetic fixture"
+  },
+  "conversion": {
+    "tool_name": "score2gp",
+    "tool_version": "0.1.0",
+    "conversion_timestamp": "2026-05-25T00:00:00Z",
+    "source_file_hash": "sha256:string-mixer-fixture",
+    "source_page_count": 1
+  },
+  "tempo": { "bpm": 120, "text": "Allegro" },
+  "tracks": [
+    {
+      "id": "gtr-1",
+      "name": "Balanced Guitar",
+      "instrument": "steel guitar",
+      "capo": 0,
+      "tablature_enabled": true,
+      "staff_count": 1,
+      "tuning": {
+        "name": "Standard Guitar",
+        "strings": [
+          { "number": 1, "pitch": 64, "name": "E4", "volume_offset": -2.0, "fine_tune": 5.5 },
+          { "number": 2, "pitch": 59, "name": "B3", "volume_offset": -1.0, "fine_tune": 0.0 },
+          { "number": 3, "pitch": 55, "name": "G3", "volume_offset": 0.0, "fine_tune": -2.3 },
+          { "number": 4, "pitch": 50, "name": "D3", "volume_offset": 1.0, "fine_tune": 1.0 },
+          { "number": 5, "pitch": 45, "name": "A2", "volume_offset": 2.0, "fine_tune": 0.0 },
+          { "number": 6, "pitch": 40, "name": "E2", "volume_offset": 3.0, "fine_tune": -10.0 }
+        ]
+      }
+    }
+  ],
+  "bars": [
+    {
+      "index": 1,
+      "time_signature": { "numerator": 4, "denominator": 4 },
+      "events": [
+        {
+          "id": "e1",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 0,
+            "duration_ticks": 960,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "quarter", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 1,
+              "fret": 0,
+              "pitch": 64,
+              "confidence": 1.0,
+              "provenance": [
+                {
+                  "source_stage": "manual",
+                  "page": 1,
+                  "confidence": 1.0
+                }
+              ]
+            }
+          ],
+          "confidence": 1.0,
+          "provenance": [
+            {
+              "source_stage": "manual",
+              "page": 1,
+              "confidence": 1.0
+            }
+          ]
+        },
+        {
+          "id": "r1",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 960,
+            "duration_ticks": 2880,
+            "ticks_per_quarter": 960,
+            "voice": 1
+          },
+          "is_rest": true,
+          "confidence": 1.0,
+          "provenance": [
+            {
+              "source_stage": "manual",
+              "page": 1,
+              "confidence": 1.0
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "warnings": []
+}

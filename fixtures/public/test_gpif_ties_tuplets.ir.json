@@ -1,0 +1,187 @@
+{
+  "schema_version": "0.1.0",
+  "metadata": {
+    "title": "Ties and Tuplets GPIF Test",
+    "artist": "Generated Fixture",
+    "composer": "Generated Fixture",
+    "transcriber": "score2gp",
+    "copyright": "Public domain generated test fixture",
+    "source": "hand-authored synthetic fixture"
+  },
+  "conversion": {
+    "tool_name": "score2gp",
+    "tool_version": "0.1.0",
+    "conversion_timestamp": "2026-05-25T00:00:00Z",
+    "source_file_hash": "sha256:generated-fixture-ties-tuplets",
+    "source_page_count": 1
+  },
+  "tempo": { "bpm": 120, "text": "Allegro" },
+  "tracks": [
+    {
+      "id": "gtr-1",
+      "name": "Guitar",
+      "instrument": "steel guitar",
+      "capo": 0,
+      "tablature_enabled": true,
+      "staff_count": 1,
+      "tuning": {
+        "name": "Open E",
+        "strings": [
+          { "number": 1, "pitch": 64, "name": "E4" },
+          { "number": 2, "pitch": 59, "name": "B3" },
+          { "number": 3, "pitch": 56, "name": "G#3" },
+          { "number": 4, "pitch": 52, "name": "E3" },
+          { "number": 5, "pitch": 47, "name": "B2" },
+          { "number": 6, "pitch": 40, "name": "E2" }
+        ]
+      }
+    }
+  ],
+  "bars": [
+    {
+      "index": 1,
+      "time_signature": { "numerator": 4, "denominator": 4 },
+      "events": [
+        {
+          "id": "e1",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 0,
+            "duration_ticks": 960,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "quarter", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 3,
+              "fret": 2,
+              "pitch": 58,
+              "confidence": 1.0,
+              "techniques": [
+                { "kind": "tie", "state": "start" }
+              ]
+            }
+          ],
+          "confidence": 1.0
+        },
+        {
+          "id": "e2",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 960,
+            "duration_ticks": 960,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "quarter", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 3,
+              "fret": 2,
+              "pitch": 58,
+              "confidence": 1.0,
+              "techniques": [
+                { "kind": "tie", "state": "continue" }
+              ]
+            }
+          ],
+          "confidence": 1.0
+        },
+        {
+          "id": "e3",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 1920,
+            "duration_ticks": 960,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "quarter", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 3,
+              "fret": 2,
+              "pitch": 58,
+              "confidence": 1.0,
+              "techniques": [
+                { "kind": "tie", "state": "stop" }
+              ]
+            }
+          ],
+          "confidence": 1.0
+        },
+        {
+          "id": "et1",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 2880,
+            "duration_ticks": 320,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "eighth", "dots": 0 },
+            "tuplet": { "actual_notes": 3, "normal_notes": 2 }
+          },
+          "notes": [
+            {
+              "string": 3,
+              "fret": 3,
+              "pitch": 59,
+              "confidence": 1.0
+            }
+          ],
+          "confidence": 1.0
+        },
+        {
+          "id": "et2",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 3200,
+            "duration_ticks": 320,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "eighth", "dots": 0 },
+            "tuplet": { "actual_notes": 3, "normal_notes": 2 }
+          },
+          "notes": [
+            {
+              "string": 3,
+              "fret": 3,
+              "pitch": 59,
+              "confidence": 1.0
+            }
+          ],
+          "confidence": 1.0
+        },
+        {
+          "id": "et3",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 3520,
+            "duration_ticks": 320,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "eighth", "dots": 0 },
+            "tuplet": { "actual_notes": 3, "normal_notes": 2 }
+          },
+          "notes": [
+            {
+              "string": 3,
+              "fret": 3,
+              "pitch": 59,
+              "confidence": 1.0
+            }
+          ],
+          "confidence": 1.0
+        }
+      ]
+    }
+  ],
+  "warnings": []
+}

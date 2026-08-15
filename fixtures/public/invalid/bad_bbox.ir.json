@@ -1,0 +1,49 @@
+{
+  "schema_version": "0.1.0",
+  "metadata": { "title": "Invalid Bounding Box" },
+  "tempo": { "bpm": 66 },
+  "tracks": [
+    {
+      "id": "gtr-1",
+      "name": "Guitar",
+      "tuning": {
+        "name": "Open E",
+        "strings": [
+          { "number": 1, "pitch": 64, "name": "E4" },
+          { "number": 2, "pitch": 59, "name": "B3" },
+          { "number": 3, "pitch": 56, "name": "G#3" },
+          { "number": 4, "pitch": 52, "name": "E3" },
+          { "number": 5, "pitch": 47, "name": "B2" },
+          { "number": 6, "pitch": 40, "name": "E2" }
+        ]
+      }
+    }
+  ],
+  "bars": [
+    {
+      "index": 1,
+      "time_signature": { "numerator": 4, "denominator": 4 },
+      "events": [
+        {
+          "id": "bad-bbox",
+          "track_id": "gtr-1",
+          "timing": { "bar_index": 1, "onset_ticks": 0, "duration_ticks": 960, "ticks_per_quarter": 960, "voice": 1 },
+          "notes": [
+            {
+              "string": 1,
+              "fret": 0,
+              "pitch": 64,
+              "provenance": [
+                {
+                  "source_stage": "pdf-text",
+                  "bbox": { "page": 1, "x0": 20, "y0": 20, "x1": 10, "y1": 30 },
+                  "confidence": 0.9
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

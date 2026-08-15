@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import pytest
 from pathlib import Path
-import pytest
 from score2gp.notation_omr.timeline import (
     TopologicallyLockedBarTimeline,
     build_staff_timeline_preview,
@@ -180,8 +179,6 @@ def test_strict_chord_equivalence_and_invalidation() -> None:
 def test_private_fixture_lesson6_smoke_preservation() -> None:
     """Verify pipeline recognition on Lesson-6.pdf preserves 4/4 triplet timing."""
     lesson6_pdf = PROJECT_ROOT / "fixtures" / "private" / "Lesson-6.pdf"
-    if not lesson6_pdf.exists():
-        import pytest; pytest.skip("Missing fixture")
 
     result = run_recognition_on_file(lesson6_pdf, assume_treble_clef=True)
     assert result is not None

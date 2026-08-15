@@ -1,17 +1,9 @@
 from __future__ import annotations
-import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
 
 import hashlib
 import json
 from pathlib import Path
-
 import pytest
-from pathlib import Path
-
-
-
 from typer.testing import CliRunner
 
 from score2gp.cli import app
@@ -23,7 +15,7 @@ from score2gp.sidecar_evaluator import (
 
 runner = CliRunner()
 
-GOOD_SIDECAR = _get_dynamic_private_musicxml()
+GOOD_SIDECAR = Path("tests/fixtures/musicxml/generated_tiny_tab.musicxml")
 
 
 def test_mxs10_manifest_validation_success(tmp_path: Path) -> None:
@@ -47,7 +39,7 @@ def test_mxs10_manifest_validation_success(tmp_path: Path) -> None:
     assert result.generator_tool == "musescore_manual"
     assert result.generator_version == "4.2.1"
     assert result.operator_id == "op_test_01"
-    assert True  # Removed hardcoded geometry assertion
+    assert result.operator_labor_minutes == 15.5
     assert result.sidecar_sha256 == sha
     assert result.eval_status == "passed"
 
@@ -105,7 +97,7 @@ def test_mxs10_cli_convert_with_sidecar_manifest(tmp_path: Path) -> None:
     manifest_path = tmp_path / "manifest.json"
     manifest_path.write_text(json.dumps(manifest_data), encoding="utf-8")
 
-    pdf_fixture = _get_dynamic_private_pdf()
+    pdf_fixture = Path("tests/fixtures/pdf/generated_tiny_tab.pdf")
     out_gp = tmp_path / "output.gp"
     work_dir = tmp_path / "work"
 
@@ -136,7 +128,7 @@ def test_mxs10_cli_convert_with_sidecar_manifest(tmp_path: Path) -> None:
     assert "op_cli_01" in html_content
 
 
-GOOD_PDF = _get_dynamic_private_pdf()
+GOOD_PDF = Path("tests/fixtures/pdf/generated_tiny_tab.pdf")
 
 
 def test_mxs10_manifest_validation_uppercase_sha(tmp_path: Path) -> None:

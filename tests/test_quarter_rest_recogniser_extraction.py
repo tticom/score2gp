@@ -1,13 +1,5 @@
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
-import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
 import json
-
 import pytest
-from pathlib import Path
-
-
-
 from pathlib import Path
 from score2gp.whole_note_recogniser import run_recognition_on_file
 

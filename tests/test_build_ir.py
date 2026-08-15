@@ -1,35 +1,27 @@
 from __future__ import annotations
-import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
 
 import json
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
-
 import pytest
-from pathlib import Path
-
-
-
 
 from score2gp.build_ir import BuildIrInputRiskError, build_ir_from_files
 from score2gp.ir import validate_score_ir_file
 
-MUSICXML = _get_dynamic_private_musicxml()
+MUSICXML = Path("tests/fixtures/musicxml/tiny_single_bar.musicxml")
 TABRAW = Path("tests/fixtures/tabraw/tiny_single_bar_tabraw.json")
-RICH_MUSICXML = _get_dynamic_private_musicxml()
+RICH_MUSICXML = Path("tests/fixtures/musicxml/rich_guitar_cases.musicxml")
 RICH_TABRAW = Path("tests/fixtures/tabraw/rich_guitar_cases_tabraw.json")
-MULTIBAR_MUSICXML = _get_dynamic_private_musicxml()
+MULTIBAR_MUSICXML = Path("tests/fixtures/musicxml/tiny_multibar.musicxml")
 MULTIBAR_TABRAW = Path("tests/fixtures/tabraw/tiny_multibar_tabraw.json")
-CHORDS_MUSICXML = _get_dynamic_private_musicxml()
+CHORDS_MUSICXML = Path("tests/fixtures/musicxml/tiny_chords.musicxml")
 CHORDS_TABRAW = Path("tests/fixtures/tabraw/tiny_chords_tabraw.json")
-RESTS_VOICES_MUSICXML = _get_dynamic_private_musicxml()
+RESTS_VOICES_MUSICXML = Path("tests/fixtures/musicxml/tiny_rests_voices.musicxml")
 RESTS_VOICES_TABRAW = Path("tests/fixtures/tabraw/tiny_rests_voices_tabraw.json")
-AUDIVERIS_OVERFULL_MUSICXML = _get_dynamic_private_musicxml()
-AUDIVERIS_12_8_MUSICXML = _get_dynamic_private_musicxml()
-AUDIVERIS_BACKUP_FORWARD_MUSICXML = _get_dynamic_private_musicxml()
+AUDIVERIS_OVERFULL_MUSICXML = Path("tests/fixtures/musicxml/audiveris_like_overfull_bar.musicxml")
+AUDIVERIS_12_8_MUSICXML = Path("tests/fixtures/musicxml/audiveris_like_12_8_timing.musicxml")
+AUDIVERIS_BACKUP_FORWARD_MUSICXML = Path("tests/fixtures/musicxml/audiveris_like_backup_forward.musicxml")
 
 
 def _write_mxl(tmp_path: Path, source: Path) -> Path:
@@ -69,7 +61,7 @@ def test_build_ir_creates_valid_scoreir_from_synthetic_musicxml_and_tabraw(tmp_p
     assert [event.timing.voice for event in events] == [1, 1, 1]
     assert events[0].notes[0].pitch == 64
     assert events[0].notes[0].string == 1
-    assert True  # Removed hardcoded fret assertion
+    assert events[0].notes[0].fret == 0
     assert events[1].notes[0].pitch == 66
     assert events[1].notes[0].techniques[0].kind == "tie"
     assert events[2].is_rest is True
@@ -106,7 +98,7 @@ def test_build_ir_handles_chords_tuplets_harmony_and_technique_diagnostics(tmp_p
     assert first_bar_events[0].chord_symbol == "E7"
     assert len(first_bar_events[0].notes) == 2
     assert [note.fret for note in first_bar_events[0].notes] == [0, 3]
-    assert True  # Removed hardcoded fret assertion
+    assert first_bar_events[1].notes[0].fret == 2
     assert {technique.kind for technique in first_bar_events[1].notes[0].techniques} == {"slide", "hammer-on"}
 
     triplet_events = first_bar_events[2:5]
@@ -114,12 +106,12 @@ def test_build_ir_handles_chords_tuplets_harmony_and_technique_diagnostics(tmp_p
     assert all(event.timing.duration_ticks == 320 for event in triplet_events)
     assert all(event.timing.tuplet is not None for event in triplet_events)
     assert triplet_events[0].notes[0].techniques[0].kind == "bend"
-    assert True  # Removed hardcoded geometry assertion
+    assert triplet_events[0].notes[0].techniques[0].semitones == 0.5
     assert triplet_events[1].notes[0].techniques[0].kind == "vibrato"
     assert triplet_events[2].notes[0].techniques[0].kind == "slur"
 
     assert score.bars[1].events[0].chord_symbol == "Gmaj7"
-    assert True  # Removed hardcoded fret assertion
+    assert score.bars[1].events[0].notes[0].fret == 8
     assert score.bars[1].events[1].is_rest is True
 
     codes = [warning.code for warning in score.warnings]
@@ -192,7 +184,6 @@ def test_build_ir_keeps_rests_from_consuming_tab_candidates_across_voices(tmp_pa
     assert not any(warning.code == "tab-candidate-unused" for warning in score.warnings)
 
 
-@pytest.mark.skip(reason="Requires specifically malformed synthetic fixture")
 def test_build_ir_refuses_overfull_musicxml_before_scoreir_validation(tmp_path) -> None:
     with pytest.raises(BuildIrInputRiskError) as raised:
         build_ir_from_files(AUDIVERIS_OVERFULL_MUSICXML, TABRAW, tmp_path / "overfull.ir.json")
@@ -226,7 +217,6 @@ def test_build_ir_preserves_compound_meter_warning_without_weakening_scoreir(tmp
     assert "musicxml-compound-meter-assumption" in [warning.code for warning in score.warnings]
 
 
-@pytest.mark.skip(reason="Requires specifically malformed synthetic fixture")
 def test_build_ir_refuses_backup_forward_overfull_with_timing_category(tmp_path) -> None:
     with pytest.raises(BuildIrInputRiskError) as raised:
         build_ir_from_files(AUDIVERIS_BACKUP_FORWARD_MUSICXML, TABRAW, tmp_path / "backup_forward.ir.json")
@@ -258,7 +248,6 @@ def test_build_ir_consumes_native_mxl_without_unpacked_intermediate(tmp_path) ->
     assert len(score.bars[0].events) == 3
 
 
-@pytest.mark.skip(reason="Requires specifically malformed synthetic fixture")
 def test_build_ir_refuses_overfull_mxl_before_writing_scoreir(tmp_path) -> None:
     mxl = _write_mxl(tmp_path, AUDIVERIS_OVERFULL_MUSICXML)
     out = tmp_path / "overfull_from_mxl.ir.json"

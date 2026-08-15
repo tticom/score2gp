@@ -1,0 +1,20 @@
+[
+  {
+    "id": "payload_gp6",
+    "musicxml": "tests/fixtures/musicxml/tiny_single_bar.musicxml",
+    "tabraw": "tests/fixtures/tabraw/tiny_single_bar_tabraw.json",
+    "target_version": "GP6"
+  },
+  {
+    "id": "payload_gp7",
+    "musicxml": "tests/fixtures/musicxml/tiny_single_bar.musicxml",
+    "tabraw": "tests/fixtures/tabraw/tiny_single_bar_tabraw.json",
+    "target_version": "GP7"
+  },
+  {
+    "id": "payload_gp8",
+    "musicxml": "tests/fixtures/musicxml/tiny_single_bar.musicxml",
+    "tabraw": "tests/fixtures/tabraw/tiny_single_bar_tabraw.json",
+    "target_version": "GP8"
+  }
+]

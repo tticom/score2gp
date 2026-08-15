@@ -1,0 +1,18 @@
+{
+  "page_width": 595.0,
+  "page_height": 842.0,
+  "notation_staff": {
+    "y_start": 100.0,
+    "line_gap": 8.5,
+    "line_count": 6,
+    "x0": 80.0,
+    "x1": 575.0
+  },
+  "barlines": [
+    {"x": 80.0, "y_min": 100.0, "y_max": 142.5},
+    {"x": 575.0, "y_min": 100.0, "y_max": 142.5}
+  ],
+  "margin_text_clusters": [
+    {"x": 40.0, "y": 120.0, "text": "TAB", "fontsize": 18.0, "fontname": "helv"}
+  ]
+}

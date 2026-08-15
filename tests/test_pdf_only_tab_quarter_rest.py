@@ -1,18 +1,10 @@
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
 import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
-
-import pytest
-from pathlib import Path
-
-
-
 from pathlib import Path
 from score2gp.pdf import extract_tab
 from score2gp.build_ir import build_ir_from_tabraw_only
 
 def test_pdf_only_tab_quarter_rest_detection(tmp_path):
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("fixtures/public/generated_simple/simple/TabOnlyQuarterNoteRests.pdf")
     
     # Run the PDF tab extraction
     payload = extract_tab(pdf_path, out_dir=tmp_path)
@@ -28,7 +20,7 @@ def test_pdf_only_tab_quarter_rest_detection(tmp_path):
         assert rest.get("local_bar_index", props.get("local_bar_index")) is not None
 
 def test_pdf_only_tab_three_bars_rests_unsupported_shapes_ignored(tmp_path):
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("fixtures/public/generated_simple/simple/TabOnlyThreeBarsOfRests.pdf")
     
     # Run the PDF tab extraction
     payload = extract_tab(pdf_path, out_dir=tmp_path)
@@ -44,7 +36,7 @@ def test_pdf_only_tab_three_bars_rests_unsupported_shapes_ignored(tmp_path):
         assert rest.get("local_bar_index", props.get("local_bar_index")) == 1 # The middle bar (0-indexed) has the quarter rests
 
 def test_pdf_only_tab_build_ir_creates_valid_rest_events(tmp_path):
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("fixtures/public/generated_simple/simple/TabOnlyQuarterNoteRests.pdf")
     
     # 1. Extraction
     payload = extract_tab(pdf_path, out_dir=tmp_path)

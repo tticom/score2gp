@@ -1,0 +1,132 @@
+{
+  "schema_version": "0.1.0",
+  "metadata": {
+    "title": "Fret Snapping Optimization Suite",
+    "artist": "Compiler Fret Snapping Test Suite",
+    "composer": "Compiler Fret Snapping Test Suite",
+    "transcriber": "score2gp",
+    "copyright": "Creative Commons License"
+  },
+  "conversion": {
+    "tool_name": "score2gp",
+    "tool_version": "0.1.0",
+    "source_page_count": 1
+  },
+  "tempo": {
+    "bpm": 120,
+    "text": "Moderate"
+  },
+  "tracks": [
+    {
+      "id": "gtr-1",
+      "name": "Acoustic Guitar",
+      "instrument": "acoustic guitar steel",
+      "tuning": {
+        "name": "Standard guitar",
+        "strings": [
+          { "number": 1, "pitch": 64, "name": "E4" },
+          { "number": 2, "pitch": 59, "name": "B3" },
+          { "number": 3, "pitch": 55, "name": "G3" },
+          { "number": 4, "pitch": 50, "name": "D3" },
+          { "number": 5, "pitch": 45, "name": "A2" },
+          { "number": 6, "pitch": 40, "name": "E2" }
+        ]
+      }
+    }
+  ],
+  "bars": [
+    {
+      "index": 1,
+      "time_signature": {
+        "numerator": 4,
+        "denominator": 4
+      },
+      "events": [
+        {
+          "id": "e1",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 0,
+            "duration_ticks": 960,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "quarter", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 3,
+              "fret": 2,
+              "pitch": 57,
+              "confidence": 1.0
+            }
+          ],
+          "confidence": 1.0
+        },
+        {
+          "id": "e2",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 960,
+            "duration_ticks": 960,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "quarter", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 3,
+              "fret": 4,
+              "pitch": 59,
+              "confidence": 1.0
+            }
+          ],
+          "confidence": 1.0
+        },
+        {
+          "id": "e3",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 1920,
+            "duration_ticks": 960,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "quarter", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 1,
+              "fret": 12,
+              "pitch": 76,
+              "confidence": 1.0
+            }
+          ],
+          "confidence": 1.0
+        },
+        {
+          "id": "e4",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 2880,
+            "duration_ticks": 960,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "quarter", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 1,
+              "fret": 14,
+              "pitch": 78,
+              "confidence": 1.0
+            }
+          ],
+          "confidence": 1.0
+        }
+      ]
+    }
+  ]
+}

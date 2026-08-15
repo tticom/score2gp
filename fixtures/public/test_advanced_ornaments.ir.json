@@ -1,0 +1,171 @@
+{
+  "schema_version": "0.1.0",
+  "metadata": {
+    "title": "Advanced Performance Ornaments and Grace Notes Test",
+    "artist": "Synthetic Fixture",
+    "composer": "Synthetic Fixture",
+    "transcriber": "score2gp",
+    "copyright": "Public Domain"
+  },
+  "conversion": {
+    "tool_name": "score2gp",
+    "tool_version": "0.1.0",
+    "conversion_timestamp": "2026-05-26T12:00:00Z",
+    "source_file_hash": "sha256:test-advanced-ornaments",
+    "source_page_count": 1
+  },
+  "tempo": {
+    "bpm": 120,
+    "text": "Moderato"
+  },
+  "tracks": [
+    {
+      "id": "gtr-1",
+      "name": "Guitar",
+      "instrument": "steel guitar",
+      "capo": 0,
+      "tablature_enabled": true,
+      "staff_count": 1,
+      "tuning": {
+        "name": "Standard Guitar",
+        "strings": [
+          { "number": 1, "pitch": 64, "name": "E4" },
+          { "number": 2, "pitch": 59, "name": "B3" },
+          { "number": 3, "pitch": 55, "name": "G3" },
+          { "number": 4, "pitch": 50, "name": "D3" },
+          { "number": 5, "pitch": 45, "name": "A2" },
+          { "number": 6, "pitch": 40, "name": "E2" }
+        ]
+      }
+    }
+  ],
+  "bars": [
+    {
+      "index": 1,
+      "time_signature": { "numerator": 4, "denominator": 4 },
+      "events": [
+        {
+          "id": "e1",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 0,
+            "duration_ticks": 960,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "quarter", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 1,
+              "fret": 5,
+              "pitch": 69,
+              "techniques": [
+                {
+                  "kind": "vibrato",
+                  "width": "wide"
+                }
+              ],
+              "confidence": 1.0
+            }
+          ],
+          "confidence": 1.0
+        },
+        {
+          "id": "e2",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 960,
+            "duration_ticks": 960,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "quarter", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 2,
+              "fret": 3,
+              "pitch": 62,
+              "techniques": [
+                {
+                  "kind": "rasgueado",
+                  "direction": "up"
+                }
+              ],
+              "confidence": 1.0
+            }
+          ],
+          "confidence": 1.0
+        },
+        {
+          "id": "e3",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 1920,
+            "duration_ticks": 960,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "quarter", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 3,
+              "fret": 2,
+              "pitch": 57,
+              "techniques": [
+                {
+                  "kind": "grace",
+                  "timing": {
+                    "position": "before",
+                    "slash": true,
+                    "duration": "16th",
+                    "duration_ticks": 120
+                  }
+                }
+              ],
+              "confidence": 1.0
+            }
+          ],
+          "confidence": 1.0
+        },
+        {
+          "id": "e4",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 2880,
+            "duration_ticks": 960,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "quarter", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 4,
+              "fret": 0,
+              "pitch": 50,
+              "techniques": [
+                {
+                  "kind": "tremolo-picking",
+                  "duration": "32nd",
+                  "speed": "very-fast"
+                },
+                {
+                  "kind": "trill",
+                  "fret": 2,
+                  "interval": 2,
+                  "frequency": 6.5
+                }
+              ],
+              "confidence": 1.0
+            }
+          ],
+          "confidence": 1.0
+        }
+      ]
+    }
+  ],
+  "warnings": []
+}

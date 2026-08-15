@@ -1,0 +1,47 @@
+{
+  "page_width": 595.28,
+  "page_height": 841.89,
+  "notation_staff": {
+    "x0": 100.0,
+    "x1": 500.0,
+    "y_start": 200.0,
+    "line_gap": 8.5,
+    "line_count": 5
+  },
+  "note_clusters": [
+    {
+      "rects": [
+        {
+          "x0": 200.0,
+          "y0": 200.0,
+          "x1": 206.0,
+          "y1": 206.0
+        }
+      ],
+      "lines": [],
+      "texts": [
+        {
+          "x": 110.0,
+          "y": 200.0,
+          "text": "A",
+          "fontname": "helv",
+          "fontsize": 10
+        },
+        {
+          "x": 110.0,
+          "y": 220.0,
+          "text": "B",
+          "fontname": "helv",
+          "fontsize": 10
+        },
+        {
+          "x": 110.0,
+          "y": 240.0,
+          "text": "C",
+          "fontname": "Times-Roman",
+          "fontsize": 12
+        }
+      ]
+    }
+  ]
+}

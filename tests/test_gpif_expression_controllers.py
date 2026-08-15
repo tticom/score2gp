@@ -1,6 +1,4 @@
 from __future__ import annotations
-import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
 
 import json
 import zipfile
@@ -28,17 +26,17 @@ def test_expression_controllers_and_bend_curves_roundtrip(tmp_path) -> None:
     assert note1.expression_controller.duration_ticks == 1920
     assert len(note1.expression_controller.points) == 3
     assert note1.expression_controller.points[0].offset_ticks == 0
-    assert True  # Removed hardcoded geometry assertion
+    assert note1.expression_controller.points[0].value == 40.0
     
     bend = next(t for t in note1.techniques if t.kind == "bend")
     assert bend.bend_type == "bend-release"
-    assert True  # Removed hardcoded geometry assertion
+    assert bend.destination_value == 75.0
     assert bend.graphic_duration == 960
     assert len(bend.points) == 3
     assert bend.points[1].offset_ticks == 480
-    assert True  # Removed hardcoded geometry assertion
-    assert True  # Removed hardcoded geometry assertion
-    assert True  # Removed hardcoded geometry assertion
+    assert bend.points[1].semitones == 1.0
+    assert bend.points[1].v_x == 0.25
+    assert bend.points[1].v_y == 0.5
 
     # Event e2 and event-level expression controller
     event2 = next(e for b in score.bars for e in b.events if e.id == "e2")
@@ -47,7 +45,7 @@ def test_expression_controllers_and_bend_curves_roundtrip(tmp_path) -> None:
     assert event2.expression_controller.duration_ticks == 1920
     assert len(event2.expression_controller.points) == 2
     assert event2.expression_controller.points[1].offset_ticks == 1920
-    assert True  # Removed hardcoded geometry assertion
+    assert event2.expression_controller.points[1].value == 90.0
 
     # 2. Write the score to a GP package
     out_gp = tmp_path / "expressive_solo.gp"
@@ -114,10 +112,10 @@ def test_expression_controllers_and_bend_curves_roundtrip(tmp_path) -> None:
         assert bended_enable is not None
         dest_val_prop = props_node.find(".//Property[@name='BendDestinationValue']/Float")
         assert dest_val_prop is not None
-        assert True  # Removed hardcoded geometry assertion
+        assert float(dest_val_prop.text) == 75.0
         gd_prop = props_node.find(".//Property[@name='BendGraphicDuration']/Float")
         assert gd_prop is not None
-        assert True  # Removed hardcoded geometry assertion
+        assert float(gd_prop.text) == 960.0
 
     # 4. Extract and check round-trip symmetric equality
     recovered = extract_score_ir_from_gp(out_gp)
@@ -131,17 +129,17 @@ def test_expression_controllers_and_bend_curves_roundtrip(tmp_path) -> None:
     assert rec_note1.expression_controller.duration_ticks == 1920
     assert len(rec_note1.expression_controller.points) == 3
     assert rec_note1.expression_controller.points[0].offset_ticks == 0
-    assert True  # Removed hardcoded geometry assertion
+    assert rec_note1.expression_controller.points[0].value == 40.0
     
     rec_bend = next(t for t in rec_note1.techniques if t.kind == "bend")
     assert rec_bend.bend_type == "bend-release"
-    assert True  # Removed hardcoded geometry assertion
+    assert rec_bend.destination_value == 75.0
     assert rec_bend.graphic_duration == 960
     assert len(rec_bend.points) == 3
     assert abs(rec_bend.points[1].offset_ticks - 480) <= 2
-    assert True  # Removed hardcoded geometry assertion
-    assert True  # Removed hardcoded geometry assertion
-    assert True  # Removed hardcoded geometry assertion
+    assert rec_bend.points[1].semitones == 1.0
+    assert rec_bend.points[1].v_x == 0.25
+    assert rec_bend.points[1].v_y == 0.5
 
     rec_event2 = next(e for b in recovered.bars for e in b.events if e.id == "e2")
     assert rec_event2.expression_controller is not None
@@ -149,7 +147,7 @@ def test_expression_controllers_and_bend_curves_roundtrip(tmp_path) -> None:
     assert rec_event2.expression_controller.duration_ticks == 1920
     assert len(rec_event2.expression_controller.points) == 2
     assert rec_event2.expression_controller.points[1].offset_ticks == 1920
-    assert True  # Removed hardcoded geometry assertion
+    assert rec_event2.expression_controller.points[1].value == 90.0
 
     # 5. Call validate_roundtrip and assert success
     rt_res = validate_roundtrip(out_gp, score)

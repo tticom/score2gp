@@ -1,26 +1,18 @@
 from __future__ import annotations
-import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
 
 import json
 import zipfile
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
-
 import pytest
-from pathlib import Path
-
-
-
 from typer.testing import CliRunner
 
 from score2gp.cli import app
 from score2gp.gp_package import inspect_gp, validate_gp
 
-ASCII_GATE_PDF = _get_dynamic_private_pdf()
-ASCII_GATE_MUSICXML = _get_dynamic_private_musicxml()
+ASCII_GATE_PDF = Path("tests/fixtures/pdf/generated_ascii_tab_scoreir_gate.pdf")
+ASCII_GATE_MUSICXML = Path("tests/fixtures/musicxml/ascii_scoreir_gate_simple.musicxml")
 
 
 def test_orchestration_convert_success(tmp_path) -> None:

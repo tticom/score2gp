@@ -1,17 +1,9 @@
 from __future__ import annotations
-import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml, _get_safe_dynamic_private_pdf
 
 import json
 from pathlib import Path
 from typer.testing import CliRunner
-
 import pytest
-from pathlib import Path
-
-
-
 
 from score2gp.cli import app
 from score2gp.build_ir import build_ir_from_tabraw_only, BuildIrInputRiskError
@@ -19,11 +11,10 @@ from score2gp.tabraw import TabRaw, TabCandidate
 from score2gp.gp_package import inspect_gp, validate_gp, write_gp
 
 # Public fixtures
-SIMPLE_PDF = _get_safe_dynamic_private_pdf()
+SIMPLE_PDF = Path("tests/fixtures/pdf/generated_pdf_fret_grouped_success.pdf")
 TEMPLATE_GP = Path("fixtures/templates/minimal_gp7.gp")
 
 
-@pytest.mark.skip(reason="Requires specifically malformed synthetic fixture")
 def test_pdf_only_tab_refuses_unsafe_grouping(tmp_path) -> None:
     # 1. Mock a TabRaw with a layout warning (e.g. pdf_no_systems_detected)
     tabraw_data = {
@@ -68,7 +59,7 @@ def test_pdf_only_tab_refuses_unsafe_grouping(tmp_path) -> None:
     # or we can mock extract_tab_file if we want, but actually running convert on
     # generated_unstructured_tab_text.pdf (which has no systems/barlines) will refuse.
     # Let's test using generated_unstructured_tab_text.pdf directly in the CLI!
-    unstructured_pdf = _get_dynamic_private_pdf()
+    unstructured_pdf = Path("tests/fixtures/pdf/generated_unstructured_tab_text.pdf")
     result = CliRunner().invoke(
         app,
         [
@@ -93,7 +84,6 @@ def test_pdf_only_tab_refuses_unsafe_grouping(tmp_path) -> None:
     assert report["pdf_only_diagnostics"]["pdf_grouping_status"] == "refused"
 
 
-@pytest.mark.skip(reason="Requires specifically malformed synthetic fixture")
 def test_pdf_only_tab_strict_precise_timing_mode_refuses_inference(tmp_path) -> None:
     # 1.5 Strict precise-timing mode must reject missing timing evidence
     tabraw_data = {
@@ -480,7 +470,6 @@ def test_pdf_only_does_not_stack_same_x_across_pages(tmp_path) -> None:
     assert len(score.bars[1].events) == 4
 
 
-@pytest.mark.skip(reason="Requires specifically malformed synthetic fixture")
 def test_pdf_only_duplicate_string_same_event_split_or_refused(tmp_path) -> None:
     tabraw_data = {
         "schema_version": "tabraw.v0.1",
@@ -528,8 +517,8 @@ def test_pdf_only_duplicate_string_same_event_split_or_refused(tmp_path) -> None
 
     assert len(score.bars) == 1
     assert len(score.bars[0].events) == 4
-    assert True  # Removed hardcoded fret assertion
-    assert True  # Removed hardcoded fret assertion
+    assert score.bars[0].events[0].notes[0].fret == 5
+    assert score.bars[0].events[1].notes[0].fret == 7
 
 
 def test_pdf_only_preserves_candidate_top_level_source_identity(tmp_path) -> None:
@@ -669,8 +658,8 @@ def test_pdf_only_keeps_sequential_notes_separate_when_x_gap_is_large(tmp_path) 
     assert len(score.bars) == 1
     # 2 candidates should remain sequential (plus remainder rest events)
     assert len(score.bars[0].events) == 4
-    assert True  # Removed hardcoded fret assertion
-    assert True  # Removed hardcoded fret assertion
+    assert score.bars[0].events[0].notes[0].fret == 5
+    assert score.bars[0].events[1].notes[0].fret == 7
 
 
 def test_pdf_only_does_not_group_duplicate_string_candidates_as_chord(tmp_path) -> None:
@@ -719,8 +708,8 @@ def test_pdf_only_does_not_group_duplicate_string_candidates_as_chord(tmp_path) 
     assert len(score.bars) == 1
     # Must be split into 2 sequential events (plus remainder rest events) to protect duplicate string safety
     assert len(score.bars[0].events) == 4
-    assert True  # Removed hardcoded fret assertion
-    assert True  # Removed hardcoded fret assertion
+    assert score.bars[0].events[0].notes[0].fret == 5
+    assert score.bars[0].events[1].notes[0].fret == 7
 
 
 def test_pdf_only_never_groups_chords_across_source_bar_identity(tmp_path) -> None:
@@ -769,9 +758,9 @@ def test_pdf_only_never_groups_chords_across_source_bar_identity(tmp_path) -> No
     # Must be 2 distinct bars
     assert len(score.bars) == 2
     assert len(score.bars[0].events) == 4
-    assert True  # Removed hardcoded fret assertion
+    assert score.bars[0].events[0].notes[0].fret == 5
     assert len(score.bars[1].events) == 4
-    assert True  # Removed hardcoded fret assertion
+    assert score.bars[1].events[0].notes[0].fret == 7
 
 
 def test_build_ir_from_tabraw_only_tempo_override(tmp_path) -> None:
@@ -804,24 +793,23 @@ def test_build_ir_from_tabraw_only_tempo_override(tmp_path) -> None:
     # Explicit 70.0 BPM
     score_70, _ = build_ir_from_tabraw_only(tabraw_file, tempo_bpm=70.0, tempo_is_explicit=True, editable_draft=True)
     assert score_70.tempo is not None
-    assert True  # Removed hardcoded geometry assertion
+    assert score_70.tempo.bpm == 70.0
     assert "Tempo set to 70 bpm." in score_70.bars[0].events[0].text
 
     # Explicit 120.0 BPM
     score_exp120, _ = build_ir_from_tabraw_only(tabraw_file, tempo_bpm=120.0, tempo_is_explicit=True, editable_draft=True)
     assert score_exp120.tempo is not None
-    assert True  # Removed hardcoded geometry assertion
+    assert score_exp120.tempo.bpm == 120.0
     assert "Tempo set to 120 bpm." in score_exp120.bars[0].events[0].text
     assert "Tempo defaulted" not in score_exp120.bars[0].events[0].text
 
     # Default (omitted) -> 120.0 BPM
     score_default, _ = build_ir_from_tabraw_only(tabraw_file, editable_draft=True)
     assert score_default.tempo is not None
-    assert True  # Removed hardcoded geometry assertion
+    assert score_default.tempo.bpm == 120.0
     assert "Tempo defaulted to 120 bpm." in score_default.bars[0].events[0].text
 
 
-@pytest.mark.skip(reason="Requires specifically invalid synthetic fixture")
 def test_build_ir_from_tabraw_only_rejects_invalid_tempo(tmp_path) -> None:
     tabraw_data = {
         "schema_version": "tabraw.v0.1",

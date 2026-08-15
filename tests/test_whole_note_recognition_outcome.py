@@ -1,6 +1,4 @@
 from pathlib import Path
-import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
 from score2gp.whole_note_recogniser import map_whole_note_candidates_to_read_only_outcomes
 
 def test_whole_note_read_only_recognition_outcome():

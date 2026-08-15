@@ -1,6 +1,4 @@
 from pathlib import Path
-import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
 
 from score2gp.ir import ScoreIR
 from score2gp.build_ir import optimize_fret_snapping

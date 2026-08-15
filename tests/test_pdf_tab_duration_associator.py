@@ -1,16 +1,8 @@
 from __future__ import annotations
-import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
 
 from pathlib import Path
 import fitz  # type: ignore[import-not-found]
-
 import pytest
-from pathlib import Path
-
-
-
 
 from score2gp.pdf_tab_duration_associator import (
     AmbiguityDiagnostic,
@@ -200,7 +192,7 @@ def test_distinguish_unstemmed_absence_from_ambiguity(sample_staff_context: Staf
     assert ev_unstemmed.duration_ticks == 960
     assert ev_unstemmed.is_ambiguous is False
     assert ev_unstemmed.is_fallback_placeholder is True
-    assert True  # Removed hardcoded geometry assertion
+    assert ev_unstemmed.confidence == 0.5
 
     # Ambiguous event on stemmed staff
     midpoint_stem = StemPrimitiveCandidate(
@@ -213,7 +205,7 @@ def test_distinguish_unstemmed_absence_from_ambiguity(sample_staff_context: Staf
     assert ev_ambiguous.duration_ticks == 0
     assert ev_ambiguous.is_ambiguous is True
     assert ev_ambiguous.is_fallback_placeholder is False
-    assert True  # Removed hardcoded geometry assertion
+    assert ev_ambiguous.confidence == 0.0
 
     # Fail on ambiguity mode raises explicit exception
     with pytest.raises(PdfTabDurationAssociatorError):
@@ -223,7 +215,7 @@ def test_distinguish_unstemmed_absence_from_ambiguity(sample_staff_context: Staf
 # 9. Exercise Actual Extracted Fixture Geometry (100% Dynamic Context Extraction)
 def test_exercise_actual_extracted_fixture_geometry():
     """Extract all primitives, line_y_coords, barline_x_coords, staff_space, and text-span event x-coordinates dynamically from page objects."""
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_pdf_tab_duration.pdf")
     assert pdf_path.exists()
     doc = fitz.open(pdf_path)
     page = doc[0]
@@ -276,7 +268,7 @@ def test_exercise_actual_extracted_fixture_geometry():
     staff_line_ys = sorted({round(iy0, 1) for (ix0, iy0, ix1, iy1) in drawing_lines if abs(iy0 - iy1) <= 1.0 and abs(ix1 - ix0) >= 300.0})
     assert len(staff_line_ys) == 6
     staff_space = (staff_line_ys[-1] - staff_line_ys[0]) / (len(staff_line_ys) - 1)
-    assert True  # Removed hardcoded geometry assertion
+    assert staff_space == 14.0
 
     # Dynamically derive barline_x_coords (> 60pt vertical lines crossing staff)
     barline_xs = sorted({round((ix0 + ix1) / 2.0, 1) for (ix0, iy0, ix1, iy1) in drawing_lines if abs(ix0 - ix1) <= 1.0 and (iy1 - iy0) >= 60.0 and iy0 <= staff_line_ys[0] + 2.0 and iy1 >= staff_line_ys[-1] - 2.0})

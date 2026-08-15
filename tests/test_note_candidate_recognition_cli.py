@@ -1,6 +1,3 @@
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
-import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
 import json
 import subprocess
 import os
@@ -16,7 +13,7 @@ def _get_subprocess_env():
 
 def test_installed_cli_note_candidate_recognition_report(tmp_path):
     # Test that the new generic installed CLI path works
-    fixture_path = _get_dynamic_private_pdf()
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
 
     cmd = [sys.executable, "-m", "score2gp.cli", "note-candidate-recognition", "--pdf", str(fixture_path), "--json"]
     result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=_get_subprocess_env())
@@ -43,7 +40,7 @@ def test_installed_cli_note_candidate_recognition_report(tmp_path):
 
 def test_installed_cli_note_candidate_recognition_with_half_notes(tmp_path):
     # Test that the generic CLI path exposes half notes properly
-    fixture_path = _get_dynamic_private_pdf()
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_half_note.pdf")
 
     cmd = [sys.executable, "-m", "score2gp.cli", "note-candidate-recognition", "--pdf", str(fixture_path), "--json"]
     result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=_get_subprocess_env())
@@ -68,7 +65,7 @@ def test_installed_cli_note_candidate_recognition_with_half_notes(tmp_path):
 
 def test_installed_cli_note_candidate_recognition_with_quarter_notes(tmp_path):
     # Test that the generic CLI path exposes quarter notes properly
-    fixture_path = _get_dynamic_private_pdf()
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_quarter_note.pdf")
 
     cmd = [sys.executable, "-m", "score2gp.cli", "note-candidate-recognition", "--pdf", str(fixture_path), "--json"]
     result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=_get_subprocess_env())
@@ -93,7 +90,7 @@ def test_installed_cli_note_candidate_recognition_with_quarter_notes(tmp_path):
 
 def test_installed_cli_note_candidate_recognition_with_x_aligned_clusters(tmp_path):
     # Test that the generic CLI path exposes x_aligned_cluster_candidates properly
-    fixture_path = _get_dynamic_private_pdf()
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_complex_cluster.pdf")
 
     cmd = [sys.executable, "-m", "score2gp.cli", "note-candidate-recognition", "--pdf", str(fixture_path), "--json"]
     result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=_get_subprocess_env())
@@ -123,7 +120,7 @@ def test_installed_cli_note_candidate_recognition_with_x_aligned_clusters(tmp_pa
 
 def test_installed_cli_note_candidate_recognition_with_left_margin_candidates(tmp_path):
     # Test that the generic CLI path exposes left_margin_candidates properly
-    fixture_path = _get_dynamic_private_pdf()
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_complex_cluster.pdf")
 
     cmd = [sys.executable, "-m", "score2gp.cli", "note-candidate-recognition", "--pdf", str(fixture_path), "--json"]
     result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=_get_subprocess_env())
@@ -156,7 +153,7 @@ def test_installed_cli_note_candidate_recognition_with_left_margin_candidates(tm
 
 def test_installed_cli_note_candidate_recognition_with_flag_beam_candidates(tmp_path):
     # Test that the generic CLI path exposes flag_candidate and beam_candidate properly
-    fixture_path = _get_dynamic_private_pdf()
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_complex_cluster.pdf")
 
     cmd = [sys.executable, "-m", "score2gp.cli", "note-candidate-recognition", "--pdf", str(fixture_path), "--json"]
     result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=_get_subprocess_env())
@@ -202,7 +199,7 @@ def test_installed_cli_note_candidate_recognition_with_flag_beam_candidates(tmp_
 
 def test_installed_cli_note_candidate_recognition_with_eighth_notes(tmp_path):
     # Test that the generic CLI path exposes eighth notes properly
-    fixture_path = _get_dynamic_private_pdf()
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_eighth_notes.pdf")
 
     cmd = [sys.executable, "-m", "score2gp.cli", "note-candidate-recognition", "--pdf", str(fixture_path), "--json"]
     result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=_get_subprocess_env())
@@ -225,7 +222,7 @@ def test_installed_cli_note_candidate_recognition_with_eighth_notes(tmp_path):
         assert "modifier_component_ids" in outcome
 
 def test_installed_cli_note_candidate_recognition_staff_geometry_exposure(tmp_path):
-    fixture_path = _get_dynamic_private_pdf()
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
 
     cmd = [sys.executable, "-m", "score2gp.cli", "note-candidate-recognition", "--pdf", str(fixture_path), "--json"]
     result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=_get_subprocess_env())
@@ -263,7 +260,7 @@ def test_installed_cli_note_candidate_recognition_staff_geometry_exposure(tmp_pa
     assert join_success, "Could not join note candidate to staff geometry by page, system, and staff index."
 
 def test_installed_cli_note_candidate_recognition_assume_treble_clef_default_disabled(tmp_path):
-    fixture_path = _get_dynamic_private_pdf()
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
     cmd = [sys.executable, "-m", "score2gp.cli", "note-candidate-recognition", "--pdf", str(fixture_path), "--json"]
     result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=_get_subprocess_env())
 
@@ -275,7 +272,7 @@ def test_installed_cli_note_candidate_recognition_assume_treble_clef_default_dis
         assert "assumed_treble_pitch" not in cand
 
 def test_installed_cli_note_candidate_recognition_assume_treble_clef_enabled(tmp_path):
-    fixture_path = _get_dynamic_private_pdf()
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
     cmd = [sys.executable, "-m", "score2gp.cli", "note-candidate-recognition", "--pdf", str(fixture_path), "--json", "--assume-treble-clef"]
     result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=_get_subprocess_env())
 
@@ -294,7 +291,7 @@ def test_installed_cli_note_candidate_recognition_assume_treble_clef_enabled(tmp
 
 def test_installed_cli_note_candidate_recognition_with_ledger_lines(tmp_path):
     # Test that the generic CLI path exposes ledger line candidates properly
-    fixture_path = _get_dynamic_private_pdf()
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_ledger_lines.pdf")
 
     cmd = [sys.executable, "-m", "score2gp.cli", "note-candidate-recognition", "--pdf", str(fixture_path), "--json"]
     result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=_get_subprocess_env())

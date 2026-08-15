@@ -1,15 +1,7 @@
 from __future__ import annotations
-import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
 import json
 from typing import Any
-
 import pytest
-from pathlib import Path
-
-
-
 from score2gp.pdf_staff_geometry import NotationStaffDiagnostics, StaffLeftMarginAggregateDiagnostics
 from score2gp.pdf_staff_notation_diagnostics import build_notation_diagnostics
 from score2gp.pdf_geometry import _LineSegment
@@ -90,7 +82,6 @@ def test_margin_filtering_counts_and_excludes() -> None:
     kinds = [e.kind for e in evidence]
     assert "diagonal_stroke" in kinds
 
-@pytest.mark.skip(reason="Requires specifically invalid synthetic fixture")
 def test_invalid_staff_space_fallback() -> None:
     # 0 or 1 staff line yields staff_space = 0.0
     page = MockPage(lines=[(10.0, 100.0, 200.0, 100.0)])

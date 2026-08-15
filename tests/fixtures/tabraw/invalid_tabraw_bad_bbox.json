@@ -1,0 +1,17 @@
+{
+  "schema_version": "tabraw.v0.1",
+  "source_pdf": "invalid.pdf",
+  "candidates": [
+    {
+      "id": "bad-bbox",
+      "kind": "fret",
+      "page_index": 1,
+      "raw_text": "0",
+      "parsed_fret": 0,
+      "string": 1,
+      "bbox": {"page": 1, "x0": 20.0, "y0": 10.0, "x1": 10.0, "y1": 30.0},
+      "confidence": 0.5
+    }
+  ],
+  "warnings": []
+}

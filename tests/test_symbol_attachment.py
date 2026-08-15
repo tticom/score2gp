@@ -1,21 +1,13 @@
 from __future__ import annotations
-import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
 
 import json
 from pathlib import Path
-
 import pytest
-from pathlib import Path
-
-
-
 
 from score2gp.build_ir import build_ir_from_files, build_ir_with_diagnostics_from_files
 from score2gp.ir import validate_score_ir_file
 
-MUSICXML = _get_dynamic_private_musicxml()
+MUSICXML = Path("tests/fixtures/musicxml/tiny_single_bar.musicxml")
 
 
 def test_chord_symbol_attachment_cases(tmp_path) -> None:

@@ -1,0 +1,44 @@
+{
+  "schema_version": "tabraw.v0.1",
+  "source_pdf": "generated synthetic tab candidate fixture",
+  "inspection_kind": "synthetic",
+  "candidates": [
+    {
+      "id": "tab-001",
+      "kind": "fret",
+      "page_index": 1,
+      "system_index": 1,
+      "staff_index": 1,
+      "bar_index": 1,
+      "line_index": 1,
+      "string": 1,
+      "raw_text": "0",
+      "parsed_fret": 0,
+      "x": 100.0,
+      "y": 40.0,
+      "bbox": { "page": 1, "x0": 98.0, "y0": 36.0, "x1": 102.0, "y1": 44.0 },
+      "confidence": 0.95,
+      "source_stage": "pdf-text",
+      "raw": { "fixture": true }
+    },
+    {
+      "id": "tab-002",
+      "kind": "fret",
+      "page_index": 1,
+      "system_index": 1,
+      "staff_index": 1,
+      "bar_index": 1,
+      "line_index": 1,
+      "string": 1,
+      "raw_text": "2",
+      "parsed_fret": 2,
+      "x": 180.0,
+      "y": 40.0,
+      "bbox": { "page": 1, "x0": 178.0, "y0": 36.0, "x1": 182.0, "y1": 44.0 },
+      "confidence": 0.95,
+      "source_stage": "pdf-text",
+      "raw": { "fixture": true }
+    }
+  ],
+  "warnings": []
+}

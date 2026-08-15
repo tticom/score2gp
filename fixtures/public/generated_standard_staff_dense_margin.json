@@ -1,0 +1,26 @@
+{
+  "page_width": 595.0,
+  "page_height": 842.0,
+  "notation_staff": {
+    "y_start": 100.0,
+    "line_gap": 8.5,
+    "line_count": 5,
+    "x0": 80.0,
+    "x1": 575.0
+  },
+  "barlines": [
+    {"x": 80.0, "y_min": 100.0, "y_max": 134.0},
+    {"x": 575.0, "y_min": 100.0, "y_max": 134.0}
+  ],
+  "margin_text_clusters": [
+    {"text": "b", "x": 82.0, "y": 104.0, "fontsize": 18, "fontname": "helv"},
+    {"text": "b", "x": 88.0, "y": 95.75, "fontsize": 18, "fontname": "helv"},
+    {"text": "b", "x": 94.0, "y": 112.75, "fontsize": 18, "fontname": "helv"},
+    {"text": "b", "x": 100.0, "y": 108.5, "fontsize": 18, "fontname": "helv"},
+    {"text": "b", "x": 106.0, "y": 100.0, "fontsize": 18, "fontname": "helv"},
+    {"text": "b", "x": 112.0, "y": 117.0, "fontsize": 18, "fontname": "helv"},
+    {"text": "b", "x": 118.0, "y": 104.25, "fontsize": 18, "fontname": "helv"},
+    {"text": "c", "x": 124.0, "y": 104.5, "fontsize": 18, "fontname": "helv"},
+    {"text": "c", "x": 124.0, "y": 121.25, "fontsize": 18, "fontname": "helv"}
+  ]
+}

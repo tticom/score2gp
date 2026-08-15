@@ -1,6 +1,4 @@
 import json
-import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
 from pathlib import Path
 from score2gp.pdf import inspect_pdf
 

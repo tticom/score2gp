@@ -1,0 +1,344 @@
+{
+    "score": [
+        {
+            "bar": 1,
+            "events": [
+                {
+                    "type": "note",
+                    "pitch": "D#4",
+                    "duration_us": "Quarter note",
+                    "duration_uk": "Crotchet"
+                },
+                {
+                    "type": "note",
+                    "pitch": "G#3",
+                    "duration_us": "Quarter note",
+                    "duration_uk": "Crotchet"
+                },
+                {
+                    "type": "note",
+                    "pitch": "D#4",
+                    "duration_us": "Quarter note",
+                    "duration_uk": "Crotchet"
+                },
+                {
+                    "type": "note",
+                    "pitch": "F3",
+                    "duration_us": "Quarter note",
+                    "duration_uk": "Crotchet"
+                }
+            ]
+        },
+        {
+            "bar": 2,
+            "events": [
+                {
+                    "type": "note",
+                    "pitch": "A#2",
+                    "duration_us": "Eighth note",
+                    "duration_uk": "Quaver"
+                },
+                {
+                    "type": "note",
+                    "pitch": "F3",
+                    "duration_us": "Eighth note",
+                    "duration_uk": "Quaver"
+                },
+                {
+                    "type": "note",
+                    "pitch": "A#2",
+                    "duration_us": "Eighth note",
+                    "duration_uk": "Quaver"
+                },
+                {
+                    "type": "note",
+                    "pitch": "G2",
+                    "duration_us": "Eighth note",
+                    "duration_uk": "Quaver"
+                },
+                {
+                    "type": "note",
+                    "pitch": "A#2",
+                    "duration_us": "Eighth note",
+                    "duration_uk": "Quaver"
+                },
+                {
+                    "type": "note",
+                    "pitch": "G#2",
+                    "duration_us": "Eighth note",
+                    "duration_uk": "Quaver"
+                },
+                {
+                    "type": "note",
+                    "pitch": "A#2",
+                    "duration_us": "Eighth note",
+                    "duration_uk": "Quaver"
+                },
+                {
+                    "type": "note",
+                    "pitch": "G#2",
+                    "duration_us": "Eighth note",
+                    "duration_uk": "Quaver"
+                }
+            ]
+        },
+        {
+            "bar": 3,
+            "events": [
+                {
+                    "type": "note",
+                    "pitch": "F2",
+                    "duration_us": "Sixteenth note",
+                    "duration_uk": "Semiquaver"
+                },
+                {
+                    "type": "note",
+                    "pitch": "G2",
+                    "duration_us": "Sixteenth note",
+                    "duration_uk": "Semiquaver"
+                },
+                {
+                    "type": "note",
+                    "pitch": "A#2",
+                    "duration_us": "Sixteenth note",
+                    "duration_uk": "Semiquaver"
+                },
+                {
+                    "type": "note",
+                    "pitch": "C3",
+                    "duration_us": "Sixteenth note",
+                    "duration_uk": "Semiquaver"
+                },
+                {
+                    "type": "note",
+                    "pitch": "D#3",
+                    "duration_us": "Sixteenth note",
+                    "duration_uk": "Semiquaver"
+                },
+                {
+                    "type": "note",
+                    "pitch": "F3",
+                    "duration_us": "Sixteenth note",
+                    "duration_uk": "Semiquaver"
+                },
+                {
+                    "type": "note",
+                    "pitch": "G#3",
+                    "duration_us": "Sixteenth note",
+                    "duration_uk": "Semiquaver"
+                },
+                {
+                    "type": "note",
+                    "pitch": "B3",
+                    "duration_us": "Sixteenth note",
+                    "duration_uk": "Semiquaver"
+                },
+                {
+                    "type": "note",
+                    "pitch": "C4",
+                    "duration_us": "Sixteenth note",
+                    "duration_uk": "Semiquaver"
+                },
+                {
+                    "type": "note",
+                    "pitch": "D#4",
+                    "duration_us": "Sixteenth note",
+                    "duration_uk": "Semiquaver"
+                },
+                {
+                    "type": "note",
+                    "pitch": "A#4",
+                    "duration_us": "Sixteenth note",
+                    "duration_uk": "Semiquaver"
+                },
+                {
+                    "type": "note",
+                    "pitch": "G#4",
+                    "duration_us": "Sixteenth note",
+                    "duration_uk": "Semiquaver"
+                },
+                {
+                    "type": "note",
+                    "pitch": "F4",
+                    "duration_us": "Sixteenth note",
+                    "duration_uk": "Semiquaver"
+                },
+                {
+                    "type": "note",
+                    "pitch": "D#4",
+                    "duration_us": "Sixteenth note",
+                    "duration_uk": "Semiquaver"
+                },
+                {
+                    "type": "note",
+                    "pitch": "C4",
+                    "duration_us": "Sixteenth note",
+                    "duration_uk": "Semiquaver"
+                },
+                {
+                    "type": "note",
+                    "pitch": "A#3",
+                    "duration_us": "Sixteenth note",
+                    "duration_uk": "Semiquaver"
+                }
+            ]
+        },
+        {
+            "bar": 4,
+            "events": [
+                {
+                    "type": "rest",
+                    "duration_us": "Whole rest",
+                    "duration_uk": "Semibreve rest"
+                }
+            ]
+        },
+        {
+            "bar": 5,
+            "events": [
+                {
+                    "type": "note",
+                    "pitch": "A#2",
+                    "duration_us": "Eighth note",
+                    "duration_uk": "Quaver"
+                },
+                {
+                    "type": "rest",
+                    "duration_us": "Eighth rest",
+                    "duration_uk": "Quaver rest"
+                },
+                {
+                    "type": "note",
+                    "pitch": "A#2",
+                    "duration_us": "Dotted eighth note",
+                    "duration_uk": "Dotted quaver"
+                },
+                {
+                    "type": "note",
+                    "pitch": "C3",
+                    "duration_us": "Sixteenth note",
+                    "duration_uk": "Semiquaver"
+                },
+                {
+                    "type": "rest",
+                    "duration_us": "Eighth rest",
+                    "duration_uk": "Quaver rest"
+                },
+                {
+                    "type": "note",
+                    "pitch": "A#2",
+                    "duration_us": "Eighth note",
+                    "duration_uk": "Quaver"
+                },
+                {
+                    "type": "note",
+                    "pitch": "C3",
+                    "duration_us": "Eighth note",
+                    "duration_uk": "Quaver"
+                },
+                {
+                    "type": "note",
+                    "pitch": "A#2",
+                    "duration_us": "Eighth note",
+                    "duration_uk": "Quaver"
+                }
+            ]
+        },
+        {
+            "bar": 6,
+            "events": [
+                {
+                    "type": "note",
+                    "pitch": "A#2",
+                    "duration_us": "Half note",
+                    "duration_uk": "Minim"
+                },
+                {
+                    "type": "note",
+                    "pitch": "G#2",
+                    "duration_us": "Quarter note",
+                    "duration_uk": "Crotchet"
+                },
+                {
+                    "type": "note",
+                    "pitch": "E2",
+                    "duration_us": "Quarter note",
+                    "duration_uk": "Crotchet"
+                }
+            ]
+        },
+        {
+            "bar": 7,
+            "events": [
+                {
+                    "type": "note",
+                    "pitch": "D#3",
+                    "duration_us": "Half note",
+                    "duration_uk": "Minim"
+                },
+                {
+                    "type": "note",
+                    "pitch": "C3",
+                    "duration_us": "Quarter note",
+                    "duration_uk": "Crotchet"
+                },
+                {
+                    "type": "note",
+                    "pitch": "A#2",
+                    "duration_us": "Eighth note",
+                    "duration_uk": "Quaver"
+                },
+                {
+                    "type": "rest",
+                    "duration_us": "Eighth rest",
+                    "duration_uk": "Quaver rest"
+                }
+            ]
+        },
+        {
+            "bar": 8,
+            "events": [
+                {
+                    "type": "note",
+                    "pitch": "C3",
+                    "duration_us": "Whole note",
+                    "duration_uk": "Semibreve"
+                }
+            ]
+        },
+        {
+            "bar": 9,
+            "events": [
+                {
+                    "type": "note",
+                    "pitch": "A#2",
+                    "duration_us": "Dotted quarter note",
+                    "duration_uk": "Dotted crotchet"
+                },
+                {
+                    "type": "note",
+                    "pitch": "G#2",
+                    "duration_us": "Eighth note",
+                    "duration_uk": "Quaver"
+                },
+                {
+                    "type": "note",
+                    "pitch": "E2",
+                    "duration_us": "Dotted eighth note",
+                    "duration_uk": "Dotted quaver"
+                },
+                {
+                    "type": "note",
+                    "pitch": "G#2",
+                    "duration_us": "Sixteenth note",
+                    "duration_uk": "Semiquaver"
+                },
+                {
+                    "type": "rest",
+                    "duration_us": "Quarter rest",
+                    "duration_uk": "Crotchet rest"
+                }
+            ]
+        }
+    ]
+}

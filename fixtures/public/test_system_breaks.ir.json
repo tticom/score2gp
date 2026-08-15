@@ -1,0 +1,128 @@
+{
+  "schema_version": "0.1.0",
+  "metadata": {
+    "title": "System Breaks and Staff Layout Scaling Test",
+    "artist": "Synthetic Fixture",
+    "composer": "Synthetic Fixture",
+    "transcriber": "score2gp",
+    "copyright": "Public Domain"
+  },
+  "conversion": {
+    "tool_name": "score2gp",
+    "tool_version": "0.1.0",
+    "conversion_timestamp": "2026-05-26T12:00:00Z",
+    "source_file_hash": "sha256:test-system-breaks",
+    "source_page_count": 1
+  },
+  "tempo": {
+    "bpm": 120,
+    "text": "Moderato"
+  },
+  "tracks": [
+    {
+      "id": "gtr-1",
+      "name": "Guitar",
+      "instrument": "steel guitar",
+      "capo": 0,
+      "tablature_enabled": true,
+      "staff_count": 1,
+      "tuning": {
+        "name": "Standard Guitar",
+        "strings": [
+          { "number": 1, "pitch": 64, "name": "E4" },
+          { "number": 2, "pitch": 59, "name": "B3" },
+          { "number": 3, "pitch": 55, "name": "G3" },
+          { "number": 4, "pitch": 50, "name": "D3" },
+          { "number": 5, "pitch": 45, "name": "A2" },
+          { "number": 6, "pitch": 40, "name": "E2" }
+        ]
+      }
+    }
+  ],
+  "layout": {
+    "page_setup": {
+      "width": 210.0,
+      "height": 297.0,
+      "margins": {
+        "top": 15.0,
+        "bottom": 15.0,
+        "left": 15.0,
+        "right": 15.0
+      },
+      "scale": 1.0
+    },
+    "score_systems_layout": 4,
+    "system_layout": {
+      "system_size_percent": 90.0,
+      "staff_distancing_cushion": 12.5,
+      "barline_style": "dashed"
+    },
+    "staff_layout": {
+      "staff_spacing_cushion": 8.0,
+      "staff_size": 1.1
+    }
+  },
+  "bars": [
+    {
+      "index": 1,
+      "time_signature": { "numerator": 4, "denominator": 4 },
+      "key_signature": { "fifths": 0, "mode": "major" },
+      "layout_break": "line",
+      "barline": "hidden",
+      "events": [
+        {
+          "id": "e1",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 0,
+            "duration_ticks": 960,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "quarter", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 1,
+              "fret": 0,
+              "pitch": 64,
+              "confidence": 1.0
+            }
+          ],
+          "confidence": 1.0
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "time_signature": { "numerator": 4, "denominator": 4 },
+      "key_signature": { "fifths": 0, "mode": "major" },
+      "layout_break": "page",
+      "barline": "dashed",
+      "events": [
+        {
+          "id": "e2",
+          "track_id": "gtr-1",
+          "timing": {
+            "bar_index": 2,
+            "onset_ticks": 0,
+            "duration_ticks": 960,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "quarter", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 2,
+              "fret": 0,
+              "pitch": 59,
+              "confidence": 1.0
+            }
+          ],
+          "confidence": 1.0
+        }
+      ]
+    }
+  ],
+  "warnings": []
+}

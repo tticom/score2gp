@@ -1,18 +1,10 @@
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
 import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
-
-import pytest
-from pathlib import Path
-
-
-
 from pathlib import Path
 
 from scripts.whole_note_diagnostics_report import run_diagnostics_on_file
 
 def test_whole_note_candidate_detection_positive():
-    fixture_path = _get_dynamic_private_pdf()
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
     # If the test suite is run from a different directory, handle the path safely
     assert fixture_path.exists(), f"Fixture {fixture_path} missing"
 
@@ -37,7 +29,7 @@ def test_whole_note_candidate_detection_positive():
 
 def test_whole_note_candidate_detection_negative():
     # This fixture has rectangles for notes but no whole notes
-    fixture_path = _get_dynamic_private_pdf()
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_negative_noise.pdf")
     assert fixture_path.exists(), f"Fixture {fixture_path} missing"
 
     res = run_diagnostics_on_file(fixture_path)
@@ -48,7 +40,7 @@ def test_whole_note_candidate_detection_negative():
 
 def test_whole_note_candidate_detection_half_note():
     # This fixture has hollow notes with stems (half notes)
-    fixture_path = _get_dynamic_private_pdf()
+    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_half_note.pdf")
     assert fixture_path.exists(), f"Fixture {fixture_path} missing"
 
     res = run_diagnostics_on_file(fixture_path)

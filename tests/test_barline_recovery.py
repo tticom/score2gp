@@ -1,7 +1,4 @@
 from __future__ import annotations
-import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
 
 from typing import Any
 from score2gp.pdf import _LineSegment, filter_tab_barline_candidates, _detect_tab_systems
@@ -91,7 +88,7 @@ def test_notation_to_tab_barline_inheritance():
 
 
 def test_info_warning_does_not_skip_system():
-    musicxml = parse_musicxml(_get_dynamic_private_musicxml())
+    musicxml = parse_musicxml("tests/fixtures/musicxml/tiny_single_bar.musicxml")
     
     tabraw_dict = {
         "schema_version": "tabraw.v0.1",

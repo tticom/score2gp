@@ -1,18 +1,10 @@
 from __future__ import annotations
-import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
 
 import json
 from pathlib import Path
 from unittest.mock import patch
 
-
 import pytest
-from pathlib import Path
-
-
-
 
 from score2gp.build_ir import BuildIrInputRiskError, build_ir_from_files
 from score2gp.musicxml import analyze_musicxml_timing, parse_musicxml
@@ -85,7 +77,7 @@ def _failure_payload(tmp_path: Path, musicxml_name: str) -> dict[str, object]:
 
 
 def test_timing_refinement_keeps_valid_chord_stack_out_of_overlap_bucket() -> None:
-    imported = parse_musicxml(_get_dynamic_private_musicxml())
+    imported = parse_musicxml(FIXTURES / "timing_vc_valid_chord_stack.musicxml")
     issues = analyze_musicxml_timing(imported)
 
     assert any(issue.code == "musicxml_chord_stack_detected" and issue.severity == "info" for issue in issues)
@@ -118,7 +110,6 @@ def test_invalid_timing_refinement_summary_refuses_without_repair(
     assert expected_code in summary["issue_counts"]
 
 
-@pytest.mark.skip(reason="Requires specifically invalid synthetic fixture")
 def test_valid_multivoice_polyphony_refinement_summary_is_unsupported_not_invalid(tmp_path: Path) -> None:
     payload = _failure_payload(tmp_path, "timing_vc_valid_two_voice.musicxml")
     summary = payload["musicxml_timing_refinement"]
@@ -131,7 +122,7 @@ def test_valid_multivoice_polyphony_refinement_summary_is_unsupported_not_invali
 
 
 def test_underfull_measure_remains_warning_only() -> None:
-    imported = parse_musicxml(_get_dynamic_private_musicxml())
+    imported = parse_musicxml(FIXTURES / "timing_underfull_measure.musicxml")
     issues = analyze_musicxml_timing(imported)
 
     assert any(issue.code == "musicxml-underfull-bar" and issue.severity == "warning" for issue in issues)

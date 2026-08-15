@@ -1,19 +1,11 @@
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
 import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
-
-import pytest
-from pathlib import Path
-
-
-
 from pathlib import Path
 from score2gp.whole_note_recogniser import run_recognition_on_file
 from score2gp.notation_bridge import build_ir_from_notation_outcomes
 from score2gp.ir import DEFAULT_TICKS_PER_QUARTER
 
 def test_quarter_rest_then_notes_sequencing():
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("fixtures/public/generated_simple/simple/QuarterRestThenNotes.pdf")
     res = run_recognition_on_file(
         pdf_path,
         assume_treble_clef=True,

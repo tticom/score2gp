@@ -1,12 +1,4 @@
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
 import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
-
-import pytest
-from pathlib import Path
-
-
-
 from pathlib import Path
 from score2gp.whole_note_recogniser import run_recognition_on_file
 
@@ -19,7 +11,7 @@ def _get_note_candidates(res: dict) -> list[dict]:
     ]
 
 def test_fractional_double_beam_extraction_sixteenth_notes():
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("fixtures/public/generated_simple/simple/4SixteenthNotes.pdf")
     res = run_recognition_on_file(
         pdf_path,
         include_x_aligned_clusters=True,
@@ -38,7 +30,7 @@ def test_fractional_double_beam_extraction_sixteenth_notes():
 
 
 def test_fractional_double_beam_extraction_quarter_notes_no_false_positives():
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("fixtures/public/generated_simple/simple/4QuarterNotes.pdf")
     res = run_recognition_on_file(
         pdf_path,
         include_x_aligned_clusters=True,
@@ -57,7 +49,7 @@ def test_fractional_double_beam_extraction_quarter_notes_no_false_positives():
 
 
 def test_fractional_double_beam_extraction_eighth_notes():
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("fixtures/public/generated_simple/simple/2EighthNotes.pdf")
     res = run_recognition_on_file(
         pdf_path,
         include_x_aligned_clusters=True,

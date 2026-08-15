@@ -1,12 +1,4 @@
-from tests.dynamic_fixtures import _get_dynamic_private_pdf, _get_dynamic_private_musicxml
 import pytest
-pytest.skip("Legacy tests need refactoring to use dynamic private fixtures", allow_module_level=True)
-
-import pytest
-from pathlib import Path
-
-
-
 from pathlib import Path
 import fitz
 from typing import Any
@@ -72,7 +64,7 @@ def test_note_candidate_identity_multi_staff() -> None:
     # candidates, only staff geometry. We load the real staff geometries and inject 
     # mock note drawings to prove the geometric distance heuristic correctly distinguishes
     # staves without collapsing everything to a default identity.
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_multi_staff.pdf")
     doc = fitz.open(pdf_path)
     page = doc[0]
     diags_dict = extract_notation_diagnostics_dict(page, 1)
@@ -119,7 +111,7 @@ def test_note_candidate_identity_multi_staff() -> None:
     assert q[1].system_index == staff2.system_index
 
 def test_note_candidate_identity_ledger_lines() -> None:
-    pdf_path = _get_dynamic_private_pdf()
+    pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_ledger_lines.pdf")
     doc = fitz.open(pdf_path)
     page = doc[0]
     diags_dict = extract_notation_diagnostics_dict(page, 1)

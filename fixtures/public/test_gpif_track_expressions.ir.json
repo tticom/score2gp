@@ -1,0 +1,153 @@
+{
+  "schema_version": "0.1.0",
+  "metadata": {
+    "title": "Track Expressions & Part Separation Test",
+    "artist": "Synthetic Fixture",
+    "composer": "Synthetic Fixture",
+    "transcriber": "score2gp",
+    "copyright": "Public Domain"
+  },
+  "conversion": {
+    "tool_name": "score2gp",
+    "tool_version": "0.1.0",
+    "conversion_timestamp": "2026-05-26T00:00:00Z",
+    "source_file_hash": "sha256:test-track-expressions-layout",
+    "source_page_count": 1
+  },
+  "tempo": {
+    "bpm": 120,
+    "text": "Moderato"
+  },
+  "layout": {
+    "page_setup": {
+      "width": 210.0,
+      "height": 297.0,
+      "margins": {
+        "top": 15.0,
+        "bottom": 15.0,
+        "left": 15.0,
+        "right": 15.0
+      },
+      "scale": 1.0
+    },
+    "track_order": ["vln-1", "vcl-1"],
+    "score_systems_layout": 4,
+    "part_separation": [
+      {
+        "part_id": "vln-part",
+        "track_ids": ["vln-1"],
+        "layout_mode": "standalone",
+        "visible": true
+      }
+    ]
+  },
+  "tracks": [
+    {
+      "id": "vln-1",
+      "name": "Violin",
+      "instrument": "violin",
+      "capo": 0,
+      "tablature_enabled": false,
+      "staff_count": 1,
+      "tuning": {
+        "name": "Violin Tuning",
+        "strings": [
+          { "number": 1, "pitch": 76, "name": "E5" },
+          { "number": 2, "pitch": 69, "name": "A4" },
+          { "number": 3, "pitch": 62, "name": "D4" },
+          { "number": 4, "pitch": 55, "name": "G3" }
+        ]
+      },
+      "expressions": [
+        {
+          "bar_index": 1,
+          "text": "pizzicato"
+        },
+        {
+          "bar_index": 2,
+          "text": "arco"
+        }
+      ]
+    },
+    {
+      "id": "vcl-1",
+      "name": "Cello",
+      "instrument": "cello",
+      "capo": 0,
+      "tablature_enabled": false,
+      "staff_count": 1,
+      "tuning": {
+        "name": "Cello Tuning",
+        "strings": [
+          { "number": 1, "pitch": 57, "name": "A3" },
+          { "number": 2, "pitch": 50, "name": "D3" },
+          { "number": 3, "pitch": 43, "name": "G2" },
+          { "number": 4, "pitch": 36, "name": "C2" }
+        ]
+      }
+    }
+  ],
+  "bars": [
+    {
+      "index": 1,
+      "time_signature": {
+        "numerator": 4,
+        "denominator": 4
+      },
+      "events": [
+        {
+          "id": "e1",
+          "track_id": "vln-1",
+          "timing": {
+            "bar_index": 1,
+            "onset_ticks": 0,
+            "duration_ticks": 1920,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "half", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 3,
+              "fret": 2,
+              "pitch": 64,
+              "confidence": 1.0
+            }
+          ],
+          "confidence": 1.0
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "time_signature": {
+        "numerator": 4,
+        "denominator": 4
+      },
+      "events": [
+        {
+          "id": "e2",
+          "track_id": "vln-1",
+          "timing": {
+            "bar_index": 2,
+            "onset_ticks": 0,
+            "duration_ticks": 1920,
+            "ticks_per_quarter": 960,
+            "voice": 1,
+            "notated_duration": { "value": "half", "dots": 0 }
+          },
+          "notes": [
+            {
+              "string": 3,
+              "fret": 4,
+              "pitch": 66,
+              "confidence": 1.0
+            }
+          ],
+          "confidence": 1.0
+        }
+      ]
+    }
+  ],
+  "warnings": []
+}
