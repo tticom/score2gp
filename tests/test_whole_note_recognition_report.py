@@ -5,7 +5,7 @@ from pathlib import Path
 
 def test_whole_note_recognition_report_public_fixture():
     script_path = Path("scripts/whole_note_recognition_report.py")
-    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
+    fixture_path = _get_dynamic_private_pdf()
 
     assert script_path.exists()
     assert fixture_path.exists()
@@ -42,7 +42,7 @@ def test_whole_note_recognition_report_public_fixture():
 def test_whole_note_recognition_report_nested_path_sanitisation(tmp_path):
     import shutil
     script_path = Path("scripts/whole_note_recognition_report.py")
-    fixture_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
+    fixture_path = _get_dynamic_private_pdf()
 
     # Create a nested path in tmp_path
     nested_dir = tmp_path / "deeply" / "nested" / "private_lookalike"

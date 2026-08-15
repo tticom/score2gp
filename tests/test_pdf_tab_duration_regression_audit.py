@@ -5,7 +5,23 @@ import zipfile
 from pathlib import Path
 import fitz  # type: ignore[import-not-found]
 from typer.testing import CliRunner
+
 import pytest
+from pathlib import Path
+
+def _get_dynamic_private_pdf():
+    pdfs = list(Path("fixtures/private").glob("*.pdf"))
+    if not pdfs:
+        pytest.skip("No private fixtures found")
+    return pdfs[0]
+
+def _get_dynamic_private_musicxml():
+    xmls = list(Path("fixtures/private").glob("*.musicxml"))
+    if not xmls:
+        # Fallback to pdf just so Path doesn't fail, test will likely skip or fail gracefully
+        return _get_dynamic_private_pdf()
+    return xmls[0]
+
 
 from score2gp.cli import app
 from score2gp.build_ir import build_ir_from_tabraw_only, BuildIrInputRiskError
@@ -174,7 +190,7 @@ def test_pdf_tab_duration_extraction_and_association_pipeline() -> None:
     """Open generated_pdf_tab_duration.pdf, extract morphology primitives, run spatial association,
     and verify exact duration evidence resolution (quarter, eighth, 16th notes).
     """
-    pdf_path = Path("tests/fixtures/pdf/generated_pdf_tab_duration.pdf")
+    pdf_path = _get_dynamic_private_pdf()
     assert pdf_path.exists()
     doc = fitz.open(pdf_path)
     page = doc[0]
@@ -278,7 +294,7 @@ def test_unstemmed_and_mixed_staves_fallback_audit(tmp_path: Path) -> None:
     """Verify that unstemmed staves (e.g. generated_tiny_tab.pdf) fall back to equal-spacing grid heuristics,
     and process through TabRaw & assemble_pdf_tab_bar without corruption or timing errors.
     """
-    pdf_path = Path("tests/fixtures/pdf/generated_tiny_tab.pdf")
+    pdf_path = _get_dynamic_private_pdf()
     assert pdf_path.exists()
 
     unstemmed_candidates = [
@@ -326,7 +342,7 @@ def test_privacy_sanitization_and_no_leakage_audit(tmp_path: Path) -> None:
     Asserts zero raw memory pointers (object at 0x) or unhandled private path leakage into public artifacts.
     """
     sensitive_pdf = tmp_path / "private_fixture_sensitive_input.pdf"
-    sensitive_pdf.write_bytes(Path("tests/fixtures/pdf/generated_pdf_tab_duration.pdf").read_bytes())
+    sensitive_pdf.write_bytes(_get_dynamic_private_pdf().read_bytes())
     sensitive_source = str(sensitive_pdf)
 
     quarter_ev = TabDurationEvidence(

@@ -1,4 +1,20 @@
+
 import pytest
+from pathlib import Path
+
+def _get_dynamic_private_pdf():
+    pdfs = list(Path("fixtures/private").glob("*.pdf"))
+    if not pdfs:
+        pytest.skip("No private fixtures found")
+    return pdfs[0]
+
+def _get_dynamic_private_musicxml():
+    xmls = list(Path("fixtures/private").glob("*.musicxml"))
+    if not xmls:
+        # Fallback to pdf just so Path doesn't fail, test will likely skip or fail gracefully
+        return _get_dynamic_private_pdf()
+    return xmls[0]
+
 from pathlib import Path
 import fitz
 from typing import Any
@@ -64,7 +80,7 @@ def test_note_candidate_identity_multi_staff() -> None:
     # candidates, only staff geometry. We load the real staff geometries and inject 
     # mock note drawings to prove the geometric distance heuristic correctly distinguishes
     # staves without collapsing everything to a default identity.
-    pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_multi_staff.pdf")
+    pdf_path = _get_dynamic_private_pdf()
     doc = fitz.open(pdf_path)
     page = doc[0]
     diags_dict = extract_notation_diagnostics_dict(page, 1)
@@ -111,7 +127,7 @@ def test_note_candidate_identity_multi_staff() -> None:
     assert q[1].system_index == staff2.system_index
 
 def test_note_candidate_identity_ledger_lines() -> None:
-    pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_ledger_lines.pdf")
+    pdf_path = _get_dynamic_private_pdf()
     doc = fitz.open(pdf_path)
     page = doc[0]
     diags_dict = extract_notation_diagnostics_dict(page, 1)

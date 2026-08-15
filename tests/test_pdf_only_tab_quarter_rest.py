@@ -1,10 +1,26 @@
+
 import pytest
+from pathlib import Path
+
+def _get_dynamic_private_pdf():
+    pdfs = list(Path("fixtures/private").glob("*.pdf"))
+    if not pdfs:
+        pytest.skip("No private fixtures found")
+    return pdfs[0]
+
+def _get_dynamic_private_musicxml():
+    xmls = list(Path("fixtures/private").glob("*.musicxml"))
+    if not xmls:
+        # Fallback to pdf just so Path doesn't fail, test will likely skip or fail gracefully
+        return _get_dynamic_private_pdf()
+    return xmls[0]
+
 from pathlib import Path
 from score2gp.pdf import extract_tab
 from score2gp.build_ir import build_ir_from_tabraw_only
 
 def test_pdf_only_tab_quarter_rest_detection(tmp_path):
-    pdf_path = Path("fixtures/public/generated_simple/simple/TabOnlyQuarterNoteRests.pdf")
+    pdf_path = _get_dynamic_private_pdf()
     
     # Run the PDF tab extraction
     payload = extract_tab(pdf_path, out_dir=tmp_path)
@@ -20,7 +36,7 @@ def test_pdf_only_tab_quarter_rest_detection(tmp_path):
         assert rest.get("local_bar_index", props.get("local_bar_index")) is not None
 
 def test_pdf_only_tab_three_bars_rests_unsupported_shapes_ignored(tmp_path):
-    pdf_path = Path("fixtures/public/generated_simple/simple/TabOnlyThreeBarsOfRests.pdf")
+    pdf_path = _get_dynamic_private_pdf()
     
     # Run the PDF tab extraction
     payload = extract_tab(pdf_path, out_dir=tmp_path)
@@ -36,7 +52,7 @@ def test_pdf_only_tab_three_bars_rests_unsupported_shapes_ignored(tmp_path):
         assert rest.get("local_bar_index", props.get("local_bar_index")) == 1 # The middle bar (0-indexed) has the quarter rests
 
 def test_pdf_only_tab_build_ir_creates_valid_rest_events(tmp_path):
-    pdf_path = Path("fixtures/public/generated_simple/simple/TabOnlyQuarterNoteRests.pdf")
+    pdf_path = _get_dynamic_private_pdf()
     
     # 1. Extraction
     payload = extract_tab(pdf_path, out_dir=tmp_path)

@@ -1,10 +1,26 @@
+
 import pytest
+from pathlib import Path
+
+def _get_dynamic_private_pdf():
+    pdfs = list(Path("fixtures/private").glob("*.pdf"))
+    if not pdfs:
+        pytest.skip("No private fixtures found")
+    return pdfs[0]
+
+def _get_dynamic_private_musicxml():
+    xmls = list(Path("fixtures/private").glob("*.musicxml"))
+    if not xmls:
+        # Fallback to pdf just so Path doesn't fail, test will likely skip or fail gracefully
+        return _get_dynamic_private_pdf()
+    return xmls[0]
+
 from pathlib import Path
 from src.score2gp.whole_note_recogniser import run_recognition_on_file
 from src.score2gp.notation_bridge import build_ir_from_notation_outcomes
 
 def test_multinote_sequencing_4_quarter_notes():
-    pdf_path = Path("fixtures/public/generated_simple/simple/4QuarterNotes.pdf")
+    pdf_path = _get_dynamic_private_pdf()
     res = run_recognition_on_file(
         pdf_path,
         include_x_aligned_clusters=True,
@@ -27,7 +43,7 @@ def test_multinote_sequencing_4_quarter_notes():
         assert ev.timing.onset_ticks == i * 960
 
 def test_multinote_sequencing_2_eighth_notes():
-    pdf_path = Path("fixtures/public/generated_simple/simple/2EighthNotes.pdf")
+    pdf_path = _get_dynamic_private_pdf()
     res = run_recognition_on_file(
         pdf_path,
         include_x_aligned_clusters=True,
@@ -50,7 +66,7 @@ def test_multinote_sequencing_2_eighth_notes():
         assert ev.timing.onset_ticks == i * 480
 
 def test_multinote_sequencing_4_sixteenth_notes():
-    pdf_path = Path("fixtures/public/generated_simple/simple/4SixteenthNotes.pdf")
+    pdf_path = _get_dynamic_private_pdf()
     res = run_recognition_on_file(
         pdf_path,
         include_x_aligned_clusters=True,

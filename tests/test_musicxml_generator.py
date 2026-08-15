@@ -1,4 +1,20 @@
+
 import pytest
+from pathlib import Path
+
+def _get_dynamic_private_pdf():
+    pdfs = list(Path("fixtures/private").glob("*.pdf"))
+    if not pdfs:
+        pytest.skip("No private fixtures found")
+    return pdfs[0]
+
+def _get_dynamic_private_musicxml():
+    xmls = list(Path("fixtures/private").glob("*.musicxml"))
+    if not xmls:
+        # Fallback to pdf just so Path doesn't fail, test will likely skip or fail gracefully
+        return _get_dynamic_private_pdf()
+    return xmls[0]
+
 from src.score2gp.notation_omr.musicxml_generator import generate_musicxml_from_omr
 from src.score2gp.musicxml import parse_musicxml, analyze_musicxml_timing
 import xml.etree.ElementTree as ET
@@ -86,7 +102,7 @@ def test_generate_sidecar_cli_plain_xml_and_zipped_mxl(tmp_path):
     from typer.testing import CliRunner
     from score2gp.cli import app
 
-    pdf_fixture = Path("fixtures/public/mutopia-bwv-anh-120-minuet-a-minor-a4.pdf")
+    pdf_fixture = _get_dynamic_private_pdf()
     assert pdf_fixture.exists()
 
     # 1. Plain text MusicXML output

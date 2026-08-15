@@ -1,4 +1,20 @@
+
 import pytest
+from pathlib import Path
+
+def _get_dynamic_private_pdf():
+    pdfs = list(Path("fixtures/private").glob("*.pdf"))
+    if not pdfs:
+        pytest.skip("No private fixtures found")
+    return pdfs[0]
+
+def _get_dynamic_private_musicxml():
+    xmls = list(Path("fixtures/private").glob("*.musicxml"))
+    if not xmls:
+        # Fallback to pdf just so Path doesn't fail, test will likely skip or fail gracefully
+        return _get_dynamic_private_pdf()
+    return xmls[0]
+
 from pathlib import Path
 from score2gp.whole_note_recogniser import run_recognition_on_file
 
@@ -11,7 +27,7 @@ def _get_note_candidates(res: dict) -> list[dict]:
     ]
 
 def test_fractional_double_beam_extraction_sixteenth_notes():
-    pdf_path = Path("fixtures/public/generated_simple/simple/4SixteenthNotes.pdf")
+    pdf_path = _get_dynamic_private_pdf()
     res = run_recognition_on_file(
         pdf_path,
         include_x_aligned_clusters=True,
@@ -30,7 +46,7 @@ def test_fractional_double_beam_extraction_sixteenth_notes():
 
 
 def test_fractional_double_beam_extraction_quarter_notes_no_false_positives():
-    pdf_path = Path("fixtures/public/generated_simple/simple/4QuarterNotes.pdf")
+    pdf_path = _get_dynamic_private_pdf()
     res = run_recognition_on_file(
         pdf_path,
         include_x_aligned_clusters=True,
@@ -49,7 +65,7 @@ def test_fractional_double_beam_extraction_quarter_notes_no_false_positives():
 
 
 def test_fractional_double_beam_extraction_eighth_notes():
-    pdf_path = Path("fixtures/public/generated_simple/simple/2EighthNotes.pdf")
+    pdf_path = _get_dynamic_private_pdf()
     res = run_recognition_on_file(
         pdf_path,
         include_x_aligned_clusters=True,

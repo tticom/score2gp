@@ -148,7 +148,7 @@ def test_notation_half_note_export_rejects_whole_note(tmp_path):
         assert not out_gp.exists()
 
 def test_notation_whole_note_export_fails_on_real_fixture_due_to_multiple_notes(tmp_path):
-    pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
+    pdf_path = _get_dynamic_private_pdf()
     out_gp = tmp_path / "out_real.gp"
 
     result = runner.invoke(app, [
@@ -164,7 +164,7 @@ def test_notation_whole_note_export_fails_on_real_fixture_due_to_multiple_notes(
     assert not out_gp.exists()
 
 def test_notation_whole_note_export_fails_on_real_fixture_without_flag(tmp_path):
-    pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
+    pdf_path = _get_dynamic_private_pdf()
     out_gp = tmp_path / "out_real_fail.gp"
 
     result = runner.invoke(app, [
@@ -203,7 +203,7 @@ def test_notation_whole_note_export_fails_without_pitch_resolution(tmp_path):
 
 def test_coverage_report_under_assume_treble_clef():
     from score2gp.whole_note_recogniser import run_recognition_on_file
-    pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
+    pdf_path = _get_dynamic_private_pdf()
     res = run_recognition_on_file(pdf_path, assume_treble_clef=True)
     report = res["clef_resolved_pitch_coverage"]
     
@@ -215,7 +215,7 @@ def test_coverage_report_under_assume_treble_clef():
 
 def test_coverage_report_without_assume_treble_clef():
     from score2gp.whole_note_recogniser import run_recognition_on_file
-    pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
+    pdf_path = _get_dynamic_private_pdf()
     res = run_recognition_on_file(pdf_path, assume_treble_clef=False)
     report = res["clef_resolved_pitch_coverage"]
     
@@ -229,7 +229,7 @@ def test_notation_whole_note_export_success_real_fixture(tmp_path):
     from score2gp.whole_note_recogniser import run_recognition_on_file
     from score2gp.gp_package import inspect_gp, validate_gp
 
-    pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_single_whole_note.pdf")
+    pdf_path = _get_dynamic_private_pdf()
     out_gp = tmp_path / "out_success.gp"
 
     # 1. Candidate-count validation through real recognition

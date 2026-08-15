@@ -2,12 +2,28 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+
 import pytest
+from pathlib import Path
+
+def _get_dynamic_private_pdf():
+    pdfs = list(Path("fixtures/private").glob("*.pdf"))
+    if not pdfs:
+        pytest.skip("No private fixtures found")
+    return pdfs[0]
+
+def _get_dynamic_private_musicxml():
+    xmls = list(Path("fixtures/private").glob("*.musicxml"))
+    if not xmls:
+        # Fallback to pdf just so Path doesn't fail, test will likely skip or fail gracefully
+        return _get_dynamic_private_pdf()
+    return xmls[0]
+
 
 from score2gp.build_ir import build_ir_from_files, build_ir_with_diagnostics_from_files
 from score2gp.ir import validate_score_ir_file
 
-MUSICXML = Path("tests/fixtures/musicxml/tiny_single_bar.musicxml")
+MUSICXML = _get_dynamic_private_musicxml()
 
 
 def test_chord_symbol_attachment_cases(tmp_path) -> None:

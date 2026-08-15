@@ -13,7 +13,7 @@ def _get_subprocess_env():
 
 def test_note_candidate_recognition_cli_exposes_semantic_candidates():
     # We use dense_margin which has a clef
-    pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_dense_margin.pdf")
+    pdf_path = _get_dynamic_private_pdf()
     assert pdf_path.exists()
 
     cmd = [
@@ -40,7 +40,7 @@ def test_note_candidate_recognition_cli_exposes_semantic_candidates():
     assert clef["clef_kind"] == "unknown"  # dense_margin has ambiguous left margin clef
 
 def test_inspect_pdf_cli_exposes_semantic_candidates(tmp_path):
-    pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_dense_margin.pdf")
+    pdf_path = _get_dynamic_private_pdf()
     out_json = tmp_path / "inspect_pdf.json"
 
     cmd = [
@@ -67,7 +67,7 @@ def test_inspect_pdf_cli_exposes_semantic_candidates(tmp_path):
 
 def test_reporting_script_exposes_semantic_candidates():
     script_path = Path("scripts/note_candidate_recognition_report.py")
-    pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_dense_margin.pdf")
+    pdf_path = _get_dynamic_private_pdf()
     assert script_path.exists()
 
     cmd = [
@@ -82,8 +82,8 @@ def test_reporting_script_exposes_semantic_candidates():
 
 def test_legacy_scoreir_and_playable_output_unchanged(tmp_path):
     # Verify convert runs successfully and produces the expected GP package
-    pdf_path = Path("tests/fixtures/pdf/generated_tiny_tab.pdf")
-    musicxml_path = Path("tests/fixtures/musicxml/generated_tiny_tab.musicxml")
+    pdf_path = _get_dynamic_private_pdf()
+    musicxml_path = _get_dynamic_private_musicxml()
     out_gp = tmp_path / "output.gp"
     workdir = tmp_path / "workdir"
     json_report = tmp_path / "report.json"

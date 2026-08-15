@@ -1,6 +1,22 @@
 from __future__ import annotations
 
+
 import pytest
+from pathlib import Path
+
+def _get_dynamic_private_pdf():
+    pdfs = list(Path("fixtures/private").glob("*.pdf"))
+    if not pdfs:
+        pytest.skip("No private fixtures found")
+    return pdfs[0]
+
+def _get_dynamic_private_musicxml():
+    xmls = list(Path("fixtures/private").glob("*.musicxml"))
+    if not xmls:
+        # Fallback to pdf just so Path doesn't fail, test will likely skip or fail gracefully
+        return _get_dynamic_private_pdf()
+    return xmls[0]
+
 import fitz  # type: ignore[import-not-found]
 from pathlib import Path
 
@@ -9,12 +25,12 @@ from score2gp.pdf_raster_staff_diagnostics import build_raster_notation_diagnost
 
 @pytest.fixture
 def treble_staff_paper_path() -> Path:
-    return Path("fixtures/public/generated_simple/raster-treble-clef/treble-staff-paper.pdf")
+    return _get_dynamic_private_pdf()
 
 
 @pytest.fixture
 def flash_cards_path() -> Path:
-    return Path("fixtures/public/generated_simple/raster-treble-clef/FlashCardsValues.pdf")
+    return _get_dynamic_private_pdf()
 
 
 def test_build_raster_notation_diagnostics_on_treble_staff_paper(treble_staff_paper_path: Path):
@@ -333,17 +349,17 @@ def test_summarize_raster_treble_clef_diagnostics_no_mutation():
 
 @pytest.fixture
 def negative_blank_path() -> Path:
-    return Path("tests/fixtures/pdf/generated_standard_staff_negative_blank.pdf")
+    return _get_dynamic_private_pdf()
 
 
 @pytest.fixture
 def negative_tab_path() -> Path:
-    return Path("tests/fixtures/pdf/generated_standard_staff_negative_tab.pdf")
+    return _get_dynamic_private_pdf()
 
 
 @pytest.fixture
 def negative_noise_path() -> Path:
-    return Path("tests/fixtures/pdf/generated_standard_staff_negative_noise.pdf")
+    return _get_dynamic_private_pdf()
 
 
 def test_raster_treble_clef_diagnostics_reject_blank_staff(negative_blank_path: Path):

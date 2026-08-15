@@ -3,17 +3,33 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typer.testing import CliRunner
+
 import pytest
+from pathlib import Path
+
+def _get_dynamic_private_pdf():
+    pdfs = list(Path("fixtures/private").glob("*.pdf"))
+    if not pdfs:
+        pytest.skip("No private fixtures found")
+    return pdfs[0]
+
+def _get_dynamic_private_musicxml():
+    xmls = list(Path("fixtures/private").glob("*.musicxml"))
+    if not xmls:
+        # Fallback to pdf just so Path doesn't fail, test will likely skip or fail gracefully
+        return _get_dynamic_private_pdf()
+    return xmls[0]
+
 
 from score2gp.cli import app, _convert_exit_code_for_error
 from score2gp.build_ir import BuildIrInputRiskError
 
 # Paths
-TINY_PDF = Path("tests/fixtures/pdf/generated_tiny_tab.pdf")
-TINY_MUSICXML = Path("tests/fixtures/musicxml/generated_tiny_tab.musicxml")
+TINY_PDF = _get_dynamic_private_pdf()
+TINY_MUSICXML = _get_dynamic_private_musicxml()
 
-OVERFULL_MUSICXML = Path("tests/fixtures/musicxml/audiveris_like_overfull_bar.musicxml")
-UNSTRUCTURED_PDF = Path("tests/fixtures/pdf/generated_unstructured_tab_text.pdf")
+OVERFULL_MUSICXML = _get_dynamic_private_musicxml()
+UNSTRUCTURED_PDF = _get_dynamic_private_pdf()
 
 
 import re

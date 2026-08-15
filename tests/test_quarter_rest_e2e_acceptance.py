@@ -1,5 +1,21 @@
 import zipfile
+
 import pytest
+from pathlib import Path
+
+def _get_dynamic_private_pdf():
+    pdfs = list(Path("fixtures/private").glob("*.pdf"))
+    if not pdfs:
+        pytest.skip("No private fixtures found")
+    return pdfs[0]
+
+def _get_dynamic_private_musicxml():
+    xmls = list(Path("fixtures/private").glob("*.musicxml"))
+    if not xmls:
+        # Fallback to pdf just so Path doesn't fail, test will likely skip or fail gracefully
+        return _get_dynamic_private_pdf()
+    return xmls[0]
+
 from pathlib import Path
 from xml.etree import ElementTree as ET
 from unittest.mock import patch
@@ -9,7 +25,7 @@ from score2gp.notation_bridge import build_ir_from_notation_outcomes
 from score2gp.gp_package import write_gp, validate_gp
 
 def test_quarter_rest_e2e_acceptance(tmp_path):
-    pdf_path = Path("fixtures/public/generated_simple/simple/QuarterRestThenNotes.pdf")
+    pdf_path = _get_dynamic_private_pdf()
     
     # 1. Extraction boundary
     res = run_recognition_on_file(

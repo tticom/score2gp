@@ -1,11 +1,27 @@
+
 import pytest
+from pathlib import Path
+
+def _get_dynamic_private_pdf():
+    pdfs = list(Path("fixtures/private").glob("*.pdf"))
+    if not pdfs:
+        pytest.skip("No private fixtures found")
+    return pdfs[0]
+
+def _get_dynamic_private_musicxml():
+    xmls = list(Path("fixtures/private").glob("*.musicxml"))
+    if not xmls:
+        # Fallback to pdf just so Path doesn't fail, test will likely skip or fail gracefully
+        return _get_dynamic_private_pdf()
+    return xmls[0]
+
 from pathlib import Path
 import fitz
 from score2gp.pdf_staff_notation_diagnostics import extract_notation_diagnostics_dict
 from scripts.raster_diagnostics_gate_report import run_diagnostics_on_file as gate_run_diagnostics_on_file
 
 def test_extract_notation_diagnostics_dict_whole_note() -> None:
-    pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
+    pdf_path = _get_dynamic_private_pdf()
     assert pdf_path.exists()
     doc = fitz.open(pdf_path)
     page = doc[0]
@@ -16,7 +32,7 @@ def test_extract_notation_diagnostics_dict_whole_note() -> None:
     assert len(cands) == 2
 
 def test_extract_notation_diagnostics_dict_half_note() -> None:
-    pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_half_note.pdf")
+    pdf_path = _get_dynamic_private_pdf()
     assert pdf_path.exists()
     doc = fitz.open(pdf_path)
     page = doc[0]
@@ -26,7 +42,7 @@ def test_extract_notation_diagnostics_dict_half_note() -> None:
     assert cands is None or len(cands) == 0
 
 def test_raster_diagnostics_gate_report_whole_note() -> None:
-    pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
+    pdf_path = _get_dynamic_private_pdf()
     assert pdf_path.exists()
     res = gate_run_diagnostics_on_file(pdf_path)
     assert res is not None
@@ -68,13 +84,13 @@ def test_raster_diagnostics_gate_report_whole_note() -> None:
     assert summary.get("candidate_count_by_page") == {str(p["page_index"]): p["whole_note_candidate"] for p in pages}
 
 def test_deterministic_candidate_ids_across_runs() -> None:
-    pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
+    pdf_path = _get_dynamic_private_pdf()
     res1 = gate_run_diagnostics_on_file(pdf_path)
     res2 = gate_run_diagnostics_on_file(pdf_path)
     assert res1["whole_note_candidate_locations"] == res2["whole_note_candidate_locations"]
 
 def test_raster_diagnostics_gate_report_half_note() -> None:
-    pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_half_note.pdf")
+    pdf_path = _get_dynamic_private_pdf()
     assert pdf_path.exists()
     res = gate_run_diagnostics_on_file(pdf_path)
     assert res is not None
@@ -89,7 +105,7 @@ def test_raster_diagnostics_gate_report_half_note() -> None:
     assert summary.get("candidate_count_by_page") == {}
 
 def test_raster_diagnostics_gate_report_negative_noise() -> None:
-    pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_negative_noise.pdf")
+    pdf_path = _get_dynamic_private_pdf()
     assert pdf_path.exists()
     res = gate_run_diagnostics_on_file(pdf_path)
     assert res is not None

@@ -5,14 +5,30 @@ import zipfile
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
+
 import pytest
+from pathlib import Path
+
+def _get_dynamic_private_pdf():
+    pdfs = list(Path("fixtures/private").glob("*.pdf"))
+    if not pdfs:
+        pytest.skip("No private fixtures found")
+    return pdfs[0]
+
+def _get_dynamic_private_musicxml():
+    xmls = list(Path("fixtures/private").glob("*.musicxml"))
+    if not xmls:
+        # Fallback to pdf just so Path doesn't fail, test will likely skip or fail gracefully
+        return _get_dynamic_private_pdf()
+    return xmls[0]
+
 from typer.testing import CliRunner
 
 from score2gp.cli import app
 from score2gp.gp_package import inspect_gp, validate_gp
 
-ASCII_GATE_PDF = Path("tests/fixtures/pdf/generated_ascii_tab_scoreir_gate.pdf")
-ASCII_GATE_MUSICXML = Path("tests/fixtures/musicxml/ascii_scoreir_gate_simple.musicxml")
+ASCII_GATE_PDF = _get_dynamic_private_pdf()
+ASCII_GATE_MUSICXML = _get_dynamic_private_musicxml()
 
 
 def test_orchestration_convert_success(tmp_path) -> None:

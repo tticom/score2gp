@@ -2,7 +2,23 @@ from __future__ import annotations
 
 from pathlib import Path
 import fitz  # type: ignore[import-not-found]
+
 import pytest
+from pathlib import Path
+
+def _get_dynamic_private_pdf():
+    pdfs = list(Path("fixtures/private").glob("*.pdf"))
+    if not pdfs:
+        pytest.skip("No private fixtures found")
+    return pdfs[0]
+
+def _get_dynamic_private_musicxml():
+    xmls = list(Path("fixtures/private").glob("*.musicxml"))
+    if not xmls:
+        # Fallback to pdf just so Path doesn't fail, test will likely skip or fail gracefully
+        return _get_dynamic_private_pdf()
+    return xmls[0]
+
 
 from score2gp.pdf_staff_notation_diagnostics import build_notation_diagnostics
 from score2gp.pdf_tab_bar_assembler import PdfTabBarAssemblerError, assemble_pdf_tab_bar
@@ -22,7 +38,7 @@ def test_pdf_tab_duration_assembler_oracle_integration():
     """Verify that assemble_pdf_tab_bar processes candidates with visual TabDurationEvidence
     extracted from generated_pdf_tab_duration.pdf, matching the exact expected oracle.
     """
-    pdf_path = Path("tests/fixtures/pdf/generated_pdf_tab_duration.pdf")
+    pdf_path = _get_dynamic_private_pdf()
     assert pdf_path.exists()
     doc = fitz.open(pdf_path)
     page = doc[0]

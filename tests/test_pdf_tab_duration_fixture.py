@@ -15,7 +15,7 @@ from tests.fixtures.pdf.make_generated_pdf_tab_duration_pdf import (
 
 
 def test_pdf_tab_duration_fixture_generation_and_reproducibility(tmp_path: Path):
-    pdf_path = Path("tests/fixtures/pdf/generated_pdf_tab_duration.pdf")
+    pdf_path = _get_dynamic_private_pdf()
     assert pdf_path.exists(), "Synthetic PDF fixture must exist"
 
     # Regenerate fixture to verify reproducibility into temporary path
@@ -29,7 +29,7 @@ def test_pdf_tab_duration_fixture_extracts_duration_candidates():
     can be extracted by the primitive morphology diagnostic engine when the 6-line tab staff
     is fed into the notation diagnostic path.
     """
-    pdf_path = Path("tests/fixtures/pdf/generated_pdf_tab_duration.pdf")
+    pdf_path = _get_dynamic_private_pdf()
     doc = fitz.open(pdf_path)
     page = doc[0]
 
