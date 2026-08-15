@@ -5,7 +5,7 @@ from pathlib import Path
 def _get_dynamic_private_pdf():
     pdfs = list(Path("fixtures/private").glob("*.pdf"))
     if not pdfs:
-        pytest.skip("No private fixtures found")
+        pytest.skip("No private fixtures found", allow_module_level=True)
     return pdfs[0]
 
 def _get_dynamic_private_musicxml():
