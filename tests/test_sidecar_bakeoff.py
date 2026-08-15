@@ -22,7 +22,7 @@ def test_44_triplet_discriminator() -> None:
             "staff_index": 0,
             "x0": 100.0,
             "tuplet_association": triplet_assoc,
-            "voice": 1,
+            "voice": 1, "clef_resolved_staff_pitch": "C4",
         },
         {
             "symbol_type": "eighth_note_candidate",
@@ -31,7 +31,7 @@ def test_44_triplet_discriminator() -> None:
             "staff_index": 0,
             "x0": 120.0,
             "tuplet_association": triplet_assoc,
-            "voice": 1,
+            "voice": 1, "clef_resolved_staff_pitch": "C4",
         },
         {
             "symbol_type": "eighth_note_candidate",
@@ -40,7 +40,7 @@ def test_44_triplet_discriminator() -> None:
             "staff_index": 0,
             "x0": 140.0,
             "tuplet_association": triplet_assoc,
-            "voice": 1,
+            "voice": 1, "clef_resolved_staff_pitch": "C4",
         },
         # 3 Quarter notes
         {
@@ -49,7 +49,7 @@ def test_44_triplet_discriminator() -> None:
             "system_index": 0,
             "staff_index": 0,
             "x0": 200.0,
-            "voice": 1,
+            "voice": 1, "clef_resolved_staff_pitch": "C4",
         },
         {
             "symbol_type": "quarter_note_candidate",
@@ -57,7 +57,7 @@ def test_44_triplet_discriminator() -> None:
             "system_index": 0,
             "staff_index": 0,
             "x0": 300.0,
-            "voice": 1,
+            "voice": 1, "clef_resolved_staff_pitch": "C4",
         },
         {
             "symbol_type": "quarter_note_candidate",
@@ -65,7 +65,7 @@ def test_44_triplet_discriminator() -> None:
             "system_index": 0,
             "staff_index": 0,
             "x0": 400.0,
-            "voice": 1,
+            "voice": 1, "clef_resolved_staff_pitch": "C4",
         },
     ]
 

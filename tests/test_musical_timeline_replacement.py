@@ -21,10 +21,10 @@ def test_bar_timeline_dataclass_capacity_invariants() -> None:
         voice_2_final_tick=0,
         valid=True,
         events=[
-            {"symbol_type": "quarter_note", "voice": 1, "start_tick": 0, "duration_ticks": 960},
-            {"symbol_type": "quarter_note", "voice": 1, "start_tick": 960, "duration_ticks": 960},
-            {"symbol_type": "quarter_note", "voice": 1, "start_tick": 1920, "duration_ticks": 960},
-            {"symbol_type": "quarter_note", "voice": 1, "start_tick": 2880, "duration_ticks": 960},
+            {"symbol_type": "quarter_note", "voice": 1, "clef_resolved_staff_pitch": "C4", "start_tick": 0, "duration_ticks": 960},
+            {"symbol_type": "quarter_note", "voice": 1, "clef_resolved_staff_pitch": "C4", "start_tick": 960, "duration_ticks": 960},
+            {"symbol_type": "quarter_note", "voice": 1, "clef_resolved_staff_pitch": "C4", "start_tick": 1920, "duration_ticks": 960},
+            {"symbol_type": "quarter_note", "voice": 1, "clef_resolved_staff_pitch": "C4", "start_tick": 2880, "duration_ticks": 960},
         ],
     )
 
@@ -69,8 +69,8 @@ def test_44_triplet_timing_preservation() -> None:
             "system_index": 1,
             "staff_index": 1,
             "x0": 100.0,
-            "tuplet_association": triplet_assoc,
-            "voice": 1,
+            "tuplet_association": triplet_assoc, "clef_resolved_staff_pitch": "C4",
+            "voice": 1, "clef_resolved_staff_pitch": "C4",
         },
         {
             "symbol_type": "eighth_note_candidate",
@@ -78,8 +78,8 @@ def test_44_triplet_timing_preservation() -> None:
             "system_index": 1,
             "staff_index": 1,
             "x0": 120.0,
-            "tuplet_association": triplet_assoc,
-            "voice": 1,
+            "tuplet_association": triplet_assoc, "clef_resolved_staff_pitch": "C4",
+            "voice": 1, "clef_resolved_staff_pitch": "C4",
         },
         {
             "symbol_type": "eighth_note_candidate",
@@ -87,8 +87,8 @@ def test_44_triplet_timing_preservation() -> None:
             "system_index": 1,
             "staff_index": 1,
             "x0": 140.0,
-            "tuplet_association": triplet_assoc,
-            "voice": 1,
+            "tuplet_association": triplet_assoc, "clef_resolved_staff_pitch": "C4",
+            "voice": 1, "clef_resolved_staff_pitch": "C4",
         },
         # 3 Quarter notes
         {
@@ -97,7 +97,7 @@ def test_44_triplet_timing_preservation() -> None:
             "system_index": 1,
             "staff_index": 1,
             "x0": 200.0,
-            "voice": 1,
+            "voice": 1, "clef_resolved_staff_pitch": "C4",
         },
         {
             "symbol_type": "quarter_note_candidate",
@@ -105,7 +105,7 @@ def test_44_triplet_timing_preservation() -> None:
             "system_index": 1,
             "staff_index": 1,
             "x0": 300.0,
-            "voice": 1,
+            "voice": 1, "clef_resolved_staff_pitch": "C4",
         },
         {
             "symbol_type": "quarter_note_candidate",
@@ -113,7 +113,7 @@ def test_44_triplet_timing_preservation() -> None:
             "system_index": 1,
             "staff_index": 1,
             "x0": 400.0,
-            "voice": 1,
+            "voice": 1, "clef_resolved_staff_pitch": "C4",
         },
     ]
 
@@ -154,8 +154,8 @@ def test_strict_chord_equivalence_and_invalidation() -> None:
     """Verify chords are properly grouped and conflicting durations trigger invalidation."""
     # 1. Valid chord (two whole notes at the same time)
     valid_outcomes = [
-        {"symbol_type": "whole_note_candidate", "page_index": 1, "system_index": 1, "staff_index": 1, "x0": 100.0, "voice": 1},
-        {"symbol_type": "whole_note_candidate", "page_index": 1, "system_index": 1, "staff_index": 1, "x0": 100.0, "voice": 1},
+        {"symbol_type": "whole_note_candidate", "page_index": 1, "system_index": 1, "staff_index": 1, "x0": 100.0, "voice": 1, "clef_resolved_staff_pitch": "C4"},
+        {"symbol_type": "whole_note_candidate", "page_index": 1, "system_index": 1, "staff_index": 1, "x0": 100.0, "voice": 1, "clef_resolved_staff_pitch": "C4"},
     ]
     previews = build_staff_timeline_preview(valid_outcomes)
     m = previews[0]["measures"][0]
@@ -166,10 +166,10 @@ def test_strict_chord_equivalence_and_invalidation() -> None:
     # The quarter note makes duration 960 while the whole note is 3840.
     # We pad the rest of the measure to 3840 using two half notes to ensure capacity doesn't fail first.
     invalid_outcomes = [
-        {"symbol_type": "whole_note_candidate", "page_index": 1, "system_index": 2, "staff_index": 1, "x0": 100.0, "voice": 1},
-        {"symbol_type": "quarter_note_candidate", "page_index": 1, "system_index": 2, "staff_index": 1, "x0": 100.0, "voice": 1},
-        {"symbol_type": "half_note_candidate", "page_index": 1, "system_index": 2, "staff_index": 1, "x0": 200.0, "voice": 1},
-        {"symbol_type": "quarter_note_candidate", "page_index": 1, "system_index": 2, "staff_index": 1, "x0": 300.0, "voice": 1},
+        {"symbol_type": "whole_note_candidate", "page_index": 1, "system_index": 2, "staff_index": 1, "x0": 100.0, "voice": 1, "clef_resolved_staff_pitch": "C4"},
+        {"symbol_type": "quarter_note_candidate", "page_index": 1, "system_index": 2, "staff_index": 1, "x0": 100.0, "voice": 1, "clef_resolved_staff_pitch": "C4"},
+        {"symbol_type": "half_note_candidate", "page_index": 1, "system_index": 2, "staff_index": 1, "x0": 200.0, "voice": 1, "clef_resolved_staff_pitch": "C4"},
+        {"symbol_type": "quarter_note_candidate", "page_index": 1, "system_index": 2, "staff_index": 1, "x0": 300.0, "voice": 1, "clef_resolved_staff_pitch": "C4"},
     ]
     previews2 = build_staff_timeline_preview(invalid_outcomes)
     m2 = previews2[0]["measures"][0]
