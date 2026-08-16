@@ -54,12 +54,13 @@ def test_real_invocation_smoke():
 
 def test_anonymize_name_collision():
     """Ensure two different unknown inputs generate deterministic, collision-resistant labels."""
+    private_dir = (Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "private" if (Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "private").exists() else Path(__file__).resolve().parent.parent / "fixtures" / "private")
     paths = [
-        Path("Derek Trucks BB King.pdf"),
-        Path("Lick in All 5 CAGED Shapes start on the 5 _ guitar tab creator.pdf"),
-        Path("Lesson-3.pdf"),
-        Path("Lesson-4.pdf"),
-        Path("Melodic Soloing Masterclass.pdf"),
+        private_dir / "Derek Trucks BB King.pdf",
+        private_dir / "Lick in All 5 CAGED Shapes start on the 5 _ guitar tab creator.pdf",
+        private_dir / "Lesson-3.pdf",
+        private_dir / "Lesson-4.pdf",
+        private_dir / "Melodic Soloing Masterclass.pdf",
         Path("unknown_input_a.pdf"),
         Path("unknown_input_b.pdf")
     ]

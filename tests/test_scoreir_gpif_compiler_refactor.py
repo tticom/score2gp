@@ -77,9 +77,8 @@ def test_compiler_reference_gp_isolation():
     assert score_ir is not None
     assert score_ir.semantic_contract_is_valid() is score_ir
 
-
 def test_private_fixture_lesson6_gp_compilation():
-    lesson6 = Path("fixtures/private/Lesson-6.pdf")
+    lesson6 = (Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "private" if (Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "private").exists() else Path(__file__).resolve().parent.parent / "fixtures" / "private") / "Lesson-6.pdf"
 
     res = run_recognition_on_file(lesson6, assume_treble_clef=True)
     assert res is not None
@@ -95,3 +94,51 @@ def test_private_fixture_lesson6_gp_compilation():
         builder.write_gp_file(score_ir, out_gp)
         assert out_gp.exists()
         assert out_gp.stat().st_size > 0
+
+def test_compiler_unowned_notes_crash():
+    from score2gp.scoreir_compiler import ScoreIRCompiler
+    import json
+    import pytest
+    
+    artifact_path = (Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "private" if (Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "private").exists() else Path(__file__).resolve().parent.parent / "fixtures" / "private") / "Lesson-6_unowned_artifact.json"
+    with open(artifact_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+        
+    timeline = data.get("timeline_preview", [])
+    ownership = data.get("fretboard_position_ownership", [])
+    
+    compiler = ScoreIRCompiler()
+    ir = compiler.compile(
+        bar_timelines=timeline,
+        position_ownership=ownership,
+        time_signature=(4, 4)
+    )
+    assert ir is not None
+
+def test_compiler_timeline_preservation():
+    from score2gp.scoreir_compiler import ScoreIRCompiler
+    import json
+    
+    artifact_path = (Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "private" if (Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "private").exists() else Path(__file__).resolve().parent.parent / "fixtures" / "private") / "Lesson-6_invalid_artifact.json"
+    with open(artifact_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+        
+    timeline = data.get("timeline_preview", [])
+    ownership = data.get("fretboard_position_ownership", [])
+    
+    # Count original measures
+    original_measures = []
+    for item in timeline:
+        if isinstance(item, dict) and "measures" in item:
+            original_measures.extend(item["measures"])
+    original_len = len(original_measures)
+    
+    compiler = ScoreIRCompiler()
+    ir = compiler.compile(
+        bar_timelines=timeline,
+        position_ownership=ownership,
+        time_signature=(4, 4)
+    )
+    
+    compiled_bars = ir.bars
+    assert len(compiled_bars) == original_len, "Timeline measure count was not preserved when a measure was invalid"

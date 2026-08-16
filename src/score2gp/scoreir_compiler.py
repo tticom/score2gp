@@ -99,12 +99,32 @@ class ScoreIRCompiler:
         event_counter = 0
 
         for b_idx, bar_data in enumerate(measures_list, start=1):
+            ts = TimeSignature(numerator=time_signature[0], denominator=time_signature[1])
+            is_invalid = False
             if isinstance(bar_data, dict) and not bar_data.get("valid", True):
-                continue
+                is_invalid = True
             if hasattr(bar_data, "valid") and not getattr(bar_data, "valid"):
+                is_invalid = True
+
+            if is_invalid:
+                duration = int(time_signature[0] * 960 * 4 / time_signature[1])
+                bars.append(
+                    Bar(
+                        index=b_idx,
+                        time_signature=ts,
+                        events=[
+                            Event(
+                                id=f"evt_{b_idx:02d}_001",
+                                track_id=self.track_id,
+                                timing=Timing(bar_index=b_idx, onset_ticks=0, duration_ticks=duration, voice=1),
+                                is_rest=True,
+                                notes=[],
+                            )
+                        ]
+                    )
+                )
                 continue
 
-            ts = TimeSignature(numerator=time_signature[0], denominator=time_signature[1])
 
             raw_events = getattr(bar_data, "events", None)
             if raw_events is None and isinstance(bar_data, dict):
@@ -180,15 +200,7 @@ class ScoreIRCompiler:
                             )
 
                     if not notes:
-                        bar_events.append(
-                            Event(
-                                id=evt_id,
-                                track_id=self.track_id,
-                                timing=timing,
-                                is_rest=True,
-                                notes=[],
-                            )
-                        )
+                        raise ValueError(f"Unowned note: event group at bar {b_idx}, voice {voice}, onset {onset} has no valid pitch/fret ownership")
                     else:
                         bar_events.append(
                             Event(
