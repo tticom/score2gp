@@ -30,4 +30,3 @@ work/private/
 # Interactive conversion outputs created at the repository root.
 /*.gp
 /tmp/
-tests/artifacts/
