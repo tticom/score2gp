@@ -95,7 +95,7 @@ def test_no_reference_gp_isolation():
 
 
 def test_private_fixture_lesson5_tab_token_preservation():
-    lesson5 = Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "private" / "Lesson-5.pdf"
+    lesson5 = (Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "private" if (Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "private").exists() else Path(__file__).resolve().parent.parent / "fixtures" / "private") / "Lesson-5.pdf"
 
     res = run_recognition_on_file(lesson5, assume_treble_clef=True)
     assert res is not None

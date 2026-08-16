@@ -78,7 +78,7 @@ def test_compiler_reference_gp_isolation():
     assert score_ir.semantic_contract_is_valid() is score_ir
 
 def test_private_fixture_lesson6_gp_compilation():
-    lesson6 = Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "private" / "Lesson-6.pdf"
+    lesson6 = (Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "private" if (Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "private").exists() else Path(__file__).resolve().parent.parent / "fixtures" / "private") / "Lesson-6.pdf"
 
     res = run_recognition_on_file(lesson6, assume_treble_clef=True)
     assert res is not None
@@ -100,7 +100,7 @@ def test_compiler_unowned_notes_crash():
     import json
     import pytest
     
-    artifact_path = Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "private" / "Lesson-6_unowned_artifact.json"
+    artifact_path = (Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "private" if (Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "private").exists() else Path(__file__).resolve().parent.parent / "fixtures" / "private") / "Lesson-6_unowned_artifact.json"
     with open(artifact_path, "r", encoding="utf-8") as f:
         data = json.load(f)
         
@@ -119,7 +119,7 @@ def test_compiler_timeline_preservation():
     from score2gp.scoreir_compiler import ScoreIRCompiler
     import json
     
-    artifact_path = Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "private" / "Lesson-6_invalid_artifact.json"
+    artifact_path = (Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "private" if (Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "private").exists() else Path(__file__).resolve().parent.parent / "fixtures" / "private") / "Lesson-6_invalid_artifact.json"
     with open(artifact_path, "r", encoding="utf-8") as f:
         data = json.load(f)
         

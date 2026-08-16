@@ -8,7 +8,7 @@ from score2gp.notation_omr.musicxml_generator import generate_musicxml_from_omr
 
 def test_musicxml_generation_integration() -> None:
     """Verify MusicXML generator runs successfully over Lesson-6.pdf without synthetic data."""
-    lesson5_pdf = Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "private" / "Lesson-5.pdf"
+    lesson5_pdf = (Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "private" if (Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "private").exists() else Path(__file__).resolve().parent.parent / "fixtures" / "private") / "Lesson-5.pdf"
 
     result = run_recognition_on_file(lesson5_pdf, assume_treble_clef=True)
     assert result is not None
