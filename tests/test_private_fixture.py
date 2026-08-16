@@ -5,7 +5,7 @@ from pathlib import Path
 from score2gp.gp_package import inspect_gp
 
 
-PRIVATE_GP = Path("fixtures/private/Derek Trucks BB King.gp")
+PRIVATE_GP = Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "private" / "Derek Trucks BB King.gp"
 
 
 def test_private_gp_fixture_inspects() -> None:

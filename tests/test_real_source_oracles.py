@@ -29,7 +29,7 @@ def test_process_level_reference_isolation(tmp_path) -> None:
 
 def test_missing_private_fixture_handling(tmp_path) -> None:
     """Verify that absent private fixtures are handled safely without crashing."""
-    non_existent_pdf = Path("fixtures/private/non_existent_fixture.pdf")
+    non_existent_pdf = Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "private" / "non_existent_fixture.pdf"
 
     # Anonymizing a non-existent path handles missing inputs safely
     label = anonymize_name(non_existent_pdf)
@@ -38,7 +38,7 @@ def test_missing_private_fixture_handling(tmp_path) -> None:
 
 def test_real_source_oracle_contract() -> None:
     """Contract test: verify real-source oracle verification parameters."""
-    private_dir = PROJECT_ROOT / "fixtures" / "private"
+    private_dir = Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "private"
     lesson5_pdf = private_dir / "Lesson-5.pdf"
 
 
