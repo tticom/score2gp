@@ -95,3 +95,64 @@ def test_private_fixture_lesson6_gp_compilation():
         builder.write_gp_file(score_ir, out_gp)
         assert out_gp.exists()
         assert out_gp.stat().st_size > 0
+
+def test_private_fixture_unowned_notes_crash():
+    from score2gp.notation_omr.pipeline import run_recognition_on_file
+    from score2gp.scoreir_compiler import ScoreIRCompiler
+
+    lesson6 = Path("fixtures/private/Lesson-6.pdf")
+    res = run_recognition_on_file(lesson6, assume_treble_clef=True)
+    timeline = res.get("timeline_preview", [])
+    ownership = res.get("fretboard_position_ownership", [])
+
+    # Introduce an unowned note by clearing ownership
+    ownership = []
+
+    # Force measures to be valid to reach the event processing
+    for sys in timeline:
+        if isinstance(sys, dict) and "measures" in sys:
+            for m in sys["measures"]:
+                m["valid"] = True
+
+    compiler = ScoreIRCompiler()
+    import pytest
+    with pytest.raises(ValueError, match="Unowned note"):
+        compiler.compile(
+            bar_timelines=timeline,
+            position_ownership=ownership,
+            time_signature=(4, 4)
+        )
+
+def test_private_fixture_timeline_preservation():
+    from score2gp.notation_omr.pipeline import run_recognition_on_file
+    from score2gp.scoreir_compiler import ScoreIRCompiler
+
+    lesson6 = Path("fixtures/private/Lesson-6.pdf")
+    res = run_recognition_on_file(lesson6, assume_treble_clef=True)
+    timeline = res.get("timeline_preview", [])
+    ownership = res.get("fretboard_position_ownership", [])
+
+    # Flatten measures to count them
+    original_measures = []
+    for item in timeline:
+        if isinstance(item, dict) and "measures" in item:
+            original_measures.extend(item["measures"])
+
+    original_len = len(original_measures)
+
+    # Invalidate the second measure explicitly
+    if len(original_measures) > 1:
+        if isinstance(original_measures[1], dict):
+            original_measures[1]["valid"] = False
+        elif hasattr(original_measures[1], "valid"):
+            setattr(original_measures[1], "valid", False)
+
+    compiler = ScoreIRCompiler()
+    ir = compiler.compile(
+        bar_timelines=timeline,
+        position_ownership=ownership,
+        time_signature=(4, 4)
+    )
+
+    compiled_bars = ir.bars
+    assert len(compiled_bars) == original_len, "Timeline measure count was not preserved when a measure was invalid"
