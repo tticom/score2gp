@@ -9,7 +9,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 def test_private_fixture_lesson6_timeline_integration() -> None:
     """Verify pipeline recognition on Lesson-6.pdf preserves timeline capacity and tuplets natively."""
-    lesson6_pdf = PROJECT_ROOT / "fixtures" / "private" / "Lesson-6.pdf"
+    lesson6_pdf = PROJECT_ROOT.parent / "score2gp-private-fixtures" / "fixtures" / "private" / "Lesson-6.pdf"
 
     result = run_recognition_on_file(lesson6_pdf, assume_treble_clef=True)
     assert result is not None

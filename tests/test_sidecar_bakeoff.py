@@ -8,7 +8,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 def test_sidecar_bakeoff_integration() -> None:
     """Verify sidecar evaluation runs successfully over Lesson-6.pdf without requiring reference .gp file inputs."""
-    lesson6_pdf = PROJECT_ROOT / "fixtures" / "private" / "Lesson-6.pdf"
+    lesson6_pdf = PROJECT_ROOT.parent / "score2gp-private-fixtures" / "fixtures" / "private" / "Lesson-6.pdf"
 
     # Reference .gp path should not be accessed or passed during evaluation
     reference_gp = lesson6_pdf.with_suffix(".gp")
