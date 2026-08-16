@@ -77,7 +77,7 @@ def test_compiler_reference_gp_isolation():
     assert score_ir is not None
     assert score_ir.semantic_contract_is_valid() is score_ir
 
-
+@pytest.mark.skipif(not Path("fixtures/private/Lesson-6.pdf").exists(), reason="Requires private fixture")
 def test_private_fixture_lesson6_gp_compilation():
     lesson6 = Path("fixtures/private/Lesson-6.pdf")
 
@@ -96,26 +96,28 @@ def test_private_fixture_lesson6_gp_compilation():
         assert out_gp.exists()
         assert out_gp.stat().st_size > 0
 
-def test_private_fixture_unowned_notes_crash():
-    from score2gp.notation_omr.pipeline import run_recognition_on_file
+def test_compiler_unowned_notes_crash():
     from score2gp.scoreir_compiler import ScoreIRCompiler
-
-    lesson6 = Path("fixtures/private/Lesson-6.pdf")
-    res = run_recognition_on_file(lesson6, assume_treble_clef=True)
-    timeline = res.get("timeline_preview", [])
-    ownership = res.get("fretboard_position_ownership", [])
-
-    # Introduce an unowned note by clearing ownership
-    ownership = []
-
-    # Force measures to be valid to reach the event processing
-    for sys in timeline:
-        if isinstance(sys, dict) and "measures" in sys:
-            for m in sys["measures"]:
-                m["valid"] = True
-
+    
+    # Unit test with synthetic data
+    timeline = [{
+        "measures": [
+            {
+                "measure_index": 1,
+                "valid": True,
+                "events": [
+                    {
+                        "candidate_id": "test_note_1",
+                        "duration_ticks": 960,
+                        "is_rest": False
+                    }
+                ]
+            }
+        ]
+    }]
+    ownership = [] # Empty ownership means test_note_1 is unowned
+    
     compiler = ScoreIRCompiler()
-    import pytest
     with pytest.raises(ValueError, match="Unowned note"):
         compiler.compile(
             bar_timelines=timeline,
@@ -123,36 +125,31 @@ def test_private_fixture_unowned_notes_crash():
             time_signature=(4, 4)
         )
 
-def test_private_fixture_timeline_preservation():
-    from score2gp.notation_omr.pipeline import run_recognition_on_file
+def test_compiler_timeline_preservation():
     from score2gp.scoreir_compiler import ScoreIRCompiler
-
-    lesson6 = Path("fixtures/private/Lesson-6.pdf")
-    res = run_recognition_on_file(lesson6, assume_treble_clef=True)
-    timeline = res.get("timeline_preview", [])
-    ownership = res.get("fretboard_position_ownership", [])
-
-    # Flatten measures to count them
-    original_measures = []
-    for item in timeline:
-        if isinstance(item, dict) and "measures" in item:
-            original_measures.extend(item["measures"])
-
-    original_len = len(original_measures)
-
-    # Invalidate the second measure explicitly
-    if len(original_measures) > 1:
-        if isinstance(original_measures[1], dict):
-            original_measures[1]["valid"] = False
-        elif hasattr(original_measures[1], "valid"):
-            setattr(original_measures[1], "valid", False)
-
+    
+    # Unit test with synthetic data containing invalid measure
+    timeline = [{
+        "measures": [
+            {
+                "measure_index": 1,
+                "valid": True,
+                "events": [{"candidate_id": "rest_1", "duration_ticks": 960, "is_rest": True}]
+            },
+            {
+                "measure_index": 2,
+                "valid": False, # This measure should be preserved as an empty measure
+                "events": []
+            }
+        ]
+    }]
+    
     compiler = ScoreIRCompiler()
     ir = compiler.compile(
         bar_timelines=timeline,
-        position_ownership=ownership,
+        position_ownership=[],
         time_signature=(4, 4)
     )
-
+    
     compiled_bars = ir.bars
-    assert len(compiled_bars) == original_len, "Timeline measure count was not preserved when a measure was invalid"
+    assert len(compiled_bars) == 2, "Timeline measure count was not preserved when a measure was invalid"
