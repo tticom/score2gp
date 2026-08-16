@@ -551,6 +551,8 @@ def omr_command(input_pdf: Path, out: Path = typer.Option(...), audiveris: Optio
     typer.echo(json.dumps({"out": str(out), "warnings": warnings, "manifest": manifest}, indent=2))
 
 
+from .errors import HumanReadableConversionError
+
 @app.command("build-ir")
 def build_ir_command(
     musicxml: Optional[Path] = typer.Option(None),
@@ -580,6 +582,9 @@ def build_ir_command(
             optimize_fret_snapping=optimize_fret_snapping,
             page_range=parse_page_range(pages),
         )
+    except HumanReadableConversionError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1)
     except BuildIrInputRiskError as exc:
         payload = exc.to_diagnostics_payload()
         if exc.category == "missing_pdf_grouping" and tabraw is not None:
