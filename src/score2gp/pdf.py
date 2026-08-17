@@ -3924,7 +3924,7 @@ def filter_tab_barline_candidates(
                         reason = "pdf_barline_crosses_insufficient_string_gaps"
                     else:
                         reason = "pdf_barline_partial_staff_crossing"
-                elif not (item["absolute_height_ok"] or (item["height"] >= 20.0 and item["relative_height_ok"])):
+                elif not (item["absolute_height_ok"] or (item["height"] >= min(15.0, staff_height - 2.0) and item["relative_height_ok"])):
                     reason = "pdf_barline_too_short_absolute"
 
                 if reason is None:
