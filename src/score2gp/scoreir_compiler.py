@@ -19,6 +19,7 @@ from score2gp.notation_omr.position_optimizer import (
     FretTokenOwnership,
     STANDARD_TUNING,
 )
+from score2gp.errors import HumanReadableConversionError
 
 STANDARD_STRING_NAMES = ["E4", "B3", "G3", "D3", "A2", "E2"]
 
@@ -84,21 +85,26 @@ class ScoreIRCompiler:
         # Collect measure timelines
         measures_list = []
         for item in bar_timelines:
+            page_idx = getattr(item, "page_index", None) or (item.get("page_index") if isinstance(item, dict) else None)
+            staff_idx = getattr(item, "staff_index", None) or (item.get("staff_index") if isinstance(item, dict) else None)
+
             if isinstance(item, dict) and "measures" in item:
-                measures_list.extend(item["measures"])
+                for m in item["measures"]:
+                    measures_list.append((m, page_idx, staff_idx))
             elif isinstance(item, dict) and "events" in item:
-                measures_list.append(item)
+                measures_list.append((item, page_idx, staff_idx))
             elif hasattr(item, "events"):
-                measures_list.append(item)
+                measures_list.append((item, page_idx, staff_idx))
             elif isinstance(item, list):
-                measures_list.extend(item)
+                for m in item:
+                    measures_list.append((m, None, None))
             else:
-                measures_list.append(item)
+                measures_list.append((item, page_idx, staff_idx))
 
         bars: list[Bar] = []
         event_counter = 0
 
-        for b_idx, bar_data in enumerate(measures_list, start=1):
+        for b_idx, (bar_data, page_idx, staff_idx) in enumerate(measures_list, start=1):
             ts = TimeSignature(numerator=time_signature[0], denominator=time_signature[1])
             is_invalid = False
             if isinstance(bar_data, dict) and not bar_data.get("valid", True):
@@ -107,23 +113,10 @@ class ScoreIRCompiler:
                 is_invalid = True
 
             if is_invalid:
-                duration = int(time_signature[0] * 960 * 4 / time_signature[1])
-                bars.append(
-                    Bar(
-                        index=b_idx,
-                        time_signature=ts,
-                        events=[
-                            Event(
-                                id=f"evt_{b_idx:02d}_001",
-                                track_id=self.track_id,
-                                timing=Timing(bar_index=b_idx, onset_ticks=0, duration_ticks=duration, voice=1),
-                                is_rest=True,
-                                notes=[],
-                            )
-                        ]
-                    )
+                raise HumanReadableConversionError(
+                    "Measure capacity violation: The notes and rests in this measure exceed the allowed time signature.",
+                    page=page_idx, measure=b_idx, staff=staff_idx
                 )
-                continue
 
 
             raw_events = getattr(bar_data, "events", None)
@@ -200,7 +193,17 @@ class ScoreIRCompiler:
                             )
 
                     if not notes:
-                        raise ValueError(f"Unowned note: event group at bar {b_idx}, voice {voice}, onset {onset} has no valid pitch/fret ownership")
+                        # Check for unrecognized chord
+                        if any(g.get("symbol_type") == "unrecognized_chord" or "chord" in str(g.get("symbol_type", "")) for g in group):
+                            raise HumanReadableConversionError(
+                                "Unrecognized chord symbol or unsupported chord structure.",
+                                page=page_idx, measure=b_idx, voice=voice, beat=onset / 960.0 + 1.0
+                            )
+                        else:
+                            raise HumanReadableConversionError(
+                                "Unowned note: A note exists without fret/pitch information.",
+                                page=page_idx, measure=b_idx, voice=voice, beat=onset / 960.0 + 1.0
+                            )
                     else:
                         bar_events.append(
                             Event(
