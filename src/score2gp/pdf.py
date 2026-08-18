@@ -2868,13 +2868,12 @@ def _append_grouping_warnings(raw: dict[str, Any], meta: dict[str, int] | None =
         })
 
     missing = []
-    if len(fret_candidates) > 0:
-        if grouping_counts["fret_candidates_with_system"] == 0:
-            missing.append("system")
-        if grouping_counts["fret_candidates_with_bar"] == 0:
-            missing.append("bar")
-        if grouping_counts["fret_candidates_with_string"] == 0:
-            missing.append("string")
+    if grouping_counts["fret_candidates_with_system"] < len(fret_candidates):
+        missing.append("system")
+    if grouping_counts["fret_candidates_with_bar"] < len(fret_candidates):
+        missing.append("bar")
+    if grouping_counts["fret_candidates_with_string"] < len(fret_candidates):
+        missing.append("string")
 
     # Generate refined system-detection blocker taxonomy warnings
     warning_codes_present = {w.get("code") for w in raw.get("warnings", [])}
@@ -3982,6 +3981,7 @@ def filter_tab_barline_candidates(
             "height": round(item["height"], 3),
             "staff_height": round(staff_height, 3),
             "coverage_ratio": round(item["coverage_ratio"], 3),
+            "raw_coverage_ratio": item["coverage_ratio"],
             "gaps_crossed": item["gaps_crossed"],
             "absolute_height_decision": "accepted" if item["absolute_height_ok"] else "rejected",
             "relative_staff_crossing_decision": "accepted" if item["relative_height_ok"] else "rejected",
@@ -4114,10 +4114,43 @@ def _detect_tab_systems(
     system_index = 1
     next_bar_index = first_bar_index
 
-    from dataclasses import replace
+    class TruncatedLine:
+        def __init__(self, s, y0, y1):
+            self._s = s
+            self.y0 = y0
+            self.y1 = y1
+        def __getattr__(self, name):
+            return getattr(self._s, name)
 
     # Step 2: Extract barlines using topological locking
-    for t in systems_topologies:
+    primitive_to_system = {}
+    for i, s in enumerate(deduped_verticals):
+        y_min = min(s.y0, s.y1)
+        y_max = max(s.y0, s.y1)
+        x_val = (s.x0 + s.x1) / 2
+        
+        overlapping_major = []
+        for sys_idx, t_sys in enumerate(systems_topologies):
+            overlap = max(0.0, min(y_max, t_sys["lower_limit"]) - max(y_min, t_sys["upper_limit"]))
+            in_x_bounds = (t_sys["x0"] - 25.0 <= x_val <= t_sys["x1"] + 25.0)
+            if overlap > 40.0 and in_x_bounds:
+                overlapping_major.append(sys_idx)
+                
+        if len(overlapping_major) > 1:
+            primitive_to_system[i] = None
+        else:
+            best_sys_idx = -1
+            max_overlap = 0.0
+            for sys_idx, t_sys in enumerate(systems_topologies):
+                overlap = max(0.0, min(y_max, t_sys["lower_limit"]) - max(y_min, t_sys["upper_limit"]))
+                in_x_bounds = (t_sys["x0"] - 25.0 <= x_val <= t_sys["x1"] + 25.0)
+                if overlap > max_overlap and in_x_bounds:
+                    max_overlap = overlap
+                    best_sys_idx = sys_idx
+            if best_sys_idx != -1:
+                primitive_to_system[i] = best_sys_idx
+
+    for sys_idx, t in enumerate(systems_topologies):
         group = t["group"]
         line_ys = t["line_ys"]
         x0 = t["x0"]
@@ -4144,7 +4177,7 @@ def _detect_tab_systems(
                     continue
                 trunc_y_min = max(y_min, upper_limit)
                 trunc_y_max = min(y_max, lower_limit)
-                system_candidates.append(replace(s, y0=trunc_y_min, y1=trunc_y_max))
+                system_candidates.append(TruncatedLine(s, trunc_y_min, trunc_y_max))
 
         barline_candidates_count = len(system_candidates)
         filtered = filter_tab_barline_candidates(system_candidates, y0, y1, line_ys, x0, x1)
@@ -4177,10 +4210,10 @@ def _detect_tab_systems(
                     trunc_y_min = max(y_min, upper_limit)
                     trunc_y_max = min(y_max, lower_limit)
                     if trunc_y_max >= other_y0 - 15.0 and trunc_y_min <= other_y1 + 15.0 and other_x0 - 25.0 <= x_val <= other_x1 + 25.0:
-                        other_candidates.append(replace(s, y0=trunc_y_min, y1=trunc_y_max))
+                        other_candidates.append(TruncatedLine(s, trunc_y_min, trunc_y_max))
 
             other_filtered = filter_tab_barline_candidates(other_candidates, other_y0, other_y1, other_ys, other_x0, other_x1)
-            strict_xs = {det["x"] for det in other_filtered["details"] if det.get("final_decision") == "accepted" and det.get("coverage_ratio", 0.0) >= 0.98}
+            strict_xs = {det["x"] for det in other_filtered["details"] if det.get("final_decision") == "accepted" and det.get("raw_coverage_ratio", 0.0) >= 0.98}
             partner_valid = [x for x in other_filtered["valid_barlines"] if x in strict_xs]
 
             # Same inheritance logic as main
@@ -4243,8 +4276,8 @@ def _detect_tab_systems(
                 else:
                     if b - final_barlines[-1] <= 15.0:
                         final_barlines[-1] = b
-                    else:
-                        final_barlines.append(b)
+                        continue
+                    final_barlines.append(b)
             valid_barlines = final_barlines
 
         systems.append(
