@@ -426,7 +426,7 @@ def test_partial_pdf_ambiguous_string_assignment_is_not_high_confidence(tmp_path
     warning_codes = {warning["code"] for warning in tabraw.warnings}
     report_html = (tabraw_path.parent / "grouping-diagnostics.html").read_text(encoding="utf-8")
 
-    assert {"partial_pdf_grouping", "ambiguous_string_assignment", "missing_pdf_grouping"} <= warning_codes
+    assert {"partial_pdf_grouping", "ambiguous_string_assignment"} <= warning_codes
     assert len(ambiguous) == 1
     assert ambiguous[0].string is None
     assert ambiguous[0].confidence <= 0.65
@@ -467,7 +467,7 @@ def test_partial_pdf_ambiguous_bar_assignment_is_not_high_confidence(tmp_path) -
     warning_codes = {warning["code"] for warning in tabraw.warnings}
     report_html = (tabraw_path.parent / "grouping-diagnostics.html").read_text(encoding="utf-8")
 
-    assert {"partial_pdf_grouping", "ambiguous_bar_assignment", "missing_pdf_grouping"} <= warning_codes
+    assert {"partial_pdf_grouping", "ambiguous_bar_assignment"} <= warning_codes
     assert len(ambiguous) == 1
     assert ambiguous[0].bar_index is None
     assert ambiguous[0].confidence <= 0.65

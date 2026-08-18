@@ -2868,12 +2868,13 @@ def _append_grouping_warnings(raw: dict[str, Any], meta: dict[str, int] | None =
         })
 
     missing = []
-    if grouping_counts["fret_candidates_with_system"] < len(fret_candidates):
-        missing.append("system")
-    if grouping_counts["fret_candidates_with_bar"] < len(fret_candidates):
-        missing.append("bar")
-    if grouping_counts["fret_candidates_with_string"] < len(fret_candidates):
-        missing.append("string")
+    if len(fret_candidates) > 0:
+        if grouping_counts["fret_candidates_with_system"] == 0:
+            missing.append("system")
+        if grouping_counts["fret_candidates_with_bar"] == 0:
+            missing.append("bar")
+        if grouping_counts["fret_candidates_with_string"] == 0:
+            missing.append("string")
 
     # Generate refined system-detection blocker taxonomy warnings
     warning_codes_present = {w.get("code") for w in raw.get("warnings", [])}
