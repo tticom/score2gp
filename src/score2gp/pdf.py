@@ -4089,6 +4089,9 @@ def _detect_tab_systems(
 
         top_y = best_partner[1] if best_partner else y0
         bottom_y = y1
+        if best_partner:
+            x0 = min(x0, best_partner[3])
+            x1 = max(x1, best_partner[4])
         systems_topologies.append({
             "group": group,
             "line_ys": line_ys,
@@ -4182,7 +4185,8 @@ def _detect_tab_systems(
                         other_candidates.append(TruncatedLine(s, trunc_y_min, trunc_y_max))
 
             other_filtered = filter_tab_barline_candidates(other_candidates, other_y0, other_y1, other_ys, other_x0, other_x1)
-            partner_valid = other_filtered["valid_barlines"]
+            strict_xs = {det["x"] for det in other_filtered["details"] if det.get("final_decision") == "accepted" and det.get("coverage_ratio", 0.0) >= 0.98}
+            partner_valid = [x for x in other_filtered["valid_barlines"] if x in strict_xs]
 
             # Same inheritance logic as main
             inherited_from_partner = []
