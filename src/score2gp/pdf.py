@@ -4113,13 +4113,7 @@ def _detect_tab_systems(
     system_index = 1
     next_bar_index = first_bar_index
 
-    class TruncatedLine:
-        def __init__(self, s, y0, y1):
-            self._s = s
-            self.y0 = y0
-            self.y1 = y1
-        def __getattr__(self, name):
-            return getattr(self._s, name)
+    from dataclasses import replace
 
     # Step 2: Extract barlines using topological locking
     for t in systems_topologies:
@@ -4149,7 +4143,7 @@ def _detect_tab_systems(
                     continue
                 trunc_y_min = max(y_min, upper_limit)
                 trunc_y_max = min(y_max, lower_limit)
-                system_candidates.append(TruncatedLine(s, trunc_y_min, trunc_y_max))
+                system_candidates.append(replace(s, y0=trunc_y_min, y1=trunc_y_max))
 
         barline_candidates_count = len(system_candidates)
         filtered = filter_tab_barline_candidates(system_candidates, y0, y1, line_ys, x0, x1)
@@ -4182,7 +4176,7 @@ def _detect_tab_systems(
                     trunc_y_min = max(y_min, upper_limit)
                     trunc_y_max = min(y_max, lower_limit)
                     if trunc_y_max >= other_y0 - 15.0 and trunc_y_min <= other_y1 + 15.0 and other_x0 - 25.0 <= x_val <= other_x1 + 25.0:
-                        other_candidates.append(TruncatedLine(s, trunc_y_min, trunc_y_max))
+                        other_candidates.append(replace(s, y0=trunc_y_min, y1=trunc_y_max))
 
             other_filtered = filter_tab_barline_candidates(other_candidates, other_y0, other_y1, other_ys, other_x0, other_x1)
             strict_xs = {det["x"] for det in other_filtered["details"] if det.get("final_decision") == "accepted" and det.get("coverage_ratio", 0.0) >= 0.98}
@@ -4248,8 +4242,8 @@ def _detect_tab_systems(
                 else:
                     if b - final_barlines[-1] <= 15.0:
                         final_barlines[-1] = b
-                        continue
-                    final_barlines.append(b)
+                    else:
+                        final_barlines.append(b)
             valid_barlines = final_barlines
 
         systems.append(
