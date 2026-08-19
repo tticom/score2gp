@@ -4161,7 +4161,9 @@ def _detect_tab_systems(
         lower_limit = t["lower_limit"]
 
         system_candidates = []
-        for s in deduped_verticals:
+        for i, s in enumerate(deduped_verticals):
+            if primitive_to_system.get(i) != sys_idx:
+                continue
             y_min = min(s.y0, s.y1)
             y_max = max(s.y0, s.y1)
             x_val = (s.x0 + s.x1) / 2
