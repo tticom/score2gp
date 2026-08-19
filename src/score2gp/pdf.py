@@ -4195,7 +4195,12 @@ def _detect_tab_systems(
             other_group, other_y0, other_y1, other_x0, other_x1, other_ys = best_partner
 
             other_candidates = []
-            for s in deduped_verticals:
+            for i, s in enumerate(deduped_verticals):
+                # A primitive may contribute only to the topology that owns it.
+                # This also rejects primitives spanning multiple systems, whose
+                # ownership is recorded as None.
+                if primitive_to_system.get(i) != sys_idx:
+                    continue
                 y_min = min(s.y0, s.y1)
                 y_max = max(s.y0, s.y1)
                 x_val = (s.x0 + s.x1) / 2
