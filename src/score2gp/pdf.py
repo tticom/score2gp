@@ -3981,6 +3981,7 @@ def filter_tab_barline_candidates(
             "height": round(item["height"], 3),
             "staff_height": round(staff_height, 3),
             "coverage_ratio": round(item["coverage_ratio"], 3),
+            "raw_coverage_ratio": item["coverage_ratio"],
             "gaps_crossed": item["gaps_crossed"],
             "absolute_height_decision": "accepted" if item["absolute_height_ok"] else "rejected",
             "relative_staff_crossing_decision": "accepted" if item["relative_height_ok"] else "rejected",
@@ -4048,10 +4049,8 @@ def _detect_tab_systems(
         if not found_similar:
             deduped_verticals.append(s)
 
-    systems = []
-    system_index = 1
-    next_bar_index = first_bar_index
-
+    # Step 1: Discover all systems and their notation partners to establish topological boundaries
+    systems_topologies = []
     for group in _tab_line_groups(horizontal):
         classification = classify_staff_line_group(group, page)
         if classification in ("notation", "ambiguous"):
@@ -4063,23 +4062,6 @@ def _detect_tab_systems(
         y0 = min(line_ys)
         y1 = max(line_ys)
 
-        system_candidates = []
-        for s in deduped_verticals:
-            x_val = (s.x0 + s.x1) / 2
-            y_min = min(s.y0, s.y1)
-            y_max = max(s.y0, s.y1)
-            if y_max >= y0 - 15.0 and y_min <= y1 + 15.0 and x0 - 25.0 <= x_val <= x1 + 25.0:
-                system_candidates.append(s)
-
-        barline_candidates_count = len(system_candidates)
-        filtered = filter_tab_barline_candidates(system_candidates, y0, y1, line_ys, x0, x1)
-        valid_barlines = filtered["valid_barlines"]
-        rejected_count = filtered["rejected_count"]
-        rejection_reasons = dict(filtered["rejection_reasons"])
-        details = list(filtered["details"])
-
-        # Notation-to-TAB barline inheritance
-        partner_barlines = []
         best_partner = None
         best_partner_dist = 999999.0
 
@@ -4095,9 +4077,7 @@ def _detect_tab_systems(
             other_y0 = min(other_ys)
             other_y1 = max(other_ys)
 
-            # If the other group is above the TAB staff and within 250 points
             if other_y1 < y0 and y0 - other_y1 <= 250.0:
-                # Check horizontal overlap alignment
                 other_x0 = min(min(line.x0, line.x1) for line in other_group)
                 other_x1 = max(max(line.x0, line.x1) for line in other_group)
                 overlap_w = max(0.0, min(x1, other_x1) - max(x0, other_x0))
@@ -4108,81 +4088,192 @@ def _detect_tab_systems(
                         best_partner_dist = dist
                         best_partner = (other_group, other_y0, other_y1, other_x0, other_x1, other_ys)
 
-            if best_partner is not None:
-                other_group, other_y0, other_y1, other_x0, other_x1, other_ys = best_partner
-                other_candidates = []
-                for s in deduped_verticals:
-                    x_val = (s.x0 + s.x1) / 2
-                    y_min = min(s.y0, s.y1)
-                    y_max = max(s.y0, s.y1)
+        top_y = best_partner[1] if best_partner else y0
+        bottom_y = y1
+        if best_partner:
+            x0 = min(x0, best_partner[3])
+            x1 = max(x1, best_partner[4])
+        systems_topologies.append({
+            "group": group,
+            "line_ys": line_ys,
+            "x0": x0,
+            "x1": x1,
+            "y0": y0,
+            "y1": y1,
+            "partner": best_partner,
+            "top_y": top_y,
+            "bottom_y": bottom_y
+        })
+
+    # Add limits to topologies
+    for t in systems_topologies:
+        t["upper_limit"] = t["top_y"] - 40.0
+        t["lower_limit"] = t["bottom_y"] + 40.0
+
+    systems = []
+    system_index = 1
+    next_bar_index = first_bar_index
+
+    class TruncatedLine:
+        def __init__(self, s, y0, y1):
+            self._s = s
+            self.y0 = y0
+            self.y1 = y1
+        def __getattr__(self, name):
+            return getattr(self._s, name)
+
+    # Step 2: Extract barlines using topological locking
+    primitive_to_system = {}
+    for i, s in enumerate(deduped_verticals):
+        y_min = min(s.y0, s.y1)
+        y_max = max(s.y0, s.y1)
+        x_val = (s.x0 + s.x1) / 2
+
+        overlapping_major = []
+        for sys_idx, t_sys in enumerate(systems_topologies):
+            overlap = max(0.0, min(y_max, t_sys["lower_limit"]) - max(y_min, t_sys["upper_limit"]))
+            in_x_bounds = (t_sys["x0"] - 25.0 <= x_val <= t_sys["x1"] + 25.0)
+            if overlap > 40.0 and in_x_bounds:
+                overlapping_major.append(sys_idx)
+
+        if len(overlapping_major) > 1:
+            primitive_to_system[i] = None
+        else:
+            best_sys_idx = -1
+            max_overlap = 0.0
+            for sys_idx, t_sys in enumerate(systems_topologies):
+                overlap = max(0.0, min(y_max, t_sys["lower_limit"]) - max(y_min, t_sys["upper_limit"]))
+                in_x_bounds = (t_sys["x0"] - 25.0 <= x_val <= t_sys["x1"] + 25.0)
+                if overlap > max_overlap and in_x_bounds:
+                    max_overlap = overlap
+                    best_sys_idx = sys_idx
+            if best_sys_idx != -1:
+                primitive_to_system[i] = best_sys_idx
+
+    for sys_idx, t in enumerate(systems_topologies):
+        group = t["group"]
+        line_ys = t["line_ys"]
+        x0 = t["x0"]
+        x1 = t["x1"]
+        y0 = t["y0"]
+        y1 = t["y1"]
+        upper_limit = t["upper_limit"]
+        lower_limit = t["lower_limit"]
+
+        system_candidates = []
+        for i, s in enumerate(deduped_verticals):
+            if primitive_to_system.get(i) != sys_idx:
+                continue
+            y_min = min(s.y0, s.y1)
+            y_max = max(s.y0, s.y1)
+            x_val = (s.x0 + s.x1) / 2
+
+            # Topological locking for system barline candidates
+            if y_max - y_min < 200.0:
+                y_center = (y_min + y_max) / 2
+                if not (upper_limit <= y_center <= lower_limit):
+                    continue
+                system_candidates.append(s)
+            else:
+                if y_min > lower_limit or y_max < upper_limit:
+                    continue
+                trunc_y_min = max(y_min, upper_limit)
+                trunc_y_max = min(y_max, lower_limit)
+                system_candidates.append(TruncatedLine(s, trunc_y_min, trunc_y_max))
+
+        barline_candidates_count = len(system_candidates)
+        filtered = filter_tab_barline_candidates(system_candidates, y0, y1, line_ys, x0, x1)
+        valid_barlines = filtered["valid_barlines"]
+        rejected_count = filtered["rejected_count"]
+        rejection_reasons = dict(filtered["rejection_reasons"])
+        details = list(filtered["details"])
+
+        partner_barlines = []
+        best_partner = t["partner"]
+
+        if best_partner is not None:
+            other_group, other_y0, other_y1, other_x0, other_x1, other_ys = best_partner
+
+            other_candidates = []
+            for i, s in enumerate(deduped_verticals):
+                # A primitive may contribute only to the topology that owns it.
+                # This also rejects primitives spanning multiple systems, whose
+                # ownership is recorded as None.
+                if primitive_to_system.get(i) != sys_idx:
+                    continue
+                y_min = min(s.y0, s.y1)
+                y_max = max(s.y0, s.y1)
+                x_val = (s.x0 + s.x1) / 2
+
+                if y_max - y_min < 200.0:
+                    y_center = (y_min + y_max) / 2
+                    if not (upper_limit <= y_center <= lower_limit):
+                        continue
                     if y_max >= other_y0 - 15.0 and y_min <= other_y1 + 15.0 and other_x0 - 25.0 <= x_val <= other_x1 + 25.0:
                         other_candidates.append(s)
-
-                other_filtered = filter_tab_barline_candidates(other_candidates, other_y0, other_y1, other_ys, other_x0, other_x1)
-                partner_valid = other_filtered["valid_barlines"]
-
-                inherited_from_partner = []
-                rejected_inherited = {}  # pb -> rejection_reason
-
-                tab_left = min(valid_barlines) if len(valid_barlines) >= 2 else None
-                tab_right = max(valid_barlines) if len(valid_barlines) >= 2 else None
-
-                for pb in partner_valid:
-                    # a) Check boundaries if we have outer TAB boundaries
-                    if tab_left is not None and tab_right is not None:
-                        if pb <= tab_left + 15.0 or pb >= tab_right - 15.0:
-                            rejected_inherited[pb] = "pdf_barline_outside_system_bounds"
-                            continue
-
-                    # b) Check if too close to any explicit TAB barline (anchors)
-                    if any(15.0 < abs(pb - tb) < MIN_INHERITED_INTERNAL_BAR_WIDTH for tb in valid_barlines):
-                        rejected_inherited[pb] = "pdf_barline_inherited_too_close"
+                else:
+                    if y_min > lower_limit or y_max < upper_limit:
                         continue
+                    trunc_y_min = max(y_min, upper_limit)
+                    trunc_y_max = min(y_max, lower_limit)
+                    if trunc_y_max >= other_y0 - 15.0 and trunc_y_min <= other_y1 + 15.0 and other_x0 - 25.0 <= x_val <= other_x1 + 25.0:
+                        other_candidates.append(TruncatedLine(s, trunc_y_min, trunc_y_max))
 
-                    # c) Check if too close to another candidate in partner_valid (batch check)
-                    if any(15.0 < abs(pb - other) < MIN_INHERITED_INTERNAL_BAR_WIDTH for other in partner_valid if other != pb):
-                        rejected_inherited[pb] = "pdf_barline_inherited_too_close"
+            other_filtered = filter_tab_barline_candidates(other_candidates, other_y0, other_y1, other_ys, other_x0, other_x1)
+            strict_xs = {det["x"] for det in other_filtered["details"] if det.get("final_decision") == "accepted" and det.get("raw_coverage_ratio", 0.0) >= 0.98}
+            partner_valid = [x for x in other_filtered["valid_barlines"] if x in strict_xs]
+
+            # Same inheritance logic as main
+            inherited_from_partner = []
+            rejected_inherited = {}
+            tab_left = min(valid_barlines) if len(valid_barlines) >= 2 else None
+            tab_right = max(valid_barlines) if len(valid_barlines) >= 2 else None
+
+            for pb in partner_valid:
+                if tab_left is not None and tab_right is not None:
+                    if pb <= tab_left + 15.0 or pb >= tab_right - 15.0:
+                        rejected_inherited[pb] = "pdf_barline_outside_system_bounds"
                         continue
+                if any(15.0 < abs(pb - tb) < MIN_INHERITED_INTERNAL_BAR_WIDTH for tb in valid_barlines):
+                    rejected_inherited[pb] = "pdf_barline_inherited_too_close"
+                    continue
+                if any(15.0 < abs(pb - other) < MIN_INHERITED_INTERNAL_BAR_WIDTH for other in partner_valid if other != pb):
+                    rejected_inherited[pb] = "pdf_barline_inherited_too_close"
+                    continue
+                inherited_from_partner.append(pb)
 
-                    inherited_from_partner.append(pb)
+            if inherited_from_partner:
+                partner_barlines.extend(inherited_from_partner)
 
-                if inherited_from_partner:
-                    partner_barlines.extend(inherited_from_partner)
+            for k, v in other_filtered["rejection_reasons"].items():
+                rejection_reasons[k] = rejection_reasons.get(k, 0) + v
+            rejected_count += other_filtered["rejected_count"]
 
-                # Accumulate partner staff rejection reasons
-                for k, v in other_filtered["rejection_reasons"].items():
-                    rejection_reasons[k] = rejection_reasons.get(k, 0) + v
-                rejected_count += other_filtered["rejected_count"]
+            for det in other_filtered["details"]:
+                det_copy = dict(det)
+                det_copy["inherited"] = True
+                if det_copy.get("final_decision") == "accepted":
+                    x_val = det_copy.get("x")
+                    matched_pb = None
+                    if x_val is not None:
+                        for pb in partner_valid:
+                            if abs(pb - x_val) < 0.001:
+                                matched_pb = pb
+                                break
+                    if matched_pb is not None:
+                        if matched_pb in rejected_inherited:
+                            reason = rejected_inherited[matched_pb]
+                            det_copy["final_decision"] = "rejected"
+                            det_copy["rejection_reason"] = reason
+                            rejection_reasons[reason] = rejection_reasons.get(reason, 0) + 1
+                            rejected_count += 1
+                        elif matched_pb not in inherited_from_partner:
+                            det_copy["final_decision"] = "rejected"
+                            det_copy["rejection_reason"] = "pdf_barline_outside_system_bounds"
+                            rejection_reasons["pdf_barline_outside_system_bounds"] = rejection_reasons.get("pdf_barline_outside_system_bounds", 0) + 1
+                            rejected_count += 1
+                details.append(det_copy)
 
-                # Add partner details with updated decision
-                for det in other_filtered["details"]:
-                    det_copy = dict(det)
-                    det_copy["inherited"] = True
-
-                    if det_copy.get("final_decision") == "accepted":
-                        x_val = det_copy.get("x")
-                        matched_pb = None
-                        if x_val is not None:
-                            for pb in partner_valid:
-                                if abs(pb - x_val) < 0.001:
-                                    matched_pb = pb
-                                    break
-
-                        if matched_pb is not None:
-                            if matched_pb in rejected_inherited:
-                                reason = rejected_inherited[matched_pb]
-                                det_copy["final_decision"] = "rejected"
-                                det_copy["rejection_reason"] = reason
-                                rejection_reasons[reason] = rejection_reasons.get(reason, 0) + 1
-                                rejected_count += 1
-                            elif matched_pb not in inherited_from_partner:
-                                det_copy["final_decision"] = "rejected"
-                                det_copy["rejection_reason"] = "pdf_barline_outside_system_bounds"
-                                rejection_reasons["pdf_barline_outside_system_bounds"] = rejection_reasons.get("pdf_barline_outside_system_bounds", 0) + 1
-                                rejected_count += 1
-                    details.append(det_copy)
-
-        # Merge and deduplicate barlines within 15.0 points only if we actually inherited partner barlines
         if partner_barlines:
             all_barlines = sorted(list(set(valid_barlines + partner_barlines)))
             final_barlines = []
@@ -4215,7 +4306,6 @@ def _detect_tab_systems(
         )
         next_bar_index += max(1, len(valid_barlines) - 1)
         system_index += 1
-
     # Deduplicate overlapping ghost systems where one is a subset of another
     non_ghost_systems = []
     for sys1 in systems:

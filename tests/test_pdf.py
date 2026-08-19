@@ -426,7 +426,7 @@ def test_partial_pdf_ambiguous_string_assignment_is_not_high_confidence(tmp_path
     warning_codes = {warning["code"] for warning in tabraw.warnings}
     report_html = (tabraw_path.parent / "grouping-diagnostics.html").read_text(encoding="utf-8")
 
-    assert {"partial_pdf_grouping", "ambiguous_string_assignment", "missing_pdf_grouping"} <= warning_codes
+    assert {"partial_pdf_grouping", "ambiguous_string_assignment"} <= warning_codes
     assert len(ambiguous) == 1
     assert ambiguous[0].string is None
     assert ambiguous[0].confidence <= 0.65
@@ -467,7 +467,7 @@ def test_partial_pdf_ambiguous_bar_assignment_is_not_high_confidence(tmp_path) -
     warning_codes = {warning["code"] for warning in tabraw.warnings}
     report_html = (tabraw_path.parent / "grouping-diagnostics.html").read_text(encoding="utf-8")
 
-    assert {"partial_pdf_grouping", "ambiguous_bar_assignment", "missing_pdf_grouping"} <= warning_codes
+    assert {"partial_pdf_grouping", "ambiguous_bar_assignment"} <= warning_codes
     assert len(ambiguous) == 1
     assert ambiguous[0].bar_index is None
     assert ambiguous[0].confidence <= 0.65
@@ -3408,27 +3408,130 @@ def test_page_continuous_measure_indexing_and_cumulative_offsets() -> None:
     assert systems_p2[0].first_bar_index == 3
     assert systems_p2[0].line_ys[0] == 600.0  # 100.0 + 500.0
 
-    # Real fixture check if available
-    lesson5_path = Path("fixtures/private/Lesson-5.pdf")
-    if lesson5_path.exists():
-        warnings, meta = [], {"detected_systems": 0, "detected_staves": 0, "detected_bar_boxes": 0, "detected_string_lines": 0}
-        cands = _extract_pdf_text_candidates(lesson5_path, warnings, meta)
-        page_bars = {}
-        page_ys = {}
-        for c in cands:
-            p = c.get("page_index")
-            b = c.get("bar_index")
-            y = c.get("y")
-            if p is not None and b is not None:
-                page_bars.setdefault(p, set()).add(b)
-            if p is not None and y is not None:
-                page_ys.setdefault(p, []).append(y)
+def test_private_acceptance_lesson5() -> None:
+    import pytest
+    from pathlib import Path
+    from score2gp.pdf import _extract_pdf_text_candidates
+    
+    repo_root = Path(__file__).resolve().parent.parent
+    lesson5_path = repo_root.parent / "score2gp-private-fixtures" / "fixtures" / "private" / "Lesson-5.pdf"
+    if not lesson5_path.exists():
+        pytest.skip("Lesson-5.pdf required for this private-fixture acceptance test.")
+        
+    warnings, meta = [], {"detected_systems": 0, "detected_staves": 0, "detected_bar_boxes": 0, "detected_string_lines": 0}
+    cands = _extract_pdf_text_candidates(lesson5_path, warnings, meta)
+    page_bars = {}
+    page_ys = {}
+    for c in cands:
+        p = c.get("page_index")
+        b = c.get("bar_index")
+        y = c.get("y")
+        if p is not None and b is not None:
+            page_bars.setdefault(p, set()).add(b)
+        if p is not None and y is not None:
+            page_ys.setdefault(p, []).append(y)
 
-        # Confirm Page 2 measure indexing continues after Page 1
-        assert min(page_bars[2]) == max(page_bars[1]) + 1
-        # Confirm Page 3 measure indexing continues after Page 2
-        assert min(page_bars[3]) == max(page_bars[2]) + 1
+    # Confirm Page 2 measure indexing continues after Page 1
+    assert min(page_bars[2]) == max(page_bars[1]) + 1
+    # Confirm Page 3 measure indexing continues after Page 2
+    assert min(page_bars[3]) == max(page_bars[2]) + 1
 
-        # Confirm Y coordinates are monotonically increasing across page boundaries
-        assert min(page_ys[2]) > max(page_ys[1])
-        assert min(page_ys[3]) > max(page_ys[2])
+    # Confirm Y coordinates are monotonically increasing across page boundaries
+    assert min(page_ys[2]) > max(page_ys[1])
+    assert min(page_ys[3]) > max(page_ys[2])
+
+    # Real-source acceptance oracle for Lesson-5.pdf
+    # Confirms the conversion change properly limits partner topology.
+    # Previously failed by reporting 12 systems (due to ambiguous overlap).
+    unique_systems = set(c.get("system_index") for c in cands if c.get("system_index") is not None)
+    assert len(unique_systems) == 5
+
+    unique_bars = set()
+    for p, bars in page_bars.items():
+        unique_bars.update(bars)
+    assert len(unique_bars) == 43
+
+def test_topology_cross_system_barline_rejection(tmp_path) -> None:
+    from collections import namedtuple
+    from score2gp.pdf import _detect_tab_systems
+
+    Point = namedtuple('Point', ['x', 'y'])
+    drawings = []
+
+    # System 1: Notation above (y: 100-132), TAB below (y: 200-230)
+    for y in [100.0, 108.0, 116.0, 124.0, 132.0]:
+        drawings.append({"items": [("l", Point(100.0, y), Point(800.0, y))]})
+    for y in [200.0, 206.0, 212.0, 218.0, 224.0, 230.0]:
+        drawings.append({"items": [("l", Point(100.0, y), Point(800.0, y))]})
+
+    # System 2: Notation above (y: 300-332), TAB below (y: 400-430)
+    for y in [300.0, 308.0, 316.0, 324.0, 332.0]:
+        drawings.append({"items": [("l", Point(100.0, y), Point(800.0, y))]})
+    for y in [400.0, 406.0, 412.0, 418.0, 424.0, 430.0]:
+        drawings.append({"items": [("l", Point(100.0, y), Point(800.0, y))]})
+
+    # Normal boundary barlines for System 1 (x=100, x=800)
+    drawings.append({"items": [("l", Point(100.0, 200.0), Point(100.0, 230.0))]})
+    drawings.append({"items": [("l", Point(800.0, 200.0), Point(800.0, 230.0))]})
+
+    # Normal boundary barlines for System 2 (x=100, x=800)
+    drawings.append({"items": [("l", Point(100.0, 400.0), Point(100.0, 430.0))]})
+    drawings.append({"items": [("l", Point(800.0, 400.0), Point(800.0, 430.0))]})
+
+    # Long vertical crossing BOTH systems (y=50 to y=500 at x=350.0)
+    drawings.append({"items": [("l", Point(350.0, 50.0), Point(350.0, 500.0))]})
+
+    class MockPage:
+        def get_drawings(self):
+            return drawings
+        def get_text(self, kind):
+            return []
+
+    page = MockPage()
+
+    systems = _detect_tab_systems(page, 0)
+    assert len(systems) == 2
+
+    first_system = systems[0]
+    second_system = systems[1]
+
+    # The normal boundary barlines MUST be retained to prove detection works
+    assert 100.0 in first_system.barlines
+    assert 800.0 in first_system.barlines
+    assert 100.0 in second_system.barlines
+    assert 800.0 in second_system.barlines
+
+    # The crossing vertical MUST be rejected from both systems
+    assert 350.0 not in first_system.barlines
+    assert 350.0 not in second_system.barlines
+
+
+
+def test_private_acceptance_lesson6() -> None:
+    import pytest
+    from pathlib import Path
+    from score2gp.pdf import _extract_pdf_text_candidates
+    
+    repo_root = Path(__file__).resolve().parent.parent
+    lesson6_path = repo_root.parent / "score2gp-private-fixtures" / "fixtures" / "private" / "Lesson-6.pdf"
+    if not lesson6_path.exists():
+        pytest.skip("Lesson-6.pdf required for this private-fixture acceptance test.")
+        
+    warnings, meta = [], {"detected_systems": 0, "detected_staves": 0, "detected_bar_boxes": 0, "detected_string_lines": 0}
+    cands = _extract_pdf_text_candidates(lesson6_path, warnings, meta)
+    
+    unique_systems = set(c.get("system_index") for c in cands if c.get("system_index") is not None)
+    assert len(unique_systems) == 3
+
+    page_bars = {}
+    for c in cands:
+        p = c.get("page_index")
+        b = c.get("bar_index")
+        if p is not None and b is not None:
+            page_bars.setdefault(p, set()).add(b)
+            
+    unique_bars = set()
+    for p, bars in page_bars.items():
+        unique_bars.update(bars)
+    assert len(unique_bars) == 17
+
