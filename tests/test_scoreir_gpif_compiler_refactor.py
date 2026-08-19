@@ -34,9 +34,11 @@ def _ensure_fixture(fixture_name: str) -> Path:
         if "unowned" in fixture_name:
             res["fretboard_position_ownership"] = []
             timeline = res.get("timeline_preview", [])
-            for m in timeline:
-                m["valid"] = True
-                m["invalid"] = False
+            for sys in timeline:
+                if isinstance(sys, dict) and "measures" in sys:
+                    for m in sys["measures"]:
+                        m["valid"] = True
+                        m["invalid"] = False
         elif "invalid" in fixture_name:
             timeline = res.get("timeline_preview", [])
             if timeline:
