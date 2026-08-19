@@ -11,6 +11,43 @@ from score2gp.gpif_builder import GPIFBuilder
 from score2gp.notation_omr.pipeline import run_recognition_on_file
 
 
+
+def _ensure_fixture(fixture_name: str) -> Path:
+    from score2gp.notation_omr.pipeline import run_recognition_on_file
+    import json
+    
+    repo_root = Path(__file__).resolve().parent.parent
+    fixtures_dir = repo_root.parent / "score2gp-private-fixtures" / "fixtures" / "private"
+    if not fixtures_dir.exists():
+        fixtures_dir = repo_root / "fixtures" / "private"
+        
+    artifact_path = fixtures_dir / fixture_name
+    if not artifact_path.exists():
+        # Produce the required fixture by running the system
+        lesson6_path = fixtures_dir / "Lesson-6.pdf"
+        if not lesson6_path.exists():
+            import pytest
+            pytest.skip(f"{lesson6_path.name} required to generate {fixture_name}")
+            
+        res = run_recognition_on_file(lesson6_path, assume_treble_clef=True)
+        
+        if "unowned" in fixture_name:
+            res["fretboard_position_ownership"] = []
+            timeline = res.get("timeline_preview", [])
+            for m in timeline:
+                m["valid"] = True
+                m["invalid"] = False
+        elif "invalid" in fixture_name:
+            timeline = res.get("timeline_preview", [])
+            if timeline:
+                timeline[0]["invalid"] = True
+                timeline[0]["valid"] = False
+                
+        with open(artifact_path, "w", encoding="utf-8") as f:
+            json.dump(res, f)
+            
+    return artifact_path
+
 def test_scoreir_compilation_from_locked_timeline():
     compiler = ScoreIRCompiler()
 
@@ -102,7 +139,7 @@ def test_compiler_unowned_notes_crash():
     import json
     import pytest
     
-    artifact_path = (Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "private" if (Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "private").exists() else Path(__file__).resolve().parent.parent / "fixtures" / "private") / "Lesson-6_unowned_artifact.json"
+    artifact_path = _ensure_fixture("Lesson-6_unowned_artifact.json")
     with open(artifact_path, "r", encoding="utf-8") as f:
         data = json.load(f)
         
@@ -124,7 +161,7 @@ def test_compiler_capacity_violation_error():
     import json
     import pytest
     
-    artifact_path = (Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "private" if (Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "private").exists() else Path(__file__).resolve().parent.parent / "fixtures" / "private") / "Lesson-6_invalid_artifact.json"
+    artifact_path = _ensure_fixture("Lesson-6_invalid_artifact.json")
     with open(artifact_path, "r", encoding="utf-8") as f:
         data = json.load(f)
         
