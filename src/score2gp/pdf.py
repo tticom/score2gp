@@ -4128,14 +4128,14 @@ def _detect_tab_systems(
         y_min = min(s.y0, s.y1)
         y_max = max(s.y0, s.y1)
         x_val = (s.x0 + s.x1) / 2
-        
+
         overlapping_major = []
         for sys_idx, t_sys in enumerate(systems_topologies):
             overlap = max(0.0, min(y_max, t_sys["lower_limit"]) - max(y_min, t_sys["upper_limit"]))
             in_x_bounds = (t_sys["x0"] - 25.0 <= x_val <= t_sys["x1"] + 25.0)
             if overlap > 40.0 and in_x_bounds:
                 overlapping_major.append(sys_idx)
-                
+
         if len(overlapping_major) > 1:
             primitive_to_system[i] = None
         else:
