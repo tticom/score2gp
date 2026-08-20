@@ -132,3 +132,31 @@ def test_line_segment_is_horizontal_threshold() -> None:
     # A segment too angled
     too_angled = _LineSegment(x0=10.0, y0=20.0, x1=90.0, y1=21.1) # dy = 1.1
     assert too_angled.is_horizontal is False
+
+def test_extract_floating_barlines_isolation(caplog) -> None:
+    from score2gp.pdf_geometry import _LineSegment, extract_floating_barlines
+    import logging
+
+    caplog.set_level(logging.WARNING)
+
+    # Valid floating barline
+    valid = _LineSegment(x0=50.0, y0=100.0, x1=50.0, y1=140.0, stroke_width=1.0)
+    # Outside staff bounds entirely
+    outside = _LineSegment(x0=60.0, y0=20.0, x1=60.0, y1=80.0, stroke_width=1.0)
+    # Horizontal line
+    horizontal = _LineSegment(x0=10.0, y0=120.0, x1=90.0, y1=120.0, stroke_width=1.0)
+    # Repeat marker simulation (thick floating barline)
+    thick = _LineSegment(x0=70.0, y0=90.0, x1=70.0, y1=150.0, stroke_width=3.5)
+
+    segments = [valid, outside, horizontal, thick]
+    staff_top_y = 95.0
+    staff_bottom_y = 160.0
+
+    barlines = extract_floating_barlines(segments, staff_top_y, staff_bottom_y)
+    
+    assert len(barlines) == 2
+    assert barlines[0].x0 == 50.0
+    assert barlines[1].x0 == 70.0
+    
+    # Check that a diagnostic warning was emitted for the thick line
+    assert "thickness 3.5 matching a repeat marker but lacks dots. Degrading to standard barline" in caplog.text

@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import statistics
+import logging
+
+logger = logging.getLogger(__name__)
 from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -527,3 +530,20 @@ def compute_staff_position_index(
         snap_delta=snap_delta,
         is_snapped=is_snapped,
     )
+
+def extract_floating_barlines(segments: list[_LineSegment], staff_top_y: float, staff_bottom_y: float) -> list[_LineSegment]:
+    barlines = []
+    for seg in segments:
+        if not seg.is_vertical:
+            continue
+        y_min = min(seg.y0, seg.y1)
+        y_max = max(seg.y0, seg.y1)
+        if y_max >= staff_top_y and y_min <= staff_bottom_y:
+            # Check thickness for repeat marker logic
+            if seg.stroke_width and seg.stroke_width >= 3.0:
+                logger.warning(
+                    f"Floating barline at x={seg.x0} has thickness {seg.stroke_width} "
+                    "matching a repeat marker but lacks dots. Degrading to standard barline."
+                )
+            barlines.append(seg)
+    return sorted(barlines, key=lambda s: min(s.x0, s.x1))

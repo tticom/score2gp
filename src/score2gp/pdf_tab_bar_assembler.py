@@ -133,3 +133,28 @@ def assemble_pdf_tab_bar(
         time_signature=TimeSignature(numerator=4, denominator=4),
         events=events,
     )
+
+def split_tab_candidates_by_floating_barlines(candidates: list[TabCandidate], barlines: list) -> list[list[TabCandidate]]:
+    """Split a list of TabCandidates into measures based on floating barline X-coordinates."""
+    if not barlines:
+        return [candidates] if candidates else []
+
+    measures = []
+    current_measure = []
+    barline_idx = 0
+    num_barlines = len(barlines)
+
+    sorted_candidates = sorted(candidates, key=lambda c: c.x)
+
+    for cand in sorted_candidates:
+        while barline_idx < num_barlines and cand.x > max(barlines[barline_idx].x0, barlines[barline_idx].x1):
+            if current_measure:
+                measures.append(current_measure)
+                current_measure = []
+            barline_idx += 1
+        current_measure.append(cand)
+    
+    if current_measure:
+        measures.append(current_measure)
+        
+    return measures

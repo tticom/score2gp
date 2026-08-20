@@ -1077,3 +1077,36 @@ def test_pdf_tab_helpers_isolation() -> None:
     c1.bbox.x0 = 999.0
     assert c2.x == 10.0
     assert c2.bbox.x0 == 10.0
+
+def test_split_tab_candidates_by_floating_barlines() -> None:
+    from score2gp.pdf_tab_bar_assembler import split_tab_candidates_by_floating_barlines
+    from score2gp.tabraw import TabCandidate
+    from score2gp.pdf_geometry import _LineSegment
+
+    cand1 = make_pdf_tab_candidate()
+    cand1.x = 20.0
+    cand2 = make_pdf_tab_candidate()
+    cand2.x = 40.0
+    cand3 = make_pdf_tab_candidate()
+    cand3.x = 60.0
+    cand4 = make_pdf_tab_candidate()
+    cand4.x = 80.0
+
+    barline1 = _LineSegment(x0=50.0, y0=0.0, x1=50.0, y1=100.0)
+    barline2 = _LineSegment(x0=70.0, y0=0.0, x1=70.0, y1=100.0)
+
+    measures = split_tab_candidates_by_floating_barlines(
+        [cand1, cand2, cand3, cand4],
+        [barline1, barline2]
+    )
+
+    assert len(measures) == 3
+    assert len(measures[0]) == 2
+    assert measures[0][0].x == 20.0
+    assert measures[0][1].x == 40.0
+    
+    assert len(measures[1]) == 1
+    assert measures[1][0].x == 60.0
+    
+    assert len(measures[2]) == 1
+    assert measures[2][0].x == 80.0
