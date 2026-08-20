@@ -1092,8 +1092,8 @@ def test_split_tab_candidates_by_floating_barlines() -> None:
     cand4 = make_pdf_tab_candidate()
     cand4.x = 80.0
 
-    barline1 = _LineSegment(x0=50.0, y0=0.0, x1=50.0, y1=100.0)
-    barline2 = _LineSegment(x0=70.0, y0=0.0, x1=70.0, y1=100.0)
+    barline1 = 50.0
+    barline2 = 70.0
 
     measures = split_tab_candidates_by_floating_barlines(
         [cand1, cand2, cand3, cand4],

@@ -81,6 +81,7 @@ class TabRaw(BaseModel):
     pdf_layout_class: str | None = None
     pdf_layout_warnings: list[str] = Field(default_factory=list)
     candidates: list[TabCandidate] = Field(default_factory=list)
+    floating_barlines: list[float] = Field(default_factory=list)
     warnings: list[dict[str, Any]] = Field(default_factory=list)
 
     @model_validator(mode="after")

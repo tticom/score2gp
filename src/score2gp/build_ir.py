@@ -1755,6 +1755,7 @@ def build_ir_from_tabraw_only(
         try:
             bar = assemble_pdf_tab_bar(
                 bar_frets,
+                floating_barlines=tabraw.floating_barlines,
                 output_bar_idx=output_bar_idx,
                 track_id=TRACK_ID,
                 editable_draft=editable_draft,
