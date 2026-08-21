@@ -65,8 +65,6 @@ def assemble_pdf_tab_bar(
     grouper = PdfOnlyChordEventGrouper(tolerance=chord_x_tolerance_pt)
 
     for measure_cands in measures:
-        if not measure_cands:
-            continue
 
         event_subgroups = grouper.group_bar_candidates(measure_cands)
         N = len(event_subgroups)
@@ -157,24 +155,17 @@ def assemble_pdf_tab_bar(
 def split_tab_candidates_by_floating_barlines(candidates: list[TabCandidate], barlines: list) -> list[list[TabCandidate]]:
     """Split a list of TabCandidates into measures based on floating barline X-coordinates."""
     if not barlines:
-        return [candidates] if candidates else []
+        return [candidates]
 
-    measures = []
-    current_measure = []
+    measures: list[list[TabCandidate]] = [[] for _ in range(len(barlines) + 1)]
+    sorted_candidates = sorted(candidates, key=lambda c: c.x)
+
     barline_idx = 0
     num_barlines = len(barlines)
 
-    sorted_candidates = sorted(candidates, key=lambda c: c.x)
-
     for cand in sorted_candidates:
         while barline_idx < num_barlines and cand.x > barlines[barline_idx]:
-            if current_measure:
-                measures.append(current_measure)
-                current_measure = []
             barline_idx += 1
-        current_measure.append(cand)
-
-    if current_measure:
-        measures.append(current_measure)
+        measures[barline_idx].append(cand)
 
     return measures

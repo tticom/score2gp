@@ -1104,9 +1104,30 @@ def test_split_tab_candidates_by_floating_barlines() -> None:
     assert len(measures[0]) == 2
     assert measures[0][0].x == 20.0
     assert measures[0][1].x == 40.0
-    
+
     assert len(measures[1]) == 1
     assert measures[1][0].x == 60.0
-    
+
     assert len(measures[2]) == 1
     assert measures[2][0].x == 80.0
+
+def test_split_tab_candidates_by_floating_barlines_empty_submeasures() -> None:
+    from score2gp.pdf_tab_bar_assembler import split_tab_candidates_by_floating_barlines
+
+    cand1 = make_pdf_tab_candidate()
+    cand1.x = 20.0
+    cand2 = make_pdf_tab_candidate()
+    cand2.x = 100.0
+
+    barline1 = 50.0
+    barline2 = 70.0
+
+    measures = split_tab_candidates_by_floating_barlines(
+        [cand1, cand2],
+        [barline1, barline2]
+    )
+
+    assert len(measures) == 3
+    assert len(measures[0]) == 1
+    assert len(measures[1]) == 0
+    assert len(measures[2]) == 1
