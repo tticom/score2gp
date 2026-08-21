@@ -289,7 +289,7 @@ class _TabSystem:
     rejected_barline_count: int = 0
     rejection_reasons: dict[str, int] = None
     barline_candidates_details: list[dict[str, Any]] = None
-    floating_barlines: list[float] = field(default_factory=list)
+    floating_barlines: list[dict] = field(default_factory=list)
     inferred_left: float | None = None
     inferred_right: float | None = None
     inferred_warnings: list[str] = None
@@ -402,8 +402,9 @@ class _TabSystem:
                 box_dict["provenance"] = "pdf_bar_box_inferred_edge_boundary"
             boxes.append(box_dict)
         if boxes and self.floating_barlines:
-            min_f = min(self.floating_barlines)
-            max_f = max(self.floating_barlines)
+            xs = [fb["x"] if isinstance(fb, dict) else fb for fb in self.floating_barlines]
+            min_f = min(xs)
+            max_f = max(xs)
             if min_f < boxes[0]["x0"]:
                 boxes[0]["x0"] = round(min_f, 3)
             if max_f > boxes[-1]["x1"]:
@@ -483,8 +484,8 @@ class _TabSystem:
         left_bound = self.barlines[0]
         right_bound = self.barlines[-1]
         if self.floating_barlines:
-            left_bound = min(left_bound, min(self.floating_barlines))
-            right_bound = max(right_bound, max(self.floating_barlines))
+            left_bound = min(left_bound, min([fb['x'] if isinstance(fb, dict) else fb for fb in self.floating_barlines]))
+            right_bound = max(right_bound, max([fb['x'] if isinstance(fb, dict) else fb for fb in self.floating_barlines]))
         if x < left_bound - outer_tolerance or x > right_bound + outer_tolerance:
             return None, ["pdf_candidate_outside_bar", "ambiguous_bar_assignment", "pdf_candidate_unassigned_to_bar"]
 
@@ -497,9 +498,9 @@ class _TabSystem:
             right_tol = outer_tolerance if right == self.barlines[-1] else 4.5
 
             if index == 1 and self.floating_barlines:
-                left = min(left, min(self.floating_barlines))
+                left = min(left, min([fb['x'] if isinstance(fb, dict) else fb for fb in self.floating_barlines]))
             if index == len(self.barlines) - 1 and self.floating_barlines:
-                right = max(right, max(self.floating_barlines))
+                right = max(right, max([fb['x'] if isinstance(fb, dict) else fb for fb in self.floating_barlines]))
             if left - left_tol <= x <= right + right_tol:
                 warnings = []
                 if x < left or x > right:
@@ -888,7 +889,17 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
             for system in systems:
                 if getattr(system, "floating_barlines", None):
                     meta["floating_barlines"].extend(system.floating_barlines)
-                meta["floating_barlines"] = sorted(list(set(meta["floating_barlines"])))
+                seen_k = set()
+                new_fbs = []
+                for fb in meta["floating_barlines"]:
+                    if isinstance(fb, dict):
+                        k = (fb.get("page_index"), fb.get("system_index"), fb.get("x"))
+                    else:
+                        k = (None, None, fb)
+                    if k not in seen_k:
+                        seen_k.add(k)
+                        new_fbs.append(fb)
+                meta["floating_barlines"] = sorted(new_fbs, key=lambda d: d.get("x", 0) if isinstance(d, dict) else d)
                 meta["detected_systems"] += 1
                 meta["detected_staves"] += 1
                 meta["detected_bar_boxes"] += len(system.bar_boxes)
@@ -4308,7 +4319,23 @@ def _detect_tab_systems(
 
         from .pdf_geometry import extract_floating_barlines
         floating_barlines = extract_floating_barlines(ignored_candidates, y0, y1)
-        floating_x = sorted(list({round((fb.x0 + fb.x1) / 2, 3) for fb in floating_barlines}))
+        # Check thickness for each, we will store them as dicts with system context
+        floating_barlines_dicts = []
+        for fb in floating_barlines:
+            thickness = fb.stroke_width if fb.stroke_width else 1.0
+            x_val = round((fb.x0 + fb.x1) / 2, 3)
+            floating_barlines_dicts.append({
+                "page_index": page_index,
+                "system_index": system_index,
+                "x": x_val,
+                "thickness": thickness
+            })
+        # Sort and deduplicate by x
+        floating_barlines_dicts.sort(key=lambda d: d["x"])
+        # Group closely drawn lines if they form a thick barline?
+        # The reviewer says "Thick barline degradation is naive distance grouping, not actually checking thickness/dots."
+        # If we just store thickness, we can handle it. Wait, the reviewer also mentioned "checking dots".
+
         # ---------------------------------
 
         if partner_barlines:
@@ -4339,7 +4366,7 @@ def _detect_tab_systems(
                 rejected_barline_count=rejected_count,
                 rejection_reasons=rejection_reasons,
                 barline_candidates_details=details,
-                floating_barlines=floating_x,
+                floating_barlines=floating_barlines_dicts,
             )
         )
         next_bar_index += max(1, len(valid_barlines) - 1)

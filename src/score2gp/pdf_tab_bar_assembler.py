@@ -18,7 +18,7 @@ from .tabraw import TabCandidate
 
 def assemble_pdf_tab_bar(
     subgroup_candidates: list[TabCandidate],
-    floating_barlines: list[float] | None = None,
+    floating_barlines: list | None = None,
     *,
     output_bar_idx: int,
     track_id: str,
@@ -152,7 +152,7 @@ def assemble_pdf_tab_bar(
         events=events,
     )
 
-def split_tab_candidates_by_floating_barlines(candidates: list[TabCandidate], barlines: list[float]) -> list[list[TabCandidate]]:
+def split_tab_candidates_by_floating_barlines(candidates: list[TabCandidate], barlines: list) -> list[list[TabCandidate]]:
     """Split a list of TabCandidates into measures based on floating barline X-coordinates."""
     if not candidates:
         return [candidates]
@@ -161,25 +161,30 @@ def split_tab_candidates_by_floating_barlines(candidates: list[TabCandidate], ba
     min_x = sorted_candidates[0].x
     max_x = sorted_candidates[-1].x
 
-    # Only consider floating barlines strictly within the candidate bounds of this bar
-    relevant_barlines = sorted([b for b in barlines if min_x < b < max_x])
+    # Get the system/page context from the first candidate
+    page_index = candidates[0].page_index
+    system_index = candidates[0].system_index
 
-    # Degrade thick barlines (multiple close lines) into a single logical barline
-    degraded_barlines = []
-    for b in relevant_barlines:
-        if not degraded_barlines or (b - degraded_barlines[-1]) > 10.0:
-            degraded_barlines.append(b)
+    # Filter barlines to only those belonging to this system AND within the candidate bounds
+    relevant_barlines = [
+        b.x for b in barlines
+        if getattr(b, "page_index", None) == page_index
+        and getattr(b, "system_index", None) == system_index
+        and min_x < b.x < max_x
+    ]
 
-    if not degraded_barlines:
+    if not relevant_barlines:
         return [sorted_candidates]
 
-    measures: list[list[TabCandidate]] = [[] for _ in range(len(degraded_barlines) + 1)]
+    relevant_barlines.sort()
+
+    measures: list[list[TabCandidate]] = [[] for _ in range(len(relevant_barlines) + 1)]
 
     barline_idx = 0
-    num_barlines = len(degraded_barlines)
+    num_barlines = len(relevant_barlines)
 
     for cand in sorted_candidates:
-        while barline_idx < num_barlines and cand.x > degraded_barlines[barline_idx]:
+        while barline_idx < num_barlines and cand.x > relevant_barlines[barline_idx]:
             barline_idx += 1
         measures[barline_idx].append(cand)
 

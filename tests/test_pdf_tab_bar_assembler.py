@@ -1092,8 +1092,9 @@ def test_split_tab_candidates_by_floating_barlines() -> None:
     cand4 = make_pdf_tab_candidate()
     cand4.x = 80.0
 
-    barline1 = 50.0
-    barline2 = 70.0
+    from score2gp.tabraw import FloatingBarline
+    barline1 = FloatingBarline(page_index=1, system_index=1, x=50.0)
+    barline2 = FloatingBarline(page_index=1, system_index=1, x=70.0)
 
     measures = split_tab_candidates_by_floating_barlines(
         [cand1, cand2, cand3, cand4],
@@ -1119,8 +1120,9 @@ def test_split_tab_candidates_by_floating_barlines_empty_submeasures() -> None:
     cand2 = make_pdf_tab_candidate()
     cand2.x = 100.0
 
-    barline1 = 50.0
-    barline2 = 70.0
+    from score2gp.tabraw import FloatingBarline
+    barline1 = FloatingBarline(page_index=1, system_index=1, x=50.0)
+    barline2 = FloatingBarline(page_index=1, system_index=1, x=70.0)
 
     measures = split_tab_candidates_by_floating_barlines(
         [cand1, cand2],

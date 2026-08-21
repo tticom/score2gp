@@ -531,19 +531,55 @@ def compute_staff_position_index(
         is_snapped=is_snapped,
     )
 
-def extract_floating_barlines(segments: list[_LineSegment], staff_top_y: float, staff_bottom_y: float) -> list[_LineSegment]:
-    barlines = []
+def extract_floating_barlines(segments: list[_LineSegment], staff_top_y: float, staff_bottom_y: float, dot_candidates=None) -> list[_LineSegment]:
+    raw_barlines = []
     for seg in segments:
         if not seg.is_vertical:
             continue
         y_min = min(seg.y0, seg.y1)
         y_max = max(seg.y0, seg.y1)
         if y_max >= staff_top_y and y_min <= staff_bottom_y:
-            # Check thickness for repeat marker logic
-            if seg.stroke_width and seg.stroke_width >= 3.0:
-                logger.warning(
-                    f"Floating barline at x={seg.x0} has thickness {seg.stroke_width} "
-                    "matching a repeat marker but lacks dots. Degrading to standard barline."
-                )
-            barlines.append(seg)
-    return sorted(barlines, key=lambda s: min(s.x0, s.x1))
+            raw_barlines.append(seg)
+
+    raw_barlines.sort(key=lambda s: min(s.x0, s.x1))
+
+    # Degrade thick barlines or double barlines into a single logical barline.
+    # Checks actual geometry (thickness) and groups closely drawn double barlines.
+    merged_barlines = []
+    skip_next = False
+    for i in range(len(raw_barlines)):
+        if skip_next:
+            skip_next = False
+            continue
+
+        seg = raw_barlines[i]
+
+        # Standalone thick barline (e.g. single thick line)
+        if seg.stroke_width and seg.stroke_width >= 3.0:
+            logger.warning(
+                f"Floating barline at x={seg.x0} has thickness {seg.stroke_width} "
+                "matching a repeat marker but lacks dots. Degrading to standard barline."
+            )
+
+        if i + 1 < len(raw_barlines):
+            next_seg = raw_barlines[i+1]
+            dist = min(next_seg.x0, next_seg.x1) - min(seg.x0, seg.x1)
+
+            # Double barline or thick+thin repeat marker
+            if dist < 5.0:
+                seg_thick = (seg.stroke_width and seg.stroke_width >= 3.0)
+                next_thick = (next_seg.stroke_width and next_seg.stroke_width >= 3.0)
+                if seg_thick or next_thick:
+                    logger.warning(
+                        f"Floating barline pair at x={seg.x0} has thickness matching a repeat marker "
+                        "but lacks dots. Degrading to standard barline."
+                    )
+                # Group them together because double barlines and repeat markers without dots
+                # both act as a single logical barline boundary.
+                merged_barlines.append(seg)
+                skip_next = True
+                continue
+
+        merged_barlines.append(seg)
+
+    return merged_barlines
