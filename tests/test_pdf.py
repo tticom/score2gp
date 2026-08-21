@@ -3586,3 +3586,5 @@ def test_private_acceptance_lesson6_duration_and_negative_control() -> None:
             refused = [c for c in cands2 if "pdf_notation_rhythm_missing_notehead" in c.get("raw", {}).get("assignment_warnings", [])]
             assert len(refused) > 0
             assert "pdf_notation_rhythm_missing_notehead" in refused[0]["raw"]["refusal_reason"]
+            for c in refused:
+                assert "duration_evidence" not in c.get("raw", {})

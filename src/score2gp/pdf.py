@@ -2400,6 +2400,8 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                                     warnings_list.append("pdf_notation_rhythm_missing_notehead")
                                 cand_raw["assignment_warnings"] = warnings_list
                                 cand_raw["refusal_reason"] = "pdf_notation_rhythm_missing_notehead"
+                                if "duration_evidence" in cand_raw:
+                                    del cand_raw["duration_evidence"]
                                 cand_dict["raw"] = cand_raw
 
             if systems:
