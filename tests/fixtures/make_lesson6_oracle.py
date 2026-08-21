@@ -7,7 +7,7 @@ import hashlib
 def main():
     repo_root = Path(__file__).resolve().parent.parent.parent
     gp_path = repo_root.parent / "score2gp-private-fixtures" / "fixtures" / "private" / "Lesson-6.gp"
-    
+
     if not gp_path.exists():
         print(f"Skipping: {gp_path} not found")
         return
@@ -18,16 +18,16 @@ def main():
 
     with zipfile.ZipFile(gp_path, 'r') as z:
         gpif_bytes = z.read("Content/score.gpif")
-    
+
     root = ET.fromstring(gpif_bytes)
-    
+
     rhythms = {}
     for r in root.findall(".//Rhythms/Rhythm"):
         r_id = r.get("id")
         nv = r.find("NoteValue")
         if r_id is not None and nv is not None:
             rhythms[r_id] = nv.text.lower()
-            
+
     notes = {}
     for n in root.findall(".//Notes/Note"):
         n_id = n.get("id")
@@ -46,7 +46,7 @@ def main():
                         fret = int(f_node.text)
         if n_id is not None:
             notes[n_id] = {"string": string, "fret": fret}
-            
+
     beats = {}
     for b in root.findall(".//Beats/Beat"):
         b_id = b.get("id")
@@ -57,7 +57,7 @@ def main():
             if nn.text: n_ids.extend(nn.text.split())
         if b_id is not None:
             beats[b_id] = {"rhythm_id": r_id, "notes": n_ids}
-            
+
     voices = {}
     for v in root.findall(".//Voices/Voice"):
         v_id = v.get("id")
@@ -66,7 +66,7 @@ def main():
             if bn.text: b_ids.extend(bn.text.split())
         if v_id is not None:
             voices[v_id] = b_ids
-            
+
     bars_list = []
     for m_idx, bar in enumerate(root.findall(".//Bars/Bar")):
         m_voices = []
@@ -74,7 +74,7 @@ def main():
             if vn.text:
                 for v_id in vn.text.split():
                     if v_id != "-1": m_voices.append(v_id)
-        
+
         bar_index = m_idx + 1
         for v_id in m_voices:
             for b_id in voices.get(v_id, []):
@@ -83,10 +83,10 @@ def main():
                 r_id = beat["rhythm_id"]
                 r_val = rhythms.get(r_id)
                 dur_name = r_val
-                
+
                 # We need to correctly translate 16th which in GP XML is "16th" or "sixteenth"
                 if r_val == "sixteenth": dur_name = "16th"
-                
+
                 for n_id in beat["notes"]:
                     note = notes.get(n_id)
                     if note and note["fret"] is not None and note["string"] is not None:

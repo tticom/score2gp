@@ -65,8 +65,29 @@ def extract_rhythm_candidates(
     if diagnostics.flag_beam_candidates:
         for b in diagnostics.flag_beam_candidates.beams:
             beams.append(BeamPrimitiveCandidate(bbox=SpatialBBox(b.bbox[0], b.bbox[1], b.bbox[2], b.bbox[3])))
+        # Deduplicate tiny flags (like triplet "3" curves) so they don't count twice for TAB rhythm
+        merged_flags = []
         for f in diagnostics.flag_beam_candidates.flags:
-            flags.append(FlagPrimitiveCandidate(bbox=SpatialBBox(f.bbox[0], f.bbox[1], f.bbox[2], f.bbox[3])))
+            w = abs(f.bbox[2] - f.bbox[0])
+            h = abs(f.bbox[3] - f.bbox[1])
+            merged = False
+            if w < 4.0 and h < 4.0:
+                for m in merged_flags:
+                    mw = abs(m[2] - m[0])
+                    mh = abs(m[3] - m[1])
+                    if mw < 4.0 and mh < 4.0 and abs(f.bbox[0] - m[0]) < 5.0 and abs(f.bbox[1] - m[1]) < 10.0:
+                        m[0] = min(m[0], f.bbox[0])
+                        m[1] = min(m[1], f.bbox[1])
+                        m[2] = max(m[2], f.bbox[2])
+                        m[3] = max(m[3], f.bbox[3])
+                        merged = True
+                        break
+            if not merged:
+                merged_flags.append([f.bbox[0], f.bbox[1], f.bbox[2], f.bbox[3]])
+
+        for mf in merged_flags:
+            flags.append(FlagPrimitiveCandidate(bbox=SpatialBBox(mf[0], mf[1], mf[2], mf[3])))
+
 
     # Before resolving full durations, check for MissingRhythmGeometry
     stem_assignments = associate_stems_to_events(events_x, stems, context)
