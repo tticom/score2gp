@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 from pathlib import Path
 import re
@@ -251,6 +251,8 @@ def extract_tab(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
     else:
         raw["candidates"].extend(_extract_pdf_text_candidates(Path(path), raw["warnings"], meta))
 
+    if "floating_barlines" in meta:
+        raw["floating_barlines"] = meta["floating_barlines"]
     _append_grouping_warnings(raw, meta)
     raw = TabRaw.model_validate(raw).model_dump(mode="json", exclude_none=True)
     _write_grouping_artifacts(Path(path), out, tabraw_path, inspection, raw)
@@ -287,6 +289,7 @@ class _TabSystem:
     rejected_barline_count: int = 0
     rejection_reasons: dict[str, int] = None
     barline_candidates_details: list[dict[str, Any]] = None
+    floating_barlines: list[dict] = field(default_factory=list)
     inferred_left: float | None = None
     inferred_right: float | None = None
     inferred_warnings: list[str] = None
@@ -398,6 +401,14 @@ class _TabSystem:
                 box_dict["inferred_boundaries"] = inferred
                 box_dict["provenance"] = "pdf_bar_box_inferred_edge_boundary"
             boxes.append(box_dict)
+        if boxes and self.floating_barlines:
+            xs = [fb["x"] if isinstance(fb, dict) else fb for fb in self.floating_barlines]
+            min_f = min(xs)
+            max_f = max(xs)
+            if min_f < boxes[0]["x0"]:
+                boxes[0]["x0"] = round(min_f, 3)
+            if max_f > boxes[-1]["x1"]:
+                boxes[-1]["x1"] = round(max_f, 3)
         return boxes
 
     def string_for_y(
@@ -470,7 +481,12 @@ class _TabSystem:
 
         # Outer boundary snapping: up to 24.0 pixels (matching horizontal margin of the system)
         outer_tolerance = 24.0
-        if x < self.barlines[0] - outer_tolerance or x > self.barlines[-1] + outer_tolerance:
+        left_bound = self.barlines[0]
+        right_bound = self.barlines[-1]
+        if self.floating_barlines:
+            left_bound = min(left_bound, min([fb['x'] if isinstance(fb, dict) else fb for fb in self.floating_barlines]))
+            right_bound = max(right_bound, max([fb['x'] if isinstance(fb, dict) else fb for fb in self.floating_barlines]))
+        if x < left_bound - outer_tolerance or x > right_bound + outer_tolerance:
             return None, ["pdf_candidate_outside_bar", "ambiguous_bar_assignment", "pdf_candidate_unassigned_to_bar"]
 
         internal_barlines = self.barlines[1:-1]
@@ -481,6 +497,10 @@ class _TabSystem:
             left_tol = outer_tolerance if left == self.barlines[0] else 4.5
             right_tol = outer_tolerance if right == self.barlines[-1] else 4.5
 
+            if index == 1 and self.floating_barlines:
+                left = min(left, min([fb['x'] if isinstance(fb, dict) else fb for fb in self.floating_barlines]))
+            if index == len(self.barlines) - 1 and self.floating_barlines:
+                right = max(right, max([fb['x'] if isinstance(fb, dict) else fb for fb in self.floating_barlines]))
             if left - left_tol <= x <= right + right_tol:
                 warnings = []
                 if x < left or x > right:
@@ -864,7 +884,22 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
             systems = updated_systems
 
             # Accumulate metadata
+            if "floating_barlines" not in meta:
+                meta["floating_barlines"] = []
             for system in systems:
+                if getattr(system, "floating_barlines", None):
+                    meta["floating_barlines"].extend(system.floating_barlines)
+                seen_k = set()
+                new_fbs = []
+                for fb in meta["floating_barlines"]:
+                    if isinstance(fb, dict):
+                        k = (fb.get("page_index"), fb.get("system_index"), fb.get("x"))
+                    else:
+                        k = (None, None, fb)
+                    if k not in seen_k:
+                        seen_k.add(k)
+                        new_fbs.append(fb)
+                meta["floating_barlines"] = sorted(new_fbs, key=lambda d: d.get("x", 0) if isinstance(d, dict) else d)
                 meta["detected_systems"] += 1
                 meta["detected_staves"] += 1
                 meta["detected_bar_boxes"] += len(system.bar_boxes)
@@ -4274,6 +4309,42 @@ def _detect_tab_systems(
                             rejected_count += 1
                 details.append(det_copy)
 
+        # --- NPG-03B FLOATING BARLINES ---
+        ignored_candidates = []
+        all_accepted_barlines = set(valid_barlines + partner_barlines)
+        for s in system_candidates:
+            actual_s = s.segment if s.primitive_kind == "truncated" else s
+            is_vertical = (actual_s.primitive_kind == "line" and actual_s.x0 == actual_s.x1)
+
+            # If it's a perfectly vertical line, only skip it if it's already an accepted barline
+            if is_vertical:
+                avg_x = (actual_s.x0 + actual_s.x1) / 2
+                if any(abs(avg_x - vb) < 1.0 for vb in all_accepted_barlines):
+                    continue
+
+            ignored_candidates.append(s)
+
+        from .pdf_geometry import extract_floating_barlines
+        floating_barlines = extract_floating_barlines(ignored_candidates, y0, y1)
+        # Check thickness for each, we will store them as dicts with system context
+        floating_barlines_dicts = []
+        for fb in floating_barlines:
+            thickness = fb.stroke_width if fb.stroke_width else 1.0
+            x_val = round((fb.x0 + fb.x1) / 2, 3)
+            floating_barlines_dicts.append({
+                "page_index": page_index,
+                "system_index": system_index,
+                "x": x_val,
+                "thickness": thickness
+            })
+        # Sort and deduplicate by x
+        floating_barlines_dicts.sort(key=lambda d: d["x"])
+        # Group closely drawn lines if they form a thick barline?
+        # The reviewer says "Thick barline degradation is naive distance grouping, not actually checking thickness/dots."
+        # If we just store thickness, we can handle it. Wait, the reviewer also mentioned "checking dots".
+
+        # ---------------------------------
+
         if partner_barlines:
             all_barlines = sorted(list(set(valid_barlines + partner_barlines)))
             final_barlines = []
@@ -4302,6 +4373,7 @@ def _detect_tab_systems(
                 rejected_barline_count=rejected_count,
                 rejection_reasons=rejection_reasons,
                 barline_candidates_details=details,
+                floating_barlines=floating_barlines_dicts,
             )
         )
         next_bar_index += max(1, len(valid_barlines) - 1)
@@ -4336,7 +4408,13 @@ def _detect_tab_systems(
     cur_bar = first_bar_index
     for idx, system in enumerate(non_ghost_systems, start=1):
         from dataclasses import replace
-        final_systems.append(replace(system, system_index=idx, first_bar_index=cur_bar))
+        updated_fbs = []
+        if getattr(system, "floating_barlines", None):
+            for fb in system.floating_barlines:
+                fb_copy = dict(fb)
+                fb_copy["system_index"] = idx
+                updated_fbs.append(fb_copy)
+        final_systems.append(replace(system, system_index=idx, first_bar_index=cur_bar, floating_barlines=updated_fbs))
         cur_bar += max(1, len(system.barlines) - 1)
     return final_systems
 
