@@ -152,19 +152,34 @@ def assemble_pdf_tab_bar(
         events=events,
     )
 
-def split_tab_candidates_by_floating_barlines(candidates: list[TabCandidate], barlines: list) -> list[list[TabCandidate]]:
+def split_tab_candidates_by_floating_barlines(candidates: list[TabCandidate], barlines: list[float]) -> list[list[TabCandidate]]:
     """Split a list of TabCandidates into measures based on floating barline X-coordinates."""
-    if not barlines:
+    if not candidates:
         return [candidates]
 
-    measures: list[list[TabCandidate]] = [[] for _ in range(len(barlines) + 1)]
     sorted_candidates = sorted(candidates, key=lambda c: c.x)
+    min_x = sorted_candidates[0].x
+    max_x = sorted_candidates[-1].x
+
+    # Only consider floating barlines strictly within the candidate bounds of this bar
+    relevant_barlines = sorted([b for b in barlines if min_x < b < max_x])
+
+    # Degrade thick barlines (multiple close lines) into a single logical barline
+    degraded_barlines = []
+    for b in relevant_barlines:
+        if not degraded_barlines or (b - degraded_barlines[-1]) > 10.0:
+            degraded_barlines.append(b)
+
+    if not degraded_barlines:
+        return [sorted_candidates]
+
+    measures: list[list[TabCandidate]] = [[] for _ in range(len(degraded_barlines) + 1)]
 
     barline_idx = 0
-    num_barlines = len(barlines)
+    num_barlines = len(degraded_barlines)
 
     for cand in sorted_candidates:
-        while barline_idx < num_barlines and cand.x > barlines[barline_idx]:
+        while barline_idx < num_barlines and cand.x > degraded_barlines[barline_idx]:
             barline_idx += 1
         measures[barline_idx].append(cand)
 

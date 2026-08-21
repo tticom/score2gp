@@ -26,5 +26,5 @@ def test_private_acceptance_melodic(tmp_path):
     expanded_bars = [bar for bar in bars if bar.time_signature.numerator > 4]
     assert len(expanded_bars) > 0
 
-    # Specifically, Bar 8 should be 16/4 (4 sub-measures)
-    assert bars[7].time_signature.numerator == 16
+    # Specifically, Bar 8 should be 12/4 (3 sub-measures)
+    assert bars[7].time_signature.numerator == 12
