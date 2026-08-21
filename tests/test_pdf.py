@@ -3534,3 +3534,74 @@ def test_private_acceptance_lesson6() -> None:
     for p, bars in page_bars.items():
         unique_bars.update(bars)
     assert len(unique_bars) == 17
+
+
+
+def test_private_acceptance_lesson6_duration_and_negative_control() -> None:
+    import pytest
+    from pathlib import Path
+    from score2gp.pdf import extract_tab
+    from unittest.mock import patch
+    import score2gp.pdf_staff_notation_diagnostics
+
+    repo_root = Path(__file__).resolve().parent.parent
+    lesson6_path = repo_root.parent / "score2gp-private-fixtures" / "fixtures" / "private" / "Lesson-6.pdf"
+    if not lesson6_path.exists():
+        pytest.skip("Lesson-6.pdf required for this private-fixture acceptance test.")
+
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        # Part 1: Positive duration oracle
+        out_path = Path(tmp) / "lesson6.tabraw.json"
+        raw = extract_tab(lesson6_path, out_path)
+        cands = [c for c in raw["candidates"] if c.get("kind") == "fret"]
+
+        has_dur = [c for c in cands if c.get("raw", {}).get("duration_evidence")]
+        assert len(has_dur) > 100
+
+        oracle_cand = has_dur[0]
+        assert "duration_evidence" in oracle_cand["raw"]
+        assert "pdf_notation_rhythm_missing_notehead" not in oracle_cand["raw"].get("assignment_warnings", [])
+
+        import json
+        oracle_path = repo_root / "tests" / "fixtures" / "lesson6_duration_oracle.json"
+        with open(oracle_path, "r", encoding="utf-8") as f:
+            oracle_data = json.load(f)
+
+        # Specific oracle assertions for Lesson-6.pdf
+        cand_3_1_1 = next(c for c in has_dur if c.get("parsed_fret") == 3 and c.get("string") == 1 and c.get("bar_index") == 1)
+        assert cand_3_1_1["raw"]["duration_evidence"]["duration_name"] == oracle_data["cand_3_1_1"]
+
+        cand_5_1_1 = next(c for c in has_dur if c.get("parsed_fret") == 5 and c.get("string") == 1 and c.get("bar_index") == 1)
+        assert cand_5_1_1["raw"]["duration_evidence"]["duration_name"] == oracle_data["cand_5_1_1"]
+
+        cands_15_1 = [c for c in has_dur if c.get("parsed_fret") == 15 and c.get("string") == 1]
+        assert len(cands_15_1) > 0
+        for cand in cands_15_1:
+            assert cand["raw"]["duration_evidence"]["duration_name"] == oracle_data["cands_15_1"]
+
+        # Part 2: Negative control (missing notehead)
+        original_extract = score2gp.pdf_staff_notation_diagnostics.extract_notation_diagnostics_dict
+
+        def mocked_extract(page, index):
+            diags = original_extract(page, index)
+            for staff in diags.get("staves", []):
+                new_clusters = []
+                for cluster in staff.get("x_aligned_cluster_candidates", []):
+                    cluster["primitives"] = [p for p in cluster["primitives"] if p["kind"] not in ("curve", "text_span", "rectangle")]
+                    if len(cluster["primitives"]) > 0:
+                        cluster["primitive_count"] = len(cluster["primitives"])
+                        new_clusters.append(cluster)
+                staff["x_aligned_cluster_candidates"] = new_clusters
+            return diags
+
+        with patch("score2gp.pdf_staff_notation_diagnostics.extract_notation_diagnostics_dict", side_effect=mocked_extract):
+            out_path2 = Path(tmp) / "lesson6_neg.tabraw.json"
+            raw2 = extract_tab(lesson6_path, out_path2)
+            cands2 = [c for c in raw2["candidates"] if c.get("kind") == "fret"]
+
+            refused = [c for c in cands2 if "pdf_notation_rhythm_missing_notehead" in c.get("raw", {}).get("assignment_warnings", [])]
+            assert len(refused) > 0
+            assert "pdf_notation_rhythm_missing_notehead" in refused[0]["raw"]["refusal_reason"]
+            for c in refused:
+                assert "duration_evidence" not in c.get("raw", {})
