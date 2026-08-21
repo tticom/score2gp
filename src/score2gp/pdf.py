@@ -4311,10 +4311,17 @@ def _detect_tab_systems(
 
         # --- NPG-03B FLOATING BARLINES ---
         ignored_candidates = []
+        all_accepted_barlines = set(valid_barlines + partner_barlines)
         for s in system_candidates:
             actual_s = s.segment if s.primitive_kind == "truncated" else s
-            if actual_s.primitive_kind == "line" and actual_s.x0 == actual_s.x1:
-                continue
+            is_vertical = (actual_s.primitive_kind == "line" and actual_s.x0 == actual_s.x1)
+            
+            # If it's a perfectly vertical line, only skip it if it's already an accepted barline
+            if is_vertical:
+                avg_x = (actual_s.x0 + actual_s.x1) / 2
+                if any(abs(avg_x - vb) < 1.0 for vb in all_accepted_barlines):
+                    continue
+                    
             ignored_candidates.append(s)
 
         from .pdf_geometry import extract_floating_barlines
@@ -4401,7 +4408,13 @@ def _detect_tab_systems(
     cur_bar = first_bar_index
     for idx, system in enumerate(non_ghost_systems, start=1):
         from dataclasses import replace
-        final_systems.append(replace(system, system_index=idx, first_bar_index=cur_bar))
+        updated_fbs = []
+        if getattr(system, "floating_barlines", None):
+            for fb in system.floating_barlines:
+                fb_copy = dict(fb)
+                fb_copy["system_index"] = idx
+                updated_fbs.append(fb_copy)
+        final_systems.append(replace(system, system_index=idx, first_bar_index=cur_bar, floating_barlines=updated_fbs))
         cur_bar += max(1, len(system.barlines) - 1)
     return final_systems
 
