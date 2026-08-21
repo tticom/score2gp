@@ -153,10 +153,10 @@ def test_extract_floating_barlines_isolation(caplog) -> None:
     staff_bottom_y = 160.0
 
     barlines = extract_floating_barlines(segments, staff_top_y, staff_bottom_y)
-    
+
     assert len(barlines) == 2
     assert barlines[0].x0 == 50.0
     assert barlines[1].x0 == 70.0
-    
+
     # Check that a diagnostic warning was emitted for the thick line
     assert "thickness 3.5 matching a repeat marker but lacks dots. Degrading to standard barline" in caplog.text

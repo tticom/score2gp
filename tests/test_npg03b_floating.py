@@ -27,24 +27,14 @@ def test_private_acceptance_melodic(tmp_path):
     assert len(expanded_bars) > 0
 
     # Specifically, Bar 4 should be 8/4 (2 sub-measures)
+
+    # Specifically, Bar 4 should be 8/4 (2 sub-measures)
     assert bars[3].time_signature.numerator == 8
 
-def test_extract_floating_barlines_negative_control():
-    from score2gp.pdf_geometry import extract_floating_barlines, _LineSegment
-    # Standard barline (thin)
-    standard_barline = _LineSegment(x0=100.0, y0=50.0, x1=100.0, y1=150.0, stroke_width=1.0)
-    # Thick barline (repeat sign without dots)
-    thick_barline = _LineSegment(x0=200.0, y0=50.0, x1=200.0, y1=150.0, stroke_width=3.5)
-    # Another thin line close to the thick one (part of repeat sign)
-    thin_barline_close = _LineSegment(x0=203.0, y0=50.0, x1=203.0, y1=150.0, stroke_width=1.0)
-
-    segments = [standard_barline, thick_barline, thin_barline_close]
-
-    # Extract
-    extracted = extract_floating_barlines(segments, staff_top_y=40.0, staff_bottom_y=160.0)
-
-    # Should merge the thick+thin into one, and keep the standard thin one separate.
-    # Total extracted = 2
-    assert len(extracted) == 2
-    assert extracted[0].x0 == 100.0
-    assert extracted[1].x0 == 200.0
+    # NEGATIVE CONTROL: Prove that standard barlines from the genuine source PDF are ignored.
+    # If standard barlines were incorrectly treated as floating barlines, we'd have dozens of them.
+    # Furthermore, none of the valid floating barlines in this specific PDF are in the left margin (<200.0)
+    # where standard start-of-system barlines exist.
+    assert len(tabraw.floating_barlines) == 11
+    for fb in tabraw.floating_barlines:
+        assert fb.x > 200.0

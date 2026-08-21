@@ -3412,12 +3412,12 @@ def test_private_acceptance_lesson5() -> None:
     import pytest
     from pathlib import Path
     from score2gp.pdf import _extract_pdf_text_candidates
-    
+
     repo_root = Path(__file__).resolve().parent.parent
     lesson5_path = repo_root.parent / "score2gp-private-fixtures" / "fixtures" / "private" / "Lesson-5.pdf"
     if not lesson5_path.exists():
         pytest.skip("Lesson-5.pdf required for this private-fixture acceptance test.")
-        
+
     warnings, meta = [], {"detected_systems": 0, "detected_staves": 0, "detected_bar_boxes": 0, "detected_string_lines": 0}
     cands = _extract_pdf_text_candidates(lesson5_path, warnings, meta)
     page_bars = {}
@@ -3511,15 +3511,15 @@ def test_private_acceptance_lesson6() -> None:
     import pytest
     from pathlib import Path
     from score2gp.pdf import _extract_pdf_text_candidates
-    
+
     repo_root = Path(__file__).resolve().parent.parent
     lesson6_path = repo_root.parent / "score2gp-private-fixtures" / "fixtures" / "private" / "Lesson-6.pdf"
     if not lesson6_path.exists():
         pytest.skip("Lesson-6.pdf required for this private-fixture acceptance test.")
-        
+
     warnings, meta = [], {"detected_systems": 0, "detected_staves": 0, "detected_bar_boxes": 0, "detected_string_lines": 0}
     cands = _extract_pdf_text_candidates(lesson6_path, warnings, meta)
-    
+
     unique_systems = set(c.get("system_index") for c in cands if c.get("system_index") is not None)
     assert len(unique_systems) == 3
 
@@ -3529,9 +3529,8 @@ def test_private_acceptance_lesson6() -> None:
         b = c.get("bar_index")
         if p is not None and b is not None:
             page_bars.setdefault(p, set()).add(b)
-            
+
     unique_bars = set()
     for p, bars in page_bars.items():
         unique_bars.update(bars)
     assert len(unique_bars) == 17
-
