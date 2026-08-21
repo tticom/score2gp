@@ -4315,13 +4315,13 @@ def _detect_tab_systems(
         for s in system_candidates:
             actual_s = s.segment if s.primitive_kind == "truncated" else s
             is_vertical = (actual_s.primitive_kind == "line" and actual_s.x0 == actual_s.x1)
-            
+
             # If it's a perfectly vertical line, only skip it if it's already an accepted barline
             if is_vertical:
                 avg_x = (actual_s.x0 + actual_s.x1) / 2
                 if any(abs(avg_x - vb) < 1.0 for vb in all_accepted_barlines):
                     continue
-                    
+
             ignored_candidates.append(s)
 
         from .pdf_geometry import extract_floating_barlines
