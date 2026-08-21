@@ -39,7 +39,7 @@ def extract_rhythm_candidates(
     """
     if is_tablature_only:
         return tab_candidates
-        
+
     events_x = sorted(list({c.x for c in tab_candidates if c.x is not None}))
     if not events_x:
         return tab_candidates
@@ -50,7 +50,7 @@ def extract_rhythm_candidates(
 
     stems = []
     stem_to_cluster = {}
-    
+
     if diagnostics.x_aligned_cluster_candidates:
         for cluster in diagnostics.x_aligned_cluster_candidates:
             for p in cluster.primitives:

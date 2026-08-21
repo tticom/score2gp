@@ -186,7 +186,7 @@ def test_extract_rhythm_candidates_refuses_when_noteheads_absent():
         primitives=[stem_primitive],
     )
     diagnostics = _diagnostics(x_aligned_cluster_candidates=[cluster])
-    
+
     with pytest.raises(MissingRhythmGeometry):
         extract_rhythm_candidates(diagnostics, tab_candidates, is_tablature_only=False)
 
@@ -235,7 +235,7 @@ def test_extract_rhythm_candidates_assigns_duration():
                 ],
                 beams=[]
             )  })
-    
+
     result = extract_rhythm_candidates(diagnostics, tab_candidates, is_tablature_only=False)
     assert len(result) == 1
     assert "duration_evidence" in result[0].raw

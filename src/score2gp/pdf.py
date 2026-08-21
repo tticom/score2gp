@@ -249,7 +249,7 @@ def extract_tab(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001
         raw["warnings"].append({"code": "pymupdf-unavailable", "message": str(exc), "severity": "error"})
     else:
-        raw["candidates"].extend(_extract_pdf_text_candidates(Path(path), raw["warnings"], meta))
+        raw["candidates"].extend(_extract_pdf_text_candidates(Path(path), raw["warnings"], meta, inspection_data=inspection))
 
     if "floating_barlines" in meta:
         raw["floating_barlines"] = meta["floating_barlines"]
@@ -786,7 +786,7 @@ def _split_technique_mixed_words(words: list[tuple[float, float, float, float, s
     return refined
 
 
-def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]], meta: dict[str, int]) -> list[dict[str, Any]]:
+def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]], meta: dict[str, Any], inspection_data: dict = None) -> list[dict[str, Any]]:
     import pymupdf as fitz  # type: ignore[import-not-found]
     fitz = sys.modules.get("fitz", fitz)
 
@@ -796,6 +796,7 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
     cumulative_y_offset = 0.0
     with fitz.open(pdf_path) as doc:
         for page_number, page in enumerate(doc, start=1):
+            page_cand_start_idx = len(candidates)
             page_height = float(page.rect.height)
             systems = _detect_tab_systems(
                 page, page_number, first_bar_index=running_bar_index, cumulative_y_offset=cumulative_y_offset
@@ -2362,6 +2363,45 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                     continue
                 filtered_index += 1
                 candidates.append(candidate.model_dump(mode="json", exclude_none=True))
+
+            # NPG-04C: Wire geometric rhythm extraction for notation staves
+            diags_model = None
+            if inspection_data and 'pages' in inspection_data and page_number - 1 < len(inspection_data['pages']):
+                page_diags = inspection_data['pages'][page_number - 1].get('pdf_staff_notation_diagnostics')
+                if page_diags:
+                    from .pdf_staff_geometry import PdfStaffNotationGeometryDiagnostics
+                    diags_model = PdfStaffNotationGeometryDiagnostics.model_validate(page_diags)
+
+            if diags_model and diags_model.staves:
+                from .tabraw import TabCandidate
+                page_cands = [TabCandidate.model_validate(c) for c in candidates[page_cand_start_idx:]]
+                cands_by_sys = {}
+                for c in page_cands:
+                    if c.system_index is not None:
+                        cands_by_sys.setdefault(c.system_index, []).append(c)
+
+                for sys_obj in systems:
+                    sys_cands = cands_by_sys.get(sys_obj.system_index, [])
+                    if not sys_cands:
+                        continue
+                    matching_diag = next((d for d in diags_model.staves if d.staff.system_index == sys_obj.system_index), None)
+                    if matching_diag:
+                        from .pdf_geometry_candidate_extraction import extract_rhythm_candidates, MissingRhythmGeometry
+                        try:
+                            updated = extract_rhythm_candidates(matching_diag, sys_cands, is_tablature_only=False)
+                            for old_c, new_c in zip(sys_cands, updated):
+                                candidates[page_cand_start_idx + page_cands.index(old_c)] = new_c.model_dump(mode="json", exclude_none=True)
+                        except MissingRhythmGeometry:
+                            for c in sys_cands:
+                                cand_dict = candidates[page_cand_start_idx + page_cands.index(c)]
+                                cand_raw = cand_dict.get("raw", {})
+                                warnings_list = cand_raw.get("assignment_warnings", [])
+                                if "pdf_notation_rhythm_missing_notehead" not in warnings_list:
+                                    warnings_list.append("pdf_notation_rhythm_missing_notehead")
+                                cand_raw["assignment_warnings"] = warnings_list
+                                cand_raw["refusal_reason"] = "pdf_notation_rhythm_missing_notehead"
+                                cand_dict["raw"] = cand_raw
+
             if systems:
                 last_sys = systems[-1]
                 running_bar_index = last_sys.first_bar_index + max(1, len(last_sys.barlines) - 1)
@@ -3543,6 +3583,7 @@ def _write_grouping_overlays(
     overlay_paths: list[Path] = []
     with fitz.open(pdf_path) as doc:
         for page_number, page in enumerate(doc, start=1):
+            page_cand_start_idx = len(candidates)
             page_candidates = candidates_by_page.get(page_number, [])
             if not page_candidates:
                 continue
