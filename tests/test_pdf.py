@@ -3563,17 +3563,22 @@ def test_private_acceptance_lesson6_duration_and_negative_control() -> None:
         assert "duration_evidence" in oracle_cand["raw"]
         assert "pdf_notation_rhythm_missing_notehead" not in oracle_cand["raw"].get("assignment_warnings", [])
 
+        import json
+        oracle_path = repo_root / "tests" / "fixtures" / "lesson6_duration_oracle.json"
+        with open(oracle_path, "r", encoding="utf-8") as f:
+            oracle_data = json.load(f)
+
         # Specific oracle assertions for Lesson-6.pdf
         cand_3_1_1 = next(c for c in has_dur if c.get("parsed_fret") == 3 and c.get("string") == 1 and c.get("bar_index") == 1)
-        assert cand_3_1_1["raw"]["duration_evidence"]["duration_name"] == "16th"
+        assert cand_3_1_1["raw"]["duration_evidence"]["duration_name"] == oracle_data["cand_3_1_1"]
 
         cand_5_1_1 = next(c for c in has_dur if c.get("parsed_fret") == 5 and c.get("string") == 1 and c.get("bar_index") == 1)
-        assert cand_5_1_1["raw"]["duration_evidence"]["duration_name"] == "eighth"
+        assert cand_5_1_1["raw"]["duration_evidence"]["duration_name"] == oracle_data["cand_5_1_1"]
 
         cands_15_1 = [c for c in has_dur if c.get("parsed_fret") == 15 and c.get("string") == 1]
         assert len(cands_15_1) > 0
         for cand in cands_15_1:
-            assert cand["raw"]["duration_evidence"]["duration_name"] == "quarter"
+            assert cand["raw"]["duration_evidence"]["duration_name"] == oracle_data["cands_15_1"]
 
         # Part 2: Negative control (missing notehead)
         original_extract = score2gp.pdf_staff_notation_diagnostics.extract_notation_diagnostics_dict
