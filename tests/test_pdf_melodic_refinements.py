@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import pytest
 from dataclasses import dataclass
 from typing import Any
 
-from score2gp.pdf import _LineSegment, _TabSystem, _tab_line_groups, _detect_tab_systems
+from score2gp.pdf import _LineSegment, _TabSystem, _tab_line_groups, _detect_tab_systems, extract_tab
 
 
 @dataclass
@@ -109,27 +110,27 @@ def test_tab_line_groups_horizontal_overlap() -> None:
         _LineSegment(100.0, 148.0, 300.0, 148.0),
         # Line 6: y=160
         _LineSegment(100.0, 160.0, 300.0, 160.0),
-
+        
         # Collinear fragments at y=160:
         # A: Strong overlap with the group (x from 105 to 295)
         _LineSegment(105.0, 160.0, 295.0, 160.0),
         # B: Misleading/poor overlap (x from 400 to 600)
         _LineSegment(400.0, 160.0, 600.0, 160.0),
     ]
-
+    
     # Run segment grouping
     groups = _tab_line_groups(lines)
     assert len(groups) >= 1
-
+    
     # The first group should be a 6-line group
     first_group = groups[0]
     assert len(first_group) == 6
-
+    
     # Check that the y=160 segment in the group is either the first or the strong overlap one,
     # but definitely NOT the misleading one with poor/no overlap.
     ys = [round((l.y0 + l.y1) / 2) for l in first_group]
     assert sorted(ys) == [100, 112, 124, 136, 148, 160]
-
+    
     # Verify that the misleading one (x0=400) was NOT grouped
     for segment in first_group:
         assert min(segment.x0, segment.x1) < 400.0
@@ -139,18 +140,19 @@ def test_notation_to_tab_barline_inheritance(monkeypatch) -> None:
     # Verify that a TAB system inherits barlines from standard notation above it.
     # Standard notation Y: 100 to 140
     # TAB staff Y: 200 to 260
-
+    
     import score2gp.pdf
-
+    from score2gp.pdf import _LineSegment
+    
     class MockFitzPoint:
         def __init__(self, x: float, y: float):
             self.x = x
             self.y = y
-
+            
     class MockFitzPage:
         def get_drawings(self) -> list[dict[str, Any]]:
             drawings = []
-
+            
             # Notation lines
             for y in [100.0, 110.0, 120.0, 130.0, 140.0]:
                 drawings.append({
@@ -158,7 +160,7 @@ def test_notation_to_tab_barline_inheritance(monkeypatch) -> None:
                         ("l", MockFitzPoint(100.0, y), MockFitzPoint(500.0, y))
                     ]
                 })
-
+                
             # TAB lines
             for y in [200.0, 212.0, 224.0, 236.0, 248.0, 260.0]:
                 drawings.append({
@@ -166,7 +168,7 @@ def test_notation_to_tab_barline_inheritance(monkeypatch) -> None:
                         ("l", MockFitzPoint(100.0, y), MockFitzPoint(500.0, y))
                     ]
                 })
-
+                
             # Vertical line (barline) crossing standard notation at X=150
             drawings.append({
                 "items": [
@@ -184,26 +186,26 @@ def test_notation_to_tab_barline_inheritance(monkeypatch) -> None:
                     ("l", MockFitzPoint(490.0, 95.0), MockFitzPoint(490.0, 145.0))
                 ]
             })
-
+            
             return drawings
-
+            
         def get_text(self, kind: str) -> list[Any]:
             return []
-
+            
     def mock_classify(group: list[_LineSegment], page: Any) -> str:
         ys = [(l.y0 + l.y1) / 2 for l in group]
         if min(ys) < 150.0:
             return "notation"
         return "tab"
-
+        
     monkeypatch.setattr(score2gp.pdf, "classify_staff_line_group", mock_classify)
-
+    
     page = MockFitzPage()
     systems = _detect_tab_systems(page, page_index=1)
-
+    
     assert len(systems) == 1
     sys = systems[0]
-
+    
     # Check that it inherited the barlines and deduplicated within 15.0 points
     assert len(sys.barlines) == 2
     assert sys.barlines[0] == 150.0
@@ -213,9 +215,10 @@ def test_notation_to_tab_barline_inheritance(monkeypatch) -> None:
 def test_OMR_warnings_guarding_and_downgrading(monkeypatch) -> None:
     # Verify that candidate warnings are prefixed with "info_" and downgraded to severity "info"
     # when len(system.barlines) >= 2, but remain warning blocker codes when < 2.
-
+    
+    import score2gp.pdf
     from score2gp.pdf import _TabSystem
-
+    
     # 1. System with fewer than 2 barlines (blocks)
     sys_blocked = _TabSystem(
         page_index=1,
@@ -232,13 +235,13 @@ def test_OMR_warnings_guarding_and_downgrading(monkeypatch) -> None:
         rejection_reasons={"pdf_barline_too_short": 1},
         barline_candidates_details=[],
     )
-
+    
     # We will simulate extract_tab's warnings collector block.
     # In extract_tab, for reasons in system.rejection_reasons:
     # Let's verify the guard/downgrade logic on this system:
     reasons = sys_blocked.rejection_reasons or {}
     has_usable_barlines = (len(sys_blocked.barlines) >= 2)
-
+    
     warnings = []
     def add_barline_warning(code, message, severity="warning", grouping_status="partial"):
         if has_usable_barlines:
@@ -259,14 +262,14 @@ def test_OMR_warnings_guarding_and_downgrading(monkeypatch) -> None:
                 "page_index": 1,
                 "system_index": sys_blocked.system_index,
             })
-
+            
     if reasons.get("pdf_barline_too_short", 0) > 0:
         add_barline_warning("pdf_barline_too_short", "Too short", "warning", "partial")
-
+        
     assert len(warnings) == 1
     assert warnings[0]["code"] == "pdf_barline_too_short"
     assert warnings[0]["severity"] == "warning"
-
+    
     # 2. System with >= 2 barlines (should downgrade)
     sys_ok = _TabSystem(
         page_index=1,
@@ -283,10 +286,10 @@ def test_OMR_warnings_guarding_and_downgrading(monkeypatch) -> None:
         rejection_reasons={"pdf_barline_too_short": 1},
         barline_candidates_details=[],
     )
-
+    
     reasons = sys_ok.rejection_reasons or {}
     has_usable_barlines = (len(sys_ok.barlines) >= 2)
-
+    
     warnings = []
     def add_barline_warning_ok(code, message, severity="warning", grouping_status="partial"):
         if has_usable_barlines:
@@ -307,10 +310,10 @@ def test_OMR_warnings_guarding_and_downgrading(monkeypatch) -> None:
                 "page_index": 1,
                 "system_index": sys_ok.system_index,
             })
-
+            
     if reasons.get("pdf_barline_too_short", 0) > 0:
         add_barline_warning_ok("pdf_barline_too_short", "Too short", "warning", "partial")
-
+        
     assert len(warnings) == 1
     assert warnings[0]["code"] == "info_pdf_barline_too_short"
     assert warnings[0]["severity"] == "info"

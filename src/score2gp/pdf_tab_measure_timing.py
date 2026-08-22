@@ -58,11 +58,12 @@ def select_pdf_tab_grid_spacing_and_duration_name(
     N = event_subgroup_count
     if N <= 8:
         return 480, "eighth"
-    if N <= 16:
+    elif N <= 16:
         return 240, "16th"
-    if N <= 32:
+    elif N <= 32:
         return 120, "32nd"
-    return 60, "64th"
+    else:
+        return 60, "64th"
 
 
 def is_within_pdf_tab_measure_capacity(

@@ -1,7 +1,7 @@
 """Biomechanical fretboard position optimizer and TAB token ownership."""
 
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, List, Dict, Tuple, Optional
 
 # Standard 6-string guitar tuning (E2=40, A2=45, D3=50, G3=55, B3=59, E4=64)
 STANDARD_TUNING = [64, 59, 55, 50, 45, 40]  # String 1 (High E) to String 6 (Low E)

@@ -56,6 +56,7 @@ def test_wide_primitive_does_not_merge_far_compact_primitives() -> None:
     assert len(clusters) == 3
 
 def test_aggregate_counts_are_deterministic_and_correct() -> None:
+    from score2gp.pdf_staff_geometry import XAlignedClusterAggregateDiagnostics, ClusterPrimitiveCountSummary
     from score2gp.pdf_staff_notation_diagnostics import build_notation_diagnostics
 
     class MockPoint:

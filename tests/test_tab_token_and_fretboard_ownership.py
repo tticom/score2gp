@@ -1,6 +1,7 @@
 """Unit tests for CRP-11: Biomechanical Fretboard Position Optimizer & TAB Token Ownership."""
 
 from pathlib import Path
+import pytest
 from score2gp.notation_omr.position_optimizer import (
     BiomechanicalPositionOptimizer,
     FretTokenOwnership,

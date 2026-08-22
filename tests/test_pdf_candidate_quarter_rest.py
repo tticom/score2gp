@@ -1,3 +1,4 @@
+import pytest
 from score2gp.pdf_geometry_candidates import (
     GeometryCandidateSet,
     XAlignedPrimitiveClusterCandidate,

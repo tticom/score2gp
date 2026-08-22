@@ -4,6 +4,7 @@ from pathlib import Path
 import fitz  # type: ignore[import-not-found]
 import pytest
 
+from score2gp.pdf_staff_notation_diagnostics import build_notation_diagnostics
 from score2gp.pdf_tab_bar_assembler import PdfTabBarAssemblerError, assemble_pdf_tab_bar
 from score2gp.pdf_tab_duration_associator import (
     BeamPrimitiveCandidate,

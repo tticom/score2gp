@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from score2gp.diagnostics import run_system_diagnostics
+from score2gp.diagnostics import run_system_diagnostics, get_process_memory
 
 
 def test_system_diagnostics_runner(tmp_path) -> None:

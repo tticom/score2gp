@@ -21,6 +21,7 @@ from score2gp.pdf_tab_duration_associator import (
     resolve_tab_duration_evidence,
     resolve_tab_duration_evidence_for_events,
 )
+from score2gp.pdf_tab_duration_types import TabDurationEvidence
 
 
 @pytest.fixture

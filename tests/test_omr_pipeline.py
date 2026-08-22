@@ -1,3 +1,4 @@
+import pytest
 from pathlib import Path
 from typer.testing import CliRunner
 from score2gp.cli import app

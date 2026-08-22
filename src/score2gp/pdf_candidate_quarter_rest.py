@@ -43,7 +43,7 @@ def extract_quarter_rest_candidates(
         # Rule 1: Isolation (must be exactly 1 primitive, of kind text_span, curve, or vertical_stroke)
         if cluster.primitive_count != 1:
             continue
-
+            
         prim = cluster.primitives[0]
         if prim.kind not in ("text_span", "curve", "vertical_stroke"):
             continue

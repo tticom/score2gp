@@ -337,7 +337,7 @@ def count_flags_for_stem(
                 min_other = min(other_dists)
                 if abs(min_other - dist) <= 1.0:
                     return 0, True  # Ambiguous flag assignment
-                if min_other < dist - 1.0:
+                elif min_other < dist - 1.0:
                     # Another stem is strictly closer to this flag; stem cannot claim it
                     continue
 

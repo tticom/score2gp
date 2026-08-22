@@ -36,24 +36,3 @@ project-includes = [
     "**/*.py*",
     "**/*.ipynb",
 ]
-
-[tool.ruff]
-line-length = 120
-target-version = "py312"
-
-[tool.ruff.lint]
-select = [
-    "E",   # pycodestyle errors
-    "W",   # pycodestyle warnings
-    "F",   # pyflakes
-    "C90", # mccabe complexity
-    "B",   # flake8-bugbear (common smells)
-    "SIM", # flake8-simplify
-    "RET", # flake8-return
-    "PT",  # flake8-pytest-style
-    "RUF"  # ruff-specific rules
-]
-ignore = []
-
-[tool.ruff.lint.mccabe]
-max-complexity = 10

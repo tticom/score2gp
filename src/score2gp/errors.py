@@ -4,12 +4,12 @@ class HumanReadableConversionError(Exception):
     pinpointing the location of the error in the original document.
     """
     def __init__(
-        self,
-        message: str,
-        page: int | None = None,
-        measure: int | None = None,
-        staff: int | None = None,
-        voice: int | None = None,
+        self, 
+        message: str, 
+        page: int | None = None, 
+        measure: int | None = None, 
+        staff: int | None = None, 
+        voice: int | None = None, 
         beat: float | None = None
     ):
         self.message = message
@@ -32,7 +32,7 @@ class HumanReadableConversionError(Exception):
             parts.append(f"Voice {self.voice}")
         if self.beat is not None:
             parts.append(f"Beat {self.beat}")
-
+            
         loc = ", ".join(parts)
         if loc:
             return f"Error at {loc}: {self.message}"

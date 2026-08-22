@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 import shutil
+import zipfile
 from pathlib import Path
 
 from score2gp.batch import run_batch_pipeline
+from score2gp.cache import PipelineCacheManager, compute_payload_hash
 
 
 def test_incremental_build_cache_flow(tmp_path) -> None:
@@ -39,10 +41,10 @@ def test_cache_invalidation_on_config_change(tmp_path) -> None:
     # Build custom temp payload
     musicxml_src = Path("tests/fixtures/musicxml/tiny_single_bar.musicxml")
     tabraw_src = Path("tests/fixtures/tabraw/tiny_single_bar_tabraw.json")
-
+    
     musicxml_temp = tmp_path / "test.musicxml"
     tabraw_temp = tmp_path / "test.tabraw.json"
-
+    
     shutil.copy2(musicxml_src, musicxml_temp)
     shutil.copy2(tabraw_src, tabraw_temp)
 
@@ -77,10 +79,10 @@ def test_cache_invalidation_on_config_change(tmp_path) -> None:
 def test_cache_invalidation_on_file_content_change(tmp_path) -> None:
     musicxml_src = Path("tests/fixtures/musicxml/tiny_single_bar.musicxml")
     tabraw_src = Path("tests/fixtures/tabraw/tiny_single_bar_tabraw.json")
-
+    
     musicxml_temp = tmp_path / "test_file.musicxml"
     tabraw_temp = tmp_path / "test_file.tabraw.json"
-
+    
     shutil.copy2(musicxml_src, musicxml_temp)
     shutil.copy2(tabraw_src, tabraw_temp)
 
@@ -121,7 +123,7 @@ def test_cache_invalidation_on_missing_artifact(tmp_path) -> None:
     cache_artifacts_dir = workdir / "cache_artifacts"
     cached_gps = list(cache_artifacts_dir.glob("*.gp"))
     assert len(cached_gps) == 2
-
+    
     # Delete one
     cached_gps[0].unlink()
 

@@ -400,6 +400,7 @@ def test_pdf_tab_event_factory_normalized_before_after_equivalence() -> None:
 
 
 def test_determine_pdf_tab_event_duration_all_rest_types() -> None:
+    from score2gp.pdf_tab_duration_types import TabDurationEvidence
 
     for raw_rest, exp_ticks, exp_name in [
         ("whole_rest", 3840, "whole"),

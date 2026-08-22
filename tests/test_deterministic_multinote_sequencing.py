@@ -1,3 +1,4 @@
+import pytest
 from pathlib import Path
 from src.score2gp.whole_note_recogniser import run_recognition_on_file
 from src.score2gp.notation_bridge import build_ir_from_notation_outcomes
@@ -15,9 +16,9 @@ def test_multinote_sequencing_4_quarter_notes():
     outcomes = res.get("read_only_recognition_outcomes", [])
     valid_outcomes = [o for o in outcomes if o.get("association_status") == "success" and o.get("symbol_type") == "quarter_note_candidate"]
     assert len(valid_outcomes) == 4, f"Expected 4 raw valid quarter candidates, got {len(valid_outcomes)}"
-
+    
     score = build_ir_from_notation_outcomes(outcomes)
-
+    
     events = score.bars[0].events
     assert len(events) == 4
     for i, ev in enumerate(events):
@@ -38,9 +39,9 @@ def test_multinote_sequencing_2_eighth_notes():
     outcomes = res.get("read_only_recognition_outcomes", [])
     valid_outcomes = [o for o in outcomes if o.get("association_status") == "success" and o.get("symbol_type") == "eighth_note_candidate"]
     assert len(valid_outcomes) == 2, f"Expected 2 raw valid eighth candidates, got {len(valid_outcomes)}"
-
+    
     score = build_ir_from_notation_outcomes(outcomes)
-
+    
     events = score.bars[0].events
     assert len(events) == 2
     for i, ev in enumerate(events):
@@ -61,9 +62,9 @@ def test_multinote_sequencing_4_sixteenth_notes():
     outcomes = res.get("read_only_recognition_outcomes", [])
     valid_outcomes = [o for o in outcomes if o.get("association_status") == "success" and o.get("symbol_type") == "sixteenth_note_candidate"]
     assert len(valid_outcomes) == 4, f"Expected 4 raw valid sixteenth candidates, got {len(valid_outcomes)}"
-
+    
     score = build_ir_from_notation_outcomes(outcomes)
-
+    
     events = score.bars[0].events
     assert len(events) == 4
     for i, ev in enumerate(events):

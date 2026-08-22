@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from pathlib import Path
 from score2gp.notation_omr.pipeline import run_recognition_on_file
 
@@ -10,10 +11,10 @@ def test_rhythm_timeline_diagnostics_integration() -> None:
     result = run_recognition_on_file(lesson6_pdf, assume_treble_clef=True)
     assert result is not None
     assert "timeline_preview" in result
-
+    
     previews = result["timeline_preview"]
     assert len(previews) > 0
-
+    
     # Verify events are correctly produced without synthetic intervention
     for preview in previews:
         for m in preview["measures"]:

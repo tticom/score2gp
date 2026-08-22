@@ -2236,7 +2236,7 @@ def test_gpif_standard_guitar_pitch_stave_display(tmp_path) -> None:
 
         # Get notes from flat Relational database table
         notes_node = root.find("Notes")
-        assert notes_node is not None, "Global Notes element not found directly under GPIF root"
+        assert notes_node is not None, f"Global Notes element not found directly under GPIF root"
         notes = notes_node.findall("Note")
         assert len(notes) == len(test_cases)
 
@@ -2434,7 +2434,7 @@ def test_gpif_palm_mute_let_ring_roundtrip(tmp_path) -> None:
 
 
 def test_gpif_slur_roundtrip(tmp_path) -> None:
-    from score2gp.gp_package import write_gp
+    from score2gp.gp_package import validate_roundtrip, write_gp
     from score2gp.ir import SlurTechnique
     import xml.etree.ElementTree as ET
 

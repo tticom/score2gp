@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import pytest
 
 from score2gp.build_ir import build_ir_from_files, build_ir_with_diagnostics_from_files
+from score2gp.ir import validate_score_ir_file
 
 MUSICXML = Path("tests/fixtures/musicxml/tiny_single_bar.musicxml")
 
@@ -98,7 +100,7 @@ def test_chord_symbol_attachment_cases(tmp_path) -> None:
     events = score.bars[0].events
     assert events[0].chord_symbol is None
     assert events[1].chord_symbol is None
-
+    
     # Ambiguous warning is emitted
     warning_codes = [w.code for w in score.warnings]
     assert "ambiguous_chord_symbol_attachment" in warning_codes
@@ -152,7 +154,7 @@ def test_technique_attachment_cases(tmp_path) -> None:
     playable_events = [e for e in events if not e.is_rest]
     assert len(playable_events) == 1
     note = playable_events[0].notes[0]
-
+    
     assert len(note.techniques) == 1
     assert note.techniques[0].kind == "vibrato"
     assert note.provenance[-1].raw_token_id == "tech-001"
@@ -182,7 +184,7 @@ def test_technique_attachment_cases(tmp_path) -> None:
     tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
 
     score, diagnostics = build_ir_with_diagnostics_from_files(MUSICXML, tabraw_file)
-
+    
     # Both notes should not have vibrato technique
     events = score.bars[0].events
     for ev in events:

@@ -1,3 +1,4 @@
+import os
 import re
 import subprocess
 import sys
@@ -23,7 +24,7 @@ def sanitize_exact_command(command: List[str]) -> List[str]:
             sanitized.append("[PRIVATE_INPUT_PATH]")
             prev_flag = None
             continue
-        if prev_flag in ("--out", "--out-dir"):
+        elif prev_flag in ("--out", "--out-dir"):
             sanitized.append("[PRIVATE_OUTPUT_PATH]")
             prev_flag = None
             continue
@@ -32,7 +33,7 @@ def sanitize_exact_command(command: List[str]) -> List[str]:
             sanitized.append(f"{arg.split('=', 1)[0]}=[PRIVATE_INPUT_PATH]")
             prev_flag = None
             continue
-        if arg.startswith("--out=") or arg.startswith("--out-dir="):
+        elif arg.startswith("--out=") or arg.startswith("--out-dir="):
             sanitized.append(f"{arg.split('=', 1)[0]}=[PRIVATE_OUTPUT_PATH]")
             prev_flag = None
             continue

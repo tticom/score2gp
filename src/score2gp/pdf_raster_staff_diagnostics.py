@@ -122,15 +122,15 @@ def build_raster_notation_diagnostics(page: fitz.Page, page_index: int, scale: f
     """
     mat = fitz.Matrix(scale, scale)
     pix = page.get_pixmap(matrix=mat, alpha=False, colorspace=fitz.csGRAY)
-
+    
     img = Image.frombytes("L", [pix.width, pix.height], pix.samples)
-
+    
     # 255 if dark (meaning part of the drawing/text), 0 if light (background)
     threshold = 128
     binary = img.point(lambda p: 255 if p < threshold else 0)
-
+    
     width, height = binary.size
-
+    
     # Extract flattened data to avoid deprecated Image.getdata()
     # Image.tobytes() or Image.getdata()
     try:
@@ -145,7 +145,7 @@ def build_raster_notation_diagnostics(page: fitz.Page, page_index: int, scale: f
         data = list(binary.tobytes())
 
     horizontal_lines = []
-
+    
     # 1. Detect horizontal runs
     for y in range(height):
         row = data[y * width : (y + 1) * width]
@@ -165,10 +165,10 @@ def build_raster_notation_diagnostics(page: fitz.Page, page_index: int, scale: f
                     run_length = 0
         if run_start is not None and run_length > width * 0.35:
             runs.append((run_start, width - 1))
-
+            
         for r in runs:
             horizontal_lines.append({'y': y, 'x0': r[0], 'x1': r[1]})
-
+            
     # 2. Merge adjacent lines vertically
     merged_lines = []
     for line in horizontal_lines:
@@ -182,7 +182,7 @@ def build_raster_notation_diagnostics(page: fitz.Page, page_index: int, scale: f
                 last['x1'] = max(last['x1'], line['x1'])
             else:
                 merged_lines.append(line)
-
+                
     # 3. Group into 5-line staffs
     staffs = []
     for i in range(len(merged_lines) - 4):
@@ -190,7 +190,7 @@ def build_raster_notation_diagnostics(page: fitz.Page, page_index: int, scale: f
         y_coords = [g['y'] for g in group]
         spacings = [y_coords[j+1] - y_coords[j] for j in range(4)]
         avg_spacing = sum(spacings) / 4.0
-
+        
         # Staff lines should be roughly evenly spaced
         if avg_spacing > 5.0 and all(abs(s - avg_spacing) < avg_spacing * 0.35 for s in spacings):
             # Check for adjacent lines that imply a >5 line staff (e.g. 6-line TAB)
@@ -214,7 +214,7 @@ def build_raster_notation_diagnostics(page: fitz.Page, page_index: int, scale: f
                         'x1': float(min_x1),
                         'spacing': float(avg_spacing)
                     })
-
+                
     # Remove overlapping staffs (greedy approach)
     final_staffs = []
     last_y = -1000.0
@@ -222,7 +222,7 @@ def build_raster_notation_diagnostics(page: fitz.Page, page_index: int, scale: f
         if s['y_coords'][0] - last_y > s['spacing'] * 2.0:
             final_staffs.append(s)
             last_y = s['y_coords'][4]
-
+            
     # 4. Extract opening symbol candidates
     candidates = []
     for index, s in enumerate(final_staffs, start=1):
@@ -230,26 +230,26 @@ def build_raster_notation_diagnostics(page: fitz.Page, page_index: int, scale: f
         margin_x1 = int(s['x0'] + s['spacing'] * 4.5)
         margin_y0 = int(s['y_coords'][0] - s['spacing'] * 3.5)
         margin_y1 = int(s['y_coords'][4] + s['spacing'] * 3.5)
-
+        
         margin_x0 = max(0, margin_x0)
         margin_x1 = min(width, margin_x1)
         margin_y0 = max(0, margin_y0)
         margin_y1 = min(height, margin_y1)
-
+        
         crop_box = (margin_x0, margin_y0, margin_x1, margin_y1)
         cropped = binary.crop(crop_box)
         bbox = cropped.getbbox()
-
+        
         cand = None
         if bbox:
             c_x0 = margin_x0 + bbox[0]
             c_y0 = margin_y0 + bbox[1]
             c_x1 = margin_x0 + bbox[2]
             c_y1 = margin_y0 + bbox[3]
-
+            
             c_height = c_y1 - c_y0
             c_width = c_x1 - c_x0
-
+            
             # Treble clefs span multiple staff lines
             if c_height >= s['spacing'] * 3.5 and c_width >= s['spacing'] * 1.5:
                 cand = {
@@ -269,7 +269,7 @@ def build_raster_notation_diagnostics(page: fitz.Page, page_index: int, scale: f
         }
         staff_data["raster_opening_symbol_classification"] = classify_raster_opening_symbol_candidate(staff_data)
         candidates.append(staff_data)
-
+        
     return {
         "status": "success",
         "page_index": page_index,
@@ -309,14 +309,14 @@ def summarize_raster_treble_clef_diagnostics(diagnostics: dict) -> dict:
         },
         "staffs": []
     }
-
+    
     staffs = diagnostics.get("staffs")
     if not isinstance(staffs, list):
         summary["status"] = "unknown"
         return summary
-
+        
     summary["staff_count"] = len(staffs)
-
+    
     for staff in staffs:
         if not isinstance(staff, dict):
             summary["label_counts"]["unknown"] += 1
@@ -328,10 +328,10 @@ def summarize_raster_treble_clef_diagnostics(diagnostics: dict) -> dict:
                 "has_opening_symbol_candidate": False
             })
             continue
-
+            
         staff_index = staff.get("staff_index", -1)
         has_cand = staff.get("raster_opening_symbol_candidate") is not None
-
+        
         classification = staff.get("raster_opening_symbol_classification")
         if not isinstance(classification, dict):
             label = "unknown"
@@ -343,7 +343,7 @@ def summarize_raster_treble_clef_diagnostics(diagnostics: dict) -> dict:
                 label = "unknown"
             reason = classification.get("reason", "")
             features = dict(classification.get("features", {}))
-
+            
         summary["label_counts"][label] += 1
         summary["staffs"].append({
             "staff_index": staff_index,
@@ -352,5 +352,5 @@ def summarize_raster_treble_clef_diagnostics(diagnostics: dict) -> dict:
             "features": features,
             "has_opening_symbol_candidate": has_cand
         })
-
+        
     return summary

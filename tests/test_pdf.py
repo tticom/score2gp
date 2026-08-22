@@ -3370,7 +3370,8 @@ def test_build_ir_gating_unsupported_layouts(tmp_path) -> None:
 
 def test_page_continuous_measure_indexing_and_cumulative_offsets() -> None:
     from collections import namedtuple
-    from score2gp.pdf import _detect_tab_systems
+    from score2gp.pdf import _detect_tab_systems, _extract_pdf_text_candidates
+    from pathlib import Path
 
     Point = namedtuple('Point', ['x', 'y'])
 

@@ -1,4 +1,5 @@
 import zipfile
+import pytest
 from pathlib import Path
 from xml.etree import ElementTree as ET
 from unittest.mock import patch
@@ -9,7 +10,7 @@ from score2gp.gp_package import write_gp, validate_gp
 
 def test_quarter_rest_e2e_acceptance(tmp_path):
     pdf_path = Path("fixtures/public/generated_simple/simple/QuarterRestThenNotes.pdf")
-
+    
     # 1. Extraction boundary
     res = run_recognition_on_file(
         pdf_path,
@@ -20,21 +21,21 @@ def test_quarter_rest_e2e_acceptance(tmp_path):
         include_x_aligned_clusters=True
     )
     outcomes = res.get("read_only_recognition_outcomes", [])
-
+    
     # 2. ScoreIR Sequence boundary
     score = build_ir_from_notation_outcomes(outcomes)
     events = score.bars[0].events
-
+    
     assert len(events) == 3
     ev0 = events[0]
     assert ev0.is_rest is True
     assert ev0.timing.duration_ticks == 960
     assert ev0.timing.notated_duration.value == "quarter"
     assert ev0.notes == []
-
+    
     # 3. Export boundary
     out = tmp_path / "test_e2e.gp"
-
+    
     # Patch sys.modules to bypass pytest-only legacy XML path
     with patch.dict("sys.modules"):
         import sys
@@ -46,29 +47,29 @@ def test_quarter_rest_e2e_acceptance(tmp_path):
             warnings = write_gp(score, out)
         finally:
             sys.argv = original_argv
-
+            
     assert warnings == []
     assert zipfile.is_zipfile(out)
-
+    
     with zipfile.ZipFile(out) as zf:
         xml_content = zf.read("Content/score.gpif")
         root = ET.fromstring(xml_content)
-
+        
         beats = root.findall(".//Beat")
         assert len(beats) == 3
-
+        
         # The first beat is the rest
         beat = beats[0]
         assert beat.find("Notes") is None
         assert beat.find("Chord") is None
-
+        
         rhythm_ref = beat.find("Rhythm").get("ref")
         assert rhythm_ref is not None
-
+        
         rhythm_def = root.find(f".//Rhythm[@id='{rhythm_ref}']")
         assert rhythm_def is not None
         assert rhythm_def.find("NoteValue").text == "Quarter"
-
+        
         notes_db = root.find("Notes")
         assert notes_db is not None
         # 2 notes from the remaining events

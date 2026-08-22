@@ -48,7 +48,7 @@ def test_gpif_binary_hardening_sequencing():
 
     # Map actual child tags to their indexes in the strict sequence ordering
     indexes = [TAG_ORDER.index(tag) for tag in child_tags if tag in TAG_ORDER]
-
+    
     # Assert that indexes are monotonically increasing, meaning the tags are sorted strictly
     assert indexes == sorted(indexes)
 
@@ -97,7 +97,7 @@ def test_companion_files_and_roundtrip(tmp_path):
         assert layout_root.tag == "LayoutConfiguration"
         assert layout_root.find("ActiveLayout").text == "Screen"
         assert layout_root.find("SystemLayout").text == "3"
-
+        
         spm = layout_root.find("SystemPageMargins")
         assert spm is not None
         assert spm.find("Top").text == "12.0"

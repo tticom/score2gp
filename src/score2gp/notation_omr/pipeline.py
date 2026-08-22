@@ -37,6 +37,8 @@ from .staff_geometry import (
     shape_ledger_line_candidate_evidence,
 )
 from .tuplet import (
+    TupletAssociation,
+    TupletMarkerEvidence,
     associate_local_tuplets,
     extract_tuplet_marker_evidence,
 )

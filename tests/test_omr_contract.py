@@ -2,6 +2,8 @@ import json
 import zipfile
 from pathlib import Path
 from typer.testing import CliRunner
+import hashlib
+import time
 
 from score2gp.cli import app
 

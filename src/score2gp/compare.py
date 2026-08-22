@@ -7,7 +7,7 @@ from typing import Any
 import xml.etree.ElementTree as ET
 import zipfile
 
-from .ir import ScoreIR
+from .ir import ScoreIR, Bar, Event, Note, KeySignature, TimeSignature, Tempo
 
 
 @dataclass
@@ -584,9 +584,9 @@ def load_bar_data(source: Any) -> list[BarData]:
         suffix = p.suffix.lower()
         if suffix == ".gp":
             return _extract_bars_from_gp_file(p)
-        if suffix in (".musicxml", ".xml"):
+        elif suffix in (".musicxml", ".xml"):
             return _extract_bars_from_musicxml_file(p)
-        if suffix == ".json":
+        elif suffix == ".json":
             data = json.loads(p.read_text(encoding="utf-8"))
             return load_bar_data(data)
 
@@ -598,7 +598,7 @@ def load_bar_data(source: Any) -> list[BarData]:
             except Exception:
                 pass
             return _extract_bars_from_dict(source)
-        if "events" in source or "bar_index" in source or "index" in source:
+        elif "events" in source or "bar_index" in source or "index" in source:
             return [_parse_single_bar_dict(source)]
 
     if isinstance(source, list):
@@ -941,7 +941,7 @@ def format_mismatch_report(result: dict[str, Any]) -> str:
         lines.append("ALL MISMATCHES:")
         for m in mismatches:
             lines.append(f"  [Bar {m.get('bar_index')}] {m.get('field')}: actual={m.get('actual')!r}, expected={m.get('expected')!r}")
-            if m.get("message"):
+            if "message" in m and m["message"]:
                 lines.append(f"    -> {m['message']}")
         lines.append("-" * 60)
 

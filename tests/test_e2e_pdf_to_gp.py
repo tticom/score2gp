@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import json
 import zipfile
 from pathlib import Path
+from xml.etree import ElementTree as ET
 
+import pytest
 
 from score2gp.ascii_alignment import align_ascii_musicxml_files
 from score2gp.build_ir import build_ir_from_files
@@ -78,7 +81,7 @@ def test_public_e2e_pdf_to_gp_smoke_proof(tmp_path) -> None:
     # fret 1 on string 1 (F4) -> MIDI 65
     # fret 2 on string 1 (F#4) -> MIDI 66
     # fret 3 on string 1 (G4) -> MIDI 67
-
+    
     # Assert tunings structure matches Standard Guitar Tuning
     assert len(summary["tunings"]) == 1
     tuning_info = summary["tunings"][0]

@@ -1,3 +1,4 @@
+import pytest
 from pathlib import Path
 from score2gp.whole_note_recogniser import run_recognition_on_file
 

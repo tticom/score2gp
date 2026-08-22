@@ -1,7 +1,7 @@
 """GPIF builder and binary .gp package compiler seam."""
 
 from pathlib import Path
-from typing import Any
+from typing import Any, List, Optional
 from score2gp.ir import ScoreIR
 from score2gp.gp_package import write_gp
 from score2gp.scoreir_compiler import ScoreIRCompiler

@@ -37,7 +37,7 @@ def test_build_raster_notation_diagnostics_on_treble_staff_paper(treble_staff_pa
     cand = first_staff["raster_opening_symbol_candidate"]
     assert cand["kind"] == "raster_opening_symbol_candidate"
     assert cand["width"] >= first_staff["spacing"] * 1.5
-
+    
     staff_height = first_staff["y_coords"][4] - first_staff["y_coords"][0]
     # Verify the candidate is not just staff lines: a treble clef is taller than the staff itself.
     assert cand["height"] > staff_height
@@ -78,7 +78,7 @@ def test_build_raster_notation_diagnostics_on_flash_cards(flash_cards_path: Path
     cand = first_staff["raster_opening_symbol_candidate"]
     assert cand["kind"] == "raster_opening_symbol_candidate"
     assert cand["width"] >= first_staff["spacing"] * 1.5
-
+    
     staff_height = first_staff["y_coords"][4] - first_staff["y_coords"][0]
     # Verify the candidate is not just staff lines: a treble clef is taller than the staff itself.
     assert cand["height"] > staff_height
@@ -218,7 +218,7 @@ def test_summarize_raster_treble_clef_diagnostics_on_treble_staff_paper(treble_s
     assert summary["staff_count"] == len(diags["staffs"])
     assert "treble_clef_candidate" in summary["label_counts"]
     assert "unknown" in summary["label_counts"]
-
+    
     # Check that staff summaries preserve staff index and label, and no ScoreIR fields leaked
     assert len(summary["staffs"]) == summary["staff_count"]
     for s in summary["staffs"]:
@@ -303,7 +303,7 @@ def test_summarize_raster_treble_clef_diagnostics_malformed_staffs():
 def test_summarize_raster_treble_clef_diagnostics_no_mutation():
     from score2gp.pdf_raster_staff_diagnostics import summarize_raster_treble_clef_diagnostics
     import copy
-
+    
     diags = {
         "status": "success",
         "page_index": 1,
@@ -321,13 +321,13 @@ def test_summarize_raster_treble_clef_diagnostics_no_mutation():
         ]
     }
     diags_copy = copy.deepcopy(diags)
-
+    
     summary = summarize_raster_treble_clef_diagnostics(diags)
-
+    
     # Mutate the returned summary to prove it doesn't affect diags
     summary["staffs"][0]["features"]["height_to_spacing"] = 9.9
     summary["label_counts"]["unknown"] = 99
-
+    
     assert diags == diags_copy
 
 
@@ -350,7 +350,7 @@ def test_raster_treble_clef_diagnostics_reject_blank_staff(negative_blank_path: 
     from score2gp.pdf_raster_staff_diagnostics import summarize_raster_treble_clef_diagnostics
     assert negative_blank_path.exists()
     doc = fitz.open(negative_blank_path)
-
+    
     diags = build_raster_notation_diagnostics(doc[0], page_index=1, scale=2.0)
     summary = summarize_raster_treble_clef_diagnostics(diags)
 
@@ -359,7 +359,7 @@ def test_raster_treble_clef_diagnostics_reject_blank_staff(negative_blank_path: 
     assert summary["staff_count"] == 1
     assert summary["label_counts"].get("treble_clef_candidate", 0) == 0
     assert summary["label_counts"].get("unknown", 0) == 1
-
+    
     s = summary["staffs"][0]
     assert s["label"] == "unknown"
     assert "score_ir" not in s
@@ -372,7 +372,7 @@ def test_raster_treble_clef_diagnostics_reject_tab_staff(negative_tab_path: Path
     from score2gp.pdf_raster_staff_diagnostics import summarize_raster_treble_clef_diagnostics
     assert negative_tab_path.exists()
     doc = fitz.open(negative_tab_path)
-
+    
     diags = build_raster_notation_diagnostics(doc[0], page_index=1, scale=2.0)
     summary = summarize_raster_treble_clef_diagnostics(diags)
 
@@ -386,7 +386,7 @@ def test_raster_treble_clef_diagnostics_reject_noise(negative_noise_path: Path):
     from score2gp.pdf_raster_staff_diagnostics import summarize_raster_treble_clef_diagnostics
     assert negative_noise_path.exists()
     doc = fitz.open(negative_noise_path)
-
+    
     diags = build_raster_notation_diagnostics(doc[0], page_index=1, scale=2.0)
     summary = summarize_raster_treble_clef_diagnostics(diags)
 

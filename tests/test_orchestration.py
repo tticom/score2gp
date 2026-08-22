@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import zipfile
 from pathlib import Path
+from xml.etree import ElementTree as ET
 
+import pytest
 from typer.testing import CliRunner
 
 from score2gp.cli import app

@@ -1,11 +1,13 @@
+import pytest
 from unittest.mock import Mock
 from score2gp.pdf_staff_notation_diagnostics import _extract_whole_note_candidates
+from score2gp.pdf_staff_geometry import WholeNoteCandidateDiagnostics
 
 def test_extract_whole_note_candidates_font_glyph_success():
     # Mock a PyMuPDF Page
     page_mock = Mock()
     page_mock.get_drawings.return_value = []
-
+    
     # Mock rawdict
     page_mock.get_text.return_value = {
         "blocks": [
@@ -29,7 +31,7 @@ def test_extract_whole_note_candidates_font_glyph_success():
             }
         ]
     }
-
+    
     candidates = _extract_whole_note_candidates(page_mock)
     assert len(candidates) == 1
     c = candidates[0]

@@ -1,6 +1,7 @@
 """Staff bounds, system clustering, and ledger line geometry."""
 
 from typing import Any, Iterable
+from .evidence import shape_candidate_evidence
 
 
 def shape_ledger_line_candidate_evidence(
@@ -244,7 +245,7 @@ def map_ledger_lines_to_note_candidates(outcomes: list[dict]) -> None:
 
 # Document Topology Data Structures & Seam Contract (CRP-07)
 from dataclasses import dataclass, field
-from typing import Tuple, List, Optional
+from typing import Tuple, List, Optional, Dict
 
 
 @dataclass(frozen=True)

@@ -11,27 +11,27 @@ def test_build_ir_from_whole_note_outcome_yields_valid_scoreir():
             "clef_resolved_staff_pitch": "B4",
         }
     ]
-
+    
     score = build_ir_from_notation_outcomes(outcomes)
-
+    
     # Assert valid ScoreIR object and single elements
     assert score is not None
     assert len(score.tracks) == 1
     assert len(score.bars) == 1
-
+    
     bar = score.bars[0]
     assert bar.time_signature.numerator == 4
     assert bar.time_signature.denominator == 4
     assert len(bar.events) == 1
-
+    
     event = bar.events[0]
     assert event.timing.duration_ticks == 4 * DEFAULT_TICKS_PER_QUARTER
     assert event.timing.notated_duration is not None
     assert event.timing.notated_duration.value == "whole"
-
+    
     assert len(event.notes) == 1
     note = event.notes[0]
-
+    
     # Policy A validation for written B4
     assert note.pitch == 59
     assert note.string == 2
@@ -134,24 +134,24 @@ def test_build_ir_from_half_note_outcome_yields_valid_scoreir():
             "clef_resolved_staff_pitch": "B4",
         }
     ]
-
+    
     score = build_ir_from_notation_outcomes(outcomes)
-
+    
     assert score is not None
     assert len(score.tracks) == 1
     assert len(score.bars) == 1
-
+    
     bar = score.bars[0]
     assert len(bar.events) == 1
-
+    
     event = bar.events[0]
     assert event.timing.duration_ticks == 2 * DEFAULT_TICKS_PER_QUARTER
     assert event.timing.notated_duration is not None
     assert event.timing.notated_duration.value == "half"
-
+    
     assert len(event.notes) == 1
     note = event.notes[0]
-
+    
     assert note.pitch == 59
     assert note.string == 2
     assert note.fret == 0

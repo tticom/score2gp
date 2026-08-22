@@ -1,9 +1,12 @@
 """Direct tests for score2gp.notation_omr.evidence and score2gp.notation_omr.staff_geometry."""
 
+import pytest
 from score2gp.notation_omr import (
+    _associate_staves,
     map_ledger_line_candidates_to_read_only_outcomes,
     map_ledger_lines_to_note_candidates,
     map_staff_geometry_to_read_only_report,
+    shape_candidate_evidence,
     shape_ledger_line_candidate_evidence,
 )
 from score2gp.notation_omr.evidence import shape_candidate_evidence as direct_shape_evidence

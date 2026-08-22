@@ -146,36 +146,38 @@ def classify_logical_clef_candidate(
                 "reason": "Candidate matches proportional heuristics for a treble clef",
                 "features": cand
             }
-        if cand["label"] == "bass_clef_candidate":
+        elif cand["label"] == "bass_clef_candidate":
             return {
                 "kind": "logical_clef_candidate_classifier",
                 "label": "bass_clef_candidate",
                 "reason": "Candidate matches proportional heuristics for a bass clef",
                 "features": cand
             }
-        if cand["label"] == "alto_clef_candidate":
+        elif cand["label"] == "alto_clef_candidate":
             return {
                 "kind": "logical_clef_candidate_classifier",
                 "label": "alto_clef_candidate",
                 "reason": "Candidate matches proportional heuristics for an alto clef",
                 "features": cand
             }
-        return {
-            "kind": "logical_clef_candidate_classifier",
-            "label": "unknown",
-            "reason": "Unknown classification label encountered",
-            "features": {}
-        }
-    if len(valid_candidates) > 1:
+        else:
+            return {
+                "kind": "logical_clef_candidate_classifier",
+                "label": "unknown",
+                "reason": "Unknown classification label encountered",
+                "features": {}
+            }
+    elif len(valid_candidates) > 1:
         return {
             "kind": "logical_clef_candidate_classifier",
             "label": "unknown",
             "reason": "Ambiguous: multiple competing candidates match heuristics",
             "features": {}
         }
-    return {
-        "kind": "logical_clef_candidate_classifier",
-        "label": "unknown",
-        "reason": "Evidence is ambiguous or does not strongly match clef heuristics",
-        "features": {}
-    }
+    else:
+        return {
+            "kind": "logical_clef_candidate_classifier",
+            "label": "unknown",
+            "reason": "Evidence is ambiguous or does not strongly match clef heuristics",
+            "features": {}
+        }

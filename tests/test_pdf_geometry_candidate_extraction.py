@@ -258,7 +258,7 @@ def test_extract_geometry_candidates_extracts_repeats_and_sections():
         page_index=1, system_index=1, staff_index=1,
         x0=100.0, x1=105.5, primitive_count=2, primitives=[stroke_thick, stroke_thin]
     )
-
+    
 
     # End repeat
     stroke_thin_end = PrimitiveEvidenceCandidate(
@@ -273,7 +273,7 @@ def test_extract_geometry_candidates_extracts_repeats_and_sections():
         page_index=1, system_index=1, staff_index=1,
         x0=120.0, x1=128.0, primitive_count=2, primitives=[stroke_thin_end, stroke_thick_end]
     )
-
+    
     # Section that falls back to lyric
     diag = _diagnostics(x_aligned_cluster_candidates=[cluster, cluster2])
 
@@ -288,16 +288,16 @@ def test_extract_geometry_candidates_extracts_repeats_and_sections():
             "text": "Chorus", "y_offset": 10.0, "is_bold": True
         }]
     })
-
+    
     result = extract_geometry_candidates(diag)
     assert len(result.repeats) == 2
     assert result.repeats[0].direction == "start"
     assert result.repeats[1].direction == "end"
-
+    
     # One valid section (Chorus)
     assert len(result.sections) == 1
     assert result.sections[0].text == "Chorus"
-
+    
     # One fallback lyric (UnknownBold)
     assert len(result.lyrics) == 1
     assert result.lyrics[0].text == "UnknownBold"

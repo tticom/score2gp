@@ -209,5 +209,5 @@ def extract_staff_position_diagnostics_dict(page: Any, page_index: int) -> dict[
             positioned_candidates=positioned_candidates,
             failure_reasons=[]
         ).model_dump()
-    except Exception:
+    except Exception as e:
         return {"diagnostic_status": "fail", "positioned_candidates": [], "failure_reasons": ["extraction_failed"]}

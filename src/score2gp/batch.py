@@ -30,7 +30,7 @@ def run_single_payload(
 
     musicxml = payload.get("musicxml")
     tabraw = payload.get("tabraw")
-
+    
     out_val = payload.get("out")
     if out_val:
         out_path = Path(out_val)

@@ -197,6 +197,7 @@ def test_raster_only_clef_bridge(monkeypatch):
     assert cands[0]["bbox"] == [50.0, 185.0, 70.0, 245.0]
 
 def test_logical_clef_candidate_bridge_without_raster(monkeypatch):
+    import sys
     import builtins
     from score2gp.whole_note_recogniser import extract_treble_clef_candidate_evidence
 
