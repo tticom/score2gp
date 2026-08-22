@@ -151,21 +151,21 @@ def test_dynamic_system_skipped_measure_alignment(tmp_path):
     # Measure 22 (IR index 1) should remain a rest (empty of fret candidates)
     # 5. Assert correct mappings:
     assert len(score.bars) == 4
-    
+
     # Check E (sounding 52) is in Bar 1 (index 0)
     bar1_events = score.bars[0].events
     assert len(bar1_events) == 1
     assert bar1_events[0].notes[0].pitch == 52
-    
+
     # Check Bar 2 (index 1, Measure 22) is empty/rest (skipped event)
     bar2_events = score.bars[1].events
     assert len(bar2_events) == 0
-    
+
     # Check G (sounding 55) is in Bar 3 (index 2, Measure 23)
     bar3_events = score.bars[2].events
     assert len(bar3_events) == 1
     assert bar3_events[0].notes[0].pitch == 55
-    
+
     # Check A (sounding 57) is in Bar 4 (index 3, Measure 24)
     bar4_events = score.bars[3].events
     assert len(bar4_events) == 1

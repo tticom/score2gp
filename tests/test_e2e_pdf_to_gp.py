@@ -81,7 +81,7 @@ def test_public_e2e_pdf_to_gp_smoke_proof(tmp_path) -> None:
     # fret 1 on string 1 (F4) -> MIDI 65
     # fret 2 on string 1 (F#4) -> MIDI 66
     # fret 3 on string 1 (G4) -> MIDI 67
-    
+
     # Assert tunings structure matches Standard Guitar Tuning
     assert len(summary["tunings"]) == 1
     tuning_info = summary["tunings"][0]

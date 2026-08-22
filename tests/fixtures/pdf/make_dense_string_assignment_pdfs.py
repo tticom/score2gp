@@ -36,38 +36,38 @@ def make_pdf_dense_string_assignment_safe() -> None:
     # Dense string assignment safe counterpart (resolved/safe)
     # Line spacing is 14.0pt, and all fret candidates are shifted vertically by +4.0pt
     doc, page = _new_page("Dense String Assignment Safe (Resolved)")
-    
+
     line_ys = [100, 114, 128, 142, 156, 170]
     _draw_tab_lines(page, line_ys=line_ys, x0=72, x1=332)
     _draw_barlines(page, line_ys=line_ys, bar_xs=[88, 205, 322])
-    
+
     # Write frets with +4.0pt vertical shift (Y position in insert_text is line_y + 4.0)
     # Note: _write_fret has y + 3 internally, so we pass line_y + 1.0 to get exactly line_y + 4.0
     _write_fret(page, "3", 120, line_ys[0] + 1.0)
     _write_fret(page, "5", 150, line_ys[1] + 1.0)
     _write_fret(page, "7", 180, line_ys[2] + 1.0)
-    
+
     _save(doc, "generated_pdf_dense_string_assignment_safe.pdf")
 
 
 def make_pdf_dense_string_assignment_ambiguous() -> None:
     # Genuinely ambiguous/equidistant string assignment (refused)
     doc, page = _new_page("Dense String Assignment Ambiguous (Refused)")
-    
+
     line_ys = [100, 114, 128, 142, 156, 170]
     _draw_tab_lines(page, line_ys=line_ys, x0=72, x1=332)
     _draw_barlines(page, line_ys=line_ys, bar_xs=[88, 205, 322])
-    
+
     # Standard fret on String 1
     _write_fret(page, "3", 120, line_ys[0] - 3.0)
-    
+
     # Fret exactly in the middle between String 1 (100) and String 2 (114)
     # Y = 107.0 (distance 7.0pt from both strings). Since _write_fret adds 3, we pass 104.0.
     _write_fret(page, "5", 150, 104.0)
-    
+
     # Standard fret on String 3
     _write_fret(page, "7", 180, line_ys[2] - 3.0)
-    
+
     _save(doc, "generated_pdf_dense_string_assignment_ambiguous.pdf")
 
 

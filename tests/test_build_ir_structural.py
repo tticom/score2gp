@@ -34,7 +34,7 @@ def test_build_ir_structural_signals_injected():
         },
         candidates=[]
     )
-    
+
     score = ScoreIR.model_construct(
         bars=[
             Bar.model_construct(
@@ -55,8 +55,8 @@ def test_build_ir_structural_signals_injected():
             )
         ]
     )
-    
+
     _attach_symbols_and_techniques(score, tabraw)
-    
+
     assert score.bars[0].marker == "Chorus"
     assert score.bars[0].barline == "repeat-end"

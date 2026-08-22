@@ -11,7 +11,7 @@ def test_tuplet_recognition_integration() -> None:
     result = run_recognition_on_file(lesson6_pdf, assume_treble_clef=True)
     assert result is not None
     assert "tuplet_associations" in result
-    
+
     tuplets = result["tuplet_associations"]
     # We assert it's a list; it may be empty depending on the fixture.
     assert isinstance(tuplets, list)

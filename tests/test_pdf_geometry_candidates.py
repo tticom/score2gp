@@ -206,7 +206,6 @@ def test_repeat_candidate_and_cycles() -> None:
 
 def test_malformed_cycle_nested_starts() -> None:
     import pytest
-    from score2gp.pdf_geometry_candidates import MalformedStructuralCycle
     r1 = RepeatCandidate(
         page_index=1, system_index=1, staff_index=1,
         x0=10.0, y0=20.0, x1=30.0, y1=40.0,
@@ -222,7 +221,6 @@ def test_malformed_cycle_nested_starts() -> None:
 
 def test_malformed_cycle_unmatched_end() -> None:
     import pytest
-    from score2gp.pdf_geometry_candidates import MalformedStructuralCycle
     r1 = RepeatCandidate(
         page_index=1, system_index=1, staff_index=1,
         x0=10.0, y0=20.0, x1=30.0, y1=40.0,

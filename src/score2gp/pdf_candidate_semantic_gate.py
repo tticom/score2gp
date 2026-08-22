@@ -50,19 +50,19 @@ def evaluate_logical_clef_gate(
     """
     if not geometry.left_margin_primitives:
         return SemanticGateResult(
-            status="no_candidate", 
+            status="no_candidate",
             reason="no left margin primitives found"
         )
-    
+
     text_spans = [p for p in geometry.left_margin_primitives if p.kind == "text_span"]
     curves = [p for p in geometry.left_margin_primitives if p.kind == "curve"]
-    
+
     if not text_spans and not curves:
         return SemanticGateResult(
-            status="ambiguous_candidate", 
+            status="ambiguous_candidate",
             reason="left margin contains primitives but no text spans or curves to suggest a clef"
         )
-    
+
     classification = classify_logical_clef_candidate(
         geometry.left_margin_primitives,
         staff_spacing=staff_spacing,
@@ -76,21 +76,20 @@ def evaluate_logical_clef_gate(
             clef_kind="treble",
             reason=classification["reason"]
         )
-    elif classification["label"] == "bass_clef_candidate":
+    if classification["label"] == "bass_clef_candidate":
         return SemanticGateResult(
             status="logical_clef_candidate",
             clef_kind="bass",
             reason=classification["reason"]
         )
-    elif classification["label"] == "alto_clef_candidate":
+    if classification["label"] == "alto_clef_candidate":
         return SemanticGateResult(
             status="logical_clef_candidate",
             clef_kind="alto",
             reason=classification["reason"]
         )
-    else:
-        return SemanticGateResult(
-            status="logical_clef_candidate",
-            clef_kind="unknown",
-            reason=classification["reason"]
-        )
+    return SemanticGateResult(
+        status="logical_clef_candidate",
+        clef_kind="unknown",
+        reason=classification["reason"]
+    )

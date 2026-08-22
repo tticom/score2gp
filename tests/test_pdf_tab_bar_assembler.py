@@ -1080,7 +1080,6 @@ def test_pdf_tab_helpers_isolation() -> None:
 
 def test_split_tab_candidates_by_floating_barlines() -> None:
     from score2gp.pdf_tab_bar_assembler import split_tab_candidates_by_floating_barlines
-    from score2gp.tabraw import TabCandidate
     from score2gp.pdf_geometry import _LineSegment
 
     cand1 = make_pdf_tab_candidate()

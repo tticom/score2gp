@@ -74,9 +74,9 @@ def make_pdf_bar_boxes_overlapping() -> None:
     _draw_tab_lines(page, line_ys=line_ys, x0=72, x1=332)
     # Instead of drawing standard vertical lines, we draw them such that barlines list will be unsorted,
     # but wait, since fitz extracts barlines and we sort them, how can we test the overlap check?
-    # We can write an explicit unit test on _TabSystem directly where barlines are unsorted, 
-    # but we can also draw barlines in a way that triggers it. 
-    # Wait, in the generator, we can draw a normal layout, and in the test, we'll verify both the PDF and 
+    # We can write an explicit unit test on _TabSystem directly where barlines are unsorted,
+    # but we can also draw barlines in a way that triggers it.
+    # Wait, in the generator, we can draw a normal layout, and in the test, we'll verify both the PDF and
     # the direct _TabSystem property behavior.
     _draw_barlines(page, line_ys=line_ys, bar_xs=[120, 200, 280])
     _write_fret(page, "3", 150, line_ys[0])

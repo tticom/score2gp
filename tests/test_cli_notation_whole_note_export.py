@@ -206,7 +206,7 @@ def test_coverage_report_under_assume_treble_clef():
     pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
     res = run_recognition_on_file(pdf_path, assume_treble_clef=True)
     report = res["clef_resolved_pitch_coverage"]
-    
+
     assert report["assumed_clef_mode"] is True
     assert report["note_candidates_on_staves_with_assumed_clef"] == 2
     assert report["note_candidates_with_assumed_treble_clef_pitch"] == 2
@@ -218,7 +218,7 @@ def test_coverage_report_without_assume_treble_clef():
     pdf_path = Path("tests/fixtures/pdf/generated_standard_staff_whole_note.pdf")
     res = run_recognition_on_file(pdf_path, assume_treble_clef=False)
     report = res["clef_resolved_pitch_coverage"]
-    
+
     assert report["assumed_clef_mode"] is False
     assert report["note_candidates_on_staves_with_assumed_clef"] == 0
     assert report["note_candidates_with_assumed_treble_clef_pitch"] == 0
