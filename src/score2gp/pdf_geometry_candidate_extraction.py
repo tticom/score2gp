@@ -1,4 +1,5 @@
 from score2gp.pdf_staff_geometry import NotationStaffDiagnostics
+from score2gp.pdf_structural_skeleton_diagnostics import extract_structural_signals
 from score2gp.pdf_geometry_candidates import GeometryCandidateSet
 from score2gp.tabraw import TabCandidate
 import dataclasses
@@ -24,9 +25,13 @@ def extract_geometry_candidates(diagnostics: NotationStaffDiagnostics) -> Geomet
     this function transfers already-computed diagnostic candidates into the
     page-level export shape without assigning musical meaning.
     """
+    structural = extract_structural_signals(diagnostics)
     return GeometryCandidateSet(
         left_margin_primitives=list(diagnostics.left_margin_candidates or []),
         x_aligned_clusters=list(diagnostics.x_aligned_cluster_candidates or []),
+        sections=structural.get("sections", []),
+        repeats=structural.get("repeats", []),
+        lyrics=[], # Will be populated by fallback
     )
 
 def extract_rhythm_candidates(

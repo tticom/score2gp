@@ -91,6 +91,7 @@ class TabRaw(BaseModel):
     candidates: list[TabCandidate] = Field(default_factory=list)
     floating_barlines: list[FloatingBarline] = Field(default_factory=list)
     warnings: list[dict[str, Any]] = Field(default_factory=list)
+    structural_signals: dict[str, list[dict[str, Any]]] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def candidate_ids_are_unique(self) -> "TabRaw":
