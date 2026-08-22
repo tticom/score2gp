@@ -97,7 +97,7 @@ def run_private_diagnostic_smoke(
                 from .report import write_musicxml_unrecoverable_timing_report, write_musicxml_timing_diagnostics_html
                 html_legacy_path = build_error_path.parent / "musicxml-timing-diagnostics.html"
                 write_musicxml_timing_diagnostics_html(html_legacy_path, payload, json_path_ref=build_error_path.name)
-                
+
                 unrec_json_path = build_error_path.parent / "musicxml-unrecoverable-timing-report.json"
                 unrec_html_path = build_error_path.parent / "musicxml-unrecoverable-timing-report.html"
                 write_musicxml_unrecoverable_timing_report(

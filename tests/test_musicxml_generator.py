@@ -13,9 +13,9 @@ def test_musicxml_generation_integration() -> None:
     result = run_recognition_on_file(lesson5_pdf, assume_treble_clef=True)
     assert result is not None
     assert "read_only_recognition_outcomes" in result
-    
+
     outcomes = result["read_only_recognition_outcomes"]
-    
+
     try:
         xml_str = generate_musicxml_from_omr(outcomes)
         assert xml_str is not None
@@ -23,7 +23,7 @@ def test_musicxml_generation_integration() -> None:
         root = ET.fromstring(xml_str)
         assert root.tag == "score-partwise"
     except ValueError as e:
-        # Currently, Lesson-5 and Lesson-6 contain naturally invalid measures 
+        # Currently, Lesson-5 and Lesson-6 contain naturally invalid measures
         # which trigger a Capacity Mismatch ValueError in the generator.
         # This is expected behavior for these specific real-world artifacts.
         assert "Capacity mismatch" in str(e) or "invalid" in str(e).lower()

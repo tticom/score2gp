@@ -21,13 +21,13 @@ def compute_payload_hash(payload: dict[str, Any]) -> str:
 
     # Sort payload keys to ensure deterministic hashing
     file_keys = {"musicxml", "tabraw", "ascii_alignment", "template"}
-    
+
     # 1. Hash configuration and scalar keys (ignoring 'id' and 'out' paths)
     config_dict = {}
     for k, v in sorted(payload.items()):
         if k not in file_keys and k not in {"id", "out"}:
             config_dict[k] = v
-            
+
     config_bytes = json.dumps(config_dict, sort_keys=True).encode("utf-8")
     hasher.update(config_bytes)
 
@@ -43,7 +43,7 @@ def compute_payload_hash(payload: dict[str, Any]) -> str:
             else:
                 # If path is declared but missing, hash the string representation to indicate difference
                 hasher.update(str(file_val).encode("utf-8"))
-                
+
     return hasher.hexdigest()
 
 
@@ -54,7 +54,7 @@ class PipelineCacheManager:
         self.base_work_dir = base_work_dir
         self.cache_dir = base_work_dir / CACHE_DIR_NAME
         self.manifest_path = base_work_dir / CACHE_MANIFEST_NAME
-        
+
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self._load_manifest()
 
@@ -82,18 +82,18 @@ class PipelineCacheManager:
             entry = self.manifest.get(payload_hash)
             if not entry:
                 return None
-                
+
             cached_file_str = entry.get("cached_file")
             if not cached_file_str:
                 return None
-                
+
             cached_file = Path(cached_file_str)
             if not cached_file.exists():
                 # Obsolete / deleted artifact: invalidating
                 self.manifest.pop(payload_hash, None)
                 self._save_manifest()
                 return None
-                
+
             # Copy to the desired target path
             target_out_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(cached_file, target_out_path)
@@ -106,10 +106,10 @@ class PipelineCacheManager:
         with self._lock:
             if not generated_out_path.exists():
                 return
-                
+
             cached_file = self.cache_dir / f"{payload_hash}.gp"
             shutil.copy2(generated_out_path, cached_file)
-            
+
             self.manifest[payload_hash] = {
                 "cached_file": str(cached_file),
                 "original_out": str(generated_out_path),

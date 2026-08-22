@@ -20,10 +20,10 @@ class MockRect:
 class MockPage:
     def __init__(self, drawings: list[dict[str, Any]]):
         self.drawings = drawings
-    
+
     def get_drawings(self) -> list[dict[str, Any]]:
         return self.drawings
-    
+
     def get_text(self, kind: str) -> dict:
         return {}
 
@@ -49,7 +49,7 @@ def test_extract_filled_compound_no_stem_whole_note() -> None:
         "fill": (0, 0, 0),
         "items": items
     }]
-    
+
     page = MockPage(drawings)
     whole, half, quarter = _extract_note_candidates(page)
     assert len(whole) == 1
@@ -83,7 +83,7 @@ def test_extract_filled_compound_stemmed_half_note() -> None:
             "items": [("l", MockPoint(7.0, -15.0), MockPoint(7.0, 2.0))]
         }
     ]
-    
+
     page = MockPage(drawings)
     whole, half, quarter = _extract_note_candidates(page)
     assert len(whole) == 0
@@ -111,7 +111,7 @@ def test_extract_solid_stemmed_quarter_note() -> None:
             "items": [("l", MockPoint(7.0, -15.0), MockPoint(7.0, 2.0))]
         }
     ]
-    
+
     page = MockPage(drawings)
     whole, half, quarter = _extract_note_candidates(page)
     assert len(whole) == 0
@@ -137,7 +137,7 @@ def test_reject_rest_like_filled_compound_symbol() -> None:
         "fill": (0, 0, 0),
         "items": items
     }]
-    
+
     page = MockPage(drawings)
     whole, half, quarter = _extract_note_candidates(page)
     assert len(whole) == 0
@@ -157,7 +157,7 @@ def test_extract_existing_hollow_whole_note() -> None:
         "fill": None,
         "items": items
     }]
-    
+
     page = MockPage(drawings)
     whole, half, quarter = _extract_note_candidates(page)
     assert len(whole) == 1

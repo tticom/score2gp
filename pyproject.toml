@@ -36,3 +36,28 @@ project-includes = [
     "**/*.py*",
     "**/*.ipynb",
 ]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "C90", # mccabe complexity
+    "B",   # flake8-bugbear (common smells)
+    "SIM", # flake8-simplify
+    "RET", # flake8-return
+    "PT",  # flake8-pytest-style
+]
+ignore = [
+    "F401", # Unused imports (breaks facade modules)
+    "F841", # Unused variables (breaks some unpacking in tests)
+    "B028", # No explicit stacklevel (warnings)
+    "B023", # Function definition does not bind loop variable
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10

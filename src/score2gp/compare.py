@@ -584,9 +584,9 @@ def load_bar_data(source: Any) -> list[BarData]:
         suffix = p.suffix.lower()
         if suffix == ".gp":
             return _extract_bars_from_gp_file(p)
-        elif suffix in (".musicxml", ".xml"):
+        if suffix in (".musicxml", ".xml"):
             return _extract_bars_from_musicxml_file(p)
-        elif suffix == ".json":
+        if suffix == ".json":
             data = json.loads(p.read_text(encoding="utf-8"))
             return load_bar_data(data)
 
@@ -598,7 +598,7 @@ def load_bar_data(source: Any) -> list[BarData]:
             except Exception:
                 pass
             return _extract_bars_from_dict(source)
-        elif "events" in source or "bar_index" in source or "index" in source:
+        if "events" in source or "bar_index" in source or "index" in source:
             return [_parse_single_bar_dict(source)]
 
     if isinstance(source, list):

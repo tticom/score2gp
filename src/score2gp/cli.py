@@ -659,18 +659,16 @@ def _convert_exit_code_for_error(exc: Exception) -> int:
     """
     if isinstance(exc, BuildIrInputRiskError):
         category = exc.category
-        if category == "pdf_only_tab_grouping_unsafe":
+        if category == "pdf_only_tab_grouping_unsafe" or category.startswith("ascii_") or "ascii" in category:
             return 4
-        elif category.startswith("ascii_") or "ascii" in category:
-            return 4
-        elif category in {
+        if category in {
             "pdf_input_class_scanned_pdf_unsupported",
             "pdf_input_class_no_extractable_tab_geometry",
             "pdf_input_class_drawn_tab_requires_barlines",
             "missing_pdf_grouping",
         } or category.startswith("pdf_"):
             return 2
-        elif category in {
+        if category in {
             "musicxml_timing_risk",
             "musicxml_scoreir_polyphony_gate_refused",
         } or category.startswith("musicxml_"):

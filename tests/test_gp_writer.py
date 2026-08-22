@@ -2236,7 +2236,7 @@ def test_gpif_standard_guitar_pitch_stave_display(tmp_path) -> None:
 
         # Get notes from flat Relational database table
         notes_node = root.find("Notes")
-        assert notes_node is not None, f"Global Notes element not found directly under GPIF root"
+        assert notes_node is not None, "Global Notes element not found directly under GPIF root"
         notes = notes_node.findall("Note")
         assert len(notes) == len(test_cases)
 

@@ -584,7 +584,7 @@ def build_ir_from_files(
                 from .report import write_musicxml_timing_diagnostics_html, write_musicxml_unrecoverable_timing_report
                 html_path = out_path_p.parent / "musicxml-timing-diagnostics.html"
                 write_musicxml_timing_diagnostics_html(html_path, payload, json_path_ref=out_path_p.name)
-                
+
                 # Write unrecoverable timing reports as sidecars
                 unrec_json_path = out_path_p.parent / "musicxml-unrecoverable-timing-report.json"
                 unrec_html_path = out_path_p.parent / "musicxml-unrecoverable-timing-report.html"
@@ -3917,6 +3917,66 @@ def _attach_symbols_and_techniques(score: ScoreIR, tabraw: TabRaw) -> None:
     bar_key_to_output_idx = {
         key: idx for idx, key in enumerate(source_bar_keys, start=1)
     }
+
+
+    if hasattr(tabraw, "structural_signals") and tabraw.structural_signals:
+        for section in tabraw.structural_signals.get("sections", []):
+            page = section.get("page_index")
+            sys_idx = section.get("system_index")
+            x0 = section.get("x0")
+
+            closest_bar = None
+            min_dist = float("inf")
+            for bar in score.bars:
+                # Find the first event provenance for this bar to locate it
+                bar_x = None
+                for ev in bar.events:
+                    for prov in ev.provenance:
+                        if prov.page == page and prov.system_id == str(sys_idx):
+                            if "x" in prov.raw:
+                                bar_x = prov.raw["x"]
+                                break
+                    if bar_x is not None:
+                        break
+                if bar_x is not None:
+                    dist = abs(bar_x - x0)
+                    if dist < min_dist:
+                        min_dist = dist
+                        closest_bar = bar
+
+            if closest_bar is not None:
+                closest_bar.marker = section.get("text")
+                closest_bar.marker_color = "Red"
+
+        for repeat in tabraw.structural_signals.get("repeats", []):
+            page = repeat.get("page_index")
+            sys_idx = repeat.get("system_index")
+            x0 = repeat.get("x0")
+            direction = repeat.get("direction")
+
+            closest_bar = None
+            min_dist = float("inf")
+            for bar in score.bars:
+                bar_x = None
+                for ev in bar.events:
+                    for prov in ev.provenance:
+                        if prov.page == page and prov.system_id == str(sys_idx):
+                            if "x" in prov.raw:
+                                bar_x = prov.raw["x"]
+                                break
+                    if bar_x is not None:
+                        break
+                if bar_x is not None:
+                    dist = abs(bar_x - x0)
+                    if dist < min_dist:
+                        min_dist = dist
+                        closest_bar = bar
+
+            if closest_bar is not None:
+                if direction == "start":
+                    closest_bar.barline = "repeat-start"
+                elif direction == "end":
+                    closest_bar.barline = "repeat-end"
 
     for candidate in tabraw.candidates:
         if candidate.kind not in ("chord-symbol", "technique-text", "visual-vibrato", "visual-slide"):

@@ -37,17 +37,17 @@ def get_process_memory() -> int:
                     ("PagefileUsage", ctypes.c_size_t),
                     ("PeakPagefileUsage", ctypes.c_size_t),
                 ]
-            
+
             get_current_process = ctypes.windll.kernel32.GetCurrentProcess
             get_current_process.restype = ctypes.c_void_p
-            
+
             get_process_memory_info = ctypes.windll.psapi.GetProcessMemoryInfo
             get_process_memory_info.argtypes = [ctypes.c_void_p, ctypes.POINTER(PROCESS_MEMORY_COUNTERS), ctypes.c_ulong]
             get_process_memory_info.restype = ctypes.c_int
-            
+
             counters = PROCESS_MEMORY_COUNTERS()
             counters.cb = ctypes.sizeof(PROCESS_MEMORY_COUNTERS)
-            
+
             handle = get_current_process()
             if get_process_memory_info(handle, ctypes.byref(counters), counters.cb):
                 return counters.WorkingSetSize

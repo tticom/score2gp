@@ -155,3 +155,76 @@ def test_reject_cluster_invalid_source() -> None:
             x0=10.0, x1=20.0, primitive_count=1,
             primitives=[p1]
         )
+
+from score2gp.pdf_geometry_candidates import StructuralSectionCandidate, RepeatCandidate, LyricCandidate, GeometryCandidateSet, MalformedStructuralCycle
+
+def test_structural_section_candidate() -> None:
+    sec = StructuralSectionCandidate(
+        page_index=1, system_index=1, staff_index=1,
+        x0=10.0, y0=20.0, x1=30.0, y1=40.0,
+        text="Chorus", y_offset=10.0, is_bold=True
+    )
+    assert sec.text == "Chorus"
+
+def test_structural_section_rejects_high_y_offset() -> None:
+    import pytest
+    with pytest.raises(Exception, match="exceeds the configured sensible default threshold"):
+        StructuralSectionCandidate(
+            page_index=1, system_index=1, staff_index=1,
+            x0=10.0, y0=20.0, x1=30.0, y1=40.0,
+            text="Chorus", y_offset=51.0, is_bold=True
+        )
+
+def test_structural_section_rejects_unrecognized_text() -> None:
+    import pytest
+    with pytest.raises(Exception, match="standard lyrics, not a structural section"):
+        StructuralSectionCandidate(
+            page_index=1, system_index=1, staff_index=1,
+            x0=10.0, y0=20.0, x1=30.0, y1=40.0,
+            text="Unknown Bold Text", y_offset=10.0, is_bold=True
+        )
+    with pytest.raises(Exception, match="Unrecognized text must not be classified as a structural section"):
+        StructuralSectionCandidate(
+            page_index=1, system_index=1, staff_index=1,
+            x0=10.0, y0=20.0, x1=30.0, y1=40.0,
+            text="Unknown Text", y_offset=10.0, is_bold=False
+        )
+
+def test_repeat_candidate_and_cycles() -> None:
+    r1 = RepeatCandidate(
+        page_index=1, system_index=1, staff_index=1,
+        x0=10.0, y0=20.0, x1=30.0, y1=40.0,
+        direction="start"
+    )
+    r2 = RepeatCandidate(
+        page_index=1, system_index=1, staff_index=1,
+        x0=50.0, y0=20.0, x1=70.0, y1=40.0,
+        direction="end"
+    )
+    g = GeometryCandidateSet(repeats=[r1, r2])
+    assert len(g.repeats) == 2
+
+def test_malformed_cycle_nested_starts() -> None:
+    import pytest
+    r1 = RepeatCandidate(
+        page_index=1, system_index=1, staff_index=1,
+        x0=10.0, y0=20.0, x1=30.0, y1=40.0,
+        direction="start"
+    )
+    r2 = RepeatCandidate(
+        page_index=1, system_index=1, staff_index=1,
+        x0=50.0, y0=20.0, x1=70.0, y1=40.0,
+        direction="start"
+    )
+    with pytest.raises(Exception):
+        GeometryCandidateSet(repeats=[r1, r2])
+
+def test_malformed_cycle_unmatched_end() -> None:
+    import pytest
+    r1 = RepeatCandidate(
+        page_index=1, system_index=1, staff_index=1,
+        x0=10.0, y0=20.0, x1=30.0, y1=40.0,
+        direction="end"
+    )
+    with pytest.raises(Exception, match="unmatched repeat end"):
+        GeometryCandidateSet(repeats=[r1])

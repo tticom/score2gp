@@ -13,10 +13,10 @@ def test_sidecar_bakeoff_integration() -> None:
     # Reference .gp path should not be accessed or passed during evaluation
     reference_gp = lesson6_pdf.with_suffix(".gp")
     assert not reference_gp.name.startswith("tmp_")
-    
+
     result = run_recognition_on_file(lesson6_pdf, assume_treble_clef=True)
     assert result is not None
     assert "timeline_preview" in result
-    
+
     previews = result["timeline_preview"]
     assert len(previews) > 0

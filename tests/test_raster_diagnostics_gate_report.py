@@ -168,7 +168,6 @@ def test_gate_report_aggregation_and_privacy(capsys):
             ]
         return orig_glob(self, pattern)
 
-    import builtins
     orig_open = builtins.open
     def custom_open(file, *args, **kwargs):
         if str(file).endswith("raster_diagnostics_false_negative_manifest.json"):
@@ -249,10 +248,9 @@ def test_run_diagnostics_on_file_privacy(capsys):
     def mock_open(*args, **kwargs):
         raise Exception("cannot open fixtures/private/raster-treble-clef/secret_path.pdf")
 
-    with patch.object(fitz, "open", side_effect=mock_open):
-        with patch.object(Path, "exists", return_value=True):
-            p = Path("fixtures/private/raster-treble-clef/secret_path.pdf")
-            gate_report.run_diagnostics_on_file(p, display_label="safe_label")
+    with patch.object(fitz, "open", side_effect=mock_open), patch.object(Path, "exists", return_value=True):
+        p = Path("fixtures/private/raster-treble-clef/secret_path.pdf")
+        gate_report.run_diagnostics_on_file(p, display_label="safe_label")
 
     captured = capsys.readouterr()
     assert "fixtures/private/raster-treble-clef/secret_path.pdf" not in captured.err
@@ -1260,10 +1258,10 @@ def test_subprocess_json_read_only_recognition_outcomes_custom_case_id(tmp_path)
 
     assert result.returncode == 0
     data = json.loads(result.stdout)
-    
+
     cases = data.get("cases", [])
     assert len(cases) == 1
-    
+
     custom_case = cases[0]
     assert custom_case["case_id"] == "custom_whole_note_fixture_alias"
     assert "read_only_recognition_outcomes" in custom_case

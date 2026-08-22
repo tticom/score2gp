@@ -27,16 +27,16 @@ def _parse_pitch_to_midi(pitch_str: str) -> int:
         raise ValueError(f"Unsupported pitch format: {pitch_str}")
     step = match.group(1)
     octave = int(match.group(2))
-    
+
     step_to_semitones = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
     return (octave + 1) * 12 + step_to_semitones[step]
 
 def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
     tuning = _standard_guitar_tuning()
-    
+
     valid_durations = ["whole", "half", "quarter", "eighth", "sixteenth", "thirty_second", "sixty_fourth"]
     valid_outcomes = []
-    
+
     REST_SYMBOL_TO_EXPECTED_DURATION = {
         "whole_rest_candidate": {"whole"},
         "whole_rest": {"whole"},
@@ -149,7 +149,7 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
         sys = outcome.get("system_index")
         staff = outcome.get("staff_index", outcome.get("system_staff_index"))
         x_pos = get_actual_x_pos(outcome)
-        
+
         if is_rest or not has_position_evidence(outcome):
             grouped_outcomes.append([outcome])
         else:
@@ -158,16 +158,16 @@ def build_ir_from_notation_outcomes(outcomes: list[dict[str, Any]]) -> ScoreIR:
                 first_in_last = last_group[0]
                 last_sym = first_in_last.get("symbol_type")
                 last_is_rest = last_sym in REST_SYMBOL_TO_EXPECTED_DURATION
-                
+
                 if not last_is_rest and has_position_evidence(first_in_last):
                     last_page = first_in_last.get("page_index")
                     last_sys = first_in_last.get("system_index")
                     last_staff = first_in_last.get("staff_index", first_in_last.get("system_staff_index"))
                     last_x_pos = get_actual_x_pos(first_in_last)
-                    
-                    if (page == last_page and 
-                        sys == last_sys and 
-                        staff == last_staff and 
+
+                    if (page == last_page and
+                        sys == last_sys and
+                        staff == last_staff and
                         abs(x_pos - last_x_pos) <= 1.0):
                         last_group.append(outcome)
                         continue

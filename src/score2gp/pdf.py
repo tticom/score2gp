@@ -251,9 +251,23 @@ def extract_tab(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
     else:
         raw["candidates"].extend(_extract_pdf_text_candidates(Path(path), raw["warnings"], meta, inspection_data=inspection))
 
+
     if "floating_barlines" in meta:
         raw["floating_barlines"] = meta["floating_barlines"]
+    raw["structural_signals"] = {}
+    for page in inspection.get("pages", []):
+        for gc in page.get("geometry_candidates", []):
+            if "sections" not in raw["structural_signals"]:
+                raw["structural_signals"]["sections"] = []
+            if "repeats" not in raw["structural_signals"]:
+                raw["structural_signals"]["repeats"] = []
+            if "lyrics" not in raw["structural_signals"]:
+                raw["structural_signals"]["lyrics"] = []
+            raw["structural_signals"]["sections"].extend(gc.get("sections", []))
+            raw["structural_signals"]["repeats"].extend(gc.get("repeats", []))
+            raw["structural_signals"]["lyrics"].extend(gc.get("lyrics", []))
     _append_grouping_warnings(raw, meta)
+
     raw = TabRaw.model_validate(raw).model_dump(mode="json", exclude_none=True)
     _write_grouping_artifacts(Path(path), out, tabraw_path, inspection, raw)
     tabraw_path.write_text(json.dumps(raw, indent=2), encoding="utf-8")
@@ -2192,9 +2206,7 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                             assignment_warnings.append("pdf_non_playable_text_not_string_assigned")
                         else:
                             from .tabraw import _looks_like_chord_symbol
-                            if _looks_like_chord_symbol(raw_text):
-                                assignment_warnings.append("pdf_fret_chord_text_digit_excluded")
-                            elif any(c.isdigit() for c in raw_text):
+                            if _looks_like_chord_symbol(raw_text) or any(c.isdigit() for c in raw_text):
                                 assignment_warnings.append("pdf_fret_chord_text_digit_excluded")
 
                 if system is not None:
@@ -3767,27 +3779,21 @@ def classify_staff_line_group(group: list[_LineSegment], page: Any = None) -> st
     has_fret = _has_fret_digit_intersection(group, page)
 
     if len(group) == 6:
-        if 5.5 <= median_gap <= 7.2 or 9.5 <= median_gap <= 15.0:
+        if 5.5 <= median_gap <= 7.2 or 9.5 <= median_gap <= 15.0 or 15.0 < median_gap <= 32.0 and _is_coherent_large_tab_group(group):
             return "tab"
-        elif 15.0 < median_gap <= 32.0 and _is_coherent_large_tab_group(group):
-            return "tab"
-        elif median_gap < 5.5:
+        if median_gap < 5.5:
             return "rejected"
-        else:
-            return "ambiguous"
-    elif len(group) == 5:
+        return "ambiguous"
+    if len(group) == 5:
         if 5.5 <= median_gap <= 7.2 or 9.5 <= median_gap <= 15.0:
             if has_fret:
                 return "incomplete_tab_candidate"
-            else:
-                return "ambiguous"
-        elif (3.5 <= median_gap < 5.5) or (7.8 <= median_gap <= 9.2):
+            return "ambiguous"
+        if (3.5 <= median_gap < 5.5) or (7.8 <= median_gap <= 9.2):
             if not has_fret:
                 return "notation"
-            else:
-                return "ambiguous"
-        else:
             return "ambiguous"
+        return "ambiguous"
 
     return "ambiguous"
 
@@ -4038,15 +4044,9 @@ def filter_tab_barline_candidates(
                 if reason in rejection_reasons:
                     rejection_reasons[reason] += 1
 
-                if reason == "pdf_barline_outside_staff_region":
+                if reason == "pdf_barline_outside_staff_region" or reason == "pdf_barline_crosses_insufficient_string_gaps" or reason == "pdf_barline_partial_staff_crossing":
                     rejection_reasons["pdf_barline_does_not_cross_staff"] += 1
-                elif reason == "pdf_barline_crosses_insufficient_string_gaps":
-                    rejection_reasons["pdf_barline_does_not_cross_staff"] += 1
-                elif reason == "pdf_barline_partial_staff_crossing":
-                    rejection_reasons["pdf_barline_does_not_cross_staff"] += 1
-                elif reason == "pdf_barline_too_short_absolute":
-                    rejection_reasons["pdf_barline_too_short"] += 1
-                elif reason == "pdf_barline_rejected_relative_height":
+                elif reason == "pdf_barline_too_short_absolute" or reason == "pdf_barline_rejected_relative_height":
                     rejection_reasons["pdf_barline_too_short"] += 1
 
             if item["height"] < 40.0:

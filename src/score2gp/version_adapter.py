@@ -156,7 +156,6 @@ def get_version_file_content(target_version: str) -> bytes:
     version_str = target_version.upper()
     if version_str == "GP6":
         return b"6.0\n"
-    elif version_str == "GP8":
+    if version_str == "GP8":
         return b"8.0\n"
-    else:
-        return b"7.0\n"
+    return b"7.0\n"

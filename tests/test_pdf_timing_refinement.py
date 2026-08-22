@@ -186,9 +186,8 @@ def test_pdf_timing_refinement_classifies_non_monotonic_layout_as_incompatible(t
         [_candidate("c1", 100.0, 1), _candidate("c2", 200.0, 2), _candidate("c3", 300.0, 3)],
     )
 
-    with patch("score2gp.build_ir._is_monotonic", return_value=False):
-        with pytest.raises(BuildIrInputRiskError):
-            build_ir_from_files(xml_path, tabraw_path, ir_path, diagnostics_path)
+    with patch("score2gp.build_ir._is_monotonic", return_value=False), pytest.raises(BuildIrInputRiskError):
+        build_ir_from_files(xml_path, tabraw_path, ir_path, diagnostics_path)
 
     mapping = json.loads(diagnostics_path.read_text(encoding="utf-8"))["pdf_timing_mapping"]
     assert mapping["mapping_quality_classification"] == "incompatible"
