@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import pytest
 from score2gp.notation_omr.pitch import map_clef_resolved_staff_pitch
 
 

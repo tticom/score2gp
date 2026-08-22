@@ -6,7 +6,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 from typing import Any, Literal
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 FRAGMENTED_STAFF_LINE_NEIGHBOR_MAX_GAP = 360.0
 

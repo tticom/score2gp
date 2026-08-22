@@ -50,7 +50,7 @@ def test_raw_plus_4_automation_overcount_no_suspect() -> None:
         "playable_fret_candidate_count": 20,
         "matched_fret_candidate_count": 20,
     }
-    
+
     classification = classify_gp_quality(metrics)
     assert metrics["bar_alignment_status"] == "aligned"
     assert classification != "gp_output_bar_alignment_suspect"
@@ -71,7 +71,7 @@ def test_raw_plus_4_mismatch_without_automation_is_suspect() -> None:
         "playable_fret_candidate_count": 20,
         "matched_fret_candidate_count": 20,
     }
-    
+
     classification = classify_gp_quality(metrics)
     assert metrics["bar_alignment_status"] == "mismatch"
     assert classification == "gp_output_bar_alignment_suspect"
@@ -89,7 +89,7 @@ def test_explicit_template_prelude_track_bars_accounted() -> None:
         "playable_fret_candidate_count": 100,
         "matched_fret_candidate_count": 100,
     }
-    
+
     classification = classify_gp_quality(metrics)
     assert metrics["bar_alignment_status"] == "expected_template_bars_accounted"
     assert classification != "gp_output_bar_alignment_suspect"
@@ -109,7 +109,7 @@ def test_claimed_template_bars_with_notes_remain_suspect() -> None:
         "playable_fret_candidate_count": 100,
         "matched_fret_candidate_count": 100,
     }
-    
+
     classification = classify_gp_quality(metrics)
     assert classification == "gp_output_bar_alignment_suspect"
 
@@ -126,7 +126,7 @@ def test_fewer_musical_gpif_bars_than_scoreir_remains_suspect() -> None:
         "playable_fret_candidate_count": 100,
         "matched_fret_candidate_count": 100,
     }
-    
+
     classification = classify_gp_quality(metrics)
     assert classification == "gp_output_bar_alignment_suspect"
 
@@ -143,7 +143,7 @@ def test_technique_loss_reached_only_after_alignment_passes() -> None:
         "matched_fret_candidate_count": 100,
         "non_playable_technique_text_candidate_count": 20,
     }
-    
+
     classification = classify_gp_quality(metrics)
     assert classification == "gp_output_technique_loss_expected"
 
@@ -159,6 +159,6 @@ def test_low_serialized_note_coverage_beats_bar_success() -> None:
         "playable_fret_candidate_count": 100,
         "matched_fret_candidate_count": 100,
     }
-    
+
     classification = classify_gp_quality(metrics)
     assert classification == "gp_output_note_coverage_low"

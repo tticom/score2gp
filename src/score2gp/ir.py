@@ -260,9 +260,7 @@ class Timing(BaseModel):
                         val = int(round(float(data[field_name])))
                         if field_name in ("onset_ticks", "duration_ticks"):
                             data[field_name] = max(0, val)
-                        elif field_name == "ticks_per_quarter":
-                            data[field_name] = max(1, val)
-                        elif field_name == "bar_index":
+                        elif field_name == "ticks_per_quarter" or field_name == "bar_index":
                             data[field_name] = max(1, val)
                         elif field_name == "voice":
                             data[field_name] = max(1, min(8, val))
@@ -1077,8 +1075,7 @@ def validate_score_ir_file(path: str | Path) -> tuple[ScoreIR | ScoreBooklet | N
         data = json.loads(content)
         if isinstance(data, dict) and "scores" in data:
             return ScoreBooklet.model_validate(data), []
-        else:
-            return ScoreIR.model_validate(data), []
+        return ScoreIR.model_validate(data), []
     except ValidationError as exc:
         return None, format_validation_errors(exc)
     except json.JSONDecodeError as exc:

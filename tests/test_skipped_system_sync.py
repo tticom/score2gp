@@ -2,11 +2,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-import pytest
 
 from score2gp.build_ir import build_ir_with_diagnostics_from_files
-from score2gp.musicxml import parse_musicxml
-from score2gp.tabraw import TabRaw
 
 def test_skipped_system_sync_logic(tmp_path) -> None:
     # 1. Create a synthetic MusicXML file with 3 measures

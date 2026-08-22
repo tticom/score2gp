@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import json
 import zipfile
-from pathlib import Path
 from xml.etree import ElementTree as ET
 
 from score2gp.gp_package import write_gp, extract_score_ir_from_gp, validate_roundtrip
-from score2gp.ir import ScoreIR, ExpressionController, BendTechnique
+from score2gp.ir import ScoreIR
 
 
 def test_expression_controllers_and_bend_curves_roundtrip(tmp_path) -> None:
@@ -16,18 +14,18 @@ def test_expression_controllers_and_bend_curves_roundtrip(tmp_path) -> None:
 
     # Validate models loaded correctly
     assert score.metadata.title == "Expressive Guitar Solo"
-    
+
     # Event e1 notes & note-level expression controller & bend curve
     event1 = next(e for b in score.bars for e in b.events if e.id == "e1")
     note1 = event1.notes[0]
-    
+
     assert note1.expression_controller is not None
     assert note1.expression_controller.type == "Expression"
     assert note1.expression_controller.duration_ticks == 1920
     assert len(note1.expression_controller.points) == 3
     assert note1.expression_controller.points[0].offset_ticks == 0
     assert note1.expression_controller.points[0].value == 40.0
-    
+
     bend = next(t for t in note1.techniques if t.kind == "bend")
     assert bend.bend_type == "bend-release"
     assert bend.destination_value == 75.0
@@ -120,17 +118,17 @@ def test_expression_controllers_and_bend_curves_roundtrip(tmp_path) -> None:
     # 4. Extract and check round-trip symmetric equality
     recovered = extract_score_ir_from_gp(out_gp)
     assert isinstance(recovered, ScoreIR)
-    
+
     rec_event1 = next(e for b in recovered.bars for e in b.events if e.id == "e1")
     rec_note1 = rec_event1.notes[0]
-    
+
     assert rec_note1.expression_controller is not None
     assert rec_note1.expression_controller.type == "Expression"
     assert rec_note1.expression_controller.duration_ticks == 1920
     assert len(rec_note1.expression_controller.points) == 3
     assert rec_note1.expression_controller.points[0].offset_ticks == 0
     assert rec_note1.expression_controller.points[0].value == 40.0
-    
+
     rec_bend = next(t for t in rec_note1.techniques if t.kind == "bend")
     assert rec_bend.bend_type == "bend-release"
     assert rec_bend.destination_value == 75.0

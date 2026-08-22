@@ -1,6 +1,6 @@
 """Unified ScoreIR compiler for OMR evidence, timelines, and fretboard positions."""
 
-from typing import Any, List, Dict, Tuple, Optional
+from typing import Any
 from score2gp.ir import (
     ScoreIR,
     Track,
@@ -91,9 +91,7 @@ class ScoreIRCompiler:
             if isinstance(item, dict) and "measures" in item:
                 for m in item["measures"]:
                     measures_list.append((m, page_idx, staff_idx))
-            elif isinstance(item, dict) and "events" in item:
-                measures_list.append((item, page_idx, staff_idx))
-            elif hasattr(item, "events"):
+            elif (isinstance(item, dict) and "events" in item) or hasattr(item, "events"):
                 measures_list.append((item, page_idx, staff_idx))
             elif isinstance(item, list):
                 for m in item:
@@ -109,7 +107,7 @@ class ScoreIRCompiler:
             is_invalid = False
             if isinstance(bar_data, dict) and not bar_data.get("valid", True):
                 is_invalid = True
-            if hasattr(bar_data, "valid") and not getattr(bar_data, "valid"):
+            if hasattr(bar_data, "valid") and not bar_data.valid:
                 is_invalid = True
 
             if is_invalid:
@@ -199,21 +197,19 @@ class ScoreIRCompiler:
                                 "Unrecognized chord symbol or unsupported chord structure.",
                                 page=page_idx, measure=b_idx, voice=voice, beat=onset / 960.0 + 1.0
                             )
-                        else:
-                            raise HumanReadableConversionError(
-                                "Unowned note: A note exists without fret/pitch information.",
-                                page=page_idx, measure=b_idx, voice=voice, beat=onset / 960.0 + 1.0
-                            )
-                    else:
-                        bar_events.append(
-                            Event(
-                                id=evt_id,
-                                track_id=self.track_id,
-                                timing=timing,
-                                is_rest=False,
-                                notes=notes,
-                            )
+                        raise HumanReadableConversionError(
+                            "Unowned note: A note exists without fret/pitch information.",
+                            page=page_idx, measure=b_idx, voice=voice, beat=onset / 960.0 + 1.0
                         )
+                    bar_events.append(
+                        Event(
+                            id=evt_id,
+                            track_id=self.track_id,
+                            timing=timing,
+                            is_rest=False,
+                            notes=notes,
+                        )
+                    )
 
             bars.append(Bar(index=b_idx, time_signature=ts, events=bar_events))
 

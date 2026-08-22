@@ -1,4 +1,3 @@
-import json
 import pytest
 from pathlib import Path
 from score2gp.whole_note_recogniser import run_recognition_on_file
@@ -18,12 +17,12 @@ def test_quarter_rest_candidate_extraction_target():
         include_ledger_line_candidates=True,
         include_flag_beam_candidates=True
     )
-    
+
     outcomes = result.get("read_only_recognition_outcomes", [])
     quarter_rests = [c for c in outcomes if c.get("symbol_type") == "quarter_rest_candidate"]
-    
+
     assert len(quarter_rests) == 1, f"Expected exactly 1 quarter rest, found {len(quarter_rests)}"
-    
+
     qr = quarter_rests[0]
     assert qr.get("duration") == "quarter"
     assert "bbox" in qr
@@ -38,10 +37,10 @@ def test_quarter_rest_candidate_extraction_controls(control_pdf):
         include_ledger_line_candidates=True,
         include_flag_beam_candidates=True
     )
-    
+
     outcomes = result.get("read_only_recognition_outcomes", [])
     quarter_rests = [c for c in outcomes if c.get("symbol_type") == "quarter_rest_candidate"]
-    
+
     assert len(quarter_rests) == 0, f"Expected 0 quarter rests in {control_pdf.name}, found {len(quarter_rests)}"
 
 from score2gp.quarter_rest_recogniser import extract_quarter_rest_candidates
@@ -51,7 +50,7 @@ def test_quarter_rest_candidate_staff_partitioning():
     # The x-coordinates overlap. If they weren't partitioned, they would form a cluster with width 30 and height 50,
     # which might fail the height threshold or misattribute fragments.
     outcomes = []
-    
+
     # Staff 1 fragments (valid width 15, height 30)
     for i in range(30):
         outcomes.append({
@@ -62,7 +61,7 @@ def test_quarter_rest_candidate_staff_partitioning():
             "staff_index": 0,
             "primitive_source_ids": [f"s1_f{i}"]
         })
-        
+
     # Staff 2 fragments (valid width 15, height 30), overlapping x with Staff 1
     for i in range(30):
         outcomes.append({
@@ -75,10 +74,10 @@ def test_quarter_rest_candidate_staff_partitioning():
         })
 
     results = extract_quarter_rest_candidates(outcomes)
-    
+
     # We should get exactly 2 separate rest candidates
     assert len(results) == 2
-    
+
     # Check that they preserved the staff indices
     staff_indices = sorted([r.get("staff_index") for r in results])
     assert staff_indices == [0, 1]
@@ -96,10 +95,10 @@ def test_quarter_rest_candidate_staff_index_preservation():
             "system_staff_index": 4,
             "primitive_source_ids": [f"f{i}"]
         })
-        
+
     results = extract_quarter_rest_candidates(outcomes)
     assert len(results) == 1
-    
+
     qr = results[0]
     assert qr.get("page_index") == 2
     assert qr.get("system_index") == 1
@@ -118,10 +117,10 @@ def test_quarter_rest_candidate_fallback_system_staff_index():
             "system_staff_index": 4,
             "primitive_source_ids": [f"f{i}"]
         })
-        
+
     results = extract_quarter_rest_candidates(outcomes)
     assert len(results) == 1
-    
+
     qr = results[0]
     assert qr.get("duration") == "quarter"
     assert qr.get("page_index") == 2

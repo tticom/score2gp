@@ -1,4 +1,3 @@
-import pytest
 from pathlib import Path
 import fitz
 from score2gp.pdf_staff_notation_diagnostics import extract_notation_diagnostics_dict

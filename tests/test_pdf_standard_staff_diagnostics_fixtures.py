@@ -1,7 +1,6 @@
 from __future__ import annotations
 import json
 from typing import Any
-import pytest
 from score2gp.pdf_staff_geometry import NotationStaffDiagnostics, StaffLeftMarginAggregateDiagnostics
 from score2gp.pdf_staff_notation_diagnostics import build_notation_diagnostics
 from score2gp.pdf_geometry import _LineSegment
@@ -75,7 +74,7 @@ def test_margin_filtering_counts_and_excludes() -> None:
     assert lm.curve_candidate_count == 1
     assert lm.vertical_stroke_candidate_count == 1
     assert lm.rectangle_candidate_count == 1
-    
+
     evidence = lm.evidence
     assert evidence is not None
     assert len(evidence) == 4
@@ -303,12 +302,12 @@ def test_generated_complex_cluster_fixture(tmp_path) -> None:
 
     evidence = clustering.get("evidence", [])
     assert len(evidence) == clustering["x_aligned_cluster_count"]
-    
+
     # Check cluster 2 logic: 1 vertical, 2 rects, 1 horizontal
     cluster2 = next((e for e in evidence if e["primitive_count"] >= 4), None)
     assert cluster2 is not None
     assert cluster2["primitive_count"] == len(cluster2["primitives"])
-    
+
     kinds = [p["kind"] for p in cluster2["primitives"]]
     assert kinds.count("vertical_stroke") >= 1
     assert kinds.count("rectangle") == 2
@@ -421,7 +420,6 @@ def test_inspect_pdf_text_font_diversity_fixture(tmp_path: Any) -> None:
     from score2gp.pdf import inspect_pdf
     from pathlib import Path
     import json
-    import math
 
     pdf_path = Path(__file__).parent / "fixtures" / "pdf" / "generated_standard_staff_text_font_diversity.pdf"
     json_path = pdf_path.parents[3] / "fixtures" / "public" / "generated_standard_staff_text_font_diversity.json"
@@ -502,7 +500,7 @@ def test_inspect_pdf_left_margin_threshold_fixture(tmp_path: Any) -> None:
     outside_cluster = fixture_data["note_clusters"][1]
     inside_curve = fixture_data["wide_curves"][0]
     outside_curve = fixture_data["wide_curves"][1]
-    
+
     # Assert Inside properties
     inside_rect_center = (inside_cluster["rects"][0]["x0"] + inside_cluster["rects"][0]["x1"]) / 2.0
     inside_line_center = (inside_cluster["lines"][0]["x0"] + inside_cluster["lines"][0]["x1"]) / 2.0
@@ -524,7 +522,7 @@ def test_inspect_pdf_left_margin_threshold_fixture(tmp_path: Any) -> None:
     assert not (staff_x0 <= outside_line_center <= margin_threshold)
     assert not (staff_x0 <= outside_text_center <= margin_threshold)
     assert not (staff_x0 <= outside_curve_center <= margin_threshold)
-    
+
     assert staff_geom["x0"] <= outside_rect_center <= staff_geom["x1"]
     assert staff_geom["x0"] <= outside_line_center <= staff_geom["x1"]
     assert staff_geom["x0"] <= outside_text_center <= staff_geom["x1"]
@@ -537,7 +535,7 @@ def test_inspect_pdf_left_margin_threshold_fixture(tmp_path: Any) -> None:
 
     evidence = left_margin.get("evidence", [])
     assert len(evidence) == 4
-    
+
     rect_ev = next(e for e in evidence if e["kind"] == "rectangle")
     assert abs(rect_ev["x0"] - inside_cluster["rects"][0]["x0"]) < 2.0
     assert abs(rect_ev["x1"] - inside_cluster["rects"][0]["x1"]) < 2.0

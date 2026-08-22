@@ -209,9 +209,7 @@ def build_grouping_diagnostics(
             ascii_block_count += warning.get("ascii_tab_block_count", 0)
 
     # Determine input_class
-    if drawn_system_count > 0 and ascii_block_count > 0:
-        input_class = "mixed_candidate"
-    elif "pdf_ascii_and_drawn_layout_conflict" in warning_codes or "pdf_page_layout_unsupported" in warning_codes:
+    if (drawn_system_count > 0 and ascii_block_count > 0) or "pdf_ascii_and_drawn_layout_conflict" in warning_codes or "pdf_page_layout_unsupported" in warning_codes:
         input_class = "mixed_candidate"
     elif ascii_block_count > 0 or ascii_candidates:
         input_class = "ascii_tab_candidate"
@@ -1798,7 +1796,7 @@ def write_ascii_gate_diagnostics_html(path: str | Path, payload: dict[str, Any],
         <dd><code>{html.escape(str(details.get("gate_version", "unknown")))}</code></dd>
 
         <dt>ScoreIR Written</dt>
-        <dd><code>{str(scoreir_written)}</code></dd>
+        <dd><code>{scoreir_written!s}</code></dd>
 
         <dt>Alignment Sidecar Present</dt>
         <dd><code>{str(sidecar_present) if sidecar_present is not None else "N/A"}</code></dd>
@@ -3027,29 +3025,29 @@ def write_musicxml_unrecoverable_timing_report(
     source_path: str | None = None,
 ) -> None:
     """Generate both JSON and HTML reports for unrecoverable MusicXML timing failures."""
-    
+
     json_path = Path(json_path)
     html_path = Path(html_path)
-    
+
     json_path.parent.mkdir(parents=True, exist_ok=True)
     html_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     source_label = anonymize_source_label(source_path or payload.get("source_path") or payload.get("details", {}).get("source_path"))
-    
+
     timing_issues = payload.get("timing_issues", [])
-    
+
     affected_part_ids = sorted(list(set(issue.get("part_id") for issue in timing_issues if issue.get("part_id"))))
     affected_measure_numbers = sorted(list(set(str(issue.get("measure_number")) for issue in timing_issues if issue.get("measure_number") is not None)))
     affected_measure_indexes = sorted(list(set(int(issue.get("measure_index")) for issue in timing_issues if issue.get("measure_index") is not None)))
     affected_voice_ids = sorted(list(set(int(issue.get("voice")) for issue in timing_issues if issue.get("voice") is not None)))
-    
+
     expected_measure_ticks = {}
     actual_voice_end_ticks = {}
     backup_forward_density_summary = {}
-    
+
     max_overfull_divisions = 0.0
     max_underfull_divisions = 0.0
-    
+
     for issue in timing_issues:
         m_num = str(issue.get("measure_number"))
         if m_num:
@@ -3059,21 +3057,21 @@ def write_musicxml_unrecoverable_timing_report(
                 actual_voice_end_ticks[m_num] = {str(k): int(v) for k, v in issue["voice_extents"].items()}
             if issue.get("backup_forward_count") is not None:
                 backup_forward_density_summary[m_num] = int(issue["backup_forward_count"])
-            
+
             overfull = issue.get("overfull_divisions")
             if overfull is not None:
                 max_overfull_divisions = max(max_overfull_divisions, float(overfull))
-                
+
             if "underfull" in str(issue.get("code", "")).lower() or any("underfull" in str(r).lower() for r in issue.get("secondary_reasons", [])):
                 expected = issue.get("expected_duration_divisions")
                 end = issue.get("end_divisions")
                 if expected is not None and end is not None and expected > end:
                     max_underfull_divisions = max(max_underfull_divisions, float(expected - end))
-                    
+
     primary_reason = payload.get("category") or "musicxml_timing_risk"
     all_codes = sorted({issue.get("code") for issue in timing_issues if issue.get("code")})
     secondary_reasons = sorted([code for code in all_codes if code != primary_reason])
-    
+
     affected_event_ids = set()
     for issue in timing_issues:
         ev_ids = issue.get("affected_event_ids")
@@ -3081,7 +3079,7 @@ def write_musicxml_unrecoverable_timing_report(
             affected_event_ids.update(ev_ids)
         if issue.get("musicxml_note_id"):
             affected_event_ids.add(issue["musicxml_note_id"])
-            
+
     remediation_hint = (
         "MusicXML timing is unrecoverable. "
         "Suggested actions:\n"
@@ -3090,7 +3088,7 @@ def write_musicxml_unrecoverable_timing_report(
         "- simplify/re-export in notation software\n"
         "- do not proceed to ScoreIR until timing is fixed"
     )
-    
+
     report_json = {
         "schema_version": "musicxml-unrecoverable-timing-report.v0.1",
         "source_label": source_label,
@@ -3123,7 +3121,7 @@ def write_musicxml_unrecoverable_timing_report(
         "gp_written": False,
         "remediation_hint": remediation_hint,
     }
-    
+
     json_path.write_text(json.dumps(report_json, indent=2, sort_keys=True), encoding="utf-8")
     _write_musicxml_unrecoverable_timing_html(html_path, report_json, json_path.name, timing_issues)
 
@@ -3135,7 +3133,7 @@ def _write_musicxml_unrecoverable_timing_html(
     timing_issues: list[dict[str, Any]],
 ) -> None:
     """Write user-facing HTML report for unrecoverable MusicXML timing."""
-    
+
     table_rows = []
     for issue in timing_issues:
         part_id = issue.get("part_id") or "N/A"
@@ -3143,26 +3141,26 @@ def _write_musicxml_unrecoverable_timing_html(
         m_idx = issue.get("measure_index") or 0
         voice = issue.get("voice")
         voice_str = f"Voice {voice}" if voice is not None else "N/A"
-        
+
         expected = issue.get("expected_duration_divisions")
         expected_str = f"{expected}" if expected is not None else "N/A"
-        
+
         end = issue.get("end_divisions")
         end_str = f"{end}" if end is not None else "N/A"
-        
+
         overfull = issue.get("overfull_divisions")
         underfull = None
         if expected is not None and end is not None and expected > end and "underfull" in str(issue.get("code")).lower():
             underfull = expected - end
-            
+
         amount_str = "0"
         if overfull is not None and overfull > 0:
             amount_str = f"+{overfull} divisions (overfull)"
         elif underfull is not None and underfull > 0:
             amount_str = f"-{underfull} divisions (underfull)"
-            
+
         reason_codes = issue.get("code") or "N/A"
-        
+
         table_rows.append(f"""<tr>
           <td><code>{html.escape(str(part_id))}</code></td>
           <td>Measure {html.escape(str(m_num))} (index {m_idx})</td>
@@ -3172,15 +3170,15 @@ def _write_musicxml_unrecoverable_timing_html(
           <td><code>{html.escape(amount_str)}</code></td>
           <td><code>{html.escape(str(reason_codes))}</code></td>
         </tr>""")
-        
+
     issues_html = "\n".join(table_rows) if table_rows else """<tr><td colspan="7" class="empty-state">No detailed measure timing issue rows.</td></tr>"""
-    
+
     secondary_html = ""
     if report_json["secondary_reason_codes"]:
         secondary_html = "\n".join(f"<li><code>{html.escape(str(r))}</code></li>" for r in report_json["secondary_reason_codes"])
     else:
         secondary_html = "<li><em>None</em></li>"
-        
+
     blocking_html = ""
     if report_json["calibration_blocking_reasons"]:
         blocking_html = ", ".join(f"<code>{html.escape(str(r))}</code>" for r in report_json["calibration_blocking_reasons"])
@@ -3622,9 +3620,7 @@ def build_pdf_edge_boundary_report(raw: dict[str, Any]) -> dict[str, Any] | None
         msg = w.get("message", "")
         # Check system and page markers in warning or fields
         is_match = False
-        if w.get("system_index") == sys_idx and w.get("page_index") == page_idx:
-            is_match = True
-        elif f"system {sys_idx}" in msg and f"page {page_idx}" in msg:
+        if (w.get("system_index") == sys_idx and w.get("page_index") == page_idx) or (f"system {sys_idx}" in msg and f"page {page_idx}" in msg):
             is_match = True
         if is_match and code:
             sys_warning_codes.append(code)

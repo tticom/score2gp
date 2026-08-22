@@ -53,7 +53,7 @@ def test_agent_verify_report_generation(tmp_path, monkeypatch) -> None:
     # Run main and verify files written
     try:
         agent_verify.main()
-    except SystemExit as e:
+    except SystemExit:
         # It fails fast or fails overall since step 1 returns PASS but we can check if file is written
         pass
 

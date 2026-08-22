@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import pytest
 from pathlib import Path
 from score2gp.pdf import _extract_pdf_text_candidates
 from score2gp.tabraw import parse_fret_text

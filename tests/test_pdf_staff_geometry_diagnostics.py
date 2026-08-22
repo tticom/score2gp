@@ -1,13 +1,11 @@
 from __future__ import annotations
 import json
 from typing import Any
-import pytest
 from score2gp.pdf_geometry import _LineSegment
 from score2gp.pdf_staff_geometry import (
     NotationStaffGeometry,
     LocalPrimitivesSummary,
-    NotationStaffDiagnostics,
-    PdfStaffNotationGeometryDiagnostics
+    NotationStaffDiagnostics
 )
 from score2gp.pdf_staff_notation_diagnostics import build_notation_diagnostics
 
@@ -386,7 +384,7 @@ def test_inspect_pdf_integration_boundary(monkeypatch, tmp_path) -> None:
         def get_text(self, kind: str) -> Any:
             if kind == "blocks":
                 return [(60.0, 95.0, 80.0, 115.0, "SECRET_LYRICS_DO_NOT_LEAK", 0, 0)]
-            elif kind == "dict":
+            if kind == "dict":
                 return {
                     "blocks": [
                         {
@@ -707,7 +705,7 @@ def test_inspect_pdf_positive_control_notation_staff_detected(tmp_path) -> None:
 
 
 def test_diagnostics_morphology_schema_serialization() -> None:
-    from score2gp.pdf_staff_geometry import NotationStaffMorphology, NotationStaffDiagnostics, NotationStaffGeometry, LocalPrimitivesSummary
+    from score2gp.pdf_staff_geometry import NotationStaffMorphology
 
     geom = NotationStaffGeometry(
         page_index=1,

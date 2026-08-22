@@ -1,4 +1,3 @@
-import pytest
 from score2gp.pdf_geometry_candidates import LeftMarginPrimitiveCandidate
 from score2gp.logical_clef_candidate_classifier import classify_logical_clef_candidate
 

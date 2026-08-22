@@ -10,7 +10,6 @@ from score2gp.pdf_tab_duration_associator import (
     SpatialBBox,
     associate_stems_to_events,
     resolve_tab_duration_evidence_for_events,
-    AmbiguityDiagnostic,
 )
 
 class MissingRhythmGeometry(Exception):
@@ -32,7 +31,7 @@ def extract_geometry_candidates(diagnostics: NotationStaffDiagnostics) -> Geomet
             left, right = strokes[0], strokes[-1]
             w_left = max(0.1, left.x1 - left.x0)
             w_right = max(0.1, right.x1 - right.x0)
-            
+
             if w_left > 1.5 and w_right < 1.0:
                 repeats.append({
                     "page_index": cluster.page_index,
@@ -51,7 +50,7 @@ def extract_geometry_candidates(diagnostics: NotationStaffDiagnostics) -> Geomet
                     "x1": right.x1, "y1": max(left.y1, right.y1),
                     "direction": "end"
                 })
-                
+
     return GeometryCandidateSet(
         left_margin_primitives=list(diagnostics.left_margin_candidates or []),
         x_aligned_clusters=list(diagnostics.x_aligned_cluster_candidates or []),

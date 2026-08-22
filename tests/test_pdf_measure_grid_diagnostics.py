@@ -1,4 +1,3 @@
-import pytest
 import fitz
 from score2gp.pdf_staff_notation_diagnostics import extract_measure_grid_diagnostics_dict
 

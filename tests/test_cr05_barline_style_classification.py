@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 import fitz
-import pytest
 
 from score2gp.pdf import filter_tab_barline_candidates
 from score2gp.pdf_geometry import _LineSegment, _drawing_segments

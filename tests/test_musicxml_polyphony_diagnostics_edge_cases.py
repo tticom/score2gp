@@ -220,8 +220,7 @@ def test_slur_tie_continuation_diagnostics() -> None:
 def test_duplicate_staff_tab_voice_detected() -> None:
     # Voice 1 and Voice 5 with identical onsets, durations, and stable 12-semitone pitch offset
     from score2gp.musicxml import (
-        MusicXmlImport, MusicXmlPart, MusicXmlMeasure, MusicXmlNote, MusicXmlPitch, MusicXmlMetadata,
-        classify_musicxml_voice_duplication
+        MusicXmlPart, MusicXmlMeasure, MusicXmlNote, MusicXmlPitch, classify_musicxml_voice_duplication
     )
     from score2gp.ir import TimeSignature
 
@@ -381,8 +380,7 @@ def test_genuine_independent_polyphony_still_refuses() -> None:
 
 def test_valid_chord_stack_not_misclassified_as_duplicate() -> None:
     from score2gp.musicxml import (
-        MusicXmlImport, MusicXmlPart, MusicXmlMeasure, MusicXmlNote, MusicXmlPitch, MusicXmlMetadata,
-        classify_musicxml_voice_duplication
+        MusicXmlPart, MusicXmlMeasure, MusicXmlNote, MusicXmlPitch, classify_musicxml_voice_duplication
     )
     from score2gp.ir import TimeSignature
 
@@ -458,8 +456,7 @@ def test_partial_duplicate_emits_warning() -> None:
 
 def test_same_voice_timing_error_still_refuses_after_dedup() -> None:
     from score2gp.musicxml import (
-        MusicXmlImport, MusicXmlPart, MusicXmlMeasure, MusicXmlNote, MusicXmlPitch, MusicXmlMetadata,
-        deduplicate_suspected_staff_tab_voices
+        MusicXmlImport, MusicXmlPart, MusicXmlMeasure, MusicXmlNote, MusicXmlPitch, MusicXmlMetadata
     )
     from score2gp.ir import TimeSignature
     from score2gp.build_ir import build_ir_with_diagnostics_from_imports, BuildIrInputRiskError
@@ -545,8 +542,7 @@ def test_multiple_candidate_duplicate_pairs_refuse_as_ambiguous() -> None:
 
 def test_duplicate_staff_tab_unstable_pitch_offset_rejected() -> None:
     from score2gp.musicxml import (
-        MusicXmlImport, MusicXmlPart, MusicXmlMeasure, MusicXmlNote, MusicXmlPitch, MusicXmlMetadata,
-        classify_musicxml_voice_duplication
+        MusicXmlPart, MusicXmlMeasure, MusicXmlNote, MusicXmlPitch, classify_musicxml_voice_duplication
     )
     from score2gp.ir import TimeSignature
 

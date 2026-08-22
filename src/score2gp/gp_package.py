@@ -10,10 +10,9 @@ from xml.etree import ElementTree as ET
 from .gpif import build_gpif, gpif_warnings
 from .version_adapter import adapt_gpif, get_version_file_content
 from .ir import (
-    ScoreIR, ScoreBooklet, Track, Tuning, TuningString, Mixer, SoundConfig,
-    TrackLayoutPreferences, TrackExpression, TrackAutomation, ScoreLayout,
+    ScoreIR, ScoreBooklet, Track, Tuning, TuningString, Mixer, TrackLayoutPreferences, TrackExpression, TrackAutomation, ScoreLayout,
     Metadata, Tempo, TimeSignature, KeySignature, Bar, Event, Note,
-    BoundingBox, Provenance, ConversionInfo, MasterMixer, PipelinePresetCascade,
+    MasterMixer, PipelinePresetCascade,
     BookletCoverPage, BarNumberingOverride, BookletPagination,
     ExpressionController, ExpressionControllerPoint, BendPoint, BendTechnique,
     RepeatCountOverlay, TempoAutomation
@@ -175,7 +174,7 @@ def validate_gp(path: str | Path) -> dict[str, Any]:
             try:
                 ET.fromstring(zf.read("Content/score.gpif"))
                 result["xml_well_formed"] = True
-            except Exception as exc:  # noqa: BLE001 - report parser detail to caller
+            except Exception as exc:
                 result["errors"].append(f"GPIF XML is not well formed: {exc}")
     except zipfile.BadZipFile:
         result["errors"].append("not a zip package")
@@ -434,10 +433,9 @@ def extract_score_ir_from_gp(path: str | Path) -> ScoreIR | ScoreBooklet:
                 cover_page=cover_page,
                 scores=scores
             )
-        else:
-            xml_content = zf.read("Content/score.gpif")
-            root = ET.fromstring(xml_content)
-            return _extract_score_ir_from_gpif_root(root)
+        xml_content = zf.read("Content/score.gpif")
+        root = ET.fromstring(xml_content)
+        return _extract_score_ir_from_gpif_root(root)
 
 
 def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
@@ -2011,23 +2009,22 @@ def validate_roundtrip(path: str | Path, original: ScoreIR | ScoreBooklet) -> di
             "recovered_summary": {}
         }
 
-    else:
-        if isinstance(recovered, ScoreBooklet):
-            return {
-                "valid": False,
-                "errors": [f"type mismatch: original is ScoreIR, recovered is ScoreBooklet"],
-                "original_summary": {},
-                "recovered_summary": {}
-            }
-        original_sum = semantic_scoreir_summary(original)
-        recovered_sum = semantic_scoreir_summary(recovered)
-        errors = _validate_score_ir_roundtrip(original, recovered)
+    if isinstance(recovered, ScoreBooklet):
         return {
-            "valid": len(errors) == 0,
-            "errors": errors,
-            "original_summary": original_sum,
-            "recovered_summary": recovered_sum
+            "valid": False,
+            "errors": ["type mismatch: original is ScoreIR, recovered is ScoreBooklet"],
+            "original_summary": {},
+            "recovered_summary": {}
         }
+    original_sum = semantic_scoreir_summary(original)
+    recovered_sum = semantic_scoreir_summary(recovered)
+    errors = _validate_score_ir_roundtrip(original, recovered)
+    return {
+        "valid": len(errors) == 0,
+        "errors": errors,
+        "original_summary": original_sum,
+        "recovered_summary": recovered_sum
+    }
 
 
 def _validate_score_ir_roundtrip(original: ScoreIR, recovered: ScoreIR) -> list[str]:

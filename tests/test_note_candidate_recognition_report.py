@@ -132,8 +132,8 @@ def test_note_candidate_recognition_report_eighth_note_fixture():
         # Intended explicit wide-curve flag is at x=115..125, y=185..210.
         # Allow +/- 5 margin for pdf bounds extraction rounding.
         # Y must be < 210 to avoid accepting lower notehead quadrants which sit at y=210..220.
-        if (110.0 <= bbox[0] and bbox[2] <= 130.0 and
-            180.0 <= bbox[1] and bbox[3] <= 215.0 and
+        if (bbox[0] >= 110.0 and bbox[2] <= 130.0 and
+            bbox[1] >= 180.0 and bbox[3] <= 215.0 and
             (bbox[3] - bbox[1]) >= 15.0): # must have height similar to the full stem/flag (25)
             explicit_flag_found = True
             break
@@ -380,7 +380,6 @@ def test_compose_eighth_note_candidates_positive_boundaries():
 def test_ledger_line_duplicate_beam_suppression_cross_page(tmp_path, monkeypatch):
     import fitz
     from score2gp.whole_note_recogniser import run_recognition_on_file
-    import score2gp.whole_note_recogniser as wnr
 
     # Create a dummy 2-page PDF
     pdf_path = tmp_path / "dummy.pdf"
@@ -417,21 +416,20 @@ def test_ledger_line_duplicate_beam_suppression_cross_page(tmp_path, monkeypatch
                     }
                 ]
             }
-        else:
-            return {
-                "staves": [
-                    {
-                        "staff": {"system_index": 1, "staff_index": 1, "x0": 0.0, "x1": 100.0, "y0": 0.0, "y1": 100.0},
-                        "x_aligned_cluster_candidates": [],
-                        "flag_beam_candidates": {
-                            "flags": [],
-                            "beams": [
-                                {"bbox": [10.0, 20.0, 20.0, 20.0], "primitive_kind": "non_staff_horizontal", "width": 10.0, "height": 0.0}
-                            ]
-                        }
+        return {
+            "staves": [
+                {
+                    "staff": {"system_index": 1, "staff_index": 1, "x0": 0.0, "x1": 100.0, "y0": 0.0, "y1": 100.0},
+                    "x_aligned_cluster_candidates": [],
+                    "flag_beam_candidates": {
+                        "flags": [],
+                        "beams": [
+                            {"bbox": [10.0, 20.0, 20.0, 20.0], "primitive_kind": "non_staff_horizontal", "width": 10.0, "height": 0.0}
+                        ]
                     }
-                ]
-            }
+                }
+            ]
+        }
 
     import score2gp.pdf_staff_notation_diagnostics as psnd
     monkeypatch.setattr(psnd, "extract_notation_diagnostics_dict", mock_extract)
@@ -636,9 +634,7 @@ def test_map_ledger_lines_to_note_candidates_edge_cases():
                 assert cand.get("attached_ledger_line_candidate_ids") == ["l11"]
             elif cand.get("candidate_id") == "h1":
                 assert cand.get("attached_ledger_line_candidate_ids") == ["l12"]
-            elif cand.get("candidate_id") == "e2":
-                assert cand.get("attached_ledger_line_candidate_ids") == ["l13"]
-            elif cand.get("candidate_id") == "q8":
+            elif cand.get("candidate_id") == "e2" or cand.get("candidate_id") == "q8":
                 assert cand.get("attached_ledger_line_candidate_ids") == ["l13"]
             else:
                 assert "attached_ledger_line_candidate_ids" not in cand
@@ -1084,7 +1080,7 @@ def test_clef_resolved_pitch_coverage_report_out_of_range_positions():
         {"symbol_type": "quarter_note_candidate", "candidate_id": "n_out_2", "page_index": 1, "system_index": 1, "staff_index": 1, "staff_position_index": 16},
         # Extreme position
         {"symbol_type": "quarter_note_candidate", "candidate_id": "n_out_3", "page_index": 1, "system_index": 1, "staff_index": 1, "staff_position_index": 100},
-        
+
         # Valid missing ledger line support: -7
         {"symbol_type": "quarter_note_candidate", "candidate_id": "n_ledger_1", "page_index": 1, "system_index": 1, "staff_index": 1, "staff_position_index": -7},
         # Valid missing ledger line support: 15

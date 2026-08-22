@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import pytest
 from score2gp.pdf import _LineSegment, _is_coherent_large_tab_group, _tab_line_groups, classify_staff_line_group
 from score2gp.tabraw import _candidate_kind
 
@@ -12,15 +11,15 @@ def test_large_spaced_tab_staff_is_detected() -> None:
     for i in range(6):
         # x0=100.0, x1=600.0 (width 500.0)
         lines.append(_LineSegment(100.0, y_start + i * spacing, 600.0, y_start + i * spacing))
-    
+
     # 1. Test helper directly
     assert _is_coherent_large_tab_group(lines) is True
-    
+
     # 2. Test _tab_line_groups
     groups = _tab_line_groups(lines)
     assert len(groups) == 1
     assert len(groups[0]) == 6
-    
+
     # 3. Test classify_staff_line_group
     assert classify_staff_line_group(groups[0], page=None) == "tab"
 
@@ -31,9 +30,9 @@ def test_inconsistent_large_lines_are_rejected() -> None:
     lines = []
     for y in ys:
         lines.append(_LineSegment(100.0, y, 600.0, y))
-        
+
     assert _is_coherent_large_tab_group(lines) is False
-    
+
     # Classification should be ambiguous
     assert classify_staff_line_group(lines, page=None) == "ambiguous"
 
@@ -51,7 +50,7 @@ def test_large_spaced_lines_with_poor_overlap_are_rejected() -> None:
         _LineSegment(300.0, 208.0, 600.0, 208.0),
         _LineSegment(350.0, 235.0, 650.0, 235.0),
     ]
-    
+
     assert _is_coherent_large_tab_group(lines) is False
     assert classify_staff_line_group(lines, page=None) == "ambiguous"
 

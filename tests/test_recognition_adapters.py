@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import pytest
 from pathlib import Path
 from score2gp.notation_omr.evidence import (
     SourceModality,

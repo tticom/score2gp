@@ -102,7 +102,7 @@ class StructuralSectionCandidate(BaseModel):
             raise ValueError("Must not inject a Section if the Y-offset heuristic exceeds the configured sensible default threshold (50 points)")
         text_lower = self.text.lower()
         known = {"chorus", "verse", "intro", "outro", "bridge", "solo", "section", "interlude", "pre-chorus", "prechorus", "coda"}
-        
+
         is_known = False
         for k in known:
             # Exact match, or starts with known label (e.g. "Chorus 1")
@@ -113,8 +113,7 @@ class StructuralSectionCandidate(BaseModel):
         if not is_known:
             if self.is_bold:
                 raise ValueError("Unrecognized bold text above the staff must be classified as standard lyrics, not a structural section")
-            else:
-                raise ValueError("Unrecognized text must not be classified as a structural section")
+            raise ValueError("Unrecognized text must not be classified as a structural section")
         return self
 
 class RepeatCandidate(BaseModel):
@@ -143,23 +142,23 @@ class GeometryCandidateSet(BaseModel):
             sections_raw = data.get("sections", [])
             lyrics_raw = data.get("lyrics", [])
             valid_sections = []
-            
+
             for s in sections_raw:
                 if isinstance(s, dict):
                     text_lower = s.get("text", "").lower()
                     y_offset = s.get("y_offset", 0.0)
                     is_bold = s.get("is_bold", False)
-                    
+
                     if abs(y_offset) > 50.0:
                         continue # Drop entirely per rules
-                        
+
                     known = {"chorus", "verse", "intro", "outro", "bridge", "solo", "section", "interlude", "pre-chorus", "prechorus", "coda"}
                     is_known = False
                     for k in known:
                         if text_lower == k or text_lower.startswith(k + " "):
                             is_known = True
                             break
-                            
+
                     if not is_known and is_bold:
                         # Fallback to lyric
                         lyrics_raw.append({
@@ -173,7 +172,7 @@ class GeometryCandidateSet(BaseModel):
                         valid_sections.append(s)
                 else:
                     valid_sections.append(s)
-            
+
             data["sections"] = valid_sections
             data["lyrics"] = lyrics_raw
         return data

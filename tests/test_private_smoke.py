@@ -3,7 +3,6 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import pytest
 
 # Add scripts to sys.path so we can import from it
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -126,7 +125,7 @@ def test_private_smoke_unrecoverable_timing_artifacts(tmp_path) -> None:
     )
 
     assert summary["timing_status"] == "failed"
-    
+
     # Verify that the unrecoverable reports exist on disk
     out_dir = tmp_path / "private_input_custom"
     assert (out_dir / "musicxml-unrecoverable-timing-report.json").exists()

@@ -2,7 +2,6 @@ import pytest
 from pydantic import ValidationError
 from score2gp.pdf_geometry_candidate_extractor import PdfGeometryCandidateExtractor
 from score2gp.pdf_staff_geometry import PrimitiveGeometryEvidence, XAlignedPrimitiveClusterEvidence
-from score2gp.pdf_geometry_candidates import LeftMarginPrimitiveCandidate
 
 def test_extract_left_margin_candidates_empty() -> None:
     extractor = PdfGeometryCandidateExtractor()

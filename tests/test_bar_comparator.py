@@ -12,7 +12,6 @@ from score2gp.compare import (
     compare_bar_scores,
     compact_bar_summary,
     format_mismatch_report,
-    load_bar_data,
 )
 from score2gp.ir import (
     Bar,

@@ -30,10 +30,10 @@ def _extract_note_candidates(page: Any, staves_diags: list['NotationStaffDiagnos
     def get_identity(y_center: float) -> tuple[int | None, int | None, int | None]:
         if not staves_diags:
             return None, None, None
-            
-        # We use nearest-center vertical distance as a heuristic to assign 
+
+        # We use nearest-center vertical distance as a heuristic to assign
         # candidate identity. This is a geometric inference rather than true
-        # extraction-context preservation, but it performs better than naive 
+        # extraction-context preservation, but it performs better than naive
         # tight-bounds overlap, particularly for ledger-line notes.
         best_staff = None
         min_dist = float('inf')
@@ -241,7 +241,7 @@ def _extract_note_candidates(page: Any, staves_diags: list['NotationStaffDiagnos
                                     aspect_ratio=round(aspect, 3),
                                     page_index=page_idx, system_index=sys_idx, staff_index=staff_idx
                                 ))
-    except Exception as e:
+    except Exception:
         import traceback; traceback.print_exc()
         pass
 
@@ -273,7 +273,7 @@ def _extract_note_candidates(page: Any, staves_diags: list['NotationStaffDiagnos
                                     origin_y=float(origin[1]),
                                     source_method="font_glyph_extraction"
                                 ))
-    except Exception as e:
+    except Exception:
         import traceback; traceback.print_exc()
         pass # Fail safely as required
 
@@ -446,7 +446,7 @@ def build_notation_diagnostics(
     drawings = page.get_drawings()
     try:
         text_dict = page.get_text("dict")
-    except Exception as e:
+    except Exception:
         import traceback; traceback.print_exc()
         text_dict = {}
 
@@ -870,7 +870,7 @@ def build_notation_diagnostics(
 
         sections = []
         staff_top_y = min(staff_geom.line_y_coords) if staff_geom.line_y_coords else staff_geom.y0
-        
+
         for block in text_dict.get("blocks", []):
             if block.get("type") == 0:
                 for line in block.get("lines", []):
@@ -936,7 +936,7 @@ def extract_notation_diagnostics_dict(page: Any, page_index: int) -> dict[str, A
             if hasattr(notation_diags, "model_dump")
             else notation_diags.dict()
         )
-    except Exception as e:
+    except Exception:
         import traceback; traceback.print_exc()
         return {"staves": [], "status": "pdf_notation_geometry_diagnostics_failed"}
 
@@ -949,7 +949,6 @@ def extract_structural_skeleton_diagnostics_dict(page: Any, page_index: int) -> 
         StructuralSkeletonPageDiagnostics,
         StructuralSkeletonDiagnostics
     )
-    import statistics
 
     try:
         notation_groups = _detect_notation_staff_groups(page)
@@ -1056,7 +1055,7 @@ def extract_structural_skeleton_diagnostics_dict(page: Any, page_index: int) -> 
             diagnostic_status="pass"
         )
         return StructuralSkeletonDiagnostics(pages=[page_diag]).model_dump()
-    except Exception as e:
+    except Exception:
         import traceback; traceback.print_exc()
         return {"pages": [], "failure_reasons": ["structural_skeleton_detection_failed"], "diagnostic_status": "fail"}
 
@@ -1153,7 +1152,7 @@ def extract_measure_grid_diagnostics_dict(page: Any, page_index: int) -> dict[st
         diag = MeasureGridDiagnostics(pages=mg_pages)
         return diag.model_dump()
 
-    except Exception as e:
+    except Exception:
         import traceback; traceback.print_exc()
         return {"pages": [], "failure_reasons": ["measure_grid_extraction_failed"], "diagnostic_status": "fail"}
 
@@ -1164,17 +1163,17 @@ def extract_candidate_measure_assignment_diagnostics_dict(page: Any, page_index:
         notation_diags_dict = extract_notation_diagnostics_dict(page, page_index)
         if notation_diags_dict.get("status") == "pdf_notation_geometry_diagnostics_failed":
             return {"assignments": [], "diagnostic_status": "fail", "failure_reasons": ["notation_diagnostics_failed"]}
-            
+
         measure_grid_dict = extract_measure_grid_diagnostics_dict(page, page_index)
         if measure_grid_dict.get("diagnostic_status") == "fail":
             return {"assignments": [], "diagnostic_status": "fail", "failure_reasons": ["measure_grid_diagnostics_failed"]}
-            
+
         for p in measure_grid_dict.get("pages", []):
             if p.get("page_index") == page_index and p.get("status") in ["fail", "unsupported"]:
                 return {"assignments": [], "diagnostic_status": "fail", "failure_reasons": ["measure_grid_diagnostics_failed"]}
-                
+
         assignments = []
-        
+
         staff_map = {}
         for p in measure_grid_dict.get("pages", []):
             if p.get("page_index") != page_index:
@@ -1184,16 +1183,16 @@ def extract_candidate_measure_assignment_diagnostics_dict(page: Any, page_index:
                 for staff in sys.get("staves", []):
                     staff_idx = staff.get("staff_index")
                     staff_map[(sys_idx, staff_idx)] = staff.get("measure_regions", [])
-                    
+
         def process_candidates(candidates_list, ctype):
             for c in candidates_list:
                 bbox = c.get("bbox")
                 p_idx = c.get("page_index")
                 sys_idx = c.get("system_index")
                 stf_idx = c.get("staff_index")
-                
+
                 center_x = (bbox[0] + bbox[2]) / 2.0
-                
+
                 if p_idx is None or sys_idx is None or stf_idx is None:
                     assignments.append(CandidateToMeasureAssignment(
                         candidate_type=ctype,
@@ -1205,7 +1204,7 @@ def extract_candidate_measure_assignment_diagnostics_dict(page: Any, page_index:
                         assignment_status="identity_none"
                     ))
                     continue
-                    
+
                 regions = staff_map.get((sys_idx, stf_idx))
                 if regions is None:
                     assignments.append(CandidateToMeasureAssignment(
@@ -1218,7 +1217,7 @@ def extract_candidate_measure_assignment_diagnostics_dict(page: Any, page_index:
                         assignment_status="staff_unmatched"
                     ))
                     continue
-                
+
                 if not regions:
                     assignments.append(CandidateToMeasureAssignment(
                         candidate_type=ctype,
@@ -1230,14 +1229,14 @@ def extract_candidate_measure_assignment_diagnostics_dict(page: Any, page_index:
                         assignment_status="out_of_bounds"
                     ))
                     continue
-                    
+
                 MEASURE_BOUNDARY_TOLERANCE_PT = 1.0
-                
+
                 sorted_regions = sorted(regions, key=lambda r: r.get("start_x", 0.0))
-                
+
                 first_start_x = sorted_regions[0].get("start_x", 0.0)
                 last_end_x = sorted_regions[-1].get("end_x", 0.0)
-                
+
                 if center_x < first_start_x or center_x > last_end_x:
                     assignments.append(CandidateToMeasureAssignment(
                         candidate_type=ctype,
@@ -1249,14 +1248,14 @@ def extract_candidate_measure_assignment_diagnostics_dict(page: Any, page_index:
                         assignment_status="out_of_bounds"
                     ))
                     continue
-                    
+
                 is_ambiguous = False
                 for i in range(len(sorted_regions) - 1):
                     boundary_x = sorted_regions[i].get("end_x", 0.0)
                     if abs(center_x - boundary_x) <= MEASURE_BOUNDARY_TOLERANCE_PT:
                         is_ambiguous = True
                         break
-                        
+
                 if is_ambiguous:
                     assignments.append(CandidateToMeasureAssignment(
                         candidate_type=ctype,
@@ -1268,7 +1267,7 @@ def extract_candidate_measure_assignment_diagnostics_dict(page: Any, page_index:
                         assignment_status="boundary_ambiguous"
                     ))
                     continue
-                    
+
                 matched_idx = -1
                 match_count = 0
                 for i, r in enumerate(sorted_regions):
@@ -1282,7 +1281,7 @@ def extract_candidate_measure_assignment_diagnostics_dict(page: Any, page_index:
                         if sx <= center_x <= ex:
                             matched_idx = i
                             match_count += 1
-                            
+
                 if match_count == 1:
                     assignments.append(CandidateToMeasureAssignment(
                         candidate_type=ctype,
@@ -1304,15 +1303,15 @@ def extract_candidate_measure_assignment_diagnostics_dict(page: Any, page_index:
                         center_x=round(center_x, 3),
                         assignment_status="boundary_ambiguous"
                     ))
-        
+
         process_candidates(notation_diags_dict.get("whole_note_candidates", []), "whole_note")
         process_candidates(notation_diags_dict.get("half_note_candidates", []), "half_note")
         process_candidates(notation_diags_dict.get("quarter_note_candidates", []), "quarter_note")
-        
+
         diag = CandidateMeasureAssignmentDiagnostics(assignments=assignments, diagnostic_status="pass", failure_reasons=[])
         return diag.model_dump()
-        
-    except Exception as e:
+
+    except Exception:
         return {"assignments": [], "diagnostic_status": "fail", "failure_reasons": ["assignment_extraction_failed"]}
 
 def extract_measure_bucket_diagnostics_dict(page: Any, page_index: int) -> dict[str, Any]:
@@ -1322,7 +1321,7 @@ def extract_measure_bucket_diagnostics_dict(page: Any, page_index: int) -> dict[
         assignment_diags_dict = extract_candidate_measure_assignment_diagnostics_dict(page, page_index)
         if assignment_diags_dict.get("diagnostic_status") == "fail":
             return {"buckets": [], "diagnostic_status": "fail", "failure_reasons": assignment_diags_dict.get("failure_reasons", ["upstream_failed"])}
-        
+
         grid_diags_dict = extract_measure_grid_diagnostics_dict(page, page_index)
         if grid_diags_dict.get("diagnostic_status") == "fail":
             return {"buckets": [], "diagnostic_status": "fail", "failure_reasons": grid_diags_dict.get("failure_reasons", ["upstream_grid_failed"])}
@@ -1347,7 +1346,7 @@ def extract_measure_bucket_diagnostics_dict(page: Any, page_index: int) -> dict[
             stf_idx = assignment.get("staff_index")
             mr_idx = assignment.get("measure_region_index")
             key = (p_idx, sys_idx, stf_idx, mr_idx)
-            
+
             if key in bucket_map:
                 bucket_map[key].append(MeasureBucketCandidate(
                     candidate_type=assignment.get("candidate_type"),
@@ -1359,13 +1358,13 @@ def extract_measure_bucket_diagnostics_dict(page: Any, page_index: int) -> dict[
                     measure_region_index=mr_idx,
                     assignment_status="assigned"
                 ))
-            
+
         CENTER_X_TIE_TOLERANCE_PT = 0.5
         buckets = []
         for key in sorted(bucket_map.keys()):
             p_idx, sys_idx, stf_idx, mr_idx = key
             candidates = bucket_map[key]
-            
+
             if not candidates:
                 buckets.append(MeasureBucket(
                     page_index=p_idx,
@@ -1378,15 +1377,15 @@ def extract_measure_bucket_diagnostics_dict(page: Any, page_index: int) -> dict[
                     failure_reasons=[]
                 ))
                 continue
-                
+
             candidates.sort(key=lambda c: (c.center_x, c.candidate_bbox[1], c.candidate_bbox[0], c.candidate_type))
-            
+
             bucket_status = "ordered"
             for i in range(len(candidates) - 1):
                 if candidates[i+1].center_x - candidates[i].center_x <= CENTER_X_TIE_TOLERANCE_PT:
                     bucket_status = "center_x_ambiguous"
                     break
-                    
+
             buckets.append(MeasureBucket(
                 page_index=p_idx,
                 system_index=sys_idx,
@@ -1400,5 +1399,5 @@ def extract_measure_bucket_diagnostics_dict(page: Any, page_index: int) -> dict[
 
         diag = MeasureBucketDiagnostics(buckets=buckets, diagnostic_status="pass", failure_reasons=[])
         return diag.model_dump()
-    except Exception as e:
+    except Exception:
         return {"buckets": [], "diagnostic_status": "fail", "failure_reasons": ["measure_bucket_extraction_failed"]}

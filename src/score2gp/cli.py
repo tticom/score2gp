@@ -659,18 +659,16 @@ def _convert_exit_code_for_error(exc: Exception) -> int:
     """
     if isinstance(exc, BuildIrInputRiskError):
         category = exc.category
-        if category == "pdf_only_tab_grouping_unsafe":
+        if category == "pdf_only_tab_grouping_unsafe" or category.startswith("ascii_") or "ascii" in category:
             return 4
-        elif category.startswith("ascii_") or "ascii" in category:
-            return 4
-        elif category in {
+        if category in {
             "pdf_input_class_scanned_pdf_unsupported",
             "pdf_input_class_no_extractable_tab_geometry",
             "pdf_input_class_drawn_tab_requires_barlines",
             "missing_pdf_grouping",
         } or category.startswith("pdf_"):
             return 2
-        elif category in {
+        if category in {
             "musicxml_timing_risk",
             "musicxml_scoreir_polyphony_gate_refused",
         } or category.startswith("musicxml_"):
@@ -967,7 +965,7 @@ def convert_command(
         pdf_summary = inspect_pdf_file(pdf, actual_work_dir / "inspect")
         summary["pdf"] = pdf_summary
     except Exception as exc:
-        warnings.append({"code": "pdf_inspect_failed", "message": f"PDF inspection failed: {str(exc)}", "severity": "error"})
+        warnings.append({"code": "pdf_inspect_failed", "message": f"PDF inspection failed: {exc!s}", "severity": "error"})
         write_warnings(actual_work_dir / "warnings.json", warnings)
         write_conversion_report(actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary)
         if json_report:
@@ -979,7 +977,7 @@ def convert_command(
                 work_dir=actual_work_dir,
                 error_type=type(exc).__name__,
                 refusal_code="pdf_inspect_failed",
-                recommended_action=f"Ensure the PDF is a valid born-digital document. Error: {str(exc)}",
+                recommended_action=f"Ensure the PDF is a valid born-digital document. Error: {exc!s}",
                 output_written=False,
                 strict=strict,
                     musicxml_sidecar_info=mxl_info,
@@ -1030,7 +1028,7 @@ def convert_command(
                 if w not in warnings:
                     warnings.append(w)
     except Exception as exc:
-        warnings.append({"code": "tab_extraction_failed", "message": f"Tab extraction failed: {str(exc)}", "severity": "error"})
+        warnings.append({"code": "tab_extraction_failed", "message": f"Tab extraction failed: {exc!s}", "severity": "error"})
         write_warnings(actual_work_dir / "warnings.json", warnings)
         write_conversion_report(actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary)
         if json_report:
@@ -1042,7 +1040,7 @@ def convert_command(
                 work_dir=actual_work_dir,
                 error_type=type(exc).__name__,
                 refusal_code="tab_extraction_failed",
-                recommended_action=f"Ensure the PDF contains extractable vector tab geometry. Error: {str(exc)}",
+                recommended_action=f"Ensure the PDF contains extractable vector tab geometry. Error: {exc!s}",
                 output_written=False,
                 strict=strict,
                     musicxml_sidecar_info=mxl_info,
@@ -1126,7 +1124,7 @@ def convert_command(
                 for w in alignment.warnings:
                     warnings.append(w.model_dump(mode="json", exclude_none=True))
         except Exception as exc:
-            warnings.append({"code": "ascii_alignment_failed", "message": f"ASCII/MusicXML alignment failed: {str(exc)}", "severity": "error"})
+            warnings.append({"code": "ascii_alignment_failed", "message": f"ASCII/MusicXML alignment failed: {exc!s}", "severity": "error"})
             write_warnings(actual_work_dir / "warnings.json", warnings)
             write_conversion_report(actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary)
             if json_report:
@@ -1138,7 +1136,7 @@ def convert_command(
                     work_dir=actual_work_dir,
                     error_type=type(exc).__name__,
                     refusal_code="ascii_alignment_failed",
-                    recommended_action=f"Verify alignment parameters. Error: {str(exc)}",
+                    recommended_action=f"Verify alignment parameters. Error: {exc!s}",
                     output_written=False,
                     strict=strict,
                     musicxml_sidecar_info=mxl_info,
@@ -1261,7 +1259,7 @@ def convert_command(
 
         raise typer.Exit(exit_code)
     except Exception as exc:
-        warnings.append({"code": "build_ir_failed", "message": f"ScoreIR generation failed: {str(exc)}", "severity": "error"})
+        warnings.append({"code": "build_ir_failed", "message": f"ScoreIR generation failed: {exc!s}", "severity": "error"})
         write_warnings(actual_work_dir / "warnings.json", warnings)
         write_conversion_report(actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary)
         if json_report:
@@ -1279,7 +1277,7 @@ def convert_command(
                 work_dir=actual_work_dir,
                 error_type=type(exc).__name__,
                 refusal_code="build_ir_failed",
-                recommended_action=f"ScoreIR generation failed. Error: {str(exc)}",
+                recommended_action=f"ScoreIR generation failed. Error: {exc!s}",
                 output_written=False,
                 strict=strict,
                     musicxml_sidecar_info=mxl_info,
@@ -1314,7 +1312,7 @@ def convert_command(
                 "warning_count": len(gp_warnings),
             }
         except Exception as exc:
-            warnings.append({"code": "gp_write_failed", "message": f"Guitar Pro package writing failed: {str(exc)}", "severity": "error"})
+            warnings.append({"code": "gp_write_failed", "message": f"Guitar Pro package writing failed: {exc!s}", "severity": "error"})
             write_warnings(actual_work_dir / "warnings.json", warnings)
             write_conversion_report(actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary)
             if json_report:
@@ -1332,7 +1330,7 @@ def convert_command(
                     work_dir=actual_work_dir,
                     error_type=type(exc).__name__,
                     refusal_code="gp_write_failed",
-                    recommended_action=f"Check the ScoreIR output and template validity. Error: {str(exc)}",
+                    recommended_action=f"Check the ScoreIR output and template validity. Error: {exc!s}",
                     output_written=False,
                     strict=strict,
                     musicxml_sidecar_info=mxl_info,

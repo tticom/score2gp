@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typer.testing import CliRunner
-import pytest
 
 from score2gp.cli import app, _convert_exit_code_for_error
 from score2gp.build_ir import BuildIrInputRiskError
@@ -46,7 +45,7 @@ def test_cli_convert_missing_pdf(tmp_path) -> None:
     workdir = tmp_path / "workdir"
     out_gp = tmp_path / "output.gp"
     non_existent_pdf = tmp_path / "non_existent.pdf"
-    
+
     result = CliRunner().invoke(
         app,
         [
@@ -69,7 +68,7 @@ def test_cli_convert_missing_musicxml(tmp_path) -> None:
     # 4. Missing MusicXML path exits 1
     workdir = tmp_path / "workdir"
     out_gp = tmp_path / "output.gp"
-    
+
     result = CliRunner().invoke(
         app,
         [
@@ -91,7 +90,7 @@ def test_cli_convert_layout_refusal(tmp_path) -> None:
     workdir = tmp_path / "workdir"
     out_gp = tmp_path / "output.gp"
     json_report = tmp_path / "report.json"
-    
+
     result = CliRunner().invoke(
         app,
         [
@@ -111,7 +110,7 @@ def test_cli_convert_layout_refusal(tmp_path) -> None:
     )
     assert result.exit_code == 2, result.output
     assert not out_gp.exists()
-    
+
     # 10. Failure path writes JSON report but does not write GP
     assert json_report.exists()
     report = json.loads(json_report.read_text(encoding="utf-8"))
@@ -125,7 +124,7 @@ def test_cli_convert_timing_refusal(tmp_path) -> None:
     workdir = tmp_path / "workdir"
     out_gp = tmp_path / "output.gp"
     json_report = tmp_path / "report.json"
-    
+
     result = CliRunner().invoke(
         app,
         [
@@ -145,7 +144,7 @@ def test_cli_convert_timing_refusal(tmp_path) -> None:
     )
     assert result.exit_code == 3, result.output
     assert not out_gp.exists()
-    
+
     assert json_report.exists()
     report = json.loads(json_report.read_text(encoding="utf-8"))
     assert report["status"] == "refused"
@@ -158,7 +157,7 @@ def test_cli_convert_success(tmp_path) -> None:
     workdir = tmp_path / "workdir"
     out_gp = tmp_path / "output.gp"
     json_report = tmp_path / "report.json"
-    
+
     result = CliRunner().invoke(
         app,
         [
@@ -178,7 +177,7 @@ def test_cli_convert_success(tmp_path) -> None:
     assert result.exit_code == 0, result.output
     assert out_gp.exists()
     assert json_report.exists()
-    
+
     report = json.loads(json_report.read_text(encoding="utf-8"))
     assert report["status"] == "success"
     assert report["exit_code"] == 0
@@ -331,7 +330,7 @@ def test_cli_convert_hash_refusal_contains_specific_remediation_hint(tmp_path) -
         alignment = original_align(*args, **kwargs)
         # Mutate to force a stale hash mismatch refusal (using a 64-character mismatching hash)
         alignment.source_pdf_hash = "a" * 64
-        if "out_dir" in kwargs and kwargs["out_dir"]:
+        if kwargs.get("out_dir"):
             out_path = Path(kwargs["out_dir"]) / "ascii_musicxml_alignment.json"
             alignment.to_json_file(out_path)
         return alignment
@@ -387,7 +386,7 @@ def test_cli_convert_hash_refusal_does_not_print_full_hashes_in_remediation(tmp_
         # Mutate to force a stale hash mismatch refusal on both PDF and MusicXML (using 64-character hashes)
         alignment.source_pdf_hash = "a" * 64
         alignment.source_musicxml_hash = "b" * 64
-        if "out_dir" in kwargs and kwargs["out_dir"]:
+        if kwargs.get("out_dir"):
             out_path = Path(kwargs["out_dir"]) / "ascii_musicxml_alignment.json"
             alignment.to_json_file(out_path)
         return alignment
@@ -436,7 +435,7 @@ def test_cli_convert_editable_draft_success(tmp_path) -> None:
     workdir = tmp_path / "workdir"
     out_gp = tmp_path / "output.gp"
     json_report = tmp_path / "report.json"
-    
+
     result = CliRunner().invoke(
         app,
         [
@@ -459,7 +458,7 @@ def test_cli_convert_editable_draft_success(tmp_path) -> None:
     report = json.loads(json_report.read_text(encoding="utf-8"))
     assert report.get("pdf_only_diagnostics", {}).get("inferred_rhythm_status") == "defaulted_placeholder"
 
-    
+
     gpif_content = _read_score_gpif(out_gp)
     assert "Editable draft generated from PDF tablature" in gpif_content
     assert "Rhythms defaulted to quarter notes" in gpif_content
@@ -474,7 +473,6 @@ def test_cli_convert_editable_draft_four_event_bar(tmp_path) -> None:
     # Use a synthetic 4-event bar mock in TabRaw (fits measure capacity exactly in editable draft)
     from score2gp.tabraw import TabRaw, TabCandidate
     from score2gp.ir import BoundingBox
-    import json
 
     tabraw = TabRaw(
         candidates=[

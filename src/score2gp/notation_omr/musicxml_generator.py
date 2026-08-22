@@ -3,7 +3,6 @@
 from __future__ import annotations
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
-from pathlib import Path
 from .timeline import build_staff_timeline_preview
 
 KEY_FIFTHS = {
@@ -134,7 +133,7 @@ def generate_musicxml_from_omr(
     for m_data in preview["measures"]:
         if not m_data.get("valid", True):
             raise ValueError(f"Capacity mismatch: Measure {m_data['measure_index']} is invalid")
-        
+
         m_idx = m_data["measure_index"]
         measure = ET.SubElement(part, "measure", number=str(m_idx))
 
@@ -174,7 +173,7 @@ def generate_musicxml_from_omr(
         for i, ev in enumerate(v1_events):
             pitch_data = parse_resolved_pitch(ev.get("resolved_pitch"))
             is_note = "note" in ev.get("symbol_type", "")
-            
+
             if is_note and pitch_data is None:
                 continue
 
@@ -241,7 +240,7 @@ def generate_musicxml_from_omr(
             for i, ev in enumerate(v2_events):
                 pitch_data = parse_resolved_pitch(ev.get("resolved_pitch"))
                 is_note = "note" in ev.get("symbol_type", "")
-                
+
                 if is_note and pitch_data is None:
                     continue
 

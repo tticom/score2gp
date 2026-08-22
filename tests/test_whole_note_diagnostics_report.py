@@ -1,4 +1,3 @@
-import pytest
 from pathlib import Path
 
 from scripts.whole_note_diagnostics_report import run_diagnostics_on_file

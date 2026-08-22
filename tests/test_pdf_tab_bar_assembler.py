@@ -8,7 +8,7 @@ from pdf_tab_test_helpers import make_pdf_quarter_rest_candidate, make_pdf_tab_c
 from score2gp.build_ir import BuildIrInputRiskError, build_ir_from_tabraw_only
 from score2gp.ir import DEFAULT_TICKS_PER_QUARTER
 from score2gp.pdf_tab_bar_assembler import PdfTabBarAssemblerError, assemble_pdf_tab_bar
-from score2gp.tabraw import TabCandidate, TabRaw
+from score2gp.tabraw import TabRaw
 
 
 def test_assemble_pdf_tab_bar_empty() -> None:
@@ -1080,8 +1080,6 @@ def test_pdf_tab_helpers_isolation() -> None:
 
 def test_split_tab_candidates_by_floating_barlines() -> None:
     from score2gp.pdf_tab_bar_assembler import split_tab_candidates_by_floating_barlines
-    from score2gp.tabraw import TabCandidate
-    from score2gp.pdf_geometry import _LineSegment
 
     cand1 = make_pdf_tab_candidate()
     cand1.x = 20.0

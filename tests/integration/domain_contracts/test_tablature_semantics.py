@@ -1,6 +1,6 @@
 import pytest
 from pathlib import Path
-from score2gp.tabraw import TabRaw, TabCandidate
+from score2gp.tabraw import TabRaw
 
 FIXTURES_DIR = Path(__file__).parent.parent.parent / "fixtures" / "tabraw"
 
@@ -8,10 +8,10 @@ def test_tablature_string_and_fret_bounds():
     # Load a valid synthetic tabraw fixture
     tabraw_path = FIXTURES_DIR / "tiny_single_bar_tabraw.json"
     assert tabraw_path.exists()
-    
+
     tabraw = TabRaw.from_json_file(tabraw_path)
     assert len(tabraw.candidates) > 0
-    
+
     # Domain Contract: String numbers must strictly fall within standard guitar string range [1, 6]
     # and fret numbers must be valid playable integers [0, 24]
     for candidate in tabraw.candidates:
@@ -24,7 +24,7 @@ def test_invalid_string_rejection():
     # Load an invalid string or fret candidate to verify it is caught by validation rules
     bad_fret_path = FIXTURES_DIR / "invalid_tabraw_bad_fret.json"
     assert bad_fret_path.exists()
-    
+
     # Domain Contract: Candidates with invalid strings or frets should raise validation/semantic warnings
     # or be rejected cleanly by the TabRaw Pydantic schema
     from pydantic import ValidationError
@@ -36,7 +36,7 @@ def test_multi_digit_fret_grouping():
     # never parsed as separate 1 and 0 events at slightly offset positions.
     tabraw_path = FIXTURES_DIR / "tiny_single_bar_tabraw.json"
     tabraw = TabRaw.from_json_file(tabraw_path)
-    
+
     # Assert that no concurrent overlapping fret candidates representing fragmented digits exist
     # (i.e. x-coordinate boundaries for characters of a single fret are cleanly merged)
     for c1 in tabraw.candidates:

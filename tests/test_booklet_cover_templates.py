@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import json
 import zipfile
-from pathlib import Path
 from xml.etree import ElementTree as ET
 
 from score2gp.gp_package import write_gp, extract_score_ir_from_gp, validate_roundtrip
-from score2gp.ir import ScoreBooklet, BookletCoverPage, BarNumberingOverride
+from score2gp.ir import ScoreBooklet
 
 
 def test_booklet_cover_page_and_bar_numbering_roundtrip(tmp_path) -> None:
@@ -64,7 +63,7 @@ def test_booklet_cover_page_and_bar_numbering_roundtrip(tmp_path) -> None:
         bk_node = score_root.find(".//Score/Booklet")
         assert bk_node is not None
         assert bk_node.get("title") == "Synthetic Multi-Movement Cover Template Booklet"
-        
+
         cp_node = bk_node.find("CoverPage")
         assert cp_node is not None
         assert cp_node.get("enabled") == "true"

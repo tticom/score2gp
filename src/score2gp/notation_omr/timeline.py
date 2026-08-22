@@ -1,7 +1,7 @@
 """Staff timeline preview generation and topologically locked bar timelines."""
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
@@ -49,7 +49,7 @@ def resolve_tuplet_duration(c: dict[str, Any], base_dur: int) -> int:
                     parts = ratio.split(":")
                     actual, normal = int(parts[0]), int(parts[1])
         elif hasattr(tuplet, "ratio"):
-            ratio = getattr(tuplet, "ratio")
+            ratio = tuplet.ratio
             if isinstance(ratio, (tuple, list)) and len(ratio) == 2:
                 actual, normal = ratio[0], ratio[1]
             elif isinstance(ratio, str) and ":" in ratio:
@@ -355,9 +355,7 @@ def build_staff_timeline_preview(
                     curr_e = v_evts[idx]
                     next_e = v_evts[idx + 1]
                     if curr_e["start_tick"] == next_e["start_tick"]:
-                        if curr_e["duration_ticks"] != next_e["duration_ticks"]:
-                            invalid = True
-                        elif curr_e["is_rest"] != next_e["is_rest"]:
+                        if curr_e["duration_ticks"] != next_e["duration_ticks"] or curr_e["is_rest"] != next_e["is_rest"]:
                             invalid = True
                     elif curr_e["start_tick"] < next_e["start_tick"]:
                         if curr_e["start_tick"] + curr_e["duration_ticks"] > next_e["start_tick"]:

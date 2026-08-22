@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import pytest
-import json
 from pathlib import Path
 from score2gp.notation_omr.pipeline import run_recognition_on_file
 
@@ -14,10 +12,10 @@ def test_private_fixture_lesson6_timeline_integration() -> None:
     result = run_recognition_on_file(lesson6_pdf, assume_treble_clef=True)
     assert result is not None
     assert "timeline_preview" in result
-    
+
     previews = result["timeline_preview"]
     assert len(previews) > 0
-    
+
     # Verify the structure is correct without synthetic mutation
     for preview in previews:
         assert "measures" in preview
