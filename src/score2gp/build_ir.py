@@ -3930,7 +3930,7 @@ def _attach_symbols_and_techniques(score: ScoreIR, tabraw: TabRaw) -> None:
                 bar_x = None
                 for ev in bar.events:
                     for prov in ev.provenance:
-                        if prov.page_index == page and prov.system_index == sys_idx:
+                        if prov.page == page and prov.system_id == str(sys_idx):
                             if "x" in prov.raw:
                                 bar_x = prov.raw["x"]
                                 break
@@ -3958,7 +3958,7 @@ def _attach_symbols_and_techniques(score: ScoreIR, tabraw: TabRaw) -> None:
                 bar_x = None
                 for ev in bar.events:
                     for prov in ev.provenance:
-                        if prov.page_index == page and prov.system_index == sys_idx:
+                        if prov.page == page and prov.system_id == str(sys_idx):
                             if "x" in prov.raw:
                                 bar_x = prov.raw["x"]
                                 break

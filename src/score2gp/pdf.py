@@ -255,7 +255,7 @@ def extract_tab(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
     if "floating_barlines" in meta:
         raw["floating_barlines"] = meta["floating_barlines"]
     raw["structural_signals"] = {}
-    for page in meta.get("pages", []):
+    for page in inspection.get("pages", []):
         for gc in page.get("geometry_candidates", []):
             if "sections" not in raw["structural_signals"]:
                 raw["structural_signals"]["sections"] = []
