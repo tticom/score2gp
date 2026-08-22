@@ -103,6 +103,9 @@ def test_extract_geometry_candidates_transfers_populated_diagnostic_candidates()
                 "font_size": None,
             }
         ],
+        "sections": [],
+        "repeats": [],
+        "lyrics": [],
         "x_aligned_clusters": [
             {
                 "page_index": 1,
@@ -240,3 +243,62 @@ def test_extract_rhythm_candidates_assigns_duration():
     assert len(result) == 1
     assert "duration_evidence" in result[0].raw
     assert result[0].raw["duration_evidence"]["duration_name"] == "eighth"
+
+def test_extract_geometry_candidates_extracts_repeats_and_sections():
+    # Thick left, thin right -> start repeat
+    stroke_thick = PrimitiveEvidenceCandidate(
+        page_index=1, system_index=1, staff_index=1,
+        x0=100.0, y0=100.0, x1=103.0, y1=132.0, kind="vertical_stroke", source="x_aligned_cluster"
+    )
+    stroke_thin = PrimitiveEvidenceCandidate(
+        page_index=1, system_index=1, staff_index=1,
+        x0=105.0, y0=100.0, x1=105.5, y1=132.0, kind="vertical_stroke", source="x_aligned_cluster"
+    )
+    cluster = XAlignedPrimitiveClusterCandidate(
+        page_index=1, system_index=1, staff_index=1,
+        x0=100.0, x1=105.5, primitive_count=2, primitives=[stroke_thick, stroke_thin]
+    )
+    
+
+    # End repeat
+    stroke_thin_end = PrimitiveEvidenceCandidate(
+        page_index=1, system_index=1, staff_index=1,
+        x0=120.0, y0=100.0, x1=120.5, y1=132.0, kind="vertical_stroke", source="x_aligned_cluster"
+    )
+    stroke_thick_end = PrimitiveEvidenceCandidate(
+        page_index=1, system_index=1, staff_index=1,
+        x0=125.0, y0=100.0, x1=128.0, y1=132.0, kind="vertical_stroke", source="x_aligned_cluster"
+    )
+    cluster2 = XAlignedPrimitiveClusterCandidate(
+        page_index=1, system_index=1, staff_index=1,
+        x0=120.0, x1=128.0, primitive_count=2, primitives=[stroke_thin_end, stroke_thick_end]
+    )
+    
+    # Section that falls back to lyric
+    diag = _diagnostics(x_aligned_cluster_candidates=[cluster, cluster2])
+
+    diag = diag.model_copy(update={
+        "sections": [{
+            "page_index": 1, "system_index": 1, "staff_index": 1,
+            "x0": 50.0, "y0": 50.0, "x1": 80.0, "y1": 60.0,
+            "text": "UnknownBold", "y_offset": 10.0, "is_bold": True
+        }, {
+            "page_index": 1, "system_index": 1, "staff_index": 1,
+            "x0": 150.0, "y0": 50.0, "x1": 180.0, "y1": 60.0,
+            "text": "Chorus", "y_offset": 10.0, "is_bold": True
+        }]
+    })
+    
+    result = extract_geometry_candidates(diag)
+    assert len(result.repeats) == 2
+    assert result.repeats[0].direction == "start"
+    assert result.repeats[1].direction == "end"
+    
+    # One valid section (Chorus)
+    assert len(result.sections) == 1
+    assert result.sections[0].text == "Chorus"
+    
+    # One fallback lyric (UnknownBold)
+    assert len(result.lyrics) == 1
+    assert result.lyrics[0].text == "UnknownBold"
+

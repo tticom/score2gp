@@ -175,6 +175,8 @@ class NotationStaffDiagnostics(BaseModel):
     left_margin_candidates: list[LeftMarginPrimitiveCandidate] | None = None
     x_aligned_cluster_candidates: list[XAlignedPrimitiveClusterCandidate] | None = None
     flag_beam_candidates: StaffFlagBeamCandidateDiagnostics | None = None
+    sections: list[dict] | None = None
+    repeats: list[dict] | None = None
 
 class SystemConnectorDiagnostics(BaseModel):
     """

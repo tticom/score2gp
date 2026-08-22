@@ -867,8 +867,35 @@ def build_notation_diagnostics(
                 page_index, system_idx, staff_idx, clustering_diags.evidence
             )
 
+
+        sections = []
+        staff_top_y = min(staff_geom.line_y_coords) if staff_geom.line_y_coords else staff_geom.y0
+        
+        for block in text_dict.get("blocks", []):
+            if block.get("type") == 0:
+                for line in block.get("lines", []):
+                    for span in line.get("spans", []):
+                        text = span.get("text", "")
+                        if text.strip():
+                            sx0, sy0, sx1, sy1 = span["bbox"]
+                            if sx0 >= x0_limit and sx1 <= x1_limit and sy1 <= staff_top_y + 10:
+                                y_offset = staff_top_y - sy1
+                                font_name = span.get("font", "").lower()
+                                is_bold = "bold" in font_name
+                                sections.append({
+                                    "page_index": page_index,
+                                    "system_index": system_idx,
+                                    "staff_index": staff_idx,
+                                    "x0": sx0, "y0": sy0, "x1": sx1, "y1": sy1,
+                                    "text": text,
+                                    "y_offset": float(y_offset),
+                                    "is_bold": is_bold
+                                })
         staves_diags.append(
             NotationStaffDiagnostics(
+                sections=sections,
+                repeats=[],
+
                 staff=staff_geom,
                 primitives=primitives_summary,
                 morphology=morphology,

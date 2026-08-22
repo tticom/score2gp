@@ -251,9 +251,23 @@ def extract_tab(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
     else:
         raw["candidates"].extend(_extract_pdf_text_candidates(Path(path), raw["warnings"], meta, inspection_data=inspection))
 
+
     if "floating_barlines" in meta:
         raw["floating_barlines"] = meta["floating_barlines"]
+    raw["structural_signals"] = {}
+    for page in meta.get("pages", []):
+        for gc in page.get("geometry_candidates", []):
+            if "sections" not in raw["structural_signals"]:
+                raw["structural_signals"]["sections"] = []
+            if "repeats" not in raw["structural_signals"]:
+                raw["structural_signals"]["repeats"] = []
+            if "lyrics" not in raw["structural_signals"]:
+                raw["structural_signals"]["lyrics"] = []
+            raw["structural_signals"]["sections"].extend(gc.get("sections", []))
+            raw["structural_signals"]["repeats"].extend(gc.get("repeats", []))
+            raw["structural_signals"]["lyrics"].extend(gc.get("lyrics", []))
     _append_grouping_warnings(raw, meta)
+
     raw = TabRaw.model_validate(raw).model_dump(mode="json", exclude_none=True)
     _write_grouping_artifacts(Path(path), out, tabraw_path, inspection, raw)
     tabraw_path.write_text(json.dumps(raw, indent=2), encoding="utf-8")
