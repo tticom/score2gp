@@ -4,15 +4,15 @@ set -e
 echo "=== Static Analysis Evaluation Packet ==="
 echo "OS/Runtime: $(uname -a)"
 echo "Python Version: $(python3 --version)"
-echo "Ruff Version: $(ruff --version)"
-echo "Pylint Version: $(pylint --version | head -n 1)"
+echo "Ruff Version: $(python3 -m ruff --version)"
+echo "Pylint Version: $(python3 -m pylint --version | head -n 1)"
 echo "Source SHA: $(git rev-parse HEAD)"
 echo ""
 
 echo "--- Benchmarking Ruff ---"
 rm -f ruff_output.txt
 set +e
-time ruff check src/ tests/ > ruff_output.txt 2>&1
+time python3 -m ruff check src/ tests/ > ruff_output.txt 2>&1
 RUFF_EXIT=$?
 set -e
 echo "Ruff Exit Code: $RUFF_EXIT"
@@ -22,7 +22,7 @@ echo ""
 echo "--- Benchmarking Pylint ---"
 rm -f pylint_output.txt
 set +e
-time pylint src/ tests/ > pylint_output.txt 2>&1
+time python3 -m pylint src/ tests/ > pylint_output.txt 2>&1
 PYLINT_EXIT=$?
 set -e
 echo "Pylint Exit Code: $PYLINT_EXIT"
