@@ -4,7 +4,7 @@ from pathlib import Path
 def main():
     doc = fitz.open()
     page = doc.new_page(width=800, height=800)
-    
+
     # Draw standard staff (System 1)
     # y = 100 to 132 (line gap 8)
     not_y0 = 100
@@ -17,7 +17,7 @@ def main():
     for i in range(6):
         y = tab_y0 + i * 10
         page.draw_line((50, y), (750, y), color=(0, 0, 0), width=0.5)
-        
+
     # Connect them (bracket or barline)
     page.draw_line((50, not_y0), (50, tab_y0 + 50), color=(0, 0, 0), width=1.0)
 
@@ -25,7 +25,7 @@ def main():
     for x in [750]:
         page.draw_line((x, not_y0), (x, not_y0 + 32), color=(0, 0, 0), width=0.5)
         page.draw_line((x, tab_y0), (x, tab_y0 + 50), color=(0, 0, 0), width=0.5)
-        
+
     # Add a start repeat
     page.draw_rect(fitz.Rect(253.5, not_y0, 256.5, not_y0 + 32), color=(0, 0, 0), fill=(0, 0, 0))
     page.draw_rect(fitz.Rect(258.0, not_y0, 258.5, not_y0 + 32), color=(0, 0, 0), fill=(0, 0, 0))
@@ -40,7 +40,7 @@ def main():
 
     page.insert_text((250, 80), "Chorus", fontsize=12, fontname="hebo")
     page.insert_text((500, 80), "UnknownBold", fontsize=12, fontname="hebo")
-    
+
     page.insert_text((150, tab_y0 + 4), "0", fontsize=8, fontname="helv")
     page.insert_text((350, tab_y0 + 4), "1", fontsize=8, fontname="helv")
     page.insert_text((650, tab_y0 + 4), "2", fontsize=8, fontname="helv")
