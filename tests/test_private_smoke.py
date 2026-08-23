@@ -126,7 +126,7 @@ def test_private_smoke_unrecoverable_timing_artifacts(tmp_path) -> None:
     )
 
     assert summary["timing_status"] == "failed"
-    
+
     # Verify that the unrecoverable reports exist on disk
     out_dir = tmp_path / "private_input_custom"
     assert (out_dir / "musicxml-unrecoverable-timing-report.json").exists()

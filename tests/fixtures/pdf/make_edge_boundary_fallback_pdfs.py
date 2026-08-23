@@ -111,7 +111,7 @@ def make_pdf_non_edge_internal_missing() -> None:
 def make_pdf_multi_system_safe_fallback() -> None:
     # 7. Multi-system page where one edge system uses safe inferred boundary and all playable candidates assign
     doc, page = _new_page("Multi-System Safe Fallback")
-    
+
     # System 1
     line_ys1 = [100, 114, 128, 142, 156, 170]
     _draw_tab_lines(page, line_ys=line_ys1, x0=72, x1=332)
@@ -125,14 +125,14 @@ def make_pdf_multi_system_safe_fallback() -> None:
     # 1 valid barline at 180
     _draw_barlines(page, line_ys=line_ys2, bar_xs=[180])
     _write_fret(page, "7", 120, line_ys2[0])
-    
+
     _save(doc, "generated_pdf_multi_system_safe_fallback.pdf")
 
 
 def make_pdf_multi_system_partial_fallback() -> None:
     # 8. Multi-system page where inferred boundary still leaves candidates unassigned (partial grouping)
     doc, page = _new_page("Multi-System Partial Fallback")
-    
+
     # System 1
     line_ys1 = [100, 114, 128, 142, 156, 170]
     _draw_tab_lines(page, line_ys=line_ys1, x0=72, x1=332)
@@ -146,7 +146,7 @@ def make_pdf_multi_system_partial_fallback() -> None:
     _draw_barlines(page, line_ys=line_ys2, bar_xs=[180])
     # Candidate near inferred boundary
     _write_fret(page, "7", 73, line_ys2[0])
-    
+
     _save(doc, "generated_pdf_multi_system_partial_fallback.pdf")
 
 
@@ -164,7 +164,7 @@ def make_pdf_next_blocker_string_assignment() -> None:
 def make_pdf_empty_system_policy_fallback() -> None:
     # 10. Empty system / decorative system handling with safe edge fallback
     doc, page = _new_page("Empty System Policy Fallback")
-    
+
     # System 1
     line_ys1 = [100, 114, 128, 142, 156, 170]
     _draw_tab_lines(page, line_ys=line_ys1, x0=72, x1=332)

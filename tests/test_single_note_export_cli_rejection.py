@@ -8,7 +8,7 @@ runner = CliRunner()
 def test_single_note_export_rejects_multi_note_pdf(tmp_path):
     ir_out = tmp_path / "out.ir.json"
     gp_out = tmp_path / "out.gp"
-    
+
     mock_outcomes = {
         "read_only_recognition_outcomes": [
             {
@@ -25,7 +25,7 @@ def test_single_note_export_rejects_multi_note_pdf(tmp_path):
             }
         ]
     }
-    
+
     with patch("src.score2gp.notation_omr.pipeline.run_recognition_on_file", return_value=mock_outcomes):
         result = runner.invoke(app, [
             "notation-quarter-note-export",
@@ -33,6 +33,6 @@ def test_single_note_export_rejects_multi_note_pdf(tmp_path):
             "--out", str(gp_out),
             "--ir-out", str(ir_out)
         ])
-        
+
     assert result.exit_code == 1
     assert "single-note export requires exactly 1" in result.output

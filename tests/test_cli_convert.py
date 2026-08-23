@@ -46,7 +46,7 @@ def test_cli_convert_missing_pdf(tmp_path) -> None:
     workdir = tmp_path / "workdir"
     out_gp = tmp_path / "output.gp"
     non_existent_pdf = tmp_path / "non_existent.pdf"
-    
+
     result = CliRunner().invoke(
         app,
         [
@@ -69,7 +69,7 @@ def test_cli_convert_missing_musicxml(tmp_path) -> None:
     # 4. Missing MusicXML path exits 1
     workdir = tmp_path / "workdir"
     out_gp = tmp_path / "output.gp"
-    
+
     result = CliRunner().invoke(
         app,
         [
@@ -91,7 +91,7 @@ def test_cli_convert_layout_refusal(tmp_path) -> None:
     workdir = tmp_path / "workdir"
     out_gp = tmp_path / "output.gp"
     json_report = tmp_path / "report.json"
-    
+
     result = CliRunner().invoke(
         app,
         [
@@ -111,7 +111,7 @@ def test_cli_convert_layout_refusal(tmp_path) -> None:
     )
     assert result.exit_code == 2, result.output
     assert not out_gp.exists()
-    
+
     # 10. Failure path writes JSON report but does not write GP
     assert json_report.exists()
     report = json.loads(json_report.read_text(encoding="utf-8"))
@@ -125,7 +125,7 @@ def test_cli_convert_timing_refusal(tmp_path) -> None:
     workdir = tmp_path / "workdir"
     out_gp = tmp_path / "output.gp"
     json_report = tmp_path / "report.json"
-    
+
     result = CliRunner().invoke(
         app,
         [
@@ -145,7 +145,7 @@ def test_cli_convert_timing_refusal(tmp_path) -> None:
     )
     assert result.exit_code == 3, result.output
     assert not out_gp.exists()
-    
+
     assert json_report.exists()
     report = json.loads(json_report.read_text(encoding="utf-8"))
     assert report["status"] == "refused"
@@ -158,7 +158,7 @@ def test_cli_convert_success(tmp_path) -> None:
     workdir = tmp_path / "workdir"
     out_gp = tmp_path / "output.gp"
     json_report = tmp_path / "report.json"
-    
+
     result = CliRunner().invoke(
         app,
         [
@@ -178,7 +178,7 @@ def test_cli_convert_success(tmp_path) -> None:
     assert result.exit_code == 0, result.output
     assert out_gp.exists()
     assert json_report.exists()
-    
+
     report = json.loads(json_report.read_text(encoding="utf-8"))
     assert report["status"] == "success"
     assert report["exit_code"] == 0
@@ -436,7 +436,7 @@ def test_cli_convert_editable_draft_success(tmp_path) -> None:
     workdir = tmp_path / "workdir"
     out_gp = tmp_path / "output.gp"
     json_report = tmp_path / "report.json"
-    
+
     result = CliRunner().invoke(
         app,
         [
@@ -459,7 +459,7 @@ def test_cli_convert_editable_draft_success(tmp_path) -> None:
     report = json.loads(json_report.read_text(encoding="utf-8"))
     assert report.get("pdf_only_diagnostics", {}).get("inferred_rhythm_status") == "defaulted_placeholder"
 
-    
+
     gpif_content = _read_score_gpif(out_gp)
     assert "Editable draft generated from PDF tablature" in gpif_content
     assert "Rhythms defaulted to quarter notes" in gpif_content

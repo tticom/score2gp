@@ -253,6 +253,18 @@ def extract_tab(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
 
     if "floating_barlines" in meta:
         raw["floating_barlines"] = meta["floating_barlines"]
+
+    structural_signals = {"sections": [], "repeats": [], "lyrics": []}
+    for page in inspection.get("pages", []):
+        for cand_dict in page.get("geometry_candidates", []):
+            if "sections" in cand_dict:
+                structural_signals["sections"].extend(cand_dict["sections"])
+            if "repeats" in cand_dict:
+                structural_signals["repeats"].extend(cand_dict["repeats"])
+            if "lyrics" in cand_dict:
+                structural_signals["lyrics"].extend(cand_dict["lyrics"])
+    raw["structural_signals"] = structural_signals
+
     _append_grouping_warnings(raw, meta)
     raw = TabRaw.model_validate(raw).model_dump(mode="json", exclude_none=True)
     _write_grouping_artifacts(Path(path), out, tabraw_path, inspection, raw)
