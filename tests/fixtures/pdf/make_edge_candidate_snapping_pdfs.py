@@ -38,14 +38,14 @@ def make_pdf_edge_candidate_snapping() -> None:
     line_ys = [120, 134, 148, 162, 176, 190]
     _draw_tab_lines(page, line_ys=line_ys, x0=72, x1=332)
     _draw_barlines(page, line_ys=line_ys, bar_xs=[88, 205, 322])
-    
+
     # 1. Chord cluster snapping
     _write_fret(page, "5", 150, line_ys[2])  # perfectly on string 3
     _write_fret(page, "7", 150, line_ys[0] - 7.5)  # marginally outside top string 1
-    
+
     # 2. Outer barline boundary snapping
     _write_fret(page, "3", 85, line_ys[1])  # 3.0pt to the left of left barline x=88
-    
+
     _save(doc, "generated_pdf_edge_candidate_snapping.pdf")
 
 def main() -> None:

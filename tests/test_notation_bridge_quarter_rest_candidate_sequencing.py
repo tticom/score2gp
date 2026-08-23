@@ -42,7 +42,7 @@ def test_quarter_rest_candidate_sequencing():
     events = score.bars[0].events
 
     assert len(events) == 3
-    
+
     # First event: quarter note
     assert events[0].is_rest is False
     assert len(events[0].notes) == 1
@@ -175,19 +175,19 @@ def test_quarter_rest_candidate_bridge_fallback_system_staff_index():
             "candidate_id": "c0"
         }
     ]
-    
+
     score = build_ir_from_notation_outcomes(outcomes)
     events = score.bars[0].events
-    
+
     assert len(events) == 3
-    
+
     # Due to sorting: staff 1 note comes first
     assert events[0].is_rest is False
     assert events[0].notes[0].pitch == 57 # A4 sounding midi
-    
+
     # Then staff 2 items: rest first (x=30)
     assert events[1].is_rest is True
-    
+
     # Then staff 2 note (x=50)
     assert events[2].is_rest is False
     assert events[2].notes[0].pitch == 55 # G4 sounding midi

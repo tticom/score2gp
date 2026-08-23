@@ -8,7 +8,7 @@ def test_human_readable_conversion_error_formatting():
         staff=1
     )
     assert str(err) == "Error at Page 2, Measure 5, Staff 1: Measure capacity violation."
-    
+
     err2 = HumanReadableConversionError(
         "Unowned note: A note exists without fret/pitch information."
     )

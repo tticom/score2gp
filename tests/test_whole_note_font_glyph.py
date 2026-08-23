@@ -7,7 +7,7 @@ def test_extract_whole_note_candidates_font_glyph_success():
     # Mock a PyMuPDF Page
     page_mock = Mock()
     page_mock.get_drawings.return_value = []
-    
+
     # Mock rawdict
     page_mock.get_text.return_value = {
         "blocks": [
@@ -31,7 +31,7 @@ def test_extract_whole_note_candidates_font_glyph_success():
             }
         ]
     }
-    
+
     candidates = _extract_whole_note_candidates(page_mock)
     assert len(candidates) == 1
     c = candidates[0]

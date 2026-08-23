@@ -1084,7 +1084,7 @@ def test_clef_resolved_pitch_coverage_report_out_of_range_positions():
         {"symbol_type": "quarter_note_candidate", "candidate_id": "n_out_2", "page_index": 1, "system_index": 1, "staff_index": 1, "staff_position_index": 16},
         # Extreme position
         {"symbol_type": "quarter_note_candidate", "candidate_id": "n_out_3", "page_index": 1, "system_index": 1, "staff_index": 1, "staff_position_index": 100},
-        
+
         # Valid missing ledger line support: -7
         {"symbol_type": "quarter_note_candidate", "candidate_id": "n_ledger_1", "page_index": 1, "system_index": 1, "staff_index": 1, "staff_position_index": -7},
         # Valid missing ledger line support: 15

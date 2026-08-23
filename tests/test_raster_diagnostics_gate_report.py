@@ -1260,10 +1260,10 @@ def test_subprocess_json_read_only_recognition_outcomes_custom_case_id(tmp_path)
 
     assert result.returncode == 0
     data = json.loads(result.stdout)
-    
+
     cases = data.get("cases", [])
     assert len(cases) == 1
-    
+
     custom_case = cases[0]
     assert custom_case["case_id"] == "custom_whole_note_fixture_alias"
     assert "read_only_recognition_outcomes" in custom_case
