@@ -3933,7 +3933,9 @@ def _attach_symbols_and_techniques(score: ScoreIR, tabraw: TabRaw) -> None:
                 bar_x = None
                 for ev in bar.events:
                     for prov in ev.provenance:
-                        if prov.page == page and prov.system_id == str(sys_idx) and prov.staff_id == str(staff_idx):
+                        sys_match = prov.system_id in (str(sys_idx), f"system-{sys_idx}")
+                        staff_match = prov.staff_id in (str(staff_idx), f"staff-{staff_idx}")
+                        if prov.page == page and sys_match and staff_match:
                             if "x" in prov.raw:
                                 bar_x = prov.raw["x"]
                                 break
@@ -3962,7 +3964,9 @@ def _attach_symbols_and_techniques(score: ScoreIR, tabraw: TabRaw) -> None:
                 bar_x = None
                 for ev in bar.events:
                     for prov in ev.provenance:
-                        if prov.page == page and prov.system_id == str(sys_idx) and prov.staff_id == str(staff_idx):
+                        sys_match = prov.system_id in (str(sys_idx), f"system-{sys_idx}")
+                        staff_match = prov.staff_id in (str(staff_idx), f"staff-{staff_idx}")
+                        if prov.page == page and sys_match and staff_match:
                             if "x" in prov.raw:
                                 bar_x = prov.raw["x"]
                                 break
