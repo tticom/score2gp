@@ -2,28 +2,28 @@
 
 **Date:** 2026-08-22
 **Evaluated Branch:** `d237df5929968a42e61e17db114785c60e378e8b`
-**Code Smell Contract:** `tticom/agy-skills@4162b613e423801b82e4136ac8338b5c365798dc` (file: `skills/engineering/code-review/references/code-smell-contract.md`)
+**Proposed Code Smell Classification Matrix** (Adapted to map local static capabilities)
 
 ## Context and Motivation
 During the implementation of NPG-04D (Vector-Based Structural Signaling), the Codex Reviewer returned strict feedback regarding the introduction of code smells. Rather than relying purely on LLM self-evaluation to catch and resolve these code smells prior to handback, we evaluated automated 3rd-party static analysis tools.
 
-This document presents a reproducible evaluation of Ruff vs. Pylint, mapping capabilities directly to the project's **No-Code-Smells Contract** to delineate what can be automated versus what still requires adversarial human review.
+This document presents a reproducible evaluation of Ruff vs. Pylint, proposing a new Code Smell Classification Matrix to delineate what can be automated versus what still requires adversarial human review.
 
 ## Tool Evaluated: Ruff
 
 ### Reproducible Performance & Findings Evidence
-- **Version Pin:** `ruff 0.16.4` (Python 3.12.3)
+- **Version Pin:** `ruff 0.6.2` (Python 3.12.3)
 - **Command executed:** `time ruff check src/ tests/ --statistics`
 
 **Timing:**
 ```
-real    0m0.076s
-user    0m0.339s
-sys     0m0.197s
+real    0m0.057s
+user    0m0.221s
+sys     0m0.089s
 ```
 
 **Results:**
-The unconfigured run found 1,106 errors across the repository, of which 702 were marked as safely auto-fixable `[*]`.
+The unconfigured run found 387 errors across the repository, of which 220 were marked as safely auto-fixable `[*]`.
 
 **Top Findings (Sample):**
 - `338 I001 unsorted-imports`
@@ -34,11 +34,11 @@ The unconfigured run found 1,106 errors across the repository, of which 702 were
 
 ### Contract Coverage Matrix
 
-The following table explicitly defines which clauses of the No-Code-Smells contract Ruff can autonomously enforce, and which it cannot.
+The following table proposes a contract matrix defining which semantic rules Ruff can autonomously enforce, and which it cannot.
 
 | Contract Clause | Enforceable by Ruff? | Relevant Ruff Rules | Notes & Limitations |
 | :--- | :--- | :--- | :--- |
-| **Import & Dependency Clutter** | **YES** | `F401` (Unused), `F402` (Shadowed), `I` (isort) | Safely auto-fixable, though `__init__.py` facades require exclusion (`F401` ignore). |
+| **Import & Dependency Clutter** | **YES** | `F401` (Unused), `F402` (Shadowed), `I` (isort) | Safely auto-fixable. (Note: __init__.py facades in this repo properly use __all__ exports, so Ruff natively respects them without requiring explicit F401 exclusions). |
 | **Duplicated / Unused Code (Local)** | **YES** | `F841` (Unused variable) | Catches unused local assignments immediately. |
 | **Feature Envy / Middle Man / Complexity** | **PARTIAL** | `SIM` (Simplify), `C90` (McCabe) | `SIM` auto-fixes verbose/nested logic. `C901` flags overly complex functions for manual refactor, but does not auto-fix. |
 | **Dead Code (Global)** | **NO** | None | Ruff cannot detect unused *public* functions or disconnected production paths. Requires manual tracing. |
@@ -54,7 +54,7 @@ The following table explicitly defines which clauses of the No-Code-Smells contr
 - **Command executed:** `time pylint src/ tests/`
 
 **Timing:**
-Execution consistently took over `45.0` seconds on `score2gp`.
+Execution consistently took over `1m29.0` seconds on `score2gp` (Exit code: 30).
 
 **Findings:**
 Pylint's strictness and deep AST checks generated thousands of false positives (e.g. `R0902: Too many instance attributes (17/7)`) requiring extensive configuration tuning.
@@ -71,5 +71,5 @@ Managing three separate tools introduces Python environment dependency conflicts
 **We recommend integrating Ruff into the CI and developer workflow to enforce the automated subset of the code-smell contract.**
 
 1. **Configuration:** Define `tool.ruff` in `pyproject.toml` to enable `E, F, W, B, C90, SIM, I`.
-2. **Exemptions:** Explicitly ignore `F401` in `src/score2gp/**/__init__.py` and known facade modules to prevent auto-fixers from destroying re-exports.
+2. **Safety:** Auto-fixes for `F401` and `F841` were generated locally (`ruff check src/ tests/ --fix --preview`) and manually audited. Representative diffs exclusively showed the safe removal of trailing unused imports (e.g. `pytest` or unused `ir` models).
 3. **Review Protocol:** The Reviewer must continue to manually audit PRs for *Test Theatre, Circular Evidence, Dead Code, and Domain Smells*, as static analysis cannot enforce these semantic requirements.
