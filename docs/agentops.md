@@ -19,4 +19,4 @@ This repository is the product repository for the **ScoreToGP** compiler. Projec
    - Must consult the canonical [REVIEW_RULES.md](https://github.com/tticom/score2gp-agentops/blob/main/projects/score2gp/REVIEW_RULES.md) inside the `score2gp-agentops` governance repository before evaluating pull requests.
 3. **Task Tracking & Branch State**:
    - [HANDOFF.md](../HANDOFF.md) is a branch-local state tracking file, not a repository of long-term architectural truth.
-   - [TASKS.md](../TASKS.md) maintains active todo checklists during execution and must not duplicate the comprehensive benchmark ladder defined in `score2gp-agentops`.
+   - `../score2gp-agentops/projects/score2gp/ORCHESTRATION_STATE.json` and `../score2gp-agentops/projects/score2gp/ACTIVE_TASK.md` handle all task orchestration and tracking.

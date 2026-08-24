@@ -10,9 +10,9 @@ Agent governance truth lives in the external governance repository:
 
 Before doing any work, agents must read the governance control files:
 
-1. `projects/score2gp/AGENT_CONTROL.md`
-2. `projects/score2gp/ACTIVE_TASK.md`
-3. `projects/score2gp/TASKS.md`
+1. `../score2gp-agentops/projects/score2gp/AGENT_CONTROL.md`
+2. `../score2gp-agentops/projects/score2gp/ACTIVE_TASK.md`
+3. `../score2gp-agentops/projects/score2gp/TASK_RECORDING_CONVENTION.md`
 
 If `ACTIVE_TASK.md` says `NO_ACTIVE_TASK_APPROVED`, agents must stop after preflight and report.
 
