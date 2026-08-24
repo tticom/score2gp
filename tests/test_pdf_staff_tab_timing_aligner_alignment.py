@@ -396,3 +396,23 @@ def test_irregular_staff_bounds_warning() -> None:
             [staff_ev_1],
             {(1, 1, 1, 1): [tab_grp_1, tab_grp_2]}
         )
+
+
+def test_pdf_staff_tab_timing_aligner_handles_overlapping_irregular_bars() -> None:
+    # Simulates the Devil's Advocate probe: overlapping bars (prev_max > curr_min)
+    # staff={1,2} vs tab={2} -> is_irregular = True
+    # Bar 1 has an event at X=200
+    # Bar 2 has an event at X=150
+    staff_ev_1 = PdfStaffTimingEvent(id="s-1", page_index=1, system_index=1, staff_index=1, local_bar_index=1, x=200.0, onset_ticks=0, duration_ticks=480)
+    staff_ev_2 = PdfStaffTimingEvent(id="s-2", page_index=1, system_index=1, staff_index=1, local_bar_index=2, x=150.0, onset_ticks=0, duration_ticks=480)
+    
+    # We have perfectly matching Tab Candidates at 200 and 150
+    tab_grp_1 = CandidateXGroupDiagnostics(x=200.0, x_min=200.0, x_max=200.0, candidate_count=1, candidate_ids=["c-1"], strings=[1])
+    tab_grp_2 = CandidateXGroupDiagnostics(x=150.0, x_min=150.0, x_max=150.0, candidate_count=1, candidate_ids=["c-2"], strings=[1])
+    
+    aligner = PdfStaffTabTimingAligner(tolerance=15.0)
+    result = aligner.align([staff_ev_1, staff_ev_2], {(1, 1, 1, 2): [tab_grp_1, tab_grp_2]})
+    
+    # They should both successfully align, no data loss from midpoint bisection!
+    assert len(result.aligned_pairs) == 2
+    

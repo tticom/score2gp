@@ -131,8 +131,26 @@ class PdfStaffTabTimingAligner:
                     sorted_bars = sorted(bar_ranges.keys())
                     
                     for i, bar_idx in enumerate(sorted_bars):
-                        min_bound = float('-inf') if i == 0 else (max(bar_ranges[sorted_bars[i-1]]) + min(bar_ranges[bar_idx])) / 2.0
-                        max_bound = float('inf') if i == len(sorted_bars) - 1 else (max(bar_ranges[bar_idx]) + min(bar_ranges[sorted_bars[i+1]])) / 2.0
+                        if i == 0:
+                            min_bound = float('-inf')
+                        else:
+                            prev_max = max(bar_ranges[sorted_bars[i-1]])
+                            curr_min = min(bar_ranges[bar_idx])
+                            if prev_max < curr_min:
+                                min_bound = (prev_max + curr_min) / 2.0
+                            else:
+                                min_bound = curr_min
+                                
+                        if i == len(sorted_bars) - 1:
+                            max_bound = float('inf')
+                        else:
+                            curr_max = max(bar_ranges[bar_idx])
+                            next_min = min(bar_ranges[sorted_bars[i+1]])
+                            if curr_max < next_min:
+                                max_bound = (curr_max + next_min) / 2.0
+                            else:
+                                max_bound = curr_max
+                                
                         bar_boundaries[bar_idx] = (min_bound, max_bound)
 
             # Map staff events to candidate TAB groups within tolerance
