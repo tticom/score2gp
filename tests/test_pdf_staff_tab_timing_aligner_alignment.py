@@ -362,12 +362,12 @@ def test_aligner_handles_irregular_local_bar_index() -> None:
     # They should still align if their X coordinates match!
     staff_ev_1 = PdfStaffTimingEvent(id="s-1", page_index=1, system_index=1, staff_index=1, local_bar_index=1, x=100.0, onset_ticks=0, duration_ticks=480)
     staff_ev_2 = PdfStaffTimingEvent(id="s-2", page_index=1, system_index=1, staff_index=1, local_bar_index=2, x=200.0, onset_ticks=480, duration_ticks=480)
-    
+
     tab_grp_1 = CandidateXGroupDiagnostics(x=101.0, x_min=101.0, x_max=101.0, candidate_count=1, candidate_ids=["c-1"], strings=[1])
     tab_grp_2 = CandidateXGroupDiagnostics(x=201.0, x_min=201.0, x_max=201.0, candidate_count=1, candidate_ids=["c-2"], strings=[1])
-    
+
     aligner = PdfStaffTabTimingAligner(tolerance=15.0)
-    
+
     # Notice the local_bar_index mismatch for the second event!
     # staff_ev_2 has local_bar_index=2. tab_grp_2 has local_bar_index=3!
     result = aligner.align(
@@ -377,7 +377,7 @@ def test_aligner_handles_irregular_local_bar_index() -> None:
             (1, 1, 1, 3): [tab_grp_2], # Irregular!
         }
     )
-    
+
     assert len(result.aligned_pairs) == 2
     assert result.aligned_pairs[0][0].id == "s-1"
     assert result.aligned_pairs[1][0].id == "s-2"
@@ -388,9 +388,9 @@ def test_irregular_staff_bounds_warning() -> None:
     staff_ev_1 = PdfStaffTimingEvent(id="s-1", page_index=1, system_index=1, staff_index=1, local_bar_index=1, x=100.0, onset_ticks=0, duration_ticks=480)
     tab_grp_1 = CandidateXGroupDiagnostics(x=101.0, x_min=101.0, x_max=101.0, candidate_count=1, candidate_ids=["c-1"], strings=[1])
     tab_grp_2 = CandidateXGroupDiagnostics(x=120.0, x_min=120.0, x_max=120.0, candidate_count=1, candidate_ids=["c-2"], strings=[1])
-    
+
     aligner = PdfStaffTabTimingAligner(tolerance=15.0)
-    
+
     with pytest.warns(IrregularStaffBoundsWarning):
         aligner.align(
             [staff_ev_1],
@@ -403,9 +403,9 @@ def test_normal_compact_system_no_warning(capsys) -> None:
     staff_ev_1 = PdfStaffTimingEvent(id="s-1", page_index=1, system_index=1, staff_index=1, local_bar_index=1, x=100.0, onset_ticks=0, duration_ticks=480)
     tab_grp_1 = CandidateXGroupDiagnostics(x=101.0, x_min=101.0, x_max=101.0, candidate_count=1, candidate_ids=["c-1"], strings=[1])
     tab_grp_2 = CandidateXGroupDiagnostics(x=120.0, x_min=120.0, x_max=120.0, candidate_count=1, candidate_ids=["c-2"], strings=[1])
-    
+
     aligner = PdfStaffTabTimingAligner(tolerance=15.0)
-    
+
     with warnings.catch_warnings():
         warnings.simplefilter("error", IrregularStaffBoundsWarning)
         aligner.align(
@@ -413,10 +413,10 @@ def test_normal_compact_system_no_warning(capsys) -> None:
             {(1, 1, 1, 1): [tab_grp_1, tab_grp_2]},
             system_bounds={(1, 1, 1): (90.0, 150.0)}  # Width = 60.0 >= 50.0
         )
-    
+
     captured = capsys.readouterr()
     assert "DEBUG" not in captured.out
-    assert captured.out.strip() == "" 
+    assert captured.out.strip() == ""
 
 
 def test_pdf_staff_tab_timing_aligner_handles_overlapping_irregular_bars() -> None:
@@ -426,14 +426,13 @@ def test_pdf_staff_tab_timing_aligner_handles_overlapping_irregular_bars() -> No
     # Bar 2 has an event at X=150
     staff_ev_1 = PdfStaffTimingEvent(id="s-1", page_index=1, system_index=1, staff_index=1, local_bar_index=1, x=200.0, onset_ticks=0, duration_ticks=480)
     staff_ev_2 = PdfStaffTimingEvent(id="s-2", page_index=1, system_index=1, staff_index=1, local_bar_index=2, x=150.0, onset_ticks=0, duration_ticks=480)
-    
+
     # We have perfectly matching Tab Candidates at 200 and 150
     tab_grp_1 = CandidateXGroupDiagnostics(x=200.0, x_min=200.0, x_max=200.0, candidate_count=1, candidate_ids=["c-1"], strings=[1])
     tab_grp_2 = CandidateXGroupDiagnostics(x=150.0, x_min=150.0, x_max=150.0, candidate_count=1, candidate_ids=["c-2"], strings=[1])
-    
+
     aligner = PdfStaffTabTimingAligner(tolerance=15.0)
     result = aligner.align([staff_ev_1, staff_ev_2], {(1, 1, 1, 2): [tab_grp_1, tab_grp_2]})
-    
+
     # They should both successfully align, no data loss from midpoint bisection!
     assert len(result.aligned_pairs) == 2
-    

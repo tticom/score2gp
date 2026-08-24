@@ -30,9 +30,9 @@ class PdfStaffTabTimingAligner:
 
     Alignment is tolerance-bound and restricted by source bar identity.
 
-    Note: The `is_irregular` fallback logic currently relies on simulated 
-    edge-case inputs for its test coverage, due to an approved governance 
-    exception. The upstream extraction pipeline cannot yet naturally reproduce 
+    Note: The `is_irregular` fallback logic currently relies on simulated
+    edge-case inputs for its test coverage, due to an approved governance
+    exception. The upstream extraction pipeline cannot yet naturally reproduce
     this bar count discrepancy on real-world PDFs.
     """
 
@@ -94,7 +94,7 @@ class PdfStaffTabTimingAligner:
         for sys_key in all_system_keys:
             sys_staff_events = staff_by_system[sys_key]
             sys_tab_groups = tab_groups_by_system.get(sys_key, [])
-            
+
             # Detect severely truncated bounds using explicit system_bounds evidence
             if sys_key in system_bounds:
                 min_x, max_x = system_bounds[sys_key]
@@ -110,7 +110,7 @@ class PdfStaffTabTimingAligner:
             # Extract bar keys
             staff_bar_keys = {self._alignment_bar_key(ev.page_index, ev.system_index, ev.staff_index, ev.local_bar_index) for ev in sys_staff_events}
             tab_bar_keys = tab_bar_keys_by_system.get(sys_key, set())
-            
+
             staff_bar_indices = {k[3] for k in staff_bar_keys}
             tab_bar_indices = {k[3] for k in tab_bar_keys}
 
@@ -120,7 +120,7 @@ class PdfStaffTabTimingAligner:
                     is_irregular = True
 
             result.bars_using_staff_timing.extend(list(staff_bar_keys | tab_bar_keys))
-            
+
             # If irregular, compute actual boundaries from staff events
             bar_boundaries = {}
             if is_irregular:
@@ -131,11 +131,11 @@ class PdfStaffTabTimingAligner:
                         if ev.local_bar_index not in bar_ranges:
                             bar_ranges[ev.local_bar_index] = []
                         bar_ranges[ev.local_bar_index].append(ev.x)
-                
+
                 # If there are no non-rest events, we cannot reliably bound it.
                 if bar_ranges:
                     sorted_bars = sorted(bar_ranges.keys())
-                    
+
                     for i, bar_idx in enumerate(sorted_bars):
                         if i == 0:
                             min_bound = float('-inf')
@@ -146,7 +146,7 @@ class PdfStaffTabTimingAligner:
                                 min_bound = (prev_max + curr_min) / 2.0
                             else:
                                 min_bound = curr_min
-                                
+
                         if i == len(sorted_bars) - 1:
                             max_bound = float('inf')
                         else:
@@ -156,7 +156,7 @@ class PdfStaffTabTimingAligner:
                                 max_bound = (curr_max + next_min) / 2.0
                             else:
                                 max_bound = curr_max
-                                
+
                         bar_boundaries[bar_idx] = (min_bound, max_bound)
 
             # Map staff events to candidate TAB groups within tolerance
