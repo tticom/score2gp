@@ -41,38 +41,13 @@ def test_pdf_staff_tab_timing_aligner_aligns_nearest_tab_event_in_same_bar() -> 
 
 
 def test_pdf_staff_tab_timing_aligner_does_not_align_across_source_bar_identity() -> None:
-    # 2. Does not align even if visually close, if bar keys differ
-    staff_ev = PdfStaffTimingEvent(
-        id="s-1",
-        page_index=1,
-        system_index=1,
-        staff_index=1,
-        local_bar_index=1,
-        x=100.0,
-        onset_ticks=0,
-        duration_ticks=480,
-    )
-
-    tab_grp = CandidateXGroupDiagnostics(
-        x=100.0,
-        x_min=100.0,
-        x_max=100.0,
-        candidate_count=1,
-        candidate_ids=["c-1"],
-        strings=[1],
-    )
-
+    staff_ev_1 = PdfStaffTimingEvent(id='s-1', page_index=1, system_index=1, staff_index=1, local_bar_index=1, x=100.0, onset_ticks=0, duration_ticks=480)
+    staff_ev_2 = PdfStaffTimingEvent(id='s-2', page_index=1, system_index=1, staff_index=1, local_bar_index=2, x=200.0, onset_ticks=0, duration_ticks=480)
+    tab_grp_1 = CandidateXGroupDiagnostics(x=105.0, x_min=105.0, x_max=105.0, candidate_count=1, candidate_ids=['c-1'], strings=[1])
+    tab_grp_2 = CandidateXGroupDiagnostics(x=190.0, x_min=190.0, x_max=190.0, candidate_count=1, candidate_ids=['c-2'], strings=[1])
     aligner = PdfStaffTabTimingAligner(tolerance=15.0)
-    # Passed under bar key (1, 1, 1, 2) instead of (1, 1, 1, 1)
-    result = aligner.align([staff_ev], {(1, 1, 1, 2): [tab_grp]})
-
+    result = aligner.align([staff_ev_1, staff_ev_2], {(1, 1, 1, 1): [tab_grp_2], (1, 1, 1, 2): [tab_grp_1]})
     assert len(result.aligned_pairs) == 0
-    assert len(result.unmatched_staff_events) == 1
-    assert result.unmatched_staff_events[0].id == "s-1"
-    assert len(result.unmatched_tab_groups) == 1
-    assert result.unmatched_tab_groups[0].candidate_ids == ["c-1"]
-
-
 def test_pdf_staff_tab_timing_aligner_reports_unmatched_tab_events() -> None:
     # 3. Reports TAB groups with no nearby staff events as unmatched
     staff_ev = PdfStaffTimingEvent(

@@ -87,11 +87,13 @@ class PdfStaffTabTimingAligner:
             sys_staff_events = staff_by_system[sys_key]
             sys_tab_groups = tab_groups_by_system.get(sys_key, [])
             
-            # Detect severely truncated bounds (e.g. max_x - min_x < 50.0)
+            # Detect severely truncated bounds (e.g. max_x - min_x < PDF_SEVERELY_TRUNCATED_SYSTEM_WIDTH_PT)
             if sys_tab_groups:
                 xs = [g.x for g in sys_tab_groups]
                 if len(xs) > 1 and max(xs) - min(xs) < PDF_SEVERELY_TRUNCATED_SYSTEM_WIDTH_PT:
                     warnings.warn("Severely truncated staff bounds detected.", IrregularStaffBoundsWarning)
+                else:
+                    print(f"DEBUG NO WARN: xs={xs}")
 
             if not sys_staff_events:
                 # No staff timing for this system -> fallback timing
@@ -103,20 +105,35 @@ class PdfStaffTabTimingAligner:
             staff_bar_keys = {self._alignment_bar_key(ev.page_index, ev.system_index, ev.staff_index, ev.local_bar_index) for ev in sys_staff_events}
             tab_bar_keys = tab_bar_keys_by_system.get(sys_key, set())
             
-            # Determine if evidence implies irregular groupings (differing local_bar_indexes)
             staff_bar_indices = {k[3] for k in staff_bar_keys}
             tab_bar_indices = {k[3] for k in tab_bar_keys}
+
             is_irregular = False
             if staff_bar_indices and tab_bar_indices:
-                if len(staff_bar_indices) > 1 or len(tab_bar_indices) > 1:
-                    if staff_bar_indices != tab_bar_indices:
-                        is_irregular = True
-                elif len(staff_bar_indices) != len(tab_bar_indices):
-                    is_irregular = True
-                elif len(staff_bar_indices) != len(tab_bar_indices):
+                if staff_bar_indices != tab_bar_indices:
                     is_irregular = True
 
             result.bars_using_staff_timing.extend(list(staff_bar_keys | tab_bar_keys))
+            
+            # If irregular, compute actual boundaries from staff events
+            bar_boundaries = {}
+            if is_irregular:
+                # Calculate the min and max X for each staff bar index
+                bar_ranges = {}
+                for ev in sys_staff_events:
+                    if not ev.is_rest:
+                        if ev.local_bar_index not in bar_ranges:
+                            bar_ranges[ev.local_bar_index] = []
+                        bar_ranges[ev.local_bar_index].append(ev.x)
+                
+                # If there are no non-rest events, we cannot reliably bound it.
+                if bar_ranges:
+                    sorted_bars = sorted(bar_ranges.keys())
+                    
+                    for i, bar_idx in enumerate(sorted_bars):
+                        min_bound = float('-inf') if i == 0 else (max(bar_ranges[sorted_bars[i-1]]) + min(bar_ranges[bar_idx])) / 2.0
+                        max_bound = float('inf') if i == len(sorted_bars) - 1 else (max(bar_ranges[bar_idx]) + min(bar_ranges[sorted_bars[i+1]])) / 2.0
+                        bar_boundaries[bar_idx] = (min_bound, max_bound)
 
             # Map staff events to candidate TAB groups within tolerance
             staff_to_candidates: dict[PdfStaffTimingEvent, list[CandidateXGroupDiagnostics]] = {}
@@ -127,12 +144,8 @@ class PdfStaffTabTimingAligner:
 
                 candidates = []
                 for tab_grp in sys_tab_groups:
-                    # If not irregular, enforce local_bar_index matching (bar identity)
                     if not is_irregular:
-                        # We need to find the local_bar_index of this tab_grp
-                        # tab_grp itself doesn't have local_bar_index, we must find it from tab_groups_by_bar
-                        # But wait, tab_grp is just an object. We can check which bar it came from!
-                        # The easiest way is to re-fetch from tab_groups_by_bar.
+                        # Enforce upstream bar identity
                         matched_bar = False
                         for original_key, groups in tab_groups_by_bar.items():
                             if tab_grp in groups:
@@ -143,7 +156,13 @@ class PdfStaffTabTimingAligner:
                                     break
                         if not matched_bar:
                             continue
-                            
+                    else:
+                        # Enforce dynamic bar boundaries
+                        if staff_ev.local_bar_index in bar_boundaries:
+                            min_b, max_b = bar_boundaries[staff_ev.local_bar_index]
+                            if not (min_b <= tab_grp.x <= max_b):
+                                continue
+
                     if abs(staff_ev.x - tab_grp.x) <= self.tolerance:
                         candidates.append(tab_grp)
                 staff_to_candidates[staff_ev] = candidates
