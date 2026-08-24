@@ -66,7 +66,10 @@ class PdfStaffTabTimingAligner:
         self,
         staff_events: list[PdfStaffTimingEvent],
         tab_groups_by_bar: dict[tuple[int, int, int, int], list[CandidateXGroupDiagnostics]],
+        system_bounds: dict[tuple[int, int, int], tuple[float, float]] | None = None,
     ) -> PdfStaffTabAlignmentResult:
+        if system_bounds is None:
+            system_bounds = {}
         result = PdfStaffTabAlignmentResult()
 
         # Group staff events by system key: (page_index, system_index, staff_pair_index)
@@ -92,13 +95,11 @@ class PdfStaffTabTimingAligner:
             sys_staff_events = staff_by_system[sys_key]
             sys_tab_groups = tab_groups_by_system.get(sys_key, [])
             
-            # Detect severely truncated bounds (e.g. max_x - min_x < PDF_SEVERELY_TRUNCATED_SYSTEM_WIDTH_PT)
-            if sys_tab_groups:
-                xs = [g.x for g in sys_tab_groups]
-                if len(xs) > 1 and max(xs) - min(xs) < PDF_SEVERELY_TRUNCATED_SYSTEM_WIDTH_PT:
+            # Detect severely truncated bounds using explicit system_bounds evidence
+            if sys_key in system_bounds:
+                min_x, max_x = system_bounds[sys_key]
+                if max_x - min_x < PDF_SEVERELY_TRUNCATED_SYSTEM_WIDTH_PT:
                     warnings.warn("Severely truncated staff bounds detected.", IrregularStaffBoundsWarning)
-                else:
-                    print(f"DEBUG NO WARN: xs={xs}")
 
             if not sys_staff_events:
                 # No staff timing for this system -> fallback timing
