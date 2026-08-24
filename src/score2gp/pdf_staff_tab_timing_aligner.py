@@ -14,6 +14,8 @@ from .pdf_only_chord_event_grouper import CandidateXGroupDiagnostics
 PDF_STAFF_TAB_ALIGNMENT_X_TOLERANCE_PT = 15.0
 
 
+PDF_SEVERELY_TRUNCATED_SYSTEM_WIDTH_PT = 50.0
+
 class PdfStaffTabAlignmentResult(BaseModel):
     aligned_pairs: list[tuple[PdfStaffTimingEvent, CandidateXGroupDiagnostics | None]] = Field(default_factory=list)
     unmatched_staff_events: list[PdfStaffTimingEvent] = Field(default_factory=list)
@@ -88,7 +90,7 @@ class PdfStaffTabTimingAligner:
             # Detect severely truncated bounds (e.g. max_x - min_x < 50.0)
             if sys_tab_groups:
                 xs = [g.x for g in sys_tab_groups]
-                if len(xs) > 1 and max(xs) - min(xs) < 50.0:
+                if len(xs) > 1 and max(xs) - min(xs) < PDF_SEVERELY_TRUNCATED_SYSTEM_WIDTH_PT:
                     warnings.warn("Severely truncated staff bounds detected.", IrregularStaffBoundsWarning)
 
             if not sys_staff_events:
