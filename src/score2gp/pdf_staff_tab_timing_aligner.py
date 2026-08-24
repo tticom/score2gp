@@ -29,6 +29,11 @@ class PdfStaffTabTimingAligner:
     """Aligns standard staff timing events with TAB visual x-groups within each bar.
 
     Alignment is tolerance-bound and restricted by source bar identity.
+
+    Note: The `is_irregular` fallback logic currently relies on simulated 
+    edge-case inputs for its test coverage, due to an approved governance 
+    exception. The upstream extraction pipeline cannot yet naturally reproduce 
+    this bar count discrepancy on real-world PDFs.
     """
 
     def __init__(self, tolerance: float = PDF_STAFF_TAB_ALIGNMENT_X_TOLERANCE_PT) -> None:

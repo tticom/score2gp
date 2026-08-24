@@ -58,6 +58,11 @@ def test_real_source_irregular_layout_alignment(tmp_path) -> None:
             
     # Lesson-7 has 6 systems on Page 1. System 1 has 9 bars on TAB!
     # Let's verify we have system 1 with 9 bars.
+    # NOTE(GOVERNANCE_EXCEPTION): The staff events below are intentionally mocked 
+    # to simulate a parser desync (staff_bar_indices != tab_bar_indices). 
+    # Because the upstream pipeline cannot currently reproduce this failure 
+    # organically on real data, this test substitutes mocked staff events 
+    # to verify the alignment fallback logic.
     # To test the irregular alignment logic (where staff_bar_indices != tab_bar_indices),
     # we simulate the Staff Events having different local_bar_indices due to upstream parsing discrepancies.
     # We'll just take the exact X coordinates of the first 5 tab groups and make them Staff Events,
