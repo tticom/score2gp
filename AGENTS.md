@@ -12,7 +12,7 @@ Before doing any work, agents must read the governance control files:
 
 1. `projects/score2gp/AGENT_CONTROL.md`
 2. `projects/score2gp/ACTIVE_TASK.md`
-3. `projects/score2gp/TASKS.md`
+3. `projects/score2gp/ACTIVE_TASK.md`
 
 If `ACTIVE_TASK.md` says `NO_ACTIVE_TASK_APPROVED`, agents must stop after preflight and report.
 
