@@ -372,3 +372,52 @@ def test_pdf_staff_tab_timing_aligner_preserves_pair_separation() -> None:
     assert len(result.unmatched_staff_events) == 0
     assert len(result.unmatched_tab_groups) == 0
     assert sorted(result.bars_using_staff_timing) == [(1, 1, 1, 1), (1, 1, 2, 1)]
+import pytest
+import warnings
+from score2gp.pdf_staff_tab_timing_aligner import (
+    PdfStaffTabTimingAligner,
+    PdfStaffTimingEvent,
+    CandidateXGroupDiagnostics,
+    IrregularStaffBoundsWarning,
+)
+
+def test_aligner_handles_irregular_local_bar_index() -> None:
+    # Staff events are bucketed into local_bar_index=1, 2, 3
+    # But TAB groups are bucketed into local_bar_index=1, 2, 3, 4 (irregular!)
+    # They should still align if their X coordinates match!
+    staff_ev_1 = PdfStaffTimingEvent(id="s-1", page_index=1, system_index=1, staff_index=1, local_bar_index=1, x=100.0, onset_ticks=0, duration_ticks=480)
+    staff_ev_2 = PdfStaffTimingEvent(id="s-2", page_index=1, system_index=1, staff_index=1, local_bar_index=2, x=200.0, onset_ticks=480, duration_ticks=480)
+    
+    tab_grp_1 = CandidateXGroupDiagnostics(x=101.0, x_min=101.0, x_max=101.0, candidate_count=1, candidate_ids=["c-1"], strings=[1])
+    tab_grp_2 = CandidateXGroupDiagnostics(x=201.0, x_min=201.0, x_max=201.0, candidate_count=1, candidate_ids=["c-2"], strings=[1])
+    
+    aligner = PdfStaffTabTimingAligner(tolerance=15.0)
+    
+    # Notice the local_bar_index mismatch for the second event!
+    # staff_ev_2 has local_bar_index=2. tab_grp_2 has local_bar_index=3!
+    result = aligner.align(
+        [staff_ev_1, staff_ev_2],
+        {
+            (1, 1, 1, 1): [tab_grp_1],
+            (1, 1, 1, 3): [tab_grp_2], # Irregular!
+        }
+    )
+    
+    assert len(result.aligned_pairs) == 2
+    assert result.aligned_pairs[0][0].id == "s-1"
+    assert result.aligned_pairs[1][0].id == "s-2"
+    assert result.aligned_pairs[1][1].candidate_ids == ["c-2"]
+
+def test_irregular_staff_bounds_warning() -> None:
+    # A system with severely truncated width (e.g., max_x - min_x < 50.0)
+    staff_ev_1 = PdfStaffTimingEvent(id="s-1", page_index=1, system_index=1, staff_index=1, local_bar_index=1, x=100.0, onset_ticks=0, duration_ticks=480)
+    tab_grp_1 = CandidateXGroupDiagnostics(x=101.0, x_min=101.0, x_max=101.0, candidate_count=1, candidate_ids=["c-1"], strings=[1])
+    tab_grp_2 = CandidateXGroupDiagnostics(x=120.0, x_min=120.0, x_max=120.0, candidate_count=1, candidate_ids=["c-2"], strings=[1])
+    
+    aligner = PdfStaffTabTimingAligner(tolerance=15.0)
+    
+    with pytest.warns(IrregularStaffBoundsWarning):
+        aligner.align(
+            [staff_ev_1],
+            {(1, 1, 1, 1): [tab_grp_1, tab_grp_2]}
+        )

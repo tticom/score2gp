@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import warnings
 from collections import defaultdict
+
+class IrregularStaffBoundsWarning(Warning):
+    pass
+
 from pydantic import BaseModel, Field
 
 from .pdf_staff_timing import PdfStaffTimingEvent
@@ -57,56 +62,98 @@ class PdfStaffTabTimingAligner:
     ) -> PdfStaffTabAlignmentResult:
         result = PdfStaffTabAlignmentResult()
 
-        # Group staff events by normalized bar key (using staff_pair_index as the third element)
-        staff_by_bar = defaultdict(list)
+        # Group staff events by system key: (page_index, system_index, staff_pair_index)
+        staff_by_system = defaultdict(list)
         for ev in staff_events:
-            key = self._alignment_bar_key(ev.page_index, ev.system_index, ev.staff_index, ev.local_bar_index)
-            staff_by_bar[key].append(ev)
+            pair_idx = self._alignment_bar_key(ev.page_index, ev.system_index, ev.staff_index, ev.local_bar_index)[2]
+            key = (ev.page_index, ev.system_index, pair_idx)
+            staff_by_system[key].append(ev)
 
-        # Group tab groups by normalized bar key (using staff_pair_index as the third element)
-        normalized_tab_groups_by_bar = defaultdict(list)
+        # Group tab groups by system key
+        tab_groups_by_system = defaultdict(list)
+        tab_bar_keys_by_system = defaultdict(set)
         for original_key, groups in tab_groups_by_bar.items():
             p_idx, sys_idx, st_idx, bar_idx = original_key
             norm_key = self._alignment_bar_key(p_idx, sys_idx, st_idx, bar_idx)
-            normalized_tab_groups_by_bar[norm_key].extend(groups)
+            sys_key = (norm_key[0], norm_key[1], norm_key[2])
+            tab_groups_by_system[sys_key].extend(groups)
+            tab_bar_keys_by_system[sys_key].add(norm_key)
 
-        # Collect all unique bar keys
-        all_bar_keys = set(staff_by_bar.keys()) | set(normalized_tab_groups_by_bar.keys())
+        all_system_keys = set(staff_by_system.keys()) | set(tab_groups_by_system.keys())
 
-        for bar_key in all_bar_keys:
-            bar_staff_events = staff_by_bar[bar_key]
-            bar_tab_groups = normalized_tab_groups_by_bar.get(bar_key, [])
+        for sys_key in all_system_keys:
+            sys_staff_events = staff_by_system[sys_key]
+            sys_tab_groups = tab_groups_by_system.get(sys_key, [])
+            
+            # Detect severely truncated bounds (e.g. max_x - min_x < 50.0)
+            if sys_tab_groups:
+                xs = [g.x for g in sys_tab_groups]
+                if len(xs) > 1 and max(xs) - min(xs) < 50.0:
+                    warnings.warn("Severely truncated staff bounds detected.", IrregularStaffBoundsWarning)
 
-            if not bar_staff_events:
-                # No staff timing for this bar -> fallback timing
-                result.bars_using_fallback_timing.append(bar_key)
-                result.unmatched_tab_groups.extend(bar_tab_groups)
+            if not sys_staff_events:
+                # No staff timing for this system -> fallback timing
+                result.bars_using_fallback_timing.extend(list(tab_bar_keys_by_system.get(sys_key, set())))
+                result.unmatched_tab_groups.extend(sys_tab_groups)
                 continue
 
-            result.bars_using_staff_timing.append(bar_key)
+            # Extract bar keys
+            staff_bar_keys = {self._alignment_bar_key(ev.page_index, ev.system_index, ev.staff_index, ev.local_bar_index) for ev in sys_staff_events}
+            tab_bar_keys = tab_bar_keys_by_system.get(sys_key, set())
+            
+            # Determine if evidence implies irregular groupings (differing local_bar_indexes)
+            staff_bar_indices = {k[3] for k in staff_bar_keys}
+            tab_bar_indices = {k[3] for k in tab_bar_keys}
+            is_irregular = False
+            if staff_bar_indices and tab_bar_indices:
+                if len(staff_bar_indices) > 1 or len(tab_bar_indices) > 1:
+                    if staff_bar_indices != tab_bar_indices:
+                        is_irregular = True
+                elif len(staff_bar_indices) != len(tab_bar_indices):
+                    is_irregular = True
+                elif len(staff_bar_indices) != len(tab_bar_indices):
+                    is_irregular = True
+
+            result.bars_using_staff_timing.extend(list(staff_bar_keys | tab_bar_keys))
 
             # Map staff events to candidate TAB groups within tolerance
             staff_to_candidates: dict[PdfStaffTimingEvent, list[CandidateXGroupDiagnostics]] = {}
-            for staff_ev in bar_staff_events:
+            for staff_ev in sys_staff_events:
                 if staff_ev.is_rest:
-                    # Rest events do not consume TAB groups
                     staff_to_candidates[staff_ev] = []
                     continue
 
                 candidates = []
-                for tab_grp in bar_tab_groups:
+                for tab_grp in sys_tab_groups:
+                    # If not irregular, enforce local_bar_index matching (bar identity)
+                    if not is_irregular:
+                        # We need to find the local_bar_index of this tab_grp
+                        # tab_grp itself doesn't have local_bar_index, we must find it from tab_groups_by_bar
+                        # But wait, tab_grp is just an object. We can check which bar it came from!
+                        # The easiest way is to re-fetch from tab_groups_by_bar.
+                        matched_bar = False
+                        for original_key, groups in tab_groups_by_bar.items():
+                            if tab_grp in groups:
+                                p_idx, sys_idx, st_idx, bar_idx = original_key
+                                norm_key = self._alignment_bar_key(p_idx, sys_idx, st_idx, bar_idx)
+                                if norm_key[3] == staff_ev.local_bar_index:
+                                    matched_bar = True
+                                    break
+                        if not matched_bar:
+                            continue
+                            
                     if abs(staff_ev.x - tab_grp.x) <= self.tolerance:
                         candidates.append(tab_grp)
                 staff_to_candidates[staff_ev] = candidates
 
-            # Identify ambiguous staff events (mapping to multiple TAB groups)
+            # Identify ambiguous staff events
             ambiguous_staff = set()
             for staff_ev, candidates in staff_to_candidates.items():
                 if len(candidates) > 1:
                     ambiguous_staff.add(staff_ev)
                     result.ambiguous_staff_events.append(staff_ev)
 
-            # Map TAB groups back to staff events to check for reverse ambiguity (multiple staff events mapping to same TAB group)
+            # Map TAB groups back to staff events to check reverse ambiguity
             tab_to_staff: dict[int, list[PdfStaffTimingEvent]] = defaultdict(list)
             for staff_ev, candidates in staff_to_candidates.items():
                 if staff_ev in ambiguous_staff:
@@ -116,7 +163,6 @@ class PdfStaffTabTimingAligner:
 
             for tab_grp_id, mapped_staff in tab_to_staff.items():
                 if len(mapped_staff) > 1:
-                    # Multiple staff events map to the same TAB group -> all of them are ambiguous
                     for staff_ev in mapped_staff:
                         if staff_ev not in ambiguous_staff:
                             ambiguous_staff.add(staff_ev)
@@ -124,27 +170,7 @@ class PdfStaffTabTimingAligner:
 
             # Build aligned pairs and unmatched lists
             aligned_tab_groups = set()
-            for staff_ev in bar_staff_events:
-                if staff_ev in ambiguous_staff:
-                    continue
-
-                if staff_ev.is_rest:
-                    # Rests align as timing-only without consuming any TAB group
-                    # We represent this in the aligned pairs as None or we just don't pair it.
-                    # The test says: "rest appears in alignment result as timing-only/rest evidence".
-                    # Let's include it in aligned_pairs with None for CandidateXGroupDiagnostics,
-                    # or list it separately. Let's list it in aligned_pairs with a placeholder or None.
-                    # Wait, to support tuple, we can define a special representation. Pydantic list of tuples
-                    # allows None values in Tuple if we type it as tuple[PdfStaffTimingEvent, CandidateXGroupDiagnostics | None]
-                    # Let's check: Pydantic type can be `list[tuple[PdfStaffTimingEvent, CandidateXGroupDiagnostics | None]]` or we can just pair it with a dummy group.
-                    # But Python's `tuple[PdfStaffTimingEvent, CandidateXGroupDiagnostics]` can also accept a None-like representation.
-                    # Let's type it as: `aligned_pairs: list[tuple[PdfStaffTimingEvent, CandidateXGroupDiagnostics | None]]`.
-                    pass
-
-            # Let's update `aligned_pairs` definition to allow None
-            # Wait, let's look at CandidateXGroupDiagnostics | None. Pydantic fully supports this.
-            # Let's construct aligned pairs.
-            for staff_ev in bar_staff_events:
+            for staff_ev in sys_staff_events:
                 if staff_ev in ambiguous_staff:
                     continue
 
@@ -157,16 +183,14 @@ class PdfStaffTabTimingAligner:
                     result.unmatched_staff_events.append(staff_ev)
                 else:
                     tab_grp = candidates[0]
-                    # Verify this tab_grp is not part of any ambiguity
                     if id(tab_grp) not in tab_to_staff or len(tab_to_staff[id(tab_grp)]) == 1:
                         result.aligned_pairs.append((staff_ev, tab_grp))
                         aligned_tab_groups.add(id(tab_grp))
                     else:
-                        # Tab group is ambiguous, so staff_ev is also unmatched/ambiguous
                         result.unmatched_staff_events.append(staff_ev)
 
             # Collect unmatched TAB groups
-            for tab_grp in bar_tab_groups:
+            for tab_grp in sys_tab_groups:
                 if id(tab_grp) not in aligned_tab_groups:
                     result.unmatched_tab_groups.append(tab_grp)
 
