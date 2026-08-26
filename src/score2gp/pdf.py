@@ -2103,7 +2103,7 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                                     is_down = ((iy0 + iy1) / 2.0) >= staff_mid
                                 page_stems.append(StemPrimitiveCandidate(bbox=SpatialBBox(ix0, iy0, ix1, iy1), is_downward=is_down))
                         elif dy <= 1.0 and dx >= 7.0:
-                            is_staff = dx >= 300.0 or any(abs(iy0 - ly) <= 1.0 for ly in all_line_ys)
+                            is_staff = any(abs(iy0 - ly) <= 1.0 for ly in all_line_ys)
                             if not is_staff:
                                 page_beams.append(BeamPrimitiveCandidate(bbox=SpatialBBox(ix0, iy0, ix1, iy1)))
                         elif dx >= 3.0 and dy >= 3.0:

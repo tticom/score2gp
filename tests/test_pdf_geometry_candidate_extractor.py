@@ -256,3 +256,54 @@ def test_filter_tab_barline_candidates_inherited_20pt_bar_width_limit() -> None:
     assert 800.0 in system.barlines
     assert 350.0 in system.barlines
     assert 117.0 not in system.barlines
+import pytest
+from pathlib import Path
+from score2gp.pdf import _extract_pdf_text_candidates
+import pymupdf
+from unittest.mock import MagicMock
+import sys
+
+def test_300pt_heuristic_removed_regression(tmp_path: Path) -> None:
+    class FakePage:
+        def __init__(self):
+            self.rect = MagicMock()
+            self.rect.width = 1000.0
+            self.rect.height = 1000.0
+        
+        def get_text(self, kind):
+            if kind == "dict":
+                return {"blocks": []}
+            return []
+            
+        def get_drawings(self):
+            drawings = []
+            for y in [100.0, 108.0, 116.0, 124.0, 132.0]:
+                drawings.append({"items": [("l", MagicMock(x=10.0, y=y), MagicMock(x=800.0, y=y))]})
+            for y in [200.0, 206.0, 212.0, 218.0, 224.0, 230.0]:
+                drawings.append({"items": [("l", MagicMock(x=10.0, y=y), MagicMock(x=800.0, y=y))]})
+            
+            # Now a horizontal line with dx = 400.0 (>= 300.0), NOT on any staff y.
+            drawings.append({"items": [("l", MagicMock(x=50.0, y=150.0), MagicMock(x=450.0, y=150.0))]})
+            return drawings
+
+    class FakeDoc:
+        def __init__(self):
+            self.page_count = 1
+            self.metadata = {}
+        def __getitem__(self, idx):
+            return FakePage()
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            pass
+
+    with pytest.MonkeyPatch.context() as m:
+        m.setattr(pymupdf, "open", lambda f: FakeDoc())
+        if "fitz" in sys.modules:
+            m.setattr(sys.modules["fitz"], "open", lambda f: FakeDoc())
+            
+        warnings = []
+        meta = {"detected_systems": 0, "detected_staves": 0, "detected_bar_boxes": 0, "detected_string_lines": 0}
+        cands = _extract_pdf_text_candidates(tmp_path / "dummy.pdf", warnings, meta)
+        
+        assert meta["detected_string_lines"] == 11, f"Expected 11 staff lines, got {meta['detected_string_lines']}. The 300pt hack might have returned!"
