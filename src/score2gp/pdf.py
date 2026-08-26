@@ -3875,13 +3875,14 @@ def filter_tab_barline_candidates(
         absolute_height_ok = (height >= 40.0)
         relative_height_ok = crosses_entire_staff
         min_barline_height = min(15.0, staff_height - 2.0) if staff_height > 0 else 15.0
-        is_accepted_relative = (height >= min_barline_height)
+        is_accepted_relative = (height >= min_barline_height and relative_height_ok)
 
         initially_accepted = (
             special_rejection_reason is None
             and in_bounds
             and intersects
             and (absolute_height_ok or is_accepted_relative)
+            and relative_height_ok
         )
 
         candidate_data.append({
@@ -4009,7 +4010,7 @@ def filter_tab_barline_candidates(
                         reason = "pdf_barline_crosses_insufficient_string_gaps"
                     else:
                         reason = "pdf_barline_partial_staff_crossing"
-                elif not (item["absolute_height_ok"] or (item["height"] >= min(15.0, staff_height - 2.0))):
+                elif not (item["absolute_height_ok"] or (item["height"] >= min(15.0, staff_height - 2.0) and item["relative_height_ok"])):
                     reason = "pdf_barline_too_short_absolute"
 
                 if reason is None:
