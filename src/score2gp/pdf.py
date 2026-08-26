@@ -2361,11 +2361,7 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
 
                         exclude_staff = (is_outside_staff and string_distance is not None and string_distance > 15.0) or (string is None)
 
-                        exclude_system = False
-                        if is_outside_system and system is not None:
-                            x_dist = max(0.0, x - system.x1, system.x0 - x)
-                            if x_dist > 20.0:
-                                exclude_system = True
+                        exclude_system = is_outside_system
 
                         if exclude_staff or exclude_system or is_page_or_legend or is_chord_text_digit:
                             candidate.kind = "candidate-text"
@@ -3879,14 +3875,13 @@ def filter_tab_barline_candidates(
         absolute_height_ok = (height >= 40.0)
         relative_height_ok = crosses_entire_staff
         min_barline_height = min(15.0, staff_height - 2.0) if staff_height > 0 else 15.0
-        is_accepted_relative = (height >= min_barline_height and relative_height_ok)
+        is_accepted_relative = (height >= min_barline_height)
 
         initially_accepted = (
             special_rejection_reason is None
             and in_bounds
             and intersects
             and (absolute_height_ok or is_accepted_relative)
-            and relative_height_ok
         )
 
         candidate_data.append({
@@ -4014,7 +4009,7 @@ def filter_tab_barline_candidates(
                         reason = "pdf_barline_crosses_insufficient_string_gaps"
                     else:
                         reason = "pdf_barline_partial_staff_crossing"
-                elif not (item["absolute_height_ok"] or (item["height"] >= 20.0 and item["relative_height_ok"])):
+                elif not (item["absolute_height_ok"] or (item["height"] >= min(15.0, staff_height - 2.0))):
                     reason = "pdf_barline_too_short_absolute"
 
                 if reason is None:
