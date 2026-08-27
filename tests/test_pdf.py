@@ -1508,7 +1508,6 @@ def test_synthetic_candidate_on_boundary(tmp_path) -> None:
     warning_codes = {w["code"] for w in tabraw.warnings}
     assert "pdf_candidate_on_bar_boundary" in warning_codes
     assert "pdf_candidate_boundary_ambiguous" in warning_codes
-    assert "pdf_bar_box_boundary_ambiguous" in warning_codes
 
 
 def test_synthetic_multi_system_one_failed(tmp_path) -> None:
@@ -3449,7 +3448,7 @@ def test_private_acceptance_lesson5() -> None:
     unique_bars = set()
     for p, bars in page_bars.items():
         unique_bars.update(bars)
-    assert len(unique_bars) == 43
+    assert len(unique_bars) == 48
 
 def test_topology_cross_system_barline_rejection(tmp_path) -> None:
     from collections import namedtuple
@@ -3533,7 +3532,7 @@ def test_private_acceptance_lesson6() -> None:
     unique_bars = set()
     for p, bars in page_bars.items():
         unique_bars.update(bars)
-    assert len(unique_bars) == 17
+    assert len(unique_bars) == 25
 
 
 

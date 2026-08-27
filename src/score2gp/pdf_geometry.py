@@ -294,7 +294,7 @@ class _LineSegment:
         is_exact_dup = is_exact_duplicate_or_reverse(self, other)
         if (
             self.primitive_kind == other.primitive_kind
-            and (is_exact_dup or (self.primitive_id == other.primitive_id and self.primitive_id is not None))
+            and (is_exact_dup or (self.primitive_id == other.primitive_id and self.primitive_id is not None) or self.primitive_kind == "rect_edge")
         ):
             merged_kind = self.primitive_kind
             merged_id = self.primitive_id or other.primitive_id

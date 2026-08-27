@@ -502,12 +502,19 @@ class _TabSystem:
             return None, ["pdf_candidate_outside_bar", "ambiguous_bar_assignment", "pdf_candidate_unassigned_to_bar"]
 
         internal_barlines = self.barlines[1:-1]
-        if any(abs(x - barline) <= self.ambiguous_bar_tolerance for barline in internal_barlines):
+
+        ambiguous = any(abs(x - barline) <= 1.0 for barline in internal_barlines)
+        if ambiguous:
             return None, ["ambiguous_bar_assignment", "pdf_barlines_ambiguous", "pdf_candidate_on_bar_boundary", "pdf_candidate_boundary_ambiguous", "pdf_bar_box_boundary_ambiguous"]
 
+        # If it's near the boundary but clearly on one side, add warnings but DO NOT REJECT
+        near_boundary_warnings = []
+        if any(abs(x - barline) <= self.ambiguous_bar_tolerance for barline in internal_barlines):
+            near_boundary_warnings.extend(["pdf_candidate_on_bar_boundary", "pdf_candidate_boundary_ambiguous"])
+
         for index, (left, right) in enumerate(zip(self.barlines, self.barlines[1:]), start=1):
-            left_tol = outer_tolerance if left == self.barlines[0] else 4.5
-            right_tol = outer_tolerance if right == self.barlines[-1] else 4.5
+            left_tol = outer_tolerance if left == self.barlines[0] else 0.0
+            right_tol = outer_tolerance if right == self.barlines[-1] else 0.0
 
             if index == 1 and self.floating_barlines:
                 left = min(left, min([fb['x'] if isinstance(fb, dict) else fb for fb in self.floating_barlines]))
@@ -517,6 +524,7 @@ class _TabSystem:
                 warnings = []
                 if x < left or x > right:
                     warnings.append("pdf_candidate_outside_bar")
+                warnings.extend(near_boundary_warnings)
                 if self.inferred_left is not None and abs(left - self.inferred_left) < 1.0:
                     warnings.append("pdf_bar_box_inferred_left_boundary")
                 if self.inferred_right is not None and abs(right - self.inferred_right) < 1.0:
@@ -3938,6 +3946,28 @@ def filter_tab_barline_candidates(
                 secondary = c0
                 final_decisions[representative["idx"]] = (True, None, "regular", 1)
                 final_decisions[secondary["idx"]] = (False, "pdf_barline_rect_secondary", "regular", 1)
+            elif p0_kind == "rect_edge" and p1_kind == "rect_edge" and abs(c1["x"] - c0["x"]) >= 1.0:
+                is_rightmost_edge = any(item["x"] >= x1 - 10.0 for item in cluster)
+                is_leftmost_edge = any(item["x"] <= x0 + 10.0 for item in cluster)
+                if is_rightmost_edge:
+                    representative = cluster[-1]
+                    for item in cluster:
+                        if item is representative:
+                            final_decisions[item["idx"]] = (True, None, "double", 2)
+                        else:
+                            final_decisions[item["idx"]] = (False, "pdf_barline_double_secondary", "double", 2)
+                elif is_leftmost_edge:
+                    representative = cluster[0]
+                    for item in cluster:
+                        if item is representative:
+                            final_decisions[item["idx"]] = (True, None, "double", 2)
+                        else:
+                            final_decisions[item["idx"]] = (False, "pdf_barline_double_secondary", "double", 2)
+                else:
+                    representative = cluster[0]
+                    secondary = cluster[1]
+                    final_decisions[representative["idx"]] = (True, None, "double", 2)
+                    final_decisions[secondary["idx"]] = (False, "pdf_barline_double_secondary", "double", 2)
             elif p0_kind in ("line", None) and p1_kind in ("line", None):
                 is_rightmost_edge = any(item["x"] >= x1 - 10.0 for item in cluster)
                 is_leftmost_edge = any(item["x"] <= x0 + 10.0 for item in cluster)
@@ -3967,6 +3997,26 @@ def filter_tab_barline_candidates(
             primitive_ids = {item["segment"].primitive_id for item in cluster if item["segment"].primitive_id is not None}
             has_rect = any(item["segment"].primitive_kind == "rect_edge" for item in cluster)
             if len(primitive_ids) > 1 and has_rect:
+                has_line = any(item["segment"].primitive_kind == "line" for item in cluster)
+                if not has_line:
+                    min_gap = float("inf")
+                    for i in range(len(cluster)):
+                        for j in range(i + 1, len(cluster)):
+                            if cluster[i]["segment"].primitive_id != cluster[j]["segment"].primitive_id:
+                                gap = abs(cluster[i]["x"] - cluster[j]["x"])
+                                if gap < min_gap:
+                                    min_gap = gap
+                    if min_gap >= 1.0:
+                        is_rightmost_edge = any(item["x"] >= x1 - 10.0 for item in cluster)
+                        is_leftmost_edge = any(item["x"] <= x0 + 10.0 for item in cluster)
+                        if is_rightmost_edge or is_leftmost_edge:
+                            representative = cluster[-1] if is_rightmost_edge else cluster[0]
+                            for item in cluster:
+                                if item is representative:
+                                    final_decisions[item["idx"]] = (True, None, "double", len(cluster))
+                                else:
+                                    final_decisions[item["idx"]] = (False, "pdf_barline_double_secondary", "double", len(cluster))
+                            continue
                 for item in cluster:
                     final_decisions[item["idx"]] = (False, "pdf_barline_mixed_primitive_provenance", "ambiguous", len(cluster))
             else:
