@@ -2103,7 +2103,7 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                                     is_down = ((iy0 + iy1) / 2.0) >= staff_mid
                                 page_stems.append(StemPrimitiveCandidate(bbox=SpatialBBox(ix0, iy0, ix1, iy1), is_downward=is_down))
                         elif dy <= 1.0 and dx >= 7.0:
-                            is_staff = dx >= 300.0 or any(abs(iy0 - ly) <= 1.0 for ly in all_line_ys)
+                            is_staff = any(abs(iy0 - ly) <= 1.0 for ly in all_line_ys)
                             if not is_staff:
                                 page_beams.append(BeamPrimitiveCandidate(bbox=SpatialBBox(ix0, iy0, ix1, iy1)))
                         elif dx >= 3.0 and dy >= 3.0:
@@ -2361,11 +2361,7 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
 
                         exclude_staff = (is_outside_staff and string_distance is not None and string_distance > 15.0) or (string is None)
 
-                        exclude_system = False
-                        if is_outside_system and system is not None:
-                            x_dist = max(0.0, x - system.x1, system.x0 - x)
-                            if x_dist > 20.0:
-                                exclude_system = True
+                        exclude_system = is_outside_system
 
                         if exclude_staff or exclude_system or is_page_or_legend or is_chord_text_digit:
                             candidate.kind = "candidate-text"
@@ -4014,7 +4010,7 @@ def filter_tab_barline_candidates(
                         reason = "pdf_barline_crosses_insufficient_string_gaps"
                     else:
                         reason = "pdf_barline_partial_staff_crossing"
-                elif not (item["absolute_height_ok"] or (item["height"] >= 20.0 and item["relative_height_ok"])):
+                elif not (item["absolute_height_ok"] or (item["height"] >= min(15.0, staff_height - 2.0) and item["relative_height_ok"])):
                     reason = "pdf_barline_too_short_absolute"
 
                 if reason is None:

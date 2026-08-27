@@ -256,3 +256,65 @@ def test_filter_tab_barline_candidates_inherited_20pt_bar_width_limit() -> None:
     assert 800.0 in system.barlines
     assert 350.0 in system.barlines
     assert 117.0 not in system.barlines
+import pytest
+from pathlib import Path
+from score2gp.pdf import _extract_pdf_text_candidates
+import pymupdf
+from unittest.mock import MagicMock
+import sys
+
+def test_300pt_heuristic_removed_regression(tmp_path: Path) -> None:
+    class FakePage:
+        def __init__(self):
+            self.rect = MagicMock()
+            self.rect.width = 1000.0
+            self.rect.height = 1000.0
+
+        def get_text(self, kind):
+            if kind == "words":
+                return [(240.0, 202.0, 260.0, 222.0, "0", 0, 0, 0)]
+            if kind == "dict":
+                return {"blocks": []}
+            return []
+
+        def get_drawings(self):
+            drawings = []
+            for y in [100.0, 108.0, 116.0, 124.0, 132.0]:
+                drawings.append({"items": [("l", MagicMock(x=10.0, y=y), MagicMock(x=800.0, y=y))]})
+            for y in [200.0, 206.0, 212.0, 218.0, 224.0, 230.0]:
+                drawings.append({"items": [("l", MagicMock(x=10.0, y=y), MagicMock(x=800.0, y=y))]})
+
+            drawings.append({"items": [("l", MagicMock(x=50.0, y=260.0), MagicMock(x=450.0, y=260.0))]})
+            drawings.append({"items": [("l", MagicMock(x=250.0, y=230.0), MagicMock(x=250.0, y=260.0))]})
+
+            return drawings
+
+    class FakeDoc:
+        def __init__(self):
+            self.page_count = 1
+            self.metadata = {}
+        def __getitem__(self, idx):
+            if idx > 0:
+                raise IndexError
+            return FakePage()
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            pass
+
+    with pytest.MonkeyPatch.context() as m:
+        m.setattr(pymupdf, "open", lambda f: FakeDoc())
+        if "fitz" in sys.modules:
+            m.setattr(sys.modules["fitz"], "open", lambda f: FakeDoc())
+
+        warnings = []
+        meta = {"detected_systems": 0, "detected_staves": 0, "detected_bar_boxes": 0, "detected_string_lines": 0}
+        cands = _extract_pdf_text_candidates(tmp_path / "dummy.pdf", warnings, meta)
+
+        fret = [cand for cand in cands if cand.get("raw_text") == "0"][0]
+        duration = fret["raw"]["duration_evidence"]
+
+        assert duration["beam_count"] == 1, (
+            f"Expected beam_count 1, got {duration['beam_count']}. "
+            "This implies the 400pt line was absorbed as a staff line due to the 300pt hack!"
+        )
