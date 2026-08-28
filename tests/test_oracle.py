@@ -136,6 +136,7 @@ def test_historical_destructive_behavior_topology_metadata():
 
 
 
+
 def test_infrastructure_only_evaluate_generation_valid_path(tmp_path):
     """
     Explicitly narrow the test's claim to infrastructure-only behavior.
@@ -155,8 +156,12 @@ def test_infrastructure_only_evaluate_generation_valid_path(tmp_path):
     ref_path.touch()
 
     # Synthetically produce independent IRs for the valid path
+    # Make them observably different in a field the oracle ignores (tempo)
+    # to prove the mocked paths are properly isolated and not swapped.
     ref_ir = create_valid_score()
     gen_ir = create_valid_score()
+    ref_ir.tempo = {"bpm": 100}
+    gen_ir.tempo = {"bpm": 120}
 
     with patch("scripts.oracle.run_isolated_generation") as mock_run:
         with patch("scripts.oracle.extract_score_ir_from_gp") as mock_extract:
@@ -166,7 +171,11 @@ def test_infrastructure_only_evaluate_generation_valid_path(tmp_path):
             results = evaluate_generation(pdf_path, ref_path, out_path)
 
             mock_run.assert_called_once_with(pdf_path, out_path)
+
+            # Assert exactly two calls with the strictly correct paths
             assert mock_extract.call_count == 2
+            assert mock_extract.call_args_list[0][0][0] == out_path
+            assert mock_extract.call_args_list[1][0][0] == ref_path
 
             # Assert evaluate_generation properly wires everything to the oracle
             assert "SCORE" in results
