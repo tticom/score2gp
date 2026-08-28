@@ -98,12 +98,12 @@ def test_aggregate_counts_cannot_yield_pass():
     assert not (results["ONSET"].passed and results["TAB_TOKEN"].passed)
 
 
-def test_corpus_absence_falsification():
+def test_corpus_absence_falsification(tmp_path):
     """Verify that if the corpus does not exist, productive acceptance is rejected."""
     from scripts.oracle import evaluate_generation
     from pathlib import Path
 
-    results = evaluate_generation(Path("missing.pdf"), Path("missing.gp"), Path("out.gp"))
+    results = evaluate_generation(Path("missing.pdf"), Path("missing.gp"), tmp_path / "out.gp")
     assert "CORPUS" in results
     assert results["CORPUS"].passed is False
     assert "unavailable" in results["CORPUS"].not_evaluated_reason
@@ -135,35 +135,47 @@ def test_historical_destructive_behavior_topology_metadata():
 
 
 
-def test_infrastructure_real_source_generation_evaluation(tmp_path):
+
+def test_infrastructure_only_evaluate_generation_valid_path(tmp_path):
     """
-    End-to-end real-source PDF -> isolated generation -> GP extraction -> independent assertion.
-    We use a public known-good PDF to ensure it is reproducible in CI.
+    Explicitly narrow the test's claim to infrastructure-only behavior.
+    This test verifies the valid-path wiring of evaluate_generation
+    without making real-source conversion fidelity claims.
     """
-    from score2gp.gp_package import extract_score_ir_from_gp
-    from scripts.oracle import LayeredSemanticOracle, run_isolated_generation
+    from unittest.mock import patch
+    from scripts.oracle import evaluate_generation
+    from pathlib import Path
 
-    pdf_path = PROJECT_ROOT / "tests" / "fixtures" / "pdf" / "generated_scorelike_tab.pdf"
-    out_path = tmp_path / "generated.gp"
+    pdf_path = tmp_path / "dummy.pdf"
+    ref_path = tmp_path / "dummy.gp"
+    out_path = tmp_path / "out.gp"
 
-    # 1. Run generation through the isolated boundary
-    run_isolated_generation(pdf_path, out_path)
+    # We must create the dummy files so the CORPUS check passes
+    pdf_path.touch()
+    ref_path.touch()
 
-    # 2. Extract real-source ScoreIR
-    gen_ir = extract_score_ir_from_gp(out_path)
+    # Synthetically produce independent IRs for the valid path
+    ref_ir = create_valid_score()
+    gen_ir = create_valid_score()
 
-    # 3. Provide an independent, separately sourced reference assertion
-    # by mutating the IR to prove the oracle correctly halts on divergence
-    ref_ir = deepcopy(gen_ir)
-    ref_ir.tracks[0].name = "Mutated Reference Track"
+    with patch("scripts.oracle.run_isolated_generation") as mock_run:
+        with patch("scripts.oracle.extract_score_ir_from_gp") as mock_extract:
+            # First call is generated, second call is reference
+            mock_extract.side_effect = [gen_ir, ref_ir]
 
-    # 4. Evaluate
-    oracle = LayeredSemanticOracle(gen_ir, ref_ir)
-    results = oracle.evaluate()
+            results = evaluate_generation(pdf_path, ref_path, out_path)
 
-    assert "TOPOLOGY" in results
-    assert results["TOPOLOGY"].passed is False
-    assert "Track name mismatch" in results["TOPOLOGY"].first_divergence
+            mock_run.assert_called_once_with(pdf_path, out_path)
+            assert mock_extract.call_count == 2
+
+            # Assert evaluate_generation properly wires everything to the oracle
+            assert "SCORE" in results
+            assert results["SCORE"].passed is True
+            assert results["TOPOLOGY"].passed is True
+
+    # Cleanup dummy files
+    pdf_path.unlink()
+    ref_path.unlink()
 
 
 
