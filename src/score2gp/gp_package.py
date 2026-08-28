@@ -775,14 +775,14 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
                     factor += 1.0 / (2 ** (i + 1))
                 ticks = int(ticks * factor)
 
-            tuplet = r.find("PrimaryTuplet")
+            tuplet = r.find("Tuplet")
             tuplet_obj = None
             if tuplet is not None:
                 num = int(tuplet.get("num") or 1)
                 den = int(tuplet.get("den") or 1)
                 ticks = int(ticks * den / num)
-                from .ir import PrimaryTuplet
-                tuplet_obj = PrimaryTuplet(actual_notes=num, normal_notes=den)
+                from .ir import Tuplet
+                tuplet_obj = Tuplet(actual_notes=num, normal_notes=den)
 
             from .ir import NotatedDuration
             inv_val_map = {
@@ -966,7 +966,7 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
             brush_dir = brush.get("direction").lower() if brush is not None else None
 
             arpeggio = b.find("Arpeggio")
-            arp_dir = arpeggio.get("direction").lower() if arpeggio is not None else None
+            arp_dir = (arpeggio.get("direction").lower() if arpeggio.get("direction") else "down") if arpeggio is not None else None
 
             chord_symbol = _first_text(b, ["Chord"])
 
@@ -1135,7 +1135,7 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
                             tuplet=beat["tuplet_obj"]
                         )
 
-                        ev_id = f"e_m{mb_idx}_s{s_idx}_v{voice_num}_{onset}"
+                        ev_id = f"e_m{mb_idx}_s{s_idx}_v{voice_num}_{onset}_{beat_id}"
 
                         from .ir import Event
                         events.append(Event(
@@ -1143,7 +1143,7 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
                             track_id=track_id,
                             timing=timing,
                             notes=resolved_notes,
-                            is_rest=beat["rest"],
+                            is_rest=beat["rest"] or len(resolved_notes) == 0,
                             dynamic=beat["dynamic"],
                             text=beat["text"],
                             brush=beat["brush"],

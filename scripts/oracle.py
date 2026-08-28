@@ -158,7 +158,11 @@ def run_isolated_generation(pdf_path: Path, output_gp_path: Path) -> None:
     ]
     subprocess.run(cmd, check=True)
 
+
 def evaluate_generation(pdf_path: Path, reference_gp_path: Path, output_gp_path: Path) -> dict[str, LayerResult]:
+    if not pdf_path.exists() or not reference_gp_path.exists():
+        return {"CORPUS": LayerResult("CORPUS", passed=False, not_evaluated_reason="Required source or reference artifacts are unavailable.")}
+
     run_isolated_generation(pdf_path, output_gp_path)
 
     gen_ir = extract_score_ir_from_gp(output_gp_path)
@@ -166,6 +170,7 @@ def evaluate_generation(pdf_path: Path, reference_gp_path: Path, output_gp_path:
 
     oracle = LayeredSemanticOracle(gen_ir, ref_ir)
     return oracle.evaluate()
+
 
 
 import argparse
@@ -198,4 +203,3 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Error during evaluation: {e}")
         sys.exit(2)
-
