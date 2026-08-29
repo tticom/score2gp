@@ -201,10 +201,12 @@ def test_infrastructure_only_evaluate_generation_valid_match(tmp_path):
 
             mock_run.assert_called_once_with(pdf_path, out_path)
 
-            # Assert all layers passed
-            assert all(r.passed for r in results.values())
-            assert "SCORE" in results
-            assert results["SCORE"].passed is True
+            expected_layers = {"TOPOLOGY", "MEASURE", "SCORE", "ONSET", "RHYTHM", "OWNERSHIP", "TAB_TOKEN"}
+            assert set(results.keys()) == expected_layers
+            for layer in expected_layers:
+                assert results[layer].passed is True
+                assert results[layer].first_divergence is None
+                assert results[layer].not_evaluated_reason is None
 
     pdf_path.unlink()
     ref_path.unlink()
