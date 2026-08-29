@@ -88,17 +88,17 @@ class LayeredSemanticOracle:
                 if onset_div is None and (ge.timing.onset_ticks != re.timing.onset_ticks or ge.timing.bar_index != re.timing.bar_index):
                     onset_div = f"Event {i} onset timing mismatch"
 
-                if rhy_div is None and (ge.timing.notated_duration != re.timing.notated_duration):
+                if rhy_div is None and (ge.timing.notated_duration != re.timing.notated_duration or getattr(ge.timing, 'duration_ticks', None) != getattr(re.timing, 'duration_ticks', None)):
                     rhy_div = f"Event {i} rhythm duration mismatch"
 
-                if own_div is None and (ge.timing.voice != re.timing.voice):
-                    own_div = f"Event {i} voice ownership mismatch"
+                if own_div is None and (ge.timing.voice != re.timing.voice or ge.track_id != re.track_id):
+                    own_div = f"Event {i} track/voice ownership mismatch"
 
                 if token_div is None:
-                    g_notes = sorted((n.string, n.fret) for n in getattr(ge, 'notes', []))
-                    r_notes = sorted((n.string, n.fret) for n in getattr(re, 'notes', []))
+                    g_notes = sorted((n.string, n.fret, getattr(n, 'pitch', None)) for n in getattr(ge, 'notes', []))
+                    r_notes = sorted((n.string, n.fret, getattr(n, 'pitch', None)) for n in getattr(re, 'notes', []))
                     if g_notes != r_notes:
-                        token_div = f"Event {i} TAB token mismatch: {g_notes} != {r_notes}"
+                        token_div = f"Event {i} TAB token/pitch mismatch: {g_notes} != {r_notes}"
 
         results["ONSET"] = LayerResult("ONSET", passed=(onset_div is None), first_divergence=onset_div)
         results["RHYTHM"] = LayerResult("RHYTHM", passed=(rhy_div is None), first_divergence=rhy_div)

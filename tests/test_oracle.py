@@ -255,3 +255,27 @@ def test_aliased_paths_hardlink_and_input(tmp_path):
 
     with pytest.raises(ValueError, match="Reference and output paths must not be aliased"):
         evaluate_generation(pdf_path, ref_path, out_path_link)
+
+def test_semantic_fields_rigorous():
+    """Verify that track_id, duration_ticks, and pitch are strictly checked."""
+    from scripts.oracle import LayeredSemanticOracle
+
+    ref = create_valid_score()
+
+    # Test track_id
+    gen = deepcopy(ref)
+    gen.bars[0].events[0].track_id = "wrong_track"
+    results = LayeredSemanticOracle(gen, ref).evaluate()
+    assert results["OWNERSHIP"].passed is False
+
+    # Test duration_ticks
+    gen = deepcopy(ref)
+    gen.bars[0].events[0].timing.duration_ticks = 9999
+    results = LayeredSemanticOracle(gen, ref).evaluate()
+    assert results["RHYTHM"].passed is False
+
+    # Test pitch
+    gen = deepcopy(ref)
+    gen.bars[0].events[0].notes[0].pitch = 99
+    results = LayeredSemanticOracle(gen, ref).evaluate()
+    assert results["TAB_TOKEN"].passed is False
