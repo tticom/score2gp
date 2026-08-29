@@ -228,3 +228,30 @@ def test_downstream_layers_not_evaluated_when_upstream_fails():
 
     assert results["TAB_TOKEN"].passed is False
     assert results["TAB_TOKEN"].not_evaluated_reason == "Blocked by ONSET divergence"
+
+def test_aliased_paths_hardlink_and_input(tmp_path):
+    """Verify that evaluate_generation strictly rejects hardlink aliases and input/output aliases."""
+    from scripts.oracle import evaluate_generation
+    import os
+
+    pdf_path = tmp_path / "dummy.pdf"
+    ref_path = tmp_path / "dummy.gp"
+
+    pdf_path.touch()
+    ref_path.touch()
+
+    # Test input and reference aliased
+    import pytest
+    with pytest.raises(ValueError, match="Input and reference paths must not be aliased"):
+        evaluate_generation(pdf_path, pdf_path, tmp_path / "out.gp")
+
+    # Test input and output aliased
+    with pytest.raises(ValueError, match="Input and output paths must not be aliased"):
+        evaluate_generation(pdf_path, ref_path, pdf_path)
+
+    # Test hardlink reference and output
+    out_path_link = tmp_path / "out_link.gp"
+    os.link(ref_path, out_path_link)
+
+    with pytest.raises(ValueError, match="Reference and output paths must not be aliased"):
+        evaluate_generation(pdf_path, ref_path, out_path_link)

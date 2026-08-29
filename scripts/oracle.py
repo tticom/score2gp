@@ -132,8 +132,20 @@ def evaluate_generation(pdf_path: Path, reference_gp_path: Path, output_gp_path:
     if not pdf_path.exists() or not reference_gp_path.exists():
         return {"CORPUS": LayerResult("CORPUS", passed=False, not_evaluated_reason="Required source or reference artifacts are unavailable.")}
 
-    if reference_gp_path.resolve() == output_gp_path.resolve():
-        raise ValueError("Reference and output paths must not be aliased")
+    if pdf_path.resolve() == reference_gp_path.resolve() or pdf_path.samefile(reference_gp_path):
+        raise ValueError("Input and reference paths must not be aliased")
+
+    if output_gp_path.exists():
+        if reference_gp_path.resolve() == output_gp_path.resolve() or reference_gp_path.samefile(output_gp_path):
+            raise ValueError("Reference and output paths must not be aliased")
+        if pdf_path.resolve() == output_gp_path.resolve() or pdf_path.samefile(output_gp_path):
+            raise ValueError("Input and output paths must not be aliased")
+    else:
+        # Check parent directory to ensure it doesn't resolve to the same as reference
+        if reference_gp_path.resolve() == output_gp_path.resolve():
+            raise ValueError("Reference and output paths must not be aliased")
+        if pdf_path.resolve() == output_gp_path.resolve():
+            raise ValueError("Input and output paths must not be aliased")
 
     run_isolated_generation(pdf_path, output_gp_path)
 
