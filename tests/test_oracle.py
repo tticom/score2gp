@@ -189,3 +189,42 @@ def test_infrastructure_only_evaluate_generation_valid_path(tmp_path):
 
 
 # Added a comment to trigger a new incremental commit for the codex reviewer
+
+def test_aliased_paths_rejected(tmp_path):
+    """Verify that evaluate_generation strictly rejects aliased reference and output paths."""
+    from scripts.oracle import evaluate_generation
+
+    pdf_path = tmp_path / "dummy.pdf"
+    ref_path = tmp_path / "dummy.gp"
+
+    pdf_path.touch()
+    ref_path.touch()
+
+    import pytest
+    with pytest.raises(ValueError, match="Reference and output paths must not be aliased"):
+        evaluate_generation(pdf_path, ref_path, ref_path)
+
+def test_downstream_layers_not_evaluated_when_upstream_fails():
+    """Verify that if ONSET fails, downstream RHYTHM, OWNERSHIP, TAB_TOKEN are NOT_EVALUATED."""
+    from scripts.oracle import LayeredSemanticOracle
+
+    ref = create_valid_score()
+    gen = deepcopy(ref)
+
+    # Mutate ONSET on the first event
+    gen.bars[0].events[0].timing.onset_ticks = 9999
+
+    oracle = LayeredSemanticOracle(gen, ref)
+    results = oracle.evaluate()
+
+    assert results["ONSET"].passed is False
+    assert "onset timing mismatch" in results["ONSET"].first_divergence
+
+    assert results["RHYTHM"].passed is False
+    assert results["RHYTHM"].not_evaluated_reason == "Blocked by ONSET divergence"
+
+    assert results["OWNERSHIP"].passed is False
+    assert results["OWNERSHIP"].not_evaluated_reason == "Blocked by ONSET divergence"
+
+    assert results["TAB_TOKEN"].passed is False
+    assert results["TAB_TOKEN"].not_evaluated_reason == "Blocked by ONSET divergence"

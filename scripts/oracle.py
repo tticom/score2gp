@@ -35,7 +35,6 @@ class LayeredSemanticOracle:
     def evaluate(self) -> dict[str, LayerResult]:
         results = {}
 
-
         # 1. TOPOLOGY
         top_div = None
         if len(self.generated.tracks) != len(self.reference.tracks):
@@ -45,11 +44,8 @@ class LayeredSemanticOracle:
                 if gt.name != rt.name:
                     top_div = f"Track name mismatch: {gt.name} != {rt.name}"
                     break
-                # Compare tuning dicts
-                gt_tuning = gt.tuning.model_dump()
-                rt_tuning = rt.tuning.model_dump()
-                if gt_tuning != rt_tuning:
-                    top_div = f"Track tuning mismatch: {gt_tuning} != {rt_tuning}"
+                if gt.tuning.model_dump() != rt.tuning.model_dump():
+                    top_div = f"Track tuning mismatch: {gt.tuning.model_dump()} != {rt.tuning.model_dump()}"
                     break
 
         if top_div is None:
@@ -61,89 +57,62 @@ class LayeredSemanticOracle:
                         top_div = f"Bar index ordering mismatch: {gb.index} != {rb.index}"
                         break
 
-        results["TOPOLOGY"] = LayerResult(
-            layer="TOPOLOGY",
-            passed=(top_div is None),
-            first_divergence=top_div
-        )
+        results["TOPOLOGY"] = LayerResult("TOPOLOGY", passed=(top_div is None), first_divergence=top_div)
 
-        # Helper to check if we should evaluate lower layers
-        if not results["TOPOLOGY"].passed:
-            for l in ["TAB_TOKEN", "OWNERSHIP", "ONSET", "RHYTHM", "MEASURE", "SCORE"]:
-                results[l] = LayerResult(layer=l, passed=False, not_evaluated_reason="Blocked by TOPOLOGY divergence")
-            return results
-
-        # 2. MEASURE (Measure boundaries & structure)
+        # 2. MEASURE
         meas_div = None
-        for i, (gb, rb) in enumerate(zip(self.generated.bars, self.reference.bars)):
-            if gb.time_signature != rb.time_signature:
-                meas_div = f"Bar {i+1} time signature mismatch"
-                break
+        if top_div is None:
+            for i, (gb, rb) in enumerate(zip(self.generated.bars, self.reference.bars)):
+                if gb.time_signature != rb.time_signature:
+                    meas_div = f"Bar {i+1} time signature mismatch"
+                    break
+        results["MEASURE"] = LayerResult("MEASURE", passed=(meas_div is None), first_divergence=meas_div)
 
-        results["MEASURE"] = LayerResult(
-            layer="MEASURE",
-            passed=(meas_div is None),
-            first_divergence=meas_div
-        )
-
-        if not results["MEASURE"].passed:
-            for l in ["TAB_TOKEN", "OWNERSHIP", "ONSET", "RHYTHM", "SCORE"]:
-                results[l] = LayerResult(layer=l, passed=False, not_evaluated_reason="Blocked by MEASURE divergence")
-            return results
-
-        # Extract events
+        # 3. SCORE
+        score_div = None
         gen_events = [e for b in self.generated.bars for e in b.events]
         ref_events = [e for b in self.reference.bars for e in b.events]
+        if top_div is None and meas_div is None:
+            if len(gen_events) != len(ref_events):
+                score_div = f"Total event count mismatch: {len(gen_events)} != {len(ref_events)}"
+        results["SCORE"] = LayerResult("SCORE", passed=(score_div is None), first_divergence=score_div)
 
-        # 3. SCORE (Overall event counts - aggregate counts cannot yield a pass when ordered events differ)
-        score_div = None
-        if len(gen_events) != len(ref_events):
-            score_div = f"Total event count mismatch: {len(gen_events)} != {len(ref_events)}"
-
-        results["SCORE"] = LayerResult(
-            layer="SCORE",
-            passed=(score_div is None),
-            first_divergence=score_div
-        )
-
-        if not results["SCORE"].passed:
-            for l in ["TAB_TOKEN", "OWNERSHIP", "ONSET", "RHYTHM"]:
-                results[l] = LayerResult(layer=l, passed=False, not_evaluated_reason="Blocked by SCORE divergence")
-            return results
-
-        # Ordered event checks for lower layers
+        # Evaluate events for all lower layers simultaneously if SCORE passed
         token_div = None
         own_div = None
         onset_div = None
         rhy_div = None
 
-        for i, (ge, re) in enumerate(zip(gen_events, ref_events)):
-            # ONSET
-            if ge.timing.onset_ticks != re.timing.onset_ticks or ge.timing.bar_index != re.timing.bar_index:
-                onset_div = f"Event {i} onset timing mismatch"
-                break
+        if top_div is None and meas_div is None and score_div is None:
+            for i, (ge, re) in enumerate(zip(gen_events, ref_events)):
+                if onset_div is None and (ge.timing.onset_ticks != re.timing.onset_ticks or ge.timing.bar_index != re.timing.bar_index):
+                    onset_div = f"Event {i} onset timing mismatch"
 
-            # RHYTHM
-            if ge.timing.notated_duration != re.timing.notated_duration:
-                rhy_div = f"Event {i} rhythm duration mismatch"
-                break
+                if rhy_div is None and (ge.timing.notated_duration != re.timing.notated_duration):
+                    rhy_div = f"Event {i} rhythm duration mismatch"
 
-            # OWNERSHIP (Voice)
-            if ge.timing.voice != re.timing.voice:
-                own_div = f"Event {i} voice ownership mismatch"
-                break
+                if own_div is None and (ge.timing.voice != re.timing.voice):
+                    own_div = f"Event {i} voice ownership mismatch"
 
-            # TAB_TOKEN (Strings and frets)
-            g_notes = sorted((n.string, n.fret) for n in getattr(ge, 'notes', []))
-            r_notes = sorted((n.string, n.fret) for n in getattr(re, 'notes', []))
-            if g_notes != r_notes:
-                token_div = f"Event {i} TAB token mismatch: {g_notes} != {r_notes}"
-                break
+                if token_div is None:
+                    g_notes = sorted((n.string, n.fret) for n in getattr(ge, 'notes', []))
+                    r_notes = sorted((n.string, n.fret) for n in getattr(re, 'notes', []))
+                    if g_notes != r_notes:
+                        token_div = f"Event {i} TAB token mismatch: {g_notes} != {r_notes}"
 
-        results["ONSET"] = LayerResult("ONSET", onset_div is None, first_divergence=onset_div)
-        results["RHYTHM"] = LayerResult("RHYTHM", rhy_div is None, first_divergence=rhy_div)
-        results["OWNERSHIP"] = LayerResult("OWNERSHIP", own_div is None, first_divergence=own_div)
-        results["TAB_TOKEN"] = LayerResult("TAB_TOKEN", token_div is None, first_divergence=token_div)
+        results["ONSET"] = LayerResult("ONSET", passed=(onset_div is None), first_divergence=onset_div)
+        results["RHYTHM"] = LayerResult("RHYTHM", passed=(rhy_div is None), first_divergence=rhy_div)
+        results["OWNERSHIP"] = LayerResult("OWNERSHIP", passed=(own_div is None), first_divergence=own_div)
+        results["TAB_TOKEN"] = LayerResult("TAB_TOKEN", passed=(token_div is None), first_divergence=token_div)
+
+        # Apply blocking cascade in strict order: TOPOLOGY -> MEASURE -> SCORE -> ONSET -> RHYTHM -> OWNERSHIP -> TAB_TOKEN
+        ordered_layers = ["TOPOLOGY", "MEASURE", "SCORE", "ONSET", "RHYTHM", "OWNERSHIP", "TAB_TOKEN"]
+        blocker = None
+        for layer in ordered_layers:
+            if blocker:
+                results[layer] = LayerResult(layer=layer, passed=False, not_evaluated_reason=f"Blocked by {blocker} divergence")
+            elif not results[layer].passed:
+                blocker = layer
 
         return results
 
@@ -162,6 +131,9 @@ def run_isolated_generation(pdf_path: Path, output_gp_path: Path) -> None:
 def evaluate_generation(pdf_path: Path, reference_gp_path: Path, output_gp_path: Path) -> dict[str, LayerResult]:
     if not pdf_path.exists() or not reference_gp_path.exists():
         return {"CORPUS": LayerResult("CORPUS", passed=False, not_evaluated_reason="Required source or reference artifacts are unavailable.")}
+
+    if reference_gp_path.resolve() == output_gp_path.resolve():
+        raise ValueError("Reference and output paths must not be aliased")
 
     run_isolated_generation(pdf_path, output_gp_path)
 
