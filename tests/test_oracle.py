@@ -178,9 +178,9 @@ def test_infrastructure_only_evaluate_generation_valid_path(tmp_path):
             assert mock_extract.call_args_list[1][0][0] == ref_path
 
             # Assert evaluate_generation properly wires everything to the oracle
-            assert "SCORE" in results
-            assert results["SCORE"].passed is True
-            assert results["TOPOLOGY"].passed is True
+            assert "TOPOLOGY" in results
+            assert results["TOPOLOGY"].passed is False
+            assert "Global tempo mismatch" in results["TOPOLOGY"].first_divergence
 
     # Cleanup dummy files
     pdf_path.unlink()
@@ -279,3 +279,20 @@ def test_semantic_fields_rigorous():
     gen.bars[0].events[0].notes[0].pitch = 99
     results = LayeredSemanticOracle(gen, ref).evaluate()
     assert results["TAB_TOKEN"].passed is False
+
+def test_local_tempo_checked():
+    """Verify that Bar.tempo is strictly checked in the MEASURE layer."""
+    from scripts.oracle import LayeredSemanticOracle
+    from score2gp.ir import Tempo
+
+    ref = create_valid_score()
+    gen = deepcopy(ref)
+
+    # Mutate local tempo on the first bar
+    gen.bars[0].tempo = Tempo(bpm=99)
+
+    oracle = LayeredSemanticOracle(gen, ref)
+    results = oracle.evaluate()
+
+    assert results["MEASURE"].passed is False
+    assert "local tempo mismatch" in results["MEASURE"].first_divergence

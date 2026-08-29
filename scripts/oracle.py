@@ -37,7 +37,9 @@ class LayeredSemanticOracle:
 
         # 1. TOPOLOGY
         top_div = None
-        if len(self.generated.tracks) != len(self.reference.tracks):
+        if self.generated.tempo != self.reference.tempo:
+            top_div = f"Global tempo mismatch: {self.generated.tempo} != {self.reference.tempo}"
+        elif len(self.generated.tracks) != len(self.reference.tracks):
             top_div = f"Track count mismatch: {len(self.generated.tracks)} != {len(self.reference.tracks)}"
         else:
             for gt, rt in zip(self.generated.tracks, self.reference.tracks):
@@ -65,6 +67,9 @@ class LayeredSemanticOracle:
             for i, (gb, rb) in enumerate(zip(self.generated.bars, self.reference.bars)):
                 if gb.time_signature != rb.time_signature:
                     meas_div = f"Bar {i+1} time signature mismatch"
+                    break
+                if gb.tempo != rb.tempo:
+                    meas_div = f"Bar {i+1} local tempo mismatch"
                     break
         results["MEASURE"] = LayerResult("MEASURE", passed=(meas_div is None), first_divergence=meas_div)
 
