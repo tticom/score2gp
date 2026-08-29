@@ -137,11 +137,10 @@ def test_historical_destructive_behavior_topology_metadata():
 
 
 
-def test_infrastructure_only_evaluate_generation_valid_path(tmp_path):
+def test_infrastructure_only_evaluate_generation_isolated_paths(tmp_path):
     """
-    Explicitly narrow the test's claim to infrastructure-only behavior.
-    This test verifies the valid-path wiring of evaluate_generation
-    without making real-source conversion fidelity claims.
+    Verify the path wiring of evaluate_generation by providing observably distinct
+    IRs and expecting an explicit failure (proving paths are correctly isolated).
     """
     from unittest.mock import patch
     from scripts.oracle import evaluate_generation
@@ -151,13 +150,9 @@ def test_infrastructure_only_evaluate_generation_valid_path(tmp_path):
     ref_path = tmp_path / "dummy.gp"
     out_path = tmp_path / "out.gp"
 
-    # We must create the dummy files so the CORPUS check passes
     pdf_path.touch()
     ref_path.touch()
 
-    # Synthetically produce independent IRs for the valid path
-    # Make them observably different in a field the oracle ignores (tempo)
-    # to prove the mocked paths are properly isolated and not swapped.
     ref_ir = create_valid_score()
     gen_ir = create_valid_score()
     ref_ir.tempo = {"bpm": 100}
@@ -165,24 +160,52 @@ def test_infrastructure_only_evaluate_generation_valid_path(tmp_path):
 
     with patch("scripts.oracle.run_isolated_generation") as mock_run:
         with patch("scripts.oracle.extract_score_ir_from_gp") as mock_extract:
-            # First call is generated, second call is reference
             mock_extract.side_effect = [gen_ir, ref_ir]
-
             results = evaluate_generation(pdf_path, ref_path, out_path)
 
             mock_run.assert_called_once_with(pdf_path, out_path)
-
-            # Assert exactly two calls with the strictly correct paths
             assert mock_extract.call_count == 2
             assert mock_extract.call_args_list[0][0][0] == out_path
             assert mock_extract.call_args_list[1][0][0] == ref_path
 
-            # Assert evaluate_generation properly wires everything to the oracle
             assert "TOPOLOGY" in results
             assert results["TOPOLOGY"].passed is False
             assert "Global tempo mismatch" in results["TOPOLOGY"].first_divergence
 
-    # Cleanup dummy files
+    pdf_path.unlink()
+    ref_path.unlink()
+
+def test_infrastructure_only_evaluate_generation_valid_match(tmp_path):
+    """
+    Verify that when extraction produces identical IRs, evaluate_generation
+    correctly returns a full pass for all semantic layers.
+    """
+    from unittest.mock import patch
+    from scripts.oracle import evaluate_generation
+    from pathlib import Path
+
+    pdf_path = tmp_path / "dummy.pdf"
+    ref_path = tmp_path / "dummy.gp"
+    out_path = tmp_path / "out.gp"
+
+    pdf_path.touch()
+    ref_path.touch()
+
+    ref_ir = create_valid_score()
+    gen_ir = create_valid_score()
+
+    with patch("scripts.oracle.run_isolated_generation") as mock_run:
+        with patch("scripts.oracle.extract_score_ir_from_gp") as mock_extract:
+            mock_extract.side_effect = [gen_ir, ref_ir]
+            results = evaluate_generation(pdf_path, ref_path, out_path)
+
+            mock_run.assert_called_once_with(pdf_path, out_path)
+
+            # Assert all layers passed
+            assert all(r.passed for r in results.values())
+            assert "SCORE" in results
+            assert results["SCORE"].passed is True
+
     pdf_path.unlink()
     ref_path.unlink()
 
