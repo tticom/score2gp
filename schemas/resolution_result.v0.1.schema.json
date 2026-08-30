@@ -1,0 +1,208 @@
+{
+  "$defs": {
+    "ConstraintViolation": {
+      "additionalProperties": false,
+      "properties": {
+        "affected_node_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Affected Node Ids",
+          "type": "array"
+        },
+        "affected_scope": {
+          "$ref": "#/$defs/ResolutionScope",
+          "default": "measure"
+        },
+        "constraint_id": {
+          "title": "Constraint Id",
+          "type": "string"
+        },
+        "constraint_name": {
+          "title": "Constraint Name",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "details": {
+          "additionalProperties": true,
+          "title": "Details",
+          "type": "object"
+        },
+        "is_hard_constraint": {
+          "default": true,
+          "title": "Is Hard Constraint",
+          "type": "boolean"
+        },
+        "scope_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scope Id"
+        }
+      },
+      "required": [
+        "constraint_id",
+        "constraint_name",
+        "description"
+      ],
+      "title": "ConstraintViolation",
+      "type": "object"
+    },
+    "ResolutionOutcome": {
+      "enum": [
+        "RESOLVED",
+        "AMBIGUOUS",
+        "UNSUPPORTED",
+        "CONTRADICTORY"
+      ],
+      "title": "ResolutionOutcome",
+      "type": "string"
+    },
+    "ResolutionScope": {
+      "enum": [
+        "document",
+        "system",
+        "staff",
+        "measure",
+        "voice",
+        "event",
+        "node"
+      ],
+      "title": "ResolutionScope",
+      "type": "string"
+    },
+    "ScopedResolution": {
+      "additionalProperties": false,
+      "properties": {
+        "abstention_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Abstention Reason"
+        },
+        "accepted_node_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Accepted Node Ids",
+          "type": "array"
+        },
+        "confidence": {
+          "default": 1.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "outcome": {
+          "$ref": "#/$defs/ResolutionOutcome"
+        },
+        "rejected_node_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Rejected Node Ids",
+          "type": "array"
+        },
+        "scope": {
+          "$ref": "#/$defs/ResolutionScope"
+        },
+        "scope_id": {
+          "title": "Scope Id",
+          "type": "string"
+        },
+        "violations": {
+          "items": {
+            "$ref": "#/$defs/ConstraintViolation"
+          },
+          "title": "Violations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "scope",
+        "scope_id",
+        "outcome"
+      ],
+      "title": "ScopedResolution",
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/tticom/score2gp/schemas/resolution_result.v0.1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "all_accepted_node_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "All Accepted Node Ids",
+      "type": "array"
+    },
+    "all_rejected_node_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "All Rejected Node Ids",
+      "type": "array"
+    },
+    "all_violations": {
+      "items": {
+        "$ref": "#/$defs/ConstraintViolation"
+      },
+      "title": "All Violations",
+      "type": "array"
+    },
+    "document_id": {
+      "title": "Document Id",
+      "type": "string"
+    },
+    "is_success": {
+      "title": "Is Success",
+      "type": "boolean"
+    },
+    "overall_outcome": {
+      "$ref": "#/$defs/ResolutionOutcome"
+    },
+    "schema_version": {
+      "const": "resolution_result.v0.1",
+      "default": "resolution_result.v0.1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "scoped_resolutions": {
+      "items": {
+        "$ref": "#/$defs/ScopedResolution"
+      },
+      "title": "Scoped Resolutions",
+      "type": "array"
+    },
+    "summary_diagnostics": {
+      "additionalProperties": true,
+      "title": "Summary Diagnostics",
+      "type": "object"
+    }
+  },
+  "required": [
+    "document_id",
+    "overall_outcome",
+    "is_success"
+  ],
+  "title": "ResolutionResult v0.1",
+  "type": "object"
+}

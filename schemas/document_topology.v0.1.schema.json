@@ -1,0 +1,496 @@
+{
+  "$defs": {
+    "BoundingBox2D": {
+      "additionalProperties": false,
+      "properties": {
+        "page_index": {
+          "minimum": 1,
+          "title": "Page Index",
+          "type": "integer"
+        },
+        "x0": {
+          "title": "X0",
+          "type": "number"
+        },
+        "x1": {
+          "title": "X1",
+          "type": "number"
+        },
+        "y0": {
+          "title": "Y0",
+          "type": "number"
+        },
+        "y1": {
+          "title": "Y1",
+          "type": "number"
+        }
+      },
+      "required": [
+        "page_index",
+        "x0",
+        "y0",
+        "x1",
+        "y1"
+      ],
+      "title": "BoundingBox2D",
+      "type": "object"
+    },
+    "PageTopology": {
+      "additionalProperties": false,
+      "properties": {
+        "content_bbox": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BoundingBox2D"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "height": {
+          "exclusiveMinimum": 0,
+          "title": "Height",
+          "type": "number"
+        },
+        "page_index": {
+          "minimum": 1,
+          "title": "Page Index",
+          "type": "integer"
+        },
+        "reading_order": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reading Order",
+          "type": "array"
+        },
+        "system_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "System Ids",
+          "type": "array"
+        },
+        "width": {
+          "exclusiveMinimum": 0,
+          "title": "Width",
+          "type": "number"
+        }
+      },
+      "required": [
+        "page_index",
+        "width",
+        "height"
+      ],
+      "title": "PageTopology",
+      "type": "object"
+    },
+    "PhysicalDivision": {
+      "additionalProperties": false,
+      "properties": {
+        "confidence": {
+          "default": 1.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "division_style": {
+          "default": "single",
+          "enum": [
+            "single",
+            "double",
+            "repeat_start",
+            "repeat_end",
+            "final",
+            "dashed",
+            "dotted",
+            "floating"
+          ],
+          "title": "Division Style",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "observation_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Observation Ids",
+          "type": "array"
+        },
+        "page_index": {
+          "minimum": 1,
+          "title": "Page Index",
+          "type": "integer"
+        },
+        "staff_region_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Staff Region Ids",
+          "type": "array"
+        },
+        "stroke_thickness": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stroke Thickness"
+        },
+        "system_id": {
+          "title": "System Id",
+          "type": "string"
+        },
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y_bottom": {
+          "title": "Y Bottom",
+          "type": "number"
+        },
+        "y_top": {
+          "title": "Y Top",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "page_index",
+        "system_id",
+        "x",
+        "y_top",
+        "y_bottom"
+      ],
+      "title": "PhysicalDivision",
+      "type": "object"
+    },
+    "StaffKind": {
+      "enum": [
+        "notation",
+        "tab",
+        "unknown"
+      ],
+      "title": "StaffKind",
+      "type": "string"
+    },
+    "StaffLine": {
+      "additionalProperties": false,
+      "properties": {
+        "index": {
+          "minimum": 1,
+          "title": "Index",
+          "type": "integer"
+        },
+        "stroke_width": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stroke Width"
+        },
+        "x_end": {
+          "title": "X End",
+          "type": "number"
+        },
+        "x_start": {
+          "title": "X Start",
+          "type": "number"
+        },
+        "y_position": {
+          "title": "Y Position",
+          "type": "number"
+        }
+      },
+      "required": [
+        "index",
+        "y_position",
+        "x_start",
+        "x_end"
+      ],
+      "title": "StaffLine",
+      "type": "object"
+    },
+    "StaffPairing": {
+      "additionalProperties": false,
+      "properties": {
+        "confidence": {
+          "default": 1.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "notation_staff_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Notation Staff Id"
+        },
+        "pairing_kind": {
+          "enum": [
+            "paired_notation_tab",
+            "standalone_notation",
+            "standalone_tab"
+          ],
+          "title": "Pairing Kind",
+          "type": "string"
+        },
+        "system_id": {
+          "title": "System Id",
+          "type": "string"
+        },
+        "tab_staff_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tab Staff Id"
+        },
+        "vertical_gap": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vertical Gap"
+        }
+      },
+      "required": [
+        "id",
+        "system_id",
+        "pairing_kind"
+      ],
+      "title": "StaffPairing",
+      "type": "object"
+    },
+    "StaffRegion": {
+      "additionalProperties": false,
+      "properties": {
+        "bbox": {
+          "$ref": "#/$defs/BoundingBox2D"
+        },
+        "confidence": {
+          "default": 1.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "line_count": {
+          "maximum": 12,
+          "minimum": 1,
+          "title": "Line Count",
+          "type": "integer"
+        },
+        "lines": {
+          "items": {
+            "$ref": "#/$defs/StaffLine"
+          },
+          "title": "Lines",
+          "type": "array"
+        },
+        "observation_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Observation Ids",
+          "type": "array"
+        },
+        "page_index": {
+          "minimum": 1,
+          "title": "Page Index",
+          "type": "integer"
+        },
+        "staff_kind": {
+          "$ref": "#/$defs/StaffKind"
+        },
+        "staff_space": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Staff Space"
+        },
+        "system_id": {
+          "title": "System Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "page_index",
+        "system_id",
+        "staff_kind",
+        "line_count",
+        "bbox"
+      ],
+      "title": "StaffRegion",
+      "type": "object"
+    },
+    "SystemTopology": {
+      "additionalProperties": false,
+      "properties": {
+        "bbox": {
+          "$ref": "#/$defs/BoundingBox2D"
+        },
+        "confidence": {
+          "default": 1.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "division_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Division Ids",
+          "type": "array"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "page_index": {
+          "minimum": 1,
+          "title": "Page Index",
+          "type": "integer"
+        },
+        "pairing_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Pairing Ids",
+          "type": "array"
+        },
+        "staff_region_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Staff Region Ids",
+          "type": "array"
+        },
+        "system_index": {
+          "minimum": 1,
+          "title": "System Index",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "page_index",
+        "system_index",
+        "bbox"
+      ],
+      "title": "SystemTopology",
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/tticom/score2gp/schemas/document_topology.v0.1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "competing_hypotheses": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Competing Hypotheses",
+      "type": "array"
+    },
+    "divisions": {
+      "items": {
+        "$ref": "#/$defs/PhysicalDivision"
+      },
+      "title": "Divisions",
+      "type": "array"
+    },
+    "document_id": {
+      "title": "Document Id",
+      "type": "string"
+    },
+    "pages": {
+      "items": {
+        "$ref": "#/$defs/PageTopology"
+      },
+      "title": "Pages",
+      "type": "array"
+    },
+    "pairings": {
+      "items": {
+        "$ref": "#/$defs/StaffPairing"
+      },
+      "title": "Pairings",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "document_topology.v0.1",
+      "default": "document_topology.v0.1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "staves": {
+      "items": {
+        "$ref": "#/$defs/StaffRegion"
+      },
+      "title": "Staves",
+      "type": "array"
+    },
+    "systems": {
+      "items": {
+        "$ref": "#/$defs/SystemTopology"
+      },
+      "title": "Systems",
+      "type": "array"
+    }
+  },
+  "required": [
+    "document_id"
+  ],
+  "title": "DocumentTopology v0.1",
+  "type": "object"
+}

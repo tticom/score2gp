@@ -1,0 +1,294 @@
+{
+  "$defs": {
+    "BoundingBox2D": {
+      "additionalProperties": false,
+      "properties": {
+        "page_index": {
+          "minimum": 1,
+          "title": "Page Index",
+          "type": "integer"
+        },
+        "x0": {
+          "title": "X0",
+          "type": "number"
+        },
+        "x1": {
+          "title": "X1",
+          "type": "number"
+        },
+        "y0": {
+          "title": "Y0",
+          "type": "number"
+        },
+        "y1": {
+          "title": "Y1",
+          "type": "number"
+        }
+      },
+      "required": [
+        "page_index",
+        "x0",
+        "y0",
+        "x1",
+        "y1"
+      ],
+      "title": "BoundingBox2D",
+      "type": "object"
+    },
+    "GraphNode": {
+      "additionalProperties": false,
+      "properties": {
+        "bbox": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BoundingBox2D"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "candidate_values": {
+          "items": {},
+          "title": "Candidate Values",
+          "type": "array"
+        },
+        "confidence": {
+          "default": 1.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/GraphNodeKind"
+        },
+        "page_index": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page Index"
+        },
+        "parent_hypothesis_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Parent Hypothesis Ids",
+          "type": "array"
+        },
+        "properties": {
+          "additionalProperties": true,
+          "title": "Properties",
+          "type": "object"
+        },
+        "raw_text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Raw Text"
+        },
+        "source_observation_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Source Observation Ids",
+          "type": "array"
+        },
+        "staff_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Staff Id"
+        },
+        "status": {
+          "default": "provisional",
+          "enum": [
+            "active",
+            "rejected",
+            "provisional"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "system_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "System Id"
+        }
+      },
+      "required": [
+        "id",
+        "kind"
+      ],
+      "title": "GraphNode",
+      "type": "object"
+    },
+    "GraphNodeKind": {
+      "enum": [
+        "observation_ref",
+        "tab_digit",
+        "notehead",
+        "stem",
+        "beam",
+        "flag",
+        "rest",
+        "accidental",
+        "augmentation_dot",
+        "tie",
+        "slur",
+        "clef",
+        "time_signature",
+        "key_signature",
+        "chord_symbol",
+        "technique_glyph",
+        "barline",
+        "repeat_sign",
+        "section_header",
+        "tempo_text",
+        "lyric_text",
+        "competing_cluster"
+      ],
+      "title": "GraphNodeKind",
+      "type": "string"
+    },
+    "GraphRelation": {
+      "additionalProperties": false,
+      "properties": {
+        "confidence": {
+          "default": 1.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/GraphRelationKind"
+        },
+        "properties": {
+          "additionalProperties": true,
+          "title": "Properties",
+          "type": "object"
+        },
+        "source_id": {
+          "title": "Source Id",
+          "type": "string"
+        },
+        "target_id": {
+          "title": "Target Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "source_id",
+        "target_id",
+        "kind"
+      ],
+      "title": "GraphRelation",
+      "type": "object"
+    },
+    "GraphRelationKind": {
+      "enum": [
+        "in_staff",
+        "in_system",
+        "attached_to_stem",
+        "same_onset",
+        "conflicts_with",
+        "contains",
+        "aligned_with",
+        "beamed_with",
+        "tied_to",
+        "slurred_to",
+        "attached_to_note",
+        "precedes",
+        "belongs_to_cluster"
+      ],
+      "title": "GraphRelationKind",
+      "type": "string"
+    }
+  },
+  "$id": "https://github.com/tticom/score2gp/schemas/recognition_graph.v0.1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "competing_clusters": {
+      "items": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "title": "Competing Clusters",
+      "type": "array"
+    },
+    "document_id": {
+      "title": "Document Id",
+      "type": "string"
+    },
+    "metadata": {
+      "additionalProperties": true,
+      "title": "Metadata",
+      "type": "object"
+    },
+    "nodes": {
+      "items": {
+        "$ref": "#/$defs/GraphNode"
+      },
+      "title": "Nodes",
+      "type": "array"
+    },
+    "relations": {
+      "items": {
+        "$ref": "#/$defs/GraphRelation"
+      },
+      "title": "Relations",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "recognition_graph.v0.1",
+      "default": "recognition_graph.v0.1",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "document_id"
+  ],
+  "title": "RecognitionGraph v0.1",
+  "type": "object"
+}

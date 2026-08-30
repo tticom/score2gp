@@ -1,0 +1,660 @@
+{
+  "$defs": {
+    "FingeringProvenance": {
+      "enum": [
+        "observed",
+        "inferred"
+      ],
+      "title": "FingeringProvenance",
+      "type": "string"
+    },
+    "MusicalEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "chord_symbol": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Chord Symbol"
+        },
+        "dynamic": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dynamic"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "is_rest": {
+          "default": false,
+          "title": "Is Rest",
+          "type": "boolean"
+        },
+        "measure_index": {
+          "minimum": 1,
+          "title": "Measure Index",
+          "type": "integer"
+        },
+        "notes": {
+          "items": {
+            "$ref": "#/$defs/MusicalNote"
+          },
+          "title": "Notes",
+          "type": "array"
+        },
+        "source_node_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Source Node Ids",
+          "type": "array"
+        },
+        "techniques": {
+          "items": {
+            "$ref": "#/$defs/MusicalTechnique"
+          },
+          "title": "Techniques",
+          "type": "array"
+        },
+        "text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Text"
+        },
+        "timing": {
+          "$ref": "#/$defs/MusicalTiming"
+        },
+        "track_id": {
+          "title": "Track Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "track_id",
+        "measure_index",
+        "timing"
+      ],
+      "title": "MusicalEvent",
+      "type": "object"
+    },
+    "MusicalKeySignature": {
+      "additionalProperties": false,
+      "properties": {
+        "fifths": {
+          "maximum": 7,
+          "minimum": -7,
+          "title": "Fifths",
+          "type": "integer"
+        },
+        "mode": {
+          "default": "major",
+          "enum": [
+            "major",
+            "minor"
+          ],
+          "title": "Mode",
+          "type": "string"
+        }
+      },
+      "required": [
+        "fifths"
+      ],
+      "title": "MusicalKeySignature",
+      "type": "object"
+    },
+    "MusicalMeasure": {
+      "additionalProperties": false,
+      "properties": {
+        "alternate_ending": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Alternate Ending"
+        },
+        "barline_type": {
+          "default": "regular",
+          "enum": [
+            "regular",
+            "double",
+            "repeat_start",
+            "repeat_end",
+            "final"
+          ],
+          "title": "Barline Type",
+          "type": "string"
+        },
+        "events": {
+          "items": {
+            "$ref": "#/$defs/MusicalEvent"
+          },
+          "title": "Events",
+          "type": "array"
+        },
+        "index": {
+          "minimum": 1,
+          "title": "Index",
+          "type": "integer"
+        },
+        "key_signature": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MusicalKeySignature"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "repeat_count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Repeat Count"
+        },
+        "section_header": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Section Header"
+        },
+        "source_division_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Source Division Ids",
+          "type": "array"
+        },
+        "tempo": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MusicalTempo"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "time_signature": {
+          "$ref": "#/$defs/MusicalTimeSignature"
+        }
+      },
+      "required": [
+        "index",
+        "time_signature"
+      ],
+      "title": "MusicalMeasure",
+      "type": "object"
+    },
+    "MusicalMetadata": {
+      "additionalProperties": false,
+      "properties": {
+        "album": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Album"
+        },
+        "artist": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Artist"
+        },
+        "composer": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Composer"
+        },
+        "copyright": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Copyright"
+        },
+        "source_pdf": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Pdf"
+        },
+        "subtitle": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subtitle"
+        },
+        "title": {
+          "default": "Untitled",
+          "title": "Title",
+          "type": "string"
+        },
+        "transcriber": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Transcriber"
+        }
+      },
+      "title": "MusicalMetadata",
+      "type": "object"
+    },
+    "MusicalNote": {
+      "additionalProperties": false,
+      "properties": {
+        "fingering_provenance": {
+          "$ref": "#/$defs/FingeringProvenance",
+          "default": "observed"
+        },
+        "fret": {
+          "maximum": 36,
+          "minimum": 0,
+          "title": "Fret",
+          "type": "integer"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "is_tie_destination": {
+          "default": false,
+          "title": "Is Tie Destination",
+          "type": "boolean"
+        },
+        "left_hand_finger": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Left Hand Finger"
+        },
+        "pitch": {
+          "maximum": 127,
+          "minimum": 0,
+          "title": "Pitch",
+          "type": "integer"
+        },
+        "right_hand_finger": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Right Hand Finger"
+        },
+        "source_node_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Source Node Ids",
+          "type": "array"
+        },
+        "string": {
+          "maximum": 12,
+          "minimum": 1,
+          "title": "String",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "string",
+        "fret",
+        "pitch"
+      ],
+      "title": "MusicalNote",
+      "type": "object"
+    },
+    "MusicalTechnique": {
+      "additionalProperties": false,
+      "properties": {
+        "details": {
+          "additionalProperties": true,
+          "title": "Details",
+          "type": "object"
+        },
+        "kind": {
+          "enum": [
+            "slide",
+            "bend",
+            "vibrato",
+            "hammer_on",
+            "pull_off",
+            "tap",
+            "harmonic",
+            "palm_mute",
+            "let_ring"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "source_node_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Source Node Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "MusicalTechnique",
+      "type": "object"
+    },
+    "MusicalTempo": {
+      "additionalProperties": false,
+      "properties": {
+        "bpm": {
+          "maximum": 400,
+          "minimum": 20,
+          "title": "Bpm",
+          "type": "integer"
+        },
+        "text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Text"
+        }
+      },
+      "required": [
+        "bpm"
+      ],
+      "title": "MusicalTempo",
+      "type": "object"
+    },
+    "MusicalTimeSignature": {
+      "additionalProperties": false,
+      "properties": {
+        "denominator": {
+          "maximum": 64,
+          "minimum": 1,
+          "title": "Denominator",
+          "type": "integer"
+        },
+        "numerator": {
+          "maximum": 64,
+          "minimum": 1,
+          "title": "Numerator",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "numerator",
+        "denominator"
+      ],
+      "title": "MusicalTimeSignature",
+      "type": "object"
+    },
+    "MusicalTiming": {
+      "additionalProperties": false,
+      "properties": {
+        "duration_ticks": {
+          "exclusiveMinimum": 0,
+          "title": "Duration Ticks",
+          "type": "integer"
+        },
+        "is_triplet_or_tuplet": {
+          "default": false,
+          "title": "Is Triplet Or Tuplet",
+          "type": "boolean"
+        },
+        "onset_ticks": {
+          "minimum": 0,
+          "title": "Onset Ticks",
+          "type": "integer"
+        },
+        "ticks_per_quarter": {
+          "default": 960,
+          "exclusiveMinimum": 0,
+          "title": "Ticks Per Quarter",
+          "type": "integer"
+        },
+        "tuplet_ratio": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tuplet Ratio"
+        },
+        "voice": {
+          "default": 1,
+          "maximum": 8,
+          "minimum": 1,
+          "title": "Voice",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "onset_ticks",
+        "duration_ticks"
+      ],
+      "title": "MusicalTiming",
+      "type": "object"
+    },
+    "MusicalTrack": {
+      "additionalProperties": false,
+      "properties": {
+        "capo": {
+          "default": 0,
+          "maximum": 12,
+          "minimum": 0,
+          "title": "Capo",
+          "type": "integer"
+        },
+        "has_standard_notation": {
+          "default": true,
+          "title": "Has Standard Notation",
+          "type": "boolean"
+        },
+        "has_tablature": {
+          "default": true,
+          "title": "Has Tablature",
+          "type": "boolean"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "instrument": {
+          "default": "Acoustic Guitar",
+          "title": "Instrument",
+          "type": "string"
+        },
+        "midi_program": {
+          "default": 25,
+          "maximum": 127,
+          "minimum": 0,
+          "title": "Midi Program",
+          "type": "integer"
+        },
+        "name": {
+          "default": "Guitar",
+          "title": "Name",
+          "type": "string"
+        },
+        "staff_count": {
+          "default": 2,
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Staff Count",
+          "type": "integer"
+        },
+        "tuning": {
+          "$ref": "#/$defs/TuningDefinition"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "MusicalTrack",
+      "type": "object"
+    },
+    "TuningDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "default": "Standard",
+          "title": "Name",
+          "type": "string"
+        },
+        "strings": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Strings",
+          "type": "array"
+        }
+      },
+      "title": "TuningDefinition",
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/tticom/score2gp/schemas/musical_document.v0.1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "document_id": {
+      "title": "Document Id",
+      "type": "string"
+    },
+    "measures": {
+      "items": {
+        "$ref": "#/$defs/MusicalMeasure"
+      },
+      "title": "Measures",
+      "type": "array"
+    },
+    "metadata": {
+      "$ref": "#/$defs/MusicalMetadata"
+    },
+    "resolution_provenance": {
+      "additionalProperties": true,
+      "title": "Resolution Provenance",
+      "type": "object"
+    },
+    "schema_version": {
+      "const": "musical_document.v0.1",
+      "default": "musical_document.v0.1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "tracks": {
+      "items": {
+        "$ref": "#/$defs/MusicalTrack"
+      },
+      "title": "Tracks",
+      "type": "array"
+    }
+  },
+  "required": [
+    "document_id"
+  ],
+  "title": "MusicalDocument v0.1",
+  "type": "object"
+}

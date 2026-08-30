@@ -1,0 +1,520 @@
+{
+  "$defs": {
+    "BoundingBox2D": {
+      "additionalProperties": false,
+      "properties": {
+        "page_index": {
+          "minimum": 1,
+          "title": "Page Index",
+          "type": "integer"
+        },
+        "x0": {
+          "title": "X0",
+          "type": "number"
+        },
+        "x1": {
+          "title": "X1",
+          "type": "number"
+        },
+        "y0": {
+          "title": "Y0",
+          "type": "number"
+        },
+        "y1": {
+          "title": "Y1",
+          "type": "number"
+        }
+      },
+      "required": [
+        "page_index",
+        "x0",
+        "y0",
+        "x1",
+        "y1"
+      ],
+      "title": "BoundingBox2D",
+      "type": "object"
+    },
+    "ObservationProvenance": {
+      "additionalProperties": false,
+      "properties": {
+        "acquisition_adapter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Acquisition Adapter"
+        },
+        "extra": {
+          "additionalProperties": true,
+          "title": "Extra",
+          "type": "object"
+        },
+        "page_index": {
+          "minimum": 1,
+          "title": "Page Index",
+          "type": "integer"
+        },
+        "raw_primitive_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Raw Primitive Id"
+        },
+        "source_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source File"
+        },
+        "source_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Hash"
+        }
+      },
+      "required": [
+        "page_index"
+      ],
+      "title": "ObservationProvenance",
+      "type": "object"
+    },
+    "Point2D": {
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "title": "Point2D",
+      "type": "object"
+    },
+    "RasterObservation": {
+      "additionalProperties": false,
+      "properties": {
+        "bbox": {
+          "$ref": "#/$defs/BoundingBox2D"
+        },
+        "color_channels": {
+          "default": 1,
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Color Channels",
+          "type": "integer"
+        },
+        "confidence": {
+          "default": 1.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "extra": {
+          "additionalProperties": true,
+          "title": "Extra",
+          "type": "object"
+        },
+        "feature_type": {
+          "default": "region",
+          "enum": [
+            "page_crop",
+            "staff_crop",
+            "glyph_crop",
+            "region"
+          ],
+          "title": "Feature Type",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "pixel_height": {
+          "exclusiveMinimum": 0,
+          "title": "Pixel Height",
+          "type": "integer"
+        },
+        "pixel_width": {
+          "exclusiveMinimum": 0,
+          "title": "Pixel Width",
+          "type": "integer"
+        },
+        "provenance": {
+          "$ref": "#/$defs/ObservationProvenance"
+        },
+        "raster_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Raster Ref"
+        },
+        "resolution_dpi": {
+          "exclusiveMinimum": 0,
+          "title": "Resolution Dpi",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "provenance",
+        "bbox",
+        "resolution_dpi",
+        "pixel_width",
+        "pixel_height"
+      ],
+      "title": "RasterObservation",
+      "type": "object"
+    },
+    "ScaleEstimate": {
+      "additionalProperties": false,
+      "properties": {
+        "dpi": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dpi"
+        },
+        "glyph_scale": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Glyph Scale"
+        },
+        "notation_staff_space": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Notation Staff Space"
+        },
+        "stroke_thickness": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stroke Thickness"
+        },
+        "tab_string_space": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tab String Space"
+        }
+      },
+      "title": "ScaleEstimate",
+      "type": "object"
+    },
+    "TextObservation": {
+      "additionalProperties": false,
+      "properties": {
+        "bbox": {
+          "$ref": "#/$defs/BoundingBox2D"
+        },
+        "character_bboxes": {
+          "items": {
+            "$ref": "#/$defs/BoundingBox2D"
+          },
+          "title": "Character Bboxes",
+          "type": "array"
+        },
+        "confidence": {
+          "default": 1.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "extra": {
+          "additionalProperties": true,
+          "title": "Extra",
+          "type": "object"
+        },
+        "font_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Font Name"
+        },
+        "font_size": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Font Size"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "provenance": {
+          "$ref": "#/$defs/ObservationProvenance"
+        },
+        "raw_text": {
+          "title": "Raw Text",
+          "type": "string"
+        },
+        "reading_direction": {
+          "default": "horizontal_lr",
+          "enum": [
+            "horizontal_lr",
+            "horizontal_rl",
+            "vertical_tb"
+          ],
+          "title": "Reading Direction",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "provenance",
+        "bbox",
+        "raw_text"
+      ],
+      "title": "TextObservation",
+      "type": "object"
+    },
+    "VectorPathObservation": {
+      "additionalProperties": false,
+      "properties": {
+        "bbox": {
+          "$ref": "#/$defs/BoundingBox2D"
+        },
+        "confidence": {
+          "default": 1.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "extra": {
+          "additionalProperties": true,
+          "title": "Extra",
+          "type": "object"
+        },
+        "fill_color": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fill Color"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "is_closed": {
+          "default": false,
+          "title": "Is Closed",
+          "type": "boolean"
+        },
+        "path_type": {
+          "enum": [
+            "line",
+            "curve",
+            "rect",
+            "polygon",
+            "path"
+          ],
+          "title": "Path Type",
+          "type": "string"
+        },
+        "points": {
+          "items": {
+            "$ref": "#/$defs/Point2D"
+          },
+          "title": "Points",
+          "type": "array"
+        },
+        "provenance": {
+          "$ref": "#/$defs/ObservationProvenance"
+        },
+        "stroke_color": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stroke Color"
+        },
+        "stroke_width": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stroke Width"
+        }
+      },
+      "required": [
+        "id",
+        "provenance",
+        "bbox",
+        "path_type"
+      ],
+      "title": "VectorPathObservation",
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/tticom/score2gp/schemas/document_observations.v0.1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "document_id": {
+      "title": "Document Id",
+      "type": "string"
+    },
+    "metadata": {
+      "additionalProperties": true,
+      "title": "Metadata",
+      "type": "object"
+    },
+    "page_count": {
+      "minimum": 1,
+      "title": "Page Count",
+      "type": "integer"
+    },
+    "rasters": {
+      "items": {
+        "$ref": "#/$defs/RasterObservation"
+      },
+      "title": "Rasters",
+      "type": "array"
+    },
+    "scale_estimates": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ScaleEstimate"
+      },
+      "title": "Scale Estimates",
+      "type": "object"
+    },
+    "schema_version": {
+      "const": "document_observations.v0.1",
+      "default": "document_observations.v0.1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_file": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source File"
+    },
+    "texts": {
+      "items": {
+        "$ref": "#/$defs/TextObservation"
+      },
+      "title": "Texts",
+      "type": "array"
+    },
+    "vectors": {
+      "items": {
+        "$ref": "#/$defs/VectorPathObservation"
+      },
+      "title": "Vectors",
+      "type": "array"
+    }
+  },
+  "required": [
+    "document_id",
+    "page_count"
+  ],
+  "title": "DocumentObservations v0.1",
+  "type": "object"
+}
