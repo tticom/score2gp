@@ -43,10 +43,10 @@ def _compute_sha256(data: bytes) -> str:
 def _normalize_bbox(page_index: int, x0: float, y0: float, x1: float, y1: float) -> BoundingBox2D:
     return BoundingBox2D(
         page_index=page_index,
-        x0=round(min(x0, x1), 4),
-        y0=round(min(y0, y1), 4),
-        x1=round(max(x0, x1), 4),
-        y1=round(max(y0, y1), 4),
+        x0=float(min(x0, x1)),
+        y0=float(min(y0, y1)),
+        x1=float(max(x0, x1)),
+        y1=float(max(y0, y1)),
     )
 
 
@@ -56,88 +56,101 @@ def extract_vector_observations(
     source_file: str | None = None,
     source_hash: str | None = None,
 ) -> list[VectorPathObservation]:
-    """Extract vector path drawings from a page into typed VectorPathObservations."""
+    """Extract vector path drawing primitives from a page into typed VectorPathObservations.
+
+    Extracts individual drawing items with item-level provenance and exact
+    unrounded coordinates, preserving reconstruction derivations.
+    """
     vectors: list[VectorPathObservation] = []
     drawings = page.get_drawings()
 
-    for idx, drawing in enumerate(drawings):
+    for drawing_idx, drawing in enumerate(drawings):
         items = drawing.get("items", [])
         if not items:
             continue
 
-        raw_rect = drawing.get("rect")
-        if raw_rect is not None:
-            bbox = _normalize_bbox(page_index, raw_rect.x0, raw_rect.y0, raw_rect.x1, raw_rect.y1)
-        else:
-            bbox = _normalize_bbox(page_index, 0.0, 0.0, 0.0, 0.0)
-
-        points: list[Point2D] = []
-        path_types: set[str] = set()
-
-        for item in items:
-            tag = item[0]
-            if tag == "l":  # Line
-                path_types.add("line")
-                p1, p2 = item[1], item[2]
-                points.extend([Point2D(x=round(p1.x, 4), y=round(p1.y, 4)), Point2D(x=round(p2.x, 4), y=round(p2.y, 4))])
-            elif tag == "re":  # Rect
-                path_types.add("rect")
-                r = item[1]
-                points.extend([
-                    Point2D(x=round(r.x0, 4), y=round(r.y0, 4)),
-                    Point2D(x=round(r.x1, 4), y=round(r.y0, 4)),
-                    Point2D(x=round(r.x1, 4), y=round(r.y1, 4)),
-                    Point2D(x=round(r.x0, 4), y=round(r.y1, 4)),
-                ])
-            elif tag in ("c", "qu"):  # Curve
-                path_types.add("curve")
-                for pt in item[1:]:
-                    points.append(Point2D(x=round(pt.x, 4), y=round(pt.y, 4)))
-            else:
-                path_types.add("path")
-
-        if len(path_types) == 1:
-            primary_type = list(path_types)[0]
-            if primary_type not in ("line", "curve", "rect", "polygon", "path"):
-                primary_type = "path"
-        elif len(path_types) > 1:
-            primary_type = "path"
-        else:
-            primary_type = "path"
-
-        raw_id = f"p{page_index}_d{idx}_{drawing.get('seqno', idx)}"
+        seqno = drawing.get("seqno", drawing_idx)
         color = drawing.get("color")
         color_str = f"#{int(color[0]*255):02x}{int(color[1]*255):02x}{int(color[2]*255):02x}" if color and len(color) == 3 else None
         fill = drawing.get("fill")
         fill_str = f"#{int(fill[0]*255):02x}{int(fill[1]*255):02x}{int(fill[2]*255):02x}" if fill and len(fill) == 3 else None
+        is_closed = bool(drawing.get("closePath", False))
 
-        obs = VectorPathObservation(
-            id=raw_id,
-            modality=SourceModality.VECTOR,
-            provenance=ObservationProvenance(
+        for item_idx, item in enumerate(items):
+            tag = item[0]
+            points: list[Point2D] = []
+            path_type: str = "path"
+
+            if tag == "l":  # Line
+                path_type = "line"
+                p1, p2 = item[1], item[2]
+                points = [Point2D(x=float(p1.x), y=float(p1.y)), Point2D(x=float(p2.x), y=float(p2.y))]
+                bbox = _normalize_bbox(page_index, p1.x, p1.y, p2.x, p2.y)
+            elif tag == "re":  # Rectangle
+                path_type = "rect"
+                r = item[1]
+                points = [
+                    Point2D(x=float(r.x0), y=float(r.y0)),
+                    Point2D(x=float(r.x1), y=float(r.y0)),
+                    Point2D(x=float(r.x1), y=float(r.y1)),
+                    Point2D(x=float(r.x0), y=float(r.y1)),
+                ]
+                bbox = _normalize_bbox(page_index, r.x0, r.y0, r.x1, r.y1)
+            elif tag in ("c", "qu"):  # Curve (cubic or quadratic)
+                path_type = "curve"
+                for pt in item[1:]:
+                    points.append(Point2D(x=float(pt.x), y=float(pt.y)))
+                pts_x = [p.x for p in points]
+                pts_y = [p.y for p in points]
+                bbox = _normalize_bbox(page_index, min(pts_x), min(pts_y), max(pts_x), max(pts_y))
+            else:
+                path_type = "path"
+                for el in item[1:]:
+                    if hasattr(el, "x") and hasattr(el, "y"):
+                        points.append(Point2D(x=float(el.x), y=float(el.y)))
+                if points:
+                    pts_x = [p.x for p in points]
+                    pts_y = [p.y for p in points]
+                    bbox = _normalize_bbox(page_index, min(pts_x), min(pts_y), max(pts_x), max(pts_y))
+                else:
+                    raw_rect = drawing.get("rect")
+                    if raw_rect is not None:
+                        bbox = _normalize_bbox(page_index, raw_rect.x0, raw_rect.y0, raw_rect.x1, raw_rect.y1)
+                    else:
+                        bbox = _normalize_bbox(page_index, 0.0, 0.0, 0.0, 0.0)
+
+            item_primitive_id = f"p{page_index}_d{drawing_idx}_i{item_idx}_s{seqno}"
+
+            obs = VectorPathObservation(
+                id=item_primitive_id,
                 modality=SourceModality.VECTOR,
-                source_file=source_file,
-                source_hash=source_hash,
-                page_index=page_index,
-                raw_primitive_id=raw_id,
-                acquisition_adapter="pymupdf.drawings",
-                extra={
-                    "seqno": drawing.get("seqno"),
-                    "item_count": len(items),
-                    "stroke_opacity": drawing.get("stroke_opacity"),
-                },
-            ),
-            bbox=bbox,
-            path_type=primary_type,  # type: ignore[arg-type]
-            points=points,
-            stroke_width=drawing.get("width"),
-            stroke_color=color_str,
-            fill_color=fill_str,
-            is_closed=bool(drawing.get("closePath", False)),
-            confidence=1.0,
-            extra={},
-        )
-        vectors.append(obs)
+                provenance=ObservationProvenance(
+                    modality=SourceModality.VECTOR,
+                    source_file=source_file,
+                    source_hash=source_hash,
+                    page_index=page_index,
+                    raw_primitive_id=item_primitive_id,
+                    acquisition_adapter="pymupdf.drawings.item",
+                    extra={
+                        "drawing_index": drawing_idx,
+                        "item_index": item_idx,
+                        "total_items_in_drawing": len(items),
+                        "seqno": seqno,
+                        "item_tag": tag,
+                        "stroke_opacity": drawing.get("stroke_opacity"),
+                    },
+                ),
+                bbox=bbox,
+                path_type=path_type,  # type: ignore[arg-type]
+                points=points,
+                stroke_width=drawing.get("width"),
+                stroke_color=color_str,
+                fill_color=fill_str,
+                is_closed=is_closed,
+                confidence=1.0,
+                extra={},
+            )
+            vectors.append(obs)
 
     return vectors
 
@@ -148,7 +161,7 @@ def extract_text_observations(
     source_file: str | None = None,
     source_hash: str | None = None,
 ) -> list[TextObservation]:
-    """Extract text spans from a page into typed TextObservations."""
+    """Extract text spans from a page into typed TextObservations with unrounded exact coordinates."""
     texts: list[TextObservation] = []
     text_dict = page.get_text("dict")
     span_idx = 0
@@ -186,7 +199,7 @@ def extract_text_observations(
                     bbox=bbox,
                     raw_text=raw_text,
                     font_name=span.get("font"),
-                    font_size=span.get("size"),
+                    font_size=float(span["size"]) if span.get("size") is not None else None,
                     reading_direction="horizontal_lr",
                     confidence=1.0,
                     extra={},
@@ -234,7 +247,7 @@ def extract_raster_observations(
                 },
             ),
             bbox=bbox,
-            resolution_dpi=round(float(img_info[2]) / max(bbox.x1 - bbox.x0, 1.0) * 72.0, 1) if (bbox.x1 > bbox.x0) else 300.0,
+            resolution_dpi=float(img_info[2]) / max(bbox.x1 - bbox.x0, 1.0) * 72.0 if (bbox.x1 > bbox.x0) else 300.0,
             pixel_width=int(img_info[2]),
             pixel_height=int(img_info[3]),
             color_channels=int(img_info[5]) if len(img_info) > 5 and isinstance(img_info[5], int) else 3,
@@ -257,21 +270,32 @@ def observe_pdf(source: str | Path | bytes | Any) -> DocumentObservations:
     source_file: str | None = None
     source_hash: str | None = None
 
-    if isinstance(source, (str, Path)):
-        p = Path(source)
-        if not p.is_file():
-            raise ObservationAdapterError(f"PDF source file not found: {source}")
-        source_file = str(p)
-        content = p.read_bytes()
-        source_hash = _compute_sha256(content)
-        doc = fitz.open(stream=content, filetype="pdf")
-    elif isinstance(source, bytes):
-        source_hash = _compute_sha256(source)
-        doc = fitz.open(stream=source, filetype="pdf")
-    elif hasattr(source, "page_count") and hasattr(source, "__iter__"):
-        doc = source
-    else:
-        raise ObservationAdapterError(f"Unsupported PDF source type: {type(source)}")
+    try:
+        if isinstance(source, (str, Path)):
+            p = Path(source)
+            if not p.is_file():
+                raise ObservationAdapterError(f"PDF source file not found: {source}")
+            source_file = str(p)
+            try:
+                content = p.read_bytes()
+                source_hash = _compute_sha256(content)
+                doc = fitz.open(stream=content, filetype="pdf")
+            except Exception as exc:
+                raise ObservationAdapterError(f"Failed to open/parse PDF file '{source}': {exc}") from exc
+        elif isinstance(source, bytes):
+            source_hash = _compute_sha256(source)
+            try:
+                doc = fitz.open(stream=source, filetype="pdf")
+            except Exception as exc:
+                raise ObservationAdapterError(f"Failed to open/parse PDF bytes: {exc}") from exc
+        elif hasattr(source, "page_count") and hasattr(source, "__iter__"):
+            doc = source
+        else:
+            raise ObservationAdapterError(f"Unsupported PDF source type: {type(source)}")
+    except ObservationAdapterError:
+        raise
+    except Exception as exc:
+        raise ObservationAdapterError(f"Unexpected error acquiring PDF source: {exc}") from exc
 
     try:
         page_count = doc.page_count
@@ -311,6 +335,8 @@ def observe_pdf(source: str | Path | bytes | Any) -> DocumentObservations:
             scale_estimates={},
             metadata={},
         )
+    except Exception as exc:
+        raise ObservationAdapterError(f"Failed to extract observations from PDF: {exc}") from exc
     finally:
         if isinstance(source, (str, Path, bytes)) and doc is not None:
             doc.close()

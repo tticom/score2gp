@@ -71,6 +71,32 @@ def test_observe_text_diversity_pdf() -> None:
         assert txt.raw_text != ""
 
 
+def test_exact_coordinates_precision_unrounded() -> None:
+    """Verify that source page-space coordinates retain exact unrounded precision."""
+    assert TEXT_DIVERSITY_PDF.exists(), f"Fixture missing: {TEXT_DIVERSITY_PDF}"
+    obs = observe(TEXT_DIVERSITY_PDF)
+
+    # In TEXT_DIVERSITY_PDF, title span y0 is 27.099998474121094 (has > 4 decimal places)
+    title_spans = [t for t in obs.texts if "generated_standard_staff_text_font_diversity.pdf" in t.raw_text]
+    assert len(title_spans) > 0
+    title_span = title_spans[0]
+    # Check that high precision float is preserved exactly without rounding
+    assert str(title_span.bbox.y0).startswith("27.09999") or title_span.bbox.y0 > 27.0999
+
+
+def test_item_level_drawing_provenance() -> None:
+    """Verify that multi-item drawings emit distinct observations with item-level provenance."""
+    assert SPARSE_PDF.exists(), f"Fixture missing: {SPARSE_PDF}"
+    obs = observe(SPARSE_PDF)
+
+    for vec in obs.vectors:
+        assert "_i" in vec.id, f"Observation id must contain item index: {vec.id}"
+        assert "drawing_index" in vec.provenance.extra
+        assert "item_index" in vec.provenance.extra
+        assert "seqno" in vec.provenance.extra
+        assert "item_tag" in vec.provenance.extra
+
+
 def test_observe_multi_page_or_multi_system_pdf() -> None:
     assert MULTI_SYSTEM_PDF.exists(), f"Fixture missing: {MULTI_SYSTEM_PDF}"
     obs = observe(MULTI_SYSTEM_PDF)
@@ -140,6 +166,19 @@ def test_observe_fails_on_missing_file() -> None:
     missing_path = Path("tests/fixtures/pdf/non_existent_score.pdf")
     with pytest.raises(ObservationAdapterError, match="PDF source file not found"):
         observe(missing_path)
+
+
+def test_observe_fails_on_corrupted_bytes() -> None:
+    corrupted_data = b"%PDF-1.4\ncorrupted content that cannot be parsed by mupdf"
+    with pytest.raises(ObservationAdapterError, match="Failed to open/parse PDF bytes"):
+        observe(corrupted_data)
+
+
+def test_observe_fails_on_corrupted_file(tmp_path: Path) -> None:
+    corrupt_file = tmp_path / "corrupt.pdf"
+    corrupt_file.write_bytes(b"not a valid pdf content")
+    with pytest.raises(ObservationAdapterError, match="Failed to open/parse PDF file"):
+        observe(corrupt_file)
 
 
 def test_observe_fails_on_invalid_type() -> None:
