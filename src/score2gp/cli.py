@@ -19,7 +19,6 @@ from .batch import run_batch_pipeline
 from .diagnostics import run_system_diagnostics
 from .gp_package import compare_gp, dumps_summary, inspect_gp, validate_gp, write_gp, validate_roundtrip
 from .ir import ScoreIR, compare_score_ir, export_scoreir_schema, validate_score_ir_file
-from .recognition_contracts import export_recognition_schemas
 from .pdf import extract_tab as extract_tab_file
 from .pdf import inspect_pdf as inspect_pdf_file
 from .report import write_conversion_report, write_warnings
@@ -80,9 +79,6 @@ def export_schema_command(out: Path = typer.Option(...)) -> None:
     """Export committed JSON schemas for intermediate contracts."""
     path = export_scoreir_schema(out)
     typer.echo(str(path))
-    rec_paths = export_recognition_schemas(out)
-    for p in rec_paths:
-        typer.echo(str(p))
 
 
 @app.command("validate-ir")

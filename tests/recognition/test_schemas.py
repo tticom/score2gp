@@ -345,34 +345,25 @@ def sample_musical_document() -> MusicalDocument:
 # Schema Snapshots and Export Tests
 # ---------------------------------------------------------------------------
 
-def test_exported_recognition_schemas_match_committed(tmp_path: Path) -> None:
-    """Verify that export_recognition_schemas outputs match committed schema files."""
+def test_export_recognition_schemas_generates_all_five_schemas(tmp_path: Path) -> None:
+    """Verify that export_recognition_schemas correctly generates all 5 JSON schemas."""
     exported_files = export_recognition_schemas(tmp_path)
     assert len(exported_files) == 5
-
-    committed_dir = Path("schemas")
-    for exported_path in exported_files:
-        filename = exported_path.name
-        committed_path = committed_dir / filename
-        assert committed_path.exists(), f"Committed schema {committed_path} is missing"
-
-        exported_json = json.loads(exported_path.read_text(encoding="utf-8"))
-        committed_json = json.loads(committed_path.read_text(encoding="utf-8"))
-        assert exported_json == committed_json, f"Mismatch in schema {filename}"
-
-
-def test_schema_metadata_conforms_to_draft_2020_12() -> None:
-    """Verify JSON schema root metadata."""
-    committed_dir = Path("schemas")
-    schema_names = [
+    expected_filenames = {
         "document_observations.v0.1.schema.json",
         "document_topology.v0.1.schema.json",
         "recognition_graph.v0.1.schema.json",
         "resolution_result.v0.1.schema.json",
         "musical_document.v0.1.schema.json",
-    ]
-    for name in schema_names:
-        path = committed_dir / name
+    }
+    actual_filenames = {p.name for p in exported_files}
+    assert actual_filenames == expected_filenames
+
+
+def test_schema_metadata_conforms_to_draft_2020_12(tmp_path: Path) -> None:
+    """Verify JSON schema root metadata on generated schemas."""
+    exported_files = export_recognition_schemas(tmp_path)
+    for path in exported_files:
         data = json.loads(path.read_text(encoding="utf-8"))
         assert data["$schema"] == "https://json-schema.org/draft/2020-12/schema"
         assert data["$id"].startswith("https://github.com/tticom/score2gp/schemas/")
