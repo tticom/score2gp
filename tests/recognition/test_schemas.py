@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
@@ -633,3 +634,129 @@ def test_validate_recognition_payload_failure_returns_readable_errors() -> None:
     assert instance is None
     assert len(errors) > 0
     assert any("schema_version" in e for e in errors)
+
+
+# ---------------------------------------------------------------------------
+# Source Modality Tests
+# ---------------------------------------------------------------------------
+
+def test_source_modality_round_trip_and_defaults() -> None:
+    prov = ObservationProvenance(page_index=1, modality=SourceModality.VECTOR)
+    assert prov.modality == SourceModality.VECTOR
+
+    vec = VectorPathObservation(
+        id="vec-1",
+        provenance=prov,
+        bbox=BoundingBox2D(page_index=1, x0=10, y0=20, x1=30, y1=40),
+        path_type="line",
+        points=[Point2D(x=10, y=20), Point2D(x=30, y=40)],
+        modality=SourceModality.VECTOR,
+    )
+    assert vec.modality == SourceModality.VECTOR
+
+    txt = TextObservation(
+        id="txt-1",
+        provenance=prov,
+        bbox=BoundingBox2D(page_index=1, x0=10, y0=20, x1=30, y1=40),
+        raw_text="Test",
+        modality=SourceModality.TEXT,
+    )
+    assert txt.modality == SourceModality.TEXT
+
+    raster = RasterObservation(
+        id="rast-1",
+        provenance=prov,
+        bbox=BoundingBox2D(page_index=1, x0=10, y0=20, x1=30, y1=40),
+        resolution_dpi=300.0,
+        pixel_width=100,
+        pixel_height=100,
+        modality=SourceModality.RASTER,
+    )
+    assert raster.modality == SourceModality.RASTER
+
+    node = GraphNode(
+        id="node-1",
+        kind=GraphNodeKind.NOTEHEAD,
+        modality=SourceModality.HYBRID,
+    )
+    assert node.modality == SourceModality.HYBRID
+
+    obs_doc = DocumentObservations(
+        document_id="doc-mod-01",
+        page_count=1,
+        modality=SourceModality.HYBRID,
+        vectors=[vec],
+        texts=[txt],
+        rasters=[raster],
+    )
+    assert obs_doc.modality == SourceModality.HYBRID
+
+    # Round-trip serialization check
+    dumped = obs_doc.model_dump()
+    assert dumped["modality"] == "hybrid"
+    assert dumped["vectors"][0]["modality"] == "vector"
+    assert dumped["texts"][0]["modality"] == "text"
+    assert dumped["rasters"][0]["modality"] == "raster"
+
+    restored = DocumentObservations.model_validate(dumped)
+    assert restored.modality == SourceModality.HYBRID
+    assert restored.vectors[0].modality == SourceModality.VECTOR
+    assert restored.texts[0].modality == SourceModality.TEXT
+    assert restored.rasters[0].modality == SourceModality.RASTER
+
+
+@pytest.mark.parametrize("target_cls,field_name", [
+    (ObservationProvenance, "modality"),
+    (VectorPathObservation, "modality"),
+    (TextObservation, "modality"),
+    (RasterObservation, "modality"),
+    (DocumentObservations, "modality"),
+    (GraphNode, "modality"),
+])
+def test_source_modality_rejects_invalid_values(target_cls: Any, field_name: str) -> None:
+    data: dict[str, Any]
+    if target_cls is ObservationProvenance:
+        data = {"page_index": 1, "modality": "invalid_modality"}
+    elif target_cls is VectorPathObservation:
+        data = {
+            "id": "v1",
+            "provenance": {"page_index": 1},
+            "bbox": {"page_index": 1, "x0": 0, "y0": 0, "x1": 1, "y1": 1},
+            "path_type": "line",
+            "modality": "invalid_modality",
+        }
+    elif target_cls is TextObservation:
+        data = {
+            "id": "t1",
+            "provenance": {"page_index": 1},
+            "bbox": {"page_index": 1, "x0": 0, "y0": 0, "x1": 1, "y1": 1},
+            "raw_text": "abc",
+            "modality": "invalid_modality",
+        }
+    elif target_cls is RasterObservation:
+        data = {
+            "id": "r1",
+            "provenance": {"page_index": 1},
+            "bbox": {"page_index": 1, "x0": 0, "y0": 0, "x1": 1, "y1": 1},
+            "resolution_dpi": 300,
+            "pixel_width": 10,
+            "pixel_height": 10,
+            "modality": "invalid_modality",
+        }
+    elif target_cls is DocumentObservations:
+        data = {
+            "document_id": "doc1",
+            "page_count": 1,
+            "modality": "invalid_modality",
+        }
+    elif target_cls is GraphNode:
+        data = {
+            "id": "n1",
+            "kind": "notehead",
+            "modality": "invalid_modality",
+        }
+    else:
+        raise AssertionError(f"Unhandled test class {target_cls}")
+
+    with pytest.raises(ValidationError, match="Input should be"):
+        target_cls.model_validate(data)

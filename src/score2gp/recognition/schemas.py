@@ -72,6 +72,7 @@ class ScaleEstimate(BaseModel):
 class ObservationProvenance(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    modality: SourceModality = SourceModality.VECTOR
     source_file: str | None = None
     source_hash: str | None = None
     page_index: int = Field(ge=1)
@@ -120,6 +121,7 @@ class VectorPathObservation(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str
+    modality: SourceModality = SourceModality.VECTOR
     provenance: ObservationProvenance
     bbox: BoundingBox2D
     path_type: Literal["line", "curve", "rect", "polygon", "path"]
@@ -141,6 +143,7 @@ class TextObservation(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str
+    modality: SourceModality = SourceModality.TEXT
     provenance: ObservationProvenance
     bbox: BoundingBox2D
     raw_text: str
@@ -161,6 +164,7 @@ class RasterObservation(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str
+    modality: SourceModality = SourceModality.RASTER
     provenance: ObservationProvenance
     bbox: BoundingBox2D
     resolution_dpi: float = Field(gt=0)
@@ -183,6 +187,7 @@ class DocumentObservations(BaseModel):
 
     schema_version: Literal["document_observations.v0.1"] = OBSERVATIONS_SCHEMA_VERSION
     document_id: str
+    modality: SourceModality = SourceModality.HYBRID
     source_file: str | None = None
     page_count: int = Field(ge=1)
     vectors: list[VectorPathObservation] = Field(default_factory=list)
@@ -431,6 +436,7 @@ class GraphNode(BaseModel):
 
     id: str
     kind: GraphNodeKind
+    modality: SourceModality = SourceModality.VECTOR
     bbox: BoundingBox2D | None = None
     page_index: int | None = Field(default=None, ge=1)
     system_id: str | None = None
