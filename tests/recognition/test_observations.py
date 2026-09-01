@@ -193,3 +193,52 @@ def test_legacy_path_compatibility(tmp_path: Path) -> None:
     assert summary["page_count"] >= 1
     assert "warnings" in summary
     assert "pages" in summary
+
+
+def test_quad_drawing_item_extraction() -> None:
+    """Verify that Quad drawing items ('qu') extract as polygon VectorPathObservations."""
+    import pymupdf as fitz
+    doc = fitz.open()
+    page = doc.new_page()
+    shape = page.new_shape()
+    quad = fitz.Quad(fitz.Point(10, 20), fitz.Point(30, 20), fitz.Point(10, 40), fitz.Point(30, 40))
+    shape.draw_quad(quad)
+    shape.finish(color=(0, 0, 0), fill=(0.5, 0.5, 0.5))
+    shape.commit()
+
+    pdf_bytes = doc.tobytes()
+    doc.close()
+
+    obs = observe(pdf_bytes)
+    assert len(obs.vectors) >= 1
+    # Check quad polygon
+    quad_vectors = [v for v in obs.vectors if v.path_type == "polygon"]
+    assert len(quad_vectors) >= 1
+    qv = quad_vectors[0]
+    assert len(qv.points) == 4
+    assert qv.bbox.x0 <= 10.0 and qv.bbox.x1 >= 30.0
+    assert qv.bbox.y0 <= 20.0 and qv.bbox.y1 >= 40.0
+
+
+def test_raster_color_channels_grayscale_and_rgb() -> None:
+    """Verify that grayscale and RGB embedded rasters report accurate color channel counts."""
+    import pymupdf as fitz
+    doc = fitz.open()
+    page = doc.new_page()
+
+    # 1-channel grayscale pixmap
+    pix_gray = fitz.Pixmap(fitz.csGRAY, fitz.IRect(0, 0, 16, 16), 1)
+    page.insert_image(fitz.Rect(10, 10, 50, 50), pixmap=pix_gray)
+
+    # 3-channel RGB pixmap
+    pix_rgb = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 16, 16), 0)
+    page.insert_image(fitz.Rect(60, 10, 100, 50), pixmap=pix_rgb)
+
+    pdf_bytes = doc.tobytes()
+    doc.close()
+
+    obs = observe(pdf_bytes)
+    assert len(obs.rasters) == 2
+
+    channels = sorted([r.color_channels for r in obs.rasters])
+    assert channels == [1, 3], f"Expected [1, 3] color channels, got {channels}"

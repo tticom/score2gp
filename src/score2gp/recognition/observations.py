@@ -50,6 +50,25 @@ def _normalize_bbox(page_index: int, x0: float, y0: float, x1: float, y1: float)
     )
 
 
+def _extract_color_channels(page: Any, xref: int, cs_field: Any) -> int:
+    """Extract number of color channels (1, 3, or 4) for an image."""
+    try:
+        doc = getattr(page, "parent", None)
+        if doc is not None and hasattr(doc, "extract_image"):
+            info = doc.extract_image(xref)
+            cs_val = info.get("colorspace")
+            if isinstance(cs_val, int) and 1 <= cs_val <= 4:
+                return cs_val
+    except Exception:
+        pass
+    cs_name = str(cs_field).lower()
+    if "gray" in cs_name or "indexed" in cs_name or "stencil" in cs_name:
+        return 1
+    if "cmyk" in cs_name:
+        return 4
+    return 3
+
+
 def extract_vector_observations(
     page: Any,
     page_index: int,
@@ -96,13 +115,37 @@ def extract_vector_observations(
                     Point2D(x=float(r.x0), y=float(r.y1)),
                 ]
                 bbox = _normalize_bbox(page_index, r.x0, r.y0, r.x1, r.y1)
-            elif tag in ("c", "qu"):  # Curve (cubic or quadratic)
+            elif tag == "qu":  # Quadrilateral (Quad object)
+                path_type = "polygon"
+                quad = item[1]
+                if hasattr(quad, "ul") and hasattr(quad, "ur") and hasattr(quad, "lr") and hasattr(quad, "ll"):
+                    points = [
+                        Point2D(x=float(quad.ul.x), y=float(quad.ul.y)),
+                        Point2D(x=float(quad.ur.x), y=float(quad.ur.y)),
+                        Point2D(x=float(quad.lr.x), y=float(quad.lr.y)),
+                        Point2D(x=float(quad.ll.x), y=float(quad.ll.y)),
+                    ]
+                else:
+                    for pt in item[1:]:
+                        if hasattr(pt, "x") and hasattr(pt, "y"):
+                            points.append(Point2D(x=float(pt.x), y=float(pt.y)))
+                if points:
+                    pts_x = [p.x for p in points]
+                    pts_y = [p.y for p in points]
+                    bbox = _normalize_bbox(page_index, min(pts_x), min(pts_y), max(pts_x), max(pts_y))
+                else:
+                    bbox = _normalize_bbox(page_index, 0.0, 0.0, 0.0, 0.0)
+            elif tag == "c":  # Cubic Bezier Curve
                 path_type = "curve"
                 for pt in item[1:]:
-                    points.append(Point2D(x=float(pt.x), y=float(pt.y)))
-                pts_x = [p.x for p in points]
-                pts_y = [p.y for p in points]
-                bbox = _normalize_bbox(page_index, min(pts_x), min(pts_y), max(pts_x), max(pts_y))
+                    if hasattr(pt, "x") and hasattr(pt, "y"):
+                        points.append(Point2D(x=float(pt.x), y=float(pt.y)))
+                if points:
+                    pts_x = [p.x for p in points]
+                    pts_y = [p.y for p in points]
+                    bbox = _normalize_bbox(page_index, min(pts_x), min(pts_y), max(pts_x), max(pts_y))
+                else:
+                    bbox = _normalize_bbox(page_index, 0.0, 0.0, 0.0, 0.0)
             else:
                 path_type = "path"
                 for el in item[1:]:
@@ -231,6 +274,8 @@ def extract_raster_observations(
         )
 
         raw_id = f"p{page_index}_r{idx}_xref{xref}"
+        channels = _extract_color_channels(page, xref, img_info[5] if len(img_info) > 5 else None)
+
         obs = RasterObservation(
             id=raw_id,
             modality=SourceModality.RASTER,
@@ -250,7 +295,7 @@ def extract_raster_observations(
             resolution_dpi=float(img_info[2]) / max(bbox.x1 - bbox.x0, 1.0) * 72.0 if (bbox.x1 > bbox.x0) else 300.0,
             pixel_width=int(img_info[2]),
             pixel_height=int(img_info[3]),
-            color_channels=int(img_info[5]) if len(img_info) > 5 and isinstance(img_info[5], int) else 3,
+            color_channels=channels,
             feature_type="region",
             raster_ref=f"xref:{xref}",
             confidence=1.0,
