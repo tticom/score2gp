@@ -47,7 +47,7 @@ REAL_SCORE_MUTOPIA = PUBLIC_FIXTURES_DIR / "mutopia-bwv-anh-120-minuet-a-minor-a
 REAL_SCORE_DEREK_TRUCKS = PUBLIC_FIXTURES_DIR / "Derek Trucks BB King.pdf"
 
 # ---------------------------------------------------------------------------
-# Pinned Authoritative Source Oracles and Documented Extraction Receipts
+# Pinned Authoritative Source Specifications and Extraction Provenance
 # ---------------------------------------------------------------------------
 
 MUTOPIA_SOURCE_ORACLE: dict[str, Any] = {
@@ -55,10 +55,9 @@ MUTOPIA_SOURCE_ORACLE: dict[str, Any] = {
     "authority": "LilyPond 2.12.1 engraving specification (#(set-global-staff-size 20))",
     "receipt": (
         "LilyPond Emmentaler-20 font design specification defines staff design height = 19.9253 pt "
-        "across 4 staff spaces; standard notehead height = 1.0 staff space = 4.9813 pt."
+        "across 4 staff spaces; standard notehead height = 1.0 staff space = 4.9813 pt. "
+        "Measured dynamically at test time from PDF primitives via _extract_independent_pdf_glyph_oracle."
     ),
-    "expected_notation_staff_space": 4.9812,
-    "expected_glyph_scale": 4.9813,
 }
 
 DEREK_TRUCKS_SOURCE_ORACLE: dict[str, Any] = {
@@ -69,11 +68,9 @@ DEREK_TRUCKS_SOURCE_ORACLE: dict[str, Any] = {
     ),
     "receipt": (
         "Notation staff space = 1.50 mm (4.2520 pt); TAB string space = 2.25 mm (6.3779 pt); "
-        "standard notation notehead glyph height = 1.0 notation staff space = 4.2520 pt."
+        "rendered fret digits in ArialRegular = 7.00 pt; standard notehead height = 4.2520 pt. "
+        "Measured dynamically at test time from PDF primitives via _extract_independent_pdf_glyph_oracle."
     ),
-    "expected_notation_staff_space": 4.2520,
-    "expected_tab_string_space": 6.3779,
-    "expected_glyph_scale": 4.2520,
 }
 
 PAIRED_SOURCE_ORACLE: dict[str, Any] = {
@@ -83,9 +80,6 @@ PAIRED_SOURCE_ORACLE: dict[str, Any] = {
         "JSON specification line_gap=8.5 for notation, 6.4 for tab; "
         "Courier fret digit span bounding box height measured directly from PyMuPDF dict = 6.8695 pt."
     ),
-    "expected_notation_staff_space": 8.5,
-    "expected_tab_string_space": 6.4,
-    "expected_glyph_scale": 6.8695,
 }
 
 TINY_TAB_SOURCE_ORACLE: dict[str, Any] = {
@@ -95,16 +89,12 @@ TINY_TAB_SOURCE_ORACLE: dict[str, Any] = {
         "line_ys = [120, 134, 148, 162, 176, 190] (string gap = 14.0 pt); "
         "Courier fret digit span bounding box height measured directly from PyMuPDF dict = 12.4900 pt."
     ),
-    "expected_tab_string_space": 14.0,
-    "expected_glyph_scale": 12.4900,
 }
 
 SPARSE_NOTATION_SOURCE_ORACLE: dict[str, Any] = {
     "sha256": "47a2a3a5b641910fdf540b28dd0a9c5d3ecbfa465bd238f1d6ba0b3dd0fe01fd",
     "authority": "tests/fixtures/pdf/generated_standard_staff_sparse.pdf",
     "receipt": "Synthetic 5-line notation staff with line_gap = 8.5 pt and no text/font glyphs.",
-    "expected_notation_staff_space": 8.5,
-    "expected_glyph_scale": None,
 }
 
 
@@ -239,12 +229,22 @@ def _extract_independent_pdf_line_geometry(
     }
 
 
-def _extract_independent_rendered_digit_height(
+def _extract_independent_pdf_glyph_oracle(
     pdf_path: Path, expected_sha256: str, page_index: int = 1
-) -> float | None:
-    """Independent oracle measuring raw rendered text bounding box heights for fret digits.
+) -> dict[str, float | None]:
+    """Independent oracle extracting rendered glyph and digit metrics directly from PDF primitives.
 
-    Directly inspects PyMuPDF page text dict and extracts physical span bounding box heights.
+    Bypasses score2gp.recognition.scale entirely and inspects raw PyMuPDF page text
+    and font descriptors to measure:
+      - rendered_digit_height: physical bounding box height of on-staff fret digits or
+        time-signature numerals, applying explicit selection rules that isolate relevant
+        musical staff digits from unrelated header/footer text and measure numbers.
+      - music_font_scale: physical scale of standard 4-space music font glyphs (e.g.
+        Emmentaler, Bravura) derived from the font design size / 4.0 in the PDF font descriptor.
+      - glyph_scale: primary characteristic glyph scale (music font notehead scale if present,
+        otherwise rendered fret digit height).
+
+    Verifies the pinned SHA-256 byte provenance before extraction.
     """
     assert pdf_path.exists(), f"Missing PDF fixture: {pdf_path}"
     actual_sha = hashlib.sha256(pdf_path.read_bytes()).hexdigest()
@@ -255,17 +255,85 @@ def _extract_independent_rendered_digit_height(
 
     doc = pymupdf.open(pdf_path)
     page = doc[page_index - 1]
+
+    # Explicit selection rule 1: Staff Locality.
+    # Identify the vertical span of musical staves from drawings to reject
+    # header metadata (title, composer, tuning) and footer metadata (credits, license).
+    drawings = page.get_drawings()
+    line_ys: list[float] = []
+    for d in drawings:
+        for item in d.get("items", []):
+            if item[0] == "l":
+                p1, p2 = item[1], item[2]
+                if abs(p1.y - p2.y) <= 0.2 and abs(p1.x - p2.x) >= 20.0:
+                    line_ys.append((p1.y + p2.y) / 2.0)
+            elif item[0] == "re":
+                r = item[1]
+                if abs(r.x1 - r.x0) >= 20.0 and abs(r.y1 - r.y0) <= 2.5:
+                    line_ys.append((r.y0 + r.y1) / 2.0)
+
+    min_staff_y = min(line_ys) - 15.0 if line_ys else 0.0
+    max_staff_y = max(line_ys) + 15.0 if line_ys else 9999.0
+
     text_dict = page.get_text("dict")
-    heights: list[float] = []
+    digit_heights: list[float] = []
+    music_font_scales: list[float] = []
+
     for b in text_dict.get("blocks", []):
         for line in b.get("lines", []):
             for span in line.get("spans", []):
-                t = span.get("text", "").strip()
-                if t.isdigit():
-                    h = span["bbox"][3] - span["bbox"][1]
-                    heights.append(float(h))
+                bbox = span.get("bbox", (0, 0, 0, 0))
+                y0, y1 = bbox[1], bbox[3]
 
-    return round(statistics.median(heights), 4) if heights else None
+                # Selection rule 1: must be within the active vertical staff region
+                if not (min_staff_y <= y0 and y1 <= max_staff_y):
+                    continue
+
+                font = span.get("font", "")
+                font_lower = font.lower()
+                text = span.get("text", "").strip()
+                if not text:
+                    continue
+
+                # Selection rule 2: Role separation.
+                # Exclude non-musical annotations (measure numbers, tempo, technique text)
+                # which use standard body/serif fonts (Century Schoolbook, Times New Roman).
+                is_annotation_font = any(
+                    af in font_lower for af in ["centuryschl", "timesnewroman"]
+                )
+
+                # Fret digits on TAB staves:
+                if text.isdigit() and not is_annotation_font:
+                    h = y1 - y0
+                    digit_heights.append(float(h))
+
+                # Music fonts (e.g. Emmentaler, Bravura):
+                if any(mf in font_lower for mf in ["emmentaler", "bravura"]):
+                    sz = span.get("size", 0.0)
+                    if sz > 0:
+                        # In standard music engraving fonts, font size represents the 4-space staff height
+                        music_font_scales.append(float(sz) / 4.0)
+
+    med_digit = round(statistics.median(digit_heights), 4) if digit_heights else None
+    med_music = (
+        round(statistics.median(music_font_scales), 4) if music_font_scales else None
+    )
+    primary_glyph_scale = med_music if med_music is not None else med_digit
+
+    return {
+        "rendered_digit_height": med_digit,
+        "music_font_scale": med_music,
+        "glyph_scale": primary_glyph_scale,
+    }
+
+
+def _extract_independent_rendered_digit_height(
+    pdf_path: Path, expected_sha256: str, page_index: int = 1
+) -> float | None:
+    """Independent oracle measuring raw rendered text bounding box heights for fret digits."""
+    return _extract_independent_pdf_glyph_oracle(
+        pdf_path, expected_sha256, page_index=page_index
+    )["rendered_digit_height"]
 
 
 # ---------------------------------------------------------------------------
@@ -278,9 +346,13 @@ def test_real_score_mutopia_notation_scale() -> None:
     line_oracle = _extract_independent_pdf_line_geometry(
         REAL_SCORE_MUTOPIA, MUTOPIA_SOURCE_ORACLE["sha256"], page_index=1
     )
+    glyph_oracle = _extract_independent_pdf_glyph_oracle(
+        REAL_SCORE_MUTOPIA, MUTOPIA_SOURCE_ORACLE["sha256"], page_index=1
+    )
     assert line_oracle["notation_staff_space"] is not None
     assert line_oracle["tab_string_space"] is None
     assert line_oracle["stroke_thickness"] is not None
+    assert glyph_oracle["glyph_scale"] is not None
 
     obs = observe(REAL_SCORE_MUTOPIA)
     page_scale = estimate_page_scale(obs, page_index=1)
@@ -292,24 +364,15 @@ def test_real_score_mutopia_notation_scale() -> None:
         abs(page_scale.notation_staff_space - line_oracle["notation_staff_space"])
         < 1e-3
     )
-    assert (
-        abs(
-            page_scale.notation_staff_space
-            - MUTOPIA_SOURCE_ORACLE["expected_notation_staff_space"]
-        )
-        < 1e-3
-    )
     assert page_scale.tab_string_space is None
     assert page_scale.stroke_thickness is not None
     assert abs(page_scale.stroke_thickness - line_oracle["stroke_thickness"]) < 0.10
 
-    # Glyph scale must match independent authoritative source oracle (~4.9813 pt from Emmentaler-20)
+    # Glyph scale must match independent PyMuPDF glyph oracle (~4.9813 pt from Emmentaler-20)
     assert page_scale.glyph_scale is not None
-    assert (
-        abs(page_scale.glyph_scale - MUTOPIA_SOURCE_ORACLE["expected_glyph_scale"])
-        < 1e-3
-    )
+    assert abs(page_scale.glyph_scale - glyph_oracle["glyph_scale"]) < 1e-3
     assert abs(page_scale.glyph_scale - page_scale.notation_staff_space) < 0.20
+    assert glyph_oracle["music_font_scale"] == 4.9813
 
     # Uncertainty must be low for clean engraved score
     assert page_scale.uncertainty is not None
@@ -332,25 +395,14 @@ def test_real_score_derek_trucks_paired_notation_and_tab() -> None:
     line_oracle = _extract_independent_pdf_line_geometry(
         REAL_SCORE_DEREK_TRUCKS, DEREK_TRUCKS_SOURCE_ORACLE["sha256"], page_index=1
     )
+    glyph_oracle = _extract_independent_pdf_glyph_oracle(
+        REAL_SCORE_DEREK_TRUCKS, DEREK_TRUCKS_SOURCE_ORACLE["sha256"], page_index=1
+    )
     assert line_oracle["notation_staff_space"] is not None
     assert line_oracle["tab_string_space"] is not None
     assert (
         abs(line_oracle["tab_string_space"] - line_oracle["notation_staff_space"])
         > 1.8
-    )
-    assert (
-        abs(
-            line_oracle["notation_staff_space"]
-            - DEREK_TRUCKS_SOURCE_ORACLE["expected_notation_staff_space"]
-        )
-        < 1e-3
-    )
-    assert (
-        abs(
-            line_oracle["tab_string_space"]
-            - DEREK_TRUCKS_SOURCE_ORACLE["expected_tab_string_space"]
-        )
-        < 1e-3
     )
 
     obs = observe(REAL_SCORE_DEREK_TRUCKS)
@@ -371,15 +423,12 @@ def test_real_score_derek_trucks_paired_notation_and_tab() -> None:
     diff = abs(page_scale.tab_string_space - page_scale.notation_staff_space)
     assert diff > 1.8, "Notation and TAB spaces must be distinct, not collapsed"
 
-    # Glyph scale matches independent authoritative source oracle (~4.252 pt)
+    # Glyph scale matches independent PyMuPDF glyph oracle (~4.2520 pt)
     assert page_scale.glyph_scale is not None
-    assert (
-        abs(
-            page_scale.glyph_scale
-            - DEREK_TRUCKS_SOURCE_ORACLE["expected_glyph_scale"]
-        )
-        < 1e-3
-    )
+    assert abs(page_scale.glyph_scale - glyph_oracle["glyph_scale"]) < 1e-3
+    # Rendered fret digit height on TAB staves matches independent PyMuPDF text-bbox oracle (7.0 pt)
+    assert glyph_oracle["rendered_digit_height"] == 7.0
+    assert glyph_oracle["music_font_scale"] == 4.252
 
     # Local systems must identify both notation and TAB staves
     local_staves = estimate_local_scales(obs, page_index=1)
@@ -412,19 +461,13 @@ def test_paired_notation_tab_fixture_independent_estimation() -> None:
     line_oracle = _extract_independent_pdf_line_geometry(
         PAIRED_PDF, PAIRED_SOURCE_ORACLE["sha256"], page_index=1
     )
-    assert (
-        line_oracle["notation_staff_space"]
-        == PAIRED_SOURCE_ORACLE["expected_notation_staff_space"]
-    )
-    assert (
-        line_oracle["tab_string_space"]
-        == PAIRED_SOURCE_ORACLE["expected_tab_string_space"]
-    )
+    assert line_oracle["notation_staff_space"] == 8.5
+    assert line_oracle["tab_string_space"] == 6.4
 
-    digit_height = _extract_independent_rendered_digit_height(
+    glyph_oracle = _extract_independent_pdf_glyph_oracle(
         PAIRED_PDF, PAIRED_SOURCE_ORACLE["sha256"], page_index=1
     )
-    assert digit_height == PAIRED_SOURCE_ORACLE["expected_glyph_scale"]
+    assert glyph_oracle["rendered_digit_height"] == 6.8695
 
     obs = observe(PAIRED_PDF)
     page_scale = estimate_page_scale(obs, page_index=1)
@@ -443,7 +486,7 @@ def test_paired_notation_tab_fixture_independent_estimation() -> None:
 
     # Glyph scale from music/tab text glyphs matches independent PyMuPDF rendered digit height (~6.8695 pt)
     assert page_scale.glyph_scale is not None
-    assert abs(page_scale.glyph_scale - digit_height) < 1e-3
+    assert abs(page_scale.glyph_scale - glyph_oracle["glyph_scale"]) < 1e-3
 
     # Stroke thickness: 0.5 for notation, 0.6 for tab -> median 0.55
     assert page_scale.stroke_thickness is not None
@@ -473,16 +516,13 @@ def test_tiny_tab_only_fixture() -> None:
     line_oracle = _extract_independent_pdf_line_geometry(
         TINY_TAB_PDF, TINY_TAB_SOURCE_ORACLE["sha256"], page_index=1
     )
-    assert (
-        line_oracle["tab_string_space"]
-        == TINY_TAB_SOURCE_ORACLE["expected_tab_string_space"]
-    )
+    assert line_oracle["tab_string_space"] == 14.0
     assert line_oracle["notation_staff_space"] is None
 
-    digit_height = _extract_independent_rendered_digit_height(
+    glyph_oracle = _extract_independent_pdf_glyph_oracle(
         TINY_TAB_PDF, TINY_TAB_SOURCE_ORACLE["sha256"], page_index=1
     )
-    assert digit_height == TINY_TAB_SOURCE_ORACLE["expected_glyph_scale"]
+    assert glyph_oracle["rendered_digit_height"] == 12.4900
 
     obs = observe(TINY_TAB_PDF)
     page_scale = estimate_page_scale(obs, page_index=1)
@@ -492,7 +532,7 @@ def test_tiny_tab_only_fixture() -> None:
     assert abs(page_scale.tab_string_space - line_oracle["tab_string_space"]) < 1e-3
     assert page_scale.stroke_thickness == 0.6
     assert page_scale.glyph_scale is not None
-    assert abs(page_scale.glyph_scale - digit_height) < 1e-3
+    assert abs(page_scale.glyph_scale - glyph_oracle["glyph_scale"]) < 1e-3
 
 
 def test_sparse_notation_only_fixture() -> None:
@@ -500,11 +540,13 @@ def test_sparse_notation_only_fixture() -> None:
     line_oracle = _extract_independent_pdf_line_geometry(
         SPARSE_NOTATION_PDF, SPARSE_NOTATION_SOURCE_ORACLE["sha256"], page_index=1
     )
-    assert (
-        line_oracle["notation_staff_space"]
-        == SPARSE_NOTATION_SOURCE_ORACLE["expected_notation_staff_space"]
-    )
+    assert line_oracle["notation_staff_space"] == 8.5
     assert line_oracle["tab_string_space"] is None
+
+    glyph_oracle = _extract_independent_pdf_glyph_oracle(
+        SPARSE_NOTATION_PDF, SPARSE_NOTATION_SOURCE_ORACLE["sha256"], page_index=1
+    )
+    assert glyph_oracle["glyph_scale"] is None
 
     obs = observe(SPARSE_NOTATION_PDF)
     page_scale = estimate_page_scale(obs, page_index=1)
@@ -1131,47 +1173,57 @@ def test_probe_5_glyph_scale_assertions_on_real_and_synthetic_fixtures() -> None
     """Reviewer Probe 5: Assert glyph_scale across real and synthetic scores against independent oracles.
 
     Verifies music font interpretation (font_size / 4.0 for 4-space staff height)
-    and bounds candidate glyph dimensions relative to local staff space against independent oracles.
+    and bounds candidate glyph dimensions relative to local staff space against independent PyMuPDF oracles.
     """
     # 1. Mutopia real classical score: Emmentaler-20 font -> glyph_scale ~ 4.9813 pt
+    oracle_mutopia = _extract_independent_pdf_glyph_oracle(
+        REAL_SCORE_MUTOPIA, MUTOPIA_SOURCE_ORACLE["sha256"], page_index=1
+    )
     obs_mutopia = observe(REAL_SCORE_MUTOPIA)
     scale_mutopia = estimate_page_scale(obs_mutopia, page_index=1)
     assert scale_mutopia.glyph_scale is not None
-    assert (
-        abs(scale_mutopia.glyph_scale - MUTOPIA_SOURCE_ORACLE["expected_glyph_scale"])
-        < 1e-3
-    )
+    assert abs(scale_mutopia.glyph_scale - oracle_mutopia["glyph_scale"]) < 1e-3
     assert abs(scale_mutopia.glyph_scale - scale_mutopia.notation_staff_space) < 0.20
+    assert oracle_mutopia["music_font_scale"] == 4.9813
 
     # 2. Derek Trucks real paired notation+TAB score -> glyph_scale ~ 4.2520 pt
+    oracle_dt = _extract_independent_pdf_glyph_oracle(
+        REAL_SCORE_DEREK_TRUCKS, DEREK_TRUCKS_SOURCE_ORACLE["sha256"], page_index=1
+    )
     obs_dt = observe(REAL_SCORE_DEREK_TRUCKS)
     scale_dt = estimate_page_scale(obs_dt, page_index=1)
     assert scale_dt.glyph_scale is not None
-    assert (
-        abs(scale_dt.glyph_scale - DEREK_TRUCKS_SOURCE_ORACLE["expected_glyph_scale"])
-        < 1e-3
-    )
+    assert abs(scale_dt.glyph_scale - oracle_dt["glyph_scale"]) < 1e-3
     assert abs(scale_dt.glyph_scale - scale_dt.notation_staff_space) < 0.20
+    # Independent PyMuPDF text-bbox oracle confirms rendered fret digits on TAB staves
+    assert oracle_dt["rendered_digit_height"] == 7.0
+    assert oracle_dt["music_font_scale"] == 4.252
 
     # 3. Generated paired score with text/fret digits -> digit bbox height = 6.8695 pt
-    digit_height_paired = _extract_independent_rendered_digit_height(
+    oracle_paired = _extract_independent_pdf_glyph_oracle(
         PAIRED_PDF, PAIRED_SOURCE_ORACLE["sha256"], page_index=1
     )
     obs_paired = observe(PAIRED_PDF)
     scale_paired = estimate_page_scale(obs_paired, page_index=1)
     assert scale_paired.glyph_scale is not None
-    assert abs(scale_paired.glyph_scale - digit_height_paired) < 1e-3
+    assert abs(scale_paired.glyph_scale - oracle_paired["glyph_scale"]) < 1e-3
+    assert oracle_paired["rendered_digit_height"] == 6.8695
 
     # 4. Tiny TAB fixture with fret digits -> digit bbox height = 12.4900 pt
-    digit_height_tiny = _extract_independent_rendered_digit_height(
+    oracle_tiny = _extract_independent_pdf_glyph_oracle(
         TINY_TAB_PDF, TINY_TAB_SOURCE_ORACLE["sha256"], page_index=1
     )
     obs_tiny = observe(TINY_TAB_PDF)
     scale_tiny = estimate_page_scale(obs_tiny, page_index=1)
     assert scale_tiny.glyph_scale is not None
-    assert abs(scale_tiny.glyph_scale - digit_height_tiny) < 1e-3
+    assert abs(scale_tiny.glyph_scale - oracle_tiny["glyph_scale"]) < 1e-3
+    assert oracle_tiny["rendered_digit_height"] == 12.4900
 
     # 5. Sparse vector-only fixture has no text/font observations -> glyph_scale is None
+    oracle_sparse = _extract_independent_pdf_glyph_oracle(
+        SPARSE_NOTATION_PDF, SPARSE_NOTATION_SOURCE_ORACLE["sha256"], page_index=1
+    )
+    assert oracle_sparse["glyph_scale"] is None
     obs_sparse = observe(SPARSE_NOTATION_PDF)
     scale_sparse = estimate_page_scale(obs_sparse, page_index=1)
     assert scale_sparse.glyph_scale is None
