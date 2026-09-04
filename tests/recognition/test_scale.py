@@ -47,6 +47,7 @@ REAL_SCORE_DEREK_TRUCKS = PUBLIC_FIXTURES_DIR / "Derek Trucks BB King.pdf"
 # Real Scores Validation (At least two real scores with different scales)
 # ---------------------------------------------------------------------------
 
+
 def test_real_score_mutopia_notation_scale() -> None:
     """Verify real classical notation score produces clean notation scale without TAB."""
     assert REAL_SCORE_MUTOPIA.exists(), f"Missing real fixture: {REAL_SCORE_MUTOPIA}"
@@ -61,6 +62,10 @@ def test_real_score_mutopia_notation_scale() -> None:
     assert page_scale.tab_string_space is None
     assert page_scale.stroke_thickness is not None
     assert 0.35 <= page_scale.stroke_thickness <= 0.65
+
+    # Glyph scale must match notation staff space (~4.98 pt from Emmentaler-20)
+    assert page_scale.glyph_scale is not None
+    assert abs(page_scale.glyph_scale - page_scale.notation_staff_space) < 0.20
 
     # Uncertainty must be low for clean engraved score
     assert page_scale.uncertainty is not None
@@ -80,7 +85,9 @@ def test_real_score_mutopia_notation_scale() -> None:
 
 def test_real_score_derek_trucks_paired_notation_and_tab() -> None:
     """Verify real paired notation+TAB score estimates both scales independently."""
-    assert REAL_SCORE_DEREK_TRUCKS.exists(), f"Missing real fixture: {REAL_SCORE_DEREK_TRUCKS}"
+    assert (
+        REAL_SCORE_DEREK_TRUCKS.exists()
+    ), f"Missing real fixture: {REAL_SCORE_DEREK_TRUCKS}"
     obs = observe(REAL_SCORE_DEREK_TRUCKS)
     page_scale = estimate_page_scale(obs, page_index=1)
 
@@ -95,9 +102,15 @@ def test_real_score_derek_trucks_paired_notation_and_tab() -> None:
     diff = abs(page_scale.tab_string_space - page_scale.notation_staff_space)
     assert diff > 1.8, "Notation and TAB spaces must be distinct, not collapsed"
 
+    # Glyph scale matches local notation space (~4.25 pt)
+    assert page_scale.glyph_scale is not None
+    assert abs(page_scale.glyph_scale - page_scale.notation_staff_space) < 0.20
+
     # Local systems must identify both notation and TAB staves
     local_staves = estimate_local_scales(obs, page_index=1)
-    notation_staves = [s for s in local_staves if s.support.staff_kind == StaffKind.NOTATION]
+    notation_staves = [
+        s for s in local_staves if s.support.staff_kind == StaffKind.NOTATION
+    ]
     tab_staves = [s for s in local_staves if s.support.staff_kind == StaffKind.TAB]
 
     assert len(notation_staves) >= 4
@@ -118,6 +131,7 @@ def test_real_score_derek_trucks_paired_notation_and_tab() -> None:
 # Multi-modality and Mixed-Scale Fixtures
 # ---------------------------------------------------------------------------
 
+
 def test_paired_notation_tab_fixture_independent_estimation() -> None:
     """Verify synthetic paired notation+tab fixture estimates independent scales."""
     assert PAIRED_PDF.exists(), f"Missing fixture: {PAIRED_PDF}"
@@ -131,6 +145,10 @@ def test_paired_notation_tab_fixture_independent_estimation() -> None:
     assert page_scale.tab_string_space is not None
     assert abs(page_scale.notation_staff_space - 8.5) < 0.05
     assert abs(page_scale.tab_string_space - 6.4) < 0.05
+
+    # Glyph scale from music/tab text glyphs
+    assert page_scale.glyph_scale is not None
+    assert 6.0 <= page_scale.glyph_scale <= 7.5
 
     # Stroke thickness: 0.5 for notation, 0.6 for tab -> median 0.55
     assert page_scale.stroke_thickness is not None
@@ -166,6 +184,8 @@ def test_tiny_tab_only_fixture() -> None:
     assert page_scale.tab_string_space is not None
     assert abs(page_scale.tab_string_space - 14.0) < 0.10
     assert page_scale.stroke_thickness == 0.6
+    assert page_scale.glyph_scale is not None
+    assert 11.5 <= page_scale.glyph_scale <= 13.5
 
 
 def test_sparse_notation_only_fixture() -> None:
@@ -179,11 +199,13 @@ def test_sparse_notation_only_fixture() -> None:
     assert page_scale.tab_string_space is None
     assert abs(page_scale.notation_staff_space - 8.5) < 0.05
     assert page_scale.stroke_thickness == 0.5
+    assert page_scale.glyph_scale is None
 
 
 # ---------------------------------------------------------------------------
 # Synthetic Transformation and Scale Invariance Tests
 # ---------------------------------------------------------------------------
+
 
 def _build_synthetic_staff_obs(
     line_count: int = 5,
@@ -207,10 +229,21 @@ def _build_synthetic_staff_obs(
                 id=f"synth_line_{i}",
                 modality=SourceModality.VECTOR,
                 path_type="line",
-                points=[Point2D(x=50.0 * scale_factor, y=y), Point2D(x=(50.0 + scaled_w), y=y)],
-                bbox=BoundingBox2D(page_index=1, x0=50.0 * scale_factor, y0=y, x1=(50.0 + scaled_w), y1=y),
+                points=[
+                    Point2D(x=50.0 * scale_factor, y=y),
+                    Point2D(x=(50.0 + scaled_w), y=y),
+                ],
+                bbox=BoundingBox2D(
+                    page_index=1,
+                    x0=50.0 * scale_factor,
+                    y0=y,
+                    x1=(50.0 + scaled_w),
+                    y1=y,
+                ),
                 stroke_width=scaled_sw,
-                provenance=ObservationProvenance(page_index=1, raw_primitive_id=f"raw_s_{i}"),
+                provenance=ObservationProvenance(
+                    page_index=1, raw_primitive_id=f"raw_s_{i}"
+                ),
             )
         )
     return DocumentObservations(
@@ -227,7 +260,9 @@ def test_scale_invariance_normalized_data_stability(scale_factor: float) -> None
     """Acceptance: Equivalent layouts at different sizes produce materially stable normalized data."""
     base_gap = 12.0
     base_sw = 0.6
-    obs = _build_synthetic_staff_obs(line_count=5, gap=base_gap, stroke_width=base_sw, scale_factor=scale_factor)
+    obs = _build_synthetic_staff_obs(
+        line_count=5, gap=base_gap, stroke_width=base_sw, scale_factor=scale_factor
+    )
 
     est = estimate_page_scale(obs, page_index=1)
     assert est.status == ScaleStatus.ESTIMATED
@@ -273,7 +308,9 @@ def test_collinear_fragmented_lines_reconstruction() -> None:
                     points=[Point2D(x=20.0, y=y), Point2D(x=120.0, y=y)],
                     bbox=BoundingBox2D(page_index=1, x0=20.0, y0=y, x1=120.0, y1=y),
                     stroke_width=0.5,
-                    provenance=ObservationProvenance(page_index=1, raw_primitive_id="raw_f1"),
+                    provenance=ObservationProvenance(
+                        page_index=1, raw_primitive_id="raw_f1"
+                    ),
                 )
             )
             # Fragment 2: x 140..250 (gap for fret digit)
@@ -285,7 +322,9 @@ def test_collinear_fragmented_lines_reconstruction() -> None:
                     points=[Point2D(x=140.0, y=y), Point2D(x=250.0, y=y)],
                     bbox=BoundingBox2D(page_index=1, x0=140.0, y0=y, x1=250.0, y1=y),
                     stroke_width=0.5,
-                    provenance=ObservationProvenance(page_index=1, raw_primitive_id="raw_f2"),
+                    provenance=ObservationProvenance(
+                        page_index=1, raw_primitive_id="raw_f2"
+                    ),
                 )
             )
         else:
@@ -297,7 +336,9 @@ def test_collinear_fragmented_lines_reconstruction() -> None:
                     points=[Point2D(x=20.0, y=y), Point2D(x=250.0, y=y)],
                     bbox=BoundingBox2D(page_index=1, x0=20.0, y0=y, x1=250.0, y1=y),
                     stroke_width=0.5,
-                    provenance=ObservationProvenance(page_index=1, raw_primitive_id=f"raw_{i}"),
+                    provenance=ObservationProvenance(
+                        page_index=1, raw_primitive_id=f"raw_{i}"
+                    ),
                 )
             )
 
@@ -319,6 +360,7 @@ def test_collinear_fragmented_lines_reconstruction() -> None:
 # ---------------------------------------------------------------------------
 # State Distinctions and Negative Controls
 # ---------------------------------------------------------------------------
+
 
 def test_empty_document_returns_unsupported() -> None:
     """Requirement 5: Return Unsupported rather than a default scale when evidence is inadequate."""
@@ -364,7 +406,9 @@ def test_random_irregular_lines_rejected() -> None:
                 points=[Point2D(x=10.0, y=y), Point2D(x=200.0, y=y)],
                 bbox=BoundingBox2D(page_index=1, x0=10.0, y0=y, x1=200.0, y1=y),
                 stroke_width=0.5,
-                provenance=ObservationProvenance(page_index=1, raw_primitive_id=f"raw_n_{i}"),
+                provenance=ObservationProvenance(
+                    page_index=1, raw_primitive_id=f"raw_n_{i}"
+                ),
             )
         )
     obs = DocumentObservations(
@@ -395,6 +439,7 @@ def test_invalid_page_index_error() -> None:
 # Dimensionless Detector Policies and Boundary Discrimination Tests
 # ---------------------------------------------------------------------------
 
+
 def test_dimensionless_normalization_helpers() -> None:
     """Verify normalize_dimension and denormalize_dimension roundtrip."""
     scale = 10.0
@@ -415,19 +460,37 @@ def test_detector_policy_notehead_boundaries() -> None:
     sp = 10.0
     # Notehead: height [0.70, 1.45] sp, width [0.75, 1.85] sp
     # Exactly inside
-    assert DimensionlessDetectorPolicy.is_notehead(width=12.0, height=10.0, staff_space=sp)
+    assert DimensionlessDetectorPolicy.is_notehead(
+        width=12.0, height=10.0, staff_space=sp
+    )
 
     # Height just inside vs just outside
-    assert DimensionlessDetectorPolicy.is_notehead(width=12.0, height=7.1, staff_space=sp)
-    assert not DimensionlessDetectorPolicy.is_notehead(width=12.0, height=6.9, staff_space=sp)
-    assert DimensionlessDetectorPolicy.is_notehead(width=12.0, height=14.4, staff_space=sp)
-    assert not DimensionlessDetectorPolicy.is_notehead(width=12.0, height=14.6, staff_space=sp)
+    assert DimensionlessDetectorPolicy.is_notehead(
+        width=12.0, height=7.1, staff_space=sp
+    )
+    assert not DimensionlessDetectorPolicy.is_notehead(
+        width=12.0, height=6.9, staff_space=sp
+    )
+    assert DimensionlessDetectorPolicy.is_notehead(
+        width=12.0, height=14.4, staff_space=sp
+    )
+    assert not DimensionlessDetectorPolicy.is_notehead(
+        width=12.0, height=14.6, staff_space=sp
+    )
 
     # Width just inside vs just outside
-    assert DimensionlessDetectorPolicy.is_notehead(width=7.6, height=10.0, staff_space=sp)
-    assert not DimensionlessDetectorPolicy.is_notehead(width=7.4, height=10.0, staff_space=sp)
-    assert DimensionlessDetectorPolicy.is_notehead(width=18.4, height=10.0, staff_space=sp)
-    assert not DimensionlessDetectorPolicy.is_notehead(width=18.6, height=10.0, staff_space=sp)
+    assert DimensionlessDetectorPolicy.is_notehead(
+        width=7.6, height=10.0, staff_space=sp
+    )
+    assert not DimensionlessDetectorPolicy.is_notehead(
+        width=7.4, height=10.0, staff_space=sp
+    )
+    assert DimensionlessDetectorPolicy.is_notehead(
+        width=18.4, height=10.0, staff_space=sp
+    )
+    assert not DimensionlessDetectorPolicy.is_notehead(
+        width=18.6, height=10.0, staff_space=sp
+    )
 
 
 def test_detector_policy_beam_boundaries() -> None:
@@ -438,46 +501,78 @@ def test_detector_policy_beam_boundaries() -> None:
 
     # Height boundary
     assert DimensionlessDetectorPolicy.is_beam(width=20.0, height=8.4, staff_space=sp)
-    assert not DimensionlessDetectorPolicy.is_beam(width=20.0, height=8.6, staff_space=sp)
+    assert not DimensionlessDetectorPolicy.is_beam(
+        width=20.0, height=8.6, staff_space=sp
+    )
 
     # Width boundary
     assert DimensionlessDetectorPolicy.is_beam(width=5.1, height=2.0, staff_space=sp)
-    assert not DimensionlessDetectorPolicy.is_beam(width=4.9, height=2.0, staff_space=sp)
+    assert not DimensionlessDetectorPolicy.is_beam(
+        width=4.9, height=2.0, staff_space=sp
+    )
 
     # Aspect ratio boundary
-    assert DimensionlessDetectorPolicy.is_beam(width=10.0, height=5.0, staff_space=sp)  # aspect 2.0 >= 1.8
-    assert not DimensionlessDetectorPolicy.is_beam(width=10.0, height=6.0, staff_space=sp)  # aspect 1.66 < 1.8
+    assert DimensionlessDetectorPolicy.is_beam(
+        width=10.0, height=5.0, staff_space=sp
+    )  # aspect 2.0 >= 1.8
+    assert not DimensionlessDetectorPolicy.is_beam(
+        width=10.0, height=6.0, staff_space=sp
+    )  # aspect 1.66 < 1.8
 
 
 def test_detector_policy_barline_boundaries() -> None:
     """Discriminating boundary tests for DimensionlessDetectorPolicy.is_barline."""
     sp = 10.0
     # 5-line staff: expected height 4.0 sp (40.0 pt). Tol: 0.55 sp (5.5 pt). Max width: 0.35 sp (3.5 pt)
-    assert DimensionlessDetectorPolicy.is_barline(width=1.0, height=40.0, staff_space=sp, line_count=5)
+    assert DimensionlessDetectorPolicy.is_barline(
+        width=1.0, height=40.0, staff_space=sp, line_count=5
+    )
 
     # Just inside tolerance (40.0 ± 5.4 pt)
-    assert DimensionlessDetectorPolicy.is_barline(width=1.0, height=45.4, staff_space=sp, line_count=5)
-    assert DimensionlessDetectorPolicy.is_barline(width=1.0, height=34.6, staff_space=sp, line_count=5)
+    assert DimensionlessDetectorPolicy.is_barline(
+        width=1.0, height=45.4, staff_space=sp, line_count=5
+    )
+    assert DimensionlessDetectorPolicy.is_barline(
+        width=1.0, height=34.6, staff_space=sp, line_count=5
+    )
     # Just outside tolerance (40.0 ± 5.6 pt)
-    assert not DimensionlessDetectorPolicy.is_barline(width=1.0, height=45.6, staff_space=sp, line_count=5)
-    assert not DimensionlessDetectorPolicy.is_barline(width=1.0, height=34.4, staff_space=sp, line_count=5)
+    assert not DimensionlessDetectorPolicy.is_barline(
+        width=1.0, height=45.6, staff_space=sp, line_count=5
+    )
+    assert not DimensionlessDetectorPolicy.is_barline(
+        width=1.0, height=34.4, staff_space=sp, line_count=5
+    )
 
     # Width boundary
-    assert DimensionlessDetectorPolicy.is_barline(width=3.4, height=40.0, staff_space=sp, line_count=5)
-    assert not DimensionlessDetectorPolicy.is_barline(width=3.6, height=40.0, staff_space=sp, line_count=5)
+    assert DimensionlessDetectorPolicy.is_barline(
+        width=3.4, height=40.0, staff_space=sp, line_count=5
+    )
+    assert not DimensionlessDetectorPolicy.is_barline(
+        width=3.6, height=40.0, staff_space=sp, line_count=5
+    )
 
     # 6-line staff: expected height 5.0 sp (50.0 pt)
-    assert DimensionlessDetectorPolicy.is_barline(width=1.0, height=50.0, staff_space=sp, line_count=6)
-    assert not DimensionlessDetectorPolicy.is_barline(width=1.0, height=40.0, staff_space=sp, line_count=6)
+    assert DimensionlessDetectorPolicy.is_barline(
+        width=1.0, height=50.0, staff_space=sp, line_count=6
+    )
+    assert not DimensionlessDetectorPolicy.is_barline(
+        width=1.0, height=40.0, staff_space=sp, line_count=6
+    )
 
 
 def test_detector_policy_fret_digit_boundaries() -> None:
     """Discriminating boundary tests for DimensionlessDetectorPolicy.is_fret_digit."""
     string_sp = 8.0
     # Fret digit: height [0.40, 1.30] sp, width [0.20, 1.60] sp
-    assert DimensionlessDetectorPolicy.is_fret_digit(width=5.0, height=6.0, string_space=string_sp)
-    assert not DimensionlessDetectorPolicy.is_fret_digit(width=5.0, height=3.0, string_space=string_sp)
-    assert not DimensionlessDetectorPolicy.is_fret_digit(width=5.0, height=11.0, string_space=string_sp)
+    assert DimensionlessDetectorPolicy.is_fret_digit(
+        width=5.0, height=6.0, string_space=string_sp
+    )
+    assert not DimensionlessDetectorPolicy.is_fret_digit(
+        width=5.0, height=3.0, string_space=string_sp
+    )
+    assert not DimensionlessDetectorPolicy.is_fret_digit(
+        width=5.0, height=11.0, string_space=string_sp
+    )
 
 
 def test_detector_policy_stem_boundaries() -> None:
@@ -485,14 +580,21 @@ def test_detector_policy_stem_boundaries() -> None:
     sp = 10.0
     # Stem: height [1.80, 5.00] sp, width <= 0.30 sp
     assert DimensionlessDetectorPolicy.is_stem(width=1.0, height=30.0, staff_space=sp)
-    assert not DimensionlessDetectorPolicy.is_stem(width=1.0, height=15.0, staff_space=sp)
-    assert not DimensionlessDetectorPolicy.is_stem(width=1.0, height=55.0, staff_space=sp)
-    assert not DimensionlessDetectorPolicy.is_stem(width=3.5, height=30.0, staff_space=sp)
+    assert not DimensionlessDetectorPolicy.is_stem(
+        width=1.0, height=15.0, staff_space=sp
+    )
+    assert not DimensionlessDetectorPolicy.is_stem(
+        width=1.0, height=55.0, staff_space=sp
+    )
+    assert not DimensionlessDetectorPolicy.is_stem(
+        width=3.5, height=30.0, staff_space=sp
+    )
 
 
 # ---------------------------------------------------------------------------
 # Integration with DocumentObservations
 # ---------------------------------------------------------------------------
+
 
 def test_estimate_scales_for_document_populates_scale_estimates() -> None:
     """Verify estimate_scales_for_document populates DocumentObservations.scale_estimates."""
@@ -510,3 +612,246 @@ def test_estimate_scales_for_document_populates_scale_estimates() -> None:
     assert p1_scale.tab_string_space is not None
     assert abs(p1_scale.notation_staff_space - 8.5) < 0.05
     assert abs(p1_scale.tab_string_space - 6.4) < 0.05
+
+
+# ---------------------------------------------------------------------------
+# Reviewer Findings Regression Probes (Findings 1 through 6)
+# ---------------------------------------------------------------------------
+
+
+def test_probe_1_isolated_divider_rule_does_not_truncate_staff() -> None:
+    """Reviewer Probe 1: Preceding isolated divider rule does not truncate staff into unknown.
+
+    When an isolated divider line precedes a standard 5-line staff, the gap mismatch
+    between the divider and the first staff line must not drop the first staff line,
+    preserving the complete 5-line notation staff.
+    """
+    vectors: list[VectorPathObservation] = []
+    # Isolated divider line at y=50.0
+    vectors.append(
+        VectorPathObservation(
+            id="divider_rule",
+            modality=SourceModality.VECTOR,
+            path_type="line",
+            points=[Point2D(x=50.0, y=50.0), Point2D(x=350.0, y=50.0)],
+            bbox=BoundingBox2D(page_index=1, x0=50.0, y0=50.0, x1=350.0, y1=50.0),
+            stroke_width=0.5,
+            provenance=ObservationProvenance(page_index=1, raw_primitive_id="raw_div"),
+        )
+    )
+    # Standard 5-line staff starting at y=80.0 with 10.0 pt gap
+    for i in range(5):
+        y = 80.0 + i * 10.0
+        vectors.append(
+            VectorPathObservation(
+                id=f"staff_line_{i}",
+                modality=SourceModality.VECTOR,
+                path_type="line",
+                points=[Point2D(x=50.0, y=y), Point2D(x=350.0, y=y)],
+                bbox=BoundingBox2D(page_index=1, x0=50.0, y0=y, x1=350.0, y1=y),
+                stroke_width=0.5,
+                provenance=ObservationProvenance(
+                    page_index=1, raw_primitive_id=f"raw_s_{i}"
+                ),
+            )
+        )
+    obs = DocumentObservations(
+        document_id="doc_probe_1",
+        page_count=1,
+        vectors=vectors,
+        texts=[],
+        rasters=[],
+    )
+    est = estimate_page_scale(obs, page_index=1)
+    assert est.status == ScaleStatus.ESTIMATED
+    assert est.notation_staff_space == 10.0
+
+    local_staves = estimate_local_scales(obs, page_index=1)
+    assert len(local_staves) == 1
+    assert local_staves[0].support.staff_kind == StaffKind.NOTATION
+    assert local_staves[0].support.line_count == 5
+    assert local_staves[0].notation_staff_space == 10.0
+
+
+def test_probe_2_unsupported_status_and_strict_error_boundary() -> None:
+    """Reviewer Probe 2: Unclassifiable staves return UNSUPPORTED and enforce error boundary.
+
+    When staves cannot be classified into notation or tab (e.g. 4-line unknown staves),
+    page estimation must return ScaleStatus.UNSUPPORTED with confidence=0.0 and None scales,
+    and raise UnsupportedScaleError under raise_on_unsupported=True.
+    """
+    # 4-line unknown staff with gap=10.0 pt (4 lines is neither notation=5 nor tab=6)
+    vectors: list[VectorPathObservation] = []
+    for i in range(4):
+        y = 100.0 + i * 10.0
+        vectors.append(
+            VectorPathObservation(
+                id=f"unk_line_{i}",
+                modality=SourceModality.VECTOR,
+                path_type="line",
+                points=[Point2D(x=50.0, y=y), Point2D(x=350.0, y=y)],
+                bbox=BoundingBox2D(page_index=1, x0=50.0, y0=y, x1=350.0, y1=y),
+                stroke_width=0.5,
+                provenance=ObservationProvenance(
+                    page_index=1, raw_primitive_id=f"raw_u_{i}"
+                ),
+            )
+        )
+    obs = DocumentObservations(
+        document_id="doc_probe_2",
+        page_count=1,
+        vectors=vectors,
+        texts=[],
+        rasters=[],
+    )
+    # Diagnostic mode: returns typed estimate with UNSUPPORTED status and None scales
+    est = estimate_page_scale(obs, page_index=1, raise_on_unsupported=False)
+    assert est.status == ScaleStatus.UNSUPPORTED
+    assert est.notation_staff_space is None
+    assert est.tab_string_space is None
+    assert est.uncertainty is None
+    assert est.error_message is not None
+
+    # Strict mode: must raise UnsupportedScaleError
+    with pytest.raises(UnsupportedScaleError):
+        estimate_page_scale(obs, page_index=1, raise_on_unsupported=True)
+
+
+def test_probe_3_dense_fret_cutouts_merged_and_tab_preserved() -> None:
+    """Reviewer Probe 3: Dense fret cutouts broken into <20pt fragments are merged and preserved.
+
+    A 6-line TAB staff where string 2 is cut by multiple fret digits into fragments
+    shorter than 20 pt must not be dropped, preserving the 6-line TAB classification.
+    """
+    vectors: list[VectorPathObservation] = []
+    string_space = 8.0
+    y_start = 100.0
+    for line_idx in range(6):
+        y = y_start + line_idx * string_space
+        if line_idx == 2:
+            # Dense fret cutouts: fragments of length 14 pt separated by 6 pt gaps across 200 pt
+            cur_x = 50.0
+            seg_idx = 0
+            while cur_x < 240.0:
+                seg_x1 = cur_x + 14.0
+                vectors.append(
+                    VectorPathObservation(
+                        id=f"dense_frag_{seg_idx}",
+                        modality=SourceModality.VECTOR,
+                        path_type="line",
+                        points=[Point2D(x=cur_x, y=y), Point2D(x=seg_x1, y=y)],
+                        bbox=BoundingBox2D(
+                            page_index=1, x0=cur_x, y0=y, x1=seg_x1, y1=y
+                        ),
+                        stroke_width=0.5,
+                        provenance=ObservationProvenance(
+                            page_index=1, raw_primitive_id=f"raw_df_{seg_idx}"
+                        ),
+                    )
+                )
+                cur_x = seg_x1 + 6.0  # 6 pt fret cutout gap
+                seg_idx += 1
+        else:
+            vectors.append(
+                VectorPathObservation(
+                    id=f"tab_line_{line_idx}",
+                    modality=SourceModality.VECTOR,
+                    path_type="line",
+                    points=[Point2D(x=50.0, y=y), Point2D(x=250.0, y=y)],
+                    bbox=BoundingBox2D(page_index=1, x0=50.0, y0=y, x1=250.0, y1=y),
+                    stroke_width=0.5,
+                    provenance=ObservationProvenance(
+                        page_index=1, raw_primitive_id=f"raw_tl_{line_idx}"
+                    ),
+                )
+            )
+
+    obs = DocumentObservations(
+        document_id="doc_probe_3",
+        page_count=1,
+        vectors=vectors,
+        texts=[],
+        rasters=[],
+    )
+    est = estimate_page_scale(obs, page_index=1)
+    assert est.status == ScaleStatus.ESTIMATED
+    assert est.tab_string_space == 8.0
+    assert est.notation_staff_space is None
+
+    local_staves = estimate_local_scales(obs, page_index=1)
+    assert len(local_staves) == 1
+    assert local_staves[0].support.staff_kind == StaffKind.TAB
+    assert local_staves[0].support.line_count == 6
+    assert local_staves[0].tab_string_space == 8.0
+
+
+def test_probe_4_beam_detector_rejects_thin_staff_lines_and_hairlines() -> None:
+    """Reviewer Probe 4: Beam detector enforces BEAM_MIN_HEIGHT_SP rejecting staff lines.
+
+    DimensionlessDetectorPolicy.is_beam requires normalized height >= 0.20 staff space,
+    rejecting thin horizontal staff lines (e.g. h=0.5 pt, 0.05 sp) and hairline strokes.
+    """
+    sp = 10.0
+    # Thin staff line: width=200.0, height=0.5 pt (0.05 sp) -> must be rejected
+    assert not DimensionlessDetectorPolicy.is_beam(
+        width=200.0, height=0.5, staff_space=sp
+    )
+    # Hairline stroke: width=50.0, height=0.1 pt (0.01 sp) -> must be rejected
+    assert not DimensionlessDetectorPolicy.is_beam(
+        width=50.0, height=0.1, staff_space=sp
+    )
+
+    # Boundary discrimination at BEAM_MIN_HEIGHT_SP = 0.20:
+    # Just below minimum height (h = 1.9 pt, 0.19 sp < 0.20 sp) -> rejected
+    assert not DimensionlessDetectorPolicy.is_beam(
+        width=20.0, height=1.9, staff_space=sp
+    )
+    # Just at/above minimum height (h = 2.1 pt, 0.21 sp >= 0.20 sp, aspect 9.5 >= 1.8) -> accepted
+    assert DimensionlessDetectorPolicy.is_beam(width=20.0, height=2.1, staff_space=sp)
+
+
+def test_probe_5_glyph_scale_assertions_on_real_and_synthetic_fixtures() -> None:
+    """Reviewer Probe 5: Assert glyph_scale across real and synthetic scores.
+
+    Verifies music font interpretation (font_size / 4.0 for 4-space staff height)
+    and bounds candidate glyph dimensions relative to local staff space.
+    """
+    # 1. Mutopia real classical score: Emmentaler-20 font -> glyph_scale ~ 4.98 pt
+    obs_mutopia = observe(REAL_SCORE_MUTOPIA)
+    scale_mutopia = estimate_page_scale(obs_mutopia, page_index=1)
+    assert scale_mutopia.glyph_scale is not None
+    assert abs(scale_mutopia.glyph_scale - scale_mutopia.notation_staff_space) < 0.20
+
+    # 2. Derek Trucks real paired notation+TAB score -> glyph_scale ~ 4.25 pt
+    obs_dt = observe(REAL_SCORE_DEREK_TRUCKS)
+    scale_dt = estimate_page_scale(obs_dt, page_index=1)
+    assert scale_dt.glyph_scale is not None
+    assert abs(scale_dt.glyph_scale - scale_dt.notation_staff_space) < 0.20
+
+    # 3. Generated paired score with text/fret digits
+    obs_paired = observe(PAIRED_PDF)
+    scale_paired = estimate_page_scale(obs_paired, page_index=1)
+    assert scale_paired.glyph_scale is not None
+    assert 6.0 <= scale_paired.glyph_scale <= 7.5
+
+    # 4. Tiny TAB fixture with fret digits
+    obs_tiny = observe(TINY_TAB_PDF)
+    scale_tiny = estimate_page_scale(obs_tiny, page_index=1)
+    assert scale_tiny.glyph_scale is not None
+    assert 11.5 <= scale_tiny.glyph_scale <= 13.5
+
+    # 5. Sparse vector-only fixture has no text/font observations -> glyph_scale is None
+    obs_sparse = observe(SPARSE_NOTATION_PDF)
+    scale_sparse = estimate_page_scale(obs_sparse, page_index=1)
+    assert scale_sparse.glyph_scale is None
+
+
+def test_probe_6_staff_kind_enum_identity() -> None:
+    """Verify StaffKind in scale.py is imported directly from schemas.py without duplication."""
+    from score2gp.recognition.scale import StaffKind as ScaleStaffKind
+    from score2gp.recognition.schemas import StaffKind as SchemaStaffKind
+
+    assert ScaleStaffKind is SchemaStaffKind
+    assert ScaleStaffKind.NOTATION.value == "notation"
+    assert ScaleStaffKind.TAB.value == "tab"
+    assert ScaleStaffKind.UNKNOWN.value == "unknown"

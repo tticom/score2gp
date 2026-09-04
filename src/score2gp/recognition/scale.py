@@ -9,6 +9,7 @@ dimensionless units.
 from __future__ import annotations
 
 from enum import StrEnum
+import math
 import statistics
 from typing import Any, Sequence
 
@@ -18,6 +19,7 @@ from score2gp.recognition.schemas import (
     BoundingBox2D,
     DocumentObservations,
     ScaleEstimate,
+    StaffKind,
     TextObservation,
     VectorPathObservation,
 )
@@ -33,14 +35,6 @@ class ScaleStatus(StrEnum):
     CONFLICTING = "conflicting"
 
 
-class StaffKind(StrEnum):
-    """Kind of musical staff identified by line geometry."""
-
-    NOTATION = "notation"
-    TAB = "tab"
-    UNKNOWN = "unknown"
-
-
 class UnsupportedScaleError(RuntimeError):
     """Raised when scale estimation is unsupported or evidence is inadequate."""
 
@@ -51,11 +45,17 @@ class ScaleUncertainty(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     sample_count: int = Field(ge=0, description="Number of supporting measurements")
-    standard_deviation: float = Field(ge=0.0, description="Standard deviation of gap measurements")
-    coefficient_of_variation: float = Field(ge=0.0, description="Relative uncertainty (std / mean)")
+    standard_deviation: float = Field(
+        ge=0.0, description="Standard deviation of gap measurements"
+    )
+    coefficient_of_variation: float = Field(
+        ge=0.0, description="Relative uncertainty (std / mean)"
+    )
     min_gap: float = Field(ge=0.0, description="Smallest measured gap in points")
     max_gap: float = Field(ge=0.0, description="Largest measured gap in points")
-    confidence: float = Field(ge=0.0, le=1.0, description="Confidence score in [0.0, 1.0]")
+    confidence: float = Field(
+        ge=0.0, le=1.0, description="Confidence score in [0.0, 1.0]"
+    )
 
 
 class ScaleSupport(BaseModel):
@@ -64,16 +64,20 @@ class ScaleSupport(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     vector_observation_ids: list[str] = Field(
-        default_factory=list, description="IDs of vector path observations supporting lines"
+        default_factory=list,
+        description="IDs of vector path observations supporting lines",
     )
     text_observation_ids: list[str] = Field(
-        default_factory=list, description="IDs of text observations supporting glyph scale"
+        default_factory=list,
+        description="IDs of text observations supporting glyph scale",
     )
     region_bbox: BoundingBox2D | None = Field(
         default=None, description="Bounding box covering supporting observations"
     )
     line_count: int = Field(default=0, ge=0, description="Total supporting staff lines")
-    staff_kind: StaffKind = Field(default=StaffKind.UNKNOWN, description="Classified staff kind")
+    staff_kind: StaffKind = Field(
+        default=StaffKind.UNKNOWN, description="Classified staff kind"
+    )
 
 
 class ScaleDiagnostics(BaseModel):
@@ -81,18 +85,29 @@ class ScaleDiagnostics(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    raw_line_ys: list[float] = Field(default_factory=list, description="Raw line center y-coordinates")
-    raw_gaps: list[float] = Field(default_factory=list, description="Raw adjacent line gaps in points")
-    raw_stroke_widths: list[float] = Field(default_factory=list, description="Raw stroke widths in points")
-    raw_glyph_heights: list[float] = Field(default_factory=list, description="Raw glyph heights in points")
+    raw_line_ys: list[float] = Field(
+        default_factory=list, description="Raw line center y-coordinates"
+    )
+    raw_gaps: list[float] = Field(
+        default_factory=list, description="Raw adjacent line gaps in points"
+    )
+    raw_stroke_widths: list[float] = Field(
+        default_factory=list, description="Raw stroke widths in points"
+    )
+    raw_glyph_heights: list[float] = Field(
+        default_factory=list, description="Raw glyph heights in points"
+    )
     normalized_gaps: list[float] = Field(
-        default_factory=list, description="Gaps normalized by estimated local scale (dimensionless)"
+        default_factory=list,
+        description="Gaps normalized by estimated local scale (dimensionless)",
     )
     normalized_stroke_widths: list[float] = Field(
-        default_factory=list, description="Stroke widths normalized by estimated scale (dimensionless)"
+        default_factory=list,
+        description="Stroke widths normalized by estimated scale (dimensionless)",
     )
     normalized_glyph_heights: list[float] = Field(
-        default_factory=list, description="Glyph heights normalized by estimated scale (dimensionless)"
+        default_factory=list,
+        description="Glyph heights normalized by estimated scale (dimensionless)",
     )
     detected_groups: list[dict[str, Any]] = Field(
         default_factory=list, description="Summary details of detected staff groups"
@@ -104,26 +119,46 @@ class TypedScaleEstimate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    scale_id: str = Field(description="Unique scale identifier, e.g. page-1-scale or staff-1-scale")
+    scale_id: str = Field(
+        description="Unique scale identifier, e.g. page-1-scale or staff-1-scale"
+    )
     page_index: int = Field(ge=1, description="1-based page index")
     status: ScaleStatus = Field(description="Estimation outcome status")
     notation_staff_space: float | None = Field(
-        default=None, ge=0.0, description="Standard notation staff space (gap between lines) in points"
+        default=None,
+        ge=0.0,
+        description="Standard notation staff space (gap between lines) in points",
     )
     tab_string_space: float | None = Field(
-        default=None, ge=0.0, description="TAB string space (gap between lines) in points"
+        default=None,
+        ge=0.0,
+        description="TAB string space (gap between lines) in points",
     )
     stroke_thickness: float | None = Field(
-        default=None, ge=0.0, description="Dominant staff/stem stroke thickness in points"
+        default=None,
+        ge=0.0,
+        description="Dominant staff/stem stroke thickness in points",
     )
     glyph_scale: float | None = Field(
-        default=None, ge=0.0, description="Characteristic glyph / fret-digit height in points"
+        default=None,
+        ge=0.0,
+        description="Characteristic glyph / fret-digit height in points",
     )
-    dpi: float | None = Field(default=72.0, ge=0.0, description="Resolution / coordinate density")
-    uncertainty: ScaleUncertainty | None = Field(default=None, description="Uncertainty quantification")
-    support: ScaleSupport = Field(default_factory=ScaleSupport, description="Supporting observation references")
-    diagnostics: ScaleDiagnostics = Field(default_factory=ScaleDiagnostics, description="Detailed diagnostic data")
-    error_message: str | None = Field(default=None, description="Diagnostic error reason if unsupported")
+    dpi: float | None = Field(
+        default=72.0, ge=0.0, description="Resolution / coordinate density"
+    )
+    uncertainty: ScaleUncertainty | None = Field(
+        default=None, description="Uncertainty quantification"
+    )
+    support: ScaleSupport = Field(
+        default_factory=ScaleSupport, description="Supporting observation references"
+    )
+    diagnostics: ScaleDiagnostics = Field(
+        default_factory=ScaleDiagnostics, description="Detailed diagnostic data"
+    )
+    error_message: str | None = Field(
+        default=None, description="Diagnostic error reason if unsupported"
+    )
 
     def to_schema_estimate(self) -> ScaleEstimate:
         """Convert to the canonical recognition schema ScaleEstimate."""
@@ -150,6 +185,7 @@ class PageScaleModel(BaseModel):
 # Dimensionless Detector Policies and Normalization Helpers
 # ---------------------------------------------------------------------------
 
+
 def normalize_dimension(value: float, scale: float) -> float:
     """Normalize a physical dimension by a scale factor into dimensionless units."""
     if scale <= 0.0:
@@ -173,9 +209,10 @@ class DimensionlessDetectorPolicy:
     NOTEHEAD_MIN_WIDTH_SP: float = 0.75
     NOTEHEAD_MAX_WIDTH_SP: float = 1.85
 
-    # Beam policy: horizontal beams span multiple notehead intervals with moderate thickness
-    BEAM_MIN_WIDTH_SP: float = 0.50
+    # Beam policy: horizontal beams span multiple notehead intervals with characteristic thickness
+    BEAM_MIN_HEIGHT_SP: float = 0.20
     BEAM_MAX_HEIGHT_SP: float = 0.85
+    BEAM_MIN_WIDTH_SP: float = 0.50
     BEAM_MIN_ASPECT_RATIO: float = 1.80
 
     # Barline policy: vertical lines spanning exactly the staff height
@@ -210,17 +247,19 @@ class DimensionlessDetectorPolicy:
         """Check if dimensions match a beam in dimensionless staff spaces."""
         if staff_space <= 0.0 or width <= 0.0 or height <= 0.0:
             return False
-        w_norm = width / staff_space
         h_norm = height / staff_space
+        w_norm = width / staff_space
         aspect = width / height
         return (
-            w_norm >= cls.BEAM_MIN_WIDTH_SP
-            and h_norm <= cls.BEAM_MAX_HEIGHT_SP
+            cls.BEAM_MIN_HEIGHT_SP <= h_norm <= cls.BEAM_MAX_HEIGHT_SP
+            and w_norm >= cls.BEAM_MIN_WIDTH_SP
             and aspect >= cls.BEAM_MIN_ASPECT_RATIO
         )
 
     @classmethod
-    def is_barline(cls, width: float, height: float, staff_space: float, line_count: int = 5) -> bool:
+    def is_barline(
+        cls, width: float, height: float, staff_space: float, line_count: int = 5
+    ) -> bool:
         """Check if dimensions match a barline spanning line_count lines."""
         if staff_space <= 0.0 or width <= 0.0 or height <= 0.0 or line_count < 2:
             return False
@@ -261,10 +300,18 @@ class DimensionlessDetectorPolicy:
 # Extraction & Clustering Algorithms
 # ---------------------------------------------------------------------------
 
+
 class _LineLevel:
     """Internal merged line level spanning a consistent y-coordinate."""
 
-    def __init__(self, y: float, x0: float, x1: float, stroke_width: float | None, obs_ids: list[str]) -> None:
+    def __init__(
+        self,
+        y: float,
+        x0: float,
+        x1: float,
+        stroke_width: float | None,
+        obs_ids: list[str],
+    ) -> None:
         self.y = y
         self.x0 = x0
         self.x1 = x1
@@ -279,10 +326,14 @@ class _LineLevel:
 def _extract_candidate_horizontal_lines(
     vectors: Sequence[VectorPathObservation],
     page_index: int,
-    min_length: float = 20.0,
+    min_length: float = 3.0,
     max_thickness: float = 3.5,
 ) -> list[dict[str, Any]]:
-    """Extract candidate horizontal line segments from vector observations."""
+    """Extract candidate horizontal line segments from vector observations.
+
+    Uses a small minimum length threshold (3.0 pt) so that segments fragmented by
+    dense fret digit cutouts are retained for subsequent collinear merging.
+    """
     candidates: list[dict[str, Any]] = []
     for vec in vectors:
         if vec.bbox.page_index != page_index:
@@ -298,51 +349,82 @@ def _extract_candidate_horizontal_lines(
             if p_dy > 1.0:
                 continue
 
-        stroke_w = vec.stroke_width if vec.stroke_width and vec.stroke_width > 0 else (dy if dy > 0 else 0.5)
-        candidates.append({
-            "id": vec.id,
-            "y": (vec.bbox.y0 + vec.bbox.y1) / 2.0,
-            "x0": min(vec.bbox.x0, vec.bbox.x1),
-            "x1": max(vec.bbox.x0, vec.bbox.x1),
-            "stroke_width": stroke_w,
-            "bbox": vec.bbox,
-        })
+        stroke_w = (
+            vec.stroke_width
+            if vec.stroke_width and vec.stroke_width > 0
+            else (dy if dy > 0 else 0.5)
+        )
+        candidates.append(
+            {
+                "id": vec.id,
+                "y": (vec.bbox.y0 + vec.bbox.y1) / 2.0,
+                "x0": min(vec.bbox.x0, vec.bbox.x1),
+                "x1": max(vec.bbox.x0, vec.bbox.x1),
+                "stroke_width": stroke_w,
+                "bbox": vec.bbox,
+            }
+        )
     return candidates
 
 
 def _merge_collinear_fragments(
     candidates: list[dict[str, Any]],
     tolerance_y: float = 0.5,
+    max_x_gap: float = 30.0,
+    min_line_span: float = 20.0,
 ) -> list[_LineLevel]:
-    """Merge collinear horizontal line fragments that lie at the same y level."""
+    """Merge collinear horizontal line fragments that lie at the same y level.
+
+    Reconstructs continuous line levels from fragmented segments (e.g. fret cutouts)
+    by chaining segments whose horizontal gap is at most max_x_gap, filtering out
+    isolated ledger lines and small marks.
+    """
     if not candidates:
         return []
     sorted_candidates = sorted(candidates, key=lambda c: c["y"])
+    y_groups: list[list[dict[str, Any]]] = []
+
+    for cand in sorted_candidates:
+        matched = False
+        for grp in y_groups:
+            if abs(cand["y"] - grp[0]["y"]) <= tolerance_y:
+                grp.append(cand)
+                matched = True
+                break
+        if not matched:
+            y_groups.append([cand])
+
     levels: list[_LineLevel] = []
+    for grp in y_groups:
+        grp.sort(key=lambda c: c["x0"])
+        chains: list[list[dict[str, Any]]] = []
+        cur_chain = [grp[0]]
+        for c in grp[1:]:
+            chain_x1 = max(item["x1"] for item in cur_chain)
+            if c["x0"] - chain_x1 <= max_x_gap:
+                cur_chain.append(c)
+            else:
+                chains.append(cur_chain)
+                cur_chain = [c]
+        if cur_chain:
+            chains.append(cur_chain)
 
-    current_group: list[dict[str, Any]] = [sorted_candidates[0]]
-    for cand in sorted_candidates[1:]:
-        ref_y = current_group[0]["y"]
-        if abs(cand["y"] - ref_y) <= tolerance_y:
-            current_group.append(cand)
-        else:
-            y_val = statistics.median([c["y"] for c in current_group])
-            min_x0 = min(c["x0"] for c in current_group)
-            max_x1 = max(c["x1"] for c in current_group)
-            sw_vals = [c["stroke_width"] for c in current_group if c["stroke_width"] is not None]
-            med_sw = statistics.median(sw_vals) if sw_vals else 0.5
-            ids = [c["id"] for c in current_group]
-            levels.append(_LineLevel(y=y_val, x0=min_x0, x1=max_x1, stroke_width=med_sw, obs_ids=ids))
-            current_group = [cand]
-
-    if current_group:
-        y_val = statistics.median([c["y"] for c in current_group])
-        min_x0 = min(c["x0"] for c in current_group)
-        max_x1 = max(c["x1"] for c in current_group)
-        sw_vals = [c["stroke_width"] for c in current_group if c["stroke_width"] is not None]
-        med_sw = statistics.median(sw_vals) if sw_vals else 0.5
-        ids = [c["id"] for c in current_group]
-        levels.append(_LineLevel(y=y_val, x0=min_x0, x1=max_x1, stroke_width=med_sw, obs_ids=ids))
+        for chain in chains:
+            min_x0 = min(c["x0"] for c in chain)
+            max_x1 = max(c["x1"] for c in chain)
+            span = max_x1 - min_x0
+            if span >= min_line_span:
+                med_y = statistics.median(c["y"] for c in chain)
+                sw_vals = [
+                    c["stroke_width"] for c in chain if c["stroke_width"] is not None
+                ]
+                med_sw = statistics.median(sw_vals) if sw_vals else 0.5
+                ids = [c["id"] for c in chain]
+                levels.append(
+                    _LineLevel(
+                        y=med_y, x0=min_x0, x1=max_x1, stroke_width=med_sw, obs_ids=ids
+                    )
+                )
 
     return levels
 
@@ -399,7 +481,9 @@ class _DetectedStaffGroup:
 
     @property
     def stroke_width(self) -> float:
-        sws = [line.stroke_width for line in self.lines if line.stroke_width is not None]
+        sws = [
+            line.stroke_width for line in self.lines if line.stroke_width is not None
+        ]
         return statistics.median(sws) if sws else 0.5
 
     @property
@@ -465,13 +549,15 @@ def _partition_cluster_into_staves(
             else:
                 kind = StaffKind.UNKNOWN
 
-            staves.append(_DetectedStaffGroup(
-                lines=list(lines),
-                staff_kind=kind,
-                space=med_gap,
-                uncertainty=uncertainty,
-                raw_gaps=list(gaps),
-            ))
+            staves.append(
+                _DetectedStaffGroup(
+                    lines=list(lines),
+                    staff_kind=kind,
+                    space=med_gap,
+                    uncertainty=uncertainty,
+                    raw_gaps=list(gaps),
+                )
+            )
 
     for line in sorted_lines[1:]:
         gap = line.y - cur_lines[-1].y
@@ -494,8 +580,15 @@ def _partition_cluster_into_staves(
                 cur_gaps.append(gap)
             else:
                 commit_staff(cur_lines, cur_gaps)
-                cur_lines = [line]
-                cur_gaps = []
+                if len(cur_lines) == 2 and min_gap <= gap <= max_gap:
+                    # When a 2-line group encounters a gap mismatch, the first line
+                    # was an isolated rule/divider. Keep cur_lines[-1] as the first
+                    # line of a new staff candidate.
+                    cur_lines = [cur_lines[-1], line]
+                    cur_gaps = [gap]
+                else:
+                    cur_lines = [line]
+                    cur_gaps = []
 
     if cur_lines and cur_gaps:
         commit_staff(cur_lines, cur_gaps)
@@ -506,22 +599,61 @@ def _partition_cluster_into_staves(
 def _estimate_glyph_scale(
     texts: Sequence[TextObservation],
     page_index: int,
+    reference_scale: float | None = None,
 ) -> tuple[float | None, list[str], list[float]]:
-    """Estimate characteristic glyph scale from page text observations."""
+    """Estimate characteristic glyph scale from page text observations.
+
+    Identifies music font symbols (where 1 staff space = font_size / 4.0) and
+    fret numbers / note labels, constraining candidates to plausible musical
+    glyph dimensions relative to the estimated local staff space.
+    """
     candidate_heights: list[float] = []
     text_ids: list[str] = []
 
     for t in texts:
         if t.bbox.page_index != page_index:
             continue
-        # Filter for music glyphs and fret digits (short strings: 1 to 6 chars)
         txt = t.raw_text.strip()
-        if not txt or len(txt) > 6:
+        if not txt:
             continue
-        h = abs(t.bbox.y1 - t.bbox.y0)
+
+        font_name = (t.font_name or "").lower()
+        is_music_font = any(
+            m in font_name
+            for m in [
+                "emmentaler",
+                "feta",
+                "bravura",
+                "maestro",
+                "opus",
+                "petaluma",
+                "gonville",
+                "music",
+            ]
+        )
+        has_pua = any(ord(c) >= 0xE000 or ord(c) < 0x20 for c in txt)
+
+        if is_music_font or has_pua:
+            # Music font: font size is the full staff height (4 staff spaces).
+            # A characteristic notehead glyph height is font_size / 4.0.
+            h = t.font_size / 4.0 if t.font_size and t.font_size > 0 else 0.0
+        elif txt.isdigit() or (
+            len(txt) <= 4 and all(c.isalnum() or c in "#b" for c in txt)
+        ):
+            # Fret digit or short alphanumeric notation mark
+            h = abs(t.bbox.y1 - t.bbox.y0)
+        else:
+            continue
+
         if 2.0 <= h <= 40.0:
-            candidate_heights.append(h)
-            text_ids.append(t.id)
+            if reference_scale is not None and reference_scale > 0:
+                # Constrain to plausible musical glyph height relative to staff/string space
+                if 0.45 * reference_scale <= h <= 1.80 * reference_scale:
+                    candidate_heights.append(h)
+                    text_ids.append(t.id)
+            else:
+                candidate_heights.append(h)
+                text_ids.append(t.id)
 
     if not candidate_heights:
         return None, [], []
@@ -533,6 +665,7 @@ def _estimate_glyph_scale(
 # ---------------------------------------------------------------------------
 # Public Scale Estimation API
 # ---------------------------------------------------------------------------
+
 
 def estimate_local_scales(
     obs: DocumentObservations,
@@ -546,13 +679,17 @@ def estimate_local_scales(
     """
     if page_index < 1 or page_index > obs.page_count:
         if raise_on_unsupported:
-            raise UnsupportedScaleError(f"Invalid page index {page_index}; page_count is {obs.page_count}")
-        return [TypedScaleEstimate(
-            scale_id=f"page-{page_index}-unsupported",
-            page_index=page_index,
-            status=ScaleStatus.UNSUPPORTED,
-            error_message=f"Page index {page_index} out of bounds",
-        )]
+            raise UnsupportedScaleError(
+                f"Invalid page index {page_index}; page_count is {obs.page_count}"
+            )
+        return [
+            TypedScaleEstimate(
+                scale_id=f"page-{page_index}-unsupported",
+                page_index=page_index,
+                status=ScaleStatus.UNSUPPORTED,
+                error_message=f"Page index {page_index} out of bounds",
+            )
+        ]
 
     candidates = _extract_candidate_horizontal_lines(obs.vectors, page_index)
     levels = _merge_collinear_fragments(candidates)
@@ -562,7 +699,12 @@ def estimate_local_scales(
     for cluster in clusters:
         all_staves.extend(_partition_cluster_into_staves(cluster))
 
-    glyph_scale, text_ids, raw_glyph_heights = _estimate_glyph_scale(obs.texts, page_index)
+    ref_staff_space = (
+        statistics.median([s.space for s in all_staves]) if all_staves else None
+    )
+    glyph_scale, text_ids, raw_glyph_heights = _estimate_glyph_scale(
+        obs.texts, page_index, reference_scale=ref_staff_space
+    )
 
     if not all_staves:
         # Inadequate evidence: no valid staves detected
@@ -570,12 +712,14 @@ def estimate_local_scales(
         msg = "No periodic horizontal staff lines detected with sufficient support"
         if raise_on_unsupported:
             raise UnsupportedScaleError(msg)
-        return [TypedScaleEstimate(
-            scale_id=f"page-{page_index}-unsupported",
-            page_index=page_index,
-            status=status,
-            error_message=msg,
-        )]
+        return [
+            TypedScaleEstimate(
+                scale_id=f"page-{page_index}-unsupported",
+                page_index=page_index,
+                status=status,
+                error_message=msg,
+            )
+        ]
 
     local_estimates: list[TypedScaleEstimate] = []
     for idx, staff in enumerate(all_staves, start=1):
@@ -584,14 +728,29 @@ def estimate_local_scales(
         tab_space = staff.space if staff.staff_kind == StaffKind.TAB else None
         active_space = staff.space
 
+        # If staff kind is unknown (e.g. 4-line or 7-line staff without standard classification)
+        is_known_kind = staff.staff_kind in (StaffKind.NOTATION, StaffKind.TAB)
+        status = ScaleStatus.ESTIMATED if is_known_kind else ScaleStatus.UNSUPPORTED
+        err_msg = (
+            None
+            if is_known_kind
+            else f"Non-standard staff line count {staff.line_count} (requires 5 for notation or 6 for TAB)"
+        )
+
         raw_line_ys = [line.y for line in staff.lines]
-        raw_sws = [line.stroke_width for line in staff.lines if line.stroke_width is not None]
+        raw_sws = [
+            line.stroke_width for line in staff.lines if line.stroke_width is not None
+        ]
         norm_gaps = [g / active_space for g in staff.raw_gaps]
         norm_sws = [sw / active_space for sw in raw_sws]
-        norm_glyphs = [gh / active_space for gh in raw_glyph_heights] if raw_glyph_heights else []
+        norm_glyphs = (
+            [gh / active_space for gh in raw_glyph_heights] if raw_glyph_heights else []
+        )
 
         bx0, by0, bx1, by1 = staff.bbox
-        support_bbox = BoundingBox2D(page_index=page_index, x0=bx0, y0=by0, x1=bx1, y1=by1)
+        support_bbox = BoundingBox2D(
+            page_index=page_index, x0=bx0, y0=by0, x1=bx1, y1=by1
+        )
 
         diagnostics = ScaleDiagnostics(
             raw_line_ys=raw_line_ys,
@@ -601,13 +760,15 @@ def estimate_local_scales(
             normalized_gaps=norm_gaps,
             normalized_stroke_widths=norm_sws,
             normalized_glyph_heights=norm_glyphs,
-            detected_groups=[{
-                "staff_index": idx,
-                "staff_kind": staff.staff_kind.value,
-                "line_count": staff.line_count,
-                "space": staff.space,
-                "gaps": staff.raw_gaps,
-            }],
+            detected_groups=[
+                {
+                    "staff_index": idx,
+                    "staff_kind": staff.staff_kind.value,
+                    "line_count": staff.line_count,
+                    "space": staff.space,
+                    "gaps": staff.raw_gaps,
+                }
+            ],
         )
 
         support = ScaleSupport(
@@ -618,18 +779,21 @@ def estimate_local_scales(
             staff_kind=staff.staff_kind,
         )
 
-        local_estimates.append(TypedScaleEstimate(
-            scale_id=staff_id,
-            page_index=page_index,
-            status=ScaleStatus.ESTIMATED,
-            notation_staff_space=not_space,
-            tab_string_space=tab_space,
-            stroke_thickness=round(staff.stroke_width, 4),
-            glyph_scale=round(glyph_scale, 4) if glyph_scale is not None else None,
-            uncertainty=staff.uncertainty,
-            support=support,
-            diagnostics=diagnostics,
-        ))
+        local_estimates.append(
+            TypedScaleEstimate(
+                scale_id=staff_id,
+                page_index=page_index,
+                status=status,
+                notation_staff_space=not_space,
+                tab_string_space=tab_space,
+                stroke_thickness=round(staff.stroke_width, 4),
+                glyph_scale=round(glyph_scale, 4) if glyph_scale is not None else None,
+                uncertainty=staff.uncertainty if is_known_kind else None,
+                support=support,
+                diagnostics=diagnostics,
+                error_message=err_msg,
+            )
+        )
 
     return local_estimates
 
@@ -645,10 +809,18 @@ def estimate_page_scale(
     measurements. When both exist on a page, both are reported accurately and
     separately, never collapsed into a misleading aggregate mean.
     """
-    local_estimates = estimate_local_scales(obs, page_index=page_index, raise_on_unsupported=raise_on_unsupported)
+    local_estimates = estimate_local_scales(
+        obs, page_index=page_index, raise_on_unsupported=raise_on_unsupported
+    )
 
-    # If any error or unsupported
-    if len(local_estimates) == 1 and local_estimates[0].status != ScaleStatus.ESTIMATED:
+    # If all local estimates are unsupported or error
+    if all(est.status != ScaleStatus.ESTIMATED for est in local_estimates):
+        msg = (
+            local_estimates[0].error_message
+            or "No valid notation or TAB staves detected on page"
+        )
+        if raise_on_unsupported:
+            raise UnsupportedScaleError(msg)
         return local_estimates[0]
 
     notation_spaces: list[float] = []
@@ -673,33 +845,97 @@ def estimate_page_scale(
         vector_ids.extend(est.support.vector_observation_ids)
         text_ids.extend(est.support.text_observation_ids)
 
-    glyph_scale, g_text_ids, raw_glyph_heights = _estimate_glyph_scale(obs.texts, page_index)
-    if g_text_ids:
-        text_ids.extend(g_text_ids)
-    text_ids = sorted(list(set(text_ids)))
-
     med_not_space = statistics.median(notation_spaces) if notation_spaces else None
     med_tab_space = statistics.median(tab_spaces) if tab_spaces else None
     med_stroke = statistics.median(stroke_widths) if stroke_widths else 0.5
 
-    # Determine reference scale for page-level dimensionless normalization
-    ref_scale = med_not_space or med_tab_space or 1.0
+    # If neither notation nor TAB could be estimated, fail closed
+    if med_not_space is None and med_tab_space is None:
+        msg = "Neither notation staff space nor TAB string space could be estimated from page observations"
+        if raise_on_unsupported:
+            raise UnsupportedScaleError(msg)
+        return TypedScaleEstimate(
+            scale_id=f"page-{page_index}-scale",
+            page_index=page_index,
+            status=ScaleStatus.UNSUPPORTED,
+            notation_staff_space=None,
+            tab_string_space=None,
+            stroke_thickness=round(med_stroke, 4) if stroke_widths else None,
+            glyph_scale=None,
+            uncertainty=ScaleUncertainty(
+                sample_count=0,
+                standard_deviation=0.0,
+                coefficient_of_variation=0.0,
+                min_gap=0.0,
+                max_gap=0.0,
+                confidence=0.0,
+            ),
+            support=ScaleSupport(
+                vector_observation_ids=sorted(list(set(vector_ids))),
+                text_observation_ids=[],
+                region_bbox=None,
+                line_count=len(all_line_ys),
+                staff_kind=StaffKind.UNKNOWN,
+            ),
+            diagnostics=ScaleDiagnostics(
+                raw_line_ys=sorted(all_line_ys),
+                raw_gaps=[],
+                raw_stroke_widths=stroke_widths,
+                raw_glyph_heights=[],
+                normalized_gaps=[],
+                normalized_stroke_widths=[],
+                normalized_glyph_heights=[],
+                detected_groups=[],
+            ),
+            error_message=msg,
+        )
+
+    ref_scale = med_not_space if med_not_space is not None else med_tab_space
+    assert ref_scale is not None
+
+    glyph_scale, g_text_ids, raw_glyph_heights = _estimate_glyph_scale(
+        obs.texts, page_index, reference_scale=ref_scale
+    )
+    if g_text_ids:
+        text_ids.extend(g_text_ids)
+    text_ids = sorted(list(set(text_ids)))
 
     raw_gaps = all_not_gaps + all_tab_gaps
-    norm_gaps = [g / (med_not_space if i < len(all_not_gaps) else (med_tab_space or ref_scale))
-                 for i, g in enumerate(raw_gaps)]
+    norm_gaps = [
+        g / (med_not_space if i < len(all_not_gaps) else med_tab_space)  # type: ignore[operator]
+        for i, g in enumerate(raw_gaps)
+    ]
     norm_sws = [sw / ref_scale for sw in stroke_widths]
-    norm_glyphs = [gh / ref_scale for gh in raw_glyph_heights] if raw_glyph_heights else []
+    norm_glyphs = (
+        [gh / ref_scale for gh in raw_glyph_heights] if raw_glyph_heights else []
+    )
 
-    all_gaps_for_uncertainty = all_not_gaps if all_not_gaps else all_tab_gaps
-    stdev = statistics.stdev(all_gaps_for_uncertainty) if len(all_gaps_for_uncertainty) > 1 else 0.0
-    mean_gap = statistics.mean(all_gaps_for_uncertainty) if all_gaps_for_uncertainty else 0.0
-    cv = (stdev / mean_gap) if mean_gap > 0 else 0.0
+    # Pooled uncertainty computation across independent staff sets
+    if all_not_gaps and all_tab_gaps:
+        s_not = statistics.stdev(all_not_gaps) if len(all_not_gaps) > 1 else 0.0
+        s_tab = statistics.stdev(all_tab_gaps) if len(all_tab_gaps) > 1 else 0.0
+        pooled_stdev = math.sqrt((s_not**2 + s_tab**2) / 2.0)
+        pooled_mean = (
+            statistics.mean(all_not_gaps) + statistics.mean(all_tab_gaps)
+        ) / 2.0
+        cv = pooled_stdev / pooled_mean if pooled_mean > 0 else 0.0
+    elif all_not_gaps:
+        pooled_stdev = statistics.stdev(all_not_gaps) if len(all_not_gaps) > 1 else 0.0
+        mean_val = statistics.mean(all_not_gaps)
+        cv = pooled_stdev / mean_val if mean_val > 0 else 0.0
+    elif all_tab_gaps:
+        pooled_stdev = statistics.stdev(all_tab_gaps) if len(all_tab_gaps) > 1 else 0.0
+        mean_val = statistics.mean(all_tab_gaps)
+        cv = pooled_stdev / mean_val if mean_val > 0 else 0.0
+    else:
+        pooled_stdev = 0.0
+        cv = 0.0
+
     confidence = max(0.0, min(1.0, 1.0 - cv * 3.0))
 
     uncertainty = ScaleUncertainty(
         sample_count=len(raw_gaps),
-        standard_deviation=round(stdev, 4),
+        standard_deviation=round(pooled_stdev, 4),
         coefficient_of_variation=round(cv, 4),
         min_gap=round(min(raw_gaps), 4) if raw_gaps else 0.0,
         max_gap=round(max(raw_gaps), 4) if raw_gaps else 0.0,
@@ -722,8 +958,13 @@ def estimate_page_scale(
     )
 
     staff_kind = (
-        StaffKind.UNKNOWN if (med_not_space and med_tab_space)
-        else (StaffKind.NOTATION if med_not_space else (StaffKind.TAB if med_tab_space else StaffKind.UNKNOWN))
+        StaffKind.UNKNOWN
+        if (med_not_space and med_tab_space)
+        else (
+            StaffKind.NOTATION
+            if med_not_space
+            else (StaffKind.TAB if med_tab_space else StaffKind.UNKNOWN)
+        )
     )
 
     support = ScaleSupport(
@@ -738,7 +979,9 @@ def estimate_page_scale(
         scale_id=f"page-{page_index}-scale",
         page_index=page_index,
         status=ScaleStatus.ESTIMATED,
-        notation_staff_space=round(med_not_space, 4) if med_not_space is not None else None,
+        notation_staff_space=round(med_not_space, 4)
+        if med_not_space is not None
+        else None,
         tab_string_space=round(med_tab_space, 4) if med_tab_space is not None else None,
         stroke_thickness=round(med_stroke, 4),
         glyph_scale=round(glyph_scale, 4) if glyph_scale is not None else None,
@@ -755,7 +998,9 @@ def estimate_scales_for_document(
     """Populate scale_estimates in DocumentObservations for all pages."""
     estimates_dict: dict[str, ScaleEstimate] = {}
     for p_idx in range(1, obs.page_count + 1):
-        est = estimate_page_scale(obs, page_index=p_idx, raise_on_unsupported=raise_on_unsupported)
+        est = estimate_page_scale(
+            obs, page_index=p_idx, raise_on_unsupported=raise_on_unsupported
+        )
         estimates_dict[f"page-{p_idx}"] = est.to_schema_estimate()
 
     return DocumentObservations(
