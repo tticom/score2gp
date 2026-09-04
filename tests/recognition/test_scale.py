@@ -8,7 +8,11 @@ score provenance, and negative/unsupported controls.
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
+import statistics
+from typing import Any
+import pymupdf
 import pytest
 
 from score2gp.recognition.observations import observe
@@ -42,6 +46,174 @@ TINY_TAB_PDF = FIXTURES_DIR / "generated_tiny_tab.pdf"
 REAL_SCORE_MUTOPIA = PUBLIC_FIXTURES_DIR / "mutopia-bwv-anh-120-minuet-a-minor-a4.pdf"
 REAL_SCORE_DEREK_TRUCKS = PUBLIC_FIXTURES_DIR / "Derek Trucks BB King.pdf"
 
+# Pinned SHA-256 byte provenance for real and generated score fixtures
+REAL_SCORE_MUTOPIA_SHA256 = (
+    "86435e170268a04201966492e120371348abbc7d77712221e362b91d97832eeb"
+)
+REAL_SCORE_DEREK_TRUCKS_SHA256 = (
+    "e2b80e6fa6ad9aac8b648d501e2606086a538aa1c040b345d340bda3f5fd4b27"
+)
+PAIRED_PDF_SHA256 = "31669e6c264ed6e48423c0901f853e7fa93564fd0aa60cdc4189c53a8796dcad"
+TINY_TAB_PDF_SHA256 = "7917b8cae7e3da9c7888a28204743e882b6d4fe4a703225e33c90b8d85274fed"
+SPARSE_NOTATION_PDF_SHA256 = (
+    "47a2a3a5b641910fdf540b28dd0a9c5d3ecbfa465bd238f1d6ba0b3dd0fe01fd"
+)
+
+
+# ---------------------------------------------------------------------------
+# Independent Reproducible PDF Scale Oracle
+# ---------------------------------------------------------------------------
+
+
+def _extract_independent_pdf_scale_oracle(
+    pdf_path: Path, expected_sha256: str, page_index: int = 1
+) -> dict[str, Any]:
+    """Reproducible independent oracle measuring ground-truth geometry directly from PyMuPDF.
+
+    Bypasses score2gp.recognition.scale entirely and directly inspects raw PDF vector
+    drawings and text spans to independently measure:
+      - notation staff space (median gap among 5-line staff line groups)
+      - TAB string space (median gap among 6-line staff line groups)
+      - stroke thickness (median stroke width of staff lines)
+      - glyph scale (characteristic notehead / fret digit font size)
+
+    Verifies the pinned SHA-256 byte provenance before extraction.
+    """
+    assert pdf_path.exists(), f"Missing PDF fixture: {pdf_path}"
+    actual_sha = hashlib.sha256(pdf_path.read_bytes()).hexdigest()
+    assert actual_sha == expected_sha256, (
+        f"PDF fixture SHA-256 mismatch for {pdf_path.name}: "
+        f"expected {expected_sha256}, got {actual_sha}"
+    )
+
+    doc = pymupdf.open(pdf_path)
+    page = doc[page_index - 1]
+    drawings = page.get_drawings()
+
+    # 1. Raw horizontal lines directly from primitive paths
+    raw_lines: list[tuple[float, float, float, float]] = []
+    for d in drawings:
+        w = d.get("width")
+        if w is None:
+            w = 0.5
+        for item in d["items"]:
+            if item[0] == "l":
+                p1, p2 = item[1], item[2]
+                if abs(p1.y - p2.y) <= 0.2 and abs(p1.x - p2.x) >= 20.0:
+                    raw_lines.append(
+                        (
+                            (p1.y + p2.y) / 2.0,
+                            min(p1.x, p2.x),
+                            max(p1.x, p2.x),
+                            float(w),
+                        )
+                    )
+            elif item[0] == "re":
+                r = item[1]
+                dx = abs(r.x1 - r.x0)
+                dy = abs(r.y1 - r.y0)
+                if dx >= 20.0 and dy <= 2.5:
+                    raw_lines.append(
+                        (
+                            (r.y0 + r.y1) / 2.0,
+                            min(r.x0, r.x1),
+                            max(r.x0, r.x1),
+                            float(dy),
+                        )
+                    )
+
+    raw_lines.sort(key=lambda item: item[0])
+    y_levels: list[list[tuple[float, float, float, float]]] = []
+    for line in raw_lines:
+        matched = False
+        for grp in y_levels:
+            if abs(line[0] - grp[0][0]) <= 0.5:
+                grp.append(line)
+                matched = True
+                break
+        if not matched:
+            y_levels.append([line])
+
+    level_data: list[tuple[float, float, float]] = []
+    for grp in y_levels:
+        min_x = min(seg[1] for seg in grp)
+        max_x = max(seg[2] for seg in grp)
+        span = max_x - min_x
+        if span >= 50.0:
+            med_y = statistics.median(seg[0] for seg in grp)
+            sw_vals = [seg[3] for seg in grp if seg[3] is not None]
+            med_sw = statistics.median(sw_vals) if sw_vals else 0.5
+            level_data.append((med_y, span, med_sw))
+
+    level_data.sort(key=lambda x: x[0])
+    notation_gaps: list[float] = []
+    tab_gaps: list[float] = []
+    stroke_widths = [x[2] for x in level_data if x[2] is not None]
+
+    cur_group = [level_data[0]] if level_data else []
+    for item in level_data[1:]:
+        gap = item[0] - cur_group[-1][0]
+        if len(cur_group) == 1:
+            if 2.0 <= gap <= 25.0:
+                cur_group.append(item)
+            else:
+                cur_group = [item]
+        else:
+            prev_gaps = [
+                cur_group[i + 1][0] - cur_group[i][0] for i in range(len(cur_group) - 1)
+            ]
+            med_g = statistics.median(prev_gaps)
+            if abs(gap - med_g) <= 0.8:
+                cur_group.append(item)
+            else:
+                if len(cur_group) == 5:
+                    notation_gaps.extend(prev_gaps)
+                elif len(cur_group) == 6:
+                    tab_gaps.extend(prev_gaps)
+                cur_group = [item]
+    if len(cur_group) == 5:
+        notation_gaps.extend(
+            [cur_group[i + 1][0] - cur_group[i][0] for i in range(len(cur_group) - 1)]
+        )
+    elif len(cur_group) == 6:
+        tab_gaps.extend(
+            [cur_group[i + 1][0] - cur_group[i][0] for i in range(len(cur_group) - 1)]
+        )
+
+    # 2. Text glyph sizes directly from PyMuPDF dict
+    text_dict = page.get_text("dict")
+    glyph_candidates: list[float] = []
+    for block in text_dict.get("blocks", []):
+        for line in block.get("lines", []):
+            for span in line.get("spans", []):
+                font = span.get("font", "").lower()
+                text = span.get("text", "").strip()
+                size = float(span.get("size", 0.0))
+                if any(
+                    m in font for m in ["emmentaler", "bravura", "feta", "maestro"]
+                ) or any(ord(c) >= 0xE000 for c in text):
+                    glyph_candidates.append(size / 4.0)
+                elif text.isdigit():
+                    bbox = span.get("bbox", (0, 0, 0, 0))
+                    h = bbox[3] - bbox[1]
+                    if h > 0:
+                        glyph_candidates.append(float(h))
+
+    return {
+        "notation_staff_space": (
+            round(statistics.median(notation_gaps), 4) if notation_gaps else None
+        ),
+        "tab_string_space": (
+            round(statistics.median(tab_gaps), 4) if tab_gaps else None
+        ),
+        "stroke_thickness": (
+            round(statistics.median(stroke_widths), 4) if stroke_widths else None
+        ),
+        "glyph_scale": (
+            round(statistics.median(glyph_candidates), 4) if glyph_candidates else None
+        ),
+    }
+
 
 # ---------------------------------------------------------------------------
 # Real Scores Validation (At least two real scores with different scales)
@@ -49,22 +221,28 @@ REAL_SCORE_DEREK_TRUCKS = PUBLIC_FIXTURES_DIR / "Derek Trucks BB King.pdf"
 
 
 def test_real_score_mutopia_notation_scale() -> None:
-    """Verify real classical notation score produces clean notation scale without TAB."""
-    assert REAL_SCORE_MUTOPIA.exists(), f"Missing real fixture: {REAL_SCORE_MUTOPIA}"
+    """Verify real classical notation score produces clean notation scale matching independent oracle."""
+    oracle = _extract_independent_pdf_scale_oracle(
+        REAL_SCORE_MUTOPIA, REAL_SCORE_MUTOPIA_SHA256, page_index=1
+    )
+    assert oracle["notation_staff_space"] is not None
+    assert oracle["tab_string_space"] is None
+    assert oracle["glyph_scale"] is not None
+
     obs = observe(REAL_SCORE_MUTOPIA)
     page_scale = estimate_page_scale(obs, page_index=1)
 
     assert page_scale.status == ScaleStatus.ESTIMATED
+    # Compare directly against independent PyMuPDF oracle measurement (~4.9812 pt)
     assert page_scale.notation_staff_space is not None
-    # Real Mutopia Bach Minuet has staff space around 4.98 pt
-    assert 4.80 <= page_scale.notation_staff_space <= 5.15
-    # Classical score has no tablature staves
+    assert abs(page_scale.notation_staff_space - oracle["notation_staff_space"]) < 1e-3
     assert page_scale.tab_string_space is None
     assert page_scale.stroke_thickness is not None
-    assert 0.35 <= page_scale.stroke_thickness <= 0.65
+    assert abs(page_scale.stroke_thickness - oracle["stroke_thickness"]) < 0.10
 
-    # Glyph scale must match notation staff space (~4.98 pt from Emmentaler-20)
+    # Glyph scale must match independent oracle (~4.9813 pt from Emmentaler-20)
     assert page_scale.glyph_scale is not None
+    assert abs(page_scale.glyph_scale - oracle["glyph_scale"]) < 1e-3
     assert abs(page_scale.glyph_scale - page_scale.notation_staff_space) < 0.20
 
     # Uncertainty must be low for clean engraved score
@@ -80,31 +258,35 @@ def test_real_score_mutopia_notation_scale() -> None:
         assert staff.support.staff_kind == StaffKind.NOTATION
         assert staff.notation_staff_space is not None
         assert staff.tab_string_space is None
-        assert 4.80 <= staff.notation_staff_space <= 5.15
+        assert abs(staff.notation_staff_space - oracle["notation_staff_space"]) < 0.10
 
 
 def test_real_score_derek_trucks_paired_notation_and_tab() -> None:
-    """Verify real paired notation+TAB score estimates both scales independently."""
-    assert (
-        REAL_SCORE_DEREK_TRUCKS.exists()
-    ), f"Missing real fixture: {REAL_SCORE_DEREK_TRUCKS}"
+    """Verify real paired notation+TAB score estimates both scales matching independent oracle."""
+    oracle = _extract_independent_pdf_scale_oracle(
+        REAL_SCORE_DEREK_TRUCKS, REAL_SCORE_DEREK_TRUCKS_SHA256, page_index=1
+    )
+    assert oracle["notation_staff_space"] is not None
+    assert oracle["tab_string_space"] is not None
+    assert oracle["glyph_scale"] is not None
+    assert abs(oracle["tab_string_space"] - oracle["notation_staff_space"]) > 1.8
+
     obs = observe(REAL_SCORE_DEREK_TRUCKS)
     page_scale = estimate_page_scale(obs, page_index=1)
 
     assert page_scale.status == ScaleStatus.ESTIMATED
+    # Compare directly against independent PyMuPDF oracle measurements (notation ~4.252 pt, tab ~6.378 pt)
     assert page_scale.notation_staff_space is not None
     assert page_scale.tab_string_space is not None
-
-    # Verify that notation space (~4.25 pt) and TAB space (~6.38 pt) do NOT collapse
-    assert 4.10 <= page_scale.notation_staff_space <= 4.40
-    assert 6.20 <= page_scale.tab_string_space <= 6.55
+    assert abs(page_scale.notation_staff_space - oracle["notation_staff_space"]) < 1e-3
+    assert abs(page_scale.tab_string_space - oracle["tab_string_space"]) < 1e-3
     assert page_scale.notation_staff_space != page_scale.tab_string_space
     diff = abs(page_scale.tab_string_space - page_scale.notation_staff_space)
     assert diff > 1.8, "Notation and TAB spaces must be distinct, not collapsed"
 
-    # Glyph scale matches local notation space (~4.25 pt)
+    # Glyph scale matches independent oracle (~4.252 pt)
     assert page_scale.glyph_scale is not None
-    assert abs(page_scale.glyph_scale - page_scale.notation_staff_space) < 0.20
+    assert abs(page_scale.glyph_scale - oracle["glyph_scale"]) < 1e-3
 
     # Local systems must identify both notation and TAB staves
     local_staves = estimate_local_scales(obs, page_index=1)
@@ -119,12 +301,12 @@ def test_real_score_derek_trucks_paired_notation_and_tab() -> None:
     for s in notation_staves:
         assert s.notation_staff_space is not None
         assert s.tab_string_space is None
-        assert 4.10 <= s.notation_staff_space <= 4.40
+        assert abs(s.notation_staff_space - oracle["notation_staff_space"]) < 0.10
 
     for s in tab_staves:
         assert s.tab_string_space is not None
         assert s.notation_staff_space is None
-        assert 6.20 <= s.tab_string_space <= 6.55
+        assert abs(s.tab_string_space - oracle["tab_string_space"]) < 0.10
 
 
 # ---------------------------------------------------------------------------
@@ -133,22 +315,26 @@ def test_real_score_derek_trucks_paired_notation_and_tab() -> None:
 
 
 def test_paired_notation_tab_fixture_independent_estimation() -> None:
-    """Verify synthetic paired notation+tab fixture estimates independent scales."""
-    assert PAIRED_PDF.exists(), f"Missing fixture: {PAIRED_PDF}"
-    obs = observe(PAIRED_PDF)
+    """Verify synthetic paired notation+tab fixture estimates independent scales matching oracle."""
+    oracle = _extract_independent_pdf_scale_oracle(
+        PAIRED_PDF, PAIRED_PDF_SHA256, page_index=1
+    )
+    assert oracle["notation_staff_space"] == 8.5
+    assert oracle["tab_string_space"] == 6.4
 
+    obs = observe(PAIRED_PDF)
     page_scale = estimate_page_scale(obs, page_index=1)
     assert page_scale.status == ScaleStatus.ESTIMATED
 
-    # Ground truth from JSON specification: notation=8.5, tab=6.4
+    # Compare directly against independent PyMuPDF oracle measurements
     assert page_scale.notation_staff_space is not None
     assert page_scale.tab_string_space is not None
-    assert abs(page_scale.notation_staff_space - 8.5) < 0.05
-    assert abs(page_scale.tab_string_space - 6.4) < 0.05
+    assert abs(page_scale.notation_staff_space - oracle["notation_staff_space"]) < 1e-3
+    assert abs(page_scale.tab_string_space - oracle["tab_string_space"]) < 1e-3
 
-    # Glyph scale from music/tab text glyphs
+    # Glyph scale from music/tab text glyphs matches independent oracle (~6.8695 pt)
     assert page_scale.glyph_scale is not None
-    assert 6.0 <= page_scale.glyph_scale <= 7.5
+    assert abs(page_scale.glyph_scale - oracle["glyph_scale"]) < 1e-3
 
     # Stroke thickness: 0.5 for notation, 0.6 for tab -> median 0.55
     assert page_scale.stroke_thickness is not None
@@ -167,37 +353,45 @@ def test_paired_notation_tab_fixture_independent_estimation() -> None:
     not_staff = next(s for s in locals_ if s.support.staff_kind == StaffKind.NOTATION)
     tab_staff = next(s for s in locals_ if s.support.staff_kind == StaffKind.TAB)
 
-    assert abs(not_staff.notation_staff_space - 8.5) < 0.05
+    assert abs(not_staff.notation_staff_space - oracle["notation_staff_space"]) < 1e-3
     assert not_staff.tab_string_space is None
-    assert abs(tab_staff.tab_string_space - 6.4) < 0.05
+    assert abs(tab_staff.tab_string_space - oracle["tab_string_space"]) < 1e-3
     assert tab_staff.notation_staff_space is None
 
 
 def test_tiny_tab_only_fixture() -> None:
-    """Verify pure TAB fixture yields tab_string_space and no notation_staff_space."""
-    assert TINY_TAB_PDF.exists(), f"Missing fixture: {TINY_TAB_PDF}"
-    obs = observe(TINY_TAB_PDF)
+    """Verify pure TAB fixture yields tab_string_space matching independent oracle."""
+    oracle = _extract_independent_pdf_scale_oracle(
+        TINY_TAB_PDF, TINY_TAB_PDF_SHA256, page_index=1
+    )
+    assert oracle["tab_string_space"] == 14.0
+    assert oracle["notation_staff_space"] is None
 
+    obs = observe(TINY_TAB_PDF)
     page_scale = estimate_page_scale(obs, page_index=1)
     assert page_scale.status == ScaleStatus.ESTIMATED
     assert page_scale.notation_staff_space is None
     assert page_scale.tab_string_space is not None
-    assert abs(page_scale.tab_string_space - 14.0) < 0.10
+    assert abs(page_scale.tab_string_space - oracle["tab_string_space"]) < 1e-3
     assert page_scale.stroke_thickness == 0.6
     assert page_scale.glyph_scale is not None
-    assert 11.5 <= page_scale.glyph_scale <= 13.5
+    assert abs(page_scale.glyph_scale - oracle["glyph_scale"]) < 1e-3
 
 
 def test_sparse_notation_only_fixture() -> None:
-    """Verify pure notation fixture yields notation_staff_space and no tab_string_space."""
-    assert SPARSE_NOTATION_PDF.exists(), f"Missing fixture: {SPARSE_NOTATION_PDF}"
-    obs = observe(SPARSE_NOTATION_PDF)
+    """Verify pure notation fixture yields notation_staff_space matching independent oracle."""
+    oracle = _extract_independent_pdf_scale_oracle(
+        SPARSE_NOTATION_PDF, SPARSE_NOTATION_PDF_SHA256, page_index=1
+    )
+    assert oracle["notation_staff_space"] == 8.5
+    assert oracle["tab_string_space"] is None
 
+    obs = observe(SPARSE_NOTATION_PDF)
     page_scale = estimate_page_scale(obs, page_index=1)
     assert page_scale.status == ScaleStatus.ESTIMATED
     assert page_scale.notation_staff_space is not None
     assert page_scale.tab_string_space is None
-    assert abs(page_scale.notation_staff_space - 8.5) < 0.05
+    assert abs(page_scale.notation_staff_space - oracle["notation_staff_space"]) < 1e-3
     assert page_scale.stroke_thickness == 0.5
     assert page_scale.glyph_scale is None
 
@@ -811,34 +1005,48 @@ def test_probe_4_beam_detector_rejects_thin_staff_lines_and_hairlines() -> None:
 
 
 def test_probe_5_glyph_scale_assertions_on_real_and_synthetic_fixtures() -> None:
-    """Reviewer Probe 5: Assert glyph_scale across real and synthetic scores.
+    """Reviewer Probe 5: Assert glyph_scale across real and synthetic scores against independent oracles.
 
     Verifies music font interpretation (font_size / 4.0 for 4-space staff height)
-    and bounds candidate glyph dimensions relative to local staff space.
+    and bounds candidate glyph dimensions relative to local staff space against independent oracles.
     """
-    # 1. Mutopia real classical score: Emmentaler-20 font -> glyph_scale ~ 4.98 pt
+    # 1. Mutopia real classical score: Emmentaler-20 font -> glyph_scale ~ 4.9813 pt
+    oracle_mutopia = _extract_independent_pdf_scale_oracle(
+        REAL_SCORE_MUTOPIA, REAL_SCORE_MUTOPIA_SHA256, page_index=1
+    )
     obs_mutopia = observe(REAL_SCORE_MUTOPIA)
     scale_mutopia = estimate_page_scale(obs_mutopia, page_index=1)
     assert scale_mutopia.glyph_scale is not None
+    assert abs(scale_mutopia.glyph_scale - oracle_mutopia["glyph_scale"]) < 1e-3
     assert abs(scale_mutopia.glyph_scale - scale_mutopia.notation_staff_space) < 0.20
 
-    # 2. Derek Trucks real paired notation+TAB score -> glyph_scale ~ 4.25 pt
+    # 2. Derek Trucks real paired notation+TAB score -> glyph_scale ~ 4.252 pt
+    oracle_dt = _extract_independent_pdf_scale_oracle(
+        REAL_SCORE_DEREK_TRUCKS, REAL_SCORE_DEREK_TRUCKS_SHA256, page_index=1
+    )
     obs_dt = observe(REAL_SCORE_DEREK_TRUCKS)
     scale_dt = estimate_page_scale(obs_dt, page_index=1)
     assert scale_dt.glyph_scale is not None
+    assert abs(scale_dt.glyph_scale - oracle_dt["glyph_scale"]) < 1e-3
     assert abs(scale_dt.glyph_scale - scale_dt.notation_staff_space) < 0.20
 
     # 3. Generated paired score with text/fret digits
+    oracle_paired = _extract_independent_pdf_scale_oracle(
+        PAIRED_PDF, PAIRED_PDF_SHA256, page_index=1
+    )
     obs_paired = observe(PAIRED_PDF)
     scale_paired = estimate_page_scale(obs_paired, page_index=1)
     assert scale_paired.glyph_scale is not None
-    assert 6.0 <= scale_paired.glyph_scale <= 7.5
+    assert abs(scale_paired.glyph_scale - oracle_paired["glyph_scale"]) < 1e-3
 
     # 4. Tiny TAB fixture with fret digits
+    oracle_tiny = _extract_independent_pdf_scale_oracle(
+        TINY_TAB_PDF, TINY_TAB_PDF_SHA256, page_index=1
+    )
     obs_tiny = observe(TINY_TAB_PDF)
     scale_tiny = estimate_page_scale(obs_tiny, page_index=1)
     assert scale_tiny.glyph_scale is not None
-    assert 11.5 <= scale_tiny.glyph_scale <= 13.5
+    assert abs(scale_tiny.glyph_scale - oracle_tiny["glyph_scale"]) < 1e-3
 
     # 5. Sparse vector-only fixture has no text/font observations -> glyph_scale is None
     obs_sparse = observe(SPARSE_NOTATION_PDF)
