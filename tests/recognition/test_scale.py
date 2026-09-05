@@ -425,6 +425,7 @@ def test_real_score_derek_trucks_paired_notation_and_tab() -> None:
 
     # Glyph scale matches independent PyMuPDF glyph oracle (~4.2520 pt)
     assert page_scale.glyph_scale is not None
+    assert glyph_oracle["glyph_scale"] is not None
     assert abs(page_scale.glyph_scale - glyph_oracle["glyph_scale"]) < 1e-3
     # Rendered fret digit height on TAB staves matches independent PyMuPDF text-bbox oracle (7.0 pt)
     assert glyph_oracle["rendered_digit_height"] == 7.0
@@ -486,6 +487,7 @@ def test_paired_notation_tab_fixture_independent_estimation() -> None:
 
     # Glyph scale from music/tab text glyphs matches independent PyMuPDF rendered digit height (~6.8695 pt)
     assert page_scale.glyph_scale is not None
+    assert glyph_oracle["glyph_scale"] is not None
     assert abs(page_scale.glyph_scale - glyph_oracle["glyph_scale"]) < 1e-3
 
     # Stroke thickness: 0.5 for notation, 0.6 for tab -> median 0.55
@@ -532,6 +534,7 @@ def test_tiny_tab_only_fixture() -> None:
     assert abs(page_scale.tab_string_space - line_oracle["tab_string_space"]) < 1e-3
     assert page_scale.stroke_thickness == 0.6
     assert page_scale.glyph_scale is not None
+    assert glyph_oracle["glyph_scale"] is not None
     assert abs(page_scale.glyph_scale - glyph_oracle["glyph_scale"]) < 1e-3
 
 
@@ -788,6 +791,7 @@ def test_invalid_page_index_error() -> None:
     obs = _build_synthetic_staff_obs(line_count=5, gap=10.0)
     est = estimate_page_scale(obs, page_index=2, raise_on_unsupported=False)
     assert est.status == ScaleStatus.UNSUPPORTED
+    assert est.error_message is not None
     assert "out of bounds" in est.error_message
 
     with pytest.raises(UnsupportedScaleError):
@@ -1182,6 +1186,8 @@ def test_probe_5_glyph_scale_assertions_on_real_and_synthetic_fixtures() -> None
     obs_mutopia = observe(REAL_SCORE_MUTOPIA)
     scale_mutopia = estimate_page_scale(obs_mutopia, page_index=1)
     assert scale_mutopia.glyph_scale is not None
+    assert scale_mutopia.notation_staff_space is not None
+    assert oracle_mutopia["glyph_scale"] is not None
     assert abs(scale_mutopia.glyph_scale - oracle_mutopia["glyph_scale"]) < 1e-3
     assert abs(scale_mutopia.glyph_scale - scale_mutopia.notation_staff_space) < 0.20
     assert oracle_mutopia["music_font_scale"] == 4.9813
@@ -1193,6 +1199,8 @@ def test_probe_5_glyph_scale_assertions_on_real_and_synthetic_fixtures() -> None
     obs_dt = observe(REAL_SCORE_DEREK_TRUCKS)
     scale_dt = estimate_page_scale(obs_dt, page_index=1)
     assert scale_dt.glyph_scale is not None
+    assert scale_dt.notation_staff_space is not None
+    assert oracle_dt["glyph_scale"] is not None
     assert abs(scale_dt.glyph_scale - oracle_dt["glyph_scale"]) < 1e-3
     assert abs(scale_dt.glyph_scale - scale_dt.notation_staff_space) < 0.20
     # Independent PyMuPDF text-bbox oracle confirms rendered fret digits on TAB staves
@@ -1206,6 +1214,7 @@ def test_probe_5_glyph_scale_assertions_on_real_and_synthetic_fixtures() -> None
     obs_paired = observe(PAIRED_PDF)
     scale_paired = estimate_page_scale(obs_paired, page_index=1)
     assert scale_paired.glyph_scale is not None
+    assert oracle_paired["glyph_scale"] is not None
     assert abs(scale_paired.glyph_scale - oracle_paired["glyph_scale"]) < 1e-3
     assert oracle_paired["rendered_digit_height"] == 6.8695
 
@@ -1216,6 +1225,7 @@ def test_probe_5_glyph_scale_assertions_on_real_and_synthetic_fixtures() -> None
     obs_tiny = observe(TINY_TAB_PDF)
     scale_tiny = estimate_page_scale(obs_tiny, page_index=1)
     assert scale_tiny.glyph_scale is not None
+    assert oracle_tiny["glyph_scale"] is not None
     assert abs(scale_tiny.glyph_scale - oracle_tiny["glyph_scale"]) < 1e-3
     assert oracle_tiny["rendered_digit_height"] == 12.4900
 
