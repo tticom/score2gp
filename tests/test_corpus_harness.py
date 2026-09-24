@@ -16,20 +16,28 @@ from scripts.corpus_harness import run_pipeline_for_input, resolve_score2gp_cmd,
 
 
 
-def test_resolve_score2gp_cmd():
-    with patch("pathlib.Path.exists") as mock_exists:
-        # Test Priority 1: .venv/bin/score2gp
-        mock_exists.return_value = True
-        cmd = resolve_score2gp_cmd()
-        assert cmd[1] == "convert"
-        assert "score2gp" in cmd[0]
+@pytest.mark.parametrize(
+    "venv_entrypoint",
+    [(".venv", "Scripts", "score2gp.exe"), (".venv", "bin", "score2gp")],
+    ids=["windows-venv", "posix-venv"],
+)
+def test_resolve_score2gp_cmd_prefers_repo_venv(tmp_path, venv_entrypoint):
+    entrypoint = tmp_path.joinpath(*venv_entrypoint)
+    entrypoint.parent.mkdir(parents=True)
+    entrypoint.touch()
+    with patch("shutil.which", return_value="/mock/bin/score2gp"):
+        assert resolve_score2gp_cmd(tmp_path) == [str(entrypoint), "convert"]
 
-        # Test Priority 2: shutil.which fallback
-        mock_exists.return_value = False
-        with patch("shutil.which") as mock_which:
-            mock_which.return_value = "/mock/bin/score2gp"
-            cmd = resolve_score2gp_cmd()
-            assert cmd == ["/mock/bin/score2gp", "convert"]
+
+def test_resolve_score2gp_cmd_falls_back_to_path(tmp_path):
+    with patch("shutil.which", return_value="/mock/bin/score2gp"):
+        assert resolve_score2gp_cmd(tmp_path) == ["/mock/bin/score2gp", "convert"]
+
+
+def test_resolve_score2gp_cmd_fails_without_entrypoint(tmp_path):
+    with patch("shutil.which", return_value=None):
+        with pytest.raises(RuntimeError, match="score2gp CLI entrypoint not found"):
+            resolve_score2gp_cmd(tmp_path)
 
 def test_real_invocation_smoke():
     """Real invocation smoke test verifying the CLI entrypoint can execute successfully."""
@@ -39,10 +47,14 @@ def test_real_invocation_smoke():
     # instead of a conversion run.
     smoke_cmd = [cmd[0], "convert", "--help"]
     import subprocess
+    import os
     result = subprocess.run(
         smoke_cmd,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
         check=False
     )
 

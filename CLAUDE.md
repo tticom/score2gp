@@ -13,16 +13,20 @@ This repo is the **product** repo only. Agent governance lives in the sibling re
 
 ## Commands
 
-Python ≥3.11, package in `src/` layout.
+Python ≥3.11, package in `src/` layout. Development is OS-agnostic: every command below runs unchanged in PowerShell on Windows and in a POSIX shell on Linux. Use `python`, never `python3`. The virtualenv interpreter is `.venv/Scripts/python.exe` on Windows and `.venv/bin/python` on Linux; activate it, or call it directly.
 
 ```bash
+python -m venv .venv                        # then activate: .venv\Scripts\Activate.ps1 (Windows) or . .venv/bin/activate (Linux)
 python -m pip install -e ".[dev]"          # dev deps: pytest, pillow, ruff==0.6.2, pylint==4.0.7
 python -m pytest                            # full suite (tests/, pythonpath=src)
 python -m pytest tests/test_build_ir.py::test_name -x   # single test
-make quick TEST=tests/test_foo.py           # same, via Makefile (default TEST=tests/test_notation_bridge.py)
-make verify                                 # scripts/agent_verify.py: pytest + export-schema + validate-ir + artifact_audit + git checks; writes work/agent_verify.{json,md}
+python scripts/agent_verify.py              # pytest + export-schema + validate-ir + artifact_audit + git checks; writes work/agent_verify.{json,md}
+python scripts/artifact_audit.py            # artifact audit
+python scripts/pr_body.py --title ... --summary ... --limitations ... --review-focus ...   # PR evidence body
 python -m score2gp.cli --help               # CLI (also the `score2gp` entrypoint)
 ```
+
+`make` is optional. Where it's installed, `make verify`, `make audit`, `make pr-body` and `make quick TEST=...` (default `TEST=tests/test_notation_bridge.py`) run the same commands using the virtualenv interpreter.
 
 Pre-conclusion checklist required by `AGENTS.md` (report all of it):
 
