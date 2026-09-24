@@ -3813,10 +3813,8 @@ NOTEHEAD_MIN_WIDTH_SPACES = 0.8
 NOTEHEAD_MAX_WIDTH_SPACES = 2.0
 NOTEHEAD_MIN_HEIGHT_SPACES = 0.6
 NOTEHEAD_MAX_HEIGHT_SPACES = 1.5
-# A stem touches or overlaps its notehead: every Lesson 3 stem's x lies inside its head's bounding
-# box. Only a hairline allowance is made for rounding, so a separate note with a visible gap from a
-# barline is not attachment evidence.
-STEM_ATTACHMENT_X_TOLERANCE_SPACES = 0.05
+# A stem touches or overlaps its notehead (every Lesson 3 stem lies inside its head's box).
+# Attachment is rendered contact with no horizontal allowance: any visible gap means a separate note.
 # The stem's end lies within the notehead's height (with a small allowance).
 STEM_ATTACHMENT_Y_TOLERANCE_SPACES = 0.25
 # Engraved barlines run exactly from the top staff line to the bottom one; note stems overshoot
@@ -3843,7 +3841,7 @@ def _thickness_near(segments: list[Any], x: float, tolerance: float = 0.5) -> fl
 
 
 def _classify_partner_vertical(
-    x: float,
+    x_extent: tuple[float, float],
     y_min: float,
     y_max: float,
     thickness: float | None,
@@ -3865,7 +3863,7 @@ def _classify_partner_vertical(
     barline with a notehead touching it at that thickness. Engraving never places a notehead
     against a barline, and Lessons 3-7 have none, so these synthetic pairs are left unresolved.
     """
-    if not _has_attached_notehead(x, y_min, y_max, boxes, staff_space):
+    if not _has_attached_notehead(x_extent, y_min, y_max, boxes, staff_space):
         return "barline"
     if thickness and reference_thickness:
         ratio = thickness / reference_thickness
@@ -3892,8 +3890,28 @@ def _filled_shape_boxes(drawings: list[dict[str, Any]]) -> list[tuple[float, flo
         is_filled = drawing.get("fill") is not None
         is_curved_outline = any(item and item[0] == "c" for item in drawing.get("items", []))
         if is_filled or is_curved_outline:
-            boxes.append((float(rect.x0), float(rect.y0), float(rect.x1), float(rect.y1)))
+            # Rendered extent: a stroked outline paints half its line width beyond the path.
+            half = float(drawing.get("width") or 0.0) / 2 if drawing.get("color") is not None else 0.0
+            boxes.append((float(rect.x0) - half, float(rect.y0) - half, float(rect.x1) + half, float(rect.y1) + half))
     return boxes
+
+
+def _rendered_x_extent(segments: list[Any], x: float, y_min: float, y_max: float) -> tuple[float, float]:
+    """Horizontal extent actually painted by the vertical at ``x``.
+
+    A stroke paints half its width either side; a filled rectangle paints between its two edges.
+    """
+    lows, highs = [], []
+    for s in segments:
+        if abs(s.x0 - s.x1) > 2.0 or abs(s.y1 - s.y0) < 10.0:
+            continue
+        mid = (s.x0 + s.x1) / 2
+        if abs(mid - x) > 1.0 or max(s.y0, s.y1) < y_min or min(s.y0, s.y1) > y_max:
+            continue
+        half = float(getattr(s, "stroke_width", None) or 0.0) / 2 if getattr(s, "primitive_kind", None) == "line" else 0.0
+        lows.append(mid - half)
+        highs.append(mid + half)
+    return (min(lows), max(highs)) if lows else (x, x)
 
 
 def _spans_staff_exactly(y_min: float, y_max: float, top_line: float, bottom_line: float, staff_space: float) -> bool:
@@ -3911,17 +3929,18 @@ def _staff_space(line_ys: list[float]) -> float | None:
 
 
 def _has_attached_notehead(
-    x: float,
+    x_extent: tuple[float, float],
     y_min: float,
     y_max: float,
     boxes: list[tuple[float, float, float, float]],
     staff_space: float,
 ) -> bool:
-    """True when a notehead-sized filled shape sits on this vertical and covers one of its ends.
+    """True when a notehead-sized shape is in rendered contact with this vertical at one of its ends.
 
-    That is a note stem, not a barline: a barline has no notehead attached to it.
+    That is a note stem, not a barline: a barline has no notehead attached to it. Contact means the
+    painted extents overlap or touch; any visible gap means a separate note.
     """
-    x_tolerance = STEM_ATTACHMENT_X_TOLERANCE_SPACES * staff_space
+    left, right = x_extent
     y_tolerance = STEM_ATTACHMENT_Y_TOLERANCE_SPACES * staff_space
     for bx0, by0, bx1, by1 in boxes:
         width, height = bx1 - bx0, by1 - by0
@@ -3929,7 +3948,7 @@ def _has_attached_notehead(
             continue
         if not (NOTEHEAD_MIN_HEIGHT_SPACES * staff_space <= height <= NOTEHEAD_MAX_HEIGHT_SPACES * staff_space):
             continue
-        if not (bx0 - x_tolerance <= x <= bx1 + x_tolerance):
+        if right < bx0 or left > bx1:
             continue
         if by0 - y_tolerance <= y_min <= by1 + y_tolerance or by0 - y_tolerance <= y_max <= by1 + y_tolerance:
             return True
@@ -4503,7 +4522,8 @@ def _detect_tab_systems(
                     if det_x not in partner_valid:
                         continue
                     verdict = _classify_partner_vertical(
-                        det_x, det["y_min"], det["y_max"], _thickness_near(other_candidates, det_x),
+                        _rendered_x_extent(segments, det_x, det["y_min"], det["y_max"]),
+                        det["y_min"], det["y_max"], _thickness_near(other_candidates, det_x),
                         reference_thickness, other_y0, other_y1, filled_boxes, partner_space,
                     )
                     if verdict == "stem":

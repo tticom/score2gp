@@ -116,17 +116,17 @@ def test_non_notehead_fills_do_not_reject_a_barline() -> None:
 
 
 @pytest.mark.parametrize("scale", [0.25, 1.0, 4.0])
-def test_notehead_attachment_is_measured_in_staff_spaces(scale: float) -> None:
-    # The rule is dimensionless: scaling the geometry and the staff space together changes nothing.
+def test_notehead_attachment_is_rendered_contact_in_staff_spaces(scale: float) -> None:
+    # Sizes are dimensionless; attachment is rendered contact with no horizontal allowance.
     s = scale
     notehead = [(281.0 * s, 165.0 * s, 300.0 * s, 181.0 * s)]
     space = 18.0 * s
-    assert pdf._has_attached_notehead(300.0 * s, 98.0 * s, 174.0 * s, notehead, space)          # stem on its edge
-    assert not pdf._has_attached_notehead(305.0 * s, 98.0 * s, 174.0 * s, notehead, space)      # clear of it
-    assert not pdf._has_attached_notehead(302.0 * s, 98.0 * s, 174.0 * s, notehead, space)      # a visible gap is not contact
-    assert not pdf._has_attached_notehead(300.0 * s, 98.0 * s, 140.0 * s, notehead, space)      # ends away from it
-    too_wide = [(250.0 * s, 165.0 * s, 300.0 * s, 181.0 * s)]                                    # a beam, not a notehead
-    assert not pdf._has_attached_notehead(300.0 * s, 98.0 * s, 174.0 * s, too_wide, space)
+    touching = (299.9 * s, 300.1 * s)
+    assert pdf._has_attached_notehead(touching, 98.0 * s, 174.0 * s, notehead, space)            # stem on its edge
+    assert not pdf._has_attached_notehead((300.01 * s, 300.3 * s), 98.0 * s, 174.0 * s, notehead, space)  # a visible gap
+    assert not pdf._has_attached_notehead(touching, 98.0 * s, 140.0 * s, notehead, space)        # ends away from it
+    too_wide = [(250.0 * s, 165.0 * s, 300.0 * s, 181.0 * s)]                                     # a beam, not a notehead
+    assert not pdf._has_attached_notehead(touching, 98.0 * s, 174.0 * s, too_wide, space)
 
 
 # --- Real source: the original Lesson 3 PDF through production code (counts only) ---
@@ -305,6 +305,49 @@ def test_negative_control_a_thin_stem_that_touches_its_notehead_is_still_rejecte
     # The same thin vertical, now touching the notehead, is stem evidence and is rejected.
     page = vector_page(stems=[stem(300.0)], noteheads=[(fitz.Rect(300.0, 164, 319.0, 180), True)])
     assert boundaries(page) == ([50.0, 500.0], [300.0], [])
+
+
+
+HEAD_OUTLINE_HALF = 0.4  # vector_page strokes noteheads at width 0.8, painting 0.4 beyond the path
+THIN_HALF = STEM_WIDTH / 2
+
+
+def thin_barline_page(side: str, painted_gap: float, as_rectangle: bool):
+    """A thin genuine barline at x=300 and a separate notehead ``painted_gap`` pt from its painted edge."""
+    y1 = 172.0 + 0.161 * 18.0
+    if side == "right":
+        x0 = 300.0 + THIN_HALF + painted_gap + HEAD_OUTLINE_HALF
+        head = fitz.Rect(x0, 164, x0 + 19, 180)
+    else:
+        x1 = 300.0 - THIN_HALF - painted_gap - HEAD_OUTLINE_HALF
+        head = fitz.Rect(x1 - 19, 164, x1, 180)
+    if not as_rectangle:
+        return vector_page([barline(300.0, 100.0, y1, width=STEM_WIDTH)], noteheads=[(head, True)])
+    page = vector_page(noteheads=[(head, True)])
+    shape = page.new_shape()
+    shape.draw_rect(fitz.Rect(300.0 - THIN_HALF, 100.0, 300.0 + THIN_HALF, y1))
+    shape.finish(color=None, fill=(0, 0, 0))
+    shape.commit()
+    return page
+
+
+@pytest.mark.parametrize("gap_spaces", [0.005, 0.04])
+@pytest.mark.parametrize("side", ["right", "left"])
+@pytest.mark.parametrize("as_rectangle", [False, True], ids=["stroke", "filled-rectangle"])
+def test_any_visible_gap_keeps_a_thin_genuine_barline(gap_spaces: float, side: str, as_rectangle: bool) -> None:
+    # Review 5310255195: gaps inside the former 0.05-space allowance, measured between painted edges.
+    bars, stems_rejected, ambiguous = boundaries(thin_barline_page(side, gap_spaces * 18.0, as_rectangle))
+    assert len(bars) == 3 and abs(bars[1] - 300.0) <= 0.5
+    assert stems_rejected == [] and ambiguous == []
+
+
+def test_negative_control_the_former_padded_attachment_deletes_the_barline(monkeypatch) -> None:
+    # Re-apply the reviewed defect (a 0.05-space pad around the vertical): the 0.04-space case is deleted.
+    real = pdf._rendered_x_extent
+    monkeypatch.setattr(pdf, "_rendered_x_extent",
+                        lambda segments, x, y0, y1: (real(segments, x, y0, y1)[0] - 0.9, real(segments, x, y0, y1)[1] + 0.9))
+    bars, stems_rejected, _ = boundaries(thin_barline_page("right", 0.04 * 18.0, False))
+    assert bars == [50.0, 500.0] and len(stems_rejected) == 1
 
 
 # Accepted residual (maintainer decision 2026-09-24, L3-01). These pairs are indistinguishable in
