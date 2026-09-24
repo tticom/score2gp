@@ -1,4 +1,5 @@
-PYTHON ?= $(shell [ -f .venv/bin/python3 ] && echo .venv/bin/python3 || echo python3)
+# Repository virtualenv on Windows or POSIX, else python on PATH; no shell needed.
+PYTHON ?= $(firstword $(wildcard .venv/Scripts/python.exe .venv/bin/python) python)
 TEST ?= tests/test_notation_bridge.py
 TITLE ?= [PR Title]
 SUMMARY ?= [PR Summary]

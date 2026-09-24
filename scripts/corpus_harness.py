@@ -98,17 +98,19 @@ def anonymize_name(path: Path) -> str:
 
 
 
-def resolve_score2gp_cmd() -> List[str]:
+def resolve_score2gp_cmd(repo_root: Optional[Path] = None) -> List[str]:
     """Finds the actual score2gp executable command list."""
-    import shutil
-    from pathlib import Path
+    root = repo_root or Path(__file__).resolve().parent.parent
 
-    # Priority 1: Use the existing native WSL CLI entrypoint from the committed environment
-    venv_bin = Path(__file__).resolve().parent.parent / ".venv" / "bin" / "score2gp"
-    if venv_bin.exists():
-        return [str(venv_bin), "convert"]
+    # Priority 1: the repository virtualenv (Windows or POSIX layout)
+    for venv_bin in (
+        root / ".venv" / "Scripts" / "score2gp.exe",
+        root / ".venv" / "bin" / "score2gp",
+    ):
+        if venv_bin.exists():
+            return [str(venv_bin), "convert"]
 
-    # Priority 2: native system executable (WSL/Linux PATH)
+    # Priority 2: score2gp on PATH
     score2gp_bin = shutil.which("score2gp")
     if score2gp_bin:
         return [score2gp_bin, "convert"]
@@ -168,8 +170,12 @@ def run_pipeline_for_input(
     import os
     env = os.environ.copy()
     env["PYTHONPATH"] = str(PROJECT_ROOT / "src")
+    # Pin the CLI's output encoding; Windows would otherwise decode it as cp1252.
+    env["PYTHONIOENCODING"] = "utf-8"
     print(f"Running command: {' '.join(cmd)}")
-    result = subprocess.run(cmd, env=env, capture_output=True, text=True)
+    result = subprocess.run(
+        cmd, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace"
+    )
     exit_status = result.returncode
 
 
