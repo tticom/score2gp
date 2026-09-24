@@ -38,7 +38,8 @@ python scripts/artifact_audit.py            # must exit 0
 git diff --check
 git diff -- schemas                         # export-schema must leave no diff
 git ls-files fixtures/private work          # must print exactly: fixtures/private/.gitkeep
-git status --short && git status --branch
+git status --short
+git status --branch
 ```
 
 CI (`.github/workflows/pylint.yml`, named "CI") runs `pytest` + `artifact_audit.py` on Python 3.11 after mounting the private corpus. A separate advisory workflow runs `scripts/raster_diagnostics_gate_report.py`.
