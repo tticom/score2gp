@@ -3808,6 +3808,60 @@ def classify_staff_line_group(group: list[_LineSegment], page: Any = None) -> st
     return "ambiguous"
 
 
+# Notehead geometry, in notation staff spaces (dimensionless, REC-04 policy).
+NOTEHEAD_MIN_WIDTH_SPACES = 0.8
+NOTEHEAD_MAX_WIDTH_SPACES = 2.0
+NOTEHEAD_MIN_HEIGHT_SPACES = 0.6
+NOTEHEAD_MAX_HEIGHT_SPACES = 1.5
+# A stem sits on its notehead's edge; a barline beside a note stands clear of it.
+STEM_ATTACHMENT_X_TOLERANCE_SPACES = 0.25
+
+
+def _filled_shape_boxes(drawings: list[dict[str, Any]]) -> list[tuple[float, float, float, float]]:
+    """Bounding boxes (x0, y0, x1, y1) of filled vector shapes, the candidates for noteheads."""
+    boxes = []
+    for drawing in drawings:
+        if drawing.get("fill") is None:
+            continue
+        rect = drawing.get("rect")
+        if rect is not None:
+            boxes.append((float(rect.x0), float(rect.y0), float(rect.x1), float(rect.y1)))
+    return boxes
+
+
+def _staff_space(line_ys: list[float]) -> float | None:
+    ys = sorted(line_ys)
+    gaps = sorted(b - a for a, b in zip(ys, ys[1:]) if b - a > 0)
+    if not gaps:
+        return None
+    return gaps[len(gaps) // 2]
+
+
+def _has_attached_notehead(
+    x: float,
+    y_min: float,
+    y_max: float,
+    boxes: list[tuple[float, float, float, float]],
+    staff_space: float,
+) -> bool:
+    """True when a notehead-sized filled shape sits on this vertical and covers one of its ends.
+
+    That is a note stem, not a barline: a barline has no notehead attached to it.
+    """
+    tolerance = STEM_ATTACHMENT_X_TOLERANCE_SPACES * staff_space
+    for bx0, by0, bx1, by1 in boxes:
+        width, height = bx1 - bx0, by1 - by0
+        if not (NOTEHEAD_MIN_WIDTH_SPACES * staff_space <= width <= NOTEHEAD_MAX_WIDTH_SPACES * staff_space):
+            continue
+        if not (NOTEHEAD_MIN_HEIGHT_SPACES * staff_space <= height <= NOTEHEAD_MAX_HEIGHT_SPACES * staff_space):
+            continue
+        if not (bx0 - tolerance <= x <= bx1 + tolerance):
+            continue
+        if by0 - tolerance <= y_min <= by1 + tolerance or by0 - tolerance <= y_max <= by1 + tolerance:
+            return True
+    return False
+
+
 def filter_tab_barline_candidates(
     candidates: list[_LineSegment],
     y0: float,
@@ -4149,7 +4203,9 @@ def _detect_tab_systems(
     first_bar_index: int = 1,
     cumulative_y_offset: float = 0.0,
 ) -> list[_TabSystem]:
-    segments = list(_drawing_segments(page.get_drawings()))
+    drawings = page.get_drawings()
+    segments = list(_drawing_segments(drawings))
+    filled_boxes = _filled_shape_boxes(drawings)
     raw_horizontal = sorted((segment for segment in segments if segment.is_horizontal), key=lambda segment: segment.y0)
     horizontal = sorted(merge_collinear_horizontal_segments(raw_horizontal), key=lambda segment: segment.y0)
 
@@ -4359,6 +4415,20 @@ def _detect_tab_systems(
             strict_xs = {det["x"] for det in other_filtered["details"] if det.get("final_decision") == "accepted" and det.get("raw_coverage_ratio", 0.0) >= 0.98}
             partner_valid = [x for x in other_filtered["valid_barlines"] if x in strict_xs]
 
+            # L3-01 (H2): a full-height notation-staff vertical with a notehead attached to one
+            # end is a note stem, not a barline. Rejecting it here keeps partner inheritance
+            # for genuine barlines that the TAB filter missed.
+            stem_xs: set[float] = set()
+            partner_space = _staff_space(other_ys)
+            if filled_boxes and partner_space:
+                for det in other_filtered["details"]:
+                    det_x = det.get("x")
+                    if det_x in partner_valid and _has_attached_notehead(
+                        det_x, det["y_min"], det["y_max"], filled_boxes, partner_space
+                    ):
+                        stem_xs.add(det_x)
+                partner_valid = [x for x in partner_valid if x not in stem_xs]
+
             # Same inheritance logic as main
             inherited_from_partner = []
             rejected_inherited = {}
@@ -4388,7 +4458,12 @@ def _detect_tab_systems(
             for det in other_filtered["details"]:
                 det_copy = dict(det)
                 det_copy["inherited"] = True
-                if det_copy.get("final_decision") == "accepted":
+                if det_copy.get("final_decision") == "accepted" and det_copy.get("x") in stem_xs:
+                    det_copy["final_decision"] = "rejected"
+                    det_copy["rejection_reason"] = "pdf_barline_note_stem"
+                    rejection_reasons["pdf_barline_note_stem"] = rejection_reasons.get("pdf_barline_note_stem", 0) + 1
+                    rejected_count += 1
+                elif det_copy.get("final_decision") == "accepted":
                     x_val = det_copy.get("x")
                     matched_pb = None
                     if x_val is not None:

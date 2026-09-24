@@ -56,8 +56,9 @@ def test_real_source_irregular_layout_alignment(tmp_path) -> None:
             bar_frets = [cf for cf in frets if cf.page_index == p and cf.system_index == sys and cf.bar_index == b]
             tab_groups_by_bar[key] = grouper.candidate_x_groups(bar_frets)
 
-    # Lesson-7 has 6 systems on Page 1. System 1 has 9 bars on TAB!
-    # Let's verify we have system 1 with 9 bars.
+    # L3-01: Lesson-7 system 1 has 2 TAB bars. Its reference GP has 50 measures and production now
+    # detects exactly 50. The former "9 bars" came from note stems mis-read as barlines.
+    assert sorted(b for (p, s, st, b) in tab_groups_by_bar if (p, s) == (1, 1)) == [1, 2]
     # NOTE(GOVERNANCE_EXCEPTION): The staff events below are intentionally mocked
     # to simulate a parser desync (staff_bar_indices != tab_bar_indices).
     # Because the upstream pipeline cannot currently reproduce this failure
@@ -68,23 +69,22 @@ def test_real_source_irregular_layout_alignment(tmp_path) -> None:
     # We'll just take the exact X coordinates of the first 5 tab groups and make them Staff Events,
     # but give them different local_bar_indices.
 
-    sys1_tab_groups = []
-    for b in range(1, 10):
-        if (1, 1, 1, b) in tab_groups_by_bar:
-            sys1_tab_groups.extend(tab_groups_by_bar[(1, 1, 1, b)])
+    # Desync: the staff reports fewer bars than the TAB. Take the last 5 groups of TAB bar 1 and the
+    # first 5 of TAB bar 2, so they cross a real TAB boundary, and put all 10 in a single staff bar.
+    bar1 = tab_groups_by_bar[(1, 1, 1, 1)]
+    bar2 = tab_groups_by_bar[(1, 1, 1, 2)]
+    assert len(bar1) >= 5 and len(bar2) >= 5
+    straddling = bar1[-5:] + bar2[:5]
 
-    # Create staff events matching these X coordinates, but group them into just 2 bars! (Irregular)
     staff_events = []
-    for i, grp in enumerate(sys1_tab_groups[:10]):
-        # The first 5 go to local_bar_index=1, the next 5 go to local_bar_index=2
-        local_bar = 1 if i < 5 else 2
+    for i, grp in enumerate(straddling):
         staff_events.append(
-            PdfStaffTimingEvent(id=f"s{i}", page_index=1, system_index=1, staff_index=1, local_bar_index=local_bar, x=grp.x, onset_ticks=0, duration_ticks=480)
+            PdfStaffTimingEvent(id=f"s{i}", page_index=1, system_index=1, staff_index=1, local_bar_index=1, x=grp.x, onset_ticks=0, duration_ticks=480)
         )
 
     aligner = PdfStaffTabTimingAligner(tolerance=15.0)
 
     result = aligner.align(staff_events, tab_groups_by_bar)
 
-    # Verify that the dynamic boundary system safely mapped the irregular groupings!
-    assert len(result.aligned_pairs) >= 10
+    # The dynamic boundary system maps every event across the TAB boundary.
+    assert len(result.aligned_pairs) == 10
