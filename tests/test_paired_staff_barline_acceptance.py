@@ -245,14 +245,14 @@ def test_a_genuine_touching_barline_beyond_the_span_tolerance_is_kept_by_its_thi
 
 
 @pytest.mark.parametrize(("overshoot_spaces", "expected"), [
-    (0.0, ([50.0, 300.0, 500.0], [], ["ambiguous_kept_as_barline"])),
-    (0.14, ([50.0, 300.0, 500.0], [], ["ambiguous_kept_as_barline"])),
+    (0.0, ([50.0, 500.0], [], ["ambiguous_not_promoted"])),
+    (0.14, ([50.0, 500.0], [], ["ambiguous_not_promoted"])),
     (0.16, ([50.0, 500.0], [300.0], [])),
     (0.5, ([50.0, 500.0], [300.0], [])),
 ])
 def test_equal_thickness_falls_back_to_the_staff_span_with_explicit_ambiguity(monkeypatch, overshoot_spaces, expected) -> None:
-    # When thickness cannot decide, geometry decides: an exact span is kept as a barline with its
-    # ambiguity recorded; a vertical beyond the 0.15-space tolerance with an attached head is a stem.
+    # Without thickness evidence, an attached vertical spanning exactly the staff has conflicting
+    # evidence: it is recorded and not promoted (fail-safe). Beyond the 0.15-space tolerance it is a stem.
     monkeypatch.setattr(pdf, "_thickness_near", lambda *args, **kwargs: None)
     y1 = 172.0 + overshoot_spaces * 18.0
     page = vector_page([barline(300.0, 100.0, y1)], noteheads=[(HEAD_ON_BOTTOM_LINE_LEFT_OF_300, True)])
@@ -266,10 +266,44 @@ def test_negative_control_hollow_notehead_stem_survives_without_outline_detectio
     assert boundaries(page)[0] == [50.0, 200.0, 300.0, 500.0]
 
 
-def test_negative_control_exact_span_stem_survives_without_thickness(monkeypatch) -> None:
+def test_exact_span_stem_without_thickness_evidence_is_recorded_not_promoted(monkeypatch) -> None:
+    # Absent TAB reference thickness: the conflicting candidate never becomes a boundary.
     monkeypatch.setattr(pdf, "_thickness_near", lambda *args, **kwargs: None)
     page = vector_page(stems=[stem(300.0, 100.0, 172.0)], noteheads=[(HEAD_ON_BOTTOM_LINE_LEFT_OF_300, True)])
-    assert boundaries(page) == ([50.0, 300.0, 500.0], [], ["ambiguous_kept_as_barline"])
+    assert boundaries(page) == ([50.0, 500.0], [], ["ambiguous_not_promoted"])
+
+
+def test_notation_only_recovery_is_unaffected_by_ambiguity_handling() -> None:
+    # A genuine TAB-missed barline with no attached notehead is still inherited.
+    page = vector_page([barline(200.0), barline(350.0)], stems=[stem(300.0)], noteheads=[(HEAD_ON_BOTTOM_LINE_LEFT_OF_300, True)])
+    assert boundaries(page) == ([50.0, 200.0, 350.0, 500.0], [300.0], [])
+
+
+# Accepted residual (maintainer decision 2026-09-24, L3-01). These pairs are indistinguishable in
+# the vector evidence: an attached vertical at barline thickness looks like a barline with a touching
+# notehead, and a thin one like a stem. Engraving never places a notehead against a barline, and
+# Lessons 3-7 contain none. These tests pin today's behaviour so any change to it is deliberate.
+
+def test_accepted_residual_equal_width_exact_span_stem_reads_as_a_barline() -> None:
+    page = vector_page(stems=[stem(300.0, 100.0, 172.0, width=BARLINE_WIDTH)], noteheads=[(HEAD_ON_BOTTOM_LINE_LEFT_OF_300, True)])
+    assert boundaries(page) == ([50.0, 300.0, 500.0], [], [])
+
+
+@pytest.mark.parametrize("as_rectangle", [False, True], ids=["stroke", "filled-rectangle"])
+def test_accepted_residual_thin_touching_barline_reads_as_a_stem(as_rectangle: bool) -> None:
+    y1 = 172.0 + 0.161 * 18.0
+    if as_rectangle:
+        page = vector_page(noteheads=[(HEAD_ON_BOTTOM_LINE_LEFT_OF_300, True)])
+        shape = page.new_shape()
+        shape.draw_rect(fitz.Rect(299.75, 100.0, 300.25, y1))
+        shape.finish(color=None, fill=(0, 0, 0))
+        shape.commit()
+    else:
+        page = vector_page([barline(300.0, 100.0, y1, width=STEM_WIDTH)], noteheads=[(HEAD_ON_BOTTOM_LINE_LEFT_OF_300, True)])
+    bars, stems_rejected, _ = boundaries(page)
+    assert bars == [50.0, 500.0]
+    # A filled rectangle's vertical is reported at its right edge (x 300.25).
+    assert len(stems_rejected) == 1 and abs(stems_rejected[0] - 300.0) <= 0.5
 
 
 def test_negative_control_touching_barline_is_deleted_without_thickness_or_span(monkeypatch) -> None:

@@ -3849,11 +3849,17 @@ def _classify_partner_vertical(
     boxes: list[tuple[float, float, float, float]],
     staff_space: float,
 ) -> str:
-    """Classify a notation-staff vertical as "barline", "stem" or "ambiguous_barline".
+    """Classify a notation-staff vertical as "barline", "stem" or "ambiguous".
 
     Stems need an attached notehead. Thickness relative to the system's TAB barlines decides
-    first. When it can't decide, a vertical spanning exactly the outer staff lines is kept as a
-    barline, with its ambiguity recorded rather than silently resolved.
+    first. When it can't decide, a vertical spanning exactly the outer staff lines has
+    conflicting evidence: it is "ambiguous", recorded and not promoted to a barline (fail-safe).
+    Anything else with an attached notehead is a stem.
+
+    Accepted residual (maintainer decision 2026-09-24, L3-01): an attached vertical drawn at the
+    same thickness as the barlines and one drawn thinner are indistinguishable from a genuine
+    barline with a notehead touching it at that thickness. Engraving never places a notehead
+    against a barline, and Lessons 3-7 have none, so these synthetic pairs are left unresolved.
     """
     if not _has_attached_notehead(x, y_min, y_max, boxes, staff_space):
         return "barline"
@@ -3864,7 +3870,7 @@ def _classify_partner_vertical(
         if ratio >= BARLINE_MIN_THICKNESS_RATIO:
             return "barline"
     if _spans_staff_exactly(y_min, y_max, top_line, bottom_line, staff_space):
-        return "ambiguous_barline"
+        return "ambiguous"
     return "stem"
 
 
@@ -4497,9 +4503,10 @@ def _detect_tab_systems(
                     )
                     if verdict == "stem":
                         stem_xs.add(det_x)
-                    elif verdict == "ambiguous_barline":
+                    elif verdict == "ambiguous":
                         ambiguous_xs.add(det_x)
-                partner_valid = [x for x in partner_valid if x not in stem_xs]
+                # Neither stems nor unresolved candidates are promoted to barlines.
+                partner_valid = [x for x in partner_valid if x not in stem_xs and x not in ambiguous_xs]
 
             # Same inheritance logic as main
             inherited_from_partner = []
@@ -4530,11 +4537,14 @@ def _detect_tab_systems(
             for det in other_filtered["details"]:
                 det_copy = dict(det)
                 det_copy["inherited"] = True
-                if det_copy.get("x") in ambiguous_xs:
-                    # Kept as a barline, but the stem/barline evidence conflicted: make it visible.
-                    det_copy["stem_evidence"] = "ambiguous_kept_as_barline"
+                if det_copy.get("final_decision") == "accepted" and det_copy.get("x") in ambiguous_xs:
+                    # Conflicting stem/barline evidence: recorded and not promoted (fail-safe).
+                    det_copy["final_decision"] = "rejected"
+                    det_copy["rejection_reason"] = "pdf_barline_stem_ambiguity"
+                    det_copy["stem_evidence"] = "ambiguous_not_promoted"
                     rejection_reasons["pdf_barline_stem_ambiguity"] = rejection_reasons.get("pdf_barline_stem_ambiguity", 0) + 1
-                if det_copy.get("final_decision") == "accepted" and det_copy.get("x") in stem_xs:
+                    rejected_count += 1
+                elif det_copy.get("final_decision") == "accepted" and det_copy.get("x") in stem_xs:
                     det_copy["final_decision"] = "rejected"
                     det_copy["rejection_reason"] = "pdf_barline_note_stem"
                     rejection_reasons["pdf_barline_note_stem"] = rejection_reasons.get("pdf_barline_note_stem", 0) + 1
