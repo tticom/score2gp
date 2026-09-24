@@ -163,31 +163,34 @@ def test_lesson3_whole_document_topology_matches_the_pdf() -> None:
     assert sum(measures_per_page) == 66
 
 
-# --- Review 5309174891: production-path regressions on real PyMuPDF vector pages ---
+# --- Review 5309174891 / 5309393727: production-path regressions on real PyMuPDF vector pages ---
 
 NOTATION_YS = (100.0, 118.0, 136.0, 154.0, 172.0)  # staff space 18
 TAB_YS = (200.0, 227.0, 254.0, 281.0, 308.0, 335.0)
+BARLINE_WIDTH = 0.7  # engraved barlines are thicker than stems (Lessons 3-7: 0.68 vs 0.51 pt)
+STEM_WIDTH = 0.5
 
 
-def vector_page(barlines: list[float], stems: list[tuple[float, float, float]] = (),
+def vector_page(barlines: list[tuple[float, float, float, float]] = (),
+                stems: list[tuple[float, float, float, float]] = (),
                 noteheads: list[tuple[fitz.Rect, bool]] = ()) -> fitz.Page:
-    """An in-memory PDF page: paired staves, exact-span notation barlines, stems and noteheads.
+    """An in-memory PDF page with paired staves and outer barlines spanning both staves.
 
-    ``noteheads`` holds (rect, filled). Unfilled heads are stroked ovals, drawn with curves as
-    engravers draw hollow noteheads.
+    ``barlines`` and ``stems`` are (x, y0, y1, width) notation-staff verticals. ``noteheads``
+    holds (rect, filled); unfilled heads are stroked ovals drawn with curves.
     """
     doc = fitz.open()
     page = doc.new_page(width=600, height=800)
     shape = page.new_shape()
     for y in (*NOTATION_YS, *TAB_YS):
         shape.draw_line((50, y), (500, y))
-    shape.draw_line((50, 80), (50, 350))
-    shape.draw_line((500, 80), (500, 350))
-    for x in barlines:
-        shape.draw_line((x, NOTATION_YS[0]), (x, NOTATION_YS[-1]))
-    for x, y0, y1 in stems:
+    shape.finish(color=(0, 0, 0), width=0.4)
+    for x in (50.0, 500.0):
+        shape.draw_line((x, 80), (x, 350))
+    shape.finish(color=(0, 0, 0), width=BARLINE_WIDTH)
+    for x, y0, y1, width in (*barlines, *stems):
         shape.draw_line((x, y0), (x, y1))
-    shape.finish(color=(0, 0, 0), width=0.6)
+        shape.finish(color=(0, 0, 0), width=width)
     for rect, is_filled in noteheads:
         shape.draw_oval(rect)
         shape.finish(color=(0, 0, 0), fill=(0, 0, 0) if is_filled else None, width=0.8)
@@ -196,41 +199,81 @@ def vector_page(barlines: list[float], stems: list[tuple[float, float, float]] =
     return page
 
 
+def barline(x: float, y0: float = 100.0, y1: float = 172.0, width: float = BARLINE_WIDTH):
+    return (x, y0, y1, width)
+
+
+def stem(x: float, y0: float = 94.0, y1: float = 177.0, width: float = STEM_WIDTH):
+    return (x, y0, y1, width)
+
+
+HEAD_ON_BOTTOM_LINE_LEFT_OF_300 = fitz.Rect(281, 164, 300, 180)
+
+
+def boundaries(page) -> tuple[list[float], list[float], list[str]]:
+    (system,) = _detect_tab_systems(page, 1)
+    ambiguous = [d.get("stem_evidence") for d in system.barline_candidates_details if d.get("stem_evidence")]
+    return [round(b, 1) for b in system.barlines], stem_rejections(system), ambiguous
+
+
 @pytest.mark.parametrize("gap_spaces", [0.0, 0.1, 0.25])
 @pytest.mark.parametrize("side", ["right", "left"])
 def test_a_genuine_barline_with_a_touching_or_nearby_notehead_is_kept(gap_spaces: float, side: str) -> None:
-    space = 18.0
-    gap = gap_spaces * space
+    gap = gap_spaces * 18.0
     head = fitz.Rect(200 + gap, 164, 219 + gap, 180) if side == "right" else fitz.Rect(181 - gap, 164, 200 - gap, 180)
-    page = vector_page([200.0], noteheads=[(head, True)])
-    (system,) = _detect_tab_systems(page, 1)
-    assert [round(b, 1) for b in system.barlines] == [50.0, 200.0, 500.0]
-    assert stem_rejections(system) == []
+    assert boundaries(vector_page([barline(200.0)], noteheads=[(head, True)])) == ([50.0, 200.0, 500.0], [], [])
 
 
 @pytest.mark.parametrize("is_filled", [True, False], ids=["black-notehead", "hollow-notehead"])
 def test_stems_of_filled_and_hollow_noteheads_are_rejected(is_filled: bool) -> None:
-    page = vector_page([200.0], stems=[(300.0, 94.0, 177.0)], noteheads=[(fitz.Rect(281, 164, 300, 180), is_filled)])
-    (system,) = _detect_tab_systems(page, 1)
-    assert [round(b, 1) for b in system.barlines] == [50.0, 200.0, 500.0]
-    assert stem_rejections(system) == [300.0]
+    page = vector_page([barline(200.0)], stems=[stem(300.0)], noteheads=[(HEAD_ON_BOTTOM_LINE_LEFT_OF_300, is_filled)])
+    assert boundaries(page) == ([50.0, 200.0, 500.0], [300.0], [])
+
+
+def test_an_exact_span_stem_is_rejected_by_its_thickness() -> None:
+    # Review 5309393727 probe 1: a stem drawn exactly line to line with an attached notehead.
+    page = vector_page(stems=[stem(300.0, 100.0, 172.0)], noteheads=[(HEAD_ON_BOTTOM_LINE_LEFT_OF_300, True)])
+    assert boundaries(page) == ([50.0, 500.0], [300.0], [])
+
+
+@pytest.mark.parametrize("overshoot_spaces", [0.14, 0.161, 0.5])
+def test_a_genuine_touching_barline_beyond_the_span_tolerance_is_kept_by_its_thickness(overshoot_spaces: float) -> None:
+    # Review 5309393727 probe 2: a barline overshooting the bottom line, with a touching notehead.
+    y1 = 172.0 + overshoot_spaces * 18.0
+    page = vector_page([barline(300.0, 100.0, y1)], noteheads=[(HEAD_ON_BOTTOM_LINE_LEFT_OF_300, True)])
+    assert boundaries(page) == ([50.0, 300.0, 500.0], [], [])
+
+
+@pytest.mark.parametrize(("overshoot_spaces", "expected"), [
+    (0.0, ([50.0, 300.0, 500.0], [], ["ambiguous_kept_as_barline"])),
+    (0.14, ([50.0, 300.0, 500.0], [], ["ambiguous_kept_as_barline"])),
+    (0.16, ([50.0, 500.0], [300.0], [])),
+    (0.5, ([50.0, 500.0], [300.0], [])),
+])
+def test_equal_thickness_falls_back_to_the_staff_span_with_explicit_ambiguity(monkeypatch, overshoot_spaces, expected) -> None:
+    # When thickness cannot decide, geometry decides: an exact span is kept as a barline with its
+    # ambiguity recorded; a vertical beyond the 0.15-space tolerance with an attached head is a stem.
+    monkeypatch.setattr(pdf, "_thickness_near", lambda *args, **kwargs: None)
+    y1 = 172.0 + overshoot_spaces * 18.0
+    page = vector_page([barline(300.0, 100.0, y1)], noteheads=[(HEAD_ON_BOTTOM_LINE_LEFT_OF_300, True)])
+    assert boundaries(page) == expected
 
 
 def test_negative_control_hollow_notehead_stem_survives_without_outline_detection(monkeypatch) -> None:
-    # Only filled shapes count as noteheads here, which reproduces the reviewed defect.
     real = pdf._filled_shape_boxes
-
-    def filled_only(drawings):
-        return real([d for d in drawings if d.get("fill") is not None])
-
-    monkeypatch.setattr(pdf, "_filled_shape_boxes", filled_only)
-    page = vector_page([200.0], stems=[(300.0, 94.0, 177.0)], noteheads=[(fitz.Rect(281, 164, 300, 180), False)])
-    (system,) = _detect_tab_systems(page, 1)
-    assert [round(b, 1) for b in system.barlines] == [50.0, 200.0, 300.0, 500.0]
+    monkeypatch.setattr(pdf, "_filled_shape_boxes", lambda drawings: real([d for d in drawings if d.get("fill") is not None]))
+    page = vector_page([barline(200.0)], stems=[stem(300.0)], noteheads=[(HEAD_ON_BOTTOM_LINE_LEFT_OF_300, False)])
+    assert boundaries(page)[0] == [50.0, 200.0, 300.0, 500.0]
 
 
-def test_negative_control_touching_notehead_deletes_the_barline_without_the_staff_span_rule(monkeypatch) -> None:
+def test_negative_control_exact_span_stem_survives_without_thickness(monkeypatch) -> None:
+    monkeypatch.setattr(pdf, "_thickness_near", lambda *args, **kwargs: None)
+    page = vector_page(stems=[stem(300.0, 100.0, 172.0)], noteheads=[(HEAD_ON_BOTTOM_LINE_LEFT_OF_300, True)])
+    assert boundaries(page) == ([50.0, 300.0, 500.0], [], ["ambiguous_kept_as_barline"])
+
+
+def test_negative_control_touching_barline_is_deleted_without_thickness_or_span(monkeypatch) -> None:
+    monkeypatch.setattr(pdf, "_thickness_near", lambda *args, **kwargs: None)
     monkeypatch.setattr(pdf, "_spans_staff_exactly", lambda *args, **kwargs: False)
-    page = vector_page([200.0], noteheads=[(fitz.Rect(200, 164, 219, 180), True)])
-    (system,) = _detect_tab_systems(page, 1)
-    assert [round(b, 1) for b in system.barlines] == [50.0, 500.0]
+    page = vector_page([barline(200.0)], noteheads=[(fitz.Rect(200, 164, 219, 180), True)])
+    assert boundaries(page)[0] == [50.0, 500.0]

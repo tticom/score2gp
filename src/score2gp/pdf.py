@@ -3818,6 +3818,54 @@ STEM_ATTACHMENT_X_TOLERANCE_SPACES = 0.25
 # Engraved barlines run exactly from the top staff line to the bottom one; note stems overshoot
 # or stop short of the outer lines (Lesson 3 barlines: within 0.01 spaces; stems: 0.3-1.3 spaces off).
 BARLINE_STAFF_LINE_TOLERANCE_SPACES = 0.15
+# Visible thickness relative to the system's accepted TAB barlines (known genuine). Lessons 3-7
+# draw barlines as 0.68 pt filled rectangles and stems as 0.51 pt strokes (ratio 0.75).
+STEM_MAX_THICKNESS_RATIO = 0.85
+BARLINE_MIN_THICKNESS_RATIO = 0.95
+
+
+def _visible_thickness(segment: Any) -> float | None:
+    """Drawn thickness of a vertical: stroke width for lines, rectangle width for filled bars."""
+    kind = getattr(segment, "primitive_kind", None)
+    value = getattr(segment, "stroke_width", None) if kind == "line" else getattr(segment, "source_rect_width", None)
+    return float(value) if value else None
+
+
+def _thickness_near(segments: list[Any], x: float, tolerance: float = 0.5) -> float | None:
+    widths = [
+        w for w in (_visible_thickness(s) for s in segments if abs((s.x0 + s.x1) / 2 - x) <= tolerance) if w
+    ]
+    return max(widths) if widths else None
+
+
+def _classify_partner_vertical(
+    x: float,
+    y_min: float,
+    y_max: float,
+    thickness: float | None,
+    reference_thickness: float | None,
+    top_line: float,
+    bottom_line: float,
+    boxes: list[tuple[float, float, float, float]],
+    staff_space: float,
+) -> str:
+    """Classify a notation-staff vertical as "barline", "stem" or "ambiguous_barline".
+
+    Stems need an attached notehead. Thickness relative to the system's TAB barlines decides
+    first. When it can't decide, a vertical spanning exactly the outer staff lines is kept as a
+    barline, with its ambiguity recorded rather than silently resolved.
+    """
+    if not _has_attached_notehead(x, y_min, y_max, boxes, staff_space):
+        return "barline"
+    if thickness and reference_thickness:
+        ratio = thickness / reference_thickness
+        if ratio <= STEM_MAX_THICKNESS_RATIO:
+            return "stem"
+        if ratio >= BARLINE_MIN_THICKNESS_RATIO:
+            return "barline"
+    if _spans_staff_exactly(y_min, y_max, top_line, bottom_line, staff_space):
+        return "ambiguous_barline"
+    return "stem"
 
 
 def _filled_shape_boxes(drawings: list[dict[str, Any]]) -> list[tuple[float, float, float, float]]:
@@ -4434,18 +4482,23 @@ def _detect_tab_systems(
             # end is a note stem, not a barline. Rejecting it here keeps partner inheritance
             # for genuine barlines that the TAB filter missed.
             stem_xs: set[float] = set()
+            ambiguous_xs: set[float] = set()
             partner_space = _staff_space(other_ys)
             if filled_boxes and partner_space:
+                tab_thicknesses = [w for w in (_thickness_near(system_candidates, x) for x in valid_barlines) if w]
+                reference_thickness = sorted(tab_thicknesses)[len(tab_thicknesses) // 2] if tab_thicknesses else None
                 for det in other_filtered["details"]:
                     det_x = det.get("x")
                     if det_x not in partner_valid:
                         continue
-                    # A vertical spanning exactly the outer staff lines is a barline, even with a
-                    # notehead touching it; only other verticals can be note stems.
-                    if _spans_staff_exactly(det["y_min"], det["y_max"], other_y0, other_y1, partner_space):
-                        continue
-                    if _has_attached_notehead(det_x, det["y_min"], det["y_max"], filled_boxes, partner_space):
+                    verdict = _classify_partner_vertical(
+                        det_x, det["y_min"], det["y_max"], _thickness_near(other_candidates, det_x),
+                        reference_thickness, other_y0, other_y1, filled_boxes, partner_space,
+                    )
+                    if verdict == "stem":
                         stem_xs.add(det_x)
+                    elif verdict == "ambiguous_barline":
+                        ambiguous_xs.add(det_x)
                 partner_valid = [x for x in partner_valid if x not in stem_xs]
 
             # Same inheritance logic as main
@@ -4477,6 +4530,10 @@ def _detect_tab_systems(
             for det in other_filtered["details"]:
                 det_copy = dict(det)
                 det_copy["inherited"] = True
+                if det_copy.get("x") in ambiguous_xs:
+                    # Kept as a barline, but the stem/barline evidence conflicted: make it visible.
+                    det_copy["stem_evidence"] = "ambiguous_kept_as_barline"
+                    rejection_reasons["pdf_barline_stem_ambiguity"] = rejection_reasons.get("pdf_barline_stem_ambiguity", 0) + 1
                 if det_copy.get("final_decision") == "accepted" and det_copy.get("x") in stem_xs:
                     det_copy["final_decision"] = "rejected"
                     det_copy["rejection_reason"] = "pdf_barline_note_stem"
