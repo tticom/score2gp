@@ -3813,8 +3813,12 @@ NOTEHEAD_MIN_WIDTH_SPACES = 0.8
 NOTEHEAD_MAX_WIDTH_SPACES = 2.0
 NOTEHEAD_MIN_HEIGHT_SPACES = 0.6
 NOTEHEAD_MAX_HEIGHT_SPACES = 1.5
-# A stem sits on its notehead's edge.
-STEM_ATTACHMENT_X_TOLERANCE_SPACES = 0.25
+# A stem touches or overlaps its notehead: every Lesson 3 stem's x lies inside its head's bounding
+# box. Only a hairline allowance is made for rounding, so a separate note with a visible gap from a
+# barline is not attachment evidence.
+STEM_ATTACHMENT_X_TOLERANCE_SPACES = 0.05
+# The stem's end lies within the notehead's height (with a small allowance).
+STEM_ATTACHMENT_Y_TOLERANCE_SPACES = 0.25
 # Engraved barlines run exactly from the top staff line to the bottom one; note stems overshoot
 # or stop short of the outer lines (Lesson 3 barlines: within 0.01 spaces; stems: 0.3-1.3 spaces off).
 BARLINE_STAFF_LINE_TOLERANCE_SPACES = 0.15
@@ -3917,16 +3921,17 @@ def _has_attached_notehead(
 
     That is a note stem, not a barline: a barline has no notehead attached to it.
     """
-    tolerance = STEM_ATTACHMENT_X_TOLERANCE_SPACES * staff_space
+    x_tolerance = STEM_ATTACHMENT_X_TOLERANCE_SPACES * staff_space
+    y_tolerance = STEM_ATTACHMENT_Y_TOLERANCE_SPACES * staff_space
     for bx0, by0, bx1, by1 in boxes:
         width, height = bx1 - bx0, by1 - by0
         if not (NOTEHEAD_MIN_WIDTH_SPACES * staff_space <= width <= NOTEHEAD_MAX_WIDTH_SPACES * staff_space):
             continue
         if not (NOTEHEAD_MIN_HEIGHT_SPACES * staff_space <= height <= NOTEHEAD_MAX_HEIGHT_SPACES * staff_space):
             continue
-        if not (bx0 - tolerance <= x <= bx1 + tolerance):
+        if not (bx0 - x_tolerance <= x <= bx1 + x_tolerance):
             continue
-        if by0 - tolerance <= y_min <= by1 + tolerance or by0 - tolerance <= y_max <= by1 + tolerance:
+        if by0 - y_tolerance <= y_min <= by1 + y_tolerance or by0 - y_tolerance <= y_max <= by1 + y_tolerance:
             return True
     return False
 

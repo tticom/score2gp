@@ -123,6 +123,7 @@ def test_notehead_attachment_is_measured_in_staff_spaces(scale: float) -> None:
     space = 18.0 * s
     assert pdf._has_attached_notehead(300.0 * s, 98.0 * s, 174.0 * s, notehead, space)          # stem on its edge
     assert not pdf._has_attached_notehead(305.0 * s, 98.0 * s, 174.0 * s, notehead, space)      # clear of it
+    assert not pdf._has_attached_notehead(302.0 * s, 98.0 * s, 174.0 * s, notehead, space)      # a visible gap is not contact
     assert not pdf._has_attached_notehead(300.0 * s, 98.0 * s, 140.0 * s, notehead, space)      # ends away from it
     too_wide = [(250.0 * s, 165.0 * s, 300.0 * s, 181.0 * s)]                                    # a beam, not a notehead
     assert not pdf._has_attached_notehead(300.0 * s, 98.0 * s, 174.0 * s, too_wide, space)
@@ -277,6 +278,33 @@ def test_notation_only_recovery_is_unaffected_by_ambiguity_handling() -> None:
     # A genuine TAB-missed barline with no attached notehead is still inherited.
     page = vector_page([barline(200.0), barline(350.0)], stems=[stem(300.0)], noteheads=[(HEAD_ON_BOTTOM_LINE_LEFT_OF_300, True)])
     assert boundaries(page) == ([50.0, 200.0, 350.0, 500.0], [300.0], [])
+
+
+
+@pytest.mark.parametrize("gap_spaces", [0.1, 0.2])
+@pytest.mark.parametrize("side", ["right", "left"])
+@pytest.mark.parametrize("as_rectangle", [False, True], ids=["stroke", "filled-rectangle"])
+def test_a_thin_genuine_barline_with_a_separate_nearby_note_is_kept(gap_spaces: float, side: str, as_rectangle: bool) -> None:
+    # Review 5310053328: a visible gap means the note is separate, not attached; only contact is stem evidence.
+    gap = gap_spaces * 18.0
+    head = fitz.Rect(300 + gap, 164, 319 + gap, 180) if side == "right" else fitz.Rect(281 - gap, 164, 300 - gap, 180)
+    if as_rectangle:
+        page = vector_page(noteheads=[(head, True)])
+        shape = page.new_shape()
+        shape.draw_rect(fitz.Rect(299.75, 100.0, 300.25, 172.0 + 0.161 * 18.0))
+        shape.finish(color=None, fill=(0, 0, 0))
+        shape.commit()
+    else:
+        page = vector_page([barline(300.0, 100.0, 172.0 + 0.161 * 18.0, width=STEM_WIDTH)], noteheads=[(head, True)])
+    bars, stems_rejected, ambiguous = boundaries(page)
+    assert len(bars) == 3 and abs(bars[1] - 300.0) <= 0.5
+    assert stems_rejected == [] and ambiguous == []
+
+
+def test_negative_control_a_thin_stem_that_touches_its_notehead_is_still_rejected() -> None:
+    # The same thin vertical, now touching the notehead, is stem evidence and is rejected.
+    page = vector_page(stems=[stem(300.0)], noteheads=[(fitz.Rect(300.0, 164, 319.0, 180), True)])
+    assert boundaries(page) == ([50.0, 500.0], [300.0], [])
 
 
 # Accepted residual (maintainer decision 2026-09-24, L3-01). These pairs are indistinguishable in
