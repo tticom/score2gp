@@ -3813,20 +3813,35 @@ NOTEHEAD_MIN_WIDTH_SPACES = 0.8
 NOTEHEAD_MAX_WIDTH_SPACES = 2.0
 NOTEHEAD_MIN_HEIGHT_SPACES = 0.6
 NOTEHEAD_MAX_HEIGHT_SPACES = 1.5
-# A stem sits on its notehead's edge; a barline beside a note stands clear of it.
+# A stem sits on its notehead's edge.
 STEM_ATTACHMENT_X_TOLERANCE_SPACES = 0.25
+# Engraved barlines run exactly from the top staff line to the bottom one; note stems overshoot
+# or stop short of the outer lines (Lesson 3 barlines: within 0.01 spaces; stems: 0.3-1.3 spaces off).
+BARLINE_STAFF_LINE_TOLERANCE_SPACES = 0.15
 
 
 def _filled_shape_boxes(drawings: list[dict[str, Any]]) -> list[tuple[float, float, float, float]]:
-    """Bounding boxes (x0, y0, x1, y1) of filled vector shapes, the candidates for noteheads."""
+    """Bounding boxes (x0, y0, x1, y1) of notehead-candidate vector shapes.
+
+    Filled shapes are black noteheads. Outlined shapes drawn with curves (stroked ovals) are
+    hollow noteheads such as half notes. Size is checked later, in staff spaces.
+    """
     boxes = []
     for drawing in drawings:
-        if drawing.get("fill") is None:
-            continue
         rect = drawing.get("rect")
-        if rect is not None:
+        if rect is None:
+            continue
+        is_filled = drawing.get("fill") is not None
+        is_curved_outline = any(item and item[0] == "c" for item in drawing.get("items", []))
+        if is_filled or is_curved_outline:
             boxes.append((float(rect.x0), float(rect.y0), float(rect.x1), float(rect.y1)))
     return boxes
+
+
+def _spans_staff_exactly(y_min: float, y_max: float, top_line: float, bottom_line: float, staff_space: float) -> bool:
+    """True when a vertical runs from the top staff line to the bottom one, as a barline does."""
+    tolerance = BARLINE_STAFF_LINE_TOLERANCE_SPACES * staff_space
+    return abs(y_min - top_line) <= tolerance and abs(y_max - bottom_line) <= tolerance
 
 
 def _staff_space(line_ys: list[float]) -> float | None:
@@ -4423,9 +4438,13 @@ def _detect_tab_systems(
             if filled_boxes and partner_space:
                 for det in other_filtered["details"]:
                     det_x = det.get("x")
-                    if det_x in partner_valid and _has_attached_notehead(
-                        det_x, det["y_min"], det["y_max"], filled_boxes, partner_space
-                    ):
+                    if det_x not in partner_valid:
+                        continue
+                    # A vertical spanning exactly the outer staff lines is a barline, even with a
+                    # notehead touching it; only other verticals can be note stems.
+                    if _spans_staff_exactly(det["y_min"], det["y_max"], other_y0, other_y1, partner_space):
+                        continue
+                    if _has_attached_notehead(det_x, det["y_min"], det["y_max"], filled_boxes, partner_space):
                         stem_xs.add(det_x)
                 partner_valid = [x for x in partner_valid if x not in stem_xs]
 
