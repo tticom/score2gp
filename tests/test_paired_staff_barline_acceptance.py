@@ -44,7 +44,9 @@ def line(x0: float, y0: float, x1: float, y1: float) -> dict[str, Any]:
 
 
 def filled(x0: float, y0: float, x1: float, y1: float) -> dict[str, Any]:
-    return {"items": [], "fill": (0.0, 0.0, 0.0), "rect": fitz.Rect(x0, y0, x1, y1)}
+    # A filled notehead is an oval: a closed path of Bezier curves.
+    mid = MockPoint((x0 + x1) / 2, y0)
+    return {"items": [("c", mid, mid, mid, mid)], "fill": (0.0, 0.0, 0.0), "rect": fitz.Rect(x0, y0, x1, y1)}
 
 
 def paired_system(scale: float = 1.0, extra: list[dict[str, Any]] | None = None) -> MockPage:
@@ -249,7 +251,9 @@ def test_a_genuine_touching_barline_beyond_the_span_tolerance_is_kept_by_its_thi
     (0.0, ([50.0, 500.0], [], ["ambiguous_not_promoted"])),
     (0.14, ([50.0, 500.0], [], ["ambiguous_not_promoted"])),
     (0.16, ([50.0, 500.0], [300.0], [])),
-    (0.5, ([50.0, 500.0], [300.0], [])),
+    # 0.5 spaces beyond the line the vertical passes out of the notehead's painted height: a stem
+    # ends inside its head, so this is not attachment and the barline stays.
+    (0.5, ([50.0, 300.0, 500.0], [], [])),
 ])
 def test_equal_thickness_falls_back_to_the_staff_span_with_explicit_ambiguity(monkeypatch, overshoot_spaces, expected) -> None:
     # Without thickness evidence, an attached vertical spanning exactly the staff has conflicting
@@ -348,6 +352,48 @@ def test_negative_control_the_former_padded_attachment_deletes_the_barline(monke
                         lambda segments, x, y0, y1: (real(segments, x, y0, y1)[0] - 0.9, real(segments, x, y0, y1)[1] + 0.9))
     bars, stems_rejected, _ = boundaries(thin_barline_page("right", 0.04 * 18.0, False))
     assert bars == [50.0, 500.0] and len(stems_rejected) == 1
+
+
+
+@pytest.mark.parametrize("gap_spaces", [0.04, 0.2])
+@pytest.mark.parametrize("end", ["below", "above"])
+@pytest.mark.parametrize("as_rectangle", [False, True], ids=["stroke", "filled-rectangle"])
+def test_a_note_separated_vertically_from_a_barline_end_is_not_attached(gap_spaces: float, end: str, as_rectangle: bool) -> None:
+    # Review 5310525340: a thin barline whose end is a visible vertical gap from a note overlapping
+    # its x is kept. The stem end must lie inside the notehead's painted height.
+    y0, y1 = 100.0, 172.0 + 0.161 * 18.0
+    gap = gap_spaces * 18.0 + HEAD_OUTLINE_HALF
+    head = fitz.Rect(290, y1 + gap, 309, y1 + gap + 16) if end == "below" else fitz.Rect(290, y0 - gap - 16, 309, y0 - gap)
+    if as_rectangle:
+        page = vector_page(noteheads=[(head, True)])
+        shape = page.new_shape()
+        shape.draw_rect(fitz.Rect(300.0 - THIN_HALF, y0, 300.0 + THIN_HALF, y1))
+        shape.finish(color=None, fill=(0, 0, 0))
+        shape.commit()
+    else:
+        page = vector_page([barline(300.0, y0, y1, width=STEM_WIDTH)], noteheads=[(head, True)])
+    bars, stems_rejected, ambiguous = boundaries(page)
+    assert len(bars) == 3 and abs(bars[1] - 300.0) <= 0.5
+    assert stems_rejected == [] and ambiguous == []
+
+
+def test_a_notehead_sized_triangle_is_not_notehead_evidence() -> None:
+    # Review 5310525340: a straight-edged decoration touching a thin barline does not make it a stem.
+    y1 = 172.0 + 0.161 * 18.0
+    page = vector_page([barline(300.0, 100.0, y1, width=STEM_WIDTH)])
+    shape = page.new_shape()
+    shape.draw_polyline([(281, 180), (300, 180), (290.5, 164), (281, 180)])
+    shape.finish(color=None, fill=(0, 0, 0), closePath=True)
+    shape.commit()
+    bars, stems_rejected, _ = boundaries(page)
+    assert len(bars) == 3 and stems_rejected == []
+
+
+def test_negative_control_the_same_touching_shape_as_an_oval_is_a_notehead() -> None:
+    # The touching thin pair is the accepted residual: drawn as an oval, it reads as a stem.
+    y1 = 172.0 + 0.161 * 18.0
+    page = vector_page([barline(300.0, 100.0, y1, width=STEM_WIDTH)], noteheads=[(fitz.Rect(281, 164, 300, 180), True)])
+    assert len(boundaries(page)[1]) == 1
 
 
 # Accepted residual (maintainer decision 2026-09-24, L3-01). These pairs are indistinguishable in

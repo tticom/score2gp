@@ -3815,8 +3815,7 @@ NOTEHEAD_MIN_HEIGHT_SPACES = 0.6
 NOTEHEAD_MAX_HEIGHT_SPACES = 1.5
 # A stem touches or overlaps its notehead (every Lesson 3 stem lies inside its head's box).
 # Attachment is rendered contact with no horizontal allowance: any visible gap means a separate note.
-# The stem's end lies within the notehead's height (with a small allowance).
-STEM_ATTACHMENT_Y_TOLERANCE_SPACES = 0.25
+# The stem's end lies inside the notehead's painted height, with no vertical allowance either.
 # Engraved barlines run exactly from the top staff line to the bottom one; note stems overshoot
 # or stop short of the outer lines (Lesson 3 barlines: within 0.01 spaces; stems: 0.3-1.3 spaces off).
 BARLINE_STAFF_LINE_TOLERANCE_SPACES = 0.15
@@ -3879,17 +3878,18 @@ def _classify_partner_vertical(
 def _filled_shape_boxes(drawings: list[dict[str, Any]]) -> list[tuple[float, float, float, float]]:
     """Bounding boxes (x0, y0, x1, y1) of notehead-candidate vector shapes.
 
-    Filled shapes are black noteheads. Outlined shapes drawn with curves (stroked ovals) are
-    hollow noteheads such as half notes. Size is checked later, in staff spaces.
+    Noteheads are ovals, so only shapes drawn with curves qualify: filled ones are black
+    noteheads, outlined ones hollow noteheads such as half notes. A straight-edged shape of the
+    same size (a triangle or other decoration) is not notehead evidence. In Lesson 3, all 473
+    notehead-sized filled shapes are curve paths, one per note. Size is checked later, in staff spaces.
     """
     boxes = []
     for drawing in drawings:
         rect = drawing.get("rect")
         if rect is None:
             continue
-        is_filled = drawing.get("fill") is not None
-        is_curved_outline = any(item and item[0] == "c" for item in drawing.get("items", []))
-        if is_filled or is_curved_outline:
+        is_curved = any(item and item[0] == "c" for item in drawing.get("items", []))
+        if is_curved:
             # Rendered extent: a stroked outline paints half its line width beyond the path.
             half = float(drawing.get("width") or 0.0) / 2 if drawing.get("color") is not None else 0.0
             boxes.append((float(rect.x0) - half, float(rect.y0) - half, float(rect.x1) + half, float(rect.y1) + half))
@@ -3941,7 +3941,6 @@ def _has_attached_notehead(
     painted extents overlap or touch; any visible gap means a separate note.
     """
     left, right = x_extent
-    y_tolerance = STEM_ATTACHMENT_Y_TOLERANCE_SPACES * staff_space
     for bx0, by0, bx1, by1 in boxes:
         width, height = bx1 - bx0, by1 - by0
         if not (NOTEHEAD_MIN_WIDTH_SPACES * staff_space <= width <= NOTEHEAD_MAX_WIDTH_SPACES * staff_space):
@@ -3950,7 +3949,7 @@ def _has_attached_notehead(
             continue
         if right < bx0 or left > bx1:
             continue
-        if by0 - y_tolerance <= y_min <= by1 + y_tolerance or by0 - y_tolerance <= y_max <= by1 + y_tolerance:
+        if by0 <= y_min <= by1 or by0 <= y_max <= by1:
             return True
     return False
 
