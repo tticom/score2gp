@@ -185,7 +185,8 @@ def vector_page(barlines: list[tuple[float, float, float, float]] = (),
                 stems: list[tuple[float, float, float, float]] = (),
                 noteheads: list[tuple[fitz.Rect, bool]] = (),
                 background: tuple[float, float, float] | None = None,
-                underlay: tuple[fitz.Rect, dict[str, Any]] | None = None) -> fitz.Page:
+                underlay: tuple[fitz.Rect, dict[str, Any]] | None = None,
+                patches: list[tuple[fitz.Rect, tuple[float, float, float]]] = ()) -> fitz.Page:
     """An in-memory PDF page with paired staves and outer barlines spanning both staves.
 
     ``barlines`` and ``stems`` are (x, y0, y1, width) notation-staff verticals. ``noteheads``
@@ -197,6 +198,9 @@ def vector_page(barlines: list[tuple[float, float, float, float]] = (),
     if background is not None:
         shape.draw_rect(page.rect)
         shape.finish(color=None, fill=background)
+    for rect, colour in patches:  # background patches, painted before everything else on the page
+        shape.draw_rect(rect)
+        shape.finish(color=None, fill=colour)
     if underlay is not None:  # an oval painted beneath all score lines, over the background
         shape.draw_oval(underlay[0])
         shape.finish(**underlay[1])
@@ -626,3 +630,69 @@ def test_an_unknown_backdrop_counts_paint_as_ink() -> None:
     # A raster image beneath the shape hides its backdrop; paint there is treated as visible ink.
     assert pdf._paints_ink((1, 1, 1), 1.0, None)
     assert not pdf._paints_ink((1, 1, 1), 0.0, None)
+
+
+
+# --- Review 5317580168 follow-up (review 5318235825): visibility is judged where the paint touches ---
+#
+# A background boundary through the oval: the paint may be visible at the stem contact but not at the
+# oval's centre, or the reverse. The oracle is a narrow band just beside the bar on the oval's side:
+# the oval is visible at the contact exactly when drawing it changes a pixel in that band.
+
+GREY_RIGHT = [(fitz.Rect(301.5, 150.0, 340.0, 200.0), GREY)]   # centre on grey, contact on white (the reviewer's probe)
+GREY_LEFT = [(fitz.Rect(260.0, 150.0, 302.0, 200.0), GREY)]    # contact on grey, centre on white
+CONTACT_BAND = fitz.Rect(300.0 + THIN_HALF + 0.05, CORNER_HEADS["touching"], 301.2, CORNER_BAR_Y1)
+
+
+def split_page(finish: dict[str, Any] | None, patches, as_rectangle: bool):
+    page = vector_page(patches=patches, underlay=None if finish is None else (TOUCH_HEAD, finish))
+    shape = page.new_shape()
+    if as_rectangle:
+        shape.draw_rect(fitz.Rect(300.0 - THIN_HALF, 100.0, 300.0 + THIN_HALF, CORNER_BAR_Y1))
+        shape.finish(color=None, fill=(0, 0, 0))
+    else:
+        shape.draw_line((300.0, 100.0), (300.0, CORNER_BAR_Y1))
+        shape.finish(color=(0, 0, 0), width=STEM_WIDTH)
+    shape.commit()
+    return page
+
+
+def visible_at_contact(finish, patches, as_rectangle: bool) -> bool:
+    def band(page):
+        return page.get_pixmap(matrix=fitz.Matrix(16, 16), clip=CONTACT_BAND, alpha=False).samples
+    return band(split_page(finish, patches, as_rectangle)) != band(split_page(None, patches, as_rectangle))
+
+
+GREY_OVAL = {"color": GREY, "fill": GREY, "width": 0.8}
+WHITE_OVAL = {"color": (1, 1, 1), "fill": (1, 1, 1), "width": 0.8}
+SPLIT_CASES = {
+    # name: (oval, background patches, attached?)
+    "grey-oval-contact-on-white-centre-on-grey": (GREY_OVAL, GREY_RIGHT, True),    # review 5318235825
+    "grey-oval-contact-on-grey-centre-on-white": (GREY_OVAL, GREY_LEFT, False),    # visible only away from the stem
+    "white-oval-contact-on-grey-centre-on-white": (WHITE_OVAL, GREY_LEFT, True),
+    "white-oval-contact-on-white-centre-on-grey": (WHITE_OVAL, GREY_RIGHT, False),
+    "black-oval-split-background": (BLACK_OVAL, GREY_RIGHT, True),
+}
+
+
+@pytest.mark.parametrize("as_rectangle", [False, True], ids=["stroke", "filled-rectangle"])
+@pytest.mark.parametrize("case", list(SPLIT_CASES))
+def test_visibility_is_judged_at_the_contact_on_a_split_background(case: str, as_rectangle: bool) -> None:
+    finish, patches, attached = SPLIT_CASES[case]
+    assert visible_at_contact(finish, patches, as_rectangle) is attached, "fixture must match its stated contact visibility"
+    bars, stems_rejected, ambiguous = boundaries(split_page(finish, patches, as_rectangle))
+    if attached:
+        assert bars == [50.0, 500.0] and len(stems_rejected) == 1
+    else:
+        assert len(bars) == 3 and abs(bars[1] - 300.0) <= 0.5 and stems_rejected == [] and ambiguous == []
+
+
+def test_negative_control_centre_sampling_misses_the_contact(monkeypatch) -> None:
+    # Re-apply the reviewed defect (backdrop sampled at the oval's centre): the attached stem becomes a barline.
+    def at_centre(shape, rect, point):
+        return pdf._backdrop_at(((shape.bbox[0] + shape.bbox[2]) / 2, (shape.bbox[1] + shape.bbox[3]) / 2),
+                                list(shape.backdrop_fills), list(shape.image_rects))
+    monkeypatch.setattr(pdf, "_backdrop_beside", at_centre)
+    finish, patches, _ = SPLIT_CASES["grey-oval-contact-on-white-centre-on-grey"]
+    bars, stems_rejected, _ = boundaries(split_page(finish, patches, False))
+    assert len(bars) == 3 and stems_rejected == []

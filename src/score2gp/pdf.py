@@ -3889,6 +3889,13 @@ class _NoteheadShape:
     stroke_edges: tuple[tuple[float, float, float, float], ...]  # empty when not stroked
     stroke_half_width: float
     even_odd: bool
+    # Paint and what lies beneath it, so visibility is judged where the shape actually touches.
+    fill_color: Any = None
+    fill_opacity: Any = None
+    stroke_color: Any = None
+    stroke_opacity: Any = None
+    backdrop_fills: tuple[Any, ...] = ()  # earlier fills in paint order: (rect, region, rgb)
+    image_rects: tuple[Any, ...] = ()
 
 
 def _flatten_cubic(p0: Any, p1: Any, p2: Any, p3: Any) -> list[tuple[float, float]]:
@@ -3998,9 +4005,9 @@ def _notehead_candidate_shapes(drawings: list[dict[str, Any]], image_rects: list
     noteheads, outlined ones hollow noteheads such as half notes. A straight-edged shape of the
     same size (a triangle or other decoration) is not notehead evidence. In Lesson 3, all 473
     notehead-sized filled shapes are curve paths, one per note. Size is checked later, in staff spaces.
-    Only visible ink counts: a fill or stroke that cannot differ from what lies beneath it (see
-    ``_paints_ink``) is no evidence at all. The backdrop is the topmost earlier opaque fill under the
-    shape's centre, in paint order, or the unpainted page.
+    Paint that can never show (no colour, zero opacity) is dropped here. Whether the remaining paint
+    is visible depends on the backdrop where it touches a vertical, so each shape keeps the fills
+    painted before it and visibility is judged at the contact (see ``_paints_into``).
     """
     shapes = []
     fills: list[tuple[Any, _NoteheadShape, tuple[float, float, float] | None]] = []
@@ -4013,9 +4020,10 @@ def _notehead_candidate_shapes(drawings: list[dict[str, Any]], image_rects: list
         is_curved = any(item and item[0] == "c" for item in items)
         subpaths = _path_subpaths(items) if (is_curved or drawing.get("fill") is not None) else []
         if is_curved:
-            backdrop = _backdrop_at(((rect.x0 + rect.x1) / 2, (rect.y0 + rect.y1) / 2), fills, images)
-            filled = _paints_ink(drawing.get("fill"), drawing.get("fill_opacity"), backdrop)
-            stroked = _paints_ink(drawing.get("color"), drawing.get("stroke_opacity"), backdrop)
+            # None as backdrop: only "can this paint ever show?" (a colour at non-zero opacity).
+            filled = _paints_ink(drawing.get("fill"), drawing.get("fill_opacity"), None)
+            stroked = _paints_ink(drawing.get("color"), drawing.get("stroke_opacity"), None)
+            earlier = tuple(fills)
         if drawing.get("fill") is not None and subpaths:
             opacity = drawing.get("fill_opacity")
             opaque = opacity is None or float(opacity) >= 1.0
@@ -4031,6 +4039,12 @@ def _notehead_candidate_shapes(drawings: list[dict[str, Any]], image_rects: list
             stroke_edges=_edges(subpaths, close=bool(drawing.get("closePath"))) if stroked else (),
             stroke_half_width=half,
             even_odd=bool(drawing.get("even_odd")),
+            fill_color=drawing.get("fill") if filled else None,
+            fill_opacity=drawing.get("fill_opacity"),
+            stroke_color=drawing.get("color") if stroked else None,
+            stroke_opacity=drawing.get("stroke_opacity"),
+            backdrop_fills=earlier,
+            image_rects=tuple(images),
         ))
     return shapes
 
@@ -4086,15 +4100,58 @@ def _inside_fill(px: float, py: float, shape: _NoteheadShape) -> bool:
     return crossings % 2 == 1 if shape.even_odd else winding != 0
 
 
-def _paints_into(shape: _NoteheadShape, rect: tuple[float, float, float, float]) -> bool:
-    """True when the shape's painted region (stroke band or fill) touches or overlaps the rectangle."""
+def _closest_point_to_rect(edge: tuple[float, float, float, float], rect: tuple[float, float, float, float]) -> tuple[float, float]:
+    """A point of the segment nearest the rectangle (inside it when they meet)."""
+    ax, ay, bx, by = edge
+    x0, y0, x1, y1 = rect
+    candidates = [(ax, ay), (bx, by)]
+    dx, dy = bx - ax, by - ay
+    length2 = dx * dx + dy * dy
+    for cx, cy in ((x0, y0), (x1, y0), (x1, y1), (x0, y1), ((x0 + x1) / 2, (y0 + y1) / 2)):
+        t = 0.0 if length2 == 0 else max(0.0, min(1.0, ((cx - ax) * dx + (cy - ay) * dy) / length2))
+        candidates.append((ax + t * dx, ay + t * dy))
+
+    def gap(point: tuple[float, float]) -> float:
+        px, py = point
+        return max(x0 - px, 0.0, px - x1) ** 2 + max(y0 - py, 0.0, py - y1) ** 2
+
+    return min(candidates, key=gap)
+
+
+def _backdrop_beside(shape: _NoteheadShape, rect: tuple[float, float, float, float], point: tuple[float, float]) -> tuple[float, float, float] | None:
+    """The backdrop just beside the vertical ``rect``, on the shape's side, at the contact height.
+
+    Sampling beside the vertical, not on it, keeps the vertical's own paint (a filled-rectangle
+    barline) out of the backdrop.
+    """
+    x0, y0, x1, y1 = rect
+    beside = x1 + CURVE_FLATTENING_TOLERANCE_PT if (shape.bbox[0] + shape.bbox[2]) / 2 >= (x0 + x1) / 2 else x0 - CURVE_FLATTENING_TOLERANCE_PT
+    return _backdrop_at((beside, min(max(point[1], y0), y1)), list(shape.backdrop_fills), list(shape.image_rects))
+
+
+def _contact_points(shape: _NoteheadShape, rect: tuple[float, float, float, float]):
+    """(point, colour, opacity) wherever the shape's stroke band or fill touches the rectangle."""
     reach = shape.stroke_half_width + CURVE_FLATTENING_TOLERANCE_PT
-    if any(_segment_rect_distance(edge, rect) <= reach for edge in shape.stroke_edges):
-        return True
-    if any(_segment_rect_distance(edge, rect) <= CURVE_FLATTENING_TOLERANCE_PT for edge in shape.fill_edges):
-        return True
+    for edge in shape.stroke_edges:
+        if _segment_rect_distance(edge, rect) <= reach:
+            yield _closest_point_to_rect(edge, rect), shape.stroke_color, shape.stroke_opacity
+    for edge in shape.fill_edges:
+        if _segment_rect_distance(edge, rect) <= CURVE_FLATTENING_TOLERANCE_PT:
+            yield _closest_point_to_rect(edge, rect), shape.fill_color, shape.fill_opacity
     # No boundary reaches the rectangle: it is either wholly inside the fill or wholly outside it.
-    return bool(shape.fill_edges) and _inside_fill((rect[0] + rect[2]) / 2, (rect[1] + rect[3]) / 2, shape)
+    centre = ((rect[0] + rect[2]) / 2, (rect[1] + rect[3]) / 2)
+    if shape.fill_edges and _inside_fill(centre[0], centre[1], shape):
+        yield centre, shape.fill_color, shape.fill_opacity
+
+
+def _paints_into(shape: _NoteheadShape, rect: tuple[float, float, float, float]) -> bool:
+    """True when the shape's paint touches or overlaps the rectangle and is visible where it touches.
+
+    Paint is visible at a contact when its colour differs from the backdrop there (``_paints_ink``),
+    so a notehead whose visible part does not reach the vertical is not attached to it.
+    """
+    return any(_paints_ink(colour, opacity, _backdrop_beside(shape, rect, point))
+               for point, colour, opacity in _contact_points(shape, rect))
 
 
 def _rendered_x_extent(segments: list[Any], x: float, y_min: float, y_max: float) -> tuple[float, float]:
