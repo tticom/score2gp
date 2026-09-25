@@ -22,7 +22,7 @@ def test_artifact_audit_pass(monkeypatch) -> None:
         ".gitignore",
         "pyproject.toml",
         ".antigravitycli/tool-definitions.json",
-        "reference/tab-notation-reference-images/2026-06-09/Arpeggiated Chord.png",
+        "tests/fixtures/pdf/overlays/example.png",
     ]
 
     monkeypatch.setattr(artifact_audit, "run_cmd", lambda args: mock_files)
@@ -102,3 +102,12 @@ def test_artifact_audit_fails_root_generated_score_json(monkeypatch, path: str) 
     with pytest.raises(SystemExit) as exc_info:
         artifact_audit.main()
     assert exc_info.value.code == 1
+
+
+def test_artifact_audit_rejects_third_party_reference_images(monkeypatch) -> None:
+    # Third-party reference images belong in the private corpus, not this repository.
+    mock_files = ["fixtures/private/.gitkeep", "reference/tab-notation-reference-images/2026-06-09/Arpeggiated Chord.png"]
+    monkeypatch.setattr(artifact_audit, "run_cmd", lambda args: mock_files)
+    with pytest.raises(SystemExit) as exc:
+        artifact_audit.main()
+    assert exc.value.code != 0

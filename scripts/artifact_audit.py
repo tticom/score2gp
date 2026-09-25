@@ -27,7 +27,7 @@ def main():
 
     # Allowed prefixes for json, png, html
     allowed_json_prefixes = ("tests/", "fixtures/public/", "schemas/", ".antigravitycli/")
-    allowed_png_prefixes = ("tests/", "reference/")
+    allowed_png_prefixes = ("tests/",)
     allowed_html_prefixes = ("tests/", "docs/")
     generated_json_suffixes = (".ir.json", ".tabraw.json")
 
@@ -65,7 +65,7 @@ def main():
                     violations.append((file, "JSON file tracked outside allowed directories (tests/, fixtures/public/, schemas/)"))
         elif file.endswith(".png"):
             if not any(file.startswith(p) for p in allowed_png_prefixes):
-                violations.append((file, "PNG file tracked outside allowed directories (tests/, reference/)"))
+                violations.append((file, "PNG file tracked outside allowed directories (tests/)"))
         elif file.endswith(".html"):
             if not any(file.startswith(p) for p in allowed_html_prefixes):
                 violations.append((file, "HTML file tracked outside allowed directories (tests/, docs/)"))
