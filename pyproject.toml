@@ -8,8 +8,8 @@ version = "0.1.0"
 description = "Staged, inspectable PDF score to Guitar Pro conversion experiments."
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
-authors = [{ name = "score2gp contributors" }]
+license = { text = "LicenseRef-Proprietary. Copyright (c) 2026 Niall Finlay. All rights reserved. See LICENSE." }
+authors = [{ name = "Niall Finlay" }]
 dependencies = [
   "pydantic>=2.6",
   "typer>=0.12",
