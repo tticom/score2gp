@@ -183,7 +183,9 @@ STEM_WIDTH = 0.5
 
 def vector_page(barlines: list[tuple[float, float, float, float]] = (),
                 stems: list[tuple[float, float, float, float]] = (),
-                noteheads: list[tuple[fitz.Rect, bool]] = ()) -> fitz.Page:
+                noteheads: list[tuple[fitz.Rect, bool]] = (),
+                background: tuple[float, float, float] | None = None,
+                underlay: tuple[fitz.Rect, dict[str, Any]] | None = None) -> fitz.Page:
     """An in-memory PDF page with paired staves and outer barlines spanning both staves.
 
     ``barlines`` and ``stems`` are (x, y0, y1, width) notation-staff verticals. ``noteheads``
@@ -192,6 +194,12 @@ def vector_page(barlines: list[tuple[float, float, float, float]] = (),
     doc = fitz.open()
     page = doc.new_page(width=600, height=800)
     shape = page.new_shape()
+    if background is not None:
+        shape.draw_rect(page.rect)
+        shape.finish(color=None, fill=background)
+    if underlay is not None:  # an oval painted beneath all score lines, over the background
+        shape.draw_oval(underlay[0])
+        shape.finish(**underlay[1])
     for y in (*NOTATION_YS, *TAB_YS):
         shape.draw_line((50, y), (500, y))
     shape.finish(color=(0, 0, 0), width=0.4)
@@ -273,7 +281,7 @@ def test_equal_thickness_falls_back_to_the_staff_span_with_explicit_ambiguity(mo
 
 def test_negative_control_hollow_notehead_stem_survives_without_outline_detection(monkeypatch) -> None:
     real = pdf._notehead_candidate_shapes
-    monkeypatch.setattr(pdf, "_notehead_candidate_shapes", lambda drawings: real([d for d in drawings if d.get("fill") is not None]))
+    monkeypatch.setattr(pdf, "_notehead_candidate_shapes", lambda drawings, *rest: real([d for d in drawings if d.get("fill") is not None], *rest))
     page = vector_page([barline(200.0)], stems=[stem(300.0)], noteheads=[(HEAD_ON_BOTTOM_LINE_LEFT_OF_300, False)])
     assert boundaries(page)[0] == [50.0, 200.0, 300.0, 500.0]
 
@@ -523,26 +531,25 @@ def test_negative_control_bounding_box_contact_deletes_the_disconnected_barline(
     assert bars == [50.0, 500.0] and len(stems_rejected) == 1
 
 
-# --- Review 5317098713: only visible ink is notehead evidence ---
+# --- Reviews 5317098713 and 5317580168: only paint that differs from its backdrop is ink ---
 #
-# An oval painted at zero opacity, or in pure white on the white page, adds no ink: no pixel of the
-# rendered page is darker than on the page without the oval. (Zero opacity renders byte-identical;
-# white beneath a barline can lighten its anti-aliased edge but never darkens anything.) Such an
-# oval cannot be attached to anything. Each case is checked against the raster without the oval.
+# Paint is invisible when it cannot differ from what lies beneath it: zero opacity, or the backdrop's
+# own colour (white on the unpainted page, grey on a grey fill). White on grey is visible. Each case is
+# checked against the raster of the same page without the oval: an invisible oval changes no pixel at
+# all, and a visible one changes at least one, in either direction.
 
 TOUCH_HEAD = fitz.Rect(299.0, CORNER_HEADS["touching"], 318.0, CORNER_HEADS["touching"] + 16.0)
+GREY = (0.8, 0.8, 0.8)
 
 
-def touching_oval_page(finish: dict[str, Any] | None, as_rectangle: bool):
-    """A thin barline at x=300 whose end the oval would touch, drawn with ``finish`` (``None``: no oval).
+def touching_oval_page(finish: dict[str, Any] | None, as_rectangle: bool, background: tuple[float, float, float] | None = None):
+    """A thin barline at x=300 whose end the oval touches, drawn with ``finish`` (``None``: no oval).
 
-    The oval is drawn beneath the barline: white paint over black ink would itself be visible.
+    The oval is painted beneath every score line, over the optional page ``background``, so a
+    same-coloured oval has a uniform backdrop.
     """
-    page = vector_page()
+    page = vector_page(background=background, underlay=None if finish is None else (TOUCH_HEAD, finish))
     shape = page.new_shape()
-    if finish is not None:
-        shape.draw_oval(TOUCH_HEAD)
-        shape.finish(**finish)
     if as_rectangle:
         shape.draw_rect(fitz.Rect(300.0 - THIN_HALF, 100.0, 300.0 + THIN_HALF, CORNER_BAR_Y1))
         shape.finish(color=None, fill=(0, 0, 0))
@@ -553,46 +560,69 @@ def touching_oval_page(finish: dict[str, Any] | None, as_rectangle: bool):
     return page
 
 
-def contact_pixels(page) -> bytes:
-    return page.get_pixmap(matrix=fitz.Matrix(8, 8), clip=fitz.Rect(296.0, 160.0, 322.0, 190.0), colorspace=fitz.csGRAY, alpha=False).samples
+CONTACT_CLIP, CONTACT_ZOOM = fitz.Rect(296.0, 160.0, 322.0, 190.0), 8
 
 
-def adds_ink(page, as_rectangle: bool) -> bool:
-    """True when some pixel is darker than on the same page without the oval."""
-    return any(a < b for a, b in zip(contact_pixels(page), contact_pixels(touching_oval_page(None, as_rectangle))))
+def oval_changes_pixels(finish: dict[str, Any], as_rectangle: bool, background) -> bool:
+    """True when drawing the oval changes any rendered pixel, in either direction."""
+    def pixels(page):
+        return page.get_pixmap(matrix=fitz.Matrix(CONTACT_ZOOM, CONTACT_ZOOM), clip=CONTACT_CLIP, alpha=False).samples
+    return pixels(touching_oval_page(finish, as_rectangle, background)) != pixels(touching_oval_page(None, as_rectangle, background))
 
 
+BLACK_OVAL = {"color": (0, 0, 0), "fill": (0, 0, 0), "width": 0.8}
 INVISIBLE_OVALS = {
-    "zero-fill-and-stroke-opacity": {"color": (0, 0, 0), "fill": (0, 0, 0), "width": 0.8, "fill_opacity": 0, "stroke_opacity": 0},
-    "zero-fill-opacity-no-stroke": {"color": None, "fill": (0, 0, 0), "fill_opacity": 0},
-    "white-fill-and-stroke": {"color": (1, 1, 1), "fill": (1, 1, 1), "width": 0.8},
+    "zero-opacity-on-white": ({"color": (0, 0, 0), "fill": (0, 0, 0), "width": 0.8, "fill_opacity": 0, "stroke_opacity": 0}, None),
+    "zero-opacity-on-grey": ({"color": (0, 0, 0), "fill": (0, 0, 0), "width": 0.8, "fill_opacity": 0, "stroke_opacity": 0}, GREY),
+    "zero-fill-opacity-no-stroke": ({"color": None, "fill": (0, 0, 0), "fill_opacity": 0}, None),
+    "white-on-white-page": ({"color": (1, 1, 1), "fill": (1, 1, 1), "width": 0.8}, None),
+    "grey-on-grey-fill": ({"color": GREY, "fill": GREY, "width": 0.8}, GREY),
+}
+VISIBLE_OVALS = {
+    "black-on-white": (BLACK_OVAL, None),
+    "black-on-grey": (BLACK_OVAL, GREY),
+    "white-on-grey": ({"color": (1, 1, 1), "fill": (1, 1, 1), "width": 0.8}, GREY),  # review 5317580168
+    "grey-on-white": ({"color": GREY, "fill": GREY, "width": 0.8}, None),
+    "invisible-fill-visible-stroke": ({"color": (0, 0, 0), "fill": (0, 0, 0), "width": 0.8, "fill_opacity": 0}, None),
 }
 
 
 @pytest.mark.parametrize("as_rectangle", [False, True], ids=["stroke", "filled-rectangle"])
-@pytest.mark.parametrize("finish", list(INVISIBLE_OVALS.values()), ids=list(INVISIBLE_OVALS))
-def test_an_invisible_oval_is_not_notehead_evidence(finish: dict[str, Any], as_rectangle: bool) -> None:
-    page = touching_oval_page(finish, as_rectangle)
-    assert not adds_ink(page, as_rectangle), "fixture must add no ink"
-    bars, stems_rejected, ambiguous = boundaries(page)
+@pytest.mark.parametrize("case", list(INVISIBLE_OVALS))
+def test_paint_matching_its_backdrop_is_not_notehead_evidence(case: str, as_rectangle: bool) -> None:
+    finish, background = INVISIBLE_OVALS[case]
+    assert not oval_changes_pixels(finish, as_rectangle, background), "fixture must not change the rendered page"
+    bars, stems_rejected, ambiguous = boundaries(touching_oval_page(finish, as_rectangle, background))
     assert len(bars) == 3 and abs(bars[1] - 300.0) <= 0.5
     assert stems_rejected == [] and ambiguous == []
 
 
 @pytest.mark.parametrize("as_rectangle", [False, True], ids=["stroke", "filled-rectangle"])
-@pytest.mark.parametrize("finish", [
-    {"color": (0, 0, 0), "fill": (0, 0, 0), "width": 0.8},
-    {"color": (0, 0, 0), "fill": (0, 0, 0), "width": 0.8, "fill_opacity": 0},  # hollow: only the stroke is ink
-], ids=["opaque", "invisible-fill-visible-stroke"])
-def test_control_visible_ink_in_contact_is_attached(finish: dict[str, Any], as_rectangle: bool) -> None:
-    page = touching_oval_page(finish, as_rectangle)
-    assert adds_ink(page, as_rectangle), "fixture must add visible ink"
-    bars, stems_rejected, _ = boundaries(page)
+@pytest.mark.parametrize("case", list(VISIBLE_OVALS))
+def test_visible_paint_in_contact_is_attached(case: str, as_rectangle: bool) -> None:
+    finish, background = VISIBLE_OVALS[case]
+    assert oval_changes_pixels(finish, as_rectangle, background), "fixture must visibly change the rendered page"
+    bars, stems_rejected, _ = boundaries(touching_oval_page(finish, as_rectangle, background))
     assert bars == [50.0, 500.0] and len(stems_rejected) == 1
+
+
+def test_negative_control_assuming_a_white_page_misses_white_on_grey(monkeypatch) -> None:
+    # Re-apply the reviewed defect (every backdrop taken as the white page): the visible white oval is ignored.
+    monkeypatch.setattr(pdf, "_backdrop_at", lambda *args, **kwargs: pdf.PAGE_BACKDROP_RGB)
+    finish, background = VISIBLE_OVALS["white-on-grey"]
+    bars, stems_rejected, _ = boundaries(touching_oval_page(finish, False, background))
+    assert len(bars) == 3 and stems_rejected == []
 
 
 def test_negative_control_counting_any_colour_as_ink_deletes_the_barline(monkeypatch) -> None:
-    # Re-apply the reviewed defect (presence of a colour counts as paint): the invisible oval deletes the barline.
-    monkeypatch.setattr(pdf, "_paints_ink", lambda color, opacity: color is not None)
-    bars, stems_rejected, _ = boundaries(touching_oval_page(INVISIBLE_OVALS["zero-fill-and-stroke-opacity"], False))
+    # Re-apply the first reviewed defect (presence of a colour counts as paint): the invisible oval deletes the barline.
+    monkeypatch.setattr(pdf, "_paints_ink", lambda color, opacity, backdrop=None: color is not None)
+    finish, background = INVISIBLE_OVALS["zero-opacity-on-white"]
+    bars, stems_rejected, _ = boundaries(touching_oval_page(finish, False, background))
     assert bars == [50.0, 500.0] and len(stems_rejected) == 1
+
+
+def test_an_unknown_backdrop_counts_paint_as_ink() -> None:
+    # A raster image beneath the shape hides its backdrop; paint there is treated as visible ink.
+    assert pdf._paints_ink((1, 1, 1), 1.0, None)
+    assert not pdf._paints_ink((1, 1, 1), 0.0, None)

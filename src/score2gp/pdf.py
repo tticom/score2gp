@@ -3944,42 +3944,85 @@ def _edges(subpaths: list[list[tuple[float, float]]], close: bool) -> tuple[tupl
     return tuple(edges)
 
 
-def _paints_ink(color: Any, opacity: Any) -> bool:
-    """True when paint in ``color`` at ``opacity`` leaves visible ink on an unpainted (white) page.
+# An unpainted page is white. Colours closer than half an 8-bit step render identically.
+PAGE_BACKDROP_RGB = (1.0, 1.0, 1.0)
+COLOUR_MATCH_TOLERANCE = 1.0 / 512
 
-    A missing colour paints nothing, opacity 0 paints nothing, and pure white is invisible on a
-    white page: white is (1,) in grey, (1, 1, 1) in RGB and (0, 0, 0, 0) in CMYK.
+
+def _rgb(color: Any) -> tuple[float, float, float] | None:
+    """A PDF grey, RGB or CMYK colour as RGB; None for any other colour space."""
+    values = tuple(float(v) for v in color)
+    if len(values) == 1:
+        return (values[0],) * 3
+    if len(values) == 3:
+        return values  # type: ignore[return-value]
+    if len(values) == 4:
+        c, m, y, k = values
+        return ((1 - c) * (1 - k), (1 - m) * (1 - k), (1 - y) * (1 - k))
+    return None
+
+
+def _paints_ink(color: Any, opacity: Any, backdrop: tuple[float, float, float] | None = PAGE_BACKDROP_RGB) -> bool:
+    """True when paint in ``color`` at ``opacity`` visibly differs from the ``backdrop`` beneath it.
+
+    A missing colour or zero opacity paints nothing. Otherwise paint is invisible only when it has
+    the backdrop's own colour (white on an unpainted page, grey on a grey fill). An unknown backdrop
+    (``None``, for example a raster image beneath) or colour space counts as visible ink.
     """
     if color is None:
         return False
     if opacity is not None and float(opacity) <= 0.0:
         return False
-    values = tuple(float(v) for v in color)
-    if len(values) == 4:
-        return any(v > 0.0 for v in values)
-    return any(v < 1.0 for v in values)
+    rgb = _rgb(color)
+    if rgb is None or backdrop is None:
+        return True
+    return max(abs(a - b) for a, b in zip(rgb, backdrop)) > COLOUR_MATCH_TOLERANCE
 
 
-def _notehead_candidate_shapes(drawings: list[dict[str, Any]]) -> list[_NoteheadShape]:
+def _backdrop_at(point: tuple[float, float], fills: list[tuple[Any, _NoteheadShape, tuple[float, float, float] | None]],
+                 image_rects: list[Any]) -> tuple[float, float, float] | None:
+    """Colour painted beneath ``point`` by earlier opaque fills; None when it cannot be known."""
+    x, y = point
+    for rect, region, rgb in reversed(fills):
+        if rect.x0 <= x <= rect.x1 and rect.y0 <= y <= rect.y1 and _inside_fill(x, y, region):
+            return rgb
+    if any(r[0] <= x <= r[2] and r[1] <= y <= r[3] for r in image_rects):
+        return None  # a raster image may lie beneath; its colour is not known here
+    return PAGE_BACKDROP_RGB
+
+
+def _notehead_candidate_shapes(drawings: list[dict[str, Any]], image_rects: list[Any] | None = None) -> list[_NoteheadShape]:
     """Notehead-candidate vector shapes, with the outline they actually paint.
 
     Noteheads are ovals, so only shapes drawn with curves qualify: filled ones are black
     noteheads, outlined ones hollow noteheads such as half notes. A straight-edged shape of the
     same size (a triangle or other decoration) is not notehead evidence. In Lesson 3, all 473
     notehead-sized filled shapes are curve paths, one per note. Size is checked later, in staff spaces.
-    Only visible ink counts: an invisible fill or stroke (see ``_paints_ink``) is no evidence at all.
+    Only visible ink counts: a fill or stroke that cannot differ from what lies beneath it (see
+    ``_paints_ink``) is no evidence at all. The backdrop is the topmost earlier opaque fill under the
+    shape's centre, in paint order, or the unpainted page.
     """
     shapes = []
+    fills: list[tuple[Any, _NoteheadShape, tuple[float, float, float] | None]] = []
+    images = list(image_rects or [])
     for drawing in drawings:
         rect = drawing.get("rect")
         items = drawing.get("items", [])
-        if rect is None or not any(item and item[0] == "c" for item in items):
+        if rect is None:
             continue
-        filled = _paints_ink(drawing.get("fill"), drawing.get("fill_opacity"))
-        stroked = _paints_ink(drawing.get("color"), drawing.get("stroke_opacity"))
-        if not (filled or stroked):
+        is_curved = any(item and item[0] == "c" for item in items)
+        subpaths = _path_subpaths(items) if (is_curved or drawing.get("fill") is not None) else []
+        if is_curved:
+            backdrop = _backdrop_at(((rect.x0 + rect.x1) / 2, (rect.y0 + rect.y1) / 2), fills, images)
+            filled = _paints_ink(drawing.get("fill"), drawing.get("fill_opacity"), backdrop)
+            stroked = _paints_ink(drawing.get("color"), drawing.get("stroke_opacity"), backdrop)
+        if drawing.get("fill") is not None and subpaths:
+            opacity = drawing.get("fill_opacity")
+            opaque = opacity is None or float(opacity) >= 1.0
+            region = _NoteheadShape((0, 0, 0, 0), _edges(subpaths, close=True), (), 0.0, bool(drawing.get("even_odd")))
+            fills.append((rect, region, _rgb(drawing["fill"]) if opaque else None))
+        if not is_curved or not (filled or stroked):
             continue
-        subpaths = _path_subpaths(items)
         # Rendered extent: a stroked outline paints half its line width beyond the path.
         half = float(drawing.get("width") or 0.0) / 2 if stroked else 0.0
         shapes.append(_NoteheadShape(
@@ -4460,7 +4503,7 @@ def _detect_tab_systems(
 ) -> list[_TabSystem]:
     drawings = page.get_drawings()
     segments = list(_drawing_segments(drawings))
-    notehead_shapes = _notehead_candidate_shapes(drawings)
+    notehead_shapes = _notehead_candidate_shapes(drawings, [info["bbox"] for info in getattr(page, "get_image_info", lambda: [])()])
     raw_horizontal = sorted((segment for segment in segments if segment.is_horizontal), key=lambda segment: segment.y0)
     horizontal = sorted(merge_collinear_horizontal_segments(raw_horizontal), key=lambda segment: segment.y0)
 
