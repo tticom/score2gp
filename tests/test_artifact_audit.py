@@ -104,10 +104,28 @@ def test_artifact_audit_fails_root_generated_score_json(monkeypatch, path: str) 
     assert exc_info.value.code == 1
 
 
-def test_artifact_audit_rejects_third_party_reference_images(monkeypatch) -> None:
+@pytest.mark.parametrize("path", [
+    "reference/tab-notation-reference-images/2026-06-09/Arpeggiated Chord.png",
+    "reference/tab-notation-reference-images/2026-06-09/probe.PNG",  # extension case must not bypass the ban
+    "reference/tab-notation-reference-images/2026-06-09/probe.Png",
+])
+def test_artifact_audit_rejects_third_party_reference_images(monkeypatch, path) -> None:
     # Third-party reference images belong in the private corpus, not this repository.
-    mock_files = ["fixtures/private/.gitkeep", "reference/tab-notation-reference-images/2026-06-09/Arpeggiated Chord.png"]
-    monkeypatch.setattr(artifact_audit, "run_cmd", lambda args: mock_files)
+    monkeypatch.setattr(artifact_audit, "run_cmd", lambda args: ["fixtures/private/.gitkeep", path])
+    with pytest.raises(SystemExit) as exc:
+        artifact_audit.main()
+    assert exc.value.code != 0
+
+
+@pytest.mark.parametrize("path", [
+    "diagnostics/report.HTML",
+    "work2/out.JSON",
+    "fixtures/private/Song.PDF",
+    "fixtures/private/Song.GPX",
+    "Result.IR.JSON",
+])
+def test_artifact_audit_extension_checks_ignore_case(monkeypatch, path) -> None:
+    monkeypatch.setattr(artifact_audit, "run_cmd", lambda args: ["fixtures/private/.gitkeep", path])
     with pytest.raises(SystemExit) as exc:
         artifact_audit.main()
     assert exc.value.code != 0

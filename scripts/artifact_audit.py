@@ -32,6 +32,8 @@ def main():
     generated_json_suffixes = (".ir.json", ".tabraw.json")
 
     for file in tracked_files:
+        # Extensions are matched case-insensitively: Git tracks `x.PNG` and `x.png` as different files.
+        name = file.lower()
         # Rule 1: git ls-files fixtures/private work contains anything except fixtures/private/.gitkeep
         if file.startswith("fixtures/private/") and file != "fixtures/private/.gitkeep":
             violations.append((file, "Tracked file in fixtures/private/ (only .gitkeep allowed)"))
@@ -50,12 +52,12 @@ def main():
             violations.append((file, "Tracked file in overlays/ (only tests/fixtures/ allowed)"))
 
         # Rule 4: Private fixture extensions in fixtures/private
-        if file.startswith("fixtures/private/") and any(file.endswith(ext) for ext in (".pdf", ".gp", ".mxl", ".musicxml")):
+        if file.startswith("fixtures/private/") and any(name.endswith(ext) for ext in (".pdf", ".gp", ".gpx", ".mxl", ".musicxml")):
             violations.append((file, "Private fixture file tracked in fixtures/private/"))
 
         # Rule 5: Generated diagnostic HTML/PNG/JSON outputs tracked outside allowlisted folders
-        if file.endswith(".json"):
-            if file.endswith(generated_json_suffixes) and not any(file.startswith(p) for p in allowed_json_prefixes):
+        if name.endswith(".json"):
+            if name.endswith(generated_json_suffixes) and not any(file.startswith(p) for p in allowed_json_prefixes):
                 violations.append((file, "Generated IR/TabRaw JSON tracked outside allowed public fixture directories"))
                 continue
             # Check if it starts with allowed prefixes
@@ -63,10 +65,10 @@ def main():
                 # Allow root config files if any (e.g. package.json)
                 if "/" in file:
                     violations.append((file, "JSON file tracked outside allowed directories (tests/, fixtures/public/, schemas/)"))
-        elif file.endswith(".png"):
+        elif name.endswith(".png"):
             if not any(file.startswith(p) for p in allowed_png_prefixes):
                 violations.append((file, "PNG file tracked outside allowed directories (tests/)"))
-        elif file.endswith(".html"):
+        elif name.endswith(".html"):
             if not any(file.startswith(p) for p in allowed_html_prefixes):
                 violations.append((file, "HTML file tracked outside allowed directories (tests/, docs/)"))
 
