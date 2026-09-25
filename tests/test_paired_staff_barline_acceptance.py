@@ -688,11 +688,62 @@ def test_visibility_is_judged_at_the_contact_on_a_split_background(case: str, as
 
 
 def test_negative_control_centre_sampling_misses_the_contact(monkeypatch) -> None:
-    # Re-apply the reviewed defect (backdrop sampled at the oval's centre): the attached stem becomes a barline.
-    def at_centre(shape, rect, point):
-        return pdf._backdrop_at(((shape.bbox[0] + shape.bbox[2]) / 2, (shape.bbox[1] + shape.bbox[3]) / 2),
-                                list(shape.backdrop_fills), list(shape.image_rects))
-    monkeypatch.setattr(pdf, "_backdrop_beside", at_centre)
+    # Re-apply the defect of ca93642 (one backdrop, sampled at the oval's centre): the attached stem becomes a barline.
+    def centre_rule(shape, rect):
+        centre = ((shape.bbox[0] + shape.bbox[2]) / 2, (shape.bbox[1] + shape.bbox[3]) / 2)
+        backdrop = pdf._backdrop_at(centre, list(shape.backdrop_fills), list(shape.image_rects))
+        return any(pdf._paints_ink(c, o, backdrop) for _, c, o, _ in pdf._contact_points(shape, rect))
+    monkeypatch.setattr(pdf, "_paints_into", centre_rule)
     finish, patches, _ = SPLIT_CASES["grey-oval-contact-on-white-centre-on-grey"]
+    bars, stems_rejected, _ = boundaries(split_page(finish, patches, False))
+    assert len(bars) == 3 and stems_rejected == []
+
+
+# --- Review 5319790765: the backdrop can change along the contact ---
+#
+# A narrow background band crosses the stretch where the oval overlaps the stem, falling between
+# the discrete points where the oval's outline crosses the stem (about 0.14 pt apart here). Paint is
+# judged piece by piece between the band's edges. The ovals are fill-only, so no stroke band adds
+# extra contact points. The oracle is the raster of the overlap stretch beside the bar.
+
+NARROW_GREY = [(fitz.Rect(280.0, 174.21, 330.0, 174.30), GREY)]
+NARROW_WHITE_ON_GREY = [(fitz.Rect(250.0, 150.0, 350.0, 200.0), GREY), (fitz.Rect(280.0, 174.21, 330.0, 174.30), (1, 1, 1))]
+WHITE_FILL = {"color": None, "fill": (1, 1, 1)}
+GREY_FILL = {"color": None, "fill": GREY}
+BLACK_FILL = {"color": None, "fill": (0, 0, 0)}
+OVERLAP_BAND = fitz.Rect(300.0 + THIN_HALF + 0.05, 173.0, 301.2, CORNER_BAR_Y1)
+
+
+def visible_along_contact(finish, patches, as_rectangle: bool) -> bool:
+    def band(page):
+        return page.get_pixmap(matrix=fitz.Matrix(24, 24), clip=OVERLAP_BAND, alpha=False).samples
+    return band(split_page(finish, patches, as_rectangle)) != band(split_page(None, patches, as_rectangle))
+
+
+NARROW_CASES = {
+    "white-oval-over-narrow-grey-band": (WHITE_FILL, NARROW_GREY, True),      # review 5319790765
+    "grey-oval-over-narrow-white-band-on-grey": (GREY_FILL, NARROW_WHITE_ON_GREY, True),
+    "white-oval-on-white-without-band": (WHITE_FILL, [], False),
+    "black-oval-over-narrow-grey-band": (BLACK_FILL, NARROW_GREY, True),
+}
+
+
+@pytest.mark.parametrize("as_rectangle", [False, True], ids=["stroke", "filled-rectangle"])
+@pytest.mark.parametrize("case", list(NARROW_CASES))
+def test_visibility_is_judged_along_the_whole_contact(case: str, as_rectangle: bool) -> None:
+    finish, patches, attached = NARROW_CASES[case]
+    assert visible_along_contact(finish, patches, as_rectangle) is attached, "fixture must match its stated visibility"
+    bars, stems_rejected, ambiguous = boundaries(split_page(finish, patches, as_rectangle))
+    if attached:
+        assert bars == [50.0, 500.0] and len(stems_rejected) == 1
+    else:
+        assert len(bars) == 3 and abs(bars[1] - 300.0) <= 0.5 and stems_rejected == [] and ambiguous == []
+
+
+def test_negative_control_contact_points_alone_miss_a_narrow_band(monkeypatch) -> None:
+    # Re-apply the defect of 7fdd5f7 (visibility only at discrete contact points): the attached stem stays a barline.
+    monkeypatch.setattr(pdf, "_backdrop_cuts", lambda *args, **kwargs: [])
+    monkeypatch.setattr(pdf, "_paints_at", lambda *args, **kwargs: False)
+    finish, patches, _ = NARROW_CASES["white-oval-over-narrow-grey-band"]
     bars, stems_rejected, _ = boundaries(split_page(finish, patches, False))
     assert len(bars) == 3 and stems_rejected == []

@@ -4118,40 +4118,94 @@ def _closest_point_to_rect(edge: tuple[float, float, float, float], rect: tuple[
     return min(candidates, key=gap)
 
 
-def _backdrop_beside(shape: _NoteheadShape, rect: tuple[float, float, float, float], point: tuple[float, float]) -> tuple[float, float, float] | None:
-    """The backdrop just beside the vertical ``rect``, on the shape's side, at the contact height.
+def _beside_x(shape: _NoteheadShape, rect: tuple[float, float, float, float]) -> float:
+    """The line just beside the vertical ``rect``, on the shape's side, where its backdrop is sampled.
 
     Sampling beside the vertical, not on it, keeps the vertical's own paint (a filled-rectangle
     barline) out of the backdrop.
     """
-    x0, y0, x1, y1 = rect
-    beside = x1 + CURVE_FLATTENING_TOLERANCE_PT if (shape.bbox[0] + shape.bbox[2]) / 2 >= (x0 + x1) / 2 else x0 - CURVE_FLATTENING_TOLERANCE_PT
-    return _backdrop_at((beside, min(max(point[1], y0), y1)), list(shape.backdrop_fills), list(shape.image_rects))
+    x0, _, x1, _ = rect
+    on_right = (shape.bbox[0] + shape.bbox[2]) / 2 >= (x0 + x1) / 2
+    return x1 + CURVE_FLATTENING_TOLERANCE_PT if on_right else x0 - CURVE_FLATTENING_TOLERANCE_PT
+
+
+def _backdrop_beside(shape: _NoteheadShape, rect: tuple[float, float, float, float], point: tuple[float, float]) -> tuple[float, float, float] | None:
+    """The backdrop just beside the vertical, on the shape's side, at the contact height."""
+    y = min(max(point[1], rect[1]), rect[3])
+    return _backdrop_at((_beside_x(shape, rect), y), list(shape.backdrop_fills), list(shape.image_rects))
 
 
 def _contact_points(shape: _NoteheadShape, rect: tuple[float, float, float, float]):
-    """(point, colour, opacity) wherever the shape's stroke band or fill touches the rectangle."""
+    """(point, colour, opacity, kind) wherever the shape's stroke band or fill touches the rectangle."""
     reach = shape.stroke_half_width + CURVE_FLATTENING_TOLERANCE_PT
     for edge in shape.stroke_edges:
         if _segment_rect_distance(edge, rect) <= reach:
-            yield _closest_point_to_rect(edge, rect), shape.stroke_color, shape.stroke_opacity
+            yield _closest_point_to_rect(edge, rect), shape.stroke_color, shape.stroke_opacity, "stroke"
     for edge in shape.fill_edges:
         if _segment_rect_distance(edge, rect) <= CURVE_FLATTENING_TOLERANCE_PT:
-            yield _closest_point_to_rect(edge, rect), shape.fill_color, shape.fill_opacity
-    # No boundary reaches the rectangle: it is either wholly inside the fill or wholly outside it.
-    centre = ((rect[0] + rect[2]) / 2, (rect[1] + rect[3]) / 2)
-    if shape.fill_edges and _inside_fill(centre[0], centre[1], shape):
-        yield centre, shape.fill_color, shape.fill_opacity
+            yield _closest_point_to_rect(edge, rect), shape.fill_color, shape.fill_opacity, "fill"
+    if shape.fill_edges:
+        # Parts of the rectangle inside the fill: its centre (no boundary reaches it) and its corners
+        # (so the contact stretch covers the whole overlap).
+        x0, y0, x1, y1 = rect
+        for point in (((x0 + x1) / 2, (y0 + y1) / 2), (x0, y0), (x1, y0), (x1, y1), (x0, y1)):
+            if _inside_fill(point[0], point[1], shape):
+                yield point, shape.fill_color, shape.fill_opacity, "fill"
+
+
+def _paints_at(shape: _NoteheadShape, x: float, y: float, kind: str) -> bool:
+    """True when the shape's fill (``kind`` "fill") or stroke band ("stroke") covers the point."""
+    if kind == "fill":
+        return _inside_fill(x, y, shape) or any(_point_segment_distance(x, y, e) <= CURVE_FLATTENING_TOLERANCE_PT for e in shape.fill_edges)
+    return any(_point_segment_distance(x, y, e) <= shape.stroke_half_width + CURVE_FLATTENING_TOLERANCE_PT for e in shape.stroke_edges)
+
+
+def _backdrop_cuts(shape: _NoteheadShape, x: float, lo: float, hi: float) -> list[float]:
+    """Heights in (lo, hi) where the backdrop along the vertical line ``x`` can change colour.
+
+    These are where an earlier fill's boundary, or a raster image's edge, crosses the line. Between
+    consecutive cuts the backdrop is constant.
+    """
+    cuts: set[float] = set()
+    for frect, region, _ in shape.backdrop_fills:
+        if not (frect.x0 <= x <= frect.x1) or frect.y1 < lo or frect.y0 > hi:
+            continue
+        for ax, ay, bx, by in region.fill_edges:
+            if ax != bx and (ax - x) * (bx - x) <= 0:
+                y = ay + (x - ax) * (by - ay) / (bx - ax)
+                if lo < y < hi:
+                    cuts.add(y)
+    for r in shape.image_rects:
+        cuts.update(y for y in (r[1], r[3]) if lo < y < hi)
+    return sorted(cuts)
 
 
 def _paints_into(shape: _NoteheadShape, rect: tuple[float, float, float, float]) -> bool:
     """True when the shape's paint touches or overlaps the rectangle and is visible where it touches.
 
     Paint is visible at a contact when its colour differs from the backdrop there (``_paints_ink``),
-    so a notehead whose visible part does not reach the vertical is not attached to it.
+    so a notehead whose visible part does not reach the vertical is not attached to it. The backdrop
+    may change along the contact (a narrow band under the notehead). The contact stretch is split
+    wherever an earlier fill's boundary crosses the sampling line, and each piece is tested.
     """
-    return any(_paints_ink(colour, opacity, _backdrop_beside(shape, rect, point))
-               for point, colour, opacity in _contact_points(shape, rect))
+    contacts = list(_contact_points(shape, rect))
+    if any(_paints_ink(colour, opacity, _backdrop_beside(shape, rect, point)) for point, colour, opacity, _ in contacts):
+        return True
+    x = _beside_x(shape, rect)
+    fills, images = list(shape.backdrop_fills), list(shape.image_rects)
+    for kind, colour, opacity in (("fill", shape.fill_color, shape.fill_opacity), ("stroke", shape.stroke_color, shape.stroke_opacity)):
+        ys = [point[1] for point, _, _, k in contacts if k == kind]
+        if not ys:
+            continue
+        lo, hi = max(min(ys), rect[1]), min(max(ys), rect[3])
+        if hi <= lo:
+            continue
+        cuts = [lo, *_backdrop_cuts(shape, x, lo, hi), hi]
+        for a, b in zip(cuts, cuts[1:]):
+            y = (a + b) / 2
+            if _paints_at(shape, x, y, kind) and _paints_ink(colour, opacity, _backdrop_at((x, y), fills, images)):
+                return True
+    return False
 
 
 def _rendered_x_extent(segments: list[Any], x: float, y_min: float, y_max: float) -> tuple[float, float]:
