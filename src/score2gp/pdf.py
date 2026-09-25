@@ -3808,6 +3808,469 @@ def classify_staff_line_group(group: list[_LineSegment], page: Any = None) -> st
     return "ambiguous"
 
 
+# Notehead geometry, in notation staff spaces (dimensionless, REC-04 policy).
+NOTEHEAD_MIN_WIDTH_SPACES = 0.8
+NOTEHEAD_MAX_WIDTH_SPACES = 2.0
+NOTEHEAD_MIN_HEIGHT_SPACES = 0.6
+NOTEHEAD_MAX_HEIGHT_SPACES = 1.5
+# A stem touches or overlaps its notehead (every Lesson 3 stem lies inside its head's box).
+# Attachment is rendered contact with no horizontal allowance: any visible gap means a separate note.
+# The stem's end lies inside the notehead's painted height, with no vertical allowance either.
+# Engraved barlines run exactly from the top staff line to the bottom one; note stems overshoot
+# or stop short of the outer lines (Lesson 3 barlines: within 0.01 spaces; stems: 0.3-1.3 spaces off).
+BARLINE_STAFF_LINE_TOLERANCE_SPACES = 0.15
+# Visible thickness relative to the system's accepted TAB barlines (known genuine). Lessons 3-7
+# draw barlines as 0.68 pt filled rectangles and stems as 0.51 pt strokes (ratio 0.75).
+STEM_MAX_THICKNESS_RATIO = 0.85
+BARLINE_MIN_THICKNESS_RATIO = 0.95
+
+
+def _visible_thickness(segment: Any) -> float | None:
+    """Drawn thickness of a vertical: stroke width for lines, rectangle width for filled bars."""
+    kind = getattr(segment, "primitive_kind", None)
+    value = getattr(segment, "stroke_width", None) if kind == "line" else getattr(segment, "source_rect_width", None)
+    return float(value) if value else None
+
+
+def _thickness_near(segments: list[Any], x: float, tolerance: float = 0.5) -> float | None:
+    widths = [
+        w for w in (_visible_thickness(s) for s in segments if abs((s.x0 + s.x1) / 2 - x) <= tolerance) if w
+    ]
+    return max(widths) if widths else None
+
+
+def _classify_partner_vertical(
+    x_extent: tuple[float, float],
+    y_min: float,
+    y_max: float,
+    thickness: float | None,
+    reference_thickness: float | None,
+    top_line: float,
+    bottom_line: float,
+    shapes: list[_NoteheadShape],
+    staff_space: float,
+) -> str:
+    """Classify a notation-staff vertical as "barline", "stem" or "ambiguous".
+
+    Stems need an attached notehead. Thickness relative to the system's TAB barlines decides
+    first. When it can't decide, a vertical spanning exactly the outer staff lines has
+    conflicting evidence: it is "ambiguous", recorded and not promoted to a barline (fail-safe).
+    Anything else with an attached notehead is a stem.
+
+    Accepted residual (maintainer decision 2026-09-24, L3-01): an attached vertical drawn at the
+    same thickness as the barlines and one drawn thinner are indistinguishable from a genuine
+    barline with a notehead touching it at that thickness. Engraving never places a notehead
+    against a barline, and Lessons 3-7 have none, so these synthetic pairs are left unresolved.
+    """
+    if not _has_attached_notehead(x_extent, y_min, y_max, shapes, staff_space):
+        return "barline"
+    if thickness and reference_thickness:
+        ratio = thickness / reference_thickness
+        if ratio <= STEM_MAX_THICKNESS_RATIO:
+            return "stem"
+        if ratio >= BARLINE_MIN_THICKNESS_RATIO:
+            return "barline"
+    if _spans_staff_exactly(y_min, y_max, top_line, bottom_line, staff_space):
+        return "ambiguous"
+    return "stem"
+
+
+# Curves are flattened to chords within this distance of the true outline (points). Contact is
+# tested against the chords, so this is the only numerical allowance: far below any visible gap.
+CURVE_FLATTENING_TOLERANCE_PT = 0.001
+
+
+@dataclass(frozen=True)
+class _NoteheadShape:
+    """A notehead-candidate vector shape: its rendered bounding box and its painted outline."""
+
+    bbox: tuple[float, float, float, float]
+    fill_edges: tuple[tuple[float, float, float, float], ...]  # closed subpaths; empty when unfilled
+    stroke_edges: tuple[tuple[float, float, float, float], ...]  # empty when not stroked
+    stroke_half_width: float
+    even_odd: bool
+    # Paint and what lies beneath it, so visibility is judged where the shape actually touches.
+    fill_color: Any = None
+    fill_opacity: Any = None
+    stroke_color: Any = None
+    stroke_opacity: Any = None
+    backdrop_fills: tuple[Any, ...] = ()  # earlier fills in paint order: (rect, region, rgb)
+    image_rects: tuple[Any, ...] = ()
+
+
+def _flatten_cubic(p0: Any, p1: Any, p2: Any, p3: Any) -> list[tuple[float, float]]:
+    """Points along a cubic Bezier whose chords stay within CURVE_FLATTENING_TOLERANCE_PT of it.
+
+    With n equal steps the chord error is at most (3/4) * max|second difference| / n^2 per axis,
+    so n is chosen to keep the Euclidean error (both axes) within the tolerance.
+    """
+    pts = [(float(q.x), float(q.y)) for q in (p0, p1, p2, p3)]
+    second = max(abs(pts[i][k] - 2 * pts[i + 1][k] + pts[i + 2][k]) for i in (0, 1) for k in (0, 1))
+    n = max(1, int((0.75 * second * 2 / CURVE_FLATTENING_TOLERANCE_PT) ** 0.5) + 1)
+    out = []
+    for i in range(1, n + 1):
+        t = i / n
+        u = 1 - t
+        a, b, c, d = u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t
+        out.append((a * pts[0][0] + b * pts[1][0] + c * pts[2][0] + d * pts[3][0],
+                    a * pts[0][1] + b * pts[1][1] + c * pts[2][1] + d * pts[3][1]))
+    return out
+
+
+def _path_subpaths(items: list[Any]) -> list[list[tuple[float, float]]]:
+    """Flattened subpaths of a PyMuPDF drawing's items; a new subpath starts at each discontinuity."""
+    subpaths: list[list[tuple[float, float]]] = []
+
+    def start(point: tuple[float, float]) -> None:
+        if not subpaths or subpaths[-1][-1] != point:
+            subpaths.append([point])
+
+    for item in items:
+        if not item:
+            continue
+        kind = item[0]
+        if kind == "l":
+            start((float(item[1].x), float(item[1].y)))
+            subpaths[-1].append((float(item[2].x), float(item[2].y)))
+        elif kind == "c":
+            start((float(item[1].x), float(item[1].y)))
+            subpaths[-1].extend(_flatten_cubic(item[1], item[2], item[3], item[4]))
+        elif kind in ("re", "qu"):
+            corners = ((item[1].tl, item[1].tr, item[1].br, item[1].bl) if kind == "re"
+                       else (item[1].ul, item[1].ur, item[1].lr, item[1].ll))
+            points = [(float(c.x), float(c.y)) for c in corners]
+            subpaths.append(points + [points[0]])
+    return subpaths
+
+
+def _edges(subpaths: list[list[tuple[float, float]]], close: bool) -> tuple[tuple[float, float, float, float], ...]:
+    edges = []
+    for points in subpaths:
+        ring = points + [points[0]] if close and points[0] != points[-1] else points
+        edges.extend((a[0], a[1], b[0], b[1]) for a, b in zip(ring, ring[1:]))
+    return tuple(edges)
+
+
+# An unpainted page is white. Colours closer than half an 8-bit step render identically.
+PAGE_BACKDROP_RGB = (1.0, 1.0, 1.0)
+COLOUR_MATCH_TOLERANCE = 1.0 / 512
+
+
+def _rgb(color: Any) -> tuple[float, float, float] | None:
+    """A PDF grey, RGB or CMYK colour as RGB; None for any other colour space."""
+    values = tuple(float(v) for v in color)
+    if len(values) == 1:
+        return (values[0],) * 3
+    if len(values) == 3:
+        return values  # type: ignore[return-value]
+    if len(values) == 4:
+        c, m, y, k = values
+        return ((1 - c) * (1 - k), (1 - m) * (1 - k), (1 - y) * (1 - k))
+    return None
+
+
+def _paints_ink(color: Any, opacity: Any, backdrop: tuple[float, float, float] | None = PAGE_BACKDROP_RGB) -> bool:
+    """True when paint in ``color`` at ``opacity`` visibly differs from the ``backdrop`` beneath it.
+
+    A missing colour or zero opacity paints nothing. Otherwise paint is invisible only when it has
+    the backdrop's own colour (white on an unpainted page, grey on a grey fill). An unknown backdrop
+    (``None``, for example a raster image beneath) or colour space counts as visible ink.
+    """
+    if color is None:
+        return False
+    if opacity is not None and float(opacity) <= 0.0:
+        return False
+    rgb = _rgb(color)
+    if rgb is None or backdrop is None:
+        return True
+    return max(abs(a - b) for a, b in zip(rgb, backdrop)) > COLOUR_MATCH_TOLERANCE
+
+
+def _backdrop_at(point: tuple[float, float], fills: list[tuple[Any, _NoteheadShape, tuple[float, float, float] | None]],
+                 image_rects: list[Any]) -> tuple[float, float, float] | None:
+    """Colour painted beneath ``point`` by earlier opaque fills; None when it cannot be known."""
+    x, y = point
+    for rect, region, rgb in reversed(fills):
+        if rect.x0 <= x <= rect.x1 and rect.y0 <= y <= rect.y1 and _inside_fill(x, y, region):
+            return rgb
+    if any(r[0] <= x <= r[2] and r[1] <= y <= r[3] for r in image_rects):
+        return None  # a raster image may lie beneath; its colour is not known here
+    return PAGE_BACKDROP_RGB
+
+
+def _notehead_candidate_shapes(drawings: list[dict[str, Any]], image_rects: list[Any] | None = None) -> list[_NoteheadShape]:
+    """Notehead-candidate vector shapes, with the outline they actually paint.
+
+    Noteheads are ovals, so only shapes drawn with curves qualify: filled ones are black
+    noteheads, outlined ones hollow noteheads such as half notes. A straight-edged shape of the
+    same size (a triangle or other decoration) is not notehead evidence. In Lesson 3, all 473
+    notehead-sized filled shapes are curve paths, one per note. Size is checked later, in staff spaces.
+    Paint that can never show (no colour, zero opacity) is dropped here. Whether the remaining paint
+    is visible depends on the backdrop where it touches a vertical, so each shape keeps the fills
+    painted before it and visibility is judged at the contact (see ``_paints_into``).
+    """
+    shapes = []
+    fills: list[tuple[Any, _NoteheadShape, tuple[float, float, float] | None]] = []
+    images = list(image_rects or [])
+    for drawing in drawings:
+        rect = drawing.get("rect")
+        items = drawing.get("items", [])
+        if rect is None:
+            continue
+        is_curved = any(item and item[0] == "c" for item in items)
+        subpaths = _path_subpaths(items) if (is_curved or drawing.get("fill") is not None) else []
+        if is_curved:
+            # None as backdrop: only "can this paint ever show?" (a colour at non-zero opacity).
+            filled = _paints_ink(drawing.get("fill"), drawing.get("fill_opacity"), None)
+            stroked = _paints_ink(drawing.get("color"), drawing.get("stroke_opacity"), None)
+            earlier = tuple(fills)
+        if drawing.get("fill") is not None and subpaths:
+            opacity = drawing.get("fill_opacity")
+            opaque = opacity is None or float(opacity) >= 1.0
+            region = _NoteheadShape((0, 0, 0, 0), _edges(subpaths, close=True), (), 0.0, bool(drawing.get("even_odd")))
+            fills.append((rect, region, _rgb(drawing["fill"]) if opaque else None))
+        if not is_curved or not (filled or stroked):
+            continue
+        # Rendered extent: a stroked outline paints half its line width beyond the path.
+        half = float(drawing.get("width") or 0.0) / 2 if stroked else 0.0
+        shapes.append(_NoteheadShape(
+            bbox=(float(rect.x0) - half, float(rect.y0) - half, float(rect.x1) + half, float(rect.y1) + half),
+            fill_edges=_edges(subpaths, close=True) if filled else (),
+            stroke_edges=_edges(subpaths, close=bool(drawing.get("closePath"))) if stroked else (),
+            stroke_half_width=half,
+            even_odd=bool(drawing.get("even_odd")),
+            fill_color=drawing.get("fill") if filled else None,
+            fill_opacity=drawing.get("fill_opacity"),
+            stroke_color=drawing.get("color") if stroked else None,
+            stroke_opacity=drawing.get("stroke_opacity"),
+            backdrop_fills=earlier,
+            image_rects=tuple(images),
+        ))
+    return shapes
+
+
+def _segment_meets_rect(edge: tuple[float, float, float, float], rect: tuple[float, float, float, float]) -> bool:
+    """True when a segment intersects or touches a closed axis-aligned rectangle (Liang-Barsky)."""
+    ax, ay, bx, by = edge
+    x0, y0, x1, y1 = rect
+    t0, t1 = 0.0, 1.0
+    for p, q in ((ax - bx, ax - x0), (bx - ax, x1 - ax), (ay - by, ay - y0), (by - ay, y1 - ay)):
+        if p == 0:
+            if q < 0:
+                return False
+            continue
+        t = q / p
+        if p < 0:
+            t0 = max(t0, t)
+        else:
+            t1 = min(t1, t)
+        if t0 > t1:
+            return False
+    return True
+
+
+def _point_segment_distance(px: float, py: float, edge: tuple[float, float, float, float]) -> float:
+    ax, ay, bx, by = edge
+    dx, dy = bx - ax, by - ay
+    length2 = dx * dx + dy * dy
+    t = 0.0 if length2 == 0 else max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / length2))
+    return ((px - ax - t * dx) ** 2 + (py - ay - t * dy) ** 2) ** 0.5
+
+
+def _segment_rect_distance(edge: tuple[float, float, float, float], rect: tuple[float, float, float, float]) -> float:
+    if _segment_meets_rect(edge, rect):
+        return 0.0
+    x0, y0, x1, y1 = rect
+    ax, ay, bx, by = edge
+    to_rect = [
+        (max(x0 - px, 0.0, px - x1) ** 2 + max(y0 - py, 0.0, py - y1) ** 2) ** 0.5 for px, py in ((ax, ay), (bx, by))
+    ]
+    to_edge = [_point_segment_distance(cx, cy, edge) for cx, cy in ((x0, y0), (x1, y0), (x1, y1), (x0, y1))]
+    return min(*to_rect, *to_edge)
+
+
+def _inside_fill(px: float, py: float, shape: _NoteheadShape) -> bool:
+    """Point-in-fill for the shape's closed subpaths under its fill rule."""
+    winding = crossings = 0
+    for ax, ay, bx, by in shape.fill_edges:
+        if (ay <= py) != (by <= py):
+            if ax + (py - ay) * (bx - ax) / (by - ay) > px:
+                crossings += 1
+                winding += 1 if by > ay else -1
+    return crossings % 2 == 1 if shape.even_odd else winding != 0
+
+
+def _closest_point_to_rect(edge: tuple[float, float, float, float], rect: tuple[float, float, float, float]) -> tuple[float, float]:
+    """A point of the segment nearest the rectangle (inside it when they meet)."""
+    ax, ay, bx, by = edge
+    x0, y0, x1, y1 = rect
+    candidates = [(ax, ay), (bx, by)]
+    dx, dy = bx - ax, by - ay
+    length2 = dx * dx + dy * dy
+    for cx, cy in ((x0, y0), (x1, y0), (x1, y1), (x0, y1), ((x0 + x1) / 2, (y0 + y1) / 2)):
+        t = 0.0 if length2 == 0 else max(0.0, min(1.0, ((cx - ax) * dx + (cy - ay) * dy) / length2))
+        candidates.append((ax + t * dx, ay + t * dy))
+
+    def gap(point: tuple[float, float]) -> float:
+        px, py = point
+        return max(x0 - px, 0.0, px - x1) ** 2 + max(y0 - py, 0.0, py - y1) ** 2
+
+    return min(candidates, key=gap)
+
+
+def _beside_x(shape: _NoteheadShape, rect: tuple[float, float, float, float]) -> float:
+    """The line just beside the vertical ``rect``, on the shape's side, where its backdrop is sampled.
+
+    Sampling beside the vertical, not on it, keeps the vertical's own paint (a filled-rectangle
+    barline) out of the backdrop.
+    """
+    x0, _, x1, _ = rect
+    on_right = (shape.bbox[0] + shape.bbox[2]) / 2 >= (x0 + x1) / 2
+    return x1 + CURVE_FLATTENING_TOLERANCE_PT if on_right else x0 - CURVE_FLATTENING_TOLERANCE_PT
+
+
+def _backdrop_beside(shape: _NoteheadShape, rect: tuple[float, float, float, float], point: tuple[float, float]) -> tuple[float, float, float] | None:
+    """The backdrop just beside the vertical, on the shape's side, at the contact height."""
+    y = min(max(point[1], rect[1]), rect[3])
+    return _backdrop_at((_beside_x(shape, rect), y), list(shape.backdrop_fills), list(shape.image_rects))
+
+
+def _contact_points(shape: _NoteheadShape, rect: tuple[float, float, float, float]):
+    """(point, colour, opacity, kind) wherever the shape's stroke band or fill touches the rectangle."""
+    reach = shape.stroke_half_width + CURVE_FLATTENING_TOLERANCE_PT
+    for edge in shape.stroke_edges:
+        if _segment_rect_distance(edge, rect) <= reach:
+            yield _closest_point_to_rect(edge, rect), shape.stroke_color, shape.stroke_opacity, "stroke"
+    for edge in shape.fill_edges:
+        if _segment_rect_distance(edge, rect) <= CURVE_FLATTENING_TOLERANCE_PT:
+            yield _closest_point_to_rect(edge, rect), shape.fill_color, shape.fill_opacity, "fill"
+    if shape.fill_edges:
+        # Parts of the rectangle inside the fill: its centre (no boundary reaches it) and its corners
+        # (so the contact stretch covers the whole overlap).
+        x0, y0, x1, y1 = rect
+        for point in (((x0 + x1) / 2, (y0 + y1) / 2), (x0, y0), (x1, y0), (x1, y1), (x0, y1)):
+            if _inside_fill(point[0], point[1], shape):
+                yield point, shape.fill_color, shape.fill_opacity, "fill"
+
+
+def _paints_at(shape: _NoteheadShape, x: float, y: float, kind: str) -> bool:
+    """True when the shape's fill (``kind`` "fill") or stroke band ("stroke") covers the point."""
+    if kind == "fill":
+        return _inside_fill(x, y, shape) or any(_point_segment_distance(x, y, e) <= CURVE_FLATTENING_TOLERANCE_PT for e in shape.fill_edges)
+    return any(_point_segment_distance(x, y, e) <= shape.stroke_half_width + CURVE_FLATTENING_TOLERANCE_PT for e in shape.stroke_edges)
+
+
+def _backdrop_cuts(shape: _NoteheadShape, x: float, lo: float, hi: float) -> list[float]:
+    """Heights in (lo, hi) where the backdrop along the vertical line ``x`` can change colour.
+
+    These are where an earlier fill's boundary, or a raster image's edge, crosses the line. Between
+    consecutive cuts the backdrop is constant.
+    """
+    cuts: set[float] = set()
+    for frect, region, _ in shape.backdrop_fills:
+        if not (frect.x0 <= x <= frect.x1) or frect.y1 < lo or frect.y0 > hi:
+            continue
+        for ax, ay, bx, by in region.fill_edges:
+            if ax != bx and (ax - x) * (bx - x) <= 0:
+                y = ay + (x - ax) * (by - ay) / (bx - ax)
+                if lo < y < hi:
+                    cuts.add(y)
+    for r in shape.image_rects:
+        cuts.update(y for y in (r[1], r[3]) if lo < y < hi)
+    return sorted(cuts)
+
+
+def _paints_into(shape: _NoteheadShape, rect: tuple[float, float, float, float]) -> bool:
+    """True when the shape's paint touches or overlaps the rectangle and is visible where it touches.
+
+    Paint is visible at a contact when its colour differs from the backdrop there (``_paints_ink``),
+    so a notehead whose visible part does not reach the vertical is not attached to it. The backdrop
+    may change along the contact (a narrow band under the notehead). The contact stretch is split
+    wherever an earlier fill's boundary crosses the sampling line, and each piece is tested.
+    """
+    contacts = list(_contact_points(shape, rect))
+    if any(_paints_ink(colour, opacity, _backdrop_beside(shape, rect, point)) for point, colour, opacity, _ in contacts):
+        return True
+    x = _beside_x(shape, rect)
+    fills, images = list(shape.backdrop_fills), list(shape.image_rects)
+    for kind, colour, opacity in (("fill", shape.fill_color, shape.fill_opacity), ("stroke", shape.stroke_color, shape.stroke_opacity)):
+        ys = [point[1] for point, _, _, k in contacts if k == kind]
+        if not ys:
+            continue
+        lo, hi = max(min(ys), rect[1]), min(max(ys), rect[3])
+        if hi <= lo:
+            continue
+        cuts = [lo, *_backdrop_cuts(shape, x, lo, hi), hi]
+        for a, b in zip(cuts, cuts[1:]):
+            y = (a + b) / 2
+            if _paints_at(shape, x, y, kind) and _paints_ink(colour, opacity, _backdrop_at((x, y), fills, images)):
+                return True
+    return False
+
+
+def _rendered_x_extent(segments: list[Any], x: float, y_min: float, y_max: float) -> tuple[float, float]:
+    """Horizontal extent actually painted by the vertical at ``x``.
+
+    A stroke paints half its width either side; a filled rectangle paints between its two edges.
+    """
+    lows, highs = [], []
+    for s in segments:
+        if abs(s.x0 - s.x1) > 2.0 or abs(s.y1 - s.y0) < 10.0:
+            continue
+        mid = (s.x0 + s.x1) / 2
+        if abs(mid - x) > 1.0 or max(s.y0, s.y1) < y_min or min(s.y0, s.y1) > y_max:
+            continue
+        half = float(getattr(s, "stroke_width", None) or 0.0) / 2 if getattr(s, "primitive_kind", None) == "line" else 0.0
+        lows.append(mid - half)
+        highs.append(mid + half)
+    return (min(lows), max(highs)) if lows else (x, x)
+
+
+def _spans_staff_exactly(y_min: float, y_max: float, top_line: float, bottom_line: float, staff_space: float) -> bool:
+    """True when a vertical runs from the top staff line to the bottom one, as a barline does."""
+    tolerance = BARLINE_STAFF_LINE_TOLERANCE_SPACES * staff_space
+    return abs(y_min - top_line) <= tolerance and abs(y_max - bottom_line) <= tolerance
+
+
+def _staff_space(line_ys: list[float]) -> float | None:
+    ys = sorted(line_ys)
+    gaps = sorted(b - a for a, b in zip(ys, ys[1:]) if b - a > 0)
+    if not gaps:
+        return None
+    return gaps[len(gaps) // 2]
+
+
+def _has_attached_notehead(
+    x_extent: tuple[float, float],
+    y_min: float,
+    y_max: float,
+    shapes: list[_NoteheadShape],
+    staff_space: float,
+) -> bool:
+    """True when a notehead-sized shape is in painted contact with this vertical at one of its ends.
+
+    That is a note stem, not a barline: a barline has no notehead attached to it. Contact means the
+    notehead's painted outline or fill touches the vertical's painted extent. An oval leaves the
+    corners of its bounding box unpainted, so box overlap alone is not contact. Any visible gap
+    means a separate note.
+    """
+    left, right = x_extent
+    for shape in shapes:
+        bx0, by0, bx1, by1 = shape.bbox
+        width, height = bx1 - bx0, by1 - by0
+        if not (NOTEHEAD_MIN_WIDTH_SPACES * staff_space <= width <= NOTEHEAD_MAX_WIDTH_SPACES * staff_space):
+            continue
+        if not (NOTEHEAD_MIN_HEIGHT_SPACES * staff_space <= height <= NOTEHEAD_MAX_HEIGHT_SPACES * staff_space):
+            continue
+        if right < bx0 or left > bx1:
+            continue
+        if not (by0 <= y_min <= by1 or by0 <= y_max <= by1):
+            continue
+        if _paints_into(shape, (left, y_min, right, y_max)):
+            return True
+    return False
+
+
 def filter_tab_barline_candidates(
     candidates: list[_LineSegment],
     y0: float,
@@ -4149,7 +4612,9 @@ def _detect_tab_systems(
     first_bar_index: int = 1,
     cumulative_y_offset: float = 0.0,
 ) -> list[_TabSystem]:
-    segments = list(_drawing_segments(page.get_drawings()))
+    drawings = page.get_drawings()
+    segments = list(_drawing_segments(drawings))
+    notehead_shapes = _notehead_candidate_shapes(drawings, [info["bbox"] for info in getattr(page, "get_image_info", lambda: [])()])
     raw_horizontal = sorted((segment for segment in segments if segment.is_horizontal), key=lambda segment: segment.y0)
     horizontal = sorted(merge_collinear_horizontal_segments(raw_horizontal), key=lambda segment: segment.y0)
 
@@ -4359,6 +4824,31 @@ def _detect_tab_systems(
             strict_xs = {det["x"] for det in other_filtered["details"] if det.get("final_decision") == "accepted" and det.get("raw_coverage_ratio", 0.0) >= 0.98}
             partner_valid = [x for x in other_filtered["valid_barlines"] if x in strict_xs]
 
+            # L3-01 (H2): a full-height notation-staff vertical with a notehead attached to one
+            # end is a note stem, not a barline. Rejecting it here keeps partner inheritance
+            # for genuine barlines that the TAB filter missed.
+            stem_xs: set[float] = set()
+            ambiguous_xs: set[float] = set()
+            partner_space = _staff_space(other_ys)
+            if notehead_shapes and partner_space:
+                tab_thicknesses = [w for w in (_thickness_near(system_candidates, x) for x in valid_barlines) if w]
+                reference_thickness = sorted(tab_thicknesses)[len(tab_thicknesses) // 2] if tab_thicknesses else None
+                for det in other_filtered["details"]:
+                    det_x = det.get("x")
+                    if det_x not in partner_valid:
+                        continue
+                    verdict = _classify_partner_vertical(
+                        _rendered_x_extent(segments, det_x, det["y_min"], det["y_max"]),
+                        det["y_min"], det["y_max"], _thickness_near(other_candidates, det_x),
+                        reference_thickness, other_y0, other_y1, notehead_shapes, partner_space,
+                    )
+                    if verdict == "stem":
+                        stem_xs.add(det_x)
+                    elif verdict == "ambiguous":
+                        ambiguous_xs.add(det_x)
+                # Neither stems nor unresolved candidates are promoted to barlines.
+                partner_valid = [x for x in partner_valid if x not in stem_xs and x not in ambiguous_xs]
+
             # Same inheritance logic as main
             inherited_from_partner = []
             rejected_inherited = {}
@@ -4388,7 +4878,19 @@ def _detect_tab_systems(
             for det in other_filtered["details"]:
                 det_copy = dict(det)
                 det_copy["inherited"] = True
-                if det_copy.get("final_decision") == "accepted":
+                if det_copy.get("final_decision") == "accepted" and det_copy.get("x") in ambiguous_xs:
+                    # Conflicting stem/barline evidence: recorded and not promoted (fail-safe).
+                    det_copy["final_decision"] = "rejected"
+                    det_copy["rejection_reason"] = "pdf_barline_stem_ambiguity"
+                    det_copy["stem_evidence"] = "ambiguous_not_promoted"
+                    rejection_reasons["pdf_barline_stem_ambiguity"] = rejection_reasons.get("pdf_barline_stem_ambiguity", 0) + 1
+                    rejected_count += 1
+                elif det_copy.get("final_decision") == "accepted" and det_copy.get("x") in stem_xs:
+                    det_copy["final_decision"] = "rejected"
+                    det_copy["rejection_reason"] = "pdf_barline_note_stem"
+                    rejection_reasons["pdf_barline_note_stem"] = rejection_reasons.get("pdf_barline_note_stem", 0) + 1
+                    rejected_count += 1
+                elif det_copy.get("final_decision") == "accepted":
                     x_val = det_copy.get("x")
                     matched_pb = None
                     if x_val is not None:
