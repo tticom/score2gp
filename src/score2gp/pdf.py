@@ -3944,6 +3944,22 @@ def _edges(subpaths: list[list[tuple[float, float]]], close: bool) -> tuple[tupl
     return tuple(edges)
 
 
+def _paints_ink(color: Any, opacity: Any) -> bool:
+    """True when paint in ``color`` at ``opacity`` leaves visible ink on an unpainted (white) page.
+
+    A missing colour paints nothing, opacity 0 paints nothing, and pure white is invisible on a
+    white page: white is (1,) in grey, (1, 1, 1) in RGB and (0, 0, 0, 0) in CMYK.
+    """
+    if color is None:
+        return False
+    if opacity is not None and float(opacity) <= 0.0:
+        return False
+    values = tuple(float(v) for v in color)
+    if len(values) == 4:
+        return any(v > 0.0 for v in values)
+    return any(v < 1.0 for v in values)
+
+
 def _notehead_candidate_shapes(drawings: list[dict[str, Any]]) -> list[_NoteheadShape]:
     """Notehead-candidate vector shapes, with the outline they actually paint.
 
@@ -3951,6 +3967,7 @@ def _notehead_candidate_shapes(drawings: list[dict[str, Any]]) -> list[_Notehead
     noteheads, outlined ones hollow noteheads such as half notes. A straight-edged shape of the
     same size (a triangle or other decoration) is not notehead evidence. In Lesson 3, all 473
     notehead-sized filled shapes are curve paths, one per note. Size is checked later, in staff spaces.
+    Only visible ink counts: an invisible fill or stroke (see ``_paints_ink``) is no evidence at all.
     """
     shapes = []
     for drawing in drawings:
@@ -3958,13 +3975,16 @@ def _notehead_candidate_shapes(drawings: list[dict[str, Any]]) -> list[_Notehead
         items = drawing.get("items", [])
         if rect is None or not any(item and item[0] == "c" for item in items):
             continue
+        filled = _paints_ink(drawing.get("fill"), drawing.get("fill_opacity"))
+        stroked = _paints_ink(drawing.get("color"), drawing.get("stroke_opacity"))
+        if not (filled or stroked):
+            continue
         subpaths = _path_subpaths(items)
-        stroked = drawing.get("color") is not None
         # Rendered extent: a stroked outline paints half its line width beyond the path.
         half = float(drawing.get("width") or 0.0) / 2 if stroked else 0.0
         shapes.append(_NoteheadShape(
             bbox=(float(rect.x0) - half, float(rect.y0) - half, float(rect.x1) + half, float(rect.y1) + half),
-            fill_edges=_edges(subpaths, close=True) if drawing.get("fill") is not None else (),
+            fill_edges=_edges(subpaths, close=True) if filled else (),
             stroke_edges=_edges(subpaths, close=bool(drawing.get("closePath"))) if stroked else (),
             stroke_half_width=half,
             even_odd=bool(drawing.get("even_odd")),

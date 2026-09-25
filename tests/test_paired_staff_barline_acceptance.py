@@ -521,3 +521,78 @@ def test_negative_control_bounding_box_contact_deletes_the_disconnected_barline(
     monkeypatch.setattr(pdf, "_paints_into", lambda shape, rect: True)
     bars, stems_rejected, _ = boundaries(corner_page("disconnected", as_rectangle=False))
     assert bars == [50.0, 500.0] and len(stems_rejected) == 1
+
+
+# --- Review 5317098713: only visible ink is notehead evidence ---
+#
+# An oval painted at zero opacity, or in pure white on the white page, adds no ink: no pixel of the
+# rendered page is darker than on the page without the oval. (Zero opacity renders byte-identical;
+# white beneath a barline can lighten its anti-aliased edge but never darkens anything.) Such an
+# oval cannot be attached to anything. Each case is checked against the raster without the oval.
+
+TOUCH_HEAD = fitz.Rect(299.0, CORNER_HEADS["touching"], 318.0, CORNER_HEADS["touching"] + 16.0)
+
+
+def touching_oval_page(finish: dict[str, Any] | None, as_rectangle: bool):
+    """A thin barline at x=300 whose end the oval would touch, drawn with ``finish`` (``None``: no oval).
+
+    The oval is drawn beneath the barline: white paint over black ink would itself be visible.
+    """
+    page = vector_page()
+    shape = page.new_shape()
+    if finish is not None:
+        shape.draw_oval(TOUCH_HEAD)
+        shape.finish(**finish)
+    if as_rectangle:
+        shape.draw_rect(fitz.Rect(300.0 - THIN_HALF, 100.0, 300.0 + THIN_HALF, CORNER_BAR_Y1))
+        shape.finish(color=None, fill=(0, 0, 0))
+    else:
+        shape.draw_line((300.0, 100.0), (300.0, CORNER_BAR_Y1))
+        shape.finish(color=(0, 0, 0), width=STEM_WIDTH)
+    shape.commit()
+    return page
+
+
+def contact_pixels(page) -> bytes:
+    return page.get_pixmap(matrix=fitz.Matrix(8, 8), clip=fitz.Rect(296.0, 160.0, 322.0, 190.0), colorspace=fitz.csGRAY, alpha=False).samples
+
+
+def adds_ink(page, as_rectangle: bool) -> bool:
+    """True when some pixel is darker than on the same page without the oval."""
+    return any(a < b for a, b in zip(contact_pixels(page), contact_pixels(touching_oval_page(None, as_rectangle))))
+
+
+INVISIBLE_OVALS = {
+    "zero-fill-and-stroke-opacity": {"color": (0, 0, 0), "fill": (0, 0, 0), "width": 0.8, "fill_opacity": 0, "stroke_opacity": 0},
+    "zero-fill-opacity-no-stroke": {"color": None, "fill": (0, 0, 0), "fill_opacity": 0},
+    "white-fill-and-stroke": {"color": (1, 1, 1), "fill": (1, 1, 1), "width": 0.8},
+}
+
+
+@pytest.mark.parametrize("as_rectangle", [False, True], ids=["stroke", "filled-rectangle"])
+@pytest.mark.parametrize("finish", list(INVISIBLE_OVALS.values()), ids=list(INVISIBLE_OVALS))
+def test_an_invisible_oval_is_not_notehead_evidence(finish: dict[str, Any], as_rectangle: bool) -> None:
+    page = touching_oval_page(finish, as_rectangle)
+    assert not adds_ink(page, as_rectangle), "fixture must add no ink"
+    bars, stems_rejected, ambiguous = boundaries(page)
+    assert len(bars) == 3 and abs(bars[1] - 300.0) <= 0.5
+    assert stems_rejected == [] and ambiguous == []
+
+
+@pytest.mark.parametrize("as_rectangle", [False, True], ids=["stroke", "filled-rectangle"])
+@pytest.mark.parametrize("finish", [
+    {"color": (0, 0, 0), "fill": (0, 0, 0), "width": 0.8},
+    {"color": (0, 0, 0), "fill": (0, 0, 0), "width": 0.8, "fill_opacity": 0},  # hollow: only the stroke is ink
+], ids=["opaque", "invisible-fill-visible-stroke"])
+def test_control_visible_ink_in_contact_is_attached(finish: dict[str, Any], as_rectangle: bool) -> None:
+    page = touching_oval_page(finish, as_rectangle)
+    assert adds_ink(page, as_rectangle), "fixture must add visible ink"
+    bars, stems_rejected, _ = boundaries(page)
+    assert bars == [50.0, 500.0] and len(stems_rejected) == 1
+
+
+def test_negative_control_counting_any_colour_as_ink_deletes_the_barline(monkeypatch) -> None:
+    # Re-apply the reviewed defect (presence of a colour counts as paint): the invisible oval deletes the barline.
+    monkeypatch.setattr(pdf, "_paints_ink", lambda color, opacity: color is not None)
+    bars, stems_rejected, _ = boundaries(touching_oval_page(INVISIBLE_OVALS["zero-fill-and-stroke-opacity"], False))
+    assert bars == [50.0, 500.0] and len(stems_rejected) == 1
