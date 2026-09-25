@@ -133,7 +133,11 @@ def test_baseline_red_is_verified_and_exactly_classified(source_pdf: Path, refer
     """Runs the real CLI on the original PDF inside the read boundary and asserts today's classified red result.
 
     This asserts the *baseline* failure so a harness regression is caught. It must be revisited, not
-    weakened, when the barline-topology seam it points at is fixed: then the divergence should disappear.
+    weakened, when the seam it points at is fixed.
+
+    L3-01 fixed the first-system barline seam: the topology now matches the source exactly (4 of 4
+    boundaries, 3 bar boxes, grouped). The product is still red, and the earliest remaining refusal
+    is timing gating (``pdf_only_tab_missing_timing_evidence``).
     """
     out = tmp_path / "acceptance"
     args = acceptance.build_parser().parse_args([
@@ -153,13 +157,15 @@ def test_baseline_red_is_verified_and_exactly_classified(source_pdf: Path, refer
     generation = public["generation"]
     assert generation["conversion"] == "NOT_CONVERTED" and not generation["output_written"]
     assert generation["semantic"] == "NOT_EVALUATED" and generation["application"] == "NOT_EVALUATED"
-    assert generation["exit_code"] not in (0, None) and generation["refusal_code"]
+    assert generation["exit_code"] == 2
+    assert (generation["stage"], generation["refusal_code"]) == ("timing-gating", "pdf_only_tab_missing_timing_evidence")
     divergence = public["first_system_divergence"]
-    assert divergence["status"] == "DIVERGENT" and divergence["kind"] == "barline_set_mismatch"
+    assert divergence["status"] == "TOPOLOGY_MATCHES_SOURCE" and divergence["kind"] is None
     counts = divergence["counts"]
     assert (counts["measures_expected"], counts["expected_boundaries"]) == (3, 4)
-    assert counts["observed_boundaries"] > counts["expected_boundaries"]
-    assert counts["missing"] == 0 and counts["extra"] == counts["extra_on_notation_stem"] > 0
-    assert counts["bar_boxes_observed"] > counts["measures_expected"]
+    assert counts["observed_boundaries"] == counts["expected_boundaries"] == 4
+    assert counts["missing"] == counts["extra"] == counts["extra_on_notation_stem"] == 0
+    assert counts["bar_boxes_observed"] == counts["measures_expected"] == 3
+    assert counts["grouping_status"] == "grouped"
     assert "private_detail" not in public and "private" not in divergence  # coordinates and values stay in the private receipt
     assert set(receipt["private_detail"]["first_system_divergence"]) == {"expected_xs", "observed_xs", "extra_xs", "missing_xs"}

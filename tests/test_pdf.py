@@ -3448,7 +3448,12 @@ def test_private_acceptance_lesson5() -> None:
     unique_bars = set()
     for p, bars in page_bars.items():
         unique_bars.update(bars)
-    assert len(unique_bars) == 48
+    # L3-01: the former 48 counted beamed note stems as barlines. Lesson-5.gp has 43 measures.
+    # With stems rejected, production detects 35: page 3's third system (measures 41-43) and its
+    # final barline are still undetected, a known shortfall that predates this change. The bound
+    # stops over-segmentation from passing again.
+    assert len(unique_bars) == 35
+    assert len(unique_bars) <= 43
 
 def test_topology_cross_system_barline_rejection(tmp_path) -> None:
     from collections import namedtuple
@@ -3532,7 +3537,11 @@ def test_private_acceptance_lesson6() -> None:
     unique_bars = set()
     for p, bars in page_bars.items():
         unique_bars.update(bars)
-    assert len(unique_bars) == 25
+    # L3-01: the former 25 included note stems read as barlines. Lesson-6.gp has 72 measures;
+    # production detects far fewer because Lesson-6 system detection is incomplete, a known
+    # shortfall that predates this change. The bound stops over-segmentation from passing again.
+    assert len(unique_bars) == 21
+    assert len(unique_bars) <= 72
 
 
 
