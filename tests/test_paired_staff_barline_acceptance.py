@@ -44,9 +44,16 @@ def line(x0: float, y0: float, x1: float, y1: float) -> dict[str, Any]:
 
 
 def filled(x0: float, y0: float, x1: float, y1: float) -> dict[str, Any]:
-    # A filled notehead is an oval: a closed path of Bezier curves.
-    mid = MockPoint((x0 + x1) / 2, y0)
-    return {"items": [("c", mid, mid, mid, mid)], "fill": (0.0, 0.0, 0.0), "rect": fitz.Rect(x0, y0, x1, y1)}
+    # A filled notehead is an oval: a closed path of four Bezier curves, as PyMuPDF reports it.
+    cx, cy, rx, ry, k = (x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0) / 2, (y1 - y0) / 2, 0.5523
+    P = MockPoint
+    items = [
+        ("c", P(x0, cy), P(x0, cy + k * ry), P(cx - k * rx, y1), P(cx, y1)),
+        ("c", P(cx, y1), P(cx + k * rx, y1), P(x1, cy + k * ry), P(x1, cy)),
+        ("c", P(x1, cy), P(x1, cy - k * ry), P(cx + k * rx, y0), P(cx, y0)),
+        ("c", P(cx, y0), P(cx - k * rx, y0), P(x0, cy - k * ry), P(x0, cy)),
+    ]
+    return {"items": items, "fill": (0.0, 0.0, 0.0), "rect": fitz.Rect(x0, y0, x1, y1)}
 
 
 def paired_system(scale: float = 1.0, extra: list[dict[str, Any]] | None = None) -> MockPage:
@@ -121,13 +128,13 @@ def test_non_notehead_fills_do_not_reject_a_barline() -> None:
 def test_notehead_attachment_is_rendered_contact_in_staff_spaces(scale: float) -> None:
     # Sizes are dimensionless; attachment is rendered contact with no horizontal allowance.
     s = scale
-    notehead = [(281.0 * s, 165.0 * s, 300.0 * s, 181.0 * s)]
+    notehead = pdf._notehead_candidate_shapes([filled(281.0 * s, 165.0 * s, 300.0 * s, 181.0 * s)])
     space = 18.0 * s
     touching = (299.9 * s, 300.1 * s)
     assert pdf._has_attached_notehead(touching, 98.0 * s, 174.0 * s, notehead, space)            # stem on its edge
     assert not pdf._has_attached_notehead((300.01 * s, 300.3 * s), 98.0 * s, 174.0 * s, notehead, space)  # a visible gap
     assert not pdf._has_attached_notehead(touching, 98.0 * s, 140.0 * s, notehead, space)        # ends away from it
-    too_wide = [(250.0 * s, 165.0 * s, 300.0 * s, 181.0 * s)]                                     # a beam, not a notehead
+    too_wide = pdf._notehead_candidate_shapes([filled(250.0 * s, 165.0 * s, 300.0 * s, 181.0 * s)])                                     # a beam, not a notehead
     assert not pdf._has_attached_notehead(touching, 98.0 * s, 174.0 * s, too_wide, space)
 
 
@@ -265,8 +272,8 @@ def test_equal_thickness_falls_back_to_the_staff_span_with_explicit_ambiguity(mo
 
 
 def test_negative_control_hollow_notehead_stem_survives_without_outline_detection(monkeypatch) -> None:
-    real = pdf._filled_shape_boxes
-    monkeypatch.setattr(pdf, "_filled_shape_boxes", lambda drawings: real([d for d in drawings if d.get("fill") is not None]))
+    real = pdf._notehead_candidate_shapes
+    monkeypatch.setattr(pdf, "_notehead_candidate_shapes", lambda drawings: real([d for d in drawings if d.get("fill") is not None]))
     page = vector_page([barline(200.0)], stems=[stem(300.0)], noteheads=[(HEAD_ON_BOTTOM_LINE_LEFT_OF_300, False)])
     assert boundaries(page)[0] == [50.0, 200.0, 300.0, 500.0]
 
@@ -428,3 +435,89 @@ def test_negative_control_touching_barline_is_deleted_without_thickness_or_span(
     monkeypatch.setattr(pdf, "_spans_staff_exactly", lambda *args, **kwargs: False)
     page = vector_page([barline(200.0)], noteheads=[(fitz.Rect(200, 164, 219, 180), True)])
     assert boundaries(page)[0] == [50.0, 500.0]
+
+
+# --- Review 5310799558: contact is with the painted notehead, not its bounding box ---
+#
+# An oval leaves the corners of its bounding box unpainted. A thin genuine barline ending in that
+# corner region has a box overlap but no painted contact: the two shapes are disconnected on the
+# rendered page. Each page's connectivity is checked independently by rasterising it.
+
+CORNER_BAR_Y1 = 172.0 + 0.161 * 18.0  # overshoots the bottom line beyond the span tolerance
+# (head top, filled): the bar end at x=300 lies inside every box's height and width.
+CORNER_HEADS = {"disconnected": 172.0, "touching": 170.0}
+
+
+def corner_page(placement: str, as_rectangle: bool, is_filled: bool = True):
+    """A thin barline at x=300 and an oval whose box starts at x=299, left of the bar's painted edge."""
+    head = (fitz.Rect(299.0, CORNER_HEADS[placement], 318.0, CORNER_HEADS[placement] + 16.0)
+            if placement in CORNER_HEADS else fitz.Rect(305.0, 172.0, 324.0, 188.0))
+    if not as_rectangle:
+        return vector_page([barline(300.0, 100.0, CORNER_BAR_Y1, width=STEM_WIDTH)], noteheads=[(head, is_filled)])
+    page = vector_page(noteheads=[(head, is_filled)])
+    shape = page.new_shape()
+    shape.draw_rect(fitz.Rect(300.0 - THIN_HALF, 100.0, 300.0 + THIN_HALF, CORNER_BAR_Y1))
+    shape.finish(color=None, fill=(0, 0, 0))
+    shape.commit()
+    return page
+
+
+def painted_components(page, clip: fitz.Rect, zoom: float = 24.0) -> int:
+    """Connected dark regions in a rasterised clip (8-connectivity)."""
+    pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), clip=clip, colorspace=fitz.csGRAY, alpha=False)
+    w, h, data = pix.width, pix.height, pix.samples
+    dark = {(x, y) for y in range(h) for x in range(w) if data[y * w + x] < 128}
+    components = 0
+    while dark:
+        components += 1
+        stack = [dark.pop()]
+        while stack:
+            x, y = stack.pop()
+            for nx in (x - 1, x, x + 1):
+                for ny in (y - 1, y, y + 1):
+                    if (nx, ny) in dark:
+                        dark.remove((nx, ny))
+                        stack.append((nx, ny))
+    return components
+
+
+# Below the bottom staff line and right of the outer barline region: only the bar end and the head.
+CORNER_CLIP = fitz.Rect(296.0, 173.0, 322.0, 190.0)
+
+
+@pytest.mark.parametrize("is_filled", [True, False], ids=["black-notehead", "hollow-notehead"])
+@pytest.mark.parametrize("as_rectangle", [False, True], ids=["stroke", "filled-rectangle"])
+def test_an_oval_whose_box_overlaps_but_whose_paint_does_not_keeps_the_barline(as_rectangle: bool, is_filled: bool) -> None:
+    page = corner_page("disconnected", as_rectangle, is_filled)
+    assert painted_components(page, CORNER_CLIP) == 2, "fixture must be disconnected on the rendered page"
+    head = next(s for s in pdf._notehead_candidate_shapes(page.get_drawings()) if s.bbox[0] < 300.0 < s.bbox[2])
+    assert head.bbox[1] <= CORNER_BAR_Y1 <= head.bbox[3], "the box overlaps the bar end"
+    bars, stems_rejected, ambiguous = boundaries(page)
+    assert len(bars) == 3 and abs(bars[1] - 300.0) <= 0.5
+    assert stems_rejected == [] and ambiguous == []
+
+
+@pytest.mark.parametrize("is_filled", [True, False], ids=["black-notehead", "hollow-notehead"])
+@pytest.mark.parametrize("as_rectangle", [False, True], ids=["stroke", "filled-rectangle"])
+def test_control_the_same_oval_in_painted_contact_is_attached(as_rectangle: bool, is_filled: bool) -> None:
+    # Moved up until its paint meets the bar end: rendered as one shape, it is the accepted
+    # thin-touching residual and reads as a stem.
+    page = corner_page("touching", as_rectangle, is_filled)
+    assert painted_components(page, CORNER_CLIP) == 1, "fixture must touch on the rendered page"
+    bars, stems_rejected, _ = boundaries(page)
+    assert bars == [50.0, 500.0] and len(stems_rejected) == 1
+
+
+@pytest.mark.parametrize("as_rectangle", [False, True], ids=["stroke", "filled-rectangle"])
+def test_control_a_clearly_separated_oval_keeps_the_barline(as_rectangle: bool) -> None:
+    page = corner_page("separated", as_rectangle)
+    assert painted_components(page, CORNER_CLIP) == 2
+    bars, stems_rejected, ambiguous = boundaries(page)
+    assert len(bars) == 3 and stems_rejected == [] and ambiguous == []
+
+
+def test_negative_control_bounding_box_contact_deletes_the_disconnected_barline(monkeypatch) -> None:
+    # Re-apply the reviewed defect (box overlap counted as contact): the disconnected case is deleted.
+    monkeypatch.setattr(pdf, "_paints_into", lambda shape, rect: True)
+    bars, stems_rejected, _ = boundaries(corner_page("disconnected", as_rectangle=False))
+    assert bars == [50.0, 500.0] and len(stems_rejected) == 1

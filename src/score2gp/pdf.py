@@ -3847,7 +3847,7 @@ def _classify_partner_vertical(
     reference_thickness: float | None,
     top_line: float,
     bottom_line: float,
-    boxes: list[tuple[float, float, float, float]],
+    shapes: list[_NoteheadShape],
     staff_space: float,
 ) -> str:
     """Classify a notation-staff vertical as "barline", "stem" or "ambiguous".
@@ -3862,7 +3862,7 @@ def _classify_partner_vertical(
     barline with a notehead touching it at that thickness. Engraving never places a notehead
     against a barline, and Lessons 3-7 have none, so these synthetic pairs are left unresolved.
     """
-    if not _has_attached_notehead(x_extent, y_min, y_max, boxes, staff_space):
+    if not _has_attached_notehead(x_extent, y_min, y_max, shapes, staff_space):
         return "barline"
     if thickness and reference_thickness:
         ratio = thickness / reference_thickness
@@ -3875,25 +3875,163 @@ def _classify_partner_vertical(
     return "stem"
 
 
-def _filled_shape_boxes(drawings: list[dict[str, Any]]) -> list[tuple[float, float, float, float]]:
-    """Bounding boxes (x0, y0, x1, y1) of notehead-candidate vector shapes.
+# Curves are flattened to chords within this distance of the true outline (points). Contact is
+# tested against the chords, so this is the only numerical allowance: far below any visible gap.
+CURVE_FLATTENING_TOLERANCE_PT = 0.001
+
+
+@dataclass(frozen=True)
+class _NoteheadShape:
+    """A notehead-candidate vector shape: its rendered bounding box and its painted outline."""
+
+    bbox: tuple[float, float, float, float]
+    fill_edges: tuple[tuple[float, float, float, float], ...]  # closed subpaths; empty when unfilled
+    stroke_edges: tuple[tuple[float, float, float, float], ...]  # empty when not stroked
+    stroke_half_width: float
+    even_odd: bool
+
+
+def _flatten_cubic(p0: Any, p1: Any, p2: Any, p3: Any) -> list[tuple[float, float]]:
+    """Points along a cubic Bezier whose chords stay within CURVE_FLATTENING_TOLERANCE_PT of it.
+
+    With n equal steps the chord error is at most (3/4) * max|second difference| / n^2 per axis,
+    so n is chosen to keep the Euclidean error (both axes) within the tolerance.
+    """
+    pts = [(float(q.x), float(q.y)) for q in (p0, p1, p2, p3)]
+    second = max(abs(pts[i][k] - 2 * pts[i + 1][k] + pts[i + 2][k]) for i in (0, 1) for k in (0, 1))
+    n = max(1, int((0.75 * second * 2 / CURVE_FLATTENING_TOLERANCE_PT) ** 0.5) + 1)
+    out = []
+    for i in range(1, n + 1):
+        t = i / n
+        u = 1 - t
+        a, b, c, d = u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t
+        out.append((a * pts[0][0] + b * pts[1][0] + c * pts[2][0] + d * pts[3][0],
+                    a * pts[0][1] + b * pts[1][1] + c * pts[2][1] + d * pts[3][1]))
+    return out
+
+
+def _path_subpaths(items: list[Any]) -> list[list[tuple[float, float]]]:
+    """Flattened subpaths of a PyMuPDF drawing's items; a new subpath starts at each discontinuity."""
+    subpaths: list[list[tuple[float, float]]] = []
+
+    def start(point: tuple[float, float]) -> None:
+        if not subpaths or subpaths[-1][-1] != point:
+            subpaths.append([point])
+
+    for item in items:
+        if not item:
+            continue
+        kind = item[0]
+        if kind == "l":
+            start((float(item[1].x), float(item[1].y)))
+            subpaths[-1].append((float(item[2].x), float(item[2].y)))
+        elif kind == "c":
+            start((float(item[1].x), float(item[1].y)))
+            subpaths[-1].extend(_flatten_cubic(item[1], item[2], item[3], item[4]))
+        elif kind in ("re", "qu"):
+            corners = ((item[1].tl, item[1].tr, item[1].br, item[1].bl) if kind == "re"
+                       else (item[1].ul, item[1].ur, item[1].lr, item[1].ll))
+            points = [(float(c.x), float(c.y)) for c in corners]
+            subpaths.append(points + [points[0]])
+    return subpaths
+
+
+def _edges(subpaths: list[list[tuple[float, float]]], close: bool) -> tuple[tuple[float, float, float, float], ...]:
+    edges = []
+    for points in subpaths:
+        ring = points + [points[0]] if close and points[0] != points[-1] else points
+        edges.extend((a[0], a[1], b[0], b[1]) for a, b in zip(ring, ring[1:]))
+    return tuple(edges)
+
+
+def _notehead_candidate_shapes(drawings: list[dict[str, Any]]) -> list[_NoteheadShape]:
+    """Notehead-candidate vector shapes, with the outline they actually paint.
 
     Noteheads are ovals, so only shapes drawn with curves qualify: filled ones are black
     noteheads, outlined ones hollow noteheads such as half notes. A straight-edged shape of the
     same size (a triangle or other decoration) is not notehead evidence. In Lesson 3, all 473
     notehead-sized filled shapes are curve paths, one per note. Size is checked later, in staff spaces.
     """
-    boxes = []
+    shapes = []
     for drawing in drawings:
         rect = drawing.get("rect")
-        if rect is None:
+        items = drawing.get("items", [])
+        if rect is None or not any(item and item[0] == "c" for item in items):
             continue
-        is_curved = any(item and item[0] == "c" for item in drawing.get("items", []))
-        if is_curved:
-            # Rendered extent: a stroked outline paints half its line width beyond the path.
-            half = float(drawing.get("width") or 0.0) / 2 if drawing.get("color") is not None else 0.0
-            boxes.append((float(rect.x0) - half, float(rect.y0) - half, float(rect.x1) + half, float(rect.y1) + half))
-    return boxes
+        subpaths = _path_subpaths(items)
+        stroked = drawing.get("color") is not None
+        # Rendered extent: a stroked outline paints half its line width beyond the path.
+        half = float(drawing.get("width") or 0.0) / 2 if stroked else 0.0
+        shapes.append(_NoteheadShape(
+            bbox=(float(rect.x0) - half, float(rect.y0) - half, float(rect.x1) + half, float(rect.y1) + half),
+            fill_edges=_edges(subpaths, close=True) if drawing.get("fill") is not None else (),
+            stroke_edges=_edges(subpaths, close=bool(drawing.get("closePath"))) if stroked else (),
+            stroke_half_width=half,
+            even_odd=bool(drawing.get("even_odd")),
+        ))
+    return shapes
+
+
+def _segment_meets_rect(edge: tuple[float, float, float, float], rect: tuple[float, float, float, float]) -> bool:
+    """True when a segment intersects or touches a closed axis-aligned rectangle (Liang-Barsky)."""
+    ax, ay, bx, by = edge
+    x0, y0, x1, y1 = rect
+    t0, t1 = 0.0, 1.0
+    for p, q in ((ax - bx, ax - x0), (bx - ax, x1 - ax), (ay - by, ay - y0), (by - ay, y1 - ay)):
+        if p == 0:
+            if q < 0:
+                return False
+            continue
+        t = q / p
+        if p < 0:
+            t0 = max(t0, t)
+        else:
+            t1 = min(t1, t)
+        if t0 > t1:
+            return False
+    return True
+
+
+def _point_segment_distance(px: float, py: float, edge: tuple[float, float, float, float]) -> float:
+    ax, ay, bx, by = edge
+    dx, dy = bx - ax, by - ay
+    length2 = dx * dx + dy * dy
+    t = 0.0 if length2 == 0 else max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / length2))
+    return ((px - ax - t * dx) ** 2 + (py - ay - t * dy) ** 2) ** 0.5
+
+
+def _segment_rect_distance(edge: tuple[float, float, float, float], rect: tuple[float, float, float, float]) -> float:
+    if _segment_meets_rect(edge, rect):
+        return 0.0
+    x0, y0, x1, y1 = rect
+    ax, ay, bx, by = edge
+    to_rect = [
+        (max(x0 - px, 0.0, px - x1) ** 2 + max(y0 - py, 0.0, py - y1) ** 2) ** 0.5 for px, py in ((ax, ay), (bx, by))
+    ]
+    to_edge = [_point_segment_distance(cx, cy, edge) for cx, cy in ((x0, y0), (x1, y0), (x1, y1), (x0, y1))]
+    return min(*to_rect, *to_edge)
+
+
+def _inside_fill(px: float, py: float, shape: _NoteheadShape) -> bool:
+    """Point-in-fill for the shape's closed subpaths under its fill rule."""
+    winding = crossings = 0
+    for ax, ay, bx, by in shape.fill_edges:
+        if (ay <= py) != (by <= py):
+            if ax + (py - ay) * (bx - ax) / (by - ay) > px:
+                crossings += 1
+                winding += 1 if by > ay else -1
+    return crossings % 2 == 1 if shape.even_odd else winding != 0
+
+
+def _paints_into(shape: _NoteheadShape, rect: tuple[float, float, float, float]) -> bool:
+    """True when the shape's painted region (stroke band or fill) touches or overlaps the rectangle."""
+    reach = shape.stroke_half_width + CURVE_FLATTENING_TOLERANCE_PT
+    if any(_segment_rect_distance(edge, rect) <= reach for edge in shape.stroke_edges):
+        return True
+    if any(_segment_rect_distance(edge, rect) <= CURVE_FLATTENING_TOLERANCE_PT for edge in shape.fill_edges):
+        return True
+    # No boundary reaches the rectangle: it is either wholly inside the fill or wholly outside it.
+    return bool(shape.fill_edges) and _inside_fill((rect[0] + rect[2]) / 2, (rect[1] + rect[3]) / 2, shape)
 
 
 def _rendered_x_extent(segments: list[Any], x: float, y_min: float, y_max: float) -> tuple[float, float]:
@@ -3932,16 +4070,19 @@ def _has_attached_notehead(
     x_extent: tuple[float, float],
     y_min: float,
     y_max: float,
-    boxes: list[tuple[float, float, float, float]],
+    shapes: list[_NoteheadShape],
     staff_space: float,
 ) -> bool:
-    """True when a notehead-sized shape is in rendered contact with this vertical at one of its ends.
+    """True when a notehead-sized shape is in painted contact with this vertical at one of its ends.
 
     That is a note stem, not a barline: a barline has no notehead attached to it. Contact means the
-    painted extents overlap or touch; any visible gap means a separate note.
+    notehead's painted outline or fill touches the vertical's painted extent. An oval leaves the
+    corners of its bounding box unpainted, so box overlap alone is not contact. Any visible gap
+    means a separate note.
     """
     left, right = x_extent
-    for bx0, by0, bx1, by1 in boxes:
+    for shape in shapes:
+        bx0, by0, bx1, by1 = shape.bbox
         width, height = bx1 - bx0, by1 - by0
         if not (NOTEHEAD_MIN_WIDTH_SPACES * staff_space <= width <= NOTEHEAD_MAX_WIDTH_SPACES * staff_space):
             continue
@@ -3949,7 +4090,9 @@ def _has_attached_notehead(
             continue
         if right < bx0 or left > bx1:
             continue
-        if by0 <= y_min <= by1 or by0 <= y_max <= by1:
+        if not (by0 <= y_min <= by1 or by0 <= y_max <= by1):
+            continue
+        if _paints_into(shape, (left, y_min, right, y_max)):
             return True
     return False
 
@@ -4297,7 +4440,7 @@ def _detect_tab_systems(
 ) -> list[_TabSystem]:
     drawings = page.get_drawings()
     segments = list(_drawing_segments(drawings))
-    filled_boxes = _filled_shape_boxes(drawings)
+    notehead_shapes = _notehead_candidate_shapes(drawings)
     raw_horizontal = sorted((segment for segment in segments if segment.is_horizontal), key=lambda segment: segment.y0)
     horizontal = sorted(merge_collinear_horizontal_segments(raw_horizontal), key=lambda segment: segment.y0)
 
@@ -4513,7 +4656,7 @@ def _detect_tab_systems(
             stem_xs: set[float] = set()
             ambiguous_xs: set[float] = set()
             partner_space = _staff_space(other_ys)
-            if filled_boxes and partner_space:
+            if notehead_shapes and partner_space:
                 tab_thicknesses = [w for w in (_thickness_near(system_candidates, x) for x in valid_barlines) if w]
                 reference_thickness = sorted(tab_thicknesses)[len(tab_thicknesses) // 2] if tab_thicknesses else None
                 for det in other_filtered["details"]:
@@ -4523,7 +4666,7 @@ def _detect_tab_systems(
                     verdict = _classify_partner_vertical(
                         _rendered_x_extent(segments, det_x, det["y_min"], det["y_max"]),
                         det["y_min"], det["y_max"], _thickness_near(other_candidates, det_x),
-                        reference_thickness, other_y0, other_y1, filled_boxes, partner_space,
+                        reference_thickness, other_y0, other_y1, notehead_shapes, partner_space,
                     )
                     if verdict == "stem":
                         stem_xs.add(det_x)
