@@ -50,6 +50,7 @@ def test_every_event_read_and_equal_to_ground_truth(lesson, bars, events, tied):
     assert summary["ground_truth_events"] == summary["read_events"] == summary["matched_events"] == events
     assert summary["ground_truth_tied_events"] == tied
     assert summary["mismatches"] == []
+    assert records["diagnostics"]["events_outside_bars"] == 0
 
 
 def test_real_tuplets_and_ties_are_read_not_just_synthetic_ones():

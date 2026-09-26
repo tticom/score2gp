@@ -78,6 +78,8 @@ def _mismatches(name: str) -> list[str]:
     result = read_note_durations(FIXTURES / f"{name}.pdf")
     bars = _bars(result)
     problems = []
+    if result["diagnostics"]["events_outside_bars"]:
+        problems.append(f"{name}: {result['diagnostics']['events_outside_bars']} events outside every bar")
     if len(bars) != len(EXPECTED[name]):
         return [f"{name}: {len(bars)} bars read, {len(EXPECTED[name])} expected"]
     for b, (got, want) in enumerate(zip(bars, EXPECTED[name])):

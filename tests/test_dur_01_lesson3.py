@@ -54,6 +54,7 @@ def test_whole_document_coverage_and_match_rate(comparison):
     assert summary["coverage"] == 1.0 and summary["match_rate"] == 1.0
     assert summary["mismatches"] == [] and summary["causes"] == {}
     assert records["summary"]["unread_events"] == 0
+    assert records["diagnostics"]["events_outside_bars"] == 0
 
 
 def test_every_mismatch_would_be_located_by_page_bar_and_event(comparison):

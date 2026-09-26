@@ -1149,6 +1149,7 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
     for event in events:
         bar = event["_bar"]
         if bar is None:
+            state["diagnostics"]["events_outside_bars"] += 1  # counted, never silently dropped
             continue
         index = per_bar.get(bar, 0)
         per_bar[bar] = index + 1
@@ -1309,7 +1310,7 @@ def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = No
     bar_signatures: dict[int, dict[str, Any] | None] = {}
     state: dict[str, Any] = {"bar_offset": 0, "system_number": 0, "time_signature": None,
                              "diagnostics": {"ignored_symbols": 0, "arcs_not_ties": 0, "unassociated_numbers": 0, "label_numbers": 0,
-                                             "pages_without_notation_staff": 0}}
+                                             "events_outside_bars": 0, "pages_without_notation_staff": 0}}
     declared = {"value": time_signature, "source": "caller_declared", "sources": []} if time_signature else None
     with pymupdf.open(path) as doc:
         first, last = pages if pages else (1, len(doc))

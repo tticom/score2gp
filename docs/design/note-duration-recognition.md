@@ -88,7 +88,9 @@ in staff spaces of the staff being read.
 `overlapping_tuplets`, `mixed_notehead_kinds`, `dot_rows_disagree`, `concurrent_events`.
 
 Each unread record keeps `location` (page, system, bar, event index, bounding box). Its `written`,
-`value_quarters` and `duration_quarters` are null.
+`value_quarters` and `duration_quarters` are null. An event that lies outside every bar is never
+dropped silently: it is counted in `diagnostics.events_outside_bars`, which is zero on every fixture
+and on Lessons 3 to 7 (tested).
 
 ## Bar check
 
