@@ -17,6 +17,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import functools
 import importlib.util
 import json
 import sys
@@ -27,13 +28,63 @@ from typing import Any
 HERE = Path(__file__).resolve().parent
 
 
+@functools.cache
 def load_oracle():
     spec = importlib.util.spec_from_file_location("native_slice_reference", HERE / "native_slice_reference.py")
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
-    sys.modules.setdefault("native_slice_reference", module)
     spec.loader.exec_module(module)
     return module
+
+
+NOTE_VALUES = {"Whole": Fraction(4), "Half": Fraction(2), "Quarter": Fraction(1), "Eighth": Fraction(1, 2),
+               "16th": Fraction(1, 4), "32nd": Fraction(1, 8), "64th": Fraction(1, 16)}
+
+
+def rhythm_ground_truth(gp_path: Path) -> list[list[dict[str, Any]]]:
+    """Per bar, kind, dots and sounding duration, read straight from the GPIF rhythm records.
+
+    Standard library only, like the reference reader, but limited to rhythm, so it also reads
+    tuplets and tied notes, which the reference reader refuses. Each event also carries its tie
+    (starts, stops). A bar with more than one voice raises rather than being guessed.
+    """
+    import xml.etree.ElementTree as ET  # noqa: PLC0415
+    import zipfile  # noqa: PLC0415
+
+    root = ET.fromstring(zipfile.ZipFile(gp_path).read("Content/score.gpif"))
+
+    def table(container: str, item: str) -> dict[str, Any]:
+        return {e.get("id"): e for e in root.find(container).findall(item)}
+
+    bars, voices, beats, rhythms = (table("Bars", "Bar"), table("Voices", "Voice"), table("Beats", "Beat"),
+                                    table("Rhythms", "Rhythm"))
+    note_table = table("Notes", "Note")
+    out = []
+    for index, master in enumerate(root.find("MasterBars").findall("MasterBar")):
+        bar_ids = master.find("Bars").text.split()
+        if len(bar_ids) != 1:
+            raise SystemExit(f"bar {index}: {len(bar_ids)} staves; this comparison reads one")
+        voice_ids = [v for v in bars[bar_ids[0]].find("Voices").text.split() if v != "-1"]
+        voice_ids = [v for v in voice_ids if voices[v].find("Beats") is not None and voices[v].find("Beats").text]
+        if len(voice_ids) != 1:
+            raise SystemExit(f"bar {index}: {len(voice_ids)} voices; this comparison reads one")
+        events = []
+        for beat_id in voices[voice_ids[0]].find("Beats").text.split():
+            beat = beats[beat_id]
+            rhythm = rhythms[beat.find("Rhythm").get("ref")]
+            dot = rhythm.find("AugmentationDot")
+            dots = int(dot.get("count")) if dot is not None else 0
+            duration = NOTE_VALUES[rhythm.find("NoteValue").text] * (2 - Fraction(1, 2 ** dots))
+            tuplet = rhythm.find("PrimaryTuplet")
+            if tuplet is not None:
+                duration *= Fraction(int(tuplet.get("den")), int(tuplet.get("num")))
+            note_ids = (beat.find("Notes").text or "").split() if beat.find("Notes") is not None else []
+            ties = [note_table[n].find("Tie") for n in note_ids]
+            events.append({"kind": "note" if note_ids else "rest", "dots": dots, "duration": duration,
+                           "tie": (any(t is not None and t.get("origin") == "true" for t in ties),
+                                   any(t is not None and t.get("destination") == "true" for t in ties))})
+        out.append(events)
+    return out
 
 
 def ground_truth(gp_path: Path) -> list[list[dict[str, Any]]]:
@@ -82,6 +133,8 @@ def compare(records: dict[str, Any], truth: list[list[dict[str, Any]]]) -> dict[
                 row["cause"] = "dots_mismatch"
             elif Fraction(have["duration_quarters"]) != want["duration"]:
                 row["cause"] = "duration_mismatch"
+            elif "tie" in want and (have["tie"]["start"], have["tie"]["stop"]) != want["tie"]:
+                row["cause"] = "tie_mismatch"
             else:
                 row["cause"] = None
             if have is not None:
@@ -89,6 +142,8 @@ def compare(records: dict[str, Any], truth: list[list[dict[str, Any]]]) -> dict[
                 row["read"] = {k: have[k] for k in ("kind", "status", "reason", "written", "value_quarters", "duration_quarters")}
             if want is not None:
                 row["expected"] = {"kind": want["kind"], "dots": want["dots"], "duration": str(want["duration"])}
+                if "tie" in want:
+                    row["expected"]["tie"] = list(want["tie"])
             rows.append(row)
     total = sum(len(b) for b in truth)
     read = sum(1 for r in rows if r.get("read", {}).get("status") == "read" and "expected" in r)
@@ -105,6 +160,7 @@ def compare(records: dict[str, Any], truth: list[list[dict[str, Any]]]) -> dict[
         "summary": {
             "ground_truth_bars": len(truth), "read_bars": records["summary"]["bars"],
             "ground_truth_events": total, "read_events": read, "matched_events": matched,
+            "ground_truth_tied_events": sum(1 for b in truth for e in b if any(e.get("tie", ()))),
             "coverage": round(read / total, 4) if total else None,
             "match_rate": round(matched / total, 4) if total else None,
             "match_rate_of_read": round(matched / read, 4) if read else None,
@@ -131,14 +187,21 @@ def main(argv: list[str] | None = None) -> int:
 
     declared = tuple(int(p) for p in args.time_signature.split("/")) if args.time_signature else None
     records = read_note_durations(args.pdf, time_signature=declared)
-    result = compare(records, ground_truth(args.gp))
+    oracle = load_oracle()
+    try:
+        truth, reader = ground_truth(args.gp), "native_slice_reference"
+    except oracle.ReferenceError as exc:
+        # The reference reader refuses features outside its allowlist (tuplets, ties).
+        truth, reader = rhythm_ground_truth(args.gp), f"rhythm_only (reference refused: {exc.code})"
+    result = compare(records, truth)
+    result["summary"]["ground_truth_reader"] = reader
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "note-durations.json").write_text(json.dumps(records, indent=2) + "\n", encoding="utf-8")
     (args.out / "comparison.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     (args.out / "summary.json").write_text(json.dumps(result["summary"], indent=2) + "\n", encoding="utf-8")
     s = result["summary"]
-    print(json.dumps({k: s[k] for k in ("ground_truth_events", "read_events", "matched_events", "coverage",
-                                         "match_rate", "first_system", "causes")}, indent=2))
+    print(json.dumps({k: s[k] for k in ("ground_truth_reader", "ground_truth_events", "read_events", "matched_events",
+                                         "coverage", "match_rate", "first_system", "causes")}, indent=2))
     return 0
 
 

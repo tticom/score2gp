@@ -85,6 +85,7 @@ DOT_NEXT_GAP_SPACES = 1.0
 DOT_HEIGHT_TOLERANCE_SPACES = 0.75
 ARC_MIN_WIDTH_SPACES = 1.5
 ARC_MAX_HEIGHT_SPACES = 1.3
+ARC_MAX_FILL_RATIO = 0.45  # below NOTEHEAD_MIN_FILL_RATIO: a crescent, never an oval
 TIE_END_REACH_SPACES = 1.0
 TIE_SAME_POSITION_SPACES = 0.25
 TIE_VERTICAL_REACH_SPACES = 1.6
@@ -107,6 +108,7 @@ REST_VERTICAL_REACH_SPACES = 2.0
 TUPLET_BRACKET_REACH_SPACES = 1.5
 TUPLET_BRACKET_OVERLAP_SPACES = 0.3
 TUPLET_NUMBER_BEAM_REACH_SPACES = 2.5
+LABEL_GAP_SPACES = 1.0
 SCAN_SAMPLES = 16
 # An oval fills pi/4 of its box, less when tilted; a tie crescent of notehead size fills about 0.3.
 NOTEHEAD_MIN_FILL_RATIO = 0.5
@@ -503,8 +505,9 @@ def _is_beam(glyph: Glyph, space: float) -> bool:
 
 
 def _is_arc(glyph: Glyph, space: float) -> bool:
+    """A tie or slur: a thin filled crescent, which leaves most of its box unpainted."""
     return (glyph.curved and glyph.filled and glyph.w >= ARC_MIN_WIDTH_SPACES * space
-            and glyph.h <= ARC_MAX_HEIGHT_SPACES * space and glyph.h < 0.5 * glyph.w)
+            and glyph.h <= ARC_MAX_HEIGHT_SPACES * space and _fill_ratio(glyph) <= ARC_MAX_FILL_RATIO)
 
 
 def _attach_heads(stem: Stem, heads: list[Glyph]) -> None:
@@ -1068,7 +1071,14 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
     for t in digit_texts:
         # A number printed on a barline belongs to the bar starting there.
         bar = next((i for i, (_, end) in enumerate(bars) if t.cx <= end), None)
-        if bar is not None and t.cx < first_x_in_bar.get(bar, math.inf) and t.bbox[3] <= staff.top:
+        if bar is not None and t.cx < first_x_in_bar.get(bar, math.inf) and t.cy < staff.top:
+            continue
+        # A number touching other text on its line is part of a label (a chord name such as
+        # "Cm7(flat)5"), never a tuplet number.
+        if any(o is not t and abs(o.cy - t.cy) <= 0.5 * s and (0 <= t.bbox[0] - o.bbox[2] <= LABEL_GAP_SPACES * s
+                                                              or 0 <= o.bbox[0] - t.bbox[2] <= LABEL_GAP_SPACES * s)
+               for o in symbols.texts):
+            state["diagnostics"]["label_numbers"] += 1
             continue
         tuplet_digits.append(t)
 
@@ -1154,24 +1164,30 @@ def _event_bbox(event: dict[str, Any]) -> tuple[float, float, float, float]:
 
 
 def _tie_ends(arc: Glyph, events: list[dict[str, Any]], space: float):
+    """(start, stop) events joined by a tie arc, (start, None) when it runs on past the system, or None.
+
+    A tie leaves a notehead (after its dots, if any) and ends at the same staff position on the very
+    next event. An arc that ends at another pitch, or skips an event, is a slur: not a tie.
+    """
     reach = TIE_END_REACH_SPACES * space
     notes = [(e, h) for e in events for h in e.get("_heads", [])]
 
-    def near_height(h: Glyph) -> bool:
-        return abs(h.cy - arc.cy) <= TIE_VERTICAL_REACH_SPACES * space
+    def right_edge(event: dict[str, Any], head: Glyph) -> float:
+        dots = [d.bbox[2] for row in event.get("_dots", []) for d in row if abs(d.cy - head.cy) <= DOT_HEIGHT_TOLERANCE_SPACES * space]
+        return max([head.bbox[2], *dots])
 
-    starts = [(e, h) for e, h in notes if h.bbox[0] - 0.3 * space <= arc.bbox[0] <= h.bbox[2] + reach and near_height(h)]
+    starts = [(e, h) for e, h in notes if h.bbox[0] - 0.3 * space <= arc.bbox[0] <= right_edge(e, h) + reach
+              and abs(h.cy - arc.cy) <= TIE_VERTICAL_REACH_SPACES * space]
     if len(starts) != 1:
         return None
     start, head = starts[0]
-    stops = [(e, h) for e, h in notes if e is not start and h.bbox[0] - reach <= arc.bbox[2] <= h.bbox[2] + 0.3 * space
-             and abs(h.cy - head.cy) <= TIE_SAME_POSITION_SPACES * space]
-    if len(stops) == 1:
+    following = sorted((e for e in events if e["_cx"] > start["_cx"]), key=lambda e: e["_cx"])
+    ends_at = [(e, h) for e, h in notes if e is not start and h.bbox[0] - reach <= arc.bbox[2] <= h.bbox[2] + 0.3 * space]
+    if not ends_at:
+        return (start, None) if not following else None
+    stops = [(e, h) for e, h in ends_at if abs(h.cy - head.cy) <= TIE_SAME_POSITION_SPACES * space]
+    if len(stops) == 1 and following and stops[0][0] is following[0]:
         return start, stops[0][0]
-    if not stops and not any(h.bbox[0] - reach <= arc.bbox[2] <= h.bbox[2] + 0.3 * space for _, h in notes):
-        later = [e for e, _ in notes if e["_cx"] > start["_cx"]]
-        if not later:
-            return start, None
     return None
 
 
@@ -1292,7 +1308,7 @@ def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = No
     systems = []
     bar_signatures: dict[int, dict[str, Any] | None] = {}
     state: dict[str, Any] = {"bar_offset": 0, "system_number": 0, "time_signature": None,
-                             "diagnostics": {"ignored_symbols": 0, "arcs_not_ties": 0, "unassociated_numbers": 0,
+                             "diagnostics": {"ignored_symbols": 0, "arcs_not_ties": 0, "unassociated_numbers": 0, "label_numbers": 0,
                                              "pages_without_notation_staff": 0}}
     declared = {"value": time_signature, "source": "caller_declared", "sources": []} if time_signature else None
     with pymupdf.open(path) as doc:
