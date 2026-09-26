@@ -63,6 +63,7 @@ STAFF_LINE_MERGE_GAP_PT = 20.0  # TAB lines are interrupted around fret numbers
 # A staff line is mostly ink along its span (TAB lines about 0.8 despite fret-number gaps); a chain
 # of ledger lines at one height is about 0.3.
 STAFF_LINE_MIN_COVERAGE = 0.6
+STAFF_LINE_END_TOLERANCE_PT = 3.0
 STAFF_GAP_TOLERANCE = 0.03  # relative spacing tolerance between the lines of one staff
 ZONE_REACH_SPACES = 8.0
 BARLINE_END_TOLERANCE_SPACES = 0.15
@@ -95,10 +96,13 @@ REST_QUARTER = {"min_w": 0.7, "max_w": 1.5, "min_h": 2.2, "max_h": 3.6}
 # A quarter rest is one zigzag stroke: nearly every horizontal scan crosses it once (its foot curls,
 # so a few cross twice). Sharps and naturals cross two or three times on most scans.
 QUARTER_REST_SINGLE_RUN_SHARE = 0.75
-REST_STEM_MIN_LENGTH_SPACES = 1.2
-REST_STEM_SLANT = (0.15, 0.8)  # horizontal run per unit of height of a hooked rest's stem
-REST_STEM_MIN_HEIGHT_SHARE = 0.8
-REST_WINDOW = {"min_w": 0.6, "max_w": 2.2, "min_h": 0.3, "max_h": 6.0}
+REST_STEM_SLANT = (0.15, 0.8)  # a hooked rest's stem: leftward drop of its right edge per unit of height
+REST_ROW_STEP_SPACES = 0.05
+REST_EDGE_HYSTERESIS_SPACES = 0.1
+REST_STEM_MARGIN_SPACES = 0.05
+REST_HOOK_MIN_HEIGHT_SPACES = 0.2
+REST_STEM_TOP_SHARE = 0.3  # a hooked rest's stem top lies in the upper part of the glyph
+REST_WINDOW = {"min_w": 0.6, "max_w": 2.6, "min_h": 0.3, "max_h": 6.0}
 REST_VERTICAL_REACH_SPACES = 2.0
 TUPLET_BRACKET_REACH_SPACES = 1.5
 TUPLET_BRACKET_OVERLAP_SPACES = 0.3
@@ -433,7 +437,9 @@ def find_staves(symbols: PageSymbols) -> tuple[list[Staff], list[Staff]]:
             if j in used:
                 continue
             other = lines[j]
-            if min(other["x1"], first["x1"]) - max(other["x0"], first["x0"]) < 0.5 * (first["x1"] - first["x0"]):
+            # The lines of one staff start and end together; a chain of tuplet-bracket or ledger
+            # pieces at a staff-line height does not.
+            if abs(other["x0"] - first["x0"]) > STAFF_LINE_END_TOLERANCE_PT or abs(other["x1"] - first["x1"]) > STAFF_LINE_END_TOLERANCE_PT:
                 continue
             step = other["y"] - lines[run[-1]]["y"]
             if gap is None:
@@ -635,36 +641,90 @@ def _augmentation_dots(anchors: list[tuple[float, float, float, float]], dots: l
 
 # --- rests ----------------------------------------------------------------------------------
 
-def _long_slanted_edge(glyph: Glyph, space: float) -> bool:
-    """True when a straight edge runs the glyph's height, rising to the right: a hooked rest's stem.
-
-    The stem spans nearly the whole glyph; the sides of an arrowhead or a sharp's bars do not.
-    """
-    lo, hi = REST_STEM_SLANT
-    for item in glyph.drawing.get("items", []):
-        if item and item[0] == "l":
-            (ax, ay), (bx, by) = (float(item[1].x), float(item[1].y)), (float(item[2].x), float(item[2].y))
-            dx, dy = abs(bx - ax), abs(by - ay)
-            length = math.hypot(dx, dy)
-            if length < max(REST_STEM_MIN_LENGTH_SPACES * space, REST_STEM_MIN_HEIGHT_SHARE * glyph.h) or dy == 0:
-                continue
-            upper, lower = ((ax, ay), (bx, by)) if ay < by else ((bx, by), (ax, ay))
-            if lo <= dx / dy <= hi and upper[0] > lower[0]:
-                return True
-    return False
-
-
-def _hook_bands(glyph: Glyph, space: float) -> int:
-    """Height bands where a horizontal scan crosses the glyph more than once (a hook beside the stem)."""
-    steps = max(SCAN_SAMPLES, int(glyph.h / (0.05 * space)))
-    bands, inside = 0, False
+def _rows(glyph: Glyph, space: float) -> list[tuple[float, list[tuple[float, float]]]]:
+    """Painted runs on horizontal scans every REST_ROW_STEP_SPACES down the glyph."""
+    steps = max(SCAN_SAMPLES, int(glyph.h / (REST_ROW_STEP_SPACES * space)))
+    out = []
     for k in range(steps):
         y = glyph.bbox[1] + (k + 0.5) * glyph.h / steps
-        multiple = len(_runs(glyph.shape, False, y, glyph.bbox[0] - 1, glyph.bbox[2] + 1)) >= 2
-        if multiple and not inside:
-            bands += 1
-        inside = multiple
-    return bands
+        out.append((y, _runs(glyph.shape, False, y, glyph.bbox[0] - 1, glyph.bbox[2] + 1)))
+    return out
+
+
+def _stem_top(rows: list[tuple[float, list[tuple[float, float]]]]) -> int | None:
+    """Index of the scan where the glyph's right edge is furthest right: a hooked rest's stem top.
+
+    The first hook's ball may rise above the stem, so rows above this one have no stem in them.
+    """
+    edges = [(runs[-1][1], k) for k, (_, runs) in enumerate(rows) if runs]
+    if not edges:
+        return None
+    best = max(edge for edge, _ in edges)
+    return min(k for edge, k in edges if edge == best)
+
+
+def _right_edge_reversals(rows: list[tuple[float, list[tuple[float, float]]]], space: float,
+                          start: int = 0) -> tuple[int, float]:
+    """Direction changes of the glyph's right edge down its height from ``start``, and its net drop.
+
+    A zigzag stroke (a quarter rest) reverses; a hooked rest's slanted stem keeps descending to the
+    left. Changes smaller than REST_EDGE_HYSTERESIS_SPACES are ignored.
+    """
+    edges = [runs[-1][1] for _, runs in rows[start:] if runs]
+    if len(edges) < 2:
+        return 0, 0.0
+    reversals, direction, anchor = 0, 0, edges[0]
+    for x in edges[1:]:
+        delta = x - anchor
+        if abs(delta) < REST_EDGE_HYSTERESIS_SPACES * space:
+            continue
+        step = 1 if delta > 0 else -1
+        if direction and step != direction:
+            reversals += 1
+        direction, anchor = step, x
+    return reversals, edges[0] - edges[-1]
+
+
+def _hooks_beside_stem(rows: list[tuple[float, list[tuple[float, float]]]], space: float, start: int = 0) -> int:
+    """Hooks of a hooked rest: the separate painted pieces left of its stem.
+
+    The stem is the band just inside the right edge from its top (``start``) down, as thick as the
+    stem where it stands alone. With the stem removed, each hook (its ball and arm) is one piece;
+    pieces are joined across successive scans where their runs overlap.
+    """
+    alone = [runs[-1][1] - runs[-1][0] for _, runs in rows[start:] if len(runs) == 1]
+    if not alone:
+        return 0
+    stem = min(alone) + REST_STEM_MARGIN_SPACES * space
+    pieces: list[dict[str, Any]] = []
+    previous: list[tuple[tuple[float, float], dict[str, Any]]] = []
+    for k, (y, runs) in enumerate(rows):
+        cut = runs[-1][1] - stem if runs and k >= start else math.inf
+        current = []
+        for a, b in runs:
+            b = min(b, cut)
+            if b - a <= 0:
+                continue
+            joined = [piece for (pa, pb), piece in previous if a <= pb and pa <= b]
+            roots = []
+            for piece in joined:
+                while piece.get("merged"):
+                    piece = piece["merged"]
+                if piece not in roots:
+                    roots.append(piece)
+            if roots:
+                piece = roots[0]
+                for other in roots[1:]:
+                    other["merged"] = piece
+                    piece["y0"] = min(piece["y0"], other["y0"])
+            else:
+                piece = {"y0": y}
+                pieces.append(piece)
+            piece["y1"] = y
+            current.append(((a, b), piece))
+        previous = current
+    roots = [p for p in pieces if not p.get("merged")]
+    return sum(1 for p in roots if p["y1"] - p["y0"] >= REST_HOOK_MIN_HEIGHT_SPACES * space)
 
 
 def _rest_glyph(glyph: Glyph, staff: Staff) -> str | None:
@@ -681,20 +741,27 @@ def _rest_glyph(glyph: Glyph, staff: Staff) -> str | None:
             if hangs != sits:
                 return "whole" if hangs else "half"
             return "unidentified"
-    q = REST_QUARTER
-    slanted = _long_slanted_edge(glyph, s)
-    if q["min_w"] <= w <= q["max_w"] and q["min_h"] <= h <= q["max_h"] and not slanted:
-        rows = _row_counts(glyph)
-        if rows.count(1) >= QUARTER_REST_SINGLE_RUN_SHARE * len(rows) and _column_counts(glyph, (0.5,))[0] >= 2:
-            return "quarter"
-    if slanted:
-        hooks = _hook_bands(glyph, s)
-        if 1 <= hooks <= 4:
-            return FLAGGED_VALUES[hooks]
     r = REST_WINDOW
-    if r["min_w"] <= w <= r["max_w"] and r["min_h"] <= h <= r["max_h"]:
-        return "unidentified"
-    return None
+    if not (r["min_w"] <= w <= r["max_w"] and r["min_h"] <= h <= r["max_h"]):
+        return None
+    rows = _rows(glyph, s)
+    top = _stem_top(rows)
+    lo, hi = REST_STEM_SLANT
+    if top is not None and top <= REST_STEM_TOP_SHARE * len(rows):
+        reversals, drop = _right_edge_reversals(rows, s, top)
+        stem_height = rows[-1][0] - rows[top][0]
+        if reversals == 0 and stem_height > 0 and lo * stem_height <= drop <= hi * stem_height:
+            hooks = _hooks_beside_stem(rows, s, top)
+            if 1 <= hooks <= 4:
+                return FLAGGED_VALUES[hooks]
+            return "unidentified"
+    reversals, _ = _right_edge_reversals(rows, s)
+    q = REST_QUARTER
+    if q["min_w"] <= w <= q["max_w"] and q["min_h"] <= h <= q["max_h"] and reversals >= 2:
+        counts = _row_counts(glyph)
+        if counts.count(1) >= QUARTER_REST_SINGLE_RUN_SHARE * len(counts) and _column_counts(glyph, (0.5,))[0] >= 2:
+            return "quarter"
+    return "unidentified"
 
 
 # --- tuplets and time signatures ------------------------------------------------------------
