@@ -203,23 +203,23 @@ def test_cli_writes_records_under_the_chosen_directory(tmp_path):
 
 # --- mutation checks: each mutant must make the fixture expectations fail -------------------------
 
-def _any_fixture_fails() -> bool:
-    return any(_mismatches(name) for name in EXPECTED)
+def _failing_fixtures() -> set[str]:
+    return {name for name in EXPECTED if _mismatches(name)}
 
 
 def test_mutation_flag_identification_replaced_by_segment_count(monkeypatch):
     monkeypatch.setattr(nd, "_flag_hooks", lambda glyph, stem, space: len(glyph.drawing["items"]))
-    assert _any_fixture_fails()
+    assert {"dotted", "rests"} <= _failing_fixtures()
 
 
 def test_mutation_dots_ignored(monkeypatch):
     monkeypatch.setattr(nd, "_augmentation_dots", lambda *args, **kwargs: [])
-    assert _any_fixture_fails()
+    assert {"dotted", "mixed_beams", "tie_across_barline"} <= _failing_fixtures()
 
 
 def test_mutation_tuplets_ignored(monkeypatch):
     monkeypatch.setattr(nd, "_read_tuplets", lambda *args, **kwargs: ([], []))
-    assert _any_fixture_fails()
+    assert "triplet" in _failing_fixtures()
 
 
 def test_mutation_values_from_the_number_of_events_in_a_group(monkeypatch):
@@ -230,4 +230,4 @@ def test_mutation_values_from_the_number_of_events_in_a_group(monkeypatch):
         return real(dict(parts, beam_count=max(1, round(math.log2(size))))) if size else real(parts)
 
     monkeypatch.setattr(nd, "_written_value", by_group_size)
-    assert _any_fixture_fails()
+    assert "mixed_beams" in _failing_fixtures()

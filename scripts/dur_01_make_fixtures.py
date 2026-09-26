@@ -232,11 +232,13 @@ class Score:
         def draw(sh: pymupdf.Shape) -> None:
             _polygon(sh, [(sx(top), top), (sx(top) + 0.2 * S, top), (sx(bottom) + 0.2 * S, bottom), (sx(bottom), bottom)])
             for k in range(hooks):
+                # As engraved: the ball hangs below the arm's outer end; the arm runs over the ball's
+                # top into the stem.
                 hy = top + k * S
                 bx, by = sx(hy) - 0.75 * S, hy + 0.3 * S
-                _ellipse(sh, bx, by, 0.27 * S, 0.27 * S, reverse=_signed_area([(1, 0), (0, 1), (-1, 0)]) < 0)
-                _polygon(sh, [(bx, by - 0.12 * S), (sx(hy) + 0.1 * S, hy), (sx(hy + 0.25 * S) + 0.1 * S, hy + 0.25 * S),
-                              (bx, by + 0.12 * S)])
+                _ellipse(sh, bx, by, 0.27 * S, 0.27 * S)
+                _polygon(sh, [(bx - 0.05 * S, by - 0.27 * S), (sx(hy) + 0.1 * S, hy - 0.05 * S),
+                              (sx(hy + 0.1 * S) + 0.1 * S, hy + 0.1 * S), (bx + 0.1 * S, by - 0.12 * S)])
 
         self.fill(draw)
 
