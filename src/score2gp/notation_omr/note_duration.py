@@ -58,8 +58,11 @@ WRITTEN_VALUES = {
 FLAGGED_VALUES = ["quarter", "eighth", "16th", "32nd", "64th"]  # by flag hooks or beam lines
 
 # Staff and symbol geometry, in staff spaces.
-STAFF_LINE_MIN_LENGTH_PT = 10.0
-STAFF_LINE_MERGE_GAP_PT = 0.5
+STAFF_LINE_MIN_LENGTH_PT = 50.0
+STAFF_LINE_MERGE_GAP_PT = 20.0  # TAB lines are interrupted around fret numbers
+# A staff line is mostly ink along its span (TAB lines about 0.8 despite fret-number gaps); a chain
+# of ledger lines at one height is about 0.3.
+STAFF_LINE_MIN_COVERAGE = 0.6
 STAFF_GAP_TOLERANCE = 0.03  # relative spacing tolerance between the lines of one staff
 ZONE_REACH_SPACES = 8.0
 BARLINE_END_TOLERANCE_SPACES = 0.15
@@ -89,8 +92,12 @@ HEADER_CONTIGUITY_SPACES = 1.5
 ACCIDENTAL_REACH_SPACES = 2.0
 REST_BLOCK = {"min_w": 0.8, "max_w": 1.8, "min_h": 0.3, "max_h": 0.8, "line": 0.12}
 REST_QUARTER = {"min_w": 0.7, "max_w": 1.5, "min_h": 2.2, "max_h": 3.6}
+# A quarter rest is one zigzag stroke: nearly every horizontal scan crosses it once (its foot curls,
+# so a few cross twice). Sharps and naturals cross two or three times on most scans.
+QUARTER_REST_SINGLE_RUN_SHARE = 0.75
 REST_STEM_MIN_LENGTH_SPACES = 1.2
 REST_STEM_SLANT = (0.15, 0.8)  # horizontal run per unit of height of a hooked rest's stem
+REST_STEM_MIN_HEIGHT_SHARE = 0.8
 REST_WINDOW = {"min_w": 0.6, "max_w": 2.2, "min_h": 0.3, "max_h": 6.0}
 REST_VERTICAL_REACH_SPACES = 2.0
 TUPLET_BRACKET_REACH_SPACES = 1.5
@@ -385,10 +392,21 @@ def _tokens(chars: list[dict[str, Any]], size: float) -> list[list[dict[str, Any
     return trimmed
 
 
+def _coverage(pieces: list[tuple[float, float]]) -> float:
+    """Length covered by the union of intervals."""
+    total, end = 0.0, -math.inf
+    for a, b in sorted(pieces):
+        if b > end:
+            total += b - max(a, end)
+            end = b
+    return total
+
+
 def find_staves(symbols: PageSymbols) -> tuple[list[Staff], list[Staff]]:
     """Five-line notation staves and six-line TAB staves: runs of equally spaced long horizontals."""
-    pieces = sorted((s for s in symbols.segments if s.horizontal and abs(s.x1 - s.x0) >= STAFF_LINE_MIN_LENGTH_PT),
-                    key=lambda s: ((s.y0 + s.y1) / 2, min(s.x0, s.x1)))
+    # Every horizontal piece joins the merge, however short: TAB lines are drawn as short pieces
+    # between fret numbers. Only the merged line must be long.
+    pieces = sorted((s for s in symbols.segments if s.horizontal), key=lambda s: ((s.y0 + s.y1) / 2, min(s.x0, s.x1)))
     lines: list[dict[str, Any]] = []
     for s in pieces:
         y, a, b = (s.y0 + s.y1) / 2, min(s.x0, s.x1), max(s.x0, s.x1)
@@ -396,10 +414,12 @@ def find_staves(symbols: PageSymbols) -> tuple[list[Staff], list[Staff]]:
             if abs(line["y"] - y) <= 0.05 and a <= line["x1"] + STAFF_LINE_MERGE_GAP_PT and b >= line["x0"] - STAFF_LINE_MERGE_GAP_PT:
                 line["x0"], line["x1"] = min(line["x0"], a), max(line["x1"], b)
                 line["ids"].append(s.ident)
+                line["pieces"].append((a, b))
                 break
         else:
-            lines.append({"y": y, "x0": a, "x1": b, "ids": [s.ident]})
-    lines = [line for line in lines if line["x1"] - line["x0"] >= 50.0]
+            lines.append({"y": y, "x0": a, "x1": b, "ids": [s.ident], "pieces": [(a, b)]})
+    lines = [line for line in lines if line["x1"] - line["x0"] >= STAFF_LINE_MIN_LENGTH_PT
+             and _coverage(line["pieces"]) >= STAFF_LINE_MIN_COVERAGE * (line["x1"] - line["x0"])]
     lines.sort(key=lambda line: line["y"])
     notation: list[Staff] = []
     tab: list[Staff] = []
@@ -576,8 +596,12 @@ def _flags_at_stem(stem: Stem, candidates: list[Glyph], space: float) -> list[Gl
 
 
 def _augmentation_dots(anchors: list[tuple[float, float, float, float]], dots: list[Glyph], claimed: set[str],
-                       space: float, rest: bool = False) -> list[Glyph]:
-    """Dots in a row to the right of the event's noteheads (or rest), each at the anchor's height."""
+                       space: float, rest: bool = False) -> list[list[Glyph]]:
+    """The row of dots to the right of each notehead of the event (or of its rest).
+
+    Each dot adds half the previous value. A chord's noteheads are dotted together, so the count is
+    the length of a row, not the number of dot glyphs.
+    """
     rows: list[list[Glyph]] = []
     for x0, y0, x1, y1 in anchors:
         cy = (y0 + y1) / 2
@@ -604,26 +628,28 @@ def _augmentation_dots(anchors: list[tuple[float, float, float, float]], dots: l
             nearest = min(options, key=lambda d: d.bbox[0])
             row.append(nearest)
             edge = nearest.bbox[2]
-        rows.append(row)
-    found: dict[str, Glyph] = {}
-    for row in rows:
-        for dot in row:
-            found[dot.ident] = dot
-    if not found:
-        return []
-    count = max(len(row) for row in rows)
-    ordered = sorted(found.values(), key=lambda d: (d.bbox[0], d.bbox[1]))
-    return ordered if len(ordered) >= count else ordered[:count]
+        if row:
+            rows.append(row)
+    return rows
 
 
 # --- rests ----------------------------------------------------------------------------------
 
 def _long_slanted_edge(glyph: Glyph, space: float) -> bool:
+    """True when a straight edge runs the glyph's height, rising to the right: a hooked rest's stem.
+
+    The stem spans nearly the whole glyph; the sides of an arrowhead or a sharp's bars do not.
+    """
     lo, hi = REST_STEM_SLANT
     for item in glyph.drawing.get("items", []):
         if item and item[0] == "l":
-            dx, dy = abs(float(item[2].x - item[1].x)), abs(float(item[2].y - item[1].y))
-            if math.hypot(dx, dy) >= REST_STEM_MIN_LENGTH_SPACES * space and dy > 0 and lo <= dx / dy <= hi:
+            (ax, ay), (bx, by) = (float(item[1].x), float(item[1].y)), (float(item[2].x), float(item[2].y))
+            dx, dy = abs(bx - ax), abs(by - ay)
+            length = math.hypot(dx, dy)
+            if length < max(REST_STEM_MIN_LENGTH_SPACES * space, REST_STEM_MIN_HEIGHT_SHARE * glyph.h) or dy == 0:
+                continue
+            upper, lower = ((ax, ay), (bx, by)) if ay < by else ((bx, by), (ax, ay))
+            if lo <= dx / dy <= hi and upper[0] > lower[0]:
                 return True
     return False
 
@@ -658,7 +684,8 @@ def _rest_glyph(glyph: Glyph, staff: Staff) -> str | None:
     q = REST_QUARTER
     slanted = _long_slanted_edge(glyph, s)
     if q["min_w"] <= w <= q["max_w"] and q["min_h"] <= h <= q["max_h"] and not slanted:
-        if set(_row_counts(glyph)) == {1} and _column_counts(glyph, (0.5,))[0] >= 2:
+        rows = _row_counts(glyph)
+        if rows.count(1) >= QUARTER_REST_SINGLE_RUN_SHARE * len(rows) and _column_counts(glyph, (0.5,))[0] >= 2:
             return "quarter"
     if slanted:
         hooks = _hook_bands(glyph, s)
@@ -972,7 +999,8 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
             first_x_in_bar[e["_bar"]] = min(first_x_in_bar.get(e["_bar"], math.inf), box[0])
     tuplet_digits = []
     for t in digit_texts:
-        bar = next((i for i, (a, b) in enumerate(bars) if a <= t.cx <= b), None)
+        # A number printed on a barline belongs to the bar starting there.
+        bar = next((i for i, (_, end) in enumerate(bars) if t.cx <= end), None)
         if bar is not None and t.cx < first_x_in_bar.get(bar, math.inf) and t.bbox[3] <= staff.top:
             continue
         tuplet_digits.append(t)
@@ -989,9 +1017,9 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
                 event["_beam_group"] = group_ids[root]
                 event["_beam_group_size"] = len(group_members[root])
         anchors = [h.bbox for h in event.get("_heads", [])] or [event["_rest"].bbox]
-        found = _augmentation_dots(anchors, dots, claimed, s, rest="_rest" in event)
-        claimed.update(d.ident for d in found)
-        event["_dots"] = found
+        rows = _augmentation_dots(anchors, dots, claimed, s, rest="_rest" in event)
+        claimed.update(d.ident for row in rows for d in row)
+        event["_dots"] = rows
 
     group_info = []
     for root, members in group_members.items():
@@ -1085,7 +1113,8 @@ def _record(event: dict[str, Any], staff: Staff, state: dict[str, Any], bar: int
     bar_index = state["bar_offset"] + bar
     location = {"page_index": staff.page_index, "system_index": state["system_index"], "bar_index": bar_index,
                 "event_index": index, "bbox": [round(v, 3) for v in _event_bbox(event)]}
-    dots = event["_dots"]
+    dot_rows = event["_dots"]
+    dot_count = max((len(row) for row in dot_rows), default=0)
     tie = event.get("_tie", {"start": False, "stop": False, "sources": []})
     record: dict[str, Any] = {
         "page_index": staff.page_index, "system_index": state["system_index"], "system_number": state["system_number"],
@@ -1093,13 +1122,15 @@ def _record(event: dict[str, Any], staff: Staff, state: dict[str, Any], bar: int
         "kind": "rest", "status": "read", "reason": None, "location": location,
         "notehead": None, "stem": None, "flags": {"count": 0, "glyphs": []},
         "beams": {"count": 0, "sources": [], "group": None, "group_size": 0},
-        "dots": {"count": len(dots), "sources": [d.ident for d in dots]},
+        "dots": {"count": dot_count, "sources": sorted({d.ident for row in dot_rows for d in row})},
         "rest": None, "tuplet": event.get("_tuplet"), "tie": tie,
         "written": None, "value_quarters": None, "duration_quarters": None,
     }
     parts = {"kind": "rest", "head_kind": None, "has_stem": False, "flag_hooks": 0, "beam_count": 0,
              "beam_group_size": 0, "rest_glyph": None}
     reason = event.get("_unread")
+    if len({len(row) for row in dot_rows}) > 1:
+        reason = reason or "dot_rows_disagree"
     if "_rest" in event:
         glyph = event["_rest"]
         record["rest"] = {"glyph": event["_rest_kind"] if event["_rest_kind"] in WRITTEN_VALUES else None,
@@ -1144,7 +1175,7 @@ def _record(event: dict[str, Any], staff: Staff, state: dict[str, Any], bar: int
         record["status"] = "unread"
         record["reason"] = reason
         return record
-    value = WRITTEN_VALUES[written] * (2 - Fraction(1, 2 ** len(dots)))
+    value = WRITTEN_VALUES[written] * (2 - Fraction(1, 2 ** dot_count))
     duration = value
     if record["tuplet"]:
         duration = value * Fraction(record["tuplet"]["normal"], record["tuplet"]["actual"])
