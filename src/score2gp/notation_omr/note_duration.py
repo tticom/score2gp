@@ -69,6 +69,7 @@ ZONE_REACH_SPACES = 8.0
 BARLINE_END_TOLERANCE_SPACES = 0.15
 BARLINE_MAX_WIDTH_SPACES = 1.0
 BARLINE_CLUSTER_SPACES = 1.5
+THICK_BARLINE_MIN_FILL_RATIO = 0.95
 STEM_MAX_WIDTH_SPACES = 0.3
 STEM_MIN_LENGTH_SPACES = 1.5
 BEAM_MIN_WIDTH_SPACES = 0.5
@@ -767,6 +768,19 @@ def _rest_glyph(glyph: Glyph, staff: Staff) -> str | None:
     return "unidentified"
 
 
+def _is_thick_barline(glyph: Glyph, staff: Staff) -> bool:
+    """The thick line of a final or repeat barline: a solid upright band from the top staff line to
+    the bottom one. No rest has that form."""
+    s = staff.space
+    tol = BARLINE_END_TOLERANCE_SPACES * s
+    if not glyph.filled or glyph.curved or glyph.w > BARLINE_MAX_WIDTH_SPACES * s:
+        return False
+    if abs(glyph.bbox[1] - staff.top) > tol or abs(glyph.bbox[3] - staff.bottom) > tol:
+        return False
+    return (set(_row_counts(glyph)) == {1} and set(_column_counts(glyph, (0.2, 0.5, 0.8))) == {1}
+            and _fill_ratio(glyph) >= THICK_BARLINE_MIN_FILL_RATIO)
+
+
 # --- tuplets and time signatures ------------------------------------------------------------
 
 def _tuplet_ratio(text: str) -> tuple[int, int] | None:
@@ -1028,27 +1042,42 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
                                    "source": "text_glyphs", "sources": time_signature["sources"]}
         digit_texts = [t for t in digit_texts if t.ident not in time_signature["sources"]]
 
-    ignored = []
+    # Every other glyph after the header is a rest, a located unread event, or a symbol classified
+    # (and counted) as something else. Nothing that could be a rest is dropped silently.
+    ignored: dict[str, int] = {}
     head_boxes = [h.bbox for h in heads]
     for g in glyphs:
         if g.ident in head_ids | dot_ids | attached_beam_ids | flag_ids | arc_ids or g.bbox[2] <= header_end:
             continue
+        # Rests stand within reach of the staff; beyond it are tempo marks, text symbols and the like.
         if not (staff.top - REST_VERTICAL_REACH_SPACES * s <= g.bbox[1] and g.bbox[3] <= staff.bottom + REST_VERTICAL_REACH_SPACES * s):
+            ignored["outside_rest_reach"] = ignored.get("outside_rest_reach", 0) + 1
             continue
         # Accidentals sit just left of a notehead; articulations sit over or under one.
         if any(b[0] - g.bbox[2] <= ACCIDENTAL_REACH_SPACES * s and g.bbox[2] <= b[0] + 0.1 * s
                and g.bbox[1] <= b[3] and b[1] <= g.bbox[3] for b in head_boxes):
-            ignored.append(g.ident)
-            continue
-        if any(g.bbox[0] <= b[2] and b[0] <= g.bbox[2] for b in head_boxes):
-            ignored.append(g.ident)
-            continue
-        if any(st.x - st.half_width <= g.bbox[2] and g.bbox[0] <= st.x + st.half_width and g.bbox[1] <= st.y1 and st.y0 <= g.bbox[3] for st in stems):
-            ignored.append(g.ident)
-            continue
+            beside = "accidental_beside_notehead"
+        elif any(g.bbox[0] <= b[2] and b[0] <= g.bbox[2] for b in head_boxes):
+            beside = "over_or_under_notehead"
+        elif any(st.x - st.half_width <= g.bbox[2] and g.bbox[0] <= st.x + st.half_width and g.bbox[1] <= st.y1 and st.y0 <= g.bbox[3] for st in stems):
+            beside = "touching_stem"
+        else:
+            beside = None
         kind = _rest_glyph(g, staff)
+        if beside:
+            # A glyph whose own form identifies a rest value is a rest even beside a note (another
+            # voice's rest printed over it): never dropped.
+            if kind in WRITTEN_VALUES:
+                events.append({"_rest": g, "_rest_kind": kind, "_cx": g.cx, "_unread": "rest_glyph_beside_note"})
+            else:
+                ignored[beside] = ignored.get(beside, 0) + 1
+            continue
         if kind is None:
-            ignored.append(g.ident)
+            if _is_thick_barline(g, staff):
+                ignored["thick_barline"] = ignored.get("thick_barline", 0) + 1
+            else:
+                events.append({"_rest": g, "_rest_kind": None, "_cx": g.cx, "_kind": "unclassified",
+                               "_unread": "symbol_unclassified"})
             continue
         events.append({"_rest": g, "_rest_kind": kind, "_cx": g.cx})
 
@@ -1154,7 +1183,10 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
         index = per_bar.get(bar, 0)
         per_bar[bar] = index + 1
         records.append(_record(event, staff, state, bar, index, parts_by_stem, head_kind, s))
-    state["diagnostics"]["ignored_symbols"] += len(ignored)
+    by_reason = state["diagnostics"]["ignored_symbols_by_reason"]
+    for reason, count in ignored.items():
+        state["diagnostics"]["ignored_symbols"] += count
+        by_reason[reason] = by_reason.get(reason, 0) + count
     return {"records": records, "bar_count": len(bars), "time_signature": state.get("time_signature")}
 
 
@@ -1217,6 +1249,7 @@ def _record(event: dict[str, Any], staff: Staff, state: dict[str, Any], bar: int
         reason = reason or "dot_rows_disagree"
     if "_rest" in event:
         glyph = event["_rest"]
+        record["kind"] = event.get("_kind", "rest")
         record["rest"] = {"glyph": event["_rest_kind"] if event["_rest_kind"] in WRITTEN_VALUES else None,
                           "source": glyph.ident}
         parts["rest_glyph"] = event["_rest_kind"]
@@ -1309,7 +1342,7 @@ def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = No
     systems = []
     bar_signatures: dict[int, dict[str, Any] | None] = {}
     state: dict[str, Any] = {"bar_offset": 0, "system_number": 0, "time_signature": None,
-                             "diagnostics": {"ignored_symbols": 0, "arcs_not_ties": 0, "unassociated_numbers": 0, "label_numbers": 0,
+                             "diagnostics": {"ignored_symbols": 0, "ignored_symbols_by_reason": {}, "arcs_not_ties": 0, "unassociated_numbers": 0, "label_numbers": 0,
                                              "events_outside_bars": 0, "pages_without_notation_staff": 0}}
     declared = {"value": time_signature, "source": "caller_declared", "sources": []} if time_signature else None
     with pymupdf.open(path) as doc:

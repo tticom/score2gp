@@ -233,3 +233,51 @@ def test_mutation_values_from_the_number_of_events_in_a_group(monkeypatch):
 
     monkeypatch.setattr(nd, "_written_value", by_group_size)
     assert "mixed_beams" in _failing_fixtures()
+
+
+# --- no silent omission: a plausible rest the reader cannot classify stays a located unread event ---
+
+def test_a_rest_the_classifier_rejects_stays_a_located_unread_event(monkeypatch):
+    """The reviewer's probe: reject one valid rest in rests.pdf; the event must not vanish."""
+    real = nd._rest_glyph
+    rejected: list[str] = []
+
+    def reject_the_quarter_rest(glyph, staff):
+        kind = real(glyph, staff)
+        if kind == "quarter" and not rejected:
+            rejected.append(glyph.ident)
+            return None
+        return kind
+
+    monkeypatch.setattr(nd, "_rest_glyph", reject_the_quarter_rest)
+    result = read_note_durations(FIXTURES / "rests.pdf")
+    assert rejected
+    assert result["summary"]["events"] == 8 and result["summary"]["unread_events"] == 1
+    event = _bars(result)[1][1]
+    assert (event["status"], event["reason"], event["kind"]) == ("unread", "symbol_unclassified", "unclassified")
+    assert event["rest"]["source"] == rejected[0] and event["rest"]["glyph"] is None
+    assert event["written"] is None and event["duration_quarters"] is None
+    assert {"page_index", "system_index", "bar_index", "event_index", "bbox"} <= set(event["location"])
+    assert (event["location"]["bar_index"], event["location"]["event_index"]) == (1, 1)
+    assert result["bar_checks"][1]["status"] == "incomplete"
+
+
+def test_unrecognised_rest_forms_are_never_silently_dropped():
+    """A condensed quarter rest and a rest over a whole note are located unread events; the
+    thick final barline is classified as a barline, not read as an event."""
+    result = read_note_durations(FIXTURES / "unrecognised_rest.pdf")
+    bars = _bars(result)
+    assert [(e["kind"], e["status"], e["reason"], e["written"]) for e in bars[0]] == [
+        ("note", "read", None, "quarter"),
+        ("unclassified", "unread", "symbol_unclassified", None),
+        ("note", "read", None, "quarter"),
+        ("note", "read", None, "quarter"),
+    ]
+    assert [(e["kind"], e["status"], e["reason"], e["written"]) for e in bars[1]] == [
+        ("note", "read", None, "whole"),
+        ("rest", "unread", "rest_glyph_beside_note", None),
+    ]
+    assert bars[1][1]["rest"]["glyph"] == "eighth"
+    assert [c["status"] for c in result["bar_checks"]] == ["incomplete", "incomplete"]
+    assert result["diagnostics"]["ignored_symbols_by_reason"] == {"thick_barline": 1}
+    assert result["diagnostics"]["ignored_symbols"] == 1

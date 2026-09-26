@@ -203,8 +203,11 @@ class Score:
             rect = pymupdf.Rect(cx - 0.6 * S, line_y(2) - 0.5 * S, cx + 0.6 * S, line_y(2))
         self.page.draw_rect(rect, color=None, fill=(0, 0, 0), width=0)
 
-    def quarter_rest(self, cx: float) -> None:
-        """A zigzag whose centreline is a function of height: one fill run on every horizontal scan."""
+    def quarter_rest(self, cx: float, width_scale: float = 1.0) -> None:
+        """A zigzag whose centreline is a function of height: one fill run on every horizontal scan.
+
+        ``width_scale`` below 1 condenses it into a form the reader does not recognise as a rest.
+        """
         top = line_y(0) + 0.5 * S
         knots = [(0.0, -0.25), (0.9, 0.35), (1.6, -0.3), (2.3, 0.3), (2.7, -0.15), (3.0, 0.1)]
 
@@ -216,8 +219,8 @@ class Score:
             return knots[-1][1]
 
         ys = [i * 3.0 / 30 for i in range(31)]
-        left = [(cx + (centre(y) - 0.2) * S, top + y * S) for y in ys]
-        right = [(cx + (centre(y) + 0.2) * S, top + y * S) for y in reversed(ys)]
+        left = [(cx + (centre(y) - 0.2) * width_scale * S, top + y * S) for y in ys]
+        right = [(cx + (centre(y) + 0.2) * width_scale * S, top + y * S) for y in reversed(ys)]
         self.fill(lambda sh: _polygon(sh, left + right))
 
     def hooked_rest(self, cx: float, hooks: int) -> None:
@@ -241,6 +244,15 @@ class Score:
                               (sx(hy + 0.1 * S) + 0.1 * S, hy + 0.1 * S), (bx + 0.1 * S, by - 0.12 * S)])
 
         self.fill(draw)
+
+    def final_barline(self) -> None:
+        """A thin barline and a thick one closing the staff: the thick one is a filled glyph."""
+        thick = 0.5 * S
+        self.page.draw_rect(pymupdf.Rect(STAFF_X1 - thick, line_y(0), STAFF_X1, line_y(4)), color=None,
+                            fill=(0, 0, 0), width=0)
+        x = STAFF_X1 - thick - 3.0
+        self.page.draw_rect(pymupdf.Rect(x - BARLINE_W / 2, line_y(0), x + BARLINE_W / 2, line_y(4)), color=None,
+                            fill=(0, 0, 0), width=0)
 
     # --- grouping --------------------------------------------------------------------------
     def tuplet(self, x0: float, x1: float, y: float, number: int, above: bool = True) -> None:
@@ -442,6 +454,25 @@ def ambiguous(doc: pymupdf.Document) -> None:
     note(score, c + EVENT_STEP, 5, "quarter")
 
 
+def unrecognised_rest(doc: pymupdf.Document) -> None:
+    """4/4, two bars, closed by a thin-thick final barline: rests that must never vanish silently.
+
+    Bar 1: a quarter note, a quarter rest condensed into a form the reader does not recognise, two
+    quarter notes. Bar 2: an eighth rest printed over a whole note (a second voice's rest).
+    """
+    bar2 = 200.0
+    score, x = new_score(doc, [bar2], 4, 4)
+    score.bar_number(x - 4, 1)
+    note(score, x + 4, 5, "quarter")
+    score.quarter_rest(x + 4 + EVENT_STEP, width_scale=0.4)
+    note(score, x + 4 + 2 * EVENT_STEP, 5, "quarter")
+    note(score, x + 4 + 3 * EVENT_STEP, 5, "quarter")
+    score.bar_number(bar2, 2)
+    note(score, bar2 + 14, 6, "whole")
+    score.hooked_rest(bar2 + 16, 1)
+    score.final_barline()
+
+
 FIXTURES = {
     "half_and_32nds": half_and_32nds,
     "dotted": dotted,
@@ -450,6 +481,7 @@ FIXTURES = {
     "rests": rests,
     "tie_across_barline": tie_across_barline,
     "ambiguous": ambiguous,
+    "unrecognised_rest": unrecognised_rest,
 }
 
 

@@ -63,8 +63,14 @@ in staff spaces of the staff being read.
     components.
   - *Quarter*: a zigzag right edge, with at least 75% single-run horizontal scans. Sharps and
     naturals do not qualify.
-  - Rest-sized glyphs that match none of these are recorded unread. Accidentals (just left of a
-    notehead), articulations (over a notehead) and the system header are not events.
+  - Rest-sized glyphs that match none of these are recorded unread (`rest_glyph_unidentified`).
+  - No glyph after the header and within two spaces of the staff is dropped silently. Each one is
+    a rest, a located unread event, or a symbol counted in
+    `diagnostics.ignored_symbols_by_reason`. The counted symbols are accidentals just left of a
+    notehead, articulations over or under one, glyphs touching a stem, the solid thick line of a
+    final barline, and glyphs beyond rest reach, such as tempo marks. A glyph whose form names a
+    rest value is a rest even beside a note (`rest_glyph_beside_note`, unread). Any other glyph is
+    an `unclassified` event, recorded unread (`symbol_unclassified`).
 - **Tuplets.** A number with a bracket piece on each side spans the events inside the bracket. A
   bare number spans the one beam group directly beneath it. Several kinds of number are not
   tuplets:
@@ -84,7 +90,8 @@ in staff spaces of the staff being read.
 
 `filled_notehead_without_stem`, `hollow_notehead_with_flag_or_beam`, `flag_and_beam_on_one_stem`,
 `more_than_four_flags_or_beams`, `flag_glyph_unidentified`, `beam_lines_not_separable`,
-`stem_crossing_not_at_tip`, `rest_glyph_unidentified`, `tuplet_number_unassociated`,
+`stem_crossing_not_at_tip`, `rest_glyph_unidentified`, `rest_glyph_beside_note`,
+`symbol_unclassified`, `tuplet_number_unassociated`,
 `overlapping_tuplets`, `mixed_notehead_kinds`, `dot_rows_disagree`, `concurrent_events`.
 
 Each unread record keeps `location` (page, system, bar, event index, bounding box). Its `written`,
@@ -110,7 +117,10 @@ in `tests/test_dur_01_note_durations.py`. Each fixture reads 100% correctly:
 - bracketed eighth and quarter triplets;
 - every rest, whole to 64th;
 - a tie across a barline;
-- ambiguous symbols recorded unread.
+- ambiguous symbols recorded unread;
+- rests in unrecognised forms (a condensed quarter rest, a rest over a whole note) recorded
+  unread, never dropped. The same holds when the classifier rejects a valid rest, and the thick
+  final barline is not an event.
 
 Each mutation check makes the tests fail, and the tests assert it:
 
