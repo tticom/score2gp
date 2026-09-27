@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import zipfile
 from pathlib import Path
@@ -8,6 +9,7 @@ from typer.testing import CliRunner
 import pytest
 
 from score2gp.cli import app
+from score2gp.notation_omr.note_duration import read_note_durations
 from score2gp.build_ir import build_ir_from_tabraw_only, BuildIrInputRiskError
 from score2gp.gp_package import inspect_gp, validate_gp, write_gp
 from score2gp.pdf_staff_detection import (
@@ -18,7 +20,6 @@ from score2gp.pdf_staff_detection import (
 from score2gp.pdf_staff_notation_diagnostics import (
     build_notation_diagnostics,
 )
-from score2gp.pdf_tab_bar_assembler import assemble_pdf_tab_bar
 from score2gp.pdf_tab_duration_associator import (
     BeamPrimitiveCandidate,
     FlagPrimitiveCandidate,
@@ -31,9 +32,32 @@ from score2gp.pdf_tab_duration_types import TabDurationEvidence
 from score2gp.tabraw import TabRaw, make_tab_candidate
 
 
+_ROUTE = Path(__file__).with_name("test_dur_02_note_type_route.py")
+_spec = importlib.util.spec_from_file_location("dur_02_route", _ROUTE)
+route = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(route)
+_spec = importlib.util.spec_from_file_location("pdf_tab_route_support", Path(__file__).with_name("test_pdf_tab_route_support.py"))
+support = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(support)
+
+
+def _convert(pdf: Path, workdir: Path, out_gp: Path, json_report: Path):
+    return CliRunner().invoke(app, ["convert", "--pdf", str(pdf), "--pdf-only-tab", "--out", str(out_gp),
+                                    "--work-dir", str(workdir), "--json-report", str(json_report)])
+
+
+def _evidence_names_by_x(tabraw_path: Path, bar_index: int) -> list[str]:
+    data = json.loads(tabraw_path.read_text(encoding="utf-8"))
+    cands = [c for c in data["candidates"] if c.get("kind") == "fret" and c.get("bar_index") == bar_index]
+    return [c["raw"]["duration_evidence"]["duration_name"] for c in sorted(cands, key=lambda c: c["x"])]
+
+
 def test_end_to_end_pdf_to_gp_tracked_public_fixtures(tmp_path: Path) -> None:
-    """Run CLI end-to-end PDF-to-GP conversion across all tracked public PDF-tab fixtures,
-    validating GP package structure, GPIF XML well-formedness, and report statuses.
+    """Run CLI end-to-end conversion across the tracked public PDF-tab fixtures. They print TAB only,
+    with no notation staff, so no duration can be read from a note type: each is refused with a
+    reason code, and no GP package is written. (Before DUR-02 each was written with durations from TAB
+    stems or from the event count; the note-type conversion is asserted end to end in
+    tests/test_dur_02_note_type_route.py.)
     """
     public_fixtures = [
         "generated_pdf_tab_duration.pdf",
@@ -44,130 +68,69 @@ def test_end_to_end_pdf_to_gp_tracked_public_fixtures(tmp_path: Path) -> None:
     for pdf_name in public_fixtures:
         pdf_path = Path(f"tests/fixtures/pdf/{pdf_name}")
         assert pdf_path.exists(), f"Tracked public fixture must exist: {pdf_name}"
-
         out_gp = tmp_path / f"out_{pdf_name}.gp"
-        workdir = tmp_path / f"work_{pdf_name}"
         json_report = tmp_path / f"report_{pdf_name}.json"
-
-        result = CliRunner().invoke(
-            app,
-            [
-                "convert",
-                "--pdf",
-                str(pdf_path),
-                "--pdf-only-tab",
-                "--out",
-                str(out_gp),
-                "--work-dir",
-                str(workdir),
-                "--json-report",
-                str(json_report),
-            ],
-        )
-
-        assert result.exit_code == 0, f"Conversion failed for {pdf_name}: {result.output}"
-        assert out_gp.exists(), f"Output GP package missing for {pdf_name}"
-        assert json_report.exists(), f"JSON report missing for {pdf_name}"
-
+        result = _convert(pdf_path, tmp_path / f"work_{pdf_name}", out_gp, json_report)
+        assert result.exit_code != 0, f"{pdf_name} must be refused: {result.output}"
+        assert not out_gp.exists()
         report = json.loads(json_report.read_text(encoding="utf-8"))
-        assert report.get("status") == "success", f"Report status not success for {pdf_name}: {report}"
-
-        # Validate generated GP package zip container and GPIF XML
-        validation = validate_gp(out_gp)
-        assert validation["is_zip"] is True, f"GP package for {pdf_name} is not a valid zip archive"
-        assert validation["xml_well_formed"] is True, f"GPIF XML in {pdf_name} is not well-formed"
-        assert validation["errors"] == [], f"GP package validation errors for {pdf_name}: {validation['errors']}"
-
-        # Inspect semantic facts from GP package
-        summary = inspect_gp(out_gp)
-        assert summary.get("bar_count", 0) >= 1, f"GP summary for {pdf_name} has invalid bar_count: {summary}"
-        assert summary.get("note_count", 0) >= 1, f"GP summary for {pdf_name} has invalid note_count: {summary}"
-
-        if pdf_name == "generated_pdf_tab_duration.pdf":
-            score_ir_data = json.loads((workdir / "score.ir.json").read_text(encoding="utf-8"))
-            bar1_events = [ev for ev in score_ir_data["bars"][0]["events"] if not ev.get("is_rest")]
-            bar2_events = [ev for ev in score_ir_data["bars"][1]["events"] if not ev.get("is_rest")]
-            assert len(bar1_events) == 4, f"Bar 1 expected 4 note events, got {len(bar1_events)}"
-            for ev in bar1_events:
-                assert ev["timing"]["notated_duration"]["value"] == "quarter"
-                assert ev["timing"]["duration_ticks"] == 960
-
-            assert len(bar2_events) == 8, f"Bar 2 expected 8 note events, got {len(bar2_events)}"
-            assert bar2_events[0]["timing"]["notated_duration"]["value"] == "eighth"
-            assert bar2_events[0]["timing"]["duration_ticks"] == 480
-            assert bar2_events[4]["timing"]["notated_duration"]["value"] == "16th"
-            assert bar2_events[4]["timing"]["duration_ticks"] == 240
-
-            with zipfile.ZipFile(out_gp, "r") as zf:
-                gpif_xml = zf.read("Content/score.gpif").decode("utf-8")
-                assert "<NoteValue>Quarter</NoteValue>" in gpif_xml
-                assert "<NoteValue>Eighth</NoteValue>" in gpif_xml
-                assert "<NoteValue>16th</NoteValue>" in gpif_xml
+        assert report.get("status") == "refused"
+        assert report.get("refusal_code") in {"pdf_only_tab_no_notation_bars", "pdf_only_tab_time_signature_unread"}
 
 
 def test_end_to_end_duration_evidence_propagation_to_scoreir_and_gpif(tmp_path: Path) -> None:
-    """Verify that TabDurationEvidence (quarter, eighth, 16th) propagates from TabRaw through assemble_pdf_tab_bar,
-    ScoreIR timing attributes, and into GPIF XML <Rhythms> elements (<NoteValue>Quarter</NoteValue>, etc.).
-    """
+    """Note-type records (quarter, eighth, 16th) propagate through ScoreIR timing into GPIF <Rhythms>; the TAB
+    evidence each digit carries (all quarters here) is not a duration source. Replaces the old test,
+    which propagated TAB evidence and padded the bar."""
     quarter_ev = TabDurationEvidence(duration_name="quarter", duration_ticks=960, stem_present=True, source="visual_morphology")
-    eighth_ev = TabDurationEvidence(duration_name="eighth", duration_ticks=480, stem_present=True, beam_count=1, source="visual_morphology")
-    sixteenth_ev = TabDurationEvidence(duration_name="16th", duration_ticks=240, stem_present=True, beam_count=2, source="visual_morphology")
-
-    cands = [
-        make_tab_candidate(candidate_id="c1", raw_text="0", page_index=1, system_index=1, staff_index=1, bar_index=1, line_index=1, string=6, bbox_values=(100.0, 150.0, 104.0, 154.0), confidence=1.0, duration_evidence=quarter_ev),
-        make_tab_candidate(candidate_id="c2", raw_text="2", page_index=1, system_index=1, staff_index=1, bar_index=1, line_index=1, string=5, bbox_values=(140.0, 150.0, 144.0, 154.0), confidence=1.0, duration_evidence=eighth_ev),
-        make_tab_candidate(candidate_id="c3", raw_text="7", page_index=1, system_index=1, staff_index=1, bar_index=1, line_index=1, string=1, bbox_values=(180.0, 150.0, 184.0, 154.0), confidence=1.0, duration_evidence=sixteenth_ev),
-    ]
-
-    tabraw = TabRaw(source_pdf="public_test.pdf", pdf_layout_class="drawn", candidates=cands)
+    specs = [support.note(20.0, "quarter"), support.note(60.0, "eighth"), support.note(80.0, "16th"),
+             support.note(90.0, "16th"), support.note(100.0, "half")]
+    cands = []
+    for i, spec in enumerate(specs):
+        d = support.digit(f"c{i}", 0, spec["x"], 6 - i, i)
+        cands.append(make_tab_candidate(candidate_id=d.id, raw_text=d.raw_text, page_index=1, system_index=1, staff_index=1,
+                                        bar_index=1, string=d.string, bbox_values=[d.bbox.x0, d.bbox.y0, d.bbox.x1, d.bbox.y1],
+                                        confidence=1.0, duration_evidence=quarter_ev))
     tabraw_path = tmp_path / "duration_propagation.tabraw.json"
-    tabraw.to_json_file(tabraw_path)
+    TabRaw(source_pdf="public_test.pdf", pdf_layout_class="drawn", candidates=cands).to_json_file(tabraw_path)
 
-    # 1. Build ScoreIR and verify event durations
-    score_ir, _ = build_ir_from_tabraw_only(tabraw_path)
+    score_ir, _ = build_ir_from_tabraw_only(tabraw_path, note_durations=support.records([[specs]]))
     assert len(score_ir.bars) == 1
     events = score_ir.bars[0].events
-    assert events[0].timing.notated_duration.value == "quarter"
-    assert events[0].timing.duration_ticks == 960
-    assert events[1].timing.notated_duration.value == "eighth"
-    assert events[1].timing.duration_ticks == 480
-    assert events[2].timing.notated_duration.value == "16th"
-    assert events[2].timing.duration_ticks == 240
+    assert [(e.timing.notated_duration.value, e.timing.duration_ticks) for e in events] == [
+        ("quarter", 960), ("eighth", 480), ("16th", 240), ("16th", 240), ("half", 1920)]
 
-    # 2. Write GP package and inspect GPIF XML
     gp_path = tmp_path / "duration_propagation.gp"
     write_gp(score_ir, gp_path)
-    assert gp_path.exists()
-
     with zipfile.ZipFile(gp_path, "r") as zf:
         gpif_xml = zf.read("Content/score.gpif").decode("utf-8")
-        assert "<NoteValue>Quarter</NoteValue>" in gpif_xml
-        assert "<NoteValue>Eighth</NoteValue>" in gpif_xml
-        assert "<NoteValue>16th</NoteValue>" in gpif_xml
-
+        for value in ("Quarter", "Eighth", "16th", "Half"):
+            assert f"<NoteValue>{value}</NoteValue>" in gpif_xml
 
 
 def test_conflicting_duration_evidence_mutation_counterexample_fails_closed(tmp_path: Path) -> None:
-    """Verify that a multi-string chord with conflicting duration evidence (quarter vs eighth)
-    fails closed by raising BuildIrInputRiskError with category pdf_only_tab_ambiguous_duration.
-    """
+    """A chord whose noteheads were not read as one value is unread, and with every bar refused the
+    conversion fails closed with the located reason. Conflicting TAB evidence under it decides nothing.
+    Replaces the old test, where the conflicting TAB evidence itself was the refusal."""
     quarter_ev = TabDurationEvidence(duration_name="quarter", duration_ticks=960, stem_present=True, source="visual_morphology")
     eighth_ev = TabDurationEvidence(duration_name="eighth", duration_ticks=480, stem_present=True, source="visual_morphology")
-
-    conflicting_cands = [
-        make_tab_candidate(candidate_id="c1", raw_text="0", page_index=1, system_index=1, staff_index=1, bar_index=1, bbox_values=(100.0, 150.0, 104.0, 154.0), confidence=1.0, string=1, duration_evidence=quarter_ev),
-        make_tab_candidate(candidate_id="c2", raw_text="1", page_index=1, system_index=1, staff_index=1, bar_index=1, bbox_values=(100.0, 164.0, 104.0, 168.0), confidence=1.0, string=2, duration_evidence=eighth_ev),
-    ]
-
-    tabraw = TabRaw(source_pdf="conflict.pdf", pdf_layout_class="drawn", candidates=conflicting_cands)
+    conflicting_cands = []
+    for ident, string, fret, ev in (("c1", 1, 0, quarter_ev), ("c2", 2, 1, eighth_ev)):
+        d = support.digit(ident, 0, 20.0, string, fret)
+        conflicting_cands.append(make_tab_candidate(candidate_id=ident, raw_text=str(fret), page_index=1, system_index=1,
+                                                    staff_index=1, bar_index=1, string=string,
+                                                    bbox_values=[d.bbox.x0, d.bbox.y0, d.bbox.x1, d.bbox.y1],
+                                                    confidence=1.0, duration_evidence=ev))
     tabraw_path = tmp_path / "conflict.tabraw.json"
-    tabraw.to_json_file(tabraw_path)
+    TabRaw(source_pdf="conflict.pdf", pdf_layout_class="drawn", candidates=conflicting_cands).to_json_file(tabraw_path)
 
+    unread = support.records([[[support.note(20.0, "whole", heads=2, unread="mixed_notehead_kinds")]]])
     with pytest.raises(BuildIrInputRiskError) as exc_info:
-        build_ir_from_tabraw_only(tabraw_path)
-
-    assert exc_info.value.category == "pdf_only_tab_ambiguous_duration"
-    assert "Conflicting duration evidence across candidates in chord subgroup" in str(exc_info.value)
+        build_ir_from_tabraw_only(tabraw_path, note_durations=unread)
+    assert exc_info.value.category == "pdf_only_tab_no_bar_written"
+    assert exc_info.value.details["refusal_reasons"] == {"note_duration_event_unread": 1}
+    score, _ = build_ir_from_tabraw_only(tabraw_path, note_durations=support.records([[[support.note(20.0, "whole", heads=2)]]]))
+    assert score.bars[0].events[0].timing.duration_ticks == 3840
 
 
 def test_pdf_tab_duration_extraction_and_association_pipeline() -> None:
@@ -275,58 +238,38 @@ def test_pdf_tab_duration_extraction_and_association_pipeline() -> None:
 
 
 def test_unstemmed_and_mixed_staves_fallback_audit(tmp_path: Path) -> None:
-    """Verify that unstemmed staves (e.g. generated_tiny_tab.pdf) fall back to equal-spacing grid heuristics,
-    and process through TabRaw & assemble_pdf_tab_bar without corruption or timing errors.
-    """
+    """An unstemmed TAB staff (generated_tiny_tab.pdf) gets no duration evidence and no equal-spacing
+    grid: with no notation staff it is refused, and a bar whose notehead is unstemmed in the notation
+    is refused, never written as eighths padded with a rest. Replaces the old fallback audit."""
     pdf_path = Path("tests/fixtures/pdf/generated_tiny_tab.pdf")
     assert pdf_path.exists()
-
-    unstemmed_candidates = [
-        make_tab_candidate(
-            candidate_id=f"tiny-{i}",
-            raw_text="3",
-            page_index=1,
-            bbox_values=(100.0 + i * 40.0, 150.0, 104.0 + i * 40.0, 154.0),
-            confidence=0.8,
-            system_index=1,
-            staff_index=1,
-            bar_index=1,
-            line_index=1,
-            string=1,
-        )
-        for i in range(4)
-    ]
-
-    bar = assemble_pdf_tab_bar(unstemmed_candidates, output_bar_idx=1, track_id="t1")
-    note_events = [ev for ev in bar.events if not ev.is_rest]
-
-    assert len(note_events) == 4
-    for ev in note_events:
-        assert ev.timing.notated_duration.value == "eighth"
-        assert ev.timing.duration_ticks == 480
-
-    # Build ScoreIR from unstemmed candidates
-    tabraw = TabRaw(
-        source_pdf=str(pdf_path),
-        pdf_layout_class="drawn",
-        candidates=unstemmed_candidates,
-    )
-
     tabraw_file = tmp_path / "tiny_tabraw.json"
-    tabraw.to_json_file(tabraw_file)
+    from score2gp.pdf import extract_tab
+    extract_tab(pdf_path, tabraw_file)
+    loaded = TabRaw.from_json_file(tabraw_file)
+    assert all(c.duration_evidence is None for c in loaded.candidates)
+    with pytest.raises(BuildIrInputRiskError) as err:
+        build_ir_from_tabraw_only(tabraw_file, note_durations=read_note_durations(pdf_path, time_signature=(4, 4)))
+    assert err.value.category == "pdf_only_tab_no_notation_bars"
 
-    score_ir, _ = build_ir_from_tabraw_only(tabraw_file)
-    assert len(score_ir.tracks) == 1
-    assert len(score_ir.bars) == 1
-    assert len(score_ir.bars[0].events) == 5  # 4 note events + 1 trailing rest event
+    unstemmed_candidates = [support.digit(f"tiny-{i}", 0, 20.0 + 40.0 * i, 1, 3) for i in range(4)]
+    tabraw = TabRaw(source_pdf=str(pdf_path), pdf_layout_class="drawn", candidates=unstemmed_candidates)
+    synthetic_file = tmp_path / "tiny_synthetic.json"
+    tabraw.to_json_file(synthetic_file)
+    specs = [support.note(20.0 + 40.0 * i, unread="filled_notehead_without_stem" if i == 2 else None) for i in range(4)]
+    with pytest.raises(BuildIrInputRiskError) as err:
+        build_ir_from_tabraw_only(synthetic_file, note_durations=support.records([[specs]]))
+    assert err.value.category == "pdf_only_tab_no_bar_written"
 
 
 def test_privacy_sanitization_and_no_leakage_audit(tmp_path: Path) -> None:
     """Audit privacy sanitization across TabRaw JSON serialization, ScoreIR outputs, and GP packages.
     Asserts zero raw memory pointers (object at 0x) or unhandled private path leakage into public artifacts.
     """
-    sensitive_pdf = tmp_path / "private_fixture_sensitive_input.pdf"
-    sensitive_pdf.write_bytes(Path("tests/fixtures/pdf/generated_pdf_tab_duration.pdf").read_bytes())
+    import shutil
+    import tempfile
+    private_dir = Path(tempfile.mkdtemp(prefix="dur02-private-"))
+    sensitive_pdf = route.clean_pdf(private_dir / "private_fixture_sensitive_input.pdf")
     sensitive_source = str(sensitive_pdf)
 
     quarter_ev = TabDurationEvidence(
@@ -340,7 +283,7 @@ def test_privacy_sanitization_and_no_leakage_audit(tmp_path: Path) -> None:
         candidate_id="cand-priv-01",
         raw_text="5",
         page_index=1,
-        bbox_values=(100.0, 150.0, 104.0, 154.0),
+        bbox_values=(support.event_x(0, 18.0), support.TAB_TOP - 3.0, support.event_x(0, 22.0), support.TAB_TOP + 3.0),
         confidence=0.9,
         system_index=1,
         staff_index=1,
@@ -361,7 +304,7 @@ def test_privacy_sanitization_and_no_leakage_audit(tmp_path: Path) -> None:
 
     # 1. Assert TabRaw JSON structure, schema, and sensitive source path
     loaded = json.loads(tabraw_file.read_text(encoding="utf-8"))
-    assert loaded["schema_version"] == "tabraw.v0.1"
+    assert loaded["schema_version"] == "tabraw.v0.2"
     assert loaded["source_pdf"] == sensitive_source
 
     raw_meta = loaded["candidates"][0]["raw"]
@@ -369,16 +312,17 @@ def test_privacy_sanitization_and_no_leakage_audit(tmp_path: Path) -> None:
     assert raw_meta["duration_evidence"]["duration_name"] == "quarter"
 
     # 2. Build ScoreIR and verify no raw object pointers or unhandled exceptions occur
-    score_ir, diagnostics = build_ir_from_tabraw_only(tabraw_file)
+    whole = support.records([[[support.note(cand.x - support.event_x(0, 0.0), "whole")]]])
+    score_ir, diagnostics = build_ir_from_tabraw_only(tabraw_file, note_durations=whole)
     assert score_ir.schema_version == "0.1.0"
 
     ir_json_str = score_ir.model_dump_json()
     assert "object at 0x" not in ir_json_str
 
     # 3. Perform CLI convert end-to-end directly on the sensitive PDF input fixture and audit output GP package
-    out_gp = tmp_path / "privacy_test.gp"
-    workdir = tmp_path / "privacy_work"
-    report_json = tmp_path / "privacy_report.json"
+    out_gp = private_dir / "privacy_out.gp"
+    workdir = private_dir / "privacy_work"
+    report_json = private_dir / "privacy_report.json"
 
     res = CliRunner().invoke(
         app,
@@ -414,6 +358,7 @@ def test_privacy_sanitization_and_no_leakage_audit(tmp_path: Path) -> None:
             assert "unhandled exception" not in content.lower()
             assert str(sensitive_pdf.resolve()) not in content, f"Sensitive absolute path leaked into GP artifact: {zip_info.filename}"
             assert sensitive_pdf.name not in content, f"Sensitive filename leaked into GP artifact: {zip_info.filename}"
+    shutil.rmtree(private_dir, ignore_errors=True)
 
 
 def test_upward_stem_duration_extraction_and_direction_counterexample(tmp_path: Path) -> None:
@@ -470,20 +415,12 @@ def test_upward_stem_duration_extraction_and_direction_counterexample(tmp_path: 
     tabraw_path = tmp_path / "upward_tabraw.json"
     tabraw.to_json_file(tabraw_path)
 
-    score_ir, _ = build_ir_from_tabraw_only(tabraw_path)
-    evs = score_ir.bars[0].events
-    assert evs[0].timing.notated_duration.value == "quarter"
-    assert evs[1].timing.notated_duration.value == "eighth"
-    assert evs[2].timing.notated_duration.value == "eighth"
-    assert evs[3].timing.notated_duration.value == "16th"
-
-    gp_path = tmp_path / "upward_test.gp"
-    write_gp(score_ir, gp_path)
-    with zipfile.ZipFile(gp_path, "r") as zf:
-        gpif_xml = zf.read("Content/score.gpif").decode("utf-8")
-        assert "<NoteValue>Quarter</NoteValue>" in gpif_xml
-        assert "<NoteValue>Eighth</NoteValue>" in gpif_xml
-        assert "<NoteValue>16th</NoteValue>" in gpif_xml
+    # The evidence alone is no longer a duration: without note-type records the route refuses.
+    with pytest.raises(BuildIrInputRiskError) as err:
+        build_ir_from_tabraw_only(tabraw_path)
+    assert err.value.category == "pdf_only_tab_note_durations_missing"
+    assert [c.duration_evidence.duration_name for c in TabRaw.from_json_file(tabraw_path).candidates] == [
+        "quarter", "eighth", "eighth", "16th"]
 
     # 2. Negative case: forcing wrong direction (is_downward=True) on upward stem geometry
     wrong_stems = [
@@ -561,42 +498,15 @@ def test_multisystem_production_path_stem_direction_inference_and_page_global_co
     workdir = tmp_path / "multisystem_work"
     json_report = tmp_path / "multisystem_report.json"
 
-    res = CliRunner().invoke(
-        app,
-        [
-            "convert",
-            "--pdf",
-            str(pdf_path),
-            "--pdf-only-tab",
-            "--out",
-            str(out_gp),
-            "--work-dir",
-            str(workdir),
-            "--json-report",
-            str(json_report),
-        ],
-    )
-    assert res.exit_code == 0, f"Production CLI conversion failed on multi-system PDF: {res.output}"
-    assert out_gp.exists()
-
-    # Assert ScoreIR contains expected eighth and 16th note durations for System 2 (upward stems)
-    score_ir_data = json.loads((workdir / "score.ir.json").read_text(encoding="utf-8"))
-    assert len(score_ir_data["bars"]) >= 1
-
-    # Bar 2 (System 2 with upward stems)
-    bar2_events = [ev for ev in score_ir_data["bars"][-1]["events"] if not ev.get("is_rest")]
-    assert len(bar2_events) == 4
-    assert bar2_events[0]["timing"]["notated_duration"]["value"] == "quarter"
-    assert bar2_events[1]["timing"]["notated_duration"]["value"] == "eighth"
-    assert bar2_events[2]["timing"]["notated_duration"]["value"] == "16th"
-    assert bar2_events[3]["timing"]["notated_duration"]["value"] == "16th"
-
-    # Assert GPIF package contains expected <NoteValue> tags
-    with zipfile.ZipFile(out_gp, "r") as zf:
-        gpif_xml = zf.read("Content/score.gpif").decode("utf-8")
-        assert "<NoteValue>Quarter</NoteValue>" in gpif_xml
-        assert "<NoteValue>Eighth</NoteValue>" in gpif_xml
-        assert "<NoteValue>16th</NoteValue>" in gpif_xml
+    res = _convert(pdf_path, workdir, out_gp, json_report)
+    # TAB only: no note type to read, so the conversion is refused and nothing is written ...
+    assert res.exit_code != 0 and not out_gp.exists()
+    assert json.loads(json_report.read_text(encoding="utf-8"))["refusal_code"] == "pdf_only_tab_no_notation_bars"
+    # ... but the production extractor still reads System 2's upward stems per system, not page-globally.
+    tabraw_path = workdir / "tab" / "tab_raw.json"
+    last_bar = max(c["bar_index"] for c in json.loads(tabraw_path.read_text(encoding="utf-8"))["candidates"]
+                   if c.get("kind") == "fret")
+    assert _evidence_names_by_x(tabraw_path, last_bar) == ["quarter", "eighth", "16th", "16th"]
 
     # 2. Explicit counterexample demonstrating that the old page-global calculation fails
     all_page_line_ys = [100.0, 110.0, 120.0, 130.0, 140.0, 150.0, 400.0, 410.0, 420.0, 430.0, 440.0, 450.0]
@@ -683,28 +593,12 @@ def test_long_downward_stem_and_containment_gate_counterexample(tmp_path: Path) 
     workdir = tmp_path / "long_stem_work"
     json_report = tmp_path / "long_stem_report.json"
 
-    res = CliRunner().invoke(
-        app,
-        [
-            "convert",
-            "--pdf",
-            str(pdf_path),
-            "--pdf-only-tab",
-            "--out",
-            str(out_gp),
-            "--work-dir",
-            str(workdir),
-            "--json-report",
-            str(json_report),
-        ],
-    )
-    assert res.exit_code == 0
-    score_ir_data = json.loads((workdir / "score.ir.json").read_text(encoding="utf-8"))
-    bar1_events = [ev for ev in score_ir_data["bars"][0]["events"] if not ev.get("is_rest")]
-    assert bar1_events[0]["timing"]["notated_duration"]["value"] == "quarter"
-    assert bar1_events[1]["timing"]["notated_duration"]["value"] == "eighth"
-    assert bar1_events[2]["timing"]["notated_duration"]["value"] == "16th"
-    assert bar1_events[3]["timing"]["notated_duration"]["value"] == "16th"
+    res = _convert(pdf_path, workdir, out_gp, json_report)
+    assert res.exit_code != 0 and not out_gp.exists()
+    tabraw_path = workdir / "tab" / "tab_raw.json"
+    first_bar = min(c["bar_index"] for c in json.loads(tabraw_path.read_text(encoding="utf-8"))["candidates"]
+                    if c.get("kind") == "fret")
+    assert _evidence_names_by_x(tabraw_path, first_bar)[:4] == ["quarter", "eighth", "16th", "16th"]
 
 
 def test_tab_duration_evidence_malformed_invariant_rejection() -> None:
