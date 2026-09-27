@@ -1761,7 +1761,7 @@ def build_ir_from_tabraw_only(
             message=f"PDF-only tab building refused: every one of {summary['source_bars']} bars was refused.",
             details={"refusal_reasons": summary["refusal_reasons"], "note_type_route": note_type_route},
         )
-    placed, _ = place_tab_digits(digits, note_durations["systems"])
+    placed, _ = place_tab_digits(digits, note_durations)
     output_bar_to_frets = {source_bar + 1: bar_digits for source_bar, bar_digits in placed.items()}
 
     warnings_list = [

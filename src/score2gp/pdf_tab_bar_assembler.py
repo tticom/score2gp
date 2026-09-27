@@ -48,15 +48,21 @@ def _column_x(column: Sequence[TabCandidate]) -> float:
     return sum(c.x for c in column) / len(column)
 
 
-def place_tab_digits(digits: Sequence[TabCandidate], systems: Sequence[dict[str, Any]]
+def place_tab_digits(digits: Sequence[TabCandidate], note_durations: dict[str, Any]
                      ) -> tuple[dict[int, list[TabCandidate]], list[TabCandidate]]:
     """Each TAB digit's notation bar (global, zero-based): the nearest notation staff above it on its page,
-    and the bar whose barlines enclose its x. Digits with no such bar are returned apart."""
+    and the bar whose barlines enclose its x. Digits with no such bar are returned apart.
+
+    TabRaw y runs on down the document (each page's height added); note-duration y is per page.
+    """
+    systems = note_durations["systems"]
+    heights = note_durations["source"]["page_heights"]
     by_bar: dict[int, list[TabCandidate]] = {}
     unplaced: list[TabCandidate] = []
     for digit in digits:
         page = (digit.page_index or 1) - 1
-        above = [s for s in systems if s["page_index"] == page and s["staff"]["bottom"] < digit.y]
+        y = digit.y - sum(heights[:page])
+        above = [s for s in systems if s["page_index"] == page and s["staff"]["bottom"] < y]
         if not above:
             unplaced.append(digit)
             continue
@@ -151,12 +157,13 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
             stage="note-type-route",
             message=(f"No time signature is read for {len(unsigned)} bar(s), first bar index {unsigned[0]}; "
                      "declare one with --time-signature."),
-            details={"first_bar_index": str(unsigned[0]), "bars": str(len(unsigned))},
+            details={"first_bar_index": str(unsigned[0]), "bars": str(len(unsigned)),
+                     "remediation_hint": "Declare the printed time signature with --time-signature (e.g. 4/4)."},
         )
     by_bar: dict[int, list[dict[str, Any]]] = {}
     for record in note_durations["events"]:
         by_bar.setdefault(record["bar_index"], []).append(record)
-    placed, unplaced = place_tab_digits(digits, systems)
+    placed, unplaced = place_tab_digits(digits, note_durations)
     system_of = {s["first_bar_index"] + i: s for s in systems for i in range(s["bar_count"])}
 
     bars: list[Bar] = []
