@@ -52,6 +52,8 @@ def test_whole_document_coverage_and_match_rate(comparison):
     assert summary["ground_truth_events"] == 465
     assert summary["read_events"] == 465 and summary["matched_events"] == 465
     assert summary["coverage"] == 1.0 and summary["match_rate"] == 1.0
+    assert summary["fields"] == {f: {"compared": 465, "equal": 465} for f in ("kind", "written", "dots", "tuplet",
+                                                                               "duration", "tie")}
     assert summary["mismatches"] == [] and summary["causes"] == {}
     assert records["summary"]["unread_events"] == 0
     assert records["diagnostics"]["events_outside_bars"] == 0

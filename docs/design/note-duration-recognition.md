@@ -135,16 +135,32 @@ Each mutation check makes the tests fail, and the tests assert it:
 Lesson 3 uses the independent reference reader `scripts/native_slice_reference.py` (standard
 library only; never imports score2gp). The reference reader refuses Lessons 4 to 7 (tuplets, ties).
 Their rhythm is read by the script's standard-library rhythm-only reader. That reader agrees with
-the reference reader on Lesson 3, and it also compares ties. The tests are
-`tests/test_dur_01_lesson3.py` and `tests/test_dur_01_lessons_4_7.py`.
+the reference reader on every field of every Lesson 3 event.
 
-| Source | Bars (truth / read) | Events | Read | Equal | Tied events | Mismatches |
-|---|---|---|---|---|---|---|
-| Lesson 3 | 66 / 66 | 465 | 465 | 465 | 0 | none |
-| Lesson 4 | 79 / 79 | 557 | 557 | 557 | 6 | none |
-| Lesson 5 | 43 / 43 | 523 | 523 | 523 | 6 | none |
-| Lesson 6 | 72 / 72 | 663 | 663 | 663 | 10 | none |
-| Lesson 7 | 50 / 50 | 474 | 474 | 474 | 0 | none |
+The ground truth keeps the independent GPIF fields apart: written note value (`NoteValue`), dots
+(`AugmentationDot`), tuplet ratio (`PrimaryTuplet`), tie, and the sounding duration they imply.
+Each is compared with the read record on its own, so an equal sounding duration cannot hide a
+wrong note type or grouping. A triplet eighth and a sixteenth in a 3:4 grouping, for example, both
+sound a third of a quarter. A row's cause is its first differing field (`written_mismatch`,
+`tuplet_mismatch`, ...), and the row lists every differing field. The reference reader refuses
+tuplets and ties, so on Lesson 3 the written value is the single note value whose dotted length
+equals the duration. The rhythm-only reader refuses any other rhythm element (a nested tuplet) and
+note values it cannot name. The tests are `tests/test_dur_01_compare.py` (synthetic, with negative
+controls that hold sounding duration constant), `tests/test_dur_01_lesson3.py` and
+`tests/test_dur_01_lessons_4_7.py`. The last adds the review's Lesson 5 mutation: a tupletted
+eighth rewritten as a quarter in 5:4, sounding the same. It yields exactly one located
+`written_mismatch`.
+
+| Source | Bars (truth / read) | Events | Read | Equal (all fields) | Tupletted | Tied | Mismatches |
+|---|---|---|---|---|---|---|---|
+| Lesson 3 | 66 / 66 | 465 | 465 | 465 | 0 | 0 | none |
+| Lesson 4 | 79 / 79 | 557 | 557 | 557 | 0 | 6 | none |
+| Lesson 5 | 43 / 43 | 523 | 523 | 523 | 261 | 6 | none |
+| Lesson 6 | 72 / 72 | 663 | 663 | 663 | 569 | 10 | none |
+| Lesson 7 | 50 / 50 | 474 | 474 | 474 | 0 | 0 | none |
+
+On every source, each of kind, written value, dots, tuplet ratio, duration and tie is equal for
+every event.
 
 Lesson 3's first system (page 0, system 0: 3 bars, 17 events) is read in full and equals ground
 truth. With the time signature declared as 4/4, all 66 Lesson 3 bar checks are `match`. Without a
