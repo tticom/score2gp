@@ -115,7 +115,7 @@ def test_minimum_beam_width_filter(sample_staff_context: StaffSystemContext):
 
 # 6. Partial Stemming Behavior Test
 def test_partial_stemming_unstemmed_event_fallback(sample_staff_context: StaffSystemContext):
-    """Verify that an unstemmed event on a partially stemmed staff defaults to equal-spacing fallback (quarter note, 960 ticks)."""
+    """An unstemmed event on a partially stemmed staff gets no evidence: DUR-02 deleted the equal-spacing quarter placeholder."""
     # Event 1 at x=100.0 has a stem; Event 2 at x=200.0 has no stem
     stem1 = StemPrimitiveCandidate(bbox=SpatialBBox(x0=100.0, y0=220.0, x1=100.0, y1=238.0), is_downward=True)
     events_x = [100.0, 200.0]
@@ -128,13 +128,9 @@ def test_partial_stemming_unstemmed_event_fallback(sample_staff_context: StaffSy
     assert ev_mapping[100.0].stem_present is True
     assert ev_mapping[100.0].source == "visual_morphology"
 
-    # Unstemmed event on partially stemmed staff
-    assert ev_mapping[200.0].duration_name == "quarter"
-    assert ev_mapping[200.0].duration_ticks == 960
-    assert ev_mapping[200.0].stem_present is False
-    assert ev_mapping[200.0].source == "equal_spacing_fallback"
-    assert ev_mapping[200.0].is_fallback_placeholder is True
-    assert ev_mapping[200.0].is_ambiguous is False
+    # Unstemmed event on partially stemmed staff: absent, never a placeholder quarter
+    assert 200.0 not in ev_mapping
+    assert set(ev_mapping) == {100.0}
 
 
 # 7. Real Neighbouring-Event Ambiguity Detection
@@ -183,15 +179,9 @@ def test_unique_closest_event_assignment(sample_staff_context: StaffSystemContex
 
 # 8. Distinguish Absence from Ambiguity
 def test_distinguish_unstemmed_absence_from_ambiguity(sample_staff_context: StaffSystemContext):
-    """Prove that unstemmed events emit equal-spacing placeholders while ambiguous events fail closed with 0 ticks."""
-    # Unstemmed event on unstemmed staff
-    ev_unstemmed = resolve_tab_duration_evidence(100.0, [], [], [], sample_staff_context)
-    assert ev_unstemmed.source == "equal_spacing_fallback"
-    assert ev_unstemmed.duration_name == "quarter"
-    assert ev_unstemmed.duration_ticks == 960
-    assert ev_unstemmed.is_ambiguous is False
-    assert ev_unstemmed.is_fallback_placeholder is True
-    assert ev_unstemmed.confidence == 0.5
+    """Prove that unstemmed events get no evidence (absence) while ambiguous events fail closed with 0 ticks."""
+    # Unstemmed event on unstemmed staff: no evidence, never a placeholder
+    assert resolve_tab_duration_evidence(100.0, [], [], [], sample_staff_context) is None
 
     # Ambiguous event on stemmed staff
     midpoint_stem = StemPrimitiveCandidate(
@@ -203,7 +193,6 @@ def test_distinguish_unstemmed_absence_from_ambiguity(sample_staff_context: Staf
     assert ev_ambiguous.duration_name == "ambiguous"
     assert ev_ambiguous.duration_ticks == 0
     assert ev_ambiguous.is_ambiguous is True
-    assert ev_ambiguous.is_fallback_placeholder is False
     assert ev_ambiguous.confidence == 0.0
 
     # Fail on ambiguity mode raises explicit exception
