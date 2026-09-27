@@ -19,6 +19,10 @@
    - Compressed `.mxl` intake reads `META-INF/container.xml` and the declared rootfile directly from the zip package; it does not extract private files to disk.
    - Extract guitar tab separately, preferring PDF vector text coordinates before OCR.
    - Associate fret numbers by y-position/string and x-position/beat.
+   - Read each note's and rest's duration from its note type and grouping on the notation staff
+     (`notation_omr/note_duration.py`, CLI `read-note-durations`). Sources are the notehead, stem,
+     flag hooks, beam lines, dots, rest glyph, tuplet and tie. Ambiguous events are recorded unread,
+     and the bar total is a check only. See `docs/design/note-duration-recognition.md`.
 
 4. ScoreIR
    - Normalize recognised material into strict JSON.

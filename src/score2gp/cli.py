@@ -1515,6 +1515,35 @@ def eval_sidecar_command(
         typer.echo(f"  Measure count: {result.measure_count}")
         typer.echo(f"  ScoreIR event count: {result.score_ir_event_count}")
         typer.echo(f"  Matched TAB candidates: {result.matched_tab_candidate_count}")
+
+
+@app.command("read-note-durations")
+def read_note_durations_command(
+    pdf: Path = typer.Option(..., "--pdf", help="Path to the PDF score"),
+    out: Path = typer.Option(..., "--out", help="Directory to write note-durations.json into"),
+    pages: Optional[str] = typer.Option(None, "--pages", help="Page range to read (e.g. '1-2')"),
+    time_signature: Optional[str] = typer.Option(
+        None, "--time-signature",
+        help="Caller-declared time signature (e.g. '4/4') for the bar check only, where none is printed as text",
+    ),
+) -> None:
+    """Read each note's and rest's duration from its note type and grouping (DUR-01)."""
+    from .notation_omr.note_duration import read_note_durations
+
+    declared = None
+    if time_signature:
+        try:
+            numerator, denominator = (int(part) for part in time_signature.split("/"))
+        except ValueError as exc:
+            raise typer.BadParameter(f"Invalid time signature: '{time_signature}'. Use a form like '4/4'.") from exc
+        declared = (numerator, denominator)
+    result = read_note_durations(pdf, pages=parse_page_range(pages), time_signature=declared)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "note-durations.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    summary = result["summary"]
+    typer.echo(f"events: {summary['events']} read: {summary['read_events']} unread: {summary['unread_events']}")
+
+
 @app.command("generate-sidecar")
 def generate_sidecar_command(
     pdf: Path = typer.Option(..., "--pdf", help="Path to the PDF score"),
