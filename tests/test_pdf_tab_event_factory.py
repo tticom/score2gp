@@ -1,462 +1,111 @@
+"""One event from a note-type record and its TAB digits.
+
+DUR-02 replaced ``build_pdf_tab_event_from_subgroup`` and ``determine_pdf_tab_event_duration`` (a
+duration from TAB-side evidence or a caller's grid default) with ``build_note_type_event``: the
+duration is the note-duration record's, the positions are the TAB's. The editable-draft annotation
+went with the editable-draft quarter default.
+"""
+
 from __future__ import annotations
 
-from score2gp.ir import BoundingBox
-from score2gp.pdf_tab_event_factory import (
-    build_pdf_tab_editable_draft_annotation_text,
-    build_pdf_tab_event_from_subgroup,
-    determine_pdf_tab_event_duration,
-)
-from score2gp.tabraw import TabCandidate
+import importlib.util
+from pathlib import Path
+
+import pytest
+
+import score2gp.pdf_tab_event_factory as factory
+from score2gp.ir import DEFAULT_TICKS_PER_QUARTER, Event, NotatedDuration, Note, TieTechnique, Timing, Tuplet
+from score2gp.pdf_tab_event_factory import build_note_type_event
+
+_spec = importlib.util.spec_from_file_location("pdf_tab_route_support", Path(__file__).with_name("test_pdf_tab_route_support.py"))
+support = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(support)
 
 
-def test_build_pdf_tab_editable_draft_annotation_text() -> None:
-    text_default = build_pdf_tab_editable_draft_annotation_text(120.0, tempo_is_explicit=False)
-    assert "Tempo defaulted to 120 bpm." in text_default
-    assert "Editable draft generated from PDF tablature." in text_default
-
-    text_explicit = build_pdf_tab_editable_draft_annotation_text(140.5, tempo_is_explicit=True)
-    assert "Tempo set to 140.5 bpm." in text_explicit
+def _record(spec):
+    return support.records([[[spec]]], time_signature=None)["events"][0]
 
 
-def test_determine_pdf_tab_event_duration() -> None:
-    c_note = TabCandidate(
-        id="c-1",
-        kind="fret",
-        raw_text="5",
-        parsed_fret=5,
-        x=10.0,
-        y=10.0,
-        string=1,
-        bar_index=1,
-        system_index=1,
-        staff_index=1,
-        page_index=1,
-        bbox=BoundingBox(page=1, x0=10.0, y0=10.0, x1=15.0, y1=15.0),
-    )
-    c_rest = TabCandidate(
-        id="c-rest",
-        kind="fret",
-        raw_text="quarter_rest",
-        parsed_fret=None,
-        x=20.0,
-        y=10.0,
-        string=1,
-        bar_index=1,
-        system_index=1,
-        staff_index=1,
-        page_index=1,
-        bbox=BoundingBox(page=1, x0=20.0, y0=10.0, x1=25.0, y1=15.0),
-    )
-
-    assert determine_pdf_tab_event_duration([c_note], 480, "eighth") == (False, 480, "eighth")
-    assert determine_pdf_tab_event_duration([c_rest], 480, "eighth") == (True, 960, "quarter")
+def _event(spec, candidates, positions=None, onset=0):
+    positions = positions if positions is not None else [(c.string, c.parsed_fret) for c in candidates]
+    return build_note_type_event(_record(spec), positions=positions, candidates=candidates, output_bar_idx=1,
+                                 event_idx=0, onset_ticks=onset, track_id="gtr-1")
 
 
-def test_build_pdf_tab_event_from_subgroup_single_note() -> None:
-    c1 = TabCandidate(
-        id="c-1",
-        kind="fret",
-        raw_text="5",
-        parsed_fret=5,
-        x=10.0,
-        y=10.0,
-        string=1,
-        bar_index=1,
-        system_index=1,
-        staff_index=1,
-        page_index=1,
-        bbox=BoundingBox(page=1, x0=10.0, y0=10.0, x1=15.0, y1=15.0),
-        confidence=0.9,
-    )
-
-    event = build_pdf_tab_event_from_subgroup(
-        [c1],
-        output_bar_idx=1,
-        event_idx=0,
-        onset_ticks=0,
-        grid_spacing=480,
-        duration_name="eighth",
-        track_id="gtr-1",
-    )
-
-    assert event.id == "bar-1-event-1"
-    assert event.is_rest is False
-    assert len(event.notes) == 1
-    assert event.notes[0].string == 1
-    assert event.notes[0].fret == 5
-    assert event.notes[0].pitch == 69  # E4 (64) + 5 = 69
+def test_a_single_note_takes_its_duration_from_the_record_and_its_position_from_the_tab() -> None:
+    digit = support.digit("c-1", 0, 20.0, 1, 5)
+    event = _event(support.note(20.0, "eighth"), [digit])
+    assert event.id == "bar-1-event-1" and event.is_rest is False
+    assert [(n.string, n.fret, n.pitch) for n in event.notes] == [(1, 5, 69)]  # E4 (64) + 5
+    assert event.notes[0].provenance[0].raw_token_id == "c-1"
     assert event.confidence == 0.9
-    assert event.timing.onset_ticks == 0
-    assert event.timing.duration_ticks == 480
+    assert (event.timing.onset_ticks, event.timing.duration_ticks) == (0, 480)
+    assert event.timing.notated_duration == NotatedDuration(value="eighth", dots=0)
+    assert event.timing.tuplet is None and event.text is None
+
+
+def test_a_chord_carries_one_note_per_tab_digit() -> None:
+    digits = [support.digit("c-1", 0, 20.0, 1, 5), support.digit("c-2", 0, 20.0, 2, 6)]
+    event = _event(support.note(20.0, "half", heads=2), digits)
+    assert [(n.string, n.fret, n.pitch) for n in event.notes] == [(1, 5, 69), (2, 6, 65)]
+    assert event.timing.duration_ticks == 1920 and event.timing.notated_duration.value == "half"
+    assert [p.raw_token_id for p in event.provenance] == ["c-1", "c-2"]
+
+
+@pytest.mark.parametrize(("written", "ticks"), [("whole", 3840), ("half", 1920), ("quarter", 960), ("eighth", 480),
+                                                ("16th", 240), ("32nd", 120), ("64th", 60)])
+def test_a_rest_is_the_notations_rest_with_no_notes(written, ticks) -> None:
+    event = _event(support.rest(20.0, written), [])
+    assert event.is_rest is True and event.notes == []
+    assert (event.timing.notated_duration.value, event.timing.duration_ticks) == (written, ticks)
+    assert event.confidence == 1.0
+
+
+@pytest.mark.parametrize(("dots", "ticks"), [(1, 1440), (2, 1680)])
+def test_dots_come_from_the_record(dots, ticks) -> None:
+    event = _event(support.note(20.0, "quarter", dots=dots), [support.digit("c-1", 0, 20.0, 3, 2)])
+    assert event.timing.notated_duration == NotatedDuration(value="quarter", dots=dots)
+    assert event.timing.duration_ticks == ticks
+
+
+def test_a_tuplet_comes_from_the_record() -> None:
+    event = _event(support.note(20.0, "eighth", tuplet=(3, 2)), [support.digit("c-1", 0, 20.0, 3, 2)], onset=320)
+    assert event.timing.tuplet == Tuplet(actual_notes=3, normal_notes=2)
+    assert (event.timing.onset_ticks, event.timing.duration_ticks) == (320, 320)
     assert event.timing.notated_duration.value == "eighth"
-    assert event.text is None
 
 
-def test_build_pdf_tab_event_from_subgroup_chord() -> None:
-    c1 = TabCandidate(
-        id="c-1",
-        kind="fret",
-        raw_text="5",
-        parsed_fret=5,
-        x=10.0,
-        y=10.0,
-        string=1,
-        bar_index=1,
-        system_index=1,
-        staff_index=1,
-        page_index=1,
-        bbox=BoundingBox(page=1, x0=10.0, y0=10.0, x1=15.0, y1=15.0),
-        confidence=0.8,
-    )
-    c2 = TabCandidate(
-        id="c-2",
-        kind="fret",
-        raw_text="3",
-        parsed_fret=3,
-        x=10.0,
-        y=20.0,
-        string=6,
-        bar_index=1,
-        system_index=1,
-        staff_index=1,
-        page_index=1,
-        bbox=BoundingBox(page=1, x0=10.0, y0=20.0, x1=15.0, y1=25.0),
-        confidence=1.0,
-    )
-
-    event = build_pdf_tab_event_from_subgroup(
-        [c1, c2],
-        output_bar_idx=2,
-        event_idx=1,
-        onset_ticks=480,
-        grid_spacing=480,
-        duration_name="eighth",
-        track_id="gtr-1",
-    )
-
-    assert event.id == "bar-2-event-2"
-    assert event.is_rest is False
-    assert len(event.notes) == 2
-    assert event.confidence == 0.9  # (0.8 + 1.0) / 2
-    assert len(event.provenance) == 2
+@pytest.mark.parametrize(("tie", "state"), [((True, False), "start"), ((False, True), "stop"), ((True, True), "continue")])
+def test_a_tie_comes_from_the_record(tie, state) -> None:
+    event = _event(support.note(20.0, tie=tie), [support.digit("c-1", 0, 20.0, 3, 2)])
+    assert event.notes[0].techniques == [TieTechnique(state=state)]
 
 
-def test_build_pdf_tab_event_from_subgroup_quarter_rest() -> None:
-    c_rest = TabCandidate(
-        id="c-rest",
-        kind="fret",
-        raw_text="quarter_rest",
-        parsed_fret=None,
-        x=20.0,
-        y=10.0,
-        string=1,
-        bar_index=1,
-        system_index=1,
-        staff_index=1,
-        page_index=1,
-        bbox=BoundingBox(page=1, x0=20.0, y0=10.0, x1=25.0, y1=15.0),
-        confidence=0.95,
-    )
-
-    event = build_pdf_tab_event_from_subgroup(
-        [c_rest],
-        output_bar_idx=1,
-        event_idx=2,
-        onset_ticks=960,
-        grid_spacing=480,
-        duration_name="eighth",
-        track_id="gtr-1",
-    )
-
-    assert event.id == "bar-1-event-3"
-    assert event.is_rest is True
-    assert event.notes == []
-    assert event.timing.duration_ticks == 960
-    assert event.timing.notated_duration.value == "quarter"
+def test_a_tie_continuation_without_its_own_digit_keeps_the_tied_position() -> None:
+    event = _event(support.note(20.0, tie=(False, True)), [], positions=[(3, 2)])
+    assert [(n.string, n.fret, n.pitch) for n in event.notes] == [(3, 2, 57)]
+    assert event.notes[0].provenance == [] and event.provenance == []
 
 
-def test_build_pdf_tab_event_from_subgroup_editable_first_event_text() -> None:
-    c1 = TabCandidate(
-        id="c-1",
-        kind="fret",
-        raw_text="0",
-        parsed_fret=0,
-        x=10.0,
-        y=10.0,
-        string=1,
-        bar_index=1,
-        system_index=1,
-        staff_index=1,
-        page_index=1,
-        bbox=BoundingBox(page=1, x0=10.0, y0=10.0, x1=15.0, y1=15.0),
-        confidence=1.0,
-    )
-
-    event = build_pdf_tab_event_from_subgroup(
-        [c1],
-        output_bar_idx=1,
-        event_idx=0,
-        onset_ticks=0,
-        grid_spacing=960,
-        duration_name="quarter",
-        track_id="gtr-1",
-        editable_draft=True,
-        tempo_bpm=120.0,
-        tempo_is_explicit=False,
-    )
-
-    assert event.text is not None
-    assert "Editable draft generated from PDF tablature." in event.text
-    assert "Tempo defaulted to 120 bpm." in event.text
-
-
-def test_pdf_tab_event_factory_normalized_before_after_equivalence() -> None:
-    """Verify field-for-field normalized equivalence for representative public scenarios:
-    1. Single-note event
-    2. Multi-note chord event
-    3. Explicit quarter-rest event
-    4. Editable-draft first-event text annotation
-    against independent baseline expectations.
-    """
-    from score2gp.ir import DEFAULT_TICKS_PER_QUARTER, Event, NotatedDuration, Note, Timing
-
-    # 1. Representative single-note event
-    c1 = TabCandidate(
-        id="c-1",
-        kind="fret",
-        raw_text="5",
-        parsed_fret=5,
-        x=10.0,
-        y=10.0,
-        string=1,
-        bar_index=1,
-        system_index=1,
-        staff_index=1,
-        page_index=1,
-        bbox=BoundingBox(page=1, x0=10.0, y0=10.0, x1=15.0, y1=15.0),
-        confidence=0.9,
-    )
-    ev_note = build_pdf_tab_event_from_subgroup(
-        [c1],
-        output_bar_idx=1,
-        event_idx=0,
-        onset_ticks=0,
-        grid_spacing=480,
-        duration_name="eighth",
-        track_id="gtr-1",
-    )
-    expected_note_event = Event(
+def test_the_whole_event_equals_an_independently_built_one() -> None:
+    """Replaces test_pdf_tab_event_factory_normalized_before_after_equivalence, field for field."""
+    digit = support.digit("c-1", 0, 20.0, 1, 5)
+    expected = Event(
         id="bar-1-event-1",
         track_id="gtr-1",
-        timing=Timing(
-            bar_index=1,
-            onset_ticks=0,
-            duration_ticks=480,
-            ticks_per_quarter=DEFAULT_TICKS_PER_QUARTER,
-            notated_duration=NotatedDuration(value="eighth", dots=0),
-        ),
+        timing=Timing(bar_index=1, onset_ticks=480, duration_ticks=1440, ticks_per_quarter=DEFAULT_TICKS_PER_QUARTER,
+                      notated_duration=NotatedDuration(value="quarter", dots=1)),
         is_rest=False,
-        notes=[
-            Note(
-                string=1,
-                fret=5,
-                pitch=69,  # E4 (64) + 5
-                confidence=0.9,
-                provenance=[c1.to_provenance()],
-            )
-        ],
+        notes=[Note(string=1, fret=5, pitch=69, confidence=0.9, provenance=[digit.to_provenance()])],
         text=None,
         confidence=0.9,
-        provenance=[c1.to_provenance()],
+        provenance=[digit.to_provenance()],
     )
-    assert ev_note == expected_note_event
-
-    # 2. Representative chord event (string 1 fret 5 & string 3 fret 7)
-    c2 = TabCandidate(
-        id="c-2",
-        kind="fret",
-        raw_text="7",
-        parsed_fret=7,
-        x=10.0,
-        y=20.0,
-        string=3,
-        bar_index=1,
-        system_index=1,
-        staff_index=1,
-        page_index=1,
-        bbox=BoundingBox(page=1, x0=10.0, y0=20.0, x1=15.0, y1=25.0),
-        confidence=0.7,
-    )
-    ev_chord = build_pdf_tab_event_from_subgroup(
-        [c1, c2],
-        output_bar_idx=1,
-        event_idx=1,
-        onset_ticks=480,
-        grid_spacing=480,
-        duration_name="eighth",
-        track_id="gtr-1",
-    )
-    expected_chord_event = Event(
-        id="bar-1-event-2",
-        track_id="gtr-1",
-        timing=Timing(
-            bar_index=1,
-            onset_ticks=480,
-            duration_ticks=480,
-            ticks_per_quarter=DEFAULT_TICKS_PER_QUARTER,
-            notated_duration=NotatedDuration(value="eighth", dots=0),
-        ),
-        is_rest=False,
-        notes=[
-            Note(
-                string=1,
-                fret=5,
-                pitch=69,
-                confidence=0.9,
-                provenance=[c1.to_provenance()],
-            ),
-            Note(
-                string=3,
-                fret=7,
-                pitch=62,  # G3 (55) + 7
-                confidence=0.7,
-                provenance=[c2.to_provenance()],
-            ),
-        ],
-        text=None,
-        confidence=0.8,  # (0.9 + 0.7) / 2
-        provenance=[c1.to_provenance(), c2.to_provenance()],
-    )
-    assert ev_chord == expected_chord_event
-
-    # 3. Representative explicit quarter-rest event
-    c_rest = TabCandidate(
-        id="c-rest",
-        kind="fret",
-        raw_text="quarter_rest",
-        parsed_fret=None,
-        x=20.0,
-        y=10.0,
-        string=1,
-        bar_index=1,
-        system_index=1,
-        staff_index=1,
-        page_index=1,
-        bbox=BoundingBox(page=1, x0=20.0, y0=10.0, x1=25.0, y1=15.0),
-        confidence=0.95,
-    )
-    ev_rest = build_pdf_tab_event_from_subgroup(
-        [c_rest],
-        output_bar_idx=1,
-        event_idx=2,
-        onset_ticks=960,
-        grid_spacing=480,
-        duration_name="eighth",
-        track_id="gtr-1",
-    )
-    expected_rest_event = Event(
-        id="bar-1-event-3",
-        track_id="gtr-1",
-        timing=Timing(
-            bar_index=1,
-            onset_ticks=960,
-            duration_ticks=960,
-            ticks_per_quarter=DEFAULT_TICKS_PER_QUARTER,
-            notated_duration=NotatedDuration(value="quarter", dots=0),
-        ),
-        is_rest=True,
-        notes=[],
-        text=None,
-        confidence=0.95,
-        provenance=[c_rest.to_provenance()],
-    )
-    assert ev_rest == expected_rest_event
-
-    # 4. Representative editable-draft first-event text annotation
-    ev_editable = build_pdf_tab_event_from_subgroup(
-        [c1],
-        output_bar_idx=1,
-        event_idx=0,
-        onset_ticks=0,
-        grid_spacing=960,
-        duration_name="quarter",
-        track_id="gtr-1",
-        editable_draft=True,
-        tempo_bpm=120.0,
-        tempo_is_explicit=False,
-    )
-    expected_editable_text = (
-        "Editable draft generated from PDF tablature. "
-        "Rhythms defaulted to quarter notes; timing was not recognised. "
-        "Tuning defaulted to E Standard unless corrected by the user. "
-        "Time signature defaulted to 4/4. "
-        "Tempo defaulted to 120 bpm. "
-        "Standard notation and notation/tab alignment were skipped. "
-        "Rests/silence may be omitted."
-    )
-    assert ev_editable.text == expected_editable_text
-    assert ev_editable.timing.duration_ticks == 960
-    assert ev_editable.timing.notated_duration.value == "quarter"
+    assert _event(support.note(20.0, "quarter", dots=1), [digit], onset=480) == expected
 
 
-def test_determine_pdf_tab_event_duration_all_rest_types() -> None:
-    from score2gp.pdf_tab_duration_types import TabDurationEvidence
-
-    for raw_rest, exp_ticks, exp_name in [
-        ("whole_rest", 3840, "whole"),
-        ("half_rest", 1920, "half"),
-        ("quarter_rest", 960, "quarter"),
-        ("eighth_rest", 480, "eighth"),
-        ("sixteenth_rest", 240, "16th"),
-        ("32nd_rest", 120, "32nd"),
-        ("64th_rest", 60, "64th"),
-    ]:
-        cand = TabCandidate(
-            id=f"c-{raw_rest}",
-            kind="fret",
-            raw_text=raw_rest,
-            parsed_fret=None,
-            x=10.0,
-            y=10.0,
-            string=1,
-            bar_index=1,
-            system_index=1,
-            staff_index=1,
-            page_index=1,
-            bbox=BoundingBox(page=1, x0=10.0, y0=10.0, x1=15.0, y1=15.0),
-        )
-        is_rest, ticks, name = determine_pdf_tab_event_duration([cand], 480, "eighth")
-        assert is_rest is True
-        assert ticks == exp_ticks
-        assert name == exp_name
-
-
-def test_build_pdf_tab_event_from_subgroup_with_dotted_note() -> None:
-    cand = TabCandidate(
-        id="c-dotted",
-        kind="fret",
-        raw_text="3",
-        parsed_fret=3,
-        x=10.0,
-        y=10.0,
-        string=1,
-        bar_index=1,
-        system_index=1,
-        staff_index=1,
-        page_index=1,
-        bbox=BoundingBox(page=1, x0=10.0, y0=10.0, x1=15.0, y1=15.0),
-    )
-
-    event = build_pdf_tab_event_from_subgroup(
-        [cand],
-        output_bar_idx=1,
-        event_idx=0,
-        onset_ticks=0,
-        grid_spacing=1440,
-        duration_name="quarter",
-        track_id="gtr-1",
-    )
-
-    assert event.timing.duration_ticks == 1440
-    assert event.timing.notated_duration.value == "quarter"
-    assert event.timing.notated_duration.dots == 1
+def test_the_evidence_default_and_draft_annotation_paths_are_gone() -> None:
+    """Replaces test_determine_pdf_tab_event_duration(_all_rest_types) and the two editable-draft tests."""
+    for name in ("determine_pdf_tab_event_duration", "build_pdf_tab_event_from_subgroup",
+                 "build_pdf_tab_editable_draft_annotation_text", "_infer_dots_from_duration", "_REST_CANDIDATE_MAP"):
+        assert not hasattr(factory, name)
