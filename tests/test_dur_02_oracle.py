@@ -23,7 +23,8 @@ from typing import Any
 WRITTEN = {"Whole": "whole", "Half": "half", "Quarter": "quarter", "Eighth": "eighth",
            "16th": "16th", "32nd": "32nd", "64th": "64th"}
 RHYTHM_TAGS = {"NoteValue", "AugmentationDot", "PrimaryTuplet"}
-EVENT_FIELDS = ("kind", "written", "dots", "tuplet", "tie", "positions")
+TECHNIQUE_FIELDS = ("hopo_origin", "hopo_destination", "slide", "vibrato", "palm_mute", "let_ring")
+EVENT_FIELDS = ("kind", "written", "dots", "tuplet", "tie", "positions", *TECHNIQUE_FIELDS)
 
 
 class OracleRefusal(Exception):
@@ -64,10 +65,26 @@ def read_gp_bars(gp: Path | bytes) -> list[dict[str, Any]]:
                 tuplet = rhythm.find("PrimaryTuplet")
                 note_ids = (beat.findtext("Notes") or "").split()
                 positions, origins, destinations = [], [], []
+                techniques: dict[str, list[tuple[Any, ...]]] = {field: [] for field in TECHNIQUE_FIELDS}
                 for nid in note_ids:
-                    props = {p.get("name"): p for p in notes[nid].iterfind("Properties/Property")}
-                    positions.append((int(props["String"].findtext("String")), int(props["Fret"].findtext("Fret"))))
-                    tie = notes[nid].find("Tie")
+                    note = notes[nid]
+                    props = {p.get("name"): p for p in note.iterfind("Properties/Property")}
+                    position = (int(props["String"].findtext("String")), int(props["Fret"].findtext("Fret")))
+                    positions.append(position)
+                    for field, prop_name in (("hopo_origin", "HopoOrigin"),
+                                             ("hopo_destination", "HopoDestination")):
+                        if prop_name in props:
+                            techniques[field].append(position)
+                    if "Slide" in props or note.find("Slide") is not None:
+                        flag = props["Slide"].findtext("Flags") if "Slide" in props else note.findtext("Slide")
+                        techniques["slide"].append((*position, flag))
+                    if "Vibrato" in props or note.find("Vibrato") is not None:
+                        wave = props["Vibrato"].findtext("WaveSize") if "Vibrato" in props else note.findtext("Vibrato")
+                        techniques["vibrato"].append((*position, wave))
+                    for field, tag in (("palm_mute", "PalmMute"), ("let_ring", "LetRing")):
+                        if note.find(tag) is not None or tag in props:
+                            techniques[field].append(position)
+                    tie = note.find("Tie")
                     origins.append(tie is not None and tie.get("origin") == "true")
                     destinations.append(tie is not None and tie.get("destination") == "true")
                 events.append({
@@ -78,6 +95,7 @@ def read_gp_bars(gp: Path | bytes) -> list[dict[str, Any]]:
                     "tuplet": (int(tuplet.get("num")), int(tuplet.get("den"))) if tuplet is not None else None,
                     "tie": (any(origins), any(destinations)),
                     "positions": sorted(positions),
+                    **{field: sorted(values) for field, values in techniques.items()},
                 })
         out.append({"time": master.findtext("Time"), "events": events})
     return out
@@ -178,6 +196,19 @@ def _gp(bars: list[list[dict[str, Any]] | None]) -> bytes:
                 for name, tag, value in (("String", "String", string), ("Fret", "Fret", fret)):
                     prop = ET.SubElement(props, "Property", {"name": name})
                     ET.SubElement(prop, tag).text = str(value)
+                for field, prop_name in (("hopo_origin", "HopoOrigin"),
+                                         ("hopo_destination", "HopoDestination"),
+                                         ("slide", "Slide"), ("vibrato", "Vibrato")):
+                    for item in event.get(field, []):
+                        if item[:2] == (string, fret):
+                            prop = ET.SubElement(props, "Property", {"name": prop_name})
+                            if field.startswith("hopo"):
+                                ET.SubElement(prop, "Enable")
+                            else:
+                                ET.SubElement(prop, "Flags" if field == "slide" else "WaveSize").text = item[2]
+                for field, tag in (("palm_mute", "PalmMute"), ("let_ring", "LetRing")):
+                    if (string, fret) in event.get(field, []):
+                        ET.SubElement(note, tag)
             if note_ids:
                 ET.SubElement(beat, "Notes").text = " ".join(note_ids)
         voice = ET.SubElement(voice_db, "Voice", {"id": voice_id})
@@ -202,6 +233,19 @@ def _bar() -> list[dict[str, Any]]:
 def test_identical_files_have_no_difference():
     result = compare_gp(_gp([_bar(), _bar()]), _gp([_bar(), _bar()]))
     assert result["differences"] == [] and result["written_bars"] == 2 and result["equal_events"] == 12
+
+
+def test_each_technique_placement_is_compared_by_bar_and_event():
+    reference = _bar()
+    reference[0] = {**reference[0], "hopo_origin": [(3, 5)], "slide": [(3, 5, "1")],
+                    "vibrato": [(3, 5, "Wide")], "palm_mute": [(3, 5)], "let_ring": [(3, 5)]}
+    reference[1] = {**reference[1], "hopo_destination": [(2, 7)]}
+    for field in TECHNIQUE_FIELDS:
+        changed = [dict(event) for event in reference]
+        index = 1 if field == "hopo_destination" else 0
+        changed[index].pop(field)
+        result = compare_gp(_gp([reference]), _gp([changed]))
+        assert [(d["bar_index"], d["event_index"], d["field"]) for d in result["differences"]] == [(0, index, field)]
 
 
 def test_word_spellings_of_short_note_values_are_reported_as_differences():

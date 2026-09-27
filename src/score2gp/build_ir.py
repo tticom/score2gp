@@ -1823,7 +1823,7 @@ def build_ir_from_tabraw_only(
     )
 
     # Attach symbols and techniques
-    _attach_symbols_and_techniques(score, tabraw)
+    _attach_symbols_and_techniques(score, tabraw, placed_frets=placed)
 
     # Construct diagnostics
     tabraw_candidates_loaded = len(tabraw.candidates)
@@ -3912,14 +3912,27 @@ def _remove_not_aligned_warning(score: ScoreIR, candidate: TabCandidate) -> None
     ]
 
 
-def _attach_symbols_and_techniques(score: ScoreIR, tabraw: TabRaw) -> None:
+def _attach_symbols_and_techniques(
+    score: ScoreIR, tabraw: TabRaw, *, placed_frets: dict[int, list[TabCandidate]] | None = None,
+) -> None:
     bars_by_index = {bar.index: bar for bar in score.bars}
 
     fret_candidates = [c for c in tabraw.candidates if c.kind == "fret" and c.bar_index is not None]
     source_bar_keys = sorted(list({(c.page_index or 1, c.system_index or 1, c.staff_index or 1, c.bar_index) for c in fret_candidates}))
-    bar_key_to_output_idx = {
-        key: idx for idx, key in enumerate(source_bar_keys, start=1)
-    }
+    if placed_frets is None:
+        bar_key_to_output_idx = {key: idx for idx, key in enumerate(source_bar_keys, start=1)}
+    else:
+        # The note-type route numbers every notation bar, including bars without TAB digits.
+        # Only use a TabRaw key when its digits all landed in one notation bar.
+        destinations: dict[tuple[int, int, int, int], set[int]] = defaultdict(set)
+        for source_bar, digits in placed_frets.items():
+            for digit in digits:
+                key = (digit.page_index or 1, digit.system_index or 1,
+                       digit.staff_index or 1, digit.bar_index)
+                destinations[key].add(source_bar + 1)
+        bar_key_to_output_idx = {
+            key: next(iter(indices)) for key, indices in destinations.items() if len(indices) == 1
+        }
 
 
     if hasattr(tabraw, "structural_signals") and tabraw.structural_signals:
@@ -3992,10 +4005,29 @@ def _attach_symbols_and_techniques(score: ScoreIR, tabraw: TabRaw) -> None:
             continue
 
         bar_idx = candidate.bar_index
+        if placed_frets is not None and bar_idx is None:
+            score.warnings.append(WarningItem(
+                code="pdf_only_tab_attachment_bar_unplaced",
+                message=(f"Candidate {candidate.id} at page {candidate.page_index}, system "
+                         f"{candidate.system_index}, x {candidate.x} has no TabRaw bar index."),
+                severity="warning", provenance=[candidate.to_provenance()],
+            ))
+            continue
         if bar_idx is not None:
             cand_key = (candidate.page_index or 1, candidate.system_index or 1, candidate.staff_index or 1, bar_idx)
             if cand_key in bar_key_to_output_idx:
                 bar_idx = bar_key_to_output_idx[cand_key]
+            elif placed_frets is not None:
+                bar_idx = None
+                reason = "ambiguous" if cand_key in destinations else "unplaced"
+                score.warnings.append(WarningItem(
+                    code="pdf_only_tab_attachment_bar_unplaced",
+                    message=(f"Candidate {candidate.id} at page {candidate.page_index}, system "
+                             f"{candidate.system_index}, bar {candidate.bar_index} has {reason} "
+                             "notation-bar placement."),
+                    severity="warning", provenance=[candidate.to_provenance()],
+                ))
+                continue
         # If candidate lacks a bar index, or the target bar does not exist:
         if bar_idx is None or bar_idx not in bars_by_index:
             if candidate.kind == "chord-symbol":

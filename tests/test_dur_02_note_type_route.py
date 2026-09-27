@@ -318,6 +318,120 @@ def test_a_digit_is_placed_by_its_page_local_height():
     assert {bar: [c.id for c in cands] for bar, cands in placed.items()} == {0: ["a"], 1: ["b"]} and unplaced == []
 
 
+def test_vibrato_uses_notation_bar_after_digitless_bar(tmp_path):
+    from score2gp.tabraw import TabRaw, make_visual_vibrato_candidate
+    from score2gp.pdf_tab_bar_assembler import place_tab_digits
+
+    pdf = clean_pdf(tmp_path / "gap.pdf")
+    raw_path = tmp_path / "tab_raw.json"
+    extract_tab(pdf, raw_path)
+    raw = TabRaw.from_json_file(raw_path)
+    records = read_note_durations(pdf)
+    placed, _ = place_tab_digits(
+        [c for c in raw.candidates if c.kind == "fret" and c.parsed_fret is not None], records)
+    target = placed[2][0]
+    raw.candidates = [c for c in raw.candidates if c.id not in {d.id for d in placed[0]}]
+    raw.candidates.append(make_visual_vibrato_candidate(
+        candidate_id="later-vibrato", page_index=target.page_index,
+        system_index=target.system_index, staff_index=target.staff_index,
+        bar_index=target.bar_index, string=target.string,
+        bbox_values=(target.x - 4, target.y - 12, target.x + 4, target.y - 4),
+        cycles=3, amplitude=4.0))
+    raw.to_json_file(raw_path)
+    score, diagnostics = build_ir_from_tabraw_only(raw_path, note_durations=records)
+    assert diagnostics.note_type_route["bars"][0]["status"] == "refused"
+    assert not any(t.kind == "vibrato" for e in score.bars[1].events for n in e.notes for t in n.techniques)
+    assert any(t.kind == "vibrato" for e in score.bars[2].events for n in e.notes for t in n.techniques)
+
+
+def test_symbols_spans_slides_and_hopo_use_notation_bar(tmp_path):
+    from score2gp.tabraw import TabRaw, make_tab_candidate, make_visual_slide_candidate, make_palm_mute_candidate
+    from score2gp.pdf_tab_bar_assembler import place_tab_digits
+
+    pdf = clean_pdf(tmp_path / "attachments.pdf")
+    raw_path = tmp_path / "tab_raw.json"
+    extract_tab(pdf, raw_path)
+    raw = TabRaw.from_json_file(raw_path)
+    records = read_note_durations(pdf)
+    placed, _ = place_tab_digits([c for c in raw.candidates if c.kind == "fret" and c.parsed_fret is not None], records)
+    raw.candidates = [c for c in raw.candidates if c.id not in {d.id for d in placed[0]}]
+    first, second = sorted(placed[2], key=lambda c: c.x)[:2]
+    layout = dict(page_index=first.page_index, system_index=first.system_index,
+                  staff_index=first.staff_index, bar_index=first.bar_index)
+    raw.candidates.extend([
+        make_tab_candidate(candidate_id="chord", raw_text="C", kind="chord-symbol", confidence=0.9,
+                           bbox_values=(first.x - 4, first.y - 16, first.x + 4, first.y - 8), **layout),
+        make_tab_candidate(candidate_id="hopo", raw_text="h", kind="technique-text", confidence=0.9,
+                           bbox_values=((first.x + second.x) / 2 - 4, first.y - 14,
+                                        (first.x + second.x) / 2 + 4, first.y - 6), **layout),
+        make_palm_mute_candidate(candidate_id="pm", string=None, bbox_values=(first.x - 3, first.y - 20,
+                                 second.x + 3, first.y - 12), **layout),
+        make_tab_candidate(candidate_id="lr", raw_text="l.r.", kind="technique-text", confidence=0.9,
+                           bbox_values=(first.x - 3, first.y - 26, second.x + 3, first.y - 18), **layout),
+        make_visual_slide_candidate(candidate_id="slide", string=second.string,
+                                    bbox_values=(second.x - 3, second.y - 10, second.x + 8, second.y - 2),
+                                    slope=1.0, direction="up", **layout),
+    ])
+    raw.to_json_file(raw_path)
+    score, _ = build_ir_from_tabraw_only(raw_path, note_durations=records)
+    assert all(not e.notes or not any(n.techniques for n in e.notes) for e in score.bars[1].events)
+    bar = score.bars[2]
+    assert any(e.chord_symbol == "C" for e in bar.events)
+    kinds = [t.kind for e in bar.events for n in e.notes for t in n.techniques]
+    assert {"hammer-on", "palm-mute", "let-ring", "slide"} <= set(kinds)
+    assert any("palm-mute" in {t.kind for n in e.notes for t in n.techniques}
+               for e in bar.events[:2])
+    assert any("let-ring" in {t.kind for n in e.notes for t in n.techniques}
+               for e in bar.events[:2])
+
+
+def test_unplaced_attachment_has_a_located_warning(tmp_path):
+    from score2gp.tabraw import TabRaw, make_visual_vibrato_candidate
+
+    pdf = clean_pdf(tmp_path / "unplaced.pdf")
+    raw_path = tmp_path / "tab_raw.json"
+    extract_tab(pdf, raw_path)
+    raw = TabRaw.from_json_file(raw_path)
+    records = read_note_durations(pdf)
+    raw.candidates.append(make_visual_vibrato_candidate(
+        candidate_id="unplaced-vibrato", page_index=1, system_index=99,
+        staff_index=1, bar_index=99, string=3,
+        bbox_values=(450, 220, 460, 228), cycles=3, amplitude=4.0))
+    raw.to_json_file(raw_path)
+    score, _ = build_ir_from_tabraw_only(raw_path, note_durations=records)
+    warnings = [w for w in score.warnings if w.code == "pdf_only_tab_attachment_bar_unplaced"]
+    assert len(warnings) == 1
+    assert warnings[0].provenance[0].raw_token_id == "unplaced-vibrato"
+    assert "bar 99" in warnings[0].message
+
+
+def test_attachment_mapping_across_pages_and_structural_marker(tmp_path):
+    from score2gp.tabraw import TabRaw, make_visual_vibrato_candidate
+    from score2gp.pdf_tab_bar_assembler import place_tab_digits
+
+    pdf = two_page_pdf(tmp_path / "pages.pdf")
+    raw_path = tmp_path / "tab_raw.json"
+    extract_tab(pdf, raw_path)
+    raw = TabRaw.from_json_file(raw_path)
+    records = read_note_durations(pdf)
+    placed, _ = place_tab_digits([c for c in raw.candidates if c.kind == "fret" and c.parsed_fret is not None], records)
+    target = placed[3][0]
+    raw.candidates = [c for c in raw.candidates if c.id not in {d.id for d in placed[0]}]
+    raw.candidates.append(make_visual_vibrato_candidate(
+        candidate_id="page-two-vibrato", page_index=target.page_index,
+        system_index=target.system_index, staff_index=target.staff_index,
+        bar_index=target.bar_index, string=target.string,
+        bbox_values=(target.x - 4, target.y - 12, target.x + 4, target.y - 4),
+        cycles=3, amplitude=4.0))
+    raw.structural_signals = {"sections": [{"page_index": target.page_index,
+        "system_index": target.system_index, "staff_index": target.staff_index,
+        "x0": target.x, "text": "Chorus"}]}
+    raw.to_json_file(raw_path)
+    score, _ = build_ir_from_tabraw_only(raw_path, note_durations=records)
+    assert any(t.kind == "vibrato" for e in score.bars[3].events for n in e.notes for t in n.techniques)
+    assert score.bars[3].marker == "Chorus"
+
+
 # --- refusals --------------------------------------------------------------------------------------
 
 @pytest.mark.parametrize(
@@ -392,15 +506,16 @@ def _convert(*args: str) -> subprocess.CompletedProcess:
 
 
 def _expected_clean() -> list[list[dict]]:
+    no_technique = {field: [] for field in oracle.TECHNIQUE_FIELDS}
     def n(written, positions, dots=0):
         # GPIF strings count from the lowest string, zero-based: TAB string s is 6 - s.
         return {"kind": "note", "written": written, "dots": dots, "tuplet": None, "tie": (False, False),
-                "positions": sorted((6 - s, f) for s, f in positions)}
+                "positions": sorted((6 - s, f) for s, f in positions), **no_technique}
     return [
         [n("eighth", [(3, 2)]), n("eighth", [(3, 4)]), n("quarter", [(2, 3)]), n("16th", [(3, 5)]),
          n("16th", [(3, 4)]), n("16th", [(3, 2)]), n("16th", [(3, 4)]), n("quarter", [(2, 1)])],
         [n("half", [(3, 7)]), {"kind": "rest", "written": "half", "dots": 0, "tuplet": None,
-                                "tie": (False, False), "positions": []}],
+                                "tie": (False, False), "positions": [], **no_technique}],
         [n("quarter", [(4, 5)], dots=1), n("eighth", [(3, 9)]), n("half", [(2, 5), (3, 5)])],
     ]
 
