@@ -182,6 +182,22 @@ def refusal_pdf(path: Path, fault: str) -> Path:
     return _save(doc, path)
 
 
+def two_page_pdf(path: Path) -> Path:
+    """Two pages, one system of two 4/4 bars each, four quarters a bar; every fret is distinct."""
+    doc = pymupdf.open()
+    for page in range(2):
+        bar2 = 300.0
+        score, x = _system(doc, [bar2])
+        for bar, start in enumerate((x + 4, bar2 + 16)):
+            if bar:
+                score.bar_number(bar2, 2 * page + 2)
+            for i in range(4):
+                cx = start + i * (STEP - 8)
+                fx.note(score, cx, 5, "quarter")
+                _digit(score, cx, 3, 8 * page + 4 * bar + i)
+    return _save(doc, path)
+
+
 def no_time_signature_pdf(path: Path) -> Path:
     doc = pymupdf.open()
     score, x = _system(doc, [], time_signature=False)
@@ -274,6 +290,32 @@ def test_triplet_and_tie_come_from_the_grouping(tmp_path):
         assert start_tie == ["start"] and stop_tie == ["stop"]
         match = _route_bar(diagnostics, 1)["events"][0]["match"]
         assert match["kind"] == ("tab_column" if tie_stop_digit else "tie_continuation")
+
+
+def test_tab_digits_on_a_later_page_are_placed_under_that_pages_notation(tmp_path):
+    score, diagnostics = _build(two_page_pdf(tmp_path / "two.pdf"), tmp_path)
+    assert diagnostics.note_type_route["summary"]["written_bars"] == 4
+    assert [[n.fret for e in bar.events for n in e.notes] for bar in score.bars] == [
+        [0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11], [12, 13, 14, 15]]
+    assert all(e.timing.notated_duration.value == "quarter" for bar in score.bars for e in bar.events)
+
+
+def test_a_digit_is_placed_by_its_page_local_height():
+    from score2gp.pdf_tab_bar_assembler import place_tab_digits
+    from score2gp.tabraw import make_tab_candidate
+
+    def system(index, top, first_bar):
+        return {"page_index": 1, "system_index": index, "first_bar_index": first_bar, "bar_count": 1, "staff_space": 4.0,
+                "staff": {"top": top, "bottom": top + 16.0, "x0": 40.0, "x1": 500.0}, "bars": [[40.0, 500.0]]}
+
+    records = {"source": {"page_heights": [800.0, 800.0]}, "systems": [system(0, 100.0, 0), system(1, 400.0, 1)]}
+
+    def digit(ident, y):  # TabRaw y runs on down the document: page 2 starts at 800
+        return make_tab_candidate(candidate_id=ident, raw_text="3", page_index=2, bbox_values=[200.0, y - 3, 204.0, y + 3],
+                                  confidence=0.9, string=1, kind="fret")
+
+    placed, unplaced = place_tab_digits([digit("a", 800.0 + 150.0), digit("b", 800.0 + 450.0)], records)
+    assert {bar: [c.id for c in cands] for bar, cands in placed.items()} == {0: ["a"], 1: ["b"]} and unplaced == []
 
 
 # --- refusals --------------------------------------------------------------------------------------
