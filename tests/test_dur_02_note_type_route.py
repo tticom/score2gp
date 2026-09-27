@@ -385,6 +385,88 @@ def test_symbols_spans_slides_and_hopo_use_notation_bar(tmp_path):
                for e in bar.events[:2])
 
 
+def _attachment_probe(tmp_path):
+    from score2gp.tabraw import TabRaw
+    from score2gp.pdf_tab_bar_assembler import place_tab_digits
+
+    pdf = clean_pdf(tmp_path / "attachment-probe.pdf")
+    raw_path = tmp_path / "tab_raw.json"
+    extract_tab(pdf, raw_path)
+    raw = TabRaw.from_json_file(raw_path)
+    records = read_note_durations(pdf)
+    placed, _ = place_tab_digits(
+        [c for c in raw.candidates if c.kind == "fret" and c.parsed_fret is not None], records,
+    )
+    score, _ = build_ir_from_tabraw_only(raw_path, note_durations=records)
+    return score, raw, placed
+
+
+def test_gp_writer_preserves_hopo_origin_on_pdf_only_route(tmp_path):
+    from score2gp.ir import HammerOnTechnique
+
+    score, _, _ = _attachment_probe(tmp_path)
+    first, second = score.bars[0].events[:2]
+    first.notes[0].techniques.append(HammerOnTechnique(
+        kind="hammer-on", target_event_id=second.id,
+    ))
+    ir_path = tmp_path / "hopo.ir.json"
+    ir_path.write_text(score.model_dump_json(), encoding="utf-8")
+    output = tmp_path / "hopo.gp"
+    subprocess.run([
+        sys.executable, "-c",
+        "from score2gp.ir import ScoreIR; from score2gp.gp_package import write_gp; "
+        "import sys; write_gp(ScoreIR.model_validate_json(open(sys.argv[1], "
+        "encoding='utf-8').read()), sys.argv[2])",
+        str(ir_path), str(output),
+    ], check=True, cwd=ROOT)
+    written = oracle.read_gp_bars(output)
+    assert written[0]["events"][0]["hopo_origin"]
+    assert written[0]["events"][1]["hopo_destination"]
+
+
+def test_hopo_span_can_cross_adjacent_bars_on_same_system(tmp_path):
+    from score2gp.build_ir import _attach_symbols_and_techniques
+    from score2gp.tabraw import make_tab_candidate
+
+    score, raw, placed = _attachment_probe(tmp_path)
+    origin = score.bars[0].events[-1].notes[0]
+    destination = score.bars[1].events[0].notes[0]
+    destination.string = origin.string
+    last_digit = max(placed[0], key=lambda c: c.x)
+    first_digit = min(placed[1], key=lambda c: c.x)
+    marker = make_tab_candidate(
+        candidate_id="cross-bar-pull", raw_text="p", kind="technique-text", confidence=0.9,
+        bbox_values=((last_digit.x + first_digit.x) / 2 - 2, last_digit.y - 12,
+                     (last_digit.x + first_digit.x) / 2 + 2, last_digit.y - 4),
+        page_index=last_digit.page_index, system_index=last_digit.system_index,
+        staff_index=last_digit.staff_index, bar_index=last_digit.bar_index,
+    )
+    raw.candidates = [marker]
+    _attach_symbols_and_techniques(score, raw, placed_frets=placed)
+    assert any(t.kind == "pull-off" and t.target_event_id == score.bars[1].events[0].id
+               for t in origin.techniques)
+
+
+def test_slide_marker_between_same_string_notes_uses_origin(tmp_path):
+    from score2gp.build_ir import _attach_symbols_and_techniques
+    from score2gp.tabraw import make_tab_candidate
+
+    score, raw, placed = _attachment_probe(tmp_path)
+    first, second = sorted(placed[0], key=lambda c: c.x)[:2]
+    marker = make_tab_candidate(
+        candidate_id="between-notes-slide", raw_text="sl.", kind="technique-text",
+        confidence=0.9,
+        bbox_values=((first.x + second.x) / 2, first.y - 12,
+                     (first.x + second.x) / 2 + 4, first.y - 4),
+        page_index=first.page_index, system_index=first.system_index,
+        staff_index=first.staff_index, bar_index=first.bar_index,
+    )
+    raw.candidates = [marker]
+    _attach_symbols_and_techniques(score, raw, placed_frets=placed)
+    assert any(t.kind == "slide" for t in score.bars[0].events[0].notes[0].techniques)
+    assert not any(t.kind == "slide" for t in score.bars[0].events[1].notes[0].techniques)
+
+
 def test_unplaced_attachment_has_a_located_warning(tmp_path):
     from score2gp.tabraw import TabRaw, make_visual_vibrato_candidate
 

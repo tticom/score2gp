@@ -859,6 +859,10 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
                                 hopo_dest_prop = ET.SubElement(props, "Property", {"name": "HopoDestination"})
                                 ET.SubElement(hopo_dest_prop, "Enable")
 
+                            if any(tech.kind in ("hammer-on", "pull-off") for tech in note.techniques):
+                                hopo_origin_prop = ET.SubElement(props, "Property", {"name": "HopoOrigin"})
+                                ET.SubElement(hopo_origin_prop, "Enable")
+
                             has_slide = False
                             slide_flags = 2
                             has_bend = False
@@ -866,11 +870,16 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
                                 if tech.kind == "slide":
                                     has_slide = True
                                     style = getattr(tech, "style", "unknown")
-                                    if style == "shift": slide_flags = 1
-                                    elif style == "legato": slide_flags = 2
-                                    elif style == "slide-in": slide_flags = 16
-                                    elif style == "slide-out": slide_flags = 4
-                                    else: slide_flags = 2
+                                    if style == "shift":
+                                        slide_flags = 1
+                                    elif style == "legato":
+                                        slide_flags = 2
+                                    elif style == "slide-in":
+                                        slide_flags = 16
+                                    elif style == "slide-out":
+                                        slide_flags = 4
+                                    else:
+                                        slide_flags = 2
                                 elif tech.kind == "bend":
                                     has_bend = True
 

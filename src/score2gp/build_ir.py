@@ -26,7 +26,6 @@ from .ir import (
     SourceStage,
     Technique,
     Tempo,
-    TimeSignature,
     Timing,
     Tuning,
     TuningString,
@@ -38,7 +37,6 @@ from .ir import (
     VibratoTechnique,
     HammerOnTechnique,
     PullOffTechnique,
-    UnsupportedTechnique,
     LetRingTechnique,
     PalmMuteTechnique,
     GraceTiming,
@@ -4190,6 +4188,30 @@ def _attach_symbols_and_techniques(
                                 dist = abs(mid_x - candidate.x)
                                 candidate_pairs.append((dist, ev1, note1, ev2, note2))
 
+                    # A span printed after the final digit may end at the first
+                    # digit of the next bar on the same staff system. Require
+                    # the marker to lie strictly between those two digits.
+                    next_bar = bars_by_index.get(bar_idx + 1)
+                    if placed_frets is not None and next_bar is not None:
+                        current_events = [ev for ev in bar.events if not ev.is_rest and ev.notes]
+                        next_events = [ev for ev in next_bar.events if not ev.is_rest and ev.notes]
+                        if current_events and next_events:
+                            last_event, first_event = current_events[-1], next_events[0]
+                            for origin in last_event.notes:
+                                x1 = _get_note_x(origin)
+                                for destination in first_event.notes:
+                                    x2 = _get_note_x(destination)
+                                    provenance = destination.provenance[0] if destination.provenance else None
+                                    same_system = (provenance is not None and
+                                                   provenance.page == candidate.page_index and
+                                                   provenance.system_id in (str(candidate.system_index),
+                                                                            f"system-{candidate.system_index}"))
+                                    if (origin.string == destination.string and same_system and
+                                            x1 is not None and x2 is not None and
+                                            x1 < candidate.x < x2):
+                                        candidate_pairs.append((abs((x1 + x2) / 2 - candidate.x),
+                                                                last_event, origin, first_event, destination))
+
                     if candidate_pairs:
                         candidate_pairs.sort(key=lambda item: item[0])
                         if len(candidate_pairs) > 1 and abs(candidate_pairs[0][0] - candidate_pairs[1][0]) < TECHNIQUE_ATTACHMENT_AMBIGUITY_EPSILON:
@@ -4207,7 +4229,9 @@ def _attach_symbols_and_techniques(
                                 tech = HammerOnTechnique(kind="hammer-on", target_event_id=ev2.id)
                             else:
                                 tech = PullOffTechnique(kind="pull-off", target_event_id=ev2.id)
-                            note1.techniques.append(tech)
+                            if not any(t.kind == kind and t.target_event_id == ev2.id
+                                       for t in note1.techniques):
+                                note1.techniques.append(tech)
                             note1.provenance.append(candidate.to_provenance())
                             _remove_not_aligned_warning(score, candidate)
                         attached = True
@@ -4251,7 +4275,44 @@ def _attach_symbols_and_techniques(
 
             elif kind == "slide":
                 attached = False
-                if candidate.x is not None:
+                if candidate.x is not None and placed_frets is not None:
+                    spanning_origins = []
+                    for first_event, second_event in zip(bar.events, bar.events[1:]):
+                        if first_event.is_rest or second_event.is_rest:
+                            continue
+                        for first_note in first_event.notes:
+                            x1 = _get_note_x(first_note)
+                            for second_note in second_event.notes:
+                                x2 = _get_note_x(second_note)
+                                if (first_note.string == second_note.string and
+                                        x1 is not None and x2 is not None and
+                                        x1 < candidate.x < x2):
+                                    spanning_origins.append((first_note, (x1 + x2) / 2))
+                    if len(spanning_origins) == 1:
+                        target_note, midpoint = spanning_origins[0]
+                        if abs(candidate.x - midpoint) < TECHNIQUE_ATTACHMENT_AMBIGUITY_EPSILON / 2:
+                            score.warnings.append(WarningItem(
+                                code="ambiguous_technique_attachment",
+                                message=f"Technique '{candidate.raw_text}' is centered between notes in bar {bar_idx}.",
+                                severity="warning", provenance=[candidate.to_provenance()],
+                            ))
+                        else:
+                            if not any(t.kind == "slide" for t in target_note.techniques):
+                                target_note.techniques.append(SlideTechnique(
+                                    kind="slide", style="unknown", direction="unknown",
+                                    target_event_id=None,
+                                ))
+                            target_note.provenance.append(candidate.to_provenance())
+                            _remove_not_aligned_warning(score, candidate)
+                        attached = True
+                    elif len(spanning_origins) > 1:
+                        score.warnings.append(WarningItem(
+                            code="ambiguous_technique_attachment",
+                            message=f"Technique '{candidate.raw_text}' spans multiple pairs in bar {bar_idx}.",
+                            severity="warning", provenance=[candidate.to_provenance()],
+                        ))
+                        attached = True
+                if candidate.x is not None and not attached:
                     notes_with_x = []
                     for event in bar.events:
                         if event.is_rest:
