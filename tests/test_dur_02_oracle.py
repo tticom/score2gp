@@ -60,8 +60,6 @@ def read_gp_bars(gp: Path | bytes) -> list[dict[str, Any]]:
                 if unknown:
                     raise OracleRefusal(f"bar {index}: rhythm element {unknown}")
                 value = rhythm.findtext("NoteValue")
-                if value not in WRITTEN:
-                    raise OracleRefusal(f"bar {index}: note value {value}")
                 dot = rhythm.find("AugmentationDot")
                 tuplet = rhythm.find("PrimaryTuplet")
                 note_ids = (beat.findtext("Notes") or "").split()
@@ -74,7 +72,8 @@ def read_gp_bars(gp: Path | bytes) -> list[dict[str, Any]]:
                     destinations.append(tie is not None and tie.get("destination") == "true")
                 events.append({
                     "kind": "note" if note_ids else "rest",
-                    "written": WRITTEN[value],
+                    # A value Guitar Pro does not write is compared verbatim, so it shows as a difference.
+                    "written": WRITTEN.get(value, f"unrecognised:{value}"),
                     "dots": int(dot.get("count")) if dot is not None else 0,
                     "tuplet": (int(tuplet.get("num")), int(tuplet.get("den"))) if tuplet is not None else None,
                     "tie": (any(origins), any(destinations)),
@@ -233,6 +232,16 @@ def test_a_rest_written_as_a_note_is_a_kind_difference():
 def test_a_refused_bar_counts_against_coverage_and_is_not_compared():
     result = compare_gp(_gp([_bar(), _bar()]), _gp([None, _bar()]))
     assert result["written_bars"] == 1 and result["refused_bars"] == [0] and result["differences"] == []
+
+
+def test_a_note_value_guitar_pro_does_not_write_is_a_difference():
+    gpif = zipfile.ZipFile(io.BytesIO(_gp([_bar()]))).read("Content/score.gpif")
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as package:
+        package.writestr("Content/score.gpif", gpif.replace(b"<NoteValue>Quarter</NoteValue>", b"<NoteValue>Crotchet</NoteValue>"))
+    produced = buffer.getvalue()
+    result = compare_gp(_gp([_bar()]), produced)
+    assert {(d["event_index"], d["field"], d["actual"]) for d in result["differences"]} == {(0, "written", "unrecognised:Crotchet"), (4, "written", "unrecognised:Crotchet")}
 
 
 def test_a_missing_event_is_located():

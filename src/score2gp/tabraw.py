@@ -130,7 +130,6 @@ VALID_DURATION_NAMES: set[str] = {
 }
 VALID_SOURCES: set[str] = {
     "visual_morphology",
-    "equal_spacing_fallback",
     "ambiguous_conflict",
 }
 TAB_DURATION_EVIDENCE_FIELDS: set[str] = {
@@ -142,7 +141,6 @@ TAB_DURATION_EVIDENCE_FIELDS: set[str] = {
     "confidence",
     "source",
     "is_ambiguous",
-    "is_fallback_placeholder",
     "diagnostic_message",
 }
 
@@ -188,10 +186,6 @@ def _parse_tab_duration_evidence(data: TabDurationEvidence | dict[str, Any]) -> 
     if not isinstance(is_ambiguous, bool):
         return None
 
-    is_fallback_placeholder = data.get("is_fallback_placeholder", False)
-    if not isinstance(is_fallback_placeholder, bool):
-        return None
-
     diagnostic_message = data.get("diagnostic_message", "")
     if not isinstance(diagnostic_message, str):
         return None
@@ -205,7 +199,6 @@ def _parse_tab_duration_evidence(data: TabDurationEvidence | dict[str, Any]) -> 
         confidence=float(confidence),
         source=source,  # type: ignore[arg-type]
         is_ambiguous=is_ambiguous,
-        is_fallback_placeholder=is_fallback_placeholder,
         diagnostic_message=diagnostic_message,
     )
 

@@ -834,6 +834,11 @@ def notation_half_note_export_command(
         raise typer.Exit(1)
 
 
+def _write_note_type_route(work_dir: Path, route: dict | None) -> None:
+    if route is not None:
+        (work_dir / "note-type-route.json").write_text(json.dumps(route, indent=2) + "\n", encoding="utf-8")
+
+
 @app.command("convert")
 def convert_command(
     pdf: Path = typer.Option(..., "--pdf", help="Path to input born-digital vector PDF"),
@@ -849,7 +854,10 @@ def convert_command(
     optimize_fret_snapping: bool = typer.Option(False, "--optimize-fret-snapping", help="Enable Left-hand finger position/fret-snapping optimization"),
     pages: Optional[str] = typer.Option(None, "--pages", help="Explicit page range subset to process (e.g. '1-1' or '1-2')."),
     pdf_only_tab: bool = typer.Option(False, "--pdf-only-tab", help="Enable direct PDF-to-GP conversion without a MusicXML timing source"),
-    editable_draft: bool = typer.Option(False, "--editable-draft", help="Generate an editable GP draft with defaulted rhythms and tuning from PDF tab extraction."),
+    time_signature: Optional[str] = typer.Option(
+        None, "--time-signature",
+        help="With --pdf-only-tab: a declared time signature (e.g. '4/4') for the bar check only, where none is printed",
+    ),
     require_precise_timing: bool = typer.Option(False, "--require-precise-timing", help="Reject input if reliable precise timing evidence is missing."),
     tempo_bpm: Optional[float] = typer.Option(None, "--tempo-bpm", help="Explicit tempo override in BPM for PDF-only TabRaw conversion."),
     ref_gp: Optional[Path] = typer.Option(None, "--ref-gp", help="Path to optional reference GP package for semantic comparison"),
@@ -863,11 +871,21 @@ def convert_command(
 
     pdf_only_diag_payload = None
     supplied_musicxml = musicxml is not None
+    declared_time_signature = None
+    if time_signature is not None:
+        if not pdf_only_tab:
+            typer.echo("Error: --time-signature is only supported with --pdf-only-tab.", err=True)
+            raise typer.Exit(1)
+        try:
+            numerator, denominator = (int(part) for part in time_signature.split("/"))
+            declared_time_signature = (numerator, denominator)
+        except ValueError as exc:
+            raise typer.BadParameter(f"Invalid time signature: '{time_signature}'. Use a form like '4/4'.") from exc
     mxl_info = _get_mxl_info(musicxml, supplied_musicxml)
 
     if tempo_bpm is not None:
-        if not pdf_only_tab and not editable_draft:
-            typer.echo("Error: --tempo-bpm option is only supported with --pdf-only-tab or --editable-draft.", err=True)
+        if not pdf_only_tab:
+            typer.echo("Error: --tempo-bpm option is only supported with --pdf-only-tab.", err=True)
             if json_report:
                 _write_convert_report(
                     report_path=json_report,
@@ -877,7 +895,7 @@ def convert_command(
                     work_dir=actual_work_dir,
                     error_type="ValueError",
                     refusal_code="pdf_only_tab_invalid_tempo",
-                    recommended_action="Remove --tempo-bpm or specify --pdf-only-tab or --editable-draft.",
+                    recommended_action="Remove --tempo-bpm or specify --pdf-only-tab.",
                     output_written=False,
                     strict=strict,
                     musicxml_sidecar_info=mxl_info,
@@ -1049,7 +1067,7 @@ def convert_command(
             )
         raise typer.Exit(1)
     # Stage 2: Check for MusicXML sidecar requirement
-    if not pdf_only_tab and not editable_draft:
+    if not pdf_only_tab:
         if musicxml is None:
             typer.echo("Error: MusicXML sidecar path must be provided via --musicxml or -m.", err=True)
             warnings.append({
@@ -1108,7 +1126,7 @@ def convert_command(
     )
 
     alignment_path = None
-    if has_ascii_candidates and not (pdf_only_tab or editable_draft):
+    if has_ascii_candidates and not pdf_only_tab:
         try:
             alignment_dir = actual_work_dir / "alignment"
             alignment = align_ascii_musicxml_files(
@@ -1154,17 +1172,20 @@ def convert_command(
     diagnostics_path = actual_work_dir / "diagnostics.json"
 
     try:
-        if pdf_only_tab or editable_draft:
+        if pdf_only_tab:
             from .build_ir import build_ir_from_tabraw_only
+            from .notation_omr.note_duration import read_note_durations
+            note_durations = read_note_durations(pdf, pages=parse_page_range(pages), time_signature=declared_time_signature)
+            (actual_work_dir / "note-durations.json").write_text(json.dumps(note_durations, indent=2) + "\n", encoding="utf-8")
             tabraw_kwargs = {
                 "tabraw_path": tabraw_path,
-                "editable_draft": editable_draft,
+                "note_durations": note_durations,
                 "require_precise_timing": require_precise_timing,
             }
             if tempo_bpm is not None:
                 tabraw_kwargs["tempo_bpm"] = tempo_bpm
-                tabraw_kwargs["tempo_is_explicit"] = True
             score, diagnostics = build_ir_from_tabraw_only(**tabraw_kwargs)
+            _write_note_type_route(actual_work_dir, diagnostics.note_type_route)
             score.to_json_file(ir_path)
         else:
             score, diagnostics = build_ir_with_diagnostics_from_files(
@@ -1191,6 +1212,8 @@ def convert_command(
                 warnings.append(w.model_dump(mode="json", exclude_none=True))
     except BuildIrInputRiskError as exc:
         payload = exc.to_diagnostics_payload()
+        if pdf_only_tab and isinstance(exc.details.get("note_type_route"), dict):
+            _write_note_type_route(actual_work_dir, exc.details["note_type_route"])
         if exc.category == "missing_pdf_grouping":
             payload["artifacts"] = _grouping_artifacts_for_tabraw(tabraw_path)
         diagnostics_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
@@ -1234,7 +1257,7 @@ def convert_command(
         typer.echo(f"recommended_action: {recommended_action}", err=True)
 
         if json_report:
-            if pdf_only_tab or editable_draft:
+            if pdf_only_tab:
                 pdf_only_diag_payload = {
                     "pdf_grouping_status": "refused",
                     "inferred_rhythm_status": None,
@@ -1265,7 +1288,7 @@ def convert_command(
         write_warnings(actual_work_dir / "warnings.json", warnings)
         write_conversion_report(actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary)
         if json_report:
-            if pdf_only_tab or editable_draft:
+            if pdf_only_tab:
                 pdf_only_diag_payload = {
                     "pdf_grouping_status": "refused" if getattr(exc, "category", None) == "pdf_only_tab_grouping_unsafe" else "failed",
                     "inferred_rhythm_status": None,
@@ -1318,10 +1341,10 @@ def convert_command(
             write_warnings(actual_work_dir / "warnings.json", warnings)
             write_conversion_report(actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary)
             if json_report:
-                if pdf_only_tab or editable_draft:
+                if pdf_only_tab:
                     pdf_only_diag_payload = {
                         "pdf_grouping_status": "safe",
-                        "inferred_rhythm_status": "defaulted_placeholder" if editable_draft else "applied",
+                        "inferred_rhythm_status": "note_type",
                         "gp_package_written": False,
                     }
                 _write_convert_report(
@@ -1346,10 +1369,10 @@ def convert_command(
 
     # Write successful JSON report
     if json_report:
-        if pdf_only_tab or editable_draft:
+        if pdf_only_tab:
             pdf_only_diag_payload = {
                 "pdf_grouping_status": "safe",
-                "inferred_rhythm_status": "defaulted_placeholder" if editable_draft else "applied",
+                "inferred_rhythm_status": "note_type",
                 "gp_package_written": True,
             }
             if ref_gp:

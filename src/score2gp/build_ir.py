@@ -9,7 +9,7 @@ from typing import Iterable, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .pdf_tab_bar_assembler import PdfTabBarAssemblerError, assemble_pdf_tab_bar
+from .pdf_tab_bar_assembler import PdfTabBarAssemblerError, assemble_note_type_bars, place_tab_digits
 from .ascii_alignment import ALIGNMENT_SCHEMA_VERSION, AsciiMusicXmlAlignment, compute_sha256
 from . import __version__
 from .ir import (
@@ -523,6 +523,7 @@ class BuildIrDiagnostics(BaseModel):
     per_bar: list[BarAlignmentDiagnostics] = Field(default_factory=list)
     warnings: list[dict[str, object]] = Field(default_factory=list)
     pdf_timing_mapping: dict[str, object] | None = None
+    note_type_route: dict[str, object] | None = None
 
     def to_json_file(self, path: str | Path) -> None:
         out = Path(path)
@@ -1628,11 +1629,15 @@ def build_ir_with_diagnostics_from_imports(
 def build_ir_from_tabraw_only(
     tabraw_path: str | Path,
     *,
+    note_durations: dict[str, object] | None = None,
     tempo_bpm: float = 120.0,
-    tempo_is_explicit: bool = False,
-    editable_draft: bool = False,
     require_precise_timing: bool = False,
 ) -> tuple[ScoreIR, BuildIrDiagnostics]:
+    """ScoreIR from TAB positions and note-type durations (DUR-01 records of the same PDF).
+
+    Every duration is the event's note type; every position is its TAB digit. Bars that cannot be
+    written that way are refused, written empty, and located in ``diagnostics.note_type_route``.
+    """
     if tempo_bpm is None or math.isnan(tempo_bpm) or math.isinf(tempo_bpm) or tempo_bpm <= 0:
         raise BuildIrInputRiskError(
             category="pdf_only_tab_invalid_tempo",
@@ -1729,66 +1734,56 @@ def build_ir_from_tabraw_only(
                 message=f"PDF-only tab building refused: candidate {candidate.id} has missing required layout fields (string={candidate.string}, bar_index={candidate.bar_index}, system_index={candidate.system_index}, x={candidate.x}).",
             )
 
-    # 2. Rhythmic alignment & ScoreIR generation
+    if note_durations is None:
+        raise BuildIrInputRiskError(
+            category="pdf_only_tab_note_durations_missing",
+            stage="note-type-route",
+            message="PDF-only tab building refused: no note-duration records were given, and no duration is ever defaulted.",
+            details={"remediation_hint": "Read the note durations of the same PDF (score2gp read-note-durations) and pass them in."},
+        )
 
+    # 2. Durations from note types, positions from the TAB
+    digits = [c for c in fret_candidates if c.kind == "fret" and c.parsed_fret is not None]
+    try:
+        bars, note_type_route = assemble_note_type_bars(digits, note_durations, track_id=TRACK_ID)
+    except PdfTabBarAssemblerError as err:
+        raise BuildIrInputRiskError(
+            category=err.category,
+            stage=err.stage,
+            message=err.message,
+            details=err.details,
+        ) from err
+    summary = note_type_route["summary"]
+    if summary["written_bars"] == 0:
+        raise BuildIrInputRiskError(
+            category="pdf_only_tab_no_bar_written",
+            stage="note-type-route",
+            message=f"PDF-only tab building refused: every one of {summary['source_bars']} bars was refused.",
+            details={"refusal_reasons": summary["refusal_reasons"], "note_type_route": note_type_route},
+        )
+    placed, _ = place_tab_digits(digits, note_durations["systems"])
+    output_bar_to_frets = {source_bar + 1: bar_digits for source_bar, bar_digits in placed.items()}
 
-
-    # Get unique source bar keys in stable reading order:
-    # (page_index, system_index, staff_index, bar_index)
-    source_bar_keys = sorted(list({(c.page_index or 1, c.system_index, c.staff_index or 1, c.bar_index) for c in fret_candidates}))
-
-    bars = []
-    output_bar_to_frets = {}
-
-    for output_bar_idx, source_bar_key in enumerate(source_bar_keys, start=1):
-        page_idx, sys_idx, staff_idx, local_bar_idx = source_bar_key
-        bar_frets = [
-            c for c in fret_candidates
-            if (c.page_index or 1) == page_idx
-            and c.system_index == sys_idx
-            and (c.staff_index or 1) == staff_idx
-            and c.bar_index == local_bar_idx
-        ]
-
-        output_bar_to_frets[output_bar_idx] = bar_frets
-
-        try:
-            bar = assemble_pdf_tab_bar(
-                bar_frets,
-                floating_barlines=tabraw.floating_barlines,
-                output_bar_idx=output_bar_idx,
-                track_id=TRACK_ID,
-                editable_draft=editable_draft,
-                tempo_bpm=tempo_bpm,
-                tempo_is_explicit=tempo_is_explicit,
-                chord_x_tolerance_pt=PDF_ONLY_CHORD_X_TOLERANCE_PT,
-            )
-        except PdfTabBarAssemblerError as err:
-            raise BuildIrInputRiskError(
-                category=err.category,
-                stage=err.stage,
-                message=err.message,
-                details=err.details,
-            ) from err
-        bars.append(bar)
-
-    # Create warnings and add timing inferred timing warning
     warnings_list = [
         WarningItem(
-            code="pdf_only_tab_inferred_timing",
-            message="Timing and rhythmic durations are approximate and inferred from PDF horizontal layout positioning, not source notation.",
-            severity="warning",
+            code="pdf_only_tab_note_type_timing",
+            message="Durations are read from the notation's note types and grouping; positions from the TAB.",
+            severity="info",
         )
     ]
-
-    if editable_draft:
-        warnings_list.append(
-            WarningItem(
-                code="pdf_editable_draft",
-                message="Editable GP draft generated. Tuning, rhythm, tempo, and time signature are explicit defaults.",
-                severity="warning",
+    for entry in note_type_route["bars"]:
+        if entry["status"] == "refused":
+            location = entry["location"]
+            where = f"page {location['page_index'] + 1}, bar {location['bar_index'] + 1}"
+            if "event_index" in location:
+                where += f", event {location['event_index']}"
+            warnings_list.append(
+                WarningItem(
+                    code="pdf_only_tab_bar_refused",
+                    message=f"Bar {entry['output_bar_index']} refused ({entry['reason']}) at {where}; written empty.",
+                    severity="warning",
+                )
             )
-        )
 
     for candidate in tabraw.candidates:
         if candidate.kind in ("chord-symbol", "technique-text"):
@@ -1907,15 +1902,15 @@ def build_ir_from_tabraw_only(
         "whether_mapping_attempted": False,
         "whether_mapping_refused": False,
         "refusal_reason_codes": [],
-        "mapping_quality_classification": "inferred",
+        "mapping_quality_classification": "note_type",
         "refinement_reason_codes": [],
         "safe_layout_evidence": True,
         "partial_layout_evidence": False,
         "ambiguous_layout_evidence": False,
         "incompatible_layout_evidence": False,
-        "quality": "inferred",
+        "quality": "note_type",
         "whether_scoreir_written": True,
-        "remediation_hint": "Timing is layout-inferred. No timing source sidecar was provided.",
+        "remediation_hint": "Durations are read from the notation's note types; see note_type_route for refused bars.",
         "per_bar": [],
         "matched_x_onset_group_count": 0,
         "unmatched_x_group_count": 0,
@@ -1954,6 +1949,7 @@ def build_ir_from_tabraw_only(
         warnings=[w.model_dump(mode="json", exclude_none=True) for w in score.warnings],
         per_bar=per_bar_diagnostics,
         pdf_timing_mapping=pdf_timing_mapping,
+        note_type_route=note_type_route,
     )
 
     return score, diagnostics

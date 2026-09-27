@@ -19,11 +19,9 @@ DURATION_TICKS_MAP: dict[DurationName, int] = {
 
 @dataclass(frozen=True)
 class TabDurationEvidence:
-    """Represents duration evidence extracted from visual morphology or equal-spacing fallback.
+    """Represents duration evidence extracted from visual morphology.
 
-    For unstemmed events where no visual candidates are present, source is "equal_spacing_fallback"
-    and is_fallback_placeholder is True (the duration_name "quarter" is a structural placeholder,
-    not visual evidence).
+    An unstemmed event without visual candidates gets no evidence at all: no placeholder duration.
 
     For ambiguous or conflicting geometry, source is "ambiguous_conflict", is_ambiguous is True,
     duration_name is "ambiguous", and duration_ticks is 0 (failing closed without fabricating false evidence).
@@ -35,12 +33,13 @@ class TabDurationEvidence:
     beam_count: int = 0
     flag_count: int = 0
     confidence: float = 1.0
-    source: Literal["visual_morphology", "equal_spacing_fallback", "ambiguous_conflict"] = "visual_morphology"
+    source: Literal["visual_morphology", "ambiguous_conflict"] = "visual_morphology"
     is_ambiguous: bool = False
-    is_fallback_placeholder: bool = False
     diagnostic_message: str = ""
 
     def __post_init__(self) -> None:
+        if self.source not in ("visual_morphology", "ambiguous_conflict"):
+            raise ValueError(f"TabDurationEvidence invariant mismatch: unknown source '{self.source}'")
         if self.duration_name not in DURATION_TICKS_MAP:
             raise ValueError(
                 f"TabDurationEvidence invariant mismatch: unknown duration_name '{self.duration_name}'"
