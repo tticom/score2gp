@@ -23,6 +23,7 @@ from .tabraw import TabCandidate
 COLUMN_SPACES = 0.75  # TAB digits closer than this in x are one column (one chord)
 MATCH_SPACES = 1.0  # a notation event and a TAB column further apart than this are not the same event
 BAR_EDGE_SPACES = 0.5  # a TAB digit this close outside a notation bar's barlines still belongs to it
+MAX_EVENTS_PER_BAR = 64  # more notation events or TAB columns than this in one bar is unsafe grouping
 
 
 def _refusal(reason: str, event_index: int | None = None, detail: str | None = None) -> dict[str, Any]:
@@ -180,6 +181,13 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
             "time_signature": check["time_signature"], "time_signature_source": check["time_signature_source"],
             "notation_events": len(records), "tab_digits": len(bar_digits), "events": [],
         }
+        crowded = max(len(records), len(_columns(bar_digits, system["staff_space"])))
+        if crowded > MAX_EVENTS_PER_BAR:
+            raise PdfTabBarAssemblerError(
+                category="pdf_only_tab_grouping_unsafe",
+                stage="layout-gating",
+                message=f"PDF-only tab building refused: too many events ({crowded}) in bar {output_index}.",
+            )
         unread = next((r for r in records if r["status"] != "read"), None)
         refusal = None
         matched: list[dict[str, Any]] = []
@@ -224,7 +232,7 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
             reasons[entry["reason"]] = reasons.get(entry["reason"], 0) + 1
     match_kinds: dict[str, int] = {}
     for entry in route_bars:
-        for event in entry["events"]:
+        for event in entry["events"] if entry["status"] == "written" else []:
             match_kinds[event["match"]["kind"]] = match_kinds.get(event["match"]["kind"], 0) + 1
     route = {
         "schema": "note-type-route.v0.1",

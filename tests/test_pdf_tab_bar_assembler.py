@@ -1,1135 +1,207 @@
+"""Bars from note-type records and TAB digits: every duration from its note type, positions from the TAB.
+
+DUR-02 replaced ``assemble_pdf_tab_bar`` (durations from the event count, trailing rests to fill the
+bar, sub-bars split at floating TAB barlines) with ``assemble_note_type_bars``. Each old test has a
+replacement here, named in its docstring.
+"""
+
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
 
 import pytest
 
-from pdf_tab_test_helpers import make_pdf_quarter_rest_candidate, make_pdf_tab_candidate
+import score2gp.pdf_tab_bar_assembler as assembler
 from score2gp.build_ir import BuildIrInputRiskError, build_ir_from_tabraw_only
-from score2gp.ir import DEFAULT_TICKS_PER_QUARTER
-from score2gp.pdf_tab_bar_assembler import PdfTabBarAssemblerError, assemble_pdf_tab_bar
-from score2gp.tabraw import TabCandidate, TabRaw
+from score2gp.ir import Bar, DEFAULT_TICKS_PER_QUARTER, Event, NotatedDuration, Note, TimeSignature, Timing, Tuplet
+from score2gp.pdf_tab_bar_assembler import PdfTabBarAssemblerError, assemble_note_type_bars, place_tab_digits
+from score2gp.tabraw import TabRaw
+
+_spec = importlib.util.spec_from_file_location("pdf_tab_route_support", Path(__file__).with_name("test_pdf_tab_route_support.py"))
+support = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(support)
+note, rest, digit, records = support.note, support.rest, support.digit, support.records
+QUARTERS = [note(20.0), note(60.0), note(100.0), note(140.0)]
 
 
-def test_assemble_pdf_tab_bar_empty() -> None:
-    bar = assemble_pdf_tab_bar([], output_bar_idx=1, track_id="gtr-1")
-
-    assert bar.index == 1
-    assert len(bar.events) == 1
-    assert bar.events[0].is_rest is True
-    assert bar.events[0].timing.duration_ticks == 3840
-    assert bar.events[0].timing.notated_duration.value == "whole"
+def _assemble(pages, digits, **kwargs):
+    return assemble_note_type_bars(digits, records(pages, **kwargs), track_id="gtr-1")
 
 
-def test_assemble_pdf_tab_bar_single_note() -> None:
-    c1 = make_pdf_tab_candidate(id="c-1", raw_text="5", parsed_fret=5, string=1, confidence=0.9)
-
-    bar = assemble_pdf_tab_bar([c1], output_bar_idx=1, track_id="gtr-1")
-
-    assert bar.index == 1
-    assert len(bar.events) >= 1
-    assert bar.events[0].is_rest is False
-    assert bar.events[0].timing.duration_ticks == 480
-    assert bar.events[0].notes[0].pitch == 69  # E4 (64) + 5
-
-    total_ticks = sum(e.timing.duration_ticks for e in bar.events)
-    assert total_ticks == 3840
+def _quarter_digits(bar=0, page=0, fret=5):
+    return [digit(f"p{page}b{bar}e{i}", bar, 20.0 + 40.0 * i, 3, fret + i, page=page) for i in range(4)]
 
 
-def test_assemble_pdf_tab_bar_chord() -> None:
-    c1 = make_pdf_tab_candidate(id="c-1", raw_text="5", parsed_fret=5, string=1, confidence=0.9)
-    c2 = make_pdf_tab_candidate(id="c-2", raw_text="7", parsed_fret=7, y=20.0, string=3, confidence=0.8)
-
-    bar = assemble_pdf_tab_bar([c1, c2], output_bar_idx=1, track_id="gtr-1")
-
-    assert bar.events[0].is_rest is False
-    assert len(bar.events[0].notes) == 2
-    assert bar.events[0].notes[0].string == 1
-    assert bar.events[0].notes[1].string == 3
-    assert sum(e.timing.duration_ticks for e in bar.events) == 3840
+def test_a_bar_with_no_notation_event_is_refused_never_given_a_whole_rest() -> None:
+    """Replaces test_assemble_pdf_tab_bar_empty (which invented a whole rest)."""
+    bars, route = _assemble([[[], QUARTERS]], _quarter_digits(bar=1))
+    assert bars[0].events == [] and route["bars"][0]["reason"] == "bar_without_notation_event"
+    assert route["bars"][1]["status"] == "written"
 
 
-def test_assemble_pdf_tab_bar_sequential_notes() -> None:
-    c1 = make_pdf_tab_candidate(id="c-1", raw_text="3", parsed_fret=3, x=10.0, string=6)
-    c2 = make_pdf_tab_candidate(id="c-2", raw_text="5", parsed_fret=5, x=30.0, string=5)
-
-    bar = assemble_pdf_tab_bar([c1, c2], output_bar_idx=1, track_id="gtr-1")
-
-    note_events = [e for e in bar.events if not e.is_rest]
-    assert len(note_events) == 2
-    assert note_events[0].timing.onset_ticks == 0
-    assert note_events[0].notes[0].fret == 3
-    assert note_events[1].timing.onset_ticks == 480
-    assert note_events[1].notes[0].fret == 5
-    assert sum(e.timing.duration_ticks for e in bar.events) == 3840
+def test_a_printed_whole_rest_is_written_as_the_notation_prints_it() -> None:
+    bars, route = _assemble([[[rest(20.0, "whole")]]], [])
+    assert route["bars"][0]["status"] == "written"
+    assert [(e.is_rest, e.timing.notated_duration.value, e.timing.duration_ticks) for e in bars[0].events] == [
+        (True, "whole", 3840)]
 
 
-def test_assemble_pdf_tab_bar_duplicate_string_candidates() -> None:
-    # Two candidates on the exact same string at the exact same x coordinate
-    c1 = make_pdf_tab_candidate(id="c-1", raw_text="5", parsed_fret=5, string=1, confidence=0.9)
-    c2 = make_pdf_tab_candidate(id="c-2", raw_text="7", parsed_fret=7, y=12.0, string=1, confidence=0.7)
-
-    bar = assemble_pdf_tab_bar([c1, c2], output_bar_idx=1, track_id="gtr-1")
-
-    # Duplicate-string grouper splits duplicate strings into separate ordered subgroups
-    note_events = [e for e in bar.events if not e.is_rest]
-    assert len(note_events) == 2
-
-    # Event 1: c-1 (fret 5 on string 1) at onset 0
-    assert note_events[0].timing.onset_ticks == 0
-    assert len(note_events[0].notes) == 1
-    assert note_events[0].notes[0].fret == 5
-    assert note_events[0].notes[0].string == 1
-    assert note_events[0].notes[0].provenance[0].raw_token_id == "c-1"
-
-    # Event 2: c-2 (fret 7 on string 1) at onset 480
-    assert note_events[1].timing.onset_ticks == 480
-    assert len(note_events[1].notes) == 1
-    assert note_events[1].notes[0].fret == 7
-    assert note_events[1].notes[0].string == 1
-    assert note_events[1].notes[0].provenance[0].raw_token_id == "c-2"
-
-    assert sum(e.timing.duration_ticks for e in bar.events) == 3840
+def test_a_single_note_bar() -> None:
+    """Replaces test_assemble_pdf_tab_bar_single_note (which made the note an eighth and padded the bar)."""
+    bars, route = _assemble([[[note(20.0, "whole")]]], [digit("c-1", 0, 20.0, 1, 5)])
+    (event,) = bars[0].events
+    assert (event.timing.notated_duration.value, event.timing.duration_ticks) == ("whole", 3840)
+    assert [(n.string, n.fret, n.pitch) for n in event.notes] == [(1, 5, 69)]
+    assert route["bars"][0]["events"][0]["match"] == {"kind": "tab_column", "candidate_ids": ["c-1"], "dx_spaces": 0.0}
 
 
-def test_assemble_pdf_tab_bar_quarter_rest() -> None:
-    c_rest = make_pdf_quarter_rest_candidate(id="c-rest", confidence=0.95)
-
-    bar = assemble_pdf_tab_bar([c_rest], output_bar_idx=1, track_id="gtr-1")
-
-    assert bar.events[0].is_rest is True
-    assert bar.events[0].timing.duration_ticks == 960
-    assert bar.events[0].timing.notated_duration.value == "quarter"
-    assert sum(e.timing.duration_ticks for e in bar.events) == 3840
+def test_a_chord_bar() -> None:
+    """Replaces test_assemble_pdf_tab_bar_chord."""
+    digits = [digit("c-1", 0, 20.0, 1, 3), digit("c-2", 0, 20.0, 2, 5)]
+    bars, _ = _assemble([[[note(20.0, "whole", heads=2)]]], digits)
+    assert [(n.string, n.fret) for n in bars[0].events[0].notes] == [(1, 3), (2, 5)]
 
 
-def test_assemble_pdf_tab_bar_custom_chord_x_tolerance() -> None:
-    c1 = make_pdf_tab_candidate(id="c-1", raw_text="3", parsed_fret=3, x=10.0, string=1)
-    c2 = make_pdf_tab_candidate(id="c-2", raw_text="5", parsed_fret=5, x=15.0, y=20.0, string=2)
-
-    bar_separate = assemble_pdf_tab_bar([c1, c2], output_bar_idx=1, track_id="gtr-1", chord_x_tolerance_pt=2.0)
-    assert len([e for e in bar_separate.events if not e.is_rest]) == 2
-
-    bar_chord = assemble_pdf_tab_bar([c1, c2], output_bar_idx=1, track_id="gtr-1", chord_x_tolerance_pt=10.0)
-    assert len(bar_chord.events[0].notes) == 2
+def test_sequential_notes_take_their_onsets_from_the_note_types_before_them() -> None:
+    """Replaces test_assemble_pdf_tab_bar_sequential_notes (onsets 0 and 480 from the count rule)."""
+    specs = [note(20.0, "quarter", dots=1), note(60.0, "eighth"), note(100.0, "half")]
+    digits = [digit(f"c-{i}", 0, s["x"], 3, i) for i, s in enumerate(specs)]
+    bars, _ = _assemble([[specs]], digits)
+    assert [(e.timing.onset_ticks, e.timing.duration_ticks) for e in bars[0].events] == [(0, 1440), (1440, 480), (1920, 1920)]
 
 
-def test_assemble_pdf_tab_bar_internal_error_raised() -> None:
-    candidates = [
-        make_pdf_tab_candidate(id=f"c-{idx}", raw_text="5", parsed_fret=5, x=float(idx * 10))
-        for idx in range(5)
-    ] + [
-        make_pdf_quarter_rest_candidate(id=f"c-{idx}", x=float(idx * 10))
-        for idx in range(5, 7)
-    ]
+def test_two_digits_on_one_string_in_one_column_are_refused() -> None:
+    """Replaces test_assemble_pdf_tab_bar_duplicate_string_candidates (which split them into two eighths)."""
+    digits = [digit("c-1", 0, 20.0, 1, 5), digit("c-2", 0, 20.0, 1, 7)]
+    bars, route = _assemble([[[note(20.0, "whole", heads=2)]]], digits)
+    assert bars[0].events == []
+    assert (route["bars"][0]["reason"], route["bars"][0]["location"]["event_index"]) == ("notehead_digit_count_mismatch", 0)
 
-    with pytest.raises(PdfTabBarAssemblerError) as exc_info:
-        assemble_pdf_tab_bar(candidates, output_bar_idx=1, track_id="gtr-1")
 
-    assert exc_info.value.category == "pdf_only_tab_measure_overcapacity"
-    assert exc_info.value.stage == "measure-assembly"
-    assert exc_info.value.details == {
-        "bar_index": "1",
-        "accumulated_ticks": "4320",
-        "measure_capacity": "3840",
-    }
+def test_a_rest_comes_from_the_notation_and_a_tab_rest_candidate_adds_nothing() -> None:
+    """Replaces test_assemble_pdf_tab_bar_quarter_rest (a TAB rest glyph and trailing rest padding)."""
+    specs = [rest(20.0), note(60.0), note(100.0, "half")]
+    bars, _ = _assemble([[specs]], [digit("c-1", 0, 60.0, 3, 2), digit("c-2", 0, 100.0, 3, 4)])
+    assert [(e.is_rest, e.timing.notated_duration.value) for e in bars[0].events] == [
+        (True, "quarter"), (False, "quarter"), (False, "half")]
+
+
+def test_digits_are_one_column_within_three_quarters_of_a_staff_space() -> None:
+    """Replaces test_assemble_pdf_tab_bar_custom_chord_x_tolerance: the tolerance is in staff spaces."""
+    near = [digit("c-1", 0, 20.0, 1, 3), digit("c-2", 0, 20.0 + 0.5 * support.SPACE, 2, 5)]
+    bars, route = _assemble([[[note(21.0, "whole", heads=2)]]], near)
+    assert route["bars"][0]["status"] == "written" and len(bars[0].events[0].notes) == 2
+    apart = [digit("c-1", 0, 20.0, 1, 3), digit("c-2", 0, 20.0 + 3 * support.SPACE, 2, 5)]
+    bars, route = _assemble([[[note(20.0, "half"), note(20.0 + 3 * support.SPACE, "half")]]], apart)
+    assert route["bars"][0]["status"] == "written" and [len(e.notes) for e in bars[0].events] == [1, 1]
+
+
+def test_an_overfull_bar_is_refused_and_the_other_bars_are_written() -> None:
+    """Replaces test_assemble_pdf_tab_bar_internal_error_raised (a whole-score overcapacity error)."""
+    overfull = [note(10.0 + 30.0 * i) for i in range(5)]
+    digits = [digit(f"c-{i}", 0, s["x"], 3, i) for i, s in enumerate(overfull)] + _quarter_digits(bar=1)
+    bars, route = _assemble([[overfull, QUARTERS]], digits)
+    assert (route["bars"][0]["status"], route["bars"][0]["reason"]) == ("refused", "bar_total_mismatch")
+    assert bars[0].events == [] and len(bars[1].events) == 4
+    assert route["summary"] == {"source_bars": 2, "written_bars": 1, "refused_bars": 1,
+                                "refusal_reasons": {"bar_total_mismatch": 1}, "match_kinds": {"tab_column": 4},
+                                "tab_digits": 9, "unplaced_tab_digits": 0}
+
+
+def _tabraw_file(tmp_path, digits):
+    path = tmp_path / "tabraw.json"
+    TabRaw(candidates=digits).to_json_file(path)
+    return path
 
 
 def test_build_ir_grouping_unsafe_refusal_exact_payload(tmp_path: Path) -> None:
-    candidates = [
-        make_pdf_tab_candidate(id=f"c-{idx}", raw_text="1", parsed_fret=1, x=float(idx * 10))
-        for idx in range(65)
-    ]
-
-    tabraw = TabRaw(candidates=candidates)
-    tabraw_file = tmp_path / "tabraw.json"
-    tabraw.to_json_file(tabraw_file)
-
+    """Kept: more than 64 events in one bar is refused as unsafe grouping."""
+    specs = [note(1.0 + 3.0 * i, "64th") for i in range(65)]
+    digits = [digit(f"c-{i}", 0, s["x"], 1, 1) for i, s in enumerate(specs)]
     with pytest.raises(BuildIrInputRiskError) as exc_info:
-        build_ir_from_tabraw_only(tabraw_file)
-
+        build_ir_from_tabraw_only(_tabraw_file(tmp_path, digits), note_durations=records([[specs]]))
     assert exc_info.value.category == "pdf_only_tab_grouping_unsafe"
     assert exc_info.value.stage == "layout-gating"
     assert str(exc_info.value) == "PDF-only tab building refused: too many events (65) in bar 1."
     assert exc_info.value.details == {}
 
 
-def test_build_ir_overcapacity_refusal_exact_payload(tmp_path: Path) -> None:
-    candidates = [
-        make_pdf_tab_candidate(id=f"c-{idx}", raw_text="5", parsed_fret=5, x=float(idx * 10))
-        for idx in range(5)
-    ] + [
-        make_pdf_quarter_rest_candidate(id=f"c-{idx}", x=float(idx * 10))
-        for idx in range(5, 7)
-    ]
-
-    tabraw = TabRaw(candidates=candidates)
-    tabraw_file = tmp_path / "tabraw.json"
-    tabraw.to_json_file(tabraw_file)
-
-    with pytest.raises(BuildIrInputRiskError) as exc_info:
-        build_ir_from_tabraw_only(tabraw_file)
-
-    assert exc_info.value.category == "pdf_only_tab_measure_overcapacity"
-    assert exc_info.value.stage == "measure-assembly"
-    assert str(exc_info.value) == "Candidate note events in bar 1 exceed measure capacity 3840 ticks (accumulated 4320 ticks)."
-    assert exc_info.value.details == {
-        "bar_index": "1",
-        "accumulated_ticks": "4320",
-        "measure_capacity": "3840",
-    }
+def test_build_ir_overfull_bar_refusal_exact_payload(tmp_path: Path) -> None:
+    """Replaces test_build_ir_overcapacity_refusal_exact_payload: the bar is refused, located, and written empty."""
+    overfull = [note(10.0 + 30.0 * i) for i in range(5)]
+    digits = [digit(f"c-{i}", 0, s["x"], 3, i) for i, s in enumerate(overfull)] + _quarter_digits(bar=1)
+    score, diagnostics = build_ir_from_tabraw_only(_tabraw_file(tmp_path, digits), note_durations=records([[overfull, QUARTERS]]))
+    refused = [w for w in score.warnings if w.code == "pdf_only_tab_bar_refused"]
+    assert [w.message for w in refused] == ["Bar 1 refused (bar_total_mismatch) at page 1, bar 1; written empty."]
+    assert diagnostics.note_type_route["bars"][0]["location"] == {"page_index": 0, "system_index": 0, "bar_index": 0}
+    assert diagnostics.note_type_route["bars"][0]["detail"] == "5 of 4 quarters"
+    assert [len(b.events) for b in score.bars] == [0, 4]
 
 
-# Complete Normalized Bar Equivalence Tests for all 4 required scenarios:
-# Each test compares full bar.model_dump(mode="json") against fixed baseline data.
+def test_normalized_bar_equivalence() -> None:
+    """Replaces the four test_normalized_bar_equivalence_* tests: one bar with a single note, a chord,
+    a printed rest and a triplet, compared field for field with a bar built independently."""
+    specs = [note(10.0, "quarter"), note(50.0, "quarter", heads=2), rest(90.0, "quarter"),
+             note(130.0, "eighth", tuplet=(3, 2)), note(150.0, "eighth", tuplet=(3, 2)), note(170.0, "eighth", tuplet=(3, 2))]
+    digits = [digit("a", 0, 10.0, 1, 5), digit("b1", 0, 50.0, 2, 3), digit("b2", 0, 50.0, 3, 2),
+              digit("c", 0, 130.0, 1, 0), digit("d", 0, 150.0, 1, 1), digit("e", 0, 170.0, 1, 3)]
+    bars, _ = _assemble([[specs]], digits)
+    by_id = {d.id: d for d in digits}
 
-def test_normalized_bar_equivalence_single_event() -> None:
-    c1 = make_pdf_tab_candidate(id="c-1", raw_text="5", parsed_fret=5, string=1, confidence=0.9)
+    def ev(i, onset, ticks, written, ids, tuplet=None, is_rest=False):
+        notes = [Note(string=by_id[c].string, fret=by_id[c].parsed_fret,
+                      pitch={1: 64, 2: 59, 3: 55}[by_id[c].string] + by_id[c].parsed_fret,
+                      confidence=0.9, provenance=[by_id[c].to_provenance()]) for c in ids]
+        return Event(id=f"bar-1-event-{i}", track_id="gtr-1",
+                     timing=Timing(bar_index=1, onset_ticks=onset, duration_ticks=ticks, ticks_per_quarter=DEFAULT_TICKS_PER_QUARTER,
+                                   notated_duration=NotatedDuration(value=written, dots=0), tuplet=tuplet),
+                     is_rest=is_rest, notes=notes, confidence=0.9 if ids else 1.0,
+                     provenance=[by_id[c].to_provenance() for c in ids])
 
-    bar = assemble_pdf_tab_bar([c1], output_bar_idx=1, track_id="gtr-1")
-
-    expected_baseline_bar = {
-        "index": 1,
-        "time_signature": {"numerator": 4, "denominator": 4},
-        "key_signature": None,
-        "events": [
-            {
-                "id": "bar-1-event-1",
-                "track_id": "gtr-1",
-                "timing": {
-                    "bar_index": 1,
-                    "onset_ticks": 0,
-                    "duration_ticks": 480,
-                    "ticks_per_quarter": DEFAULT_TICKS_PER_QUARTER,
-                    "voice": 1,
-                    "notated_duration": {"value": "eighth", "dots": 0},
-                    "tuplet": None,
-                    "grace": None,
-                },
-                "notes": [
-                    {
-                        "string": 1,
-                        "fret": 5,
-                        "pitch": 69,
-                        "is_dead": False,
-                        "articulations": [],
-                        "techniques": [],
-                        "left_hand_fingering": None,
-                        "right_hand_fingering": None,
-                        "confidence": 0.9,
-                        "provenance": [
-                            {
-                                "source_stage": "pdf-text",
-                                "page": 1,
-                                "system_id": "system-1",
-                                "staff_id": "staff-1",
-                                "bar_index": 1,
-                                "bbox": {"page": 1, "x0": 10.0, "y0": 10.0, "x1": 15.0, "y1": 15.0},
-                                "raw_token_id": "c-1",
-                                "raw": {"kind": "fret", "raw_text": "5", "parsed_fret": 5, "string": 1, "x": 10.0, "y": 10.0},
-                                "confidence": 0.9,
-                            }
-                        ],
-                        "expression_controller": None,
-                    }
-                ],
-                "is_rest": False,
-                "chord_symbol": None,
-                "chord_diagram": None,
-                "dynamic": None,
-                "hairpin": None,
-                "fermata": None,
-                "arpeggio": None,
-                "arpeggio_duration": None,
-                "brush": None,
-                "brush_duration": None,
-                "text": None,
-                "techniques": [],
-                "confidence": 0.9,
-                "provenance": [
-                    {
-                        "source_stage": "pdf-text",
-                        "page": 1,
-                        "system_id": "system-1",
-                        "staff_id": "staff-1",
-                        "bar_index": 1,
-                        "bbox": {"page": 1, "x0": 10.0, "y0": 10.0, "x1": 15.0, "y1": 15.0},
-                        "raw_token_id": "c-1",
-                        "raw": {"kind": "fret", "raw_text": "5", "parsed_fret": 5, "string": 1, "x": 10.0, "y": 10.0},
-                        "confidence": 0.9,
-                    }
-                ],
-                "expression_controller": None,
-            },
-            {
-                "id": "bar-1-rest-1",
-                "track_id": "gtr-1",
-                "timing": {
-                    "bar_index": 1,
-                    "onset_ticks": 480,
-                    "duration_ticks": 1920,
-                    "ticks_per_quarter": DEFAULT_TICKS_PER_QUARTER,
-                    "voice": 1,
-                    "notated_duration": {"value": "half", "dots": 0},
-                    "tuplet": None,
-                    "grace": None,
-                },
-                "notes": [],
-                "is_rest": True,
-                "chord_symbol": None,
-                "chord_diagram": None,
-                "dynamic": None,
-                "hairpin": None,
-                "fermata": None,
-                "arpeggio": None,
-                "arpeggio_duration": None,
-                "brush": None,
-                "brush_duration": None,
-                "text": None,
-                "techniques": [],
-                "confidence": 1.0,
-                "provenance": [],
-                "expression_controller": None,
-            },
-            {
-                "id": "bar-1-rest-2",
-                "track_id": "gtr-1",
-                "timing": {
-                    "bar_index": 1,
-                    "onset_ticks": 2400,
-                    "duration_ticks": 960,
-                    "ticks_per_quarter": DEFAULT_TICKS_PER_QUARTER,
-                    "voice": 1,
-                    "notated_duration": {"value": "quarter", "dots": 0},
-                    "tuplet": None,
-                    "grace": None,
-                },
-                "notes": [],
-                "is_rest": True,
-                "chord_symbol": None,
-                "chord_diagram": None,
-                "dynamic": None,
-                "hairpin": None,
-                "fermata": None,
-                "arpeggio": None,
-                "arpeggio_duration": None,
-                "brush": None,
-                "brush_duration": None,
-                "text": None,
-                "techniques": [],
-                "confidence": 1.0,
-                "provenance": [],
-                "expression_controller": None,
-            },
-            {
-                "id": "bar-1-rest-3",
-                "track_id": "gtr-1",
-                "timing": {
-                    "bar_index": 1,
-                    "onset_ticks": 3360,
-                    "duration_ticks": 480,
-                    "ticks_per_quarter": DEFAULT_TICKS_PER_QUARTER,
-                    "voice": 1,
-                    "notated_duration": {"value": "eighth", "dots": 0},
-                    "tuplet": None,
-                    "grace": None,
-                },
-                "notes": [],
-                "is_rest": True,
-                "chord_symbol": None,
-                "chord_diagram": None,
-                "dynamic": None,
-                "hairpin": None,
-                "fermata": None,
-                "arpeggio": None,
-                "arpeggio_duration": None,
-                "brush": None,
-                "brush_duration": None,
-                "text": None,
-                "techniques": [],
-                "confidence": 1.0,
-                "provenance": [],
-                "expression_controller": None,
-            },
-        ],
-        "tempo": None,
-        "layout_break": None,
-        "anacrusis": False,
-        "barline": None,
-        "repeat_count": None,
-        "measure_layout": None,
-        "bar_numbering": None,
-        "directions": None,
-        "marker": None,
-        "marker_color": None,
-        "alternate_ending_passes": None,
-        "alternate_ending_is_stop": None,
-        "multi_measure_rest_count": None,
-        "repeat_count_overlay": None,
-        "tempo_automation": None,
-    }
-
-    assert bar.model_dump(mode="json") == expected_baseline_bar
-
-
-def test_normalized_bar_equivalence_chord() -> None:
-    c1 = make_pdf_tab_candidate(id="c-1", raw_text="5", parsed_fret=5, string=1, confidence=0.9)
-    c2 = make_pdf_tab_candidate(id="c-2", raw_text="7", parsed_fret=7, y=20.0, string=3, confidence=0.8)
-
-    bar = assemble_pdf_tab_bar([c1, c2], output_bar_idx=2, track_id="gtr-1")
-
-    expected_baseline_bar = {
-        "index": 2,
-        "time_signature": {"numerator": 4, "denominator": 4},
-        "key_signature": None,
-        "events": [
-            {
-                "id": "bar-2-event-1",
-                "track_id": "gtr-1",
-                "timing": {
-                    "bar_index": 2,
-                    "onset_ticks": 0,
-                    "duration_ticks": 480,
-                    "ticks_per_quarter": DEFAULT_TICKS_PER_QUARTER,
-                    "voice": 1,
-                    "notated_duration": {"value": "eighth", "dots": 0},
-                    "tuplet": None,
-                    "grace": None,
-                },
-                "notes": [
-                    {
-                        "string": 1,
-                        "fret": 5,
-                        "pitch": 69,
-                        "is_dead": False,
-                        "articulations": [],
-                        "techniques": [],
-                        "left_hand_fingering": None,
-                        "right_hand_fingering": None,
-                        "confidence": 0.9,
-                        "provenance": [
-                            {
-                                "source_stage": "pdf-text",
-                                "page": 1,
-                                "system_id": "system-1",
-                                "staff_id": "staff-1",
-                                "bar_index": 1,
-                                "bbox": {"page": 1, "x0": 10.0, "y0": 10.0, "x1": 15.0, "y1": 15.0},
-                                "raw_token_id": "c-1",
-                                "raw": {"kind": "fret", "raw_text": "5", "parsed_fret": 5, "string": 1, "x": 10.0, "y": 10.0},
-                                "confidence": 0.9,
-                            }
-                        ],
-                        "expression_controller": None,
-                    },
-                    {
-                        "string": 3,
-                        "fret": 7,
-                        "pitch": 62,
-                        "is_dead": False,
-                        "articulations": [],
-                        "techniques": [],
-                        "left_hand_fingering": None,
-                        "right_hand_fingering": None,
-                        "confidence": 0.8,
-                        "provenance": [
-                            {
-                                "source_stage": "pdf-text",
-                                "page": 1,
-                                "system_id": "system-1",
-                                "staff_id": "staff-1",
-                                "bar_index": 1,
-                                "bbox": {"page": 1, "x0": 10.0, "y0": 20.0, "x1": 15.0, "y1": 25.0},
-                                "raw_token_id": "c-2",
-                                "raw": {"kind": "fret", "raw_text": "7", "parsed_fret": 7, "string": 3, "x": 10.0, "y": 20.0},
-                                "confidence": 0.8,
-                            }
-                        ],
-                        "expression_controller": None,
-                    },
-                ],
-                "is_rest": False,
-                "chord_symbol": None,
-                "chord_diagram": None,
-                "dynamic": None,
-                "hairpin": None,
-                "fermata": None,
-                "arpeggio": None,
-                "arpeggio_duration": None,
-                "brush": None,
-                "brush_duration": None,
-                "text": None,
-                "techniques": [],
-                "confidence": (0.9 + 0.8) / 2.0,
-                "provenance": [
-                    {
-                        "source_stage": "pdf-text",
-                        "page": 1,
-                        "system_id": "system-1",
-                        "staff_id": "staff-1",
-                        "bar_index": 1,
-                        "bbox": {"page": 1, "x0": 10.0, "y0": 10.0, "x1": 15.0, "y1": 15.0},
-                        "raw_token_id": "c-1",
-                        "raw": {"kind": "fret", "raw_text": "5", "parsed_fret": 5, "string": 1, "x": 10.0, "y": 10.0},
-                        "confidence": 0.9,
-                    },
-                    {
-                        "source_stage": "pdf-text",
-                        "page": 1,
-                        "system_id": "system-1",
-                        "staff_id": "staff-1",
-                        "bar_index": 1,
-                        "bbox": {"page": 1, "x0": 10.0, "y0": 20.0, "x1": 15.0, "y1": 25.0},
-                        "raw_token_id": "c-2",
-                        "raw": {"kind": "fret", "raw_text": "7", "parsed_fret": 7, "string": 3, "x": 10.0, "y": 20.0},
-                        "confidence": 0.8,
-                    },
-                ],
-                "expression_controller": None,
-            },
-            {
-                "id": "bar-2-rest-1",
-                "track_id": "gtr-1",
-                "timing": {
-                    "bar_index": 2,
-                    "onset_ticks": 480,
-                    "duration_ticks": 1920,
-                    "ticks_per_quarter": DEFAULT_TICKS_PER_QUARTER,
-                    "voice": 1,
-                    "notated_duration": {"value": "half", "dots": 0},
-                    "tuplet": None,
-                    "grace": None,
-                },
-                "notes": [],
-                "is_rest": True,
-                "chord_symbol": None,
-                "chord_diagram": None,
-                "dynamic": None,
-                "hairpin": None,
-                "fermata": None,
-                "arpeggio": None,
-                "arpeggio_duration": None,
-                "brush": None,
-                "brush_duration": None,
-                "text": None,
-                "techniques": [],
-                "confidence": 1.0,
-                "provenance": [],
-                "expression_controller": None,
-            },
-            {
-                "id": "bar-2-rest-2",
-                "track_id": "gtr-1",
-                "timing": {
-                    "bar_index": 2,
-                    "onset_ticks": 2400,
-                    "duration_ticks": 960,
-                    "ticks_per_quarter": DEFAULT_TICKS_PER_QUARTER,
-                    "voice": 1,
-                    "notated_duration": {"value": "quarter", "dots": 0},
-                    "tuplet": None,
-                    "grace": None,
-                },
-                "notes": [],
-                "is_rest": True,
-                "chord_symbol": None,
-                "chord_diagram": None,
-                "dynamic": None,
-                "hairpin": None,
-                "fermata": None,
-                "arpeggio": None,
-                "arpeggio_duration": None,
-                "brush": None,
-                "brush_duration": None,
-                "text": None,
-                "techniques": [],
-                "confidence": 1.0,
-                "provenance": [],
-                "expression_controller": None,
-            },
-            {
-                "id": "bar-2-rest-3",
-                "track_id": "gtr-1",
-                "timing": {
-                    "bar_index": 2,
-                    "onset_ticks": 3360,
-                    "duration_ticks": 480,
-                    "ticks_per_quarter": DEFAULT_TICKS_PER_QUARTER,
-                    "voice": 1,
-                    "notated_duration": {"value": "eighth", "dots": 0},
-                    "tuplet": None,
-                    "grace": None,
-                },
-                "notes": [],
-                "is_rest": True,
-                "chord_symbol": None,
-                "chord_diagram": None,
-                "dynamic": None,
-                "hairpin": None,
-                "fermata": None,
-                "arpeggio": None,
-                "arpeggio_duration": None,
-                "brush": None,
-                "brush_duration": None,
-                "text": None,
-                "techniques": [],
-                "confidence": 1.0,
-                "provenance": [],
-                "expression_controller": None,
-            },
-        ],
-        "tempo": None,
-        "layout_break": None,
-        "anacrusis": False,
-        "barline": None,
-        "repeat_count": None,
-        "measure_layout": None,
-        "bar_numbering": None,
-        "directions": None,
-        "marker": None,
-        "marker_color": None,
-        "alternate_ending_passes": None,
-        "alternate_ending_is_stop": None,
-        "multi_measure_rest_count": None,
-        "repeat_count_overlay": None,
-        "tempo_automation": None,
-    }
-
-    assert bar.model_dump(mode="json") == expected_baseline_bar
-
-
-def test_normalized_bar_equivalence_explicit_rest() -> None:
-    c_rest = make_pdf_quarter_rest_candidate(id="c-rest", confidence=0.95)
-
-    bar = assemble_pdf_tab_bar([c_rest], output_bar_idx=3, track_id="gtr-1")
-
-    expected_baseline_bar = {
-        "index": 3,
-        "time_signature": {"numerator": 4, "denominator": 4},
-        "key_signature": None,
-        "events": [
-            {
-                "id": "bar-3-event-1",
-                "track_id": "gtr-1",
-                "timing": {
-                    "bar_index": 3,
-                    "onset_ticks": 0,
-                    "duration_ticks": 960,
-                    "ticks_per_quarter": DEFAULT_TICKS_PER_QUARTER,
-                    "voice": 1,
-                    "notated_duration": {"value": "quarter", "dots": 0},
-                    "tuplet": None,
-                    "grace": None,
-                },
-                "notes": [],
-                "is_rest": True,
-                "chord_symbol": None,
-                "chord_diagram": None,
-                "dynamic": None,
-                "hairpin": None,
-                "fermata": None,
-                "arpeggio": None,
-                "arpeggio_duration": None,
-                "brush": None,
-                "brush_duration": None,
-                "text": None,
-                "techniques": [],
-                "confidence": 0.95,
-                "provenance": [
-                    {
-                        "source_stage": "pdf-text",
-                        "page": 1,
-                        "system_id": "system-1",
-                        "staff_id": "staff-1",
-                        "bar_index": 1,
-                        "bbox": {"page": 1, "x0": 10.0, "y0": 10.0, "x1": 15.0, "y1": 15.0},
-                        "raw_token_id": "c-rest",
-                        "raw": {"kind": "fret", "raw_text": "quarter_rest", "parsed_fret": None, "string": 1, "x": 10.0, "y": 10.0},
-                        "confidence": 0.95,
-                    }
-                ],
-                "expression_controller": None,
-            },
-            {
-                "id": "bar-3-rest-1",
-                "track_id": "gtr-1",
-                "timing": {
-                    "bar_index": 3,
-                    "onset_ticks": 960,
-                    "duration_ticks": 1920,
-                    "ticks_per_quarter": DEFAULT_TICKS_PER_QUARTER,
-                    "voice": 1,
-                    "notated_duration": {"value": "half", "dots": 0},
-                    "tuplet": None,
-                    "grace": None,
-                },
-                "notes": [],
-                "is_rest": True,
-                "chord_symbol": None,
-                "chord_diagram": None,
-                "dynamic": None,
-                "hairpin": None,
-                "fermata": None,
-                "arpeggio": None,
-                "arpeggio_duration": None,
-                "brush": None,
-                "brush_duration": None,
-                "text": None,
-                "techniques": [],
-                "confidence": 1.0,
-                "provenance": [],
-                "expression_controller": None,
-            },
-            {
-                "id": "bar-3-rest-2",
-                "track_id": "gtr-1",
-                "timing": {
-                    "bar_index": 3,
-                    "onset_ticks": 2880,
-                    "duration_ticks": 960,
-                    "ticks_per_quarter": DEFAULT_TICKS_PER_QUARTER,
-                    "voice": 1,
-                    "notated_duration": {"value": "quarter", "dots": 0},
-                    "tuplet": None,
-                    "grace": None,
-                },
-                "notes": [],
-                "is_rest": True,
-                "chord_symbol": None,
-                "chord_diagram": None,
-                "dynamic": None,
-                "hairpin": None,
-                "fermata": None,
-                "arpeggio": None,
-                "arpeggio_duration": None,
-                "brush": None,
-                "brush_duration": None,
-                "text": None,
-                "techniques": [],
-                "confidence": 1.0,
-                "provenance": [],
-                "expression_controller": None,
-            },
-        ],
-        "tempo": None,
-        "layout_break": None,
-        "anacrusis": False,
-        "barline": None,
-        "repeat_count": None,
-        "measure_layout": None,
-        "bar_numbering": None,
-        "directions": None,
-        "marker": None,
-        "marker_color": None,
-        "alternate_ending_passes": None,
-        "alternate_ending_is_stop": None,
-        "multi_measure_rest_count": None,
-        "repeat_count_overlay": None,
-        "tempo_automation": None,
-    }
-
-    assert bar.model_dump(mode="json") == expected_baseline_bar
-
-
-def test_normalized_bar_equivalence_multi_event_sequential() -> None:
-    c_seq1 = make_pdf_tab_candidate(id="c-1", raw_text="0", parsed_fret=0, x=10.0, string=6)
-    c_seq2 = make_pdf_tab_candidate(id="c-2", raw_text="2", parsed_fret=2, x=30.0, string=5)
-    c_seq3 = make_pdf_tab_candidate(id="c-3", raw_text="2", parsed_fret=2, x=50.0, string=4)
-    c_seq4 = make_pdf_tab_candidate(id="c-4", raw_text="1", parsed_fret=1, x=70.0, string=3)
-
-    bar = assemble_pdf_tab_bar([c_seq1, c_seq2, c_seq3, c_seq4], output_bar_idx=4, track_id="gtr-1")
-
-    expected_baseline_bar = {
-        "index": 4,
-        "time_signature": {"numerator": 4, "denominator": 4},
-        "key_signature": None,
-        "events": [
-            {
-                "id": "bar-4-event-1",
-                "track_id": "gtr-1",
-                "timing": {
-                    "bar_index": 4,
-                    "onset_ticks": 0,
-                    "duration_ticks": 480,
-                    "ticks_per_quarter": DEFAULT_TICKS_PER_QUARTER,
-                    "voice": 1,
-                    "notated_duration": {"value": "eighth", "dots": 0},
-                    "tuplet": None,
-                    "grace": None,
-                },
-                "notes": [
-                    {
-                        "string": 6,
-                        "fret": 0,
-                        "pitch": 40,
-                        "is_dead": False,
-                        "articulations": [],
-                        "techniques": [],
-                        "left_hand_fingering": None,
-                        "right_hand_fingering": None,
-                        "confidence": 0.5,
-                        "provenance": [
-                            {
-                                "source_stage": "pdf-text",
-                                "page": 1,
-                                "system_id": "system-1",
-                                "staff_id": "staff-1",
-                                "bar_index": 1,
-                                "bbox": {"page": 1, "x0": 10.0, "y0": 10.0, "x1": 15.0, "y1": 15.0},
-                                "raw_token_id": "c-1",
-                                "raw": {"kind": "fret", "raw_text": "0", "parsed_fret": 0, "string": 6, "x": 10.0, "y": 10.0},
-                                "confidence": 0.5,
-                            }
-                        ],
-                        "expression_controller": None,
-                    }
-                ],
-                "is_rest": False,
-                "chord_symbol": None,
-                "chord_diagram": None,
-                "dynamic": None,
-                "hairpin": None,
-                "fermata": None,
-                "arpeggio": None,
-                "arpeggio_duration": None,
-                "brush": None,
-                "brush_duration": None,
-                "text": None,
-                "techniques": [],
-                "confidence": 0.5,
-                "provenance": [
-                    {
-                        "source_stage": "pdf-text",
-                        "page": 1,
-                        "system_id": "system-1",
-                        "staff_id": "staff-1",
-                        "bar_index": 1,
-                        "bbox": {"page": 1, "x0": 10.0, "y0": 10.0, "x1": 15.0, "y1": 15.0},
-                        "raw_token_id": "c-1",
-                        "raw": {"kind": "fret", "raw_text": "0", "parsed_fret": 0, "string": 6, "x": 10.0, "y": 10.0},
-                        "confidence": 0.5,
-                    }
-                ],
-                "expression_controller": None,
-            },
-            {
-                "id": "bar-4-event-2",
-                "track_id": "gtr-1",
-                "timing": {
-                    "bar_index": 4,
-                    "onset_ticks": 480,
-                    "duration_ticks": 480,
-                    "ticks_per_quarter": DEFAULT_TICKS_PER_QUARTER,
-                    "voice": 1,
-                    "notated_duration": {"value": "eighth", "dots": 0},
-                    "tuplet": None,
-                    "grace": None,
-                },
-                "notes": [
-                    {
-                        "string": 5,
-                        "fret": 2,
-                        "pitch": 47,
-                        "is_dead": False,
-                        "articulations": [],
-                        "techniques": [],
-                        "left_hand_fingering": None,
-                        "right_hand_fingering": None,
-                        "confidence": 0.5,
-                        "provenance": [
-                            {
-                                "source_stage": "pdf-text",
-                                "page": 1,
-                                "system_id": "system-1",
-                                "staff_id": "staff-1",
-                                "bar_index": 1,
-                                "bbox": {"page": 1, "x0": 30.0, "y0": 10.0, "x1": 35.0, "y1": 15.0},
-                                "raw_token_id": "c-2",
-                                "raw": {"kind": "fret", "raw_text": "2", "parsed_fret": 2, "string": 5, "x": 30.0, "y": 10.0},
-                                "confidence": 0.5,
-                            }
-                        ],
-                        "expression_controller": None,
-                    }
-                ],
-                "is_rest": False,
-                "chord_symbol": None,
-                "chord_diagram": None,
-                "dynamic": None,
-                "hairpin": None,
-                "fermata": None,
-                "arpeggio": None,
-                "arpeggio_duration": None,
-                "brush": None,
-                "brush_duration": None,
-                "text": None,
-                "techniques": [],
-                "confidence": 0.5,
-                "provenance": [
-                    {
-                        "source_stage": "pdf-text",
-                        "page": 1,
-                        "system_id": "system-1",
-                        "staff_id": "staff-1",
-                        "bar_index": 1,
-                        "bbox": {"page": 1, "x0": 30.0, "y0": 10.0, "x1": 35.0, "y1": 15.0},
-                        "raw_token_id": "c-2",
-                        "raw": {"kind": "fret", "raw_text": "2", "parsed_fret": 2, "string": 5, "x": 30.0, "y": 10.0},
-                        "confidence": 0.5,
-                    }
-                ],
-                "expression_controller": None,
-            },
-            {
-                "id": "bar-4-event-3",
-                "track_id": "gtr-1",
-                "timing": {
-                    "bar_index": 4,
-                    "onset_ticks": 960,
-                    "duration_ticks": 480,
-                    "ticks_per_quarter": DEFAULT_TICKS_PER_QUARTER,
-                    "voice": 1,
-                    "notated_duration": {"value": "eighth", "dots": 0},
-                    "tuplet": None,
-                    "grace": None,
-                },
-                "notes": [
-                    {
-                        "string": 4,
-                        "fret": 2,
-                        "pitch": 52,
-                        "is_dead": False,
-                        "articulations": [],
-                        "techniques": [],
-                        "left_hand_fingering": None,
-                        "right_hand_fingering": None,
-                        "confidence": 0.5,
-                        "provenance": [
-                            {
-                                "source_stage": "pdf-text",
-                                "page": 1,
-                                "system_id": "system-1",
-                                "staff_id": "staff-1",
-                                "bar_index": 1,
-                                "bbox": {"page": 1, "x0": 50.0, "y0": 10.0, "x1": 55.0, "y1": 15.0},
-                                "raw_token_id": "c-3",
-                                "raw": {"kind": "fret", "raw_text": "2", "parsed_fret": 2, "string": 4, "x": 50.0, "y": 10.0},
-                                "confidence": 0.5,
-                            }
-                        ],
-                        "expression_controller": None,
-                    }
-                ],
-                "is_rest": False,
-                "chord_symbol": None,
-                "chord_diagram": None,
-                "dynamic": None,
-                "hairpin": None,
-                "fermata": None,
-                "arpeggio": None,
-                "arpeggio_duration": None,
-                "brush": None,
-                "brush_duration": None,
-                "text": None,
-                "techniques": [],
-                "confidence": 0.5,
-                "provenance": [
-                    {
-                        "source_stage": "pdf-text",
-                        "page": 1,
-                        "system_id": "system-1",
-                        "staff_id": "staff-1",
-                        "bar_index": 1,
-                        "bbox": {"page": 1, "x0": 50.0, "y0": 10.0, "x1": 55.0, "y1": 15.0},
-                        "raw_token_id": "c-3",
-                        "raw": {"kind": "fret", "raw_text": "2", "parsed_fret": 2, "string": 4, "x": 50.0, "y": 10.0},
-                        "confidence": 0.5,
-                    }
-                ],
-                "expression_controller": None,
-            },
-            {
-                "id": "bar-4-event-4",
-                "track_id": "gtr-1",
-                "timing": {
-                    "bar_index": 4,
-                    "onset_ticks": 1440,
-                    "duration_ticks": 480,
-                    "ticks_per_quarter": DEFAULT_TICKS_PER_QUARTER,
-                    "voice": 1,
-                    "notated_duration": {"value": "eighth", "dots": 0},
-                    "tuplet": None,
-                    "grace": None,
-                },
-                "notes": [
-                    {
-                        "string": 3,
-                        "fret": 1,
-                        "pitch": 56,
-                        "is_dead": False,
-                        "articulations": [],
-                        "techniques": [],
-                        "left_hand_fingering": None,
-                        "right_hand_fingering": None,
-                        "confidence": 0.5,
-                        "provenance": [
-                            {
-                                "source_stage": "pdf-text",
-                                "page": 1,
-                                "system_id": "system-1",
-                                "staff_id": "staff-1",
-                                "bar_index": 1,
-                                "bbox": {"page": 1, "x0": 70.0, "y0": 10.0, "x1": 75.0, "y1": 15.0},
-                                "raw_token_id": "c-4",
-                                "raw": {"kind": "fret", "raw_text": "1", "parsed_fret": 1, "string": 3, "x": 70.0, "y": 10.0},
-                                "confidence": 0.5,
-                            }
-                        ],
-                        "expression_controller": None,
-                    }
-                ],
-                "is_rest": False,
-                "chord_symbol": None,
-                "chord_diagram": None,
-                "dynamic": None,
-                "hairpin": None,
-                "fermata": None,
-                "arpeggio": None,
-                "arpeggio_duration": None,
-                "brush": None,
-                "brush_duration": None,
-                "text": None,
-                "techniques": [],
-                "confidence": 0.5,
-                "provenance": [
-                    {
-                        "source_stage": "pdf-text",
-                        "page": 1,
-                        "system_id": "system-1",
-                        "staff_id": "staff-1",
-                        "bar_index": 1,
-                        "bbox": {"page": 1, "x0": 70.0, "y0": 10.0, "x1": 75.0, "y1": 15.0},
-                        "raw_token_id": "c-4",
-                        "raw": {"kind": "fret", "raw_text": "1", "parsed_fret": 1, "string": 3, "x": 70.0, "y": 10.0},
-                        "confidence": 0.5,
-                    }
-                ],
-                "expression_controller": None,
-            },
-            {
-                "id": "bar-4-rest-1",
-                "track_id": "gtr-1",
-                "timing": {
-                    "bar_index": 4,
-                    "onset_ticks": 1920,
-                    "duration_ticks": 1920,
-                    "ticks_per_quarter": DEFAULT_TICKS_PER_QUARTER,
-                    "voice": 1,
-                    "notated_duration": {"value": "half", "dots": 0},
-                    "tuplet": None,
-                    "grace": None,
-                },
-                "notes": [],
-                "is_rest": True,
-                "chord_symbol": None,
-                "chord_diagram": None,
-                "dynamic": None,
-                "hairpin": None,
-                "fermata": None,
-                "arpeggio": None,
-                "arpeggio_duration": None,
-                "brush": None,
-                "brush_duration": None,
-                "text": None,
-                "techniques": [],
-                "confidence": 1.0,
-                "provenance": [],
-                "expression_controller": None,
-            },
-        ],
-        "tempo": None,
-        "layout_break": None,
-        "anacrusis": False,
-        "barline": None,
-        "repeat_count": None,
-        "measure_layout": None,
-        "bar_numbering": None,
-        "directions": None,
-        "marker": None,
-        "marker_color": None,
-        "alternate_ending_passes": None,
-        "alternate_ending_is_stop": None,
-        "multi_measure_rest_count": None,
-        "repeat_count_overlay": None,
-        "tempo_automation": None,
-    }
-
-    assert bar.model_dump(mode="json") == expected_baseline_bar
+    triplet = Tuplet(actual_notes=3, normal_notes=2)
+    expected = Bar(index=1, time_signature=TimeSignature(numerator=4, denominator=4), events=[
+        ev(1, 0, 960, "quarter", ["a"]), ev(2, 960, 960, "quarter", ["b1", "b2"]),
+        ev(3, 1920, 960, "quarter", [], is_rest=True), ev(4, 2880, 320, "eighth", ["c"], triplet),
+        ev(5, 3200, 320, "eighth", ["d"], triplet), ev(6, 3520, 320, "eighth", ["e"], triplet)])
+    assert bars[0].model_dump(mode="json") == expected.model_dump(mode="json")
 
 
 def test_pdf_tab_helpers_isolation() -> None:
-    """Focused helper test proving fresh objects are returned and caller mutation cannot leak."""
-    c1 = make_pdf_tab_candidate()
-    c2 = make_pdf_tab_candidate()
-    assert c1 is not c2
-    assert c1.bbox is not c2.bbox
+    """Kept: the synthetic helpers return fresh objects, so a caller's mutation cannot leak."""
+    c1, c2 = digit("x", 0, 20.0, 1, 5), digit("x", 0, 20.0, 1, 5)
+    assert c1 is not c2 and c1.bbox is not c2.bbox
     c1.x = 999.0
     c1.bbox.x0 = 999.0
-    assert c2.x == 10.0
-    assert c2.bbox.x0 == 10.0
+    assert c2.x == support.event_x(0, 20.0) and c2.bbox.x0 == support.event_x(0, 18.0)
+    r1, r2 = records([[QUARTERS]]), records([[QUARTERS]])
+    r1["events"][0]["written"] = "half"
+    assert r2["events"][0]["written"] == "quarter"
 
-def test_split_tab_candidates_by_floating_barlines() -> None:
-    from score2gp.pdf_tab_bar_assembler import split_tab_candidates_by_floating_barlines
-    from score2gp.tabraw import TabCandidate
-    from score2gp.pdf_geometry import _LineSegment
 
-    cand1 = make_pdf_tab_candidate()
-    cand1.x = 20.0
-    cand2 = make_pdf_tab_candidate()
-    cand2.x = 40.0
-    cand3 = make_pdf_tab_candidate()
-    cand3.x = 60.0
-    cand4 = make_pdf_tab_candidate()
-    cand4.x = 80.0
+def test_digits_are_placed_in_notation_bars_by_the_notation_barlines() -> None:
+    """Replaces test_split_tab_candidates_by_floating_barlines: the notation's barlines divide the TAB."""
+    digits = [digit("a", 0, 20.0, 1, 1), digit("b", 0, 150.0, 1, 2), digit("c", 1, 30.0, 1, 3), digit("d", 2, 60.0, 1, 4)]
+    placed, unplaced = place_tab_digits(digits, records([[[], [], []]]))
+    assert {bar: [c.id for c in cands] for bar, cands in placed.items()} == {0: ["a", "b"], 1: ["c"], 2: ["d"]}
+    assert unplaced == []
 
-    from score2gp.tabraw import FloatingBarline
-    barline1 = FloatingBarline(page_index=1, system_index=1, x=50.0)
-    barline2 = FloatingBarline(page_index=1, system_index=1, x=70.0)
 
-    measures = split_tab_candidates_by_floating_barlines(
-        [cand1, cand2, cand3, cand4],
-        [barline1, barline2]
-    )
+def test_a_bar_with_no_digits_and_a_digit_outside_every_bar() -> None:
+    """Replaces test_split_tab_candidates_by_floating_barlines_empty_submeasures."""
+    digits = [digit("a", 0, 20.0, 1, 1), digit("b", 2, 60.0, 1, 4), digit("out", 3, 100.0, 1, 5)]
+    placed, unplaced = place_tab_digits(digits, records([[[], [], []]]))
+    assert {bar: [c.id for c in cands] for bar, cands in placed.items()} == {0: ["a"], 2: ["b"]}
+    assert [c.id for c in unplaced] == ["out"]
 
-    assert len(measures) == 3
-    assert len(measures[0]) == 2
-    assert measures[0][0].x == 20.0
-    assert measures[0][1].x == 40.0
 
-    assert len(measures[1]) == 1
-    assert measures[1][0].x == 60.0
+def test_the_count_rule_assembler_is_gone() -> None:
+    for name in ("assemble_pdf_tab_bar", "split_tab_candidates_by_floating_barlines"):
+        assert not hasattr(assembler, name)
 
-    assert len(measures[2]) == 1
-    assert measures[2][0].x == 80.0
 
-def test_split_tab_candidates_by_floating_barlines_empty_submeasures() -> None:
-    from score2gp.pdf_tab_bar_assembler import split_tab_candidates_by_floating_barlines
-
-    cand1 = make_pdf_tab_candidate()
-    cand1.x = 20.0
-    cand2 = make_pdf_tab_candidate()
-    cand2.x = 100.0
-
-    from score2gp.tabraw import FloatingBarline
-    barline1 = FloatingBarline(page_index=1, system_index=1, x=50.0)
-    barline2 = FloatingBarline(page_index=1, system_index=1, x=70.0)
-
-    measures = split_tab_candidates_by_floating_barlines(
-        [cand1, cand2],
-        [barline1, barline2]
-    )
-
-    assert len(measures) == 3
-    assert len(measures[0]) == 1
-    assert len(measures[1]) == 0
-    assert len(measures[2]) == 1
+def test_incompatible_note_duration_records_are_refused() -> None:
+    old = {**records([[QUARTERS]]), "schema": "note-duration-records.v0.1"}
+    with pytest.raises(PdfTabBarAssemblerError) as err:
+        assemble_note_type_bars([], old, track_id="t")
+    assert err.value.category == "pdf_only_tab_note_durations_incompatible"
