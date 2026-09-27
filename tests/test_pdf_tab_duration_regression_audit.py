@@ -11,7 +11,7 @@ import pytest
 from score2gp.cli import app
 from score2gp.notation_omr.note_duration import read_note_durations
 from score2gp.build_ir import build_ir_from_tabraw_only, BuildIrInputRiskError
-from score2gp.gp_package import inspect_gp, validate_gp, write_gp
+from score2gp.gp_package import write_gp
 from score2gp.pdf_staff_detection import (
     _drawing_segments,
     _tab_line_groups,
