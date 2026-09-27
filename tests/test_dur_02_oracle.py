@@ -21,7 +21,8 @@ from pathlib import Path
 from typing import Any
 
 WRITTEN = {"Whole": "whole", "Half": "half", "Quarter": "quarter", "Eighth": "eighth",
-           "16th": "16th", "32nd": "32nd", "64th": "64th"}
+           "16th": "16th", "Sixteenth": "16th", "32nd": "32nd", "ThirtySecond": "32nd",
+           "64th": "64th", "SixtyFourth": "64th"}
 RHYTHM_TAGS = {"NoteValue", "AugmentationDot", "PrimaryTuplet"}
 EVENT_FIELDS = ("kind", "written", "dots", "tuplet", "tie", "positions")
 
@@ -136,7 +137,8 @@ def _gp(bars: list[list[dict[str, Any]] | None]) -> bytes:
     root = ET.Element("GPIF")
     masters, bar_db, voice_db, beat_db = (ET.SubElement(root, n) for n in ("MasterBars", "Bars", "Voices", "Beats"))
     note_db, rhythm_db = ET.SubElement(root, "Notes"), ET.SubElement(root, "Rhythms")
-    names = {v: k for k, v in WRITTEN.items()}
+    names = {"whole": "Whole", "half": "Half", "quarter": "Quarter", "eighth": "Eighth",
+             "16th": "16th", "32nd": "32nd", "64th": "64th"}
     counters = {"voice": 0, "beat": 0, "note": 0, "rhythm": 0}
     for index, events in enumerate(bars):
         master = ET.SubElement(masters, "MasterBar")
@@ -201,6 +203,20 @@ def _bar() -> list[dict[str, Any]]:
 def test_identical_files_have_no_difference():
     result = compare_gp(_gp([_bar(), _bar()]), _gp([_bar(), _bar()]))
     assert result["differences"] == [] and result["written_bars"] == 2 and result["equal_events"] == 12
+
+
+def test_equivalent_gpif_spellings_of_short_note_values_compare_equal():
+    for source_name, alternate_name in ((b"16th", b"Sixteenth"),
+                                        (b"32nd", b"ThirtySecond"),
+                                        (b"64th", b"SixtyFourth")):
+        truth = _gp([[{"kind": "note", "written": source_name.decode(), "positions": [(3, 5)]}]])
+        truth_gpif = zipfile.ZipFile(io.BytesIO(truth)).read("Content/score.gpif")
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as package:
+            package.writestr("Content/score.gpif", truth_gpif.replace(
+                b"<NoteValue>" + source_name + b"</NoteValue>",
+                b"<NoteValue>" + alternate_name + b"</NoteValue>"))
+        assert compare_gp(truth, buffer.getvalue())["differences"] == []
 
 
 def _mutated(event_index: int, field: str, value: Any) -> bytes:

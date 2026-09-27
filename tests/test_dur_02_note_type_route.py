@@ -414,7 +414,7 @@ def test_convert_writes_the_note_type_rhythm_into_the_guitar_pro_file(tmp_path):
     assert result.returncode == 0, result.stderr
     bars = oracle.read_gp_bars(out)
     assert [b["time"] for b in bars] == ["4/4"] * 3
-    assert _sixteenth_names_apart([b["events"] for b in bars]) == _sixteenth_names_apart(_expected_clean())
+    assert [b["events"] for b in bars] == _expected_clean()
     payload = json.loads(report.read_text(encoding="utf-8"))
     assert payload["pdf_only_diagnostics"]["inferred_rhythm_status"] == "note_type"
     route = json.loads((tmp_path / "wd" / "note-type-route.json").read_text(encoding="utf-8"))
@@ -422,14 +422,6 @@ def test_convert_writes_the_note_type_rhythm_into_the_guitar_pro_file(tmp_path):
     assert (tmp_path / "wd" / "note-durations.json").exists()
 
 
-def _sixteenth_names_apart(bars: list[list[dict]]) -> list[list[dict]]:
-    """Every field, except that a 16th's note value is checked on its own below."""
-    return [[{**e, "written": None} if e["written"] in ("16th", "unrecognised:Sixteenth") else e for e in bar]
-            for bar in bars]
-
-
-@pytest.mark.xfail(strict=True, reason="gpif.py writes NoteValue 'Sixteenth'; Guitar Pro writes '16th' "
-                                       "(Lesson-5.gp, Lesson-7.gp). gpif.py is outside DUR-02's allowed paths.")
 def test_a_sixteenth_is_written_with_the_guitar_pro_note_value(tmp_path):
     out = tmp_path / "clean.gp"
     result = _convert("--pdf", str(clean_pdf(tmp_path / "clean.pdf")), "--out", str(out),
