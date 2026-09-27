@@ -11,7 +11,10 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from .ir import BoundingBox, Provenance, SourceStage
 from .pdf_tab_duration_types import TabDurationEvidence
 
-TABRAW_SCHEMA_VERSION = "tabraw.v0.1"
+# v0.2: duration evidence carries no placeholder: neither the equal-spacing source nor the placeholder
+# flag. v0.1 documents are still read, but evidence carrying either is refused.
+TABRAW_SCHEMA_VERSION = "tabraw.v0.2"
+LEGACY_TABRAW_SCHEMA_VERSION = "tabraw.v0.1"
 
 
 class TabCandidate(BaseModel):
@@ -83,7 +86,7 @@ class FloatingBarline(BaseModel):
 class TabRaw(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal["tabraw.v0.1"] = TABRAW_SCHEMA_VERSION
+    schema_version: Literal["tabraw.v0.1", "tabraw.v0.2"] = TABRAW_SCHEMA_VERSION
     source_pdf: str | None = None
     inspection_kind: str | None = None
     pdf_layout_class: str | None = None
@@ -250,7 +253,7 @@ def normalize_tabraw_payload(data: dict[str, Any]) -> dict[str, Any]:
         )
 
     return {
-        "schema_version": TABRAW_SCHEMA_VERSION,
+        "schema_version": LEGACY_TABRAW_SCHEMA_VERSION,  # a legacy items list is laid out as v0.1
         "source_pdf": data.get("source_pdf"),
         "inspection_kind": data.get("inspection_kind"),
         "pdf_layout_class": data.get("pdf_layout_class"),
