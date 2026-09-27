@@ -36,35 +36,33 @@ def test_pdf_only_tab_three_bars_rests_unsupported_shapes_ignored(tmp_path):
         assert rest.get("local_bar_index", props.get("local_bar_index")) == 1 # The middle bar (0-indexed) has the quarter rests
 
 def test_pdf_only_tab_build_ir_creates_valid_rest_events(tmp_path):
-    pdf_path = Path("fixtures/public/generated_simple/simple/TabOnlyQuarterNoteRests.pdf")
-
-    # 1. Extraction
-    payload = extract_tab(pdf_path, out_dir=tmp_path)
-
-    # 2. Build IR
+    """Replaced (DUR-02): rests come from the notation, never from TAB rest glyphs or padding. The
+    TAB-only fixture has no notation staff, so it is refused; a notation bar of two quarter rests and
+    a half rest is written as exactly those three rests."""
+    import importlib.util
     import json
+
+    import pytest
+
+    from score2gp.build_ir import BuildIrInputRiskError
+    from score2gp.notation_omr.note_duration import read_note_durations
+    from score2gp.tabraw import TabRaw
+
+    pdf_path = Path("fixtures/public/generated_simple/simple/TabOnlyQuarterNoteRests.pdf")
+    payload = extract_tab(pdf_path, out_dir=tmp_path)
     tabraw_path = tmp_path / "tabraw.json"
     tabraw_path.write_text(json.dumps(payload, indent=2))
+    with pytest.raises(BuildIrInputRiskError) as err:
+        build_ir_from_tabraw_only(tabraw_path, note_durations=read_note_durations(pdf_path, time_signature=(4, 4)))
+    assert err.value.category == "pdf_only_tab_no_notation_bars"
 
-    score, diagnostics = build_ir_from_tabraw_only(tabraw_path, editable_draft=False)
-
-    # Verify events
+    spec = importlib.util.spec_from_file_location("pdf_tab_route_support", Path(__file__).with_name("test_pdf_tab_route_support.py"))
+    support = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(support)
+    synthetic = tmp_path / "synthetic.json"
+    TabRaw(candidates=[support.digit("q", 1, 20.0, 1, 3)]).to_json_file(synthetic)
+    rests = [support.rest(20.0), support.rest(60.0), support.rest(100.0, "half")]
+    score, _ = build_ir_from_tabraw_only(synthetic, note_durations=support.records([[rests, [support.note(20.0, "whole")]]]))
     events = score.bars[0].events
-    # The fixture has two quarter rests (plus 1 decomposed half rest filling the measure to 3840 ticks)
-    assert len(events) == 3
-
-    rest_events = [ev for ev in events if ev.is_rest]
-    assert len(rest_events) == 3
-
-    for rest_ev in rest_events:
-        assert rest_ev.is_rest is True
-        assert rest_ev.notes == [] # Ensure notes are cleanly stripped
-
-    # The first two rests are the explicit candidate quarter rests
-    for rest_ev in rest_events[:2]:
-        assert rest_ev.timing.duration_ticks == 960 # Must have quarter rest duration
-        assert rest_ev.timing.notated_duration.value == "quarter"
-
-    # The third rest is the decomposed half rest filling the remainder measure capacity
-    assert rest_events[2].timing.duration_ticks == 1920
-    assert rest_events[2].timing.notated_duration.value == "half"
+    assert [(e.is_rest, e.notes, e.timing.notated_duration.value, e.timing.onset_ticks) for e in events] == [
+        (True, [], "quarter", 0), (True, [], "quarter", 960), (True, [], "half", 1920)]
