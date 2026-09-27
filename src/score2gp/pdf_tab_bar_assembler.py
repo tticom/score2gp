@@ -69,7 +69,10 @@ def place_tab_digits(digits: Sequence[TabCandidate], note_durations: dict[str, A
             continue
         system = max(above, key=lambda s: s["staff"]["bottom"])
         edge = BAR_EDGE_SPACES * system["staff_space"]
-        bar = next((i for i, (a, b) in enumerate(system["bars"]) if a - edge <= digit.x <= b + edge), None)
+        bar = next((i for i, (a, b) in enumerate(system["bars"]) if a <= digit.x <= b), None)
+        if bar is None:  # just outside a barline: the one bar it is within reach of, if only one
+            near = [i for i, (a, b) in enumerate(system["bars"]) if a - edge <= digit.x <= b + edge]
+            bar = near[0] if len(near) == 1 else None
         if bar is None:
             unplaced.append(digit)
             continue
