@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import pytest
 
 from pdf_tab_test_helpers import make_pdf_tab_candidate
-from score2gp.build_ir import build_ir_from_tabraw_only
+from score2gp.build_ir import BuildIrInputRiskError, build_ir_from_tabraw_only
 from score2gp.pdf_only_chord_event_grouper import PdfOnlyChordEventGrouper
 
 
@@ -151,11 +152,6 @@ def test_pdf_only_chord_event_grouper_does_not_cross_source_bar_identity(tmp_pat
     tabraw_file = tmp_path / "tabraw_boundary.json"
     tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
 
-    score, diagnostics = build_ir_from_tabraw_only(tabraw_file)
-
-    # Must produce 2 distinct bars, each with 1 note event + 3 rests
-    assert len(score.bars) == 2
-    assert len(score.bars[0].events) == 4
-    assert score.bars[0].events[0].notes[0].fret == 5
-    assert len(score.bars[1].events) == 4
-    assert score.bars[1].events[0].notes[0].fret == 7
+    with pytest.raises(BuildIrInputRiskError) as exc:
+        build_ir_from_tabraw_only(tabraw_file)
+    assert exc.value.category == "pdf_only_tab_note_durations_missing"

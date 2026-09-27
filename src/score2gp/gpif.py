@@ -685,9 +685,9 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
             "half": "Half",
             "quarter": "Quarter",
             "eighth": "Eighth",
-            "16th": "Sixteenth",
-            "32nd": "ThirtySecond",
-            "64th": "SixtyFourth",
+            "16th": "16th",
+            "32nd": "32nd",
+            "64th": "64th",
         }
 
         for bar in score.bars:
