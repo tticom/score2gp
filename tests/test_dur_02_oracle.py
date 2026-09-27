@@ -97,11 +97,16 @@ def read_gp_bars(gp: Path | bytes) -> list[dict[str, Any]]:
                     "positions": sorted(positions),
                     **{field: sorted(values) for field, values in techniques.items()},
                 })
-        out.append({"time": master.findtext("Time"), "events": events})
+        key = master.find("Key")
+        count = int(key.findtext("AccidentalCount")) if key is not None else None
+        out.append({"time": master.findtext("Time"), "key_count": count,
+                    "key_mode": key.findtext("Mode") if key is not None else None,
+                    "events": events})
     return out
 
 
-def compare_gp(truth: Path | bytes, produced: Path | bytes) -> dict[str, Any]:
+def compare_gp(truth: Path | bytes, produced: Path | bytes,
+               mode_evidence: set[int] | None = None) -> dict[str, Any]:
     """Every difference between the produced file and the truth, by bar and event index."""
     want, have = read_gp_bars(truth), read_gp_bars(produced)
     differences: list[dict[str, Any]] = []
@@ -110,6 +115,12 @@ def compare_gp(truth: Path | bytes, produced: Path | bytes) -> dict[str, Any]:
         differences.append({"bar_index": None, "event_index": None, "field": "bar_count",
                             "expected": len(want), "actual": len(have)})
     for bar, (w, h) in enumerate(zip(want, have)):
+        if w["key_count"] != h["key_count"]:
+            differences.append({"bar_index": bar, "event_index": None, "field": "key_accidental_count",
+                                "expected": w["key_count"], "actual": h["key_count"]})
+        if mode_evidence and bar in mode_evidence and w["key_mode"] != h["key_mode"]:
+            differences.append({"bar_index": bar, "event_index": None, "field": "key_mode",
+                                "expected": w["key_mode"], "actual": h["key_mode"]})
         if h["events"] is None:
             continue  # refused by the product: written empty, counted against coverage
         written_bars += 1
@@ -149,7 +160,8 @@ def _counts(values) -> dict[str, int]:
 
 # --- negative controls ---------------------------------------------------------------------------
 
-def _gp(bars: list[list[dict[str, Any]] | None]) -> bytes:
+def _gp(bars: list[list[dict[str, Any]] | None],
+        keys: list[tuple[int, str] | None] | None = None) -> bytes:
     """A minimal GPIF package. Each event: kind, written, dots, tuplet, tie, positions."""
     root = ET.Element("GPIF")
     masters, bar_db, voice_db, beat_db = (ET.SubElement(root, n) for n in ("MasterBars", "Bars", "Voices", "Beats"))
@@ -159,6 +171,12 @@ def _gp(bars: list[list[dict[str, Any]] | None]) -> bytes:
     counters = {"voice": 0, "beat": 0, "note": 0, "rhythm": 0}
     for index, events in enumerate(bars):
         master = ET.SubElement(masters, "MasterBar")
+        if keys is not None and keys[index] is not None:
+            fifths, mode = keys[index]
+            key = ET.SubElement(master, "Key")
+            ET.SubElement(key, "AccidentalCount").text = str(fifths)
+            ET.SubElement(key, "Mode").text = mode
+            ET.SubElement(key, "TransposeAs").text = "Flats" if fifths < 0 else "Sharps"
         ET.SubElement(master, "Time").text = "4/4"
         ET.SubElement(master, "Bars").text = str(index)
         bar = ET.SubElement(bar_db, "Bar", {"id": str(index)})
@@ -233,6 +251,21 @@ def _bar() -> list[dict[str, Any]]:
 def test_identical_files_have_no_difference():
     result = compare_gp(_gp([_bar(), _bar()]), _gp([_bar(), _bar()]))
     assert result["differences"] == [] and result["written_bars"] == 2 and result["equal_events"] == 12
+
+
+def test_key_count_is_compared_on_every_bar_including_empty_bars():
+    truth = _gp([_bar(), None, _bar()], keys=[(1, "Major"), (-2, "Major"), (0, "Major")])
+    produced = _gp([_bar(), None, _bar()], keys=[(0, "Major"), None, (1, "Major")])
+    result = compare_gp(truth, produced)
+    assert [(d["bar_index"], d["field"]) for d in result["differences"]] == [
+        (0, "key_accidental_count"), (1, "key_accidental_count"), (2, "key_accidental_count")]
+
+
+def test_key_mode_is_compared_only_where_source_evidences_it():
+    truth = _gp([_bar(), _bar()], keys=[(1, "Major"), (1, "Minor")])
+    produced = _gp([_bar(), _bar()], keys=[(1, "Minor"), (1, "Major")])
+    result = compare_gp(truth, produced, mode_evidence={1})
+    assert [(d["bar_index"], d["field"]) for d in result["differences"]] == [(1, "key_mode")]
 
 
 def test_each_technique_placement_is_compared_by_bar_and_event():

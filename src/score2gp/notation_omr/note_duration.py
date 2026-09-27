@@ -49,7 +49,7 @@ from ..pdf import (
     _path_subpaths,
 )
 
-SCHEMA = "note-duration-records.v0.2"  # v0.2: page heights, staff extent and bar spans per system
+SCHEMA = "note-duration-records.v0.3"  # v0.3: sourced key signature per notation system
 
 WRITTEN_VALUES = {
     "whole": Fraction(4), "half": Fraction(2), "quarter": Fraction(1), "eighth": Fraction(1, 2),
@@ -1340,8 +1340,10 @@ def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = No
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
     records: list[dict[str, Any]] = []
     systems = []
+    key_signatures = []
     bar_signatures: dict[int, dict[str, Any] | None] = {}
     state: dict[str, Any] = {"bar_offset": 0, "system_number": 0, "time_signature": None,
+                             "key_signature": None,
                              "diagnostics": {"ignored_symbols": 0, "ignored_symbols_by_reason": {}, "arcs_not_ties": 0, "unassociated_numbers": 0, "label_numbers": 0,
                                              "events_outside_bars": 0, "pages_without_notation_staff": 0}}
     declared = {"value": time_signature, "source": "caller_declared", "sources": []} if time_signature else None
@@ -1354,12 +1356,30 @@ def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = No
             if not notation:
                 state["diagnostics"]["pages_without_notation_staff"] += 1
             for system_index, staff in enumerate(sorted(notation, key=lambda st: st.top)):
+                from .key_signature import read_system_key_signature  # noqa: PLC0415 - shared symbol types
+                key_signature = read_system_key_signature(staff, symbols)
+                previous_key = state["key_signature"]
+                if key_signature["status"] == "read" and not key_signature["sources"] and previous_key:
+                    key_signature["fifths"] = previous_key["fifths"]
+                    key_signature["mode"] = previous_key["mode"]
+                    key_signature["mode_sources"] = previous_key["mode_sources"]
+                    key_signature["mode_diagnostic"] = previous_key["mode_diagnostic"]
+                    key_signature["inherited_from"] = previous_key.get("inherited_from", previous_key["sources"])
+                elif (key_signature["status"] == "read" and not key_signature["sources"]
+                      and previous_key is None and state["system_number"] > 0):
+                    key_signature.update(status="refused", fifths=None,
+                                         reason="key_signature_in_force_unknown")
+                if key_signature["status"] == "read":
+                    state["key_signature"] = key_signature
+                else:
+                    state["key_signature"] = None
                 state["system_index"] = system_index
                 result = _read_staff(staff, symbols, notation + tab, state)
                 records.extend(result["records"])
                 signature = state["time_signature"] or declared
                 for bar in range(result["bar_count"]):
                     bar_signatures[state["bar_offset"] + bar] = signature
+                key_signatures.append(key_signature)
                 systems.append({"page_index": page_index, "system_index": system_index,
                                 "system_number": state["system_number"], "first_bar_index": state["bar_offset"],
                                 "bar_count": result["bar_count"], "staff_space": round(staff.space, 4),
@@ -1374,6 +1394,7 @@ def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = No
     for r in records:
         if r["reason"]:
             reasons[r["reason"]] = reasons.get(r["reason"], 0) + 1
+    state["diagnostics"]["key_signatures"] = key_signatures
     return {
         "schema": SCHEMA,
         "source": {"pdf_sha256": digest, "pages": list(pages) if pages else None, "page_heights": page_heights},
