@@ -1754,6 +1754,13 @@ def build_ir_from_tabraw_only(
             details=err.details,
         ) from err
     summary = note_type_route["summary"]
+    if summary["source_bars"] == 0:
+        raise BuildIrInputRiskError(
+            category="pdf_only_tab_no_notation_bars",
+            stage="note-type-route",
+            message="PDF-only tab building refused: no notation staff bar was read, so no duration can be read from a note type.",
+            details={"note_type_route": note_type_route},
+        )
     if summary["written_bars"] == 0:
         raise BuildIrInputRiskError(
             category="pdf_only_tab_no_bar_written",
