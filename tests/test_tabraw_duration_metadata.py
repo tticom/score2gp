@@ -18,7 +18,6 @@ def test_direct_construction_with_dataclass_and_helper_access():
         confidence=1.0,
         source="visual_morphology",
         is_ambiguous=False,
-        is_fallback_placeholder=False,
         diagnostic_message="",
     )
 
@@ -49,7 +48,6 @@ def test_direct_construction_with_valid_dict():
         "confidence": 0.8,
         "source": "visual_morphology",
         "is_ambiguous": False,
-        "is_fallback_placeholder": False,
         "diagnostic_message": "2 beams detected",
     }
 
@@ -93,10 +91,10 @@ def test_direct_construction_with_raw_dict_containing_duration_evidence():
 def test_json_serialization_and_deserialization(tmp_path: Path):
     ev1 = TabDurationEvidence(duration_name="quarter", duration_ticks=960, stem_present=True)
     ev2 = TabDurationEvidence(
-        duration_name="quarter",
-        duration_ticks=960,
-        source="equal_spacing_fallback",
-        is_fallback_placeholder=True,
+        duration_name="ambiguous",
+        duration_ticks=0,
+        source="ambiguous_conflict",
+        is_ambiguous=True,
     )
 
     cand1 = make_tab_candidate(
@@ -122,6 +120,7 @@ def test_json_serialization_and_deserialization(tmp_path: Path):
     tabraw.to_json_file(json_file)
 
     loaded_tabraw = TabRaw.from_json_file(json_file)
+    assert loaded_tabraw.schema_version == "tabraw.v0.2"
 
     assert len(loaded_tabraw.candidates) == 2
     assert loaded_tabraw.candidates[0].duration_evidence == ev1
@@ -258,17 +257,9 @@ def test_malformed_dataclass_evidence_boundary():
             duration_evidence=bad_conf_ev,
         )
 
-    # Invalid source in dataclass instance
-    bad_src_ev = TabDurationEvidence(duration_name="quarter", duration_ticks=960, source="unknown_source")  # type: ignore[arg-type]
-    with pytest.raises(ValueError, match="Invalid duration_evidence"):
-        make_tab_candidate(
-            candidate_id="dc-err-4",
-            raw_text="1",
-            page_index=1,
-            bbox_values=[0, 0, 10, 10],
-            confidence=0.5,
-            duration_evidence=bad_src_ev,
-        )
+    # Invalid source in dataclass instance: refused on construction
+    with pytest.raises(ValueError, match="TabDurationEvidence invariant mismatch"):
+        TabDurationEvidence(duration_name="quarter", duration_ticks=960, source="unknown_source")  # type: ignore[arg-type]
 
     # Dataclass instance in raw dict parameter fails validation in make_tab_candidate
     with pytest.raises(ValueError, match="Invalid duration_evidence in raw metadata"):
@@ -299,3 +290,29 @@ def test_absent_duration_evidence():
         confidence=0.5,
     )
     assert candidate.duration_evidence is None
+
+
+def test_placeholder_evidence_from_a_v0_1_document_is_refused(tmp_path: Path):
+    """DUR-02: the equal-spacing quarter placeholder is gone; v0.1 evidence that carries it is not read."""
+    for placeholder in (
+        {"duration_name": "quarter", "duration_ticks": 960, "source": "equal_spacing_fallback"},
+        {"duration_name": "quarter", "duration_ticks": 960, "source": "visual_morphology", "is_fallback_placeholder": False},
+    ):
+        with pytest.raises(ValueError, match="Invalid duration_evidence"):
+            make_tab_candidate(candidate_id="p", raw_text="1", page_index=1, bbox_values=[0, 0, 10, 10],
+                               confidence=0.5, duration_evidence=placeholder)
+        assert TabCandidate(id="p", raw_text="1", raw={"duration_evidence": placeholder}).duration_evidence is None
+    with pytest.raises(ValueError, match="TabDurationEvidence invariant mismatch"):
+        TabDurationEvidence(duration_name="quarter", duration_ticks=960, source="equal_spacing_fallback")  # type: ignore[arg-type]
+
+
+def test_a_v0_1_document_without_placeholder_evidence_is_still_read(tmp_path: Path):
+    path = tmp_path / "v01.json"
+    path.write_text(
+        '{"schema_version": "tabraw.v0.1", "candidates": [{"id": "c", "raw_text": "3", "raw": {"duration_evidence": '
+        '{"duration_name": "eighth", "duration_ticks": 480, "source": "visual_morphology"}}}]}',
+        encoding="utf-8",
+    )
+    loaded = TabRaw.from_json_file(path)
+    assert loaded.schema_version == "tabraw.v0.1"
+    assert loaded.candidates[0].duration_evidence.duration_name == "eighth"

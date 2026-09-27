@@ -65,7 +65,10 @@ Overfull bars and same-voice overlaps are refused before invalid ScoreIR is writ
 
 ## TabRaw
 
-TabRaw is now a documented candidate contract with schema version `tabraw.v0.1`.
+TabRaw is now a documented candidate contract with schema version `tabraw.v0.2`. v0.2 (DUR-02) removed the
+equal-spacing quarter placeholder from candidate duration evidence: the evidence `source` is
+`visual_morphology` or `ambiguous_conflict`, and there is no placeholder flag. `tabraw.v0.1` documents are
+still read, but duration evidence that carries the removed source or flag is refused.
 
 Each candidate preserves:
 
@@ -241,7 +244,30 @@ Still out of scope:
 
 The latest controlled private diagnostic experiment produced only sanitized evidence: PDF extraction found many candidates, but no system/bar/string grouping was inferred, and MusicXML timing risk stopped build-ir before ScoreIR output. Those failure classes are now represented by public fixtures; another private run should check whether native `.mxl` intake and the stricter `missing_pdf_grouping` refusal produce clearer summaries without tuning to private material.
 
-## PDF-Only Tab Measure-Assembly Boundary (CR-04D Closure)
+## PDF-Only Conversion: Note-Type Durations (DUR-02)
+
+DUR-02 replaced the measure-assembly policy below. `build_ir_from_tabraw_only(tabraw, note_durations=...)`
+takes every duration from DUR-01's note-duration records and every position from the TAB:
+
+* **`pdf_tab_bar_assembler.py`**: `place_tab_digits` puts each TAB digit in the notation bar above it (page,
+  page-local height, x within the notation barlines); `assemble_note_type_bars` matches notation events to TAB
+  columns, records each match (`tab_column`, `rest`, or `tie_continuation` for a tied note printed without
+  its own digit), and refuses a bar with a located reason code: `note_duration_event_unread`,
+  `notation_note_without_tab_digit`, `tab_digit_without_notation_event`, `rest_over_tab_digit`,
+  `notehead_digit_count_mismatch`, `notation_tab_column_ambiguous`, `bar_without_notation_event` or
+  `bar_total_mismatch`. A refused bar is written empty.
+* **`pdf_tab_event_factory.py`**: `build_note_type_event` builds one event from its record and TAB positions.
+* **`pdf_tab_measure_timing.py`**: `ticks_for_quarters` converts a record's exact duration to ticks, refusing a
+  duration off the tick grid.
+* **`build_ir.py`**: refuses `pdf_only_tab_note_durations_missing` (no records), `pdf_only_tab_time_signature_unread`,
+  `pdf_only_tab_no_notation_bars` and `pdf_only_tab_no_bar_written`; the layout gates and the
+  more-than-64-events-in-a-bar `pdf_only_tab_grouping_unsafe` gate are unchanged.
+
+Deleted: the event-count grid spacing, the equal-spacing quarter placeholder, the `--editable-draft` quarter
+default, and remainder rest padding. TAB-side `visual_morphology` evidence cites no symbol, so it does not meet
+DUR-01's standard and is no longer a duration source.
+
+## PDF-Only Tab Measure-Assembly Boundary (CR-04D Closure, superseded by DUR-02)
 
 The refactoring sequence CR-04D (D1 through D5) extracted PDF-only Tab measure-assembly logic out of `build_ir.py` into dedicated, modular components while maintaining complete behavioral and exception payload compatibility:
 

@@ -755,17 +755,20 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
         "Half": 1920,
         "Quarter": 960,
         "Eighth": 480,
-        "Sixteenth": 240,
-        "ThirtySecond": 120,
-        "SixtyFourth": 60,
+        "16th": 240,
+        "32nd": 120,
+        "64th": 60,
+        "128th": 30,
     }
     rhythms_node = root.find("Rhythms")
     if rhythms_node is not None:
         for r in rhythms_node.findall("Rhythm"):
             r_id = r.get("id")
             val_node = r.find("NoteValue")
-            val = val_node.text if val_node is not None else "Quarter"
-            ticks = duration_ticks_map.get(val, 960)
+            val = val_node.text if val_node is not None else None
+            if val not in duration_ticks_map:
+                raise ValueError(f"Unknown GPIF NoteValue: {val!r}")
+            ticks = duration_ticks_map[val]
 
             dots = r.find("AugmentationDot")
             if dots is not None:
@@ -790,11 +793,12 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
                 "Half": "half",
                 "Quarter": "quarter",
                 "Eighth": "eighth",
-                "Sixteenth": "16th",
-                "ThirtySecond": "32nd",
-                "SixtyFourth": "64th",
+                "16th": "16th",
+                "32nd": "32nd",
+                "64th": "64th",
+                "128th": "128th",
             }
-            duration_obj = NotatedDuration(value=inv_val_map.get(val, "quarter"), dots=int(dots.get("count") or 1) if dots is not None else 0)
+            duration_obj = NotatedDuration(value=inv_val_map[val], dots=int(dots.get("count") or 1) if dots is not None else 0)
 
             rhythms[r_id] = {
                 "value": val,

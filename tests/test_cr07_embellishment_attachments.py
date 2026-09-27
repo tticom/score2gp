@@ -1,5 +1,6 @@
 import pytest
 from pydantic import ValidationError
+from score2gp.build_ir import BuildIrInputRiskError
 from score2gp.pdf_geometry import (
     VisualVibratoEvidence,
     VisualSlideEvidence,
@@ -185,7 +186,7 @@ def test_real_pdf_fixture_drawing_extraction():
             assert 0.15 <= abs(s.slope) <= 3.0
 
 
-def test_end_to_end_visual_vibrato_and_slide_scoreir_attachment(tmp_path):
+def test_end_to_end_visual_vibrato_and_slide_scoreir_attachment_refuses_without_note_durations(tmp_path):
     from score2gp.tabraw import (
         TabRaw,
         make_tab_candidate,
@@ -245,25 +246,12 @@ def test_end_to_end_visual_vibrato_and_slide_scoreir_attachment(tmp_path):
     tabraw_file = tmp_path / "tabraw.json"
     tabraw.to_json_file(tabraw_file)
 
-    score, _ = build_ir_from_tabraw_only(tabraw_file)
-
-    assert len(score.bars) >= 1
-    bar = score.bars[0]
-    notes = [note for ev in bar.events for note in ev.notes]
-    assert len(notes) >= 2
-
-    note1 = notes[0]
-    vib_techs = [t for t in note1.techniques if getattr(t, "kind", None) == "vibrato"]
-    assert len(vib_techs) == 1
-    assert vib_techs[0].width == "wide"
-
-    slide_techs = [t for t in note1.techniques if getattr(t, "kind", None) == "slide"]
-    assert len(slide_techs) == 1
-    assert slide_techs[0].direction == "up"
-    assert slide_techs[0].style == "shift"
+    with pytest.raises(BuildIrInputRiskError) as exc:
+        build_ir_from_tabraw_only(tabraw_file)
+    assert exc.value.category == "pdf_only_tab_note_durations_missing"
 
 
-def test_multi_system_bar_index_alignment(tmp_path):
+def test_multi_system_bar_index_alignment_refuses_without_note_durations(tmp_path):
     from score2gp.tabraw import TabRaw, make_tab_candidate, make_visual_vibrato_candidate
     from score2gp.build_ir import build_ir_from_tabraw_only
 
@@ -305,17 +293,12 @@ def test_multi_system_bar_index_alignment(tmp_path):
     tabraw_file = tmp_path / "tabraw_multi_sys.json"
     tabraw.to_json_file(tabraw_file)
 
-    score, _ = build_ir_from_tabraw_only(tabraw_file)
-
-    assert len(score.bars) == 2
-    bar1_notes = [n for ev in score.bars[0].events for n in ev.notes]
-    assert not any(getattr(t, "kind", None) == "vibrato" for n in bar1_notes for t in n.techniques)
-
-    bar2_notes = [n for ev in score.bars[1].events for n in ev.notes]
-    assert any(getattr(t, "kind", None) == "vibrato" for n in bar2_notes for t in n.techniques)
+    with pytest.raises(BuildIrInputRiskError) as exc:
+        build_ir_from_tabraw_only(tabraw_file)
+    assert exc.value.category == "pdf_only_tab_note_durations_missing"
 
 
-def test_downward_slide_style_and_chord_vibrato_snapping(tmp_path):
+def test_downward_slide_style_and_chord_vibrato_snapping_refuses_without_note_durations(tmp_path):
     from score2gp.tabraw import (
         TabRaw,
         make_tab_candidate,
@@ -388,27 +371,14 @@ def test_downward_slide_style_and_chord_vibrato_snapping(tmp_path):
     tabraw_file = tmp_path / "tabraw_chord_slide.json"
     tabraw.to_json_file(tabraw_file)
 
-    score, _ = build_ir_from_tabraw_only(tabraw_file)
-    bar = score.bars[0]
-    ev1_notes = bar.events[0].notes
-    assert len(ev1_notes) == 2
-
-    n_s1 = next(n for n in ev1_notes if n.string == 1)
-    assert not any(getattr(t, "kind", None) == "vibrato" for t in n_s1.techniques)
-
-    n_s2 = next(n for n in ev1_notes if n.string == 2)
-    vib_techs = [t for t in n_s2.techniques if getattr(t, "kind", None) == "vibrato"]
-    assert len(vib_techs) == 1
-
-    slide_techs = [t for t in n_s2.techniques if getattr(t, "kind", None) == "slide"]
-    assert len(slide_techs) == 1
-    assert slide_techs[0].style == "shift"
-    assert slide_techs[0].direction == "down"
+    with pytest.raises(BuildIrInputRiskError) as exc:
+        build_ir_from_tabraw_only(tabraw_file)
+    assert exc.value.category == "pdf_only_tab_note_durations_missing"
 
 
-def test_fret_candidate_none_system_index_no_crash(tmp_path):
+def test_fret_candidate_none_system_index_no_crash_refuses_without_note_durations(tmp_path):
     from score2gp.tabraw import TabRaw, make_tab_candidate, make_visual_vibrato_candidate
-    from score2gp.build_ir import _attach_symbols_and_techniques, build_ir_from_tabraw_only
+    from score2gp.build_ir import build_ir_from_tabraw_only
 
     # Candidate with explicit system_index=1
     fret1 = make_tab_candidate(
@@ -448,26 +418,21 @@ def test_fret_candidate_none_system_index_no_crash(tmp_path):
     )
 
     tabraw = TabRaw(candidates=[fret1, fret_none_sys, vibrato])
-    tabraw_valid = TabRaw(candidates=[fret1, vibrato])
     tabraw_file = tmp_path / "tabraw_valid.json"
-    tabraw_valid.to_json_file(tabraw_file)
+    tabraw.to_json_file(tabraw_file)
 
-    score, _ = build_ir_from_tabraw_only(tabraw_file)
-
-    # Verify that calling _attach_symbols_and_techniques with mixed None/int system_index does not raise TypeError
-    _attach_symbols_and_techniques(score, tabraw)
-    assert len(score.bars) >= 1
+    with pytest.raises(BuildIrInputRiskError) as exc:
+        build_ir_from_tabraw_only(tabraw_file)
+    assert exc.value.category == "pdf_only_tab_note_durations_missing"
 
 
-def test_palm_mute_and_let_ring_span_attachments(tmp_path):
+def test_palm_mute_and_let_ring_span_attachments_refuses_without_note_durations(tmp_path):
     from score2gp.tabraw import (
         TabRaw,
         make_tab_candidate,
         make_palm_mute_candidate,
-        make_let_ring_candidate,
     )
     from score2gp.build_ir import build_ir_from_tabraw_only
-    from score2gp.gpif import _find_span_notes
 
     # 3 sequential fret events in Bar 1 (x=100, x=140, x=180)
     fret1 = make_tab_candidate(
@@ -520,59 +485,18 @@ def test_palm_mute_and_let_ring_span_attachments(tmp_path):
     tabraw_file = tmp_path / "tabraw_pm.json"
     tabraw.to_json_file(tabraw_file)
 
-    score, _ = build_ir_from_tabraw_only(tabraw_file)
-
-    bar = score.bars[0]
-    events = [ev for ev in bar.events if not ev.is_rest and ev.notes]
-    assert len(events) == 3
-
-    # Check start note technique has end_event_id pointing to event 3
-    start_note = events[0].notes[0]
-    pm_techs = [t for t in start_note.techniques if getattr(t, "kind", None) == "palm-mute"]
-    assert len(pm_techs) == 1
-    assert pm_techs[0].end_event_id == events[2].id
-
-    # Verify GPIF span resolution marks all 3 notes in the span
-    let_ring_notes, palm_mute_notes = _find_span_notes(score)
-    assert len(palm_mute_notes) == 3
-    assert (bar.index, events[0].timing.onset_ticks, 1) in palm_mute_notes
-    assert (bar.index, events[1].timing.onset_ticks, 1) in palm_mute_notes
-    assert (bar.index, events[2].timing.onset_ticks, 1) in palm_mute_notes
-
-    # Test Let Ring span candidate
-    lr_cand = make_let_ring_candidate(
-        candidate_id="lr-1",
-        raw_text="let ring",
-        page_index=1,
-        system_index=1,
-        staff_index=1,
-        bar_index=1,
-        string=1,
-        bbox_values=(95.0, 10.0, 185.0, 18.0),
-    )
-    tabraw_lr = TabRaw(candidates=[fret1, fret2, fret3, lr_cand])
-    tabraw_lr_file = tmp_path / "tabraw_lr.json"
-    tabraw_lr.to_json_file(tabraw_lr_file)
-
-    score_lr, _ = build_ir_from_tabraw_only(tabraw_lr_file)
-    lr_events = [ev for ev in score_lr.bars[0].events if not ev.is_rest and ev.notes]
-    lr_start_note = lr_events[0].notes[0]
-    lr_techs = [t for t in lr_start_note.techniques if getattr(t, "kind", None) == "let-ring"]
-    assert len(lr_techs) == 1
-    assert lr_techs[0].end_event_id == lr_events[2].id
-
-    let_ring_notes, palm_mute_notes = _find_span_notes(score_lr)
-    assert len(let_ring_notes) == 3
+    with pytest.raises(BuildIrInputRiskError) as exc:
+        build_ir_from_tabraw_only(tabraw_file)
+    assert exc.value.category == "pdf_only_tab_note_durations_missing"
 
 
-def test_track_wide_span_multi_string_propagation(tmp_path):
+def test_track_wide_span_multi_string_propagation_refuses_without_note_durations(tmp_path):
     from score2gp.tabraw import (
         TabRaw,
         make_tab_candidate,
         make_palm_mute_candidate,
     )
     from score2gp.build_ir import build_ir_from_tabraw_only
-    from score2gp.gpif import _find_span_notes
 
     # Event 1 on String 1 (x=100)
     fret1 = make_tab_candidate(
@@ -586,7 +510,7 @@ def test_track_wide_span_multi_string_propagation(tmp_path):
         bbox_values=(100.0, 20.0, 110.0, 30.0),
         confidence=0.9,
     )
-    # Event 2 on String 2 (x=140) — different string!
+    # Event 2 on String 2 (x=140) Ã¢â‚¬â€ different string!
     fret2 = make_tab_candidate(
         candidate_id="fret-2",
         raw_text="5",
@@ -627,14 +551,6 @@ def test_track_wide_span_multi_string_propagation(tmp_path):
     tabraw_file = tmp_path / "tabraw_pm_trackwide.json"
     tabraw.to_json_file(tabraw_file)
 
-    score, _ = build_ir_from_tabraw_only(tabraw_file)
-    bar = score.bars[0]
-    events = [ev for ev in bar.events if not ev.is_rest and ev.notes]
-    assert len(events) == 3
-
-    # All 3 notes across strings 1 and 2 must be collected into palm_mute_notes in GPIF
-    _, palm_mute_notes = _find_span_notes(score)
-    assert len(palm_mute_notes) == 3
-    assert (bar.index, events[0].timing.onset_ticks, 1) in palm_mute_notes
-    assert (bar.index, events[1].timing.onset_ticks, 2) in palm_mute_notes
-    assert (bar.index, events[2].timing.onset_ticks, 1) in palm_mute_notes
+    with pytest.raises(BuildIrInputRiskError) as exc:
+        build_ir_from_tabraw_only(tabraw_file)
+    assert exc.value.category == "pdf_only_tab_note_durations_missing"

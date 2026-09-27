@@ -9,7 +9,7 @@ from typing import Iterable, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .pdf_tab_bar_assembler import PdfTabBarAssemblerError, assemble_pdf_tab_bar
+from .pdf_tab_bar_assembler import PdfTabBarAssemblerError, assemble_note_type_bars, place_tab_digits
 from .ascii_alignment import ALIGNMENT_SCHEMA_VERSION, AsciiMusicXmlAlignment, compute_sha256
 from . import __version__
 from .ir import (
@@ -26,7 +26,6 @@ from .ir import (
     SourceStage,
     Technique,
     Tempo,
-    TimeSignature,
     Timing,
     Tuning,
     TuningString,
@@ -38,7 +37,6 @@ from .ir import (
     VibratoTechnique,
     HammerOnTechnique,
     PullOffTechnique,
-    UnsupportedTechnique,
     LetRingTechnique,
     PalmMuteTechnique,
     GraceTiming,
@@ -523,6 +521,7 @@ class BuildIrDiagnostics(BaseModel):
     per_bar: list[BarAlignmentDiagnostics] = Field(default_factory=list)
     warnings: list[dict[str, object]] = Field(default_factory=list)
     pdf_timing_mapping: dict[str, object] | None = None
+    note_type_route: dict[str, object] | None = None
 
     def to_json_file(self, path: str | Path) -> None:
         out = Path(path)
@@ -1628,11 +1627,15 @@ def build_ir_with_diagnostics_from_imports(
 def build_ir_from_tabraw_only(
     tabraw_path: str | Path,
     *,
+    note_durations: dict[str, object] | None = None,
     tempo_bpm: float = 120.0,
-    tempo_is_explicit: bool = False,
-    editable_draft: bool = False,
     require_precise_timing: bool = False,
 ) -> tuple[ScoreIR, BuildIrDiagnostics]:
+    """ScoreIR from TAB positions and note-type durations (DUR-01 records of the same PDF).
+
+    Every duration is the event's note type; every position is its TAB digit. Bars that cannot be
+    written that way are refused, written empty, and located in ``diagnostics.note_type_route``.
+    """
     if tempo_bpm is None or math.isnan(tempo_bpm) or math.isinf(tempo_bpm) or tempo_bpm <= 0:
         raise BuildIrInputRiskError(
             category="pdf_only_tab_invalid_tempo",
@@ -1729,66 +1732,63 @@ def build_ir_from_tabraw_only(
                 message=f"PDF-only tab building refused: candidate {candidate.id} has missing required layout fields (string={candidate.string}, bar_index={candidate.bar_index}, system_index={candidate.system_index}, x={candidate.x}).",
             )
 
-    # 2. Rhythmic alignment & ScoreIR generation
+    if note_durations is None:
+        raise BuildIrInputRiskError(
+            category="pdf_only_tab_note_durations_missing",
+            stage="note-type-route",
+            message="PDF-only tab building refused: no note-duration records were given, and no duration is ever defaulted.",
+            details={"remediation_hint": "Read the note durations of the same PDF (score2gp read-note-durations) and pass them in."},
+        )
 
+    # 2. Durations from note types, positions from the TAB
+    digits = [c for c in fret_candidates if c.kind == "fret" and c.parsed_fret is not None]
+    try:
+        bars, note_type_route = assemble_note_type_bars(digits, note_durations, track_id=TRACK_ID)
+    except PdfTabBarAssemblerError as err:
+        raise BuildIrInputRiskError(
+            category=err.category,
+            stage=err.stage,
+            message=err.message,
+            details=err.details,
+        ) from err
+    summary = note_type_route["summary"]
+    if summary["source_bars"] == 0:
+        raise BuildIrInputRiskError(
+            category="pdf_only_tab_no_notation_bars",
+            stage="note-type-route",
+            message="PDF-only tab building refused: no notation staff bar was read, so no duration can be read from a note type.",
+            details={"note_type_route": note_type_route},
+        )
+    if summary["written_bars"] == 0:
+        raise BuildIrInputRiskError(
+            category="pdf_only_tab_no_bar_written",
+            stage="note-type-route",
+            message=f"PDF-only tab building refused: every one of {summary['source_bars']} bars was refused.",
+            details={"refusal_reasons": summary["refusal_reasons"], "note_type_route": note_type_route},
+        )
+    placed, _ = place_tab_digits(digits, note_durations)
+    output_bar_to_frets = {source_bar + 1: bar_digits for source_bar, bar_digits in placed.items()}
 
-
-    # Get unique source bar keys in stable reading order:
-    # (page_index, system_index, staff_index, bar_index)
-    source_bar_keys = sorted(list({(c.page_index or 1, c.system_index, c.staff_index or 1, c.bar_index) for c in fret_candidates}))
-
-    bars = []
-    output_bar_to_frets = {}
-
-    for output_bar_idx, source_bar_key in enumerate(source_bar_keys, start=1):
-        page_idx, sys_idx, staff_idx, local_bar_idx = source_bar_key
-        bar_frets = [
-            c for c in fret_candidates
-            if (c.page_index or 1) == page_idx
-            and c.system_index == sys_idx
-            and (c.staff_index or 1) == staff_idx
-            and c.bar_index == local_bar_idx
-        ]
-
-        output_bar_to_frets[output_bar_idx] = bar_frets
-
-        try:
-            bar = assemble_pdf_tab_bar(
-                bar_frets,
-                floating_barlines=tabraw.floating_barlines,
-                output_bar_idx=output_bar_idx,
-                track_id=TRACK_ID,
-                editable_draft=editable_draft,
-                tempo_bpm=tempo_bpm,
-                tempo_is_explicit=tempo_is_explicit,
-                chord_x_tolerance_pt=PDF_ONLY_CHORD_X_TOLERANCE_PT,
-            )
-        except PdfTabBarAssemblerError as err:
-            raise BuildIrInputRiskError(
-                category=err.category,
-                stage=err.stage,
-                message=err.message,
-                details=err.details,
-            ) from err
-        bars.append(bar)
-
-    # Create warnings and add timing inferred timing warning
     warnings_list = [
         WarningItem(
-            code="pdf_only_tab_inferred_timing",
-            message="Timing and rhythmic durations are approximate and inferred from PDF horizontal layout positioning, not source notation.",
-            severity="warning",
+            code="pdf_only_tab_note_type_timing",
+            message="Durations are read from the notation's note types and grouping; positions from the TAB.",
+            severity="info",
         )
     ]
-
-    if editable_draft:
-        warnings_list.append(
-            WarningItem(
-                code="pdf_editable_draft",
-                message="Editable GP draft generated. Tuning, rhythm, tempo, and time signature are explicit defaults.",
-                severity="warning",
+    for entry in note_type_route["bars"]:
+        if entry["status"] == "refused":
+            location = entry["location"]
+            where = f"page {location['page_index'] + 1}, bar {location['bar_index'] + 1}"
+            if "event_index" in location:
+                where += f", event {location['event_index']}"
+            warnings_list.append(
+                WarningItem(
+                    code="pdf_only_tab_bar_refused",
+                    message=f"Bar {entry['output_bar_index']} refused ({entry['reason']}) at {where}; written empty.",
+                    severity="warning",
+                )
             )
-        )
 
     for candidate in tabraw.candidates:
         if candidate.kind in ("chord-symbol", "technique-text"):
@@ -1821,7 +1821,7 @@ def build_ir_from_tabraw_only(
     )
 
     # Attach symbols and techniques
-    _attach_symbols_and_techniques(score, tabraw)
+    _attach_symbols_and_techniques(score, tabraw, placed_frets=placed)
 
     # Construct diagnostics
     tabraw_candidates_loaded = len(tabraw.candidates)
@@ -1907,15 +1907,15 @@ def build_ir_from_tabraw_only(
         "whether_mapping_attempted": False,
         "whether_mapping_refused": False,
         "refusal_reason_codes": [],
-        "mapping_quality_classification": "inferred",
+        "mapping_quality_classification": "note_type",
         "refinement_reason_codes": [],
         "safe_layout_evidence": True,
         "partial_layout_evidence": False,
         "ambiguous_layout_evidence": False,
         "incompatible_layout_evidence": False,
-        "quality": "inferred",
+        "quality": "note_type",
         "whether_scoreir_written": True,
-        "remediation_hint": "Timing is layout-inferred. No timing source sidecar was provided.",
+        "remediation_hint": "Durations are read from the notation's note types; see note_type_route for refused bars.",
         "per_bar": [],
         "matched_x_onset_group_count": 0,
         "unmatched_x_group_count": 0,
@@ -1954,6 +1954,7 @@ def build_ir_from_tabraw_only(
         warnings=[w.model_dump(mode="json", exclude_none=True) for w in score.warnings],
         per_bar=per_bar_diagnostics,
         pdf_timing_mapping=pdf_timing_mapping,
+        note_type_route=note_type_route,
     )
 
     return score, diagnostics
@@ -3909,14 +3910,27 @@ def _remove_not_aligned_warning(score: ScoreIR, candidate: TabCandidate) -> None
     ]
 
 
-def _attach_symbols_and_techniques(score: ScoreIR, tabraw: TabRaw) -> None:
+def _attach_symbols_and_techniques(
+    score: ScoreIR, tabraw: TabRaw, *, placed_frets: dict[int, list[TabCandidate]] | None = None,
+) -> None:
     bars_by_index = {bar.index: bar for bar in score.bars}
 
     fret_candidates = [c for c in tabraw.candidates if c.kind == "fret" and c.bar_index is not None]
     source_bar_keys = sorted(list({(c.page_index or 1, c.system_index or 1, c.staff_index or 1, c.bar_index) for c in fret_candidates}))
-    bar_key_to_output_idx = {
-        key: idx for idx, key in enumerate(source_bar_keys, start=1)
-    }
+    if placed_frets is None:
+        bar_key_to_output_idx = {key: idx for idx, key in enumerate(source_bar_keys, start=1)}
+    else:
+        # The note-type route numbers every notation bar, including bars without TAB digits.
+        # Only use a TabRaw key when its digits all landed in one notation bar.
+        destinations: dict[tuple[int, int, int, int], set[int]] = defaultdict(set)
+        for source_bar, digits in placed_frets.items():
+            for digit in digits:
+                key = (digit.page_index or 1, digit.system_index or 1,
+                       digit.staff_index or 1, digit.bar_index)
+                destinations[key].add(source_bar + 1)
+        bar_key_to_output_idx = {
+            key: next(iter(indices)) for key, indices in destinations.items() if len(indices) == 1
+        }
 
 
     if hasattr(tabraw, "structural_signals") and tabraw.structural_signals:
@@ -3989,10 +4003,29 @@ def _attach_symbols_and_techniques(score: ScoreIR, tabraw: TabRaw) -> None:
             continue
 
         bar_idx = candidate.bar_index
+        if placed_frets is not None and bar_idx is None:
+            score.warnings.append(WarningItem(
+                code="pdf_only_tab_attachment_bar_unplaced",
+                message=(f"Candidate {candidate.id} at page {candidate.page_index}, system "
+                         f"{candidate.system_index}, x {candidate.x} has no TabRaw bar index."),
+                severity="warning", provenance=[candidate.to_provenance()],
+            ))
+            continue
         if bar_idx is not None:
             cand_key = (candidate.page_index or 1, candidate.system_index or 1, candidate.staff_index or 1, bar_idx)
             if cand_key in bar_key_to_output_idx:
                 bar_idx = bar_key_to_output_idx[cand_key]
+            elif placed_frets is not None:
+                bar_idx = None
+                reason = "ambiguous" if cand_key in destinations else "unplaced"
+                score.warnings.append(WarningItem(
+                    code="pdf_only_tab_attachment_bar_unplaced",
+                    message=(f"Candidate {candidate.id} at page {candidate.page_index}, system "
+                             f"{candidate.system_index}, bar {candidate.bar_index} has {reason} "
+                             "notation-bar placement."),
+                    severity="warning", provenance=[candidate.to_provenance()],
+                ))
+                continue
         # If candidate lacks a bar index, or the target bar does not exist:
         if bar_idx is None or bar_idx not in bars_by_index:
             if candidate.kind == "chord-symbol":
@@ -4155,6 +4188,30 @@ def _attach_symbols_and_techniques(score: ScoreIR, tabraw: TabRaw) -> None:
                                 dist = abs(mid_x - candidate.x)
                                 candidate_pairs.append((dist, ev1, note1, ev2, note2))
 
+                    # A span printed after the final digit may end at the first
+                    # digit of the next bar on the same staff system. Require
+                    # the marker to lie strictly between those two digits.
+                    next_bar = bars_by_index.get(bar_idx + 1)
+                    if placed_frets is not None and next_bar is not None:
+                        current_events = [ev for ev in bar.events if not ev.is_rest and ev.notes]
+                        next_events = [ev for ev in next_bar.events if not ev.is_rest and ev.notes]
+                        if current_events and next_events:
+                            last_event, first_event = current_events[-1], next_events[0]
+                            for origin in last_event.notes:
+                                x1 = _get_note_x(origin)
+                                for destination in first_event.notes:
+                                    x2 = _get_note_x(destination)
+                                    provenance = destination.provenance[0] if destination.provenance else None
+                                    same_system = (provenance is not None and
+                                                   provenance.page == candidate.page_index and
+                                                   provenance.system_id in (str(candidate.system_index),
+                                                                            f"system-{candidate.system_index}"))
+                                    if (origin.string == destination.string and same_system and
+                                            x1 is not None and x2 is not None and
+                                            x1 < candidate.x < x2):
+                                        candidate_pairs.append((abs((x1 + x2) / 2 - candidate.x),
+                                                                last_event, origin, first_event, destination))
+
                     if candidate_pairs:
                         candidate_pairs.sort(key=lambda item: item[0])
                         if len(candidate_pairs) > 1 and abs(candidate_pairs[0][0] - candidate_pairs[1][0]) < TECHNIQUE_ATTACHMENT_AMBIGUITY_EPSILON:
@@ -4172,7 +4229,9 @@ def _attach_symbols_and_techniques(score: ScoreIR, tabraw: TabRaw) -> None:
                                 tech = HammerOnTechnique(kind="hammer-on", target_event_id=ev2.id)
                             else:
                                 tech = PullOffTechnique(kind="pull-off", target_event_id=ev2.id)
-                            note1.techniques.append(tech)
+                            if not any(t.kind == kind and t.target_event_id == ev2.id
+                                       for t in note1.techniques):
+                                note1.techniques.append(tech)
                             note1.provenance.append(candidate.to_provenance())
                             _remove_not_aligned_warning(score, candidate)
                         attached = True
@@ -4216,7 +4275,44 @@ def _attach_symbols_and_techniques(score: ScoreIR, tabraw: TabRaw) -> None:
 
             elif kind == "slide":
                 attached = False
-                if candidate.x is not None:
+                if candidate.x is not None and placed_frets is not None:
+                    spanning_origins = []
+                    for first_event, second_event in zip(bar.events, bar.events[1:]):
+                        if first_event.is_rest or second_event.is_rest:
+                            continue
+                        for first_note in first_event.notes:
+                            x1 = _get_note_x(first_note)
+                            for second_note in second_event.notes:
+                                x2 = _get_note_x(second_note)
+                                if (first_note.string == second_note.string and
+                                        x1 is not None and x2 is not None and
+                                        x1 < candidate.x < x2):
+                                    spanning_origins.append((first_note, (x1 + x2) / 2))
+                    if len(spanning_origins) == 1:
+                        target_note, midpoint = spanning_origins[0]
+                        if abs(candidate.x - midpoint) < TECHNIQUE_ATTACHMENT_AMBIGUITY_EPSILON / 2:
+                            score.warnings.append(WarningItem(
+                                code="ambiguous_technique_attachment",
+                                message=f"Technique '{candidate.raw_text}' is centered between notes in bar {bar_idx}.",
+                                severity="warning", provenance=[candidate.to_provenance()],
+                            ))
+                        else:
+                            if not any(t.kind == "slide" for t in target_note.techniques):
+                                target_note.techniques.append(SlideTechnique(
+                                    kind="slide", style="unknown", direction="unknown",
+                                    target_event_id=None,
+                                ))
+                            target_note.provenance.append(candidate.to_provenance())
+                            _remove_not_aligned_warning(score, candidate)
+                        attached = True
+                    elif len(spanning_origins) > 1:
+                        score.warnings.append(WarningItem(
+                            code="ambiguous_technique_attachment",
+                            message=f"Technique '{candidate.raw_text}' spans multiple pairs in bar {bar_idx}.",
+                            severity="warning", provenance=[candidate.to_provenance()],
+                        ))
+                        attached = True
+                if candidate.x is not None and not attached:
                     notes_with_x = []
                     for event in bar.events:
                         if event.is_rest:

@@ -1,11 +1,16 @@
 from pathlib import Path
+
+import pytest
+
+from score2gp.build_ir import BuildIrInputRiskError, build_ir_from_tabraw_only
+from score2gp.notation_omr.note_duration import read_note_durations
 from score2gp.pdf import extract_tab
 from score2gp.tabraw import TabRaw
 
 def test_private_acceptance_melodic(tmp_path):
-    pdf_path = Path("../score2gp-private-fixtures/fixtures/private/Melodic Soloing Masterclass.pdf").resolve()
+    pdf_path = Path("fixtures/private/Melodic Soloing Masterclass.pdf")
     if not pdf_path.exists():
-        return
+        pytest.skip("mounted private corpus is unavailable: Melodic Soloing Masterclass.pdf")
 
     tabraw_path = tmp_path / "melodic.tabraw.json"
     tabraw = TabRaw.model_validate(extract_tab(pdf_path, tabraw_path))
@@ -13,23 +18,13 @@ def test_private_acceptance_melodic(tmp_path):
     # Prove that we have floating barlines extracted
     assert len(tabraw.floating_barlines) > 0
 
-    from score2gp.build_ir import build_ir_from_tabraw_only
-    ir, _ = build_ir_from_tabraw_only(tabraw_path)
-
-    bars = ir.bars
-
-    # Prove that we successfully assembled 9 bars
-    assert len(bars) == 9
-
-    # Prove that the floating barlines successfully allowed measure splitting/merging
-    # resulting in expanded time signatures (e.g. 16/4, 12/4, 8/4)
-    expanded_bars = [bar for bar in bars if bar.time_signature.numerator > 4]
-    assert len(expanded_bars) > 0
-
-    # Specifically, Bar 4 should be 8/4 (2 sub-measures)
-
-    # Specifically, Bar 4 should be 8/4 (2 sub-measures)
-    assert bars[3].time_signature.numerator == 8
+    # This PDF has TAB but no notation staff: DUR-01 cannot supply any note types.
+    records = read_note_durations(pdf_path)
+    assert records["systems"] == []
+    with pytest.raises(BuildIrInputRiskError) as refusal:
+        build_ir_from_tabraw_only(tabraw_path)
+    assert refusal.value.category == "pdf_only_tab_note_durations_missing"
+    assert refusal.value.stage == "note-type-route"
 
     # NEGATIVE CONTROL: Prove that standard barlines from the genuine source PDF are ignored.
     # If standard barlines were incorrectly treated as floating barlines, we'd have dozens of them.

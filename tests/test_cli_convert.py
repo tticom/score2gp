@@ -432,151 +432,84 @@ def _read_score_gpif(gp_path) -> str:
     with zipfile.ZipFile(gp_path) as package:
         return package.read("Content/score.gpif").decode("utf-8")
 
+def _route_support():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("pdf_tab_route_support", Path(__file__).with_name("test_pdf_tab_route_support.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def test_cli_convert_editable_draft_success(tmp_path) -> None:
+    """Replaced (DUR-02): --editable-draft, which defaulted every rhythm to a quarter, is gone, and the
+    TAB-only fixture it converted is refused by --pdf-only-tab, because no note type can be read."""
     workdir = tmp_path / "workdir"
     out_gp = tmp_path / "output.gp"
     json_report = tmp_path / "report.json"
-
-    result = CliRunner().invoke(
-        app,
-        [
-            "convert",
-            "--pdf",
-            str(TINY_PDF),
-            "--editable-draft",
-            "--out",
-            str(out_gp),
-            "--work-dir",
-            str(workdir),
-            "--json-report",
-            str(json_report),
-        ],
-    )
-    assert result.exit_code == 0, result.output
-    assert out_gp.exists()
-    assert json_report.exists()
-    import json
+    gone = CliRunner().invoke(app, ["convert", "--pdf", str(TINY_PDF), "--editable-draft", "--out", str(out_gp),
+                                    "--work-dir", str(workdir)])
+    assert gone.exit_code == 2 and "No such option" in gone.output
+    result = CliRunner().invoke(app, ["convert", "--pdf", str(TINY_PDF), "--pdf-only-tab", "--out", str(out_gp),
+                                      "--work-dir", str(workdir), "--json-report", str(json_report)])
+    assert result.exit_code != 0
+    assert not out_gp.exists()
     report = json.loads(json_report.read_text(encoding="utf-8"))
-    assert report.get("pdf_only_diagnostics", {}).get("inferred_rhythm_status") == "defaulted_placeholder"
+    assert report["status"] == "refused"
+    assert report["refusal_code"] == "pdf_only_tab_no_notation_bars"
+    assert report["pdf_only_diagnostics"]["inferred_rhythm_status"] is None
 
-
-    gpif_content = _read_score_gpif(out_gp)
-    assert "Editable draft generated from PDF tablature" in gpif_content
-    assert "Rhythms defaulted to quarter notes" in gpif_content
-    assert "timing was not recognised" in gpif_content
-    assert "Tuning defaulted to E Standard" in gpif_content
-    assert "Time signature defaulted to 4/4" in gpif_content
-    assert "Tempo defaulted to 120 bpm" in gpif_content
-    assert "Standard notation and notation/tab alignment were skipped" in gpif_content
-    assert "Rests/silence may be omitted" in gpif_content
 
 def test_cli_convert_editable_draft_four_event_bar(tmp_path) -> None:
-    # Use a synthetic 4-event bar mock in TabRaw (fits measure capacity exactly in editable draft)
-    from score2gp.tabraw import TabRaw, TabCandidate
-    from score2gp.ir import BoundingBox
-    import json
-
-    tabraw = TabRaw(
-        candidates=[
-            TabCandidate(
-                id=f"c-{i}",
-                kind="fret",
-                raw_text="0",
-                parsed_fret=0,
-                x=10.0 + i * 5.0,
-                y=10.0,
-                string=1,
-                bar_index=1,
-                system_index=1,
-                staff_index=1,
-                page_index=1,
-                bbox=BoundingBox(page=1, x0=10.0 + i * 5.0, y0=10.0, x1=15.0 + i * 5.0, y1=15.0),
-            )
-            for i in range(4)  # 4 events in 1 bar (4 * 960 = 3840 ticks)
-        ]
-    )
-
-    workdir = tmp_path / "workdir"
-    out_gp = tmp_path / "output.gp"
+    """Replaced (DUR-02): four TAB digits are written with the note types read above them (a half,
+    a quarter and two eighths), not as four defaulted quarters."""
     from unittest.mock import patch
 
-    with patch("score2gp.cli.extract_tab_file", side_effect=lambda *args, **kwargs: {"candidates_count": 4}):
-        with patch("score2gp.cli.inspect_pdf_file", side_effect=lambda *args, **kwargs: {}):
-            with patch("score2gp.build_ir.TabRaw.from_json_file", return_value=tabraw):
-                result = CliRunner().invoke(
-                    app,
-                    [
-                        "convert",
-                        "--pdf",
-                        str(TINY_PDF),
-                        "--editable-draft",
-                        "--out",
-                        str(out_gp),
-                        "--work-dir",
-                        str(workdir),
-                    ],
-                )
-                assert result.exit_code == 0, result.output
-                assert out_gp.exists()
+    from score2gp.tabraw import TabRaw
 
-                import re
-
-                gpif_content = _read_score_gpif(out_gp)
-                notes_count = len(re.findall(r"<Note\b", gpif_content))
-                assert notes_count >= 4, f"Expected at least 4 notes, found {notes_count}"
+    support = _route_support()
+    specs = [support.note(20.0, "half"), support.note(80.0), support.note(120.0, "eighth"), support.note(140.0, "eighth")]
+    tabraw = TabRaw(candidates=[support.digit(f"c-{i}", 0, s["x"], 1, i) for i, s in enumerate(specs)])
+    workdir = tmp_path / "workdir"
+    out_gp = tmp_path / "output.gp"
+    json_report = tmp_path / "report.json"
+    with patch("score2gp.cli.extract_tab_file", side_effect=lambda *args, **kwargs: {"candidates_count": 4}), \
+            patch("score2gp.cli.inspect_pdf_file", side_effect=lambda *args, **kwargs: {}), \
+            patch("score2gp.build_ir.TabRaw.from_json_file", return_value=tabraw), \
+            patch("score2gp.notation_omr.note_duration.read_note_durations", return_value=support.records([[specs]])):
+        result = CliRunner().invoke(app, ["convert", "--pdf", str(TINY_PDF), "--pdf-only-tab", "--out", str(out_gp),
+                                          "--work-dir", str(workdir), "--json-report", str(json_report)])
+    assert result.exit_code == 0, result.output
+    assert out_gp.exists()
+    assert json.loads(json_report.read_text(encoding="utf-8"))["pdf_only_diagnostics"]["inferred_rhythm_status"] == "note_type"
+    score = json.loads((workdir / "score.ir.json").read_text(encoding="utf-8"))
+    assert [(e["timing"]["notated_duration"]["value"], e["notes"][0]["fret"]) for e in score["bars"][0]["events"]] == [
+        ("half", 0), ("quarter", 1), ("eighth", 2), ("eighth", 3)]
+    assert len(re.findall(r"<Note\b", _read_score_gpif(out_gp))) >= 4
 
 
 def test_cli_convert_overcapacity_dense_input_refusal(tmp_path) -> None:
-    from score2gp.tabraw import TabRaw, TabCandidate
-    from score2gp.ir import BoundingBox
-    import json
+    """Replaced (DUR-02): twenty quarter notes in one 4/4 bar refuse the bar; with no bar written the
+    conversion is refused and no GP package is written."""
+    from unittest.mock import patch
 
-    tabraw = TabRaw(
-        candidates=[
-            TabCandidate(
-                id=f"c-{i}",
-                kind="fret",
-                raw_text="0",
-                parsed_fret=0,
-                x=10.0 + i * 5.0,
-                y=10.0,
-                string=1,
-                bar_index=1,
-                system_index=1,
-                staff_index=1,
-                page_index=1,
-                bbox=BoundingBox(page=1, x0=10.0 + i * 5.0, y0=10.0, x1=15.0 + i * 5.0, y1=15.0),
-            )
-            for i in range(20)  # 20 events in 1 bar in --editable-draft mode (20 * 960 = 19200 > 3840)
-        ]
-    )
+    from score2gp.tabraw import TabRaw
 
+    support = _route_support()
+    specs = [support.note(5.0 + 9.0 * i) for i in range(20)]
+    tabraw = TabRaw(candidates=[support.digit(f"c-{i}", 0, s["x"], 1, 0) for i, s in enumerate(specs)])
     workdir = tmp_path / "workdir"
     out_gp = tmp_path / "output.gp"
     json_report = tmp_path / "report.json"
-    from unittest.mock import patch
-
-    with patch("score2gp.cli.extract_tab_file", side_effect=lambda *args, **kwargs: {"candidates_count": 20}):
-        with patch("score2gp.cli.inspect_pdf_file", side_effect=lambda *args, **kwargs: {}):
-            with patch("score2gp.build_ir.TabRaw.from_json_file", return_value=tabraw):
-                result = CliRunner().invoke(
-                    app,
-                    [
-                        "convert",
-                        "--pdf",
-                        str(TINY_PDF),
-                        "--editable-draft",
-                        "--out",
-                        str(out_gp),
-                        "--work-dir",
-                        str(workdir),
-                        "--json-report",
-                        str(json_report),
-                    ],
-                )
-                assert result.exit_code != 0
-                assert not out_gp.exists()
-                assert json_report.exists()
-                report = json.loads(json_report.read_text(encoding="utf-8"))
-                assert report["status"] == "refused"
-                assert report["refusal_code"] == "pdf_only_tab_measure_overcapacity"
+    with patch("score2gp.cli.extract_tab_file", side_effect=lambda *args, **kwargs: {"candidates_count": 20}), \
+            patch("score2gp.cli.inspect_pdf_file", side_effect=lambda *args, **kwargs: {}), \
+            patch("score2gp.build_ir.TabRaw.from_json_file", return_value=tabraw), \
+            patch("score2gp.notation_omr.note_duration.read_note_durations", return_value=support.records([[specs]])):
+        result = CliRunner().invoke(app, ["convert", "--pdf", str(TINY_PDF), "--pdf-only-tab", "--out", str(out_gp),
+                                          "--work-dir", str(workdir), "--json-report", str(json_report)])
+    assert result.exit_code != 0
+    assert not out_gp.exists()
+    report = json.loads(json_report.read_text(encoding="utf-8"))
+    assert report["status"] == "refused"
+    assert report["refusal_code"] == "pdf_only_tab_no_bar_written"
+    route = json.loads((workdir / "note-type-route.json").read_text(encoding="utf-8"))
+    assert route["bars"][0]["reason"] == "bar_total_mismatch" and route["bars"][0]["detail"] == "20 of 4 quarters"

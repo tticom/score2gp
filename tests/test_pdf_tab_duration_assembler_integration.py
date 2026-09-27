@@ -1,11 +1,24 @@
+"""TAB-side duration evidence no longer sets a duration: the note-type records do.
+
+Before DUR-02, ``assemble_pdf_tab_bar`` took a duration from TAB stem/beam/flag evidence
+(``visual_morphology``), fell back to the equal-spacing grid for unstemmed events, and padded the bar
+with rests. That evidence cites no symbol, so it does not meet DUR-01's standard, and DUR-01's records
+replace it. Each old test has a replacement here, named in its docstring. The associator's own
+extraction from the fixture is still asserted exactly.
+"""
+
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
+
 import fitz  # type: ignore[import-not-found]
 import pytest
 
-from score2gp.pdf_staff_notation_diagnostics import build_notation_diagnostics
-from score2gp.pdf_tab_bar_assembler import PdfTabBarAssemblerError, assemble_pdf_tab_bar
+from score2gp.build_ir import BuildIrInputRiskError, build_ir_from_tabraw_only
+from score2gp.notation_omr.note_duration import read_note_durations
+from score2gp.pdf import extract_tab
+from score2gp.pdf_tab_bar_assembler import assemble_note_type_bars
 from score2gp.pdf_tab_duration_associator import (
     BeamPrimitiveCandidate,
     FlagPrimitiveCandidate,
@@ -17,11 +30,31 @@ from score2gp.pdf_tab_duration_associator import (
 from score2gp.pdf_tab_duration_types import TabDurationEvidence
 from score2gp.tabraw import make_tab_candidate
 
+_spec = importlib.util.spec_from_file_location("pdf_tab_route_support", Path(__file__).with_name("test_pdf_tab_route_support.py"))
+support = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(support)
+note, digit, records = support.note, support.digit, support.records
 
-def test_pdf_tab_duration_assembler_oracle_integration():
-    """Verify that assemble_pdf_tab_bar processes candidates with visual TabDurationEvidence
-    extracted from generated_pdf_tab_duration.pdf, matching the exact expected oracle.
-    """
+FIXTURE = Path("tests/fixtures/pdf/generated_pdf_tab_duration.pdf")
+QUARTER = TabDurationEvidence(duration_name="quarter", duration_ticks=960, stem_present=True)
+EIGHTH = TabDurationEvidence(duration_name="eighth", duration_ticks=480, stem_present=True, beam_count=1)
+AMBIGUOUS = TabDurationEvidence(duration_name="ambiguous", duration_ticks=0, stem_present=True, source="ambiguous_conflict",
+                                is_ambiguous=True, diagnostic_message="Conflicting stem geometry")
+
+
+def _with_evidence(candidate, evidence):
+    return make_tab_candidate(candidate_id=candidate.id, raw_text=candidate.raw_text, page_index=candidate.page_index,
+                              bbox_values=[candidate.bbox.x0, candidate.bbox.y0, candidate.bbox.x1, candidate.bbox.y1],
+                              confidence=candidate.confidence, system_index=1, staff_index=1, bar_index=1,
+                              string=candidate.string, kind="fret", duration_evidence=evidence)
+
+
+def _assemble(specs, digits):
+    bars, route = assemble_note_type_bars(digits, records([[specs]]), track_id="t1")
+    return bars[0], route["bars"][0]
+
+
+def _fixture_evidence():
     pdf_path = Path("tests/fixtures/pdf/generated_pdf_tab_duration.pdf")
     assert pdf_path.exists()
     doc = fitz.open(pdf_path)
@@ -80,305 +113,86 @@ def test_pdf_tab_duration_assembler_oracle_integration():
         barline_x_coords=barline_xs,
         staff_space=staff_space,
     )
-
     ev_mapping = resolve_tab_duration_evidence_for_events(extracted_xs, stems, beams, flags, context)
-
-    # Bar 1: first 4 events (x < barline_xs[1])
-    bar1_candidates = []
-    for idx, (ex, fret_text) in enumerate(extracted_spans[:4], start=1):
-        cand = make_tab_candidate(
-            candidate_id=f"b1-cand-{idx}",
-            raw_text=fret_text,
-            page_index=1,
-            bbox_values=(ex - 2, staff_line_ys[0], ex + 2, staff_line_ys[0] + 4),
-            confidence=1.0,
-            system_index=1,
-            staff_index=1,
-            bar_index=1,
-            string=6,
-            duration_evidence=ev_mapping[ex],
-        )
-        bar1_candidates.append(cand)
-
-    bar1 = assemble_pdf_tab_bar(
-        bar1_candidates,
-        output_bar_idx=1,
-        track_id="track-1",
-    )
-
-    assert len(bar1.events) == 4
-    for ev in bar1.events:
-        assert not ev.is_rest
-        assert ev.timing.notated_duration.value == "quarter"
-        assert ev.timing.duration_ticks == 960
-
-    # Bar 2: next 8 events (x > barline_xs[1])
-    bar2_candidates = []
-    for idx, (ex, fret_text) in enumerate(extracted_spans[4:], start=1):
-        cand = make_tab_candidate(
-            candidate_id=f"b2-cand-{idx}",
-            raw_text=fret_text,
-            page_index=1,
-            bbox_values=(ex - 2, staff_line_ys[1], ex + 2, staff_line_ys[1] + 4),
-            confidence=1.0,
-            system_index=1,
-            staff_index=1,
-            bar_index=2,
-            string=6,
-            duration_evidence=ev_mapping[ex],
-        )
-        bar2_candidates.append(cand)
-
-    bar2 = assemble_pdf_tab_bar(
-        bar2_candidates,
-        output_bar_idx=2,
-        track_id="track-1",
-    )
-
-    note_events = [ev for ev in bar2.events if not ev.is_rest]
-    rest_events = [ev for ev in bar2.events if ev.is_rest]
-
-    assert len(note_events) == 8
-
-    # 2 flagged eighth notes (480 ticks each)
-    assert note_events[0].timing.notated_duration.value == "eighth"
-    assert note_events[0].timing.duration_ticks == 480
-    assert note_events[1].timing.notated_duration.value == "eighth"
-    assert note_events[1].timing.duration_ticks == 480
-
-    # 2 beamed eighth notes (480 ticks each)
-    assert note_events[2].timing.notated_duration.value == "eighth"
-    assert note_events[2].timing.duration_ticks == 480
-    assert note_events[3].timing.notated_duration.value == "eighth"
-    assert note_events[3].timing.duration_ticks == 480
-
-    # 4 double-beamed sixteenth notes (240 ticks each)
-    for ev in note_events[4:8]:
-        assert ev.timing.notated_duration.value == "16th"
-        assert ev.timing.duration_ticks == 240
-
-    # Total note ticks = 4*480 + 4*240 = 1920 + 960 = 2880 ticks.
-    # Remainder rest = 3840 - 2880 = 960 ticks (1 quarter rest)
-    assert len(rest_events) == 1
-    assert rest_events[0].timing.notated_duration.value == "quarter"
-    assert rest_events[0].timing.duration_ticks == 960
-    assert rest_events[0].timing.onset_ticks == 2880
-
     doc.close()
+    return extracted_xs, ev_mapping
+
+
+def test_pdf_tab_duration_assembler_oracle_integration(tmp_path):
+    """Replaces the old oracle test. The associator still reads the fixture's TAB stems exactly (four
+    quarters, then two flagged eighths, two beamed eighths and four sixteenths), but that evidence is no
+    longer a duration source: the fixture has no notation staff, so it is refused, and no rest is ever
+    added for the 960 ticks its second bar was short."""
+    xs, mapping = _fixture_evidence()
+    assert [mapping[x].duration_name for x in xs] == ["quarter"] * 4 + ["eighth"] * 4 + ["16th"] * 4
+    assert all(mapping[x].source == "visual_morphology" for x in xs)
+    tabraw = tmp_path / "tab_raw.json"
+    extract_tab(FIXTURE, tabraw)
+    with pytest.raises(BuildIrInputRiskError) as err:
+        build_ir_from_tabraw_only(tabraw, note_durations=read_note_durations(FIXTURE, time_signature=(4, 4)))
+    assert err.value.category == "pdf_only_tab_no_notation_bars"
+
+
+def test_tab_evidence_never_overrides_the_note_type():
+    """The records say eighths and a half; every TAB digit carries quarter evidence. The records win."""
+    specs = [note(20.0, "eighth"), note(40.0, "eighth"), note(60.0, "quarter"), note(100.0, "half")]
+    digits = [_with_evidence(digit(f"q{i}", 0, s["x"], 1, i), QUARTER) for i, s in enumerate(specs)]
+    bar, entry = _assemble(specs, digits)
+    assert entry["status"] == "written"
+    assert [e.timing.duration_ticks for e in bar.events] == [480, 480, 960, 1920]
 
 
 def test_unstemmed_fallback_preservation():
-    """Verify that candidates lacking visual duration evidence fall back to equal-spacing heuristics."""
-    candidates = []
-    for i in range(4):
-        cand = make_tab_candidate(
-            candidate_id=f"unstemmed-{i}",
-            raw_text="3",
-            page_index=1,
-            bbox_values=(100 + i * 40, 150, 104 + i * 40, 154),
-            confidence=0.8,
-            string=1,
-        )
-        candidates.append(cand)
-
-    bar = assemble_pdf_tab_bar(candidates, output_bar_idx=1, track_id="t1")
-    # For N=4 <= 8, equal spacing yields eighth notes (480 ticks each)
-    note_events = [ev for ev in bar.events if not ev.is_rest]
-    assert len(note_events) == 4
-    for ev in note_events:
-        assert ev.timing.notated_duration.value == "eighth"
-        assert ev.timing.duration_ticks == 480
-
-    # Trailing rest for remaining 1920 ticks (3840 - 4*480 = 1920 = half rest)
-    rest_events = [ev for ev in bar.events if ev.is_rest]
-    assert len(rest_events) == 1
-    assert rest_events[0].timing.notated_duration.value == "half"
-    assert rest_events[0].timing.duration_ticks == 1920
+    """Replaces the old test (unstemmed digits became eighths and a half rest): an unstemmed notehead
+    is an unread event, and its bar is refused."""
+    specs = [note(20.0), note(60.0, unread="filled_notehead_without_stem"), note(100.0), note(140.0)]
+    bar, entry = _assemble(specs, [digit(f"u{i}", 0, s["x"], 1, 3) for i, s in enumerate(specs)])
+    assert bar.events == []
+    assert (entry["reason"], entry["detail"], entry["location"]["event_index"]) == (
+        "note_duration_event_unread", "filled_notehead_without_stem", 1)
 
 
 def test_measure_capacity_enforcement_overcapacity():
-    """Verify that visual duration evidence causing measure capacity overflow (>3840 ticks) fails closed."""
-    # 5 quarter notes = 4800 ticks > 3840 ticks capacity
-    candidates = []
-    quarter_ev = TabDurationEvidence(
-        duration_name="quarter",
-        duration_ticks=960,
-        stem_present=True,
-        source="visual_morphology",
-    )
-
-    for i in range(5):
-        cand = make_tab_candidate(
-            candidate_id=f"overcap-{i}",
-            raw_text="0",
-            page_index=1,
-            bbox_values=(100 + i * 30, 150, 104 + i * 30, 154),
-            confidence=0.9,
-            string=6,
-            duration_evidence=quarter_ev,
-        )
-        candidates.append(cand)
-
-    with pytest.raises(PdfTabBarAssemblerError) as exc_info:
-        assemble_pdf_tab_bar(candidates, output_bar_idx=1, track_id="t1")
-
-    assert exc_info.value.category == "pdf_only_tab_measure_overcapacity"
-    assert "exceed measure capacity 3840 ticks" in exc_info.value.message
+    """Replaces the old test: five quarter notes in 4/4 refuse their bar, whatever the TAB evidence."""
+    specs = [note(10.0 + 35.0 * i) for i in range(5)]
+    digits = [_with_evidence(digit(f"o{i}", 0, s["x"], 6, 0), QUARTER) for i, s in enumerate(specs)]
+    bar, entry = _assemble(specs, digits)
+    assert (entry["status"], entry["reason"], entry["detail"]) == ("refused", "bar_total_mismatch", "5 of 4 quarters")
+    assert bar.events == []
 
 
 def test_ambiguous_duration_evidence_fail_closed():
-    """Verify that ambiguous duration evidence on event candidates fails closed with PdfTabBarAssemblerError."""
-    ambiguous_ev = TabDurationEvidence(
-        duration_name="ambiguous",
-        duration_ticks=0,
-        stem_present=True,
-        source="ambiguous_conflict",
-        is_ambiguous=True,
-        diagnostic_message="Conflicting stem geometry",
-    )
-
-    cand = make_tab_candidate(
-        candidate_id="amb-1",
-        raw_text="5",
-        page_index=1,
-        bbox_values=(100, 150, 104, 154),
-        confidence=0.9,
-        string=1,
-        duration_evidence=ambiguous_ev,
-    )
-
-    with pytest.raises(PdfTabBarAssemblerError) as exc_info:
-        assemble_pdf_tab_bar([cand], output_bar_idx=1, track_id="t1")
-
-    assert exc_info.value.category == "pdf_only_tab_ambiguous_duration"
-    assert "Ambiguous duration evidence" in exc_info.value.message
+    """Replaces the old test. An event whose note type is not read refuses its bar; ambiguous TAB
+    evidence under an event whose note type is read changes nothing."""
+    unread = [note(20.0, "whole", unread="flag_glyph_unidentified")]
+    bar, entry = _assemble(unread, [_with_evidence(digit("a", 0, 20.0, 1, 5), AMBIGUOUS)])
+    assert bar.events == [] and entry["reason"] == "note_duration_event_unread"
+    bar, entry = _assemble([note(20.0, "whole")], [_with_evidence(digit("a", 0, 20.0, 1, 5), AMBIGUOUS)])
+    assert entry["status"] == "written" and bar.events[0].timing.duration_ticks == 3840
 
 
 def test_mixed_stemmed_and_unstemmed_subgroup_behavior():
-    """Verify that stemmed events use explicit duration evidence while unstemmed events fall back."""
-    stemmed_ev = TabDurationEvidence(
-        duration_name="quarter",
-        duration_ticks=960,
-        stem_present=True,
-        source="visual_morphology",
-    )
-    unstemmed_ev = TabDurationEvidence(
-        duration_name="quarter",
-        duration_ticks=960,
-        stem_present=False,
-        source="equal_spacing_fallback",
-        is_fallback_placeholder=True,
-    )
-
-    cand1 = make_tab_candidate(
-        candidate_id="mixed-1",
-        raw_text="3",
-        page_index=1,
-        bbox_values=(100, 150, 104, 154),
-        confidence=0.9,
-        string=1,
-        duration_evidence=stemmed_ev,
-    )
-    cand2 = make_tab_candidate(
-        candidate_id="mixed-2",
-        raw_text="5",
-        page_index=1,
-        bbox_values=(150, 150, 154, 154),
-        confidence=0.9,
-        string=1,
-        duration_evidence=unstemmed_ev,
-    )
-
-    bar = assemble_pdf_tab_bar([cand1, cand2], output_bar_idx=1, track_id="t1")
-    note_events = [ev for ev in bar.events if not ev.is_rest]
-
-    assert len(note_events) == 2
-    assert note_events[0].timing.duration_ticks == 960
-    assert note_events[1].timing.duration_ticks == 480  # Unstemmed event falls back to equal spacing grid (N=2 -> eighth)
+    """Replaces the old test (stemmed 960, unstemmed 480 from the grid): both come from their records."""
+    specs = [note(20.0, "half"), note(100.0, "half")]
+    digits = [_with_evidence(digit("m1", 0, 20.0, 1, 3), QUARTER), digit("m2", 0, 100.0, 1, 5)]
+    bar, entry = _assemble(specs, digits)
+    assert entry["status"] == "written" and [e.timing.duration_ticks for e in bar.events] == [1920, 1920]
 
 
 def test_matching_multi_string_chord_duration_evidence():
-    """Verify that a multi-string chord where all candidates share identical explicit duration evidence assembles cleanly."""
-    quarter_ev = TabDurationEvidence(
-        duration_name="quarter",
-        duration_ticks=960,
-        stem_present=True,
-        source="visual_morphology",
-    )
-
-    cand_string1 = make_tab_candidate(
-        candidate_id="chord-s1",
-        raw_text="0",
-        page_index=1,
-        bbox_values=(100.0, 150.0, 104.0, 154.0),
-        confidence=0.9,
-        string=1,
-        duration_evidence=quarter_ev,
-    )
-    cand_string2 = make_tab_candidate(
-        candidate_id="chord-s2",
-        raw_text="1",
-        page_index=1,
-        bbox_values=(100.0, 164.0, 104.0, 168.0),
-        confidence=0.9,
-        string=2,
-        duration_evidence=quarter_ev,
-    )
-    cand_string3 = make_tab_candidate(
-        candidate_id="chord-s3",
-        raw_text="0",
-        page_index=1,
-        bbox_values=(100.0, 178.0, 104.0, 182.0),
-        confidence=0.9,
-        string=3,
-        duration_evidence=quarter_ev,
-    )
-
-    bar = assemble_pdf_tab_bar([cand_string1, cand_string2, cand_string3], output_bar_idx=1, track_id="t1")
-    note_events = [ev for ev in bar.events if not ev.is_rest]
-
-    assert len(note_events) == 1
-    assert len(note_events[0].notes) == 3
-    assert note_events[0].timing.notated_duration.value == "quarter"
-    assert note_events[0].timing.duration_ticks == 960
+    """Replaces the old test: a three-note chord is one event with the record's duration."""
+    digits = [_with_evidence(digit(f"s{s}", 0, 20.0, s, f), QUARTER) for s, f in ((1, 0), (2, 1), (3, 0))]
+    bar, entry = _assemble([note(20.0, "whole", heads=3)], digits)
+    assert entry["status"] == "written"
+    assert [(n.string, n.fret) for n in bar.events[0].notes] == [(1, 0), (2, 1), (3, 0)]
+    assert bar.events[0].timing.notated_duration.value == "whole"
 
 
 def test_conflicting_multi_string_chord_duration_evidence_fails_closed():
-    """Verify that a multi-string chord containing conflicting explicit duration evidence across candidates fails closed."""
-    quarter_ev = TabDurationEvidence(
-        duration_name="quarter",
-        duration_ticks=960,
-        stem_present=True,
-        source="visual_morphology",
-    )
-    eighth_ev = TabDurationEvidence(
-        duration_name="eighth",
-        duration_ticks=480,
-        stem_present=True,
-        source="visual_morphology",
-    )
-
-    cand_string1 = make_tab_candidate(
-        candidate_id="conflict-s1",
-        raw_text="0",
-        page_index=1,
-        bbox_values=(100.0, 150.0, 104.0, 154.0),
-        confidence=0.9,
-        string=1,
-        duration_evidence=quarter_ev,
-    )
-    cand_string2 = make_tab_candidate(
-        candidate_id="conflict-s2",
-        raw_text="1",
-        page_index=1,
-        bbox_values=(100.0, 164.0, 104.0, 168.0),
-        confidence=0.9,
-        string=2,
-        duration_evidence=eighth_ev,
-    )
-
-    with pytest.raises(PdfTabBarAssemblerError) as exc_info:
-        assemble_pdf_tab_bar([cand_string1, cand_string2], output_bar_idx=1, track_id="t1")
-
-    assert exc_info.value.category == "pdf_only_tab_ambiguous_duration"
-    assert "Conflicting duration evidence across candidates in chord subgroup" in exc_info.value.message
+    """Replaces the old test: conflicting TAB evidence no longer decides anything; a chord whose
+    noteheads the reader could not read as one value is unread, and refuses its bar."""
+    digits = [_with_evidence(digit("c1", 0, 20.0, 1, 0), QUARTER), _with_evidence(digit("c2", 0, 20.0, 2, 1), EIGHTH)]
+    bar, entry = _assemble([note(20.0, "whole", heads=2, unread="mixed_notehead_kinds")], digits)
+    assert bar.events == [] and (entry["reason"], entry["detail"]) == ("note_duration_event_unread", "mixed_notehead_kinds")
+    bar, entry = _assemble([note(20.0, "whole", heads=2)], digits)
+    assert entry["status"] == "written" and bar.events[0].timing.duration_ticks == 3840

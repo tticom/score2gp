@@ -367,10 +367,9 @@ def resolve_tab_duration_evidence_for_events(
 ) -> dict[float, TabDurationEvidence]:
     """Resolve TabDurationEvidence for all event subgroup x-positions on a staff system.
 
-    Per Architecture Spec (Section 6 Item 2):
-    Unstemmed events (whether on an unstemmed staff or a partially stemmed measure) default
-    to equal-spacing fallback (quarter note, 960 ticks, placeholder=True) unless constrained by
-    measure capacity. Ambiguous conflict (0 ticks) is reserved for geometric ambiguities.
+    Unstemmed events (whether on an unstemmed staff or a partially stemmed measure) get no
+    evidence: they are absent from the result, and no placeholder duration is ever assigned.
+    Ambiguous conflict (0 ticks) is reserved for geometric ambiguities.
     """
     if not events_x:
         return {}
@@ -394,26 +393,12 @@ def resolve_tab_duration_evidence_for_events(
                 confidence=0.0,
                 source="ambiguous_conflict",
                 is_ambiguous=True,
-                is_fallback_placeholder=False,
                 diagnostic_message=assigned.message,
             )
             continue
 
         if assigned is None:
-            # Unstemmed event -> equal-spacing fallback placeholder per spec Section 6 Item 2
-            results[ev_x] = TabDurationEvidence(
-                duration_name="quarter",
-                duration_ticks=960,
-                stem_present=False,
-                beam_count=0,
-                flag_count=0,
-                confidence=0.5,
-                source="equal_spacing_fallback",
-                is_ambiguous=False,
-                is_fallback_placeholder=True,
-                diagnostic_message="Unstemmed event: using equal-spacing structural placeholder",
-            )
-            continue
+            continue  # unstemmed: no evidence, and never a placeholder duration
 
         stem = assigned
         beam_count = count_beams_for_stem(stem, beams, context)
@@ -478,7 +463,6 @@ def resolve_tab_duration_evidence_for_events(
             confidence=1.0,
             source="visual_morphology",
             is_ambiguous=False,
-            is_fallback_placeholder=False,
         )
 
     return results
@@ -493,12 +477,12 @@ def resolve_tab_duration_evidence(
     *,
     all_events_x: Sequence[float] | None = None,
     fail_on_ambiguity: bool = False,
-) -> TabDurationEvidence:
-    """Single event convenience wrapper for resolve_tab_duration_evidence_for_events."""
+) -> TabDurationEvidence | None:
+    """Single event convenience wrapper for resolve_tab_duration_evidence_for_events; None when unstemmed."""
     events = list(all_events_x) if all_events_x is not None else [event_x]
     if event_x not in events:
         events.append(event_x)
     mapping = resolve_tab_duration_evidence_for_events(
         events, stems, beams, flags, context, fail_on_ambiguity=fail_on_ambiguity
     )
-    return mapping[event_x]
+    return mapping.get(event_x)

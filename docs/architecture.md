@@ -24,6 +24,17 @@
      flag hooks, beam lines, dots, rest glyph, tuplet and tie. Ambiguous events are recorded unread,
      and the bar total is a check only. See `docs/design/note-duration-recognition.md`.
 
+4a. PDF-only conversion route (`convert --pdf-only-tab`, `pdf_tab_bar_assembler.py`)
+   - Every event's duration is its note-duration record (note type, dots, tuplet, tie); every note's
+     string and fret is the TAB digit column printed under it. Bars come from the notation staff; each
+     TAB digit is placed in the notation bar above it by page, height and x, and matched to one
+     notation event by column. The match is recorded in `note-type-route.json`.
+   - A bar with an unread event, a notation/TAB mismatch or a total that disagrees with its time
+     signature is refused with a located reason code and written empty. No duration is derived from
+     an event count, spacing, a default or a bar total, and no rest is added to fill a bar.
+   - A PDF with no notation staff (TAB only) is refused: `pdf_only_tab_no_notation_bars`. Where no time
+     signature is printed as text, `--time-signature` declares one for the bar check.
+
 4. ScoreIR
    - Normalize recognised material into strict JSON.
    - Preserve confidence, source stage, warnings, and bounding boxes.

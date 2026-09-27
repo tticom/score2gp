@@ -1,98 +1,91 @@
+"""Ticks for a note-type duration, and the refusals that replace the deleted count and padding rules.
+
+DUR-02 deleted ``select_pdf_tab_grid_spacing_and_duration_name`` (a duration from the event count),
+``is_within_pdf_tab_measure_capacity`` and ``decompose_pdf_tab_measure_remainder_to_rests`` (rests
+added to fill a bar). Each old test is replaced here: the same event count gives whatever durations
+the note types say, an overfull or underfull bar is refused, and a remainder is never filled.
+"""
+
 from __future__ import annotations
+
+import importlib.util
+from fractions import Fraction
+from pathlib import Path
 
 import pytest
 
-from score2gp.pdf_tab_measure_timing import (
-    RestDurationDescriptor,
-    decompose_pdf_tab_measure_remainder_to_rests,
-    is_within_pdf_tab_measure_capacity,
-    select_pdf_tab_grid_spacing_and_duration_name,
+import score2gp.pdf_tab_measure_timing as timing
+from score2gp.pdf_tab_bar_assembler import assemble_note_type_bars
+from score2gp.pdf_tab_measure_timing import PdfTabBarAssemblerError, ticks_for_quarters
+
+_spec = importlib.util.spec_from_file_location("pdf_tab_route_support", Path(__file__).with_name("test_pdf_tab_route_support.py"))
+support = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(support)
+
+
+def _bar(specs):
+    digits = [support.digit(f"d{i}", 0, s["x"], 3, i) for i, s in enumerate(specs) if s["kind"] != "rest"]
+    bars, route = assemble_note_type_bars(digits, support.records([[specs]]), track_id="t")
+    return bars[0], route["bars"][0]
+
+
+def test_ticks_for_every_written_value_dot_and_tuplet() -> None:
+    assert [ticks_for_quarters(q) for q in (Fraction(4), Fraction(2), Fraction(1), Fraction(1, 2), Fraction(1, 4),
+                                            Fraction(1, 8), Fraction(1, 16))] == [3840, 1920, 960, 480, 240, 120, 60]
+    assert ticks_for_quarters(Fraction(3, 2)) == 1440  # dotted quarter
+    assert ticks_for_quarters(Fraction(7, 4)) == 1680  # double-dotted quarter
+    assert ticks_for_quarters(Fraction(1, 3)) == 320  # eighth in a 3:2 triplet
+
+
+@pytest.mark.parametrize("quarters", [Fraction(1, 7), Fraction(1, 1920), Fraction(0), Fraction(-1)])
+def test_a_duration_off_the_tick_grid_or_not_positive_is_refused(quarters) -> None:
+    with pytest.raises(PdfTabBarAssemblerError) as err:
+        ticks_for_quarters(quarters)
+    assert err.value.category == "pdf_only_tab_duration_off_tick_grid"
+
+
+def test_the_event_count_never_selects_a_duration() -> None:
+    """Replaces test_select_pdf_tab_grid_spacing_and_duration_name: four events are whatever their
+    note types say (the count rule would have made them eighths), and so are nine."""
+    four = [support.note(20.0, "half"), support.note(60.0, "quarter"), support.note(100.0, "eighth"),
+            support.note(140.0, "eighth")]
+    bar, entry = _bar(four)
+    assert entry["status"] == "written"
+    assert [e.timing.notated_duration.value for e in bar.events] == ["half", "quarter", "eighth", "eighth"]
+    nine = [support.note(10.0 + 20.0 * i, "16th") for i in range(8)] + [support.note(180.0, "half")]
+    bar, entry = _bar(nine)
+    assert entry["status"] == "written"
+    assert [e.timing.duration_ticks for e in bar.events] == [240] * 8 + [1920]
+    for name in ("select_pdf_tab_grid_spacing_and_duration_name", "is_within_pdf_tab_measure_capacity",
+                 "decompose_pdf_tab_measure_remainder_to_rests", "RestDurationDescriptor", "REST_DURATION_HIERARCHY"):
+        assert not hasattr(timing, name)
+
+
+def test_an_overfull_bar_is_refused_not_truncated() -> None:
+    """Replaces test_is_within_pdf_tab_measure_capacity: five quarters in 4/4 are refused."""
+    bar, entry = _bar([support.note(10.0 + 35.0 * i) for i in range(5)])
+    assert entry["status"] == "refused" and entry["reason"] == "bar_total_mismatch"
+    assert entry["detail"] == "5 of 4 quarters"
+    assert bar.events == []
+
+
+@pytest.mark.parametrize(
+    ("specs", "detail"),
+    [
+        ([support.note(20.0, "half")], "2 of 4 quarters"),  # the old rule added a half rest
+        ([support.note(20.0, "quarter"), support.note(60.0, "eighth")], "3/2 of 4 quarters"),  # old: half + eighth rests
+        ([support.note(20.0, "64th")], "1/16 of 4 quarters"),  # old: half + quarter + ... + 64th rests
+    ],
 )
+def test_an_underfull_bar_is_refused_and_never_padded_with_rests(specs, detail) -> None:
+    """Replaces the three decompose_pdf_tab_measure_remainder_to_rests tests: a remainder is never filled."""
+    bar, entry = _bar(specs)
+    assert entry["status"] == "refused" and entry["reason"] == "bar_total_mismatch" and entry["detail"] == detail
+    assert bar.events == []
 
 
-def test_select_pdf_tab_grid_spacing_and_duration_name() -> None:
-    # Editable draft mode defaults to 960 quarter
-    assert select_pdf_tab_grid_spacing_and_duration_name(0, editable_draft=True) == (960, "quarter")
-    assert select_pdf_tab_grid_spacing_and_duration_name(4, editable_draft=True) == (960, "quarter")
-
-    # Standard mode based on N candidate subgroups
-    assert select_pdf_tab_grid_spacing_and_duration_name(0) == (480, "eighth")
-    assert select_pdf_tab_grid_spacing_and_duration_name(4) == (480, "eighth")
-    assert select_pdf_tab_grid_spacing_and_duration_name(8) == (480, "eighth")
-    assert select_pdf_tab_grid_spacing_and_duration_name(9) == (240, "16th")
-    assert select_pdf_tab_grid_spacing_and_duration_name(16) == (240, "16th")
-    assert select_pdf_tab_grid_spacing_and_duration_name(17) == (120, "32nd")
-    assert select_pdf_tab_grid_spacing_and_duration_name(32) == (120, "32nd")
-    assert select_pdf_tab_grid_spacing_and_duration_name(33) == (60, "64th")
-
-
-def test_is_within_pdf_tab_measure_capacity() -> None:
-    # Valid onsets and event durations (0, 60, 480, 960, 3840)
-    assert is_within_pdf_tab_measure_capacity(0, 60) is True
-    assert is_within_pdf_tab_measure_capacity(0, 480) is True
-    assert is_within_pdf_tab_measure_capacity(0, 960) is True
-    assert is_within_pdf_tab_measure_capacity(0, 3840) is True
-    assert is_within_pdf_tab_measure_capacity(3360, 480) is True
-    assert is_within_pdf_tab_measure_capacity(2880, 960) is True
-
-    # Over-capacity cases
-    assert is_within_pdf_tab_measure_capacity(3840, 60) is False
-    assert is_within_pdf_tab_measure_capacity(3360, 960) is False  # 4320 > 3840
-
-
-def test_decompose_pdf_tab_measure_remainder_to_rests() -> None:
-    # Remainder 0
-    assert decompose_pdf_tab_measure_remainder_to_rests(0) == []
-
-    # Remainder 60 -> 64th
-    r60 = decompose_pdf_tab_measure_remainder_to_rests(60)
-    assert r60 == [RestDurationDescriptor(name="64th", ticks=60)]
-    assert sum(r.ticks for r in r60) == 60
-
-    # Remainder 480 -> eighth
-    r480 = decompose_pdf_tab_measure_remainder_to_rests(480)
-    assert r480 == [RestDurationDescriptor(name="eighth", ticks=480)]
-    assert sum(r.ticks for r in r480) == 480
-
-    # Remainder 960 -> quarter
-    r960 = decompose_pdf_tab_measure_remainder_to_rests(960)
-    assert r960 == [RestDurationDescriptor(name="quarter", ticks=960)]
-    assert sum(r.ticks for r in r960) == 960
-
-    # Remainder 1920 -> half
-    r1920 = decompose_pdf_tab_measure_remainder_to_rests(1920)
-    assert r1920 == [RestDurationDescriptor(name="half", ticks=1920)]
-    assert sum(r.ticks for r in r1920) == 1920
-
-    # Remainder 2400 -> half + eighth
-    r2400 = decompose_pdf_tab_measure_remainder_to_rests(2400)
-    assert r2400 == [
-        RestDurationDescriptor(name="half", ticks=1920),
-        RestDurationDescriptor(name="eighth", ticks=480),
-    ]
-    assert sum(r.ticks for r in r2400) == 2400
-
-    # Remainder 3360 -> half + quarter + eighth
-    r3360 = decompose_pdf_tab_measure_remainder_to_rests(3360)
-    assert r3360 == [
-        RestDurationDescriptor(name="half", ticks=1920),
-        RestDurationDescriptor(name="quarter", ticks=960),
-        RestDurationDescriptor(name="eighth", ticks=480),
-    ]
-    assert sum(r.ticks for r in r3360) == 3360
-
-    # Remainder 3840 -> whole
-    r3840 = decompose_pdf_tab_measure_remainder_to_rests(3840)
-    assert r3840 == [RestDurationDescriptor(name="whole", ticks=3840)]
-    assert sum(r.ticks for r in r3840) == 3840
-
-
-def test_decompose_pdf_tab_measure_remainder_invalid_negative() -> None:
-    with pytest.raises(ValueError, match="non-negative"):
-        decompose_pdf_tab_measure_remainder_to_rests(-10)
-
-
-def test_decompose_pdf_tab_measure_remainder_unrepresentable_residual_regression() -> None:
-    # 61 ticks leaves a 1-tick residual after 60-tick 64th rest
-    with pytest.raises(ValueError, match="residual of 1 ticks remains"):
-        decompose_pdf_tab_measure_remainder_to_rests(61)
+def test_a_rest_is_written_only_where_the_notation_prints_one() -> None:
+    bar, entry = _bar([support.note(20.0, "half"), support.rest(100.0, "quarter"), support.note(150.0, "quarter")])
+    assert entry["status"] == "written"
+    assert [(e.is_rest, e.timing.notated_duration.value, e.timing.onset_ticks) for e in bar.events] == [
+        (False, "half", 0), (True, "quarter", 1920), (False, "quarter", 2880)]

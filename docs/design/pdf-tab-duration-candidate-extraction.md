@@ -2,7 +2,9 @@
 
 **Task:** PDFTAB-DUR-03 (PDF-Tab Duration Candidate Extraction Architecture)
 **Date:** 2026-07-28
-**Status:** PROPOSED ARCHITECTURE
+**Status:** PROPOSED ARCHITECTURE. Superseded in part by DUR-02: TAB-side evidence is no longer a duration
+source, and the equal-spacing fallback, grid spacing and remainder rests below were deleted. Durations come
+from note types (see `docs/musicxml-tabraw-build-ir.md`, "PDF-Only Conversion: Note-Type Durations").
 
 ---
 
