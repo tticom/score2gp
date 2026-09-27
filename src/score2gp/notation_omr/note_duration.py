@@ -49,7 +49,7 @@ from ..pdf import (
     _path_subpaths,
 )
 
-SCHEMA = "note-duration-records.v0.1"
+SCHEMA = "note-duration-records.v0.2"  # v0.2: page heights, staff extent and bar spans per system
 
 WRITTEN_VALUES = {
     "whole": Fraction(4), "half": Fraction(2), "quarter": Fraction(1), "eighth": Fraction(1, 2),
@@ -1187,7 +1187,7 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
     for reason, count in ignored.items():
         state["diagnostics"]["ignored_symbols"] += count
         by_reason[reason] = by_reason.get(reason, 0) + count
-    return {"records": records, "bar_count": len(bars), "time_signature": state.get("time_signature")}
+    return {"records": records, "bar_count": len(bars), "bars": bars, "time_signature": state.get("time_signature")}
 
 
 def _event_bbox(event: dict[str, Any]) -> tuple[float, float, float, float]:
@@ -1346,6 +1346,7 @@ def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = No
                                              "events_outside_bars": 0, "pages_without_notation_staff": 0}}
     declared = {"value": time_signature, "source": "caller_declared", "sources": []} if time_signature else None
     with pymupdf.open(path) as doc:
+        page_heights = [round(float(page.rect.height), 3) for page in doc]
         first, last = pages if pages else (1, len(doc))
         for page_index in range(first - 1, min(last, len(doc))):
             symbols = extract_page_symbols(doc[page_index], page_index)
@@ -1361,7 +1362,10 @@ def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = No
                     bar_signatures[state["bar_offset"] + bar] = signature
                 systems.append({"page_index": page_index, "system_index": system_index,
                                 "system_number": state["system_number"], "first_bar_index": state["bar_offset"],
-                                "bar_count": result["bar_count"], "staff_space": round(staff.space, 4)})
+                                "bar_count": result["bar_count"], "staff_space": round(staff.space, 4),
+                                "staff": {"top": round(staff.top, 3), "bottom": round(staff.bottom, 3),
+                                          "x0": round(staff.x0, 3), "x1": round(staff.x1, 3)},
+                                "bars": [[round(a, 3), round(b, 3)] for a, b in result["bars"]]})
                 state["bar_offset"] += result["bar_count"]
                 state["system_number"] += 1
     checks = _bar_checks(records, bar_signatures)
@@ -1372,7 +1376,7 @@ def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = No
             reasons[r["reason"]] = reasons.get(r["reason"], 0) + 1
     return {
         "schema": SCHEMA,
-        "source": {"pdf_sha256": digest, "pages": list(pages) if pages else None},
+        "source": {"pdf_sha256": digest, "pages": list(pages) if pages else None, "page_heights": page_heights},
         "systems": systems,
         "events": records,
         "bar_checks": checks,
