@@ -1,6 +1,7 @@
 """Public key-signature PDF regression and refusal cases."""
 
 from pathlib import Path
+from dataclasses import replace
 import json
 import os
 import shutil
@@ -12,7 +13,8 @@ from xml.etree import ElementTree as ET
 
 import pymupdf
 
-from score2gp.notation_omr.key_signature import read_system_key_signature
+from score2gp.notation_omr.key_signature import (FLAT_TOPS, SHARP_TOPS,
+                                                read_bar_key_signatures, read_system_key_signature)
 from score2gp.notation_omr.note_duration import extract_page_symbols, find_staves, read_note_durations
 
 
@@ -73,6 +75,56 @@ def test_mid_system_three_accidental_runs_are_complete():
                 ("read", 0, 0), ("read", 3, 3),
                 ("read", 1, 1), ("read", -3, 3),
             ]
+
+
+def test_mid_system_signature_is_split_from_first_note_accidental():
+    source = FIXTURE.parent / "mid_system_seven_flats_note_sharp.pdf"
+    keys = read_note_durations(source, time_signature=(4, 4))["diagnostics"]["bar_key_signatures"]
+    assert keys[0]["fifths"] == 1
+    assert keys[1]["status"] == "read"
+    assert keys[1]["fifths"] == -7
+    assert len(keys[1]["sources"]) == 7
+
+
+def test_mid_system_three_to_seven_accidentals_are_not_truncated():
+    source = FIXTURE.parent / "mid_system_seven_flats_note_sharp.pdf"
+    with pymupdf.open(source) as doc:
+        symbols = extract_page_symbols(doc[0], 0)
+        staff = find_staves(symbols)[0][0]
+    bars = read_note_durations(source, time_signature=(4, 4))["systems"][0]["bars"]
+    flats = [t for t in symbols.texts if t.text == "b" and 164 <= t.bbox[0] < 200]
+    others = [t for t in symbols.texts if t not in flats and t.text != "#"]
+    assert len(flats) == 7
+    header = read_system_key_signature(staff, symbols)
+    for count in range(3, 8):
+        for kind, positions, sign in (("b", FLAT_TOPS, -1), ("#", SHARP_TOPS, 1)):
+            run = []
+            for index, glyph in enumerate(flats[:count]):
+                top = staff.top + positions[index] * staff.space
+                height = glyph.bbox[3] - glyph.bbox[1]
+                run.append(replace(glyph, text=kind,
+                                   bbox=(glyph.bbox[0], top, glyph.bbox[2], top + height)))
+            key = read_bar_key_signatures(staff, replace(symbols, texts=others + run), bars, header)[1]
+            assert (key["status"], key["fifths"], len(key["sources"])) == ("read", sign * count, count)
+
+
+def test_mid_system_first_note_accidental_does_not_change_key():
+    source = FIXTURE.parent / "mid_system_note_sharp_only.pdf"
+    keys = read_note_durations(source, time_signature=(4, 4))["diagnostics"]["bar_key_signatures"]
+    assert [keys[i]["fifths"] for i in (0, 1)] == [1, 1]
+    assert keys[1]["sources"] == keys[0]["sources"]
+
+
+def test_mid_system_ambiguous_run_is_refused():
+    # The trailing sharp is near the note horizontally, but at a different
+    # staff position; geometry cannot assign it to that note.
+    source = FIXTURE.parent / "mid_system_ambiguous.pdf"
+    keys = read_note_durations(source, time_signature=(4, 4))["diagnostics"]["bar_key_signatures"]
+    assert keys[1]["status"] == "refused"
+    assert keys[1]["fifths"] is None
+    assert keys[1]["reason"] == "key_signature_partial_or_ambiguous"
+    assert keys[1]["location"]["bar_index"] == 1
+    assert len(keys[1]["sources"]) == 7
 
 
 def test_natural_cancellation_header_is_refused():
@@ -194,3 +246,27 @@ def test_public_mid_system_changes_reach_gpif():
     assert counts == ["1", "-3"]
     assert any(w["code"] == "key_mode_unresolved" and "bar 2" in w["message"]
                for w in score_ir["warnings"])
+
+
+def test_seven_flat_change_with_note_accidental_reaches_gpif():
+    source = FIXTURE.parent / "mid_system_seven_flats_note_sharp.pdf"
+    scratch_root = Path(__file__).resolve().parents[1] / "work"
+    scratch_root.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=scratch_root) as directory:
+        scratch = Path(directory)
+        input_pdf = scratch / "input.pdf"
+        shutil.copyfile(source, input_pdf)
+        output = scratch / "keys.gp"
+        env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
+        result = subprocess.run(
+            [sys.executable, "-m", "score2gp.cli", "convert", "--pdf", str(input_pdf),
+             "--pdf-only-tab", "--time-signature", "4/4", "--out", str(output),
+             "--work-dir", str(scratch / "work")],
+            text=True, capture_output=True, env=env,
+        )
+        assert result.returncode == 0, result.stderr[-1000:]
+        with zipfile.ZipFile(output) as package:
+            root = ET.fromstring(package.read("Content/score.gpif"))
+    counts = [bar.findtext("Key/AccidentalCount")
+              for bar in root.findall("MasterBars/MasterBar")]
+    assert counts == ["1", "-7"]
