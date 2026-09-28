@@ -4692,18 +4692,26 @@ def _repeat_dots_near(
                 and 0.7 <= rect.width <= 3.5 and 0.7 <= rect.height <= 3.5
                 and 2.0 <= side * (cx - thin_x) <= 9.0):
             shapes.append((index, cx, cy, rect))
-    dots = []
-    for expected_y in (top + 1.5 * space, top + 2.5 * space):
-        matches = [dot for dot in shapes if abs(dot[2] - expected_y) <= 0.3 * space]
-        if len(matches) == 1:
-            dots.append(matches[0])
-    return dots
+    return [shape for shape in shapes
+            if top + space <= shape[2] <= top + 3.5 * space]
+
+
+def _repeat_glyphs_near(
+    glyphs: list[tuple[str, int, tuple[int, int, int, int], float, float, Any]],
+    top: float, space: float, thin_x: float, side: int,
+) -> list[tuple[str, float, float, Any, int]]:
+    """Use character origins: GP's U+E044 boxes overlap and span four spaces."""
+    return [(f"text-{font}-{codepoint:04x}-{index}", x, y, rect, codepoint)
+            for font, codepoint, index, x, y, rect in glyphs
+            if 1.5 <= side * (x - thin_x) <= 9.0
+            and top + space <= y <= top + 3.5 * space]
 
 
 def _classify_wide_notation_pair(
     strokes: list[_LineSegment], drawings: list[dict[str, Any]],
+    glyphs: list[tuple[str, int, tuple[int, int, int, int], float, float, Any]],
     top: float, bottom: float, is_final: bool, widths: tuple[float, float], gap: float,
-) -> tuple[str | None, list[tuple[int, float, float, Any]]]:
+) -> tuple[str | None, list[tuple[int, float, float, Any] | tuple[str, float, float, Any, int]]]:
     thin = 0 if widths[0] < widths[1] else 1
     thick = 1 - thin
     if not (0.45 <= widths[thin] <= 1.0 and 1.5 <= widths[thick] <= 3.0
@@ -4711,8 +4719,20 @@ def _classify_wide_notation_pair(
         return None, []
     thin_x = min(strokes[thin].x0, strokes[thin].x1)
     side = -1 if thick == 1 else 1
-    dots = _repeat_dots_near(drawings, top, (bottom - top) / 4.0, thin_x, side)
-    if len(dots) == 2 and abs(dots[0][1] - dots[1][1]) <= 1.0:
+    space = (bottom - top) / 4.0
+    dots = _repeat_dots_near(drawings, top, space, thin_x, side)
+    dots.extend(_repeat_glyphs_near(glyphs, top, space, thin_x, side))
+    # GP exports one U+E044 per dot. Its origin is two and three staff
+    # spaces below the top line; painted drawing dots sit half a space higher.
+    glyph_pair = (len(dots) == 2 and all(len(dot) == 5 for dot in dots)
+                  and all(dot[4] in (0xe043, 0xe044) for dot in dots)
+                  and all(abs(dot[2] - (top + step * space)) <= 0.3 * space
+                          for dot, step in zip(sorted(dots, key=lambda d: d[2]), (2.0, 3.0))))
+    drawing_pair = (len(dots) == 2 and all(len(dot) == 4 for dot in dots)
+                    and abs(dots[0][1] - dots[1][1]) <= 1.0
+                    and all(abs(dot[2] - (top + step * space)) <= 0.3 * space
+                            for dot, step in zip(sorted(dots, key=lambda d: d[2]), (1.5, 2.5))))
+    if glyph_pair or drawing_pair:
         return ("repeat-end" if thick == 1 else "repeat-start"), dots
     if is_final and thick == 1 and not dots:
         return "end", []
@@ -4721,8 +4741,9 @@ def _classify_wide_notation_pair(
 
 def _classify_notation_barline(
     strokes: list[_LineSegment], drawings: list[dict[str, Any]],
+    glyphs: list[tuple[str, int, tuple[int, int, int, int], float, float, Any]],
     top: float, bottom: float, is_final: bool,
-) -> tuple[str | None, str | None, list[tuple[int, float, float, Any]]]:
+) -> tuple[str | None, str | None, list[tuple[int, float, float, Any] | tuple[str, float, float, Any, int]]]:
     if len(strokes) == 1:
         width = _visible_thickness(strokes[0])
         reason = "pdf_barline_thick_single_kind_unresolved" if width and width >= 1.5 else None
@@ -4737,7 +4758,7 @@ def _classify_notation_barline(
         return "double", None, []
     if len(strokes) == 2 and widths[0] and widths[1]:
         kind, dots = _classify_wide_notation_pair(
-            strokes, drawings, top, bottom, is_final,
+            strokes, drawings, glyphs, top, bottom, is_final,
             (float(widths[0]), float(widths[1])), gap,
         )
         return kind, None if kind is not None else "pdf_barline_pair_kind_unresolved", dots
@@ -4754,7 +4775,9 @@ def _notation_stroke_source(stroke: _LineSegment) -> dict[str, Any]:
 
 def _notation_system_barline_signals(
     system: dict[str, Any], segments: list[_LineSegment],
-    drawings: list[dict[str, Any]], final_bar_index: int,
+    drawings: list[dict[str, Any]],
+    glyphs: list[tuple[str, int, tuple[int, int, int, int], float, float, Any]],
+    final_bar_index: int,
 ) -> list[dict[str, Any]]:
     signals = []
     top, bottom = system["staff"]["top"], system["staff"]["bottom"]
@@ -4762,12 +4785,13 @@ def _notation_system_barline_signals(
         strokes = _notation_strokes_at_end(segments, end_x, top, bottom)
         bar_index = system["first_bar_index"] + local_index + 1
         kind, reason, dots = _classify_notation_barline(
-            strokes, drawings, top, bottom, bar_index == final_bar_index,
+            strokes, drawings, glyphs, top, bottom, bar_index == final_bar_index,
         )
         if reason is None and kind is None:
             continue
         sources = [_notation_stroke_source(stroke) for stroke in strokes]
-        sources.extend({"primitive_id": f"drawing-{dot[0]}",
+        sources.extend({"primitive_id": (dot[0] if isinstance(dot[0], str)
+                                          else f"drawing-{dot[0]}"),
                         "x": round(dot[1], 3),
                         "y_min": round(dot[3].y0, 3),
                         "y_max": round(dot[3].y1, 3),
@@ -4795,13 +4819,29 @@ def read_notation_barline_signals(
     with fitz.open(pdf_path) as doc:
         page_segments: dict[int, list[_LineSegment]] = {}
         page_drawings: dict[int, list[dict[str, Any]]] = {}
+        page_glyphs: dict[int, list[tuple[str, int, tuple[int, int, int, int], float, float, Any]]] = {}
         for system in note_durations.get("systems", []):
             page_index = system["page_index"]
             if page_index not in page_segments:
                 page_drawings[page_index] = doc[page_index].get_drawings()
                 page_segments[page_index] = list(_drawing_segments(page_drawings[page_index]))
+                page_glyphs[page_index] = [
+                    (span["font"], ord(char["c"]),
+                     (block_index, line_index, span_index, index),
+                     char["origin"][0], char["origin"][1], fitz.Rect(char["bbox"]))
+                    for block_index, block in enumerate(
+                        doc[page_index].get_text("rawdict")["blocks"])
+                    if "lines" in block
+                    for line_index, line in enumerate(block["lines"])
+                    for span_index, span in enumerate(line["spans"])
+                    for index, char in enumerate(span["chars"])
+                    if ("bravura" in span["font"].lower()
+                        or "smufl" in span["font"].lower()
+                        or "music" in span["font"].lower()
+                        or ord(char["c"]) in (0xe043, 0xe044))]
             signals.extend(_notation_system_barline_signals(
-                system, page_segments[page_index], page_drawings[page_index], final_bar_index,
+                system, page_segments[page_index], page_drawings[page_index],
+                page_glyphs[page_index], final_bar_index,
             ))
     return signals
 

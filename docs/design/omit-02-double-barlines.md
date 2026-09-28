@@ -9,6 +9,12 @@ most 0.2 pt and a 1.5–3.2 pt gap. These inclusive bounds leave a gap around
 the measured wider and more distant near misses. A single stroke does not
 produce `DoubleBar`.
 
+These point bounds assume the approximately 3.75–4.26 pt notation staff space
+measured in the mounted lesson and repeat-bearing PDFs. At other engraving
+scales a pair outside the range is refused; the bounds are not scaled with the
+staff. Tests cover values just outside the thin width, thin gap, thick width
+and thick gap limits.
+
 The mounted corpus probe covered all 30 PDFs (377 pages). The TAB topology
 found 411 systems and 200 provisional pairs, with zero extraction errors.
 Of those pairs, 124 were equal 0.68 pt rectangles separated by 2.38 pt. The
@@ -39,7 +45,19 @@ simple GPIF writer also emits `DoubleBar` for a double barline.
 A thin pair writes `Bar.barline = "double"`; the GPIF writer already emits
 `DoubleBar` on that master bar. A thin/wide pair with two small dots in the two
 middle notation spaces is a repeat, with the wide-stroke side determining
-start or end. A final-bar thin/wide pair without dots is an end barline.
+start or end. The reader searches both filled drawings and text characters.
+The real repeat-bearing PDF has 16 `U+E044` characters in its embedded
+`GPBravuraRegular` font, two per notated staff repeat mark. Their character
+origins, unlike their overlapping 15 pt text boxes, lie about two and three
+staff spaces below the top line. Their horizontal offset from the thin stroke
+is about 1.86 pt on the repeat-start and 3.98 pt on repeat-ends, so the glyph
+side window begins at 1.5 pt; the drawing window remains 2.0–9.0 pt. A
+dot-like character or drawing in the side
+window that cannot be matched as a pair makes the decision refuse. Only a
+final-bar thin/wide pair with no candidate dots in either representation is
+read as an end barline. The five private GP references have no master-bar
+`Barline/End` element, so the end decision is retained as a located diagnostic
+without adding that element to output GPIF.
 Conflicting existing bar kinds and unresolved targets produce located warnings
 and no new bar kind. A pair of uncertain kind produces
 `pdf_barline_pair_kind_unresolved` with its source strokes. Read decisions also
@@ -51,3 +69,11 @@ single, a dotted repeat, a final pair and a system-start bracket. Their
 expected GPIF flags were specified from those conventional marks, independent
 of the production classifier. The CLI tests inspect every resulting master
 bar and the read decision's source-stroke IDs.
+
+`repeat_glyph_final.pdf` embeds Steinberg's Bravura OpenType font under the
+[SIL Open Font License 1.1](https://github.com/steinbergmedia/bravura/blob/master/LICENSE.txt)
+and places two `U+E044` text characters beside a final thin/wide pair. It is
+a public synthetic engraving control, not a copied private page. The older
+`repeat_dots.pdf` uses appended vector rectangles and remains a synthetic
+control; no measured private source in this task establishes vector repeat
+dots as its representation.

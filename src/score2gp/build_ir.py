@@ -4093,7 +4093,11 @@ def _attach_symbols_and_techniques(
                     provenance=[provenance],
                 ))
             else:
-                target.barline = kind
+                # GPIF MasterBars encode doubles and repeats with dedicated
+                # elements. The private GP7/8 references have no Barline/End
+                # element, so retain the read diagnostic without writing one.
+                if kind != "end":
+                    target.barline = kind
                 score.warnings.append(WarningItem(
                     code=f"pdf_{kind.replace('-', '_')}_barline_read",
                     message=f"{kind} barline read at source bar {source_index}.",
