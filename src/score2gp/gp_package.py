@@ -1030,12 +1030,7 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
                     fifths = int(fifths_str)
                 else:
                     acc_str = _first_text(key_node, ["AccidentalCount"])
-                    acc = int(acc_str) if acc_str is not None else 0
-                    trans = _first_text(key_node, ["TransposeAs"]) or "Sharps"
-                    if "flat" in trans.lower():
-                        fifths = -acc
-                    else:
-                        fifths = acc
+                    fifths = int(acc_str) if acc_str is not None else 0
                 mode = _first_text(key_node, ["Mode"]) or "major"
                 mode = mode.lower()
                 key_sig = KeySignature(fifths=fifths, mode=mode)
@@ -1498,12 +1493,7 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
                     fifths = int(fifths_str)
                 else:
                     acc_str = _first_text(key_node, ["AccidentalCount"])
-                    acc = int(acc_str) if acc_str is not None else 0
-                    trans = _first_text(key_node, ["TransposeAs"]) or "Sharps"
-                    if "flat" in trans.lower():
-                        fifths = -acc
-                    else:
-                        fifths = acc
+                    fifths = int(acc_str) if acc_str is not None else 0
                 mode = _first_text(key_node, ["Mode"]) or "major"
                 mode = mode.lower()
                 key_sig = KeySignature(fifths=fifths, mode=mode)

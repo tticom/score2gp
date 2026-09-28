@@ -614,12 +614,10 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
             if bar.key_signature is not None:
                 key = ET.SubElement(mb_node, "Key")
                 fifths = bar.key_signature.fifths
-                accidental_count = fifths
                 transpose_as = "Sharps"
                 if fifths < 0:
-                    accidental_count = -fifths
                     transpose_as = "Flats"
-                _text(key, "AccidentalCount", accidental_count)
+                _text(key, "AccidentalCount", fifths)
                 _text(key, "Mode", bar.key_signature.mode.capitalize())
                 _text(key, "TransposeAs", transpose_as)
             _text(mb_node, "Time", f"{bar.time_signature.numerator}/{bar.time_signature.denominator}")

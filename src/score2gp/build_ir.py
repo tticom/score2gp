@@ -1820,6 +1820,52 @@ def build_ir_from_tabraw_only(
         warnings=warnings_list,
     )
 
+    # The note-duration sidecar and TAB route share the same notation-system bar
+    # indices. Attach only glyph-backed counts; unresolved mode uses the GPIF
+    # default Major and remains explicitly unresolved in the diagnostics.
+    keys = note_durations.get("diagnostics", {}).get("key_signatures", [])
+    bar_keys = note_durations.get("diagnostics", {}).get("bar_key_signatures", {})
+    for system, key in zip(note_durations["systems"], keys):
+        if key is None:
+            continue  # old sidecar: no key claim
+        first = system["first_bar_index"]
+        previous_key = key
+        for bar_index, bar in enumerate(bars[first:first + system["bar_count"]], start=first):
+            bar_key = bar_keys.get(bar_index, bar_keys.get(str(bar_index), key))
+            if bar_key["status"] == "read":
+                bar.key_signature = KeySignature(fifths=bar_key["fifths"], mode=bar_key["mode"] or "major")
+                if bar_key != previous_key and bar_key["mode"] is None:
+                    warnings_list.append(WarningItem(
+                        code="key_mode_unresolved", severity="warning",
+                        message=(f"Key mode unresolved at page {system['page_index'] + 1}, "
+                                 f"system {system['system_index'] + 1}, bar {bar_index + 1}; "
+                                 "GPIF Major is the format default and is not a recognised mode."),
+                    ))
+            elif bar_key != previous_key:
+                warnings_list.append(WarningItem(
+                    code=bar_key["reason"], severity="warning",
+                    message=(f"Key signature refused at page {system['page_index'] + 1}, "
+                             f"system {system['system_index'] + 1}, bar {bar_index + 1}; "
+                             f"source glyphs {bar_key['sources']}. No Key was written; "
+                             "Guitar Pro may display C major."),
+                ))
+            previous_key = bar_key
+        if key["status"] != "read":
+            warnings_list.append(WarningItem(
+                code=key["reason"], severity="warning",
+                message=(f"Key signature refused at page {system['page_index'] + 1}, "
+                         f"system {system['system_index'] + 1}; source glyphs {key['sources']}. "
+                         "No Key was written; Guitar Pro may display C major."),
+            ))
+        elif key["mode"] is None:
+            warnings_list.append(WarningItem(
+                code="key_mode_unresolved", severity="warning",
+                message=(f"Key mode unresolved at page {system['page_index'] + 1}, "
+                         f"system {system['system_index'] + 1}; GPIF Major is the format default "
+                         "and is not a recognised mode."),
+            ))
+    score.warnings = warnings_list
+
     # Attach symbols and techniques
     _attach_symbols_and_techniques(score, tabraw, placed_frets=placed)
 
