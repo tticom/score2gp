@@ -7,12 +7,13 @@ also accepted for public generated PDFs. A missing or partial header is refused.
 from __future__ import annotations
 
 import re
+from itertools import groupby
 from typing import Any
 
-from .note_duration import Glyph, PageSymbols, Staff, _is_notehead, _row_counts
+from .note_duration import Glyph, PageSymbols, Staff, _column_counts, _is_notehead, _row_counts
 
 
-SHARP_TOPS = (-1.4, 0.1, -2.4, -0.9, 0.6, -1.9, -0.4)
+SHARP_TOPS = (-1.4, 0.1, -1.9, -0.4, 1.1, -0.9, 0.6)
 FLAT_TOPS = (0.2, -1.3, 0.7, -0.8, 1.2, -0.3, 1.7)
 KEY_NAME = re.compile(r"^([A-G])([#b]?)\s+(Major|Minor)$", re.IGNORECASE)
 MAJOR_FIFTHS = {"C": 0, "G": 1, "D": 2, "A": 3, "E": 4, "B": 5,
@@ -28,10 +29,15 @@ def _kind(glyph: Glyph, space: float) -> str | None:
     w, h = glyph.w / space, glyph.h / space
     if not glyph.filled or not (0.65 <= w <= 1.35 and 2.1 <= h <= 3.2):
         return None
-    double_rows = sum(n >= 2 for n in _row_counts(glyph))
-    if h >= 2.6 and double_rows >= 8:
+    rows = _row_counts(glyph)
+    double_rows = sum(n >= 2 for n in rows)
+    double_bands = [sum(1 for _ in run) for doubled, run in groupby(n >= 2 for n in rows) if doubled]
+    if h >= 2.6 and double_rows >= 8 and sum(length >= 2 for length in double_bands) >= 2:
         return "sharp"
-    if double_rows <= 6:
+    # A flat's upper stem and lower bowl give several vertical paint runs on
+    # its left edge. A natural has two upright strokes but no bowl there.
+    left_runs, right_runs = _column_counts(glyph, (0.2, 0.8))
+    if double_rows <= 7 and left_runs >= 2 and right_runs <= 1:
         return "flat"
     return None
 
@@ -141,3 +147,64 @@ def read_system_key_signature(staff: Staff, symbols: PageSymbols) -> dict[str, A
             "sources": [c[3] for c in candidates], "clef_source": clef.ident,
             "mode_sources": mode_sources, "mode_diagnostic": None if mode else "key_mode_unresolved",
             "reason": None, "location": location}
+
+
+def read_bar_key_signatures(staff: Staff, symbols: PageSymbols,
+                            bars: list[tuple[float, float]],
+                            header: dict[str, Any]) -> list[dict[str, Any]]:
+    """Carry a read key by bar, inspecting each barline for a new signature."""
+    if not bars:
+        return []
+    space = staff.space
+    current = header
+    result = [current]
+    for bar_index, (left, _) in enumerate(bars[1:], start=1):
+        candidates: list[tuple[float, float, str | None, str, float]] = []
+        for glyph in symbols.glyphs:
+            if not (left + 0.25 * space <= glyph.bbox[0] <= left + 2.2 * space
+                    and staff.top - 3 * space <= glyph.cy <= staff.bottom + space):
+                continue
+            if glyph.filled and 0.6 <= glyph.w / space <= 1.4 and 2.0 <= glyph.h / space <= 3.3:
+                candidates.append((glyph.bbox[0], glyph.bbox[1], _kind(glyph, space),
+                                   glyph.ident, glyph.bbox[2]))
+        for label in symbols.texts:
+            if not (left + 0.25 * space <= label.bbox[0] <= left + 2.2 * space
+                    and staff.top - 3 * space <= label.cy <= staff.bottom + space):
+                continue
+            if label.text in ("#", "♯", "b", "♭", "♮"):
+                kind = "sharp" if label.text in ("#", "♯") else "flat" if label.text in ("b", "♭") else None
+                candidates.append((label.bbox[0], label.bbox[1], kind,
+                                   label.ident, label.bbox[2]))
+        candidates.sort()
+        if not candidates:
+            result.append(current)
+            continue
+        next_note = min((g.bbox[0] for g in symbols.glyphs
+                         if _is_notehead(g, space) and g.bbox[0] > candidates[-1][4]
+                         and staff.top - 4 * space <= g.cy <= staff.bottom + 4 * space),
+                        default=staff.x1)
+        if next_note - candidates[-1][4] <= 1.5 * space:
+            result.append(current)  # an accidental attached to the first note
+            continue
+        kind_set = {c[2] for c in candidates}
+        expected = SHARP_TOPS if kind_set == {"sharp"} else FLAT_TOPS if kind_set == {"flat"} else ()
+        observed = [(c[1] - staff.top) / space for c in candidates]
+        valid = bool(expected) and len(candidates) <= 7 and abs(observed[0] - expected[0]) <= 0.85
+        valid = valid and all(abs((observed[i] - observed[0]) - (expected[i] - expected[0])) <= 0.45
+                              for i in range(1, len(observed)))
+        valid = valid and all((candidates[i][0] - candidates[i - 1][0]) / space <= 1.8
+                              for i in range(1, len(candidates)))
+        location = {"page_index": staff.page_index, "staff_top": round(staff.top, 3),
+                    "staff_x0": round(staff.x0, 3), "bar_index": bar_index,
+                    "bar_x0": round(left, 3)}
+        if valid:
+            current = {"status": "read", "fifths": len(candidates) * (1 if expected is SHARP_TOPS else -1),
+                       "mode": None, "sources": [c[3] for c in candidates],
+                       "mode_sources": [], "mode_diagnostic": "key_mode_unresolved",
+                       "reason": None, "location": location}
+        else:
+            current = {"status": "refused", "fifths": None, "mode": None,
+                       "sources": [c[3] for c in candidates],
+                       "reason": "key_signature_partial_or_ambiguous", "location": location}
+        result.append(current)
+    return result
