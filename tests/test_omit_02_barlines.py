@@ -12,11 +12,14 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from unittest.mock import patch
 from xml.etree import ElementTree as ET
 from zipfile import ZipFile
 
 import pytest
+from typer.testing import CliRunner
 
+from score2gp.cli import app
 from score2gp.build_ir import build_ir_from_tabraw_only
 from score2gp.gp_package import write_gp
 from score2gp.notation_omr.note_duration import read_note_durations
@@ -26,6 +29,37 @@ from score2gp.tabraw import TabRaw, make_tab_candidate
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests/fixtures/pdf/omit_02"
+
+
+def test_cli_mocked_extraction_without_tabraw_file_preserves_success(tmp_path):
+    """Optional barline enrichment must not reopen an absent extraction artifact."""
+    spec = importlib.util.spec_from_file_location(
+        "pdf_tab_route_support", ROOT / "tests/test_pdf_tab_route_support.py"
+    )
+    support = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(support)
+    specs = [support.note(20.0, "half"), support.note(80.0),
+             support.note(120.0, "eighth"), support.note(140.0, "eighth")]
+    tabraw = TabRaw(candidates=[support.digit(f"c-{i}", 0, item["x"], 1, i)
+                            for i, item in enumerate(specs)])
+    workdir = tmp_path / "workdir"
+    out_gp = tmp_path / "output.gp"
+    report_path = tmp_path / "report.json"
+    with patch("score2gp.cli.extract_tab_file", return_value={"candidates_count": 4}), \
+            patch("score2gp.cli.inspect_pdf_file", return_value={}), \
+            patch("score2gp.build_ir.TabRaw.from_json_file", return_value=tabraw), \
+            patch("score2gp.notation_omr.note_duration.read_note_durations",
+                  return_value=support.records([[specs]])), \
+            patch("score2gp.pdf.read_notation_barline_signals",
+                  side_effect=AssertionError("barline reader must not run")):
+        result = CliRunner().invoke(app, ["convert", "--pdf",
+                                          "tests/fixtures/pdf/generated_tiny_tab.pdf",
+                                          "--pdf-only-tab", "--out", str(out_gp),
+                                          "--work-dir", str(workdir),
+                                          "--json-report", str(report_path)])
+    assert result.exit_code == 0, report_path.read_text(encoding="utf-8")
+    assert out_gp.exists()
+    assert not (workdir / "tab" / "tab_raw.json").exists()
 
 
 @pytest.mark.parametrize(("source", "expected"), [
