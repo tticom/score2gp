@@ -100,7 +100,11 @@ def read_gp_bars(gp: Path | bytes) -> list[dict[str, Any]]:
         key = master.find("Key")
         count = int(key.findtext("AccidentalCount")) if key is not None else None
         out.append({"time": master.findtext("Time"), "key_count": count,
-                    "key_mode": key.findtext("Mode") if key is not None else None,
+                     "key_mode": key.findtext("Mode") if key is not None else None,
+                    "double_bar": master.find("DoubleBar") is not None,
+                    "repeat_start": master.find("RepeatStart") is not None,
+                    "repeat_count": (int(master.find("Repeat").get("count"))
+                                     if master.find("Repeat") is not None else None),
                     "events": events})
     return out
 
@@ -115,6 +119,10 @@ def compare_gp(truth: Path | bytes, produced: Path | bytes,
         differences.append({"bar_index": None, "event_index": None, "field": "bar_count",
                             "expected": len(want), "actual": len(have)})
     for bar, (w, h) in enumerate(zip(want, have)):
+        for field in ("double_bar", "repeat_start", "repeat_count"):
+            if w[field] != h[field]:
+                differences.append({"bar_index": bar, "event_index": None, "field": field,
+                                    "expected": w[field], "actual": h[field]})
         if w["key_count"] != h["key_count"]:
             differences.append({"bar_index": bar, "event_index": None, "field": "key_accidental_count",
                                 "expected": w["key_count"], "actual": h["key_count"]})
@@ -161,7 +169,8 @@ def _counts(values) -> dict[str, int]:
 # --- negative controls ---------------------------------------------------------------------------
 
 def _gp(bars: list[list[dict[str, Any]] | None],
-        keys: list[tuple[int, str] | None] | None = None) -> bytes:
+        keys: list[tuple[int, str] | None] | None = None,
+        barlines: list[tuple[bool, bool, int | None]] | None = None) -> bytes:
     """A minimal GPIF package. Each event: kind, written, dots, tuplet, tie, positions."""
     root = ET.Element("GPIF")
     masters, bar_db, voice_db, beat_db = (ET.SubElement(root, n) for n in ("MasterBars", "Bars", "Voices", "Beats"))
@@ -171,6 +180,14 @@ def _gp(bars: list[list[dict[str, Any]] | None],
     counters = {"voice": 0, "beat": 0, "note": 0, "rhythm": 0}
     for index, events in enumerate(bars):
         master = ET.SubElement(masters, "MasterBar")
+        if barlines is not None:
+            double, repeat_start, repeat_count = barlines[index]
+            if double:
+                ET.SubElement(master, "DoubleBar")
+            if repeat_start:
+                ET.SubElement(master, "RepeatStart")
+            if repeat_count is not None:
+                ET.SubElement(master, "Repeat", {"count": str(repeat_count)})
         if keys is not None and keys[index] is not None:
             fifths, mode = keys[index]
             key = ET.SubElement(master, "Key")
@@ -246,6 +263,14 @@ def _bar() -> list[dict[str, Any]]:
         {"kind": "rest", "written": "quarter", "dots": 1},
         {"kind": "note", "written": "eighth", "tie": (False, True), "positions": [(1, 3), (2, 8)]},
     ]
+
+
+def test_master_bar_double_and_repeats_are_independent_even_on_empty_bars():
+    truth = _gp([None, _bar()], barlines=[(True, False, None), (False, True, 3)])
+    produced = _gp([None, _bar()], barlines=[(False, False, None), (True, False, 2)])
+    differences = compare_gp(truth, produced)["differences"]
+    assert [(d["bar_index"], d["field"]) for d in differences] == [
+        (0, "double_bar"), (1, "double_bar"), (1, "repeat_start"), (1, "repeat_count")]
 
 
 def test_identical_files_have_no_difference():
