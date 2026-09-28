@@ -28,6 +28,14 @@ PDF primitive IDs with stroke geometry. The TAB fallback emits the same record
 using accepted bar boxes. This signal is an additive member of TabRaw's
 `structural_signals` extension map; the outer TabRaw model is unchanged.
 
+The CLI records notation stroke decisions in that map during PDF evidence
+extraction, before ScoreIR building. An older TabRaw without the key keeps the
+existing TAB topology fallback and receives a located
+`barline_evidence_unavailable` warning. The build stage never opens
+`source_pdf` to classify barlines. An empty list records that extraction ran
+and found no notation barline decision, distinct from an absent key. The
+simple GPIF writer also emits `DoubleBar` for a double barline.
+
 A thin pair writes `Bar.barline = "double"`; the GPIF writer already emits
 `DoubleBar` on that master bar. A thin/wide pair with two small dots in the two
 middle notation spaces is a repeat, with the wide-stroke side determining

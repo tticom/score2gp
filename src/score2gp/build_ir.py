@@ -1867,10 +1867,21 @@ def build_ir_from_tabraw_only(
     score.warnings = warnings_list
 
     # Attach symbols and techniques
-    notation_barlines = None
-    if tabraw.source_pdf and note_durations.get("systems"):
-        from .pdf import read_notation_barline_signals
-        notation_barlines = read_notation_barline_signals(tabraw.source_pdf, note_durations)
+    # PDF stroke evidence belongs to extraction. A saved TabRaw must remain
+    # convertible after its source PDF has been moved or removed.
+    notation_barlines = tabraw.structural_signals.get("notation_barlines")
+    if notation_barlines is None:
+        first_system = next(iter(note_durations.get("systems", [])), {})
+        score.warnings.append(WarningItem(
+            code="barline_evidence_unavailable",
+            message="Notation barline evidence is absent from TabRaw; existing TAB barline behaviour is retained.",
+            provenance=[Provenance(
+                source_stage=SourceStage.PDF_TEXT,
+                page=first_system.get("page_index", 0) + 1,
+                system_id=f"system-{first_system.get('system_index', 0) + 1}",
+                bar_index=1,
+            )],
+        ))
     _attach_symbols_and_techniques(score, tabraw, placed_frets=placed,
                                    notation_barlines=notation_barlines)
 

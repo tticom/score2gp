@@ -6,6 +6,7 @@ are drawn as ordinary notation, independently of the production stroke table.
 
 import os
 import json
+import importlib.util
 from pathlib import Path
 import shutil
 import subprocess
@@ -15,6 +16,12 @@ from xml.etree import ElementTree as ET
 from zipfile import ZipFile
 
 import pytest
+
+from score2gp.build_ir import build_ir_from_tabraw_only
+from score2gp.gp_package import write_gp
+from score2gp.notation_omr.note_duration import read_note_durations
+from score2gp.pdf import read_notation_barline_signals
+from score2gp.tabraw import TabRaw, make_tab_candidate
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -68,3 +75,43 @@ def test_engraved_barline_reaches_master_gpif(source, expected):
             assert all(stroke["primitive_id"] for stroke in strokes)
         if source == "final_heavy":
             assert bars[-1].findtext("Barline") == "End"
+
+
+@pytest.mark.parametrize("carry_evidence", [False, True])
+def test_saved_tabraw_converts_without_source_pdf(tmp_path, carry_evidence):
+    """The public engraved source supplies the evidence; IR building only sees TabRaw."""
+    pdf = tmp_path / "source.pdf"
+    shutil.copyfile(FIXTURES / "standard_double.pdf", pdf)
+    tabraw_path = tmp_path / "tab_raw.json"
+    source_durations = read_note_durations(pdf, time_signature=(4, 4))
+    spec = importlib.util.spec_from_file_location("route_support", Path(__file__).with_name("test_pdf_tab_route_support.py"))
+    support = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(support)
+    digit = support.digit("c1", 0, 20.0, 1, 0)
+    candidate = make_tab_candidate(candidate_id="c1", raw_text="0", page_index=1,
+                                   system_index=1, staff_index=1, bar_index=1, string=1,
+                                   bbox_values=[digit.bbox.x0, digit.bbox.y0, digit.bbox.x1, digit.bbox.y1],
+                                   confidence=1.0)
+    tabraw = TabRaw(source_pdf=str(tmp_path / "missing.pdf"), candidates=[candidate])
+    if carry_evidence:
+        signals = read_notation_barline_signals(pdf, source_durations)
+        assert any(signal["kind"] == "double" for signal in signals)
+        assert all(stroke["primitive_id"] for signal in signals for stroke in signal["strokes"])
+        tabraw.structural_signals["notation_barlines"] = signals
+    tabraw.to_json_file(tabraw_path)
+    pdf.unlink()
+
+    score, _ = build_ir_from_tabraw_only(
+        tabraw_path, note_durations=support.records([[[support.note(20.0, "whole")]]]))
+    gp = tmp_path / "result.gp"
+    write_gp(score, gp)
+    with ZipFile(gp) as package:
+        root = ET.fromstring(package.read("Content/score.gpif"))
+    actual = [i for i, bar in enumerate(root.find(".//MasterBars").findall("MasterBar"), 1)
+              if bar.find("DoubleBar") is not None]
+    assert actual == ([1] if carry_evidence else [])
+    warnings = [w for w in score.warnings if w.code == "barline_evidence_unavailable"]
+    assert len(warnings) == (0 if carry_evidence else 1)
+    if warnings:
+        assert warnings[0].provenance[0].page == 1
+        assert warnings[0].provenance[0].bar_index == 1
