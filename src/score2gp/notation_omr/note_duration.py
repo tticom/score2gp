@@ -1345,7 +1345,6 @@ def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = No
     bar_key_signatures: dict[int, dict[str, Any]] = {}
     bar_signatures: dict[int, dict[str, Any] | None] = {}
     state: dict[str, Any] = {"bar_offset": 0, "system_number": 0, "time_signature": None,
-                             "key_signature": None,
                              "diagnostics": {"ignored_symbols": 0, "ignored_symbols_by_reason": {}, "arcs_not_ties": 0, "unassociated_numbers": 0, "label_numbers": 0,
                                              "events_outside_bars": 0, "pages_without_notation_staff": 0}}
     declared = {"value": time_signature, "source": "caller_declared", "sources": []} if time_signature else None
@@ -1359,10 +1358,6 @@ def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = No
                 state["diagnostics"]["pages_without_notation_staff"] += 1
             for system_index, staff in enumerate(sorted(notation, key=lambda st: st.top)):
                 key_signature = read_system_key_signature(staff, symbols)
-                if key_signature["status"] == "read":
-                    state["key_signature"] = key_signature
-                else:
-                    state["key_signature"] = None
                 state["system_index"] = system_index
                 result = _read_staff(staff, symbols, notation + tab, state)
                 records.extend(result["records"])

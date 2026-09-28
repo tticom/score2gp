@@ -1829,22 +1829,33 @@ def build_ir_from_tabraw_only(
         if key is None:
             continue  # old sidecar: no key claim
         first = system["first_bar_index"]
+        previous_key = key
         for bar_index, bar in enumerate(bars[first:first + system["bar_count"]], start=first):
             bar_key = bar_keys.get(bar_index, bar_keys.get(str(bar_index), key))
             if bar_key["status"] == "read":
                 bar.key_signature = KeySignature(fifths=bar_key["fifths"], mode=bar_key["mode"] or "major")
-            elif bar_key is not key:
+                if bar_key != previous_key and bar_key["mode"] is None:
+                    warnings_list.append(WarningItem(
+                        code="key_mode_unresolved", severity="warning",
+                        message=(f"Key mode unresolved at page {system['page_index'] + 1}, "
+                                 f"system {system['system_index'] + 1}, bar {bar_index + 1}; "
+                                 "GPIF Major is the format default and is not a recognised mode."),
+                    ))
+            elif bar_key != previous_key:
                 warnings_list.append(WarningItem(
                     code=bar_key["reason"], severity="warning",
                     message=(f"Key signature refused at page {system['page_index'] + 1}, "
                              f"system {system['system_index'] + 1}, bar {bar_index + 1}; "
-                             f"source glyphs {bar_key['sources']}."),
+                             f"source glyphs {bar_key['sources']}. No Key was written; "
+                             "Guitar Pro may display C major."),
                 ))
+            previous_key = bar_key
         if key["status"] != "read":
             warnings_list.append(WarningItem(
                 code=key["reason"], severity="warning",
                 message=(f"Key signature refused at page {system['page_index'] + 1}, "
-                         f"system {system['system_index'] + 1}; source glyphs {key['sources']}."),
+                         f"system {system['system_index'] + 1}; source glyphs {key['sources']}. "
+                         "No Key was written; Guitar Pro may display C major."),
             ))
         elif key["mode"] is None:
             warnings_list.append(WarningItem(

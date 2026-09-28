@@ -1,6 +1,7 @@
 """Public key-signature PDF regression and refusal cases."""
 
 from pathlib import Path
+import json
 import os
 import shutil
 import subprocess
@@ -61,6 +62,17 @@ def test_mid_system_flat_changes_the_following_bar():
     assert changed["status"] == "read"
     assert changed["fifths"] == -1
     assert len(changed["sources"]) == 1
+
+
+def test_mid_system_three_accidental_runs_are_complete():
+    source = FIXTURE.parent / "mid_system_three_keys.pdf"
+    sidecar = read_note_durations(source, time_signature=(4, 4))
+    keys = sidecar["diagnostics"]["bar_key_signatures"]
+    assert [(keys[i]["status"], keys[i]["fifths"], len(keys[i]["sources"]))
+            for i in (0, 1, 2, 3)] == [
+                ("read", 0, 0), ("read", 3, 3),
+                ("read", 1, 1), ("read", -3, 3),
+            ]
 
 
 def test_natural_cancellation_header_is_refused():
@@ -153,3 +165,32 @@ def test_public_pdf_to_gpif_has_signed_key_on_every_bar():
     counts = [int(bar.findtext("Key/AccidentalCount"))
               for bar in root.findall("MasterBars/MasterBar")]
     assert counts == [1, -1, 0]
+
+
+def test_public_mid_system_changes_reach_gpif():
+    source = FIXTURE.parent / "pdf_to_gpif_mid_system.pdf"
+    # Use a neutral input path so the production PDF route is selected.
+    scratch_root = Path(__file__).resolve().parents[1] / "work"
+    scratch_root.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=scratch_root) as directory:
+        scratch = Path(directory)
+        input_pdf = scratch / "input.pdf"
+        shutil.copyfile(source, input_pdf)
+        output = scratch / "keys.gp"
+        source_root = os.environ.get("SCORE2GP_OMIT01_MUTANT_SRC", str(Path(__file__).resolve().parents[1] / "src"))
+        env = {**os.environ, "PYTHONPATH": source_root}
+        result = subprocess.run(
+            [sys.executable, "-m", "score2gp.cli", "convert", "--pdf", str(input_pdf),
+             "--pdf-only-tab", "--time-signature", "4/4", "--out", str(output),
+             "--work-dir", str(scratch / "work")],
+            text=True, capture_output=True, env=env,
+        )
+        assert result.returncode == 0, result.stderr[-1000:]
+        with zipfile.ZipFile(output) as package:
+            root = ET.fromstring(package.read("Content/score.gpif"))
+        score_ir = json.loads((scratch / "work" / "score.ir.json").read_text())
+    counts = [bar.findtext("Key/AccidentalCount")
+              for bar in root.findall("MasterBars/MasterBar")]
+    assert counts == ["1", "-3"]
+    assert any(w["code"] == "key_mode_unresolved" and "bar 2" in w["message"]
+               for w in score_ir["warnings"])

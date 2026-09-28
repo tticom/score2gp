@@ -158,17 +158,17 @@ def read_bar_key_signatures(staff: Staff, symbols: PageSymbols,
     space = staff.space
     current = header
     result = [current]
-    for bar_index, (left, _) in enumerate(bars[1:], start=1):
+    for bar_index, (left, right) in enumerate(bars[1:], start=1):
         candidates: list[tuple[float, float, str | None, str, float]] = []
         for glyph in symbols.glyphs:
-            if not (left + 0.25 * space <= glyph.bbox[0] <= left + 2.2 * space
+            if not (left + 0.25 * space <= glyph.bbox[0] < right
                     and staff.top - 3 * space <= glyph.cy <= staff.bottom + space):
                 continue
             if glyph.filled and 0.6 <= glyph.w / space <= 1.4 and 2.0 <= glyph.h / space <= 3.3:
                 candidates.append((glyph.bbox[0], glyph.bbox[1], _kind(glyph, space),
                                    glyph.ident, glyph.bbox[2]))
         for label in symbols.texts:
-            if not (left + 0.25 * space <= label.bbox[0] <= left + 2.2 * space
+            if not (left + 0.25 * space <= label.bbox[0] < right
                     and staff.top - 3 * space <= label.cy <= staff.bottom + space):
                 continue
             if label.text in ("#", "♯", "b", "♭", "♮"):
@@ -176,6 +176,16 @@ def read_bar_key_signatures(staff: Staff, symbols: PageSymbols,
                 candidates.append((label.bbox[0], label.bbox[1], kind,
                                    label.ident, label.bbox[2]))
         candidates.sort()
+        # A signature begins just after the barline and continues at roughly
+        # one staff-space intervals. Stop at a later isolated event accidental.
+        adjacent = []
+        edge = left
+        for candidate in candidates:
+            if candidate[0] - edge > 1.5 * space:
+                break
+            adjacent.append(candidate)
+            edge = candidate[0] + space
+        candidates = adjacent
         if not candidates:
             result.append(current)
             continue
