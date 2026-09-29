@@ -2271,8 +2271,11 @@
           "default": null
         },
         "schema_version": {
-          "const": "0.1.0",
-          "default": "0.1.0",
+          "default": "0.1.1",
+          "enum": [
+            "0.1.0",
+            "0.1.1"
+          ],
           "title": "Schema Version",
           "type": "string"
         },
@@ -2372,8 +2375,11 @@
           "$ref": "#/$defs/Metadata"
         },
         "schema_version": {
-          "const": "0.1.0",
-          "default": "0.1.0",
+          "default": "0.1.1",
+          "enum": [
+            "0.1.0",
+            "0.1.1"
+          ],
           "title": "Schema Version",
           "type": "string"
         },

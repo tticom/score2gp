@@ -54,6 +54,7 @@ class TabCandidate(BaseModel):
         return None
 
     def to_provenance(self) -> Provenance:
+        """Reference extraction evidence without copying its raw payload into ScoreIR."""
         return Provenance(
             source_stage=self.source_stage,
             page=self.page_index,
@@ -62,15 +63,6 @@ class TabCandidate(BaseModel):
             bar_index=self.bar_index,
             bbox=self.bbox,
             raw_token_id=self.id,
-            raw={
-                "kind": self.kind,
-                "raw_text": self.raw_text,
-                "parsed_fret": self.parsed_fret,
-                "string": self.string,
-                "x": self.x,
-                "y": self.y,
-                **self.raw,
-            },
             confidence=self.confidence,
         )
 
