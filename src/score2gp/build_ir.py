@@ -54,6 +54,7 @@ from .musicxml import (
     parse_musicxml,
 )
 from .tabraw import TabCandidate, TabRaw
+from .pdf_score_metadata import MetadataReading, read_pdf_score_metadata
 from .pdf_only_chord_event_grouper import (
     PDF_ONLY_CHORD_X_TOLERANCE_PT,
     CandidateXGroupDiagnostics,
@@ -1801,11 +1802,19 @@ def build_ir_from_tabraw_only(
                 )
             )
 
+    if tabraw.source_pdf and Path(tabraw.source_pdf).is_file():
+        reading = read_pdf_score_metadata(tabraw.source_pdf)
+        for message in reading.diagnostics:
+            warnings_list.append(WarningItem(code=message.split(":", 1)[0], message=message))
+    else:
+        reading = MetadataReading(diagnostics=("pdf_metadata_source_missing: page 1 PDF unavailable",))
+        warnings_list.append(WarningItem(code="pdf_metadata_source_missing", message=reading.diagnostics[0]))
+
     score = ScoreIR(
         metadata=Metadata(
-            title="PDF-Only Inferred Score",
-            composer="Unknown Composer",
-            copyright="Unknown",
+            title=reading.title,
+            composer=reading.music,
+            copyright=reading.copyright,
             source=str(tabraw_path),
         ),
         conversion=ConversionInfo(
