@@ -7,6 +7,16 @@ from .ir import Event, Note, ScoreIR, Technique, ScoreBooklet
 
 SUPPORTED_MINIMAL_TECHNIQUES = {"slide", "vibrato", "hammer-on", "pull-off", "tie", "slur", "bend", "let-ring", "palm-mute", "grace", "dead-note", "tremolo-bar", "tremolo-picking", "slap", "pop", "tapping", "trill", "rasgueado"}
 
+# Guitar Pro 7's default page layout, represented as Qt rich text. The policy
+# mirrors the token order in the app-created reference files, never their score
+# content. Markup styling is intentionally minimal; GP evaluates the tokens.
+FIRST_PAGE_HEADER = (
+    '<html><body><p align="center">%TITLE%</p><p align="center">%SUBTITLE%</p>'
+    '<p align="center">%ARTIST%</p><p align="center">%ALBUM%</p>'
+    '<p align="center">%WORDS&MUSIC%</p></body></html>'
+)
+PAGE_FOOTER = '<html><body><p align="right">Page %page%/%pages%</p></body></html>'
+
 
 def _text(parent: ET.Element, tag: str, value: object | None) -> ET.Element:
     child = ET.SubElement(parent, tag)
@@ -409,10 +419,10 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
         _text(score_node, "Tabber", score.metadata.transcriber or "")
         _text(score_node, "Instructions", "")
         _text(score_node, "Notices", "")
-        _text(score_node, "FirstPageHeader", "")
-        _text(score_node, "FirstPageFooter", "")
+        _text(score_node, "FirstPageHeader", FIRST_PAGE_HEADER)
+        _text(score_node, "FirstPageFooter", PAGE_FOOTER)
         _text(score_node, "PageHeader", "")
-        _text(score_node, "PageFooter", "")
+        _text(score_node, "PageFooter", PAGE_FOOTER)
 
         layout_systems = 4
         if getattr(score, "layout", None) is not None:

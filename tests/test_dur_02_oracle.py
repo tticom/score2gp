@@ -15,6 +15,8 @@ comparator to report exactly that difference, located by bar and event index.
 from __future__ import annotations
 
 import io
+import html
+import re
 import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
@@ -29,6 +31,39 @@ EVENT_FIELDS = ("kind", "written", "dots", "tuplet", "tie", "positions", *TECHNI
 
 class OracleRefusal(Exception):
     """The reader met a GPIF element it does not read; it refuses rather than skipping it."""
+
+
+def read_gp_metadata(gp: Path | bytes) -> dict[str, object]:
+    """Read final GPIF score fields without importing production code."""
+    data = gp if isinstance(gp, bytes) else Path(gp).read_bytes()
+    root = ET.fromstring(zipfile.ZipFile(io.BytesIO(data)).read("Content/score.gpif"))
+    score = root.find("Score")
+    if score is None:
+        raise OracleRefusal("Score absent")
+    fields: dict[str, object] = {}
+    for name in ("Title", "Music", "Copyright"):
+        fields[name] = score.findtext(name) or ""
+    for name in ("FirstPageHeader", "FirstPageFooter", "PageHeader", "PageFooter"):
+        value = score.findtext(name) or ""
+        fields[name] = tuple(re.findall(r"%[A-Za-z&]+%", value))
+        if name == "PageHeader" and value.strip():
+            fields[name] = ("LITERAL_PAGE_HEADER",) + fields[name]
+    return fields
+
+
+def compare_gp_metadata(truth: Path | bytes, produced: Path | bytes) -> dict[str, tuple[object, object]]:
+    expected, actual = read_gp_metadata(truth), read_gp_metadata(produced)
+    return {name: (expected[name], actual[name]) for name in expected if expected[name] != actual[name]}
+
+
+def read_gp_template_text(gp: Path | bytes) -> dict[str, str]:
+    data = gp if isinstance(gp, bytes) else Path(gp).read_bytes()
+    root = ET.fromstring(zipfile.ZipFile(io.BytesIO(data)).read("Content/score.gpif"))
+    score = root.find("Score")
+    if score is None:
+        raise OracleRefusal("Score absent")
+    return {name: html.unescape(score.findtext(name) or "") for name in
+            ("FirstPageHeader", "FirstPageFooter", "PageHeader", "PageFooter")}
 
 
 def read_gp_bars(gp: Path | bytes) -> list[dict[str, Any]]:
@@ -263,6 +298,20 @@ def _bar() -> list[dict[str, Any]]:
         {"kind": "rest", "written": "quarter", "dots": 1},
         {"kind": "note", "written": "eighth", "tie": (False, True), "positions": [(1, 3), (2, 8)]},
     ]
+
+
+def test_metadata_oracle_rejects_double_escaped_words_music_token():
+    def package(template: str) -> bytes:
+        root = ET.Element("GPIF")
+        score = ET.SubElement(root, "Score")
+        ET.SubElement(score, "FirstPageHeader").text = template
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            archive.writestr("Content/score.gpif", ET.tostring(root))
+        return buffer.getvalue()
+
+    assert read_gp_metadata(package("%WORDS&MUSIC%"))["FirstPageHeader"] == ("%WORDS&MUSIC%",)
+    assert read_gp_metadata(package("%WORDS&amp;MUSIC%"))["FirstPageHeader"] == ()
 
 
 def test_master_bar_double_and_repeats_are_independent_even_on_empty_bars():
