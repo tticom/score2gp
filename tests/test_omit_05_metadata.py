@@ -95,3 +95,19 @@ def test_centered_subtitle_without_music_attribution_refuses_credit():
         assert result.title == "Evening Study"
         assert result.music == ""
         assert any(item.startswith("pdf_music_unreadable: page 1") for item in result.diagnostics)
+
+
+def test_holder_followed_by_gp_rights_boilerplate_never_returns_boilerplate():
+    with tempfile.TemporaryDirectory(dir=ROOT / "work") as directory:
+        path = Path(directory) / "rights.pdf"
+        with pymupdf.open() as document:
+            page = document.new_page(width=595, height=842)
+            page.insert_text((250, 770), "https://example.org", fontsize=8)
+            page.insert_text((185, 785), "All Rights Reserved - International Copyright Secured", fontsize=8)
+            document.save(path)
+        result = read_pdf_score_metadata(path)
+        assert result.copyright != "All Rights Reserved - International Copyright Secured"
+        assert result.copyright == "" or result.copyright == "https://example.org"
+        if not result.copyright:
+            assert any(item.startswith("pdf_copyright_ambiguous: page 1 bbox")
+                       for item in result.diagnostics)

@@ -44,7 +44,7 @@ def read_gp_metadata(gp: Path | bytes) -> dict[str, object]:
     for name in ("Title", "Music", "Copyright"):
         fields[name] = score.findtext(name) or ""
     for name in ("FirstPageHeader", "FirstPageFooter", "PageHeader", "PageFooter"):
-        value = html.unescape(score.findtext(name) or "")
+        value = score.findtext(name) or ""
         fields[name] = tuple(re.findall(r"%[A-Za-z&]+%", value))
         if name == "PageHeader" and value.strip():
             fields[name] = ("LITERAL_PAGE_HEADER",) + fields[name]
@@ -298,6 +298,20 @@ def _bar() -> list[dict[str, Any]]:
         {"kind": "rest", "written": "quarter", "dots": 1},
         {"kind": "note", "written": "eighth", "tie": (False, True), "positions": [(1, 3), (2, 8)]},
     ]
+
+
+def test_metadata_oracle_rejects_double_escaped_words_music_token():
+    def package(template: str) -> bytes:
+        root = ET.Element("GPIF")
+        score = ET.SubElement(root, "Score")
+        ET.SubElement(score, "FirstPageHeader").text = template
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            archive.writestr("Content/score.gpif", ET.tostring(root))
+        return buffer.getvalue()
+
+    assert read_gp_metadata(package("%WORDS&MUSIC%"))["FirstPageHeader"] == ("%WORDS&MUSIC%",)
+    assert read_gp_metadata(package("%WORDS&amp;MUSIC%"))["FirstPageHeader"] == ()
 
 
 def test_master_bar_double_and_repeats_are_independent_even_on_empty_bars():

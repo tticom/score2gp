@@ -1,4 +1,4 @@
-﻿# OMIT-05 page-one metadata evidence
+# OMIT-05 page-one metadata evidence
 
 Geometry probe: PyMuPDF page-one `get_text("dict")`, line span font and maximum size, PDF-point bounding boxes. Source indices follow lexicographic PDF filename order in `fixtures/private`; source text is not stored. No reference GP values enter classification. `T` is the unique largest centered title candidate (size at least 17 pt, x-center within 8% of page width, top within 18% of page height); `C` is an explicit music-credit line in the same top band. Blank means no qualifying line. `lines` counts nonempty page-one lines; `blocks` counts text blocks. `bbox` is x0,y0,x1,y1, rounded to points. These measurements cover every mounted PDF, including pages with no selectable title.
 
@@ -12,7 +12,7 @@ Geometry probe: PyMuPDF page-one `get_text("dict")`, line span font and maximum 
 | 6 | 595-842 | 62 | 205 | Baskerville-Bold / 21.0 / (171, 28, 424, 53) / 0:0 | - |
 | 7 | 612-792 | 44 | 190 | Baskerville / 22.4 / (208, 55, 408, 81) / 0:0 | - |
 | 8 | 612-792 | 64 | 176 | Baskerville / 22.4 / (259, 47, 357, 73) / 0:0 | - |
-| 9 | 595-842 | 86 | 352 | GPBravuraRegular / 17.0 / (281, 90, 298, 112) / 5:0 | - |
+| 9 | 595-842 | 86 | 352 | - (Bravura glyph excluded; 17.0 pt / (281, 90, 298, 112) / 5:0) | - |
 | 10 | 595-842 | 59 | 159 | TimesNewRomanRegular / 22.9 / (241, 46, 350, 69) / 0:0 | - |
 | 11 | 901-1275 | 19 | 124 | - | - |
 | 12 | 595-842 | 35 | 100 | TimesNewRomanPSMT / 25.0 / (266, 43, 329, 70) / 0:0 | - |
@@ -37,11 +37,15 @@ Geometry probe: PyMuPDF page-one `get_text("dict")`, line span font and maximum 
 
 ## Classification and refusals
 
-The measured lesson pages have one centered 25 pt title each. Four have a separate 10 pt explicit music-credit line at the right; one has no credit line. Across all 30 sources, the reader accepts 24 titles, 4 explicit music credits, and 3 unique copyright lines; it refuses 6, 26, and 27 respectively. No source caused a reader error. Other corpus pages contain centered subtitles or artist names without a music attribution, right-side transcription notices, page furniture, tempo marks, and section labels. The reader leaves Music empty unless an explicit `Music by` line is present. A tie between large centered title lines leaves Title empty. Missing or conflicting values emit a page-one located diagnostic; Copyright is copied only from a unique copyright-marked line. These rules do not infer a composer from a subtitle or a filename.
+The measured lesson pages have one centered 25 pt title each. Four have a separate 10 pt explicit music-credit line at the right; one has no credit line. Across all 30 sources, the reader accepts 24 titles, 4 explicit music credits, and 2 copyright holder lines; it refuses 6, 26, and 28 respectively. No source caused a reader error. Other corpus pages contain centered subtitles or artist names without a music attribution, right-side transcription notices, page furniture, tempo marks, and section labels. The reader leaves Music empty unless an explicit `Music by` line is present. A tie between large centered title lines leaves Title empty. Missing or conflicting values emit a page-one located diagnostic; Copyright is copied from a unique non-boilerplate copyright-marked line, or from the centered line immediately above GP rights boilerplate in the same text block. These rules do not infer a composer from a subtitle or a filename.
+
+## GP rights-line geometry
+
+Across 30 page-one probes, three sources print the standard GP rights line. Indices 9 and 25 have a centered holder line immediately above it in the same text block, with 3 pt and 1 pt vertical gaps; both match the reference Copyright. Index 10 has a page-number line as its same-block predecessor, off center and vertically overlapping the rights line. It has no measurable holder, so the reader emits a located `pdf_copyright_ambiguous` and leaves Copyright empty. Its reference stores the boilerplate itself, which the task rule forbids returning. The 27 other sources have no accepted copyright line.
 
 ## GP page-template policy
 
-The writer emits Guitar Pro 7 default Qt-rich-text page templates with ordered tokens `TITLE`, `SUBTITLE`, `ARTIST`, `ALBUM`, `WORDS&MUSIC` in FirstPageHeader and `page`, `pages` in FirstPageFooter and PageFooter. PageHeader is empty. Provenance is the app-created GP 7 page-layout shape inspected in the mounted reference files; their text values are never inputs to conversion. The independent oracle compares ordered token sequences after HTML unescaping, and separately rejects literal score title or music embedded in templates.
+The writer emits Guitar Pro 7 default Qt-rich-text page templates with ordered tokens `TITLE`, `SUBTITLE`, `ARTIST`, `ALBUM`, `WORDS&MUSIC` in FirstPageHeader and `page`, `pages` in FirstPageFooter and PageFooter. PageHeader is empty. Provenance is the app-created GP 7 page-layout shape inspected in the mounted reference files; their text values are never inputs to conversion. The independent oracle compares ordered tokens from parsed GPIF text without an extra HTML unescape, and separately rejects literal score title or music embedded in templates.
 
 ## Public fixture
 
@@ -83,4 +87,3 @@ The following inventory retains the smaller text lines from the top 18% of page 
 | 28 | 2 | Baskerville / 6.0 / (494, 105, 572, 120) / 1:0; Baskerville / 12.8 / (239, 86, 375, 101) / 3:0 |
 | 29 | 2 | TimesNewRoman-0-75 / 11.0 / (49, 89, 82, 102) / 3:0; Arial-0-75 / 9.0 / (63, 76, 108, 87) / 4:0 |
 | 30 | 6 | TimesNewRoman-0-50 / 6.0 / (163, 100, 175, 108) / 6:0; TimesNewRoman-0-75 / 11.0 / (53, 89, 77, 102) / 6:1; TimesNewRoman-0-75 / 11.0 / (206, 89, 220, 102) / 6:2; TimesNewRoman-0-75 / 11.0 / (297, 89, 330, 102) / 6:3; Arial-0-75 / 9.0 / (63, 76, 108, 87) / 7:0; TimesNewRoman-0-50 / 6.0 / (163, 146, 175, 153) / 8:0 |
-

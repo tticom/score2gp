@@ -15,6 +15,8 @@ class TextLine:
     bbox: tuple[float, float, float, float]
     size: float
     font: str
+    block: int
+    line: int
 
 
 @dataclass(frozen=True)
@@ -35,13 +37,13 @@ def read_pdf_score_metadata(path: str | Path) -> MetadataReading:
         page = document[0]
         width, height = page.rect.width, page.rect.height
         lines = []
-        for block in page.get_text("dict")["blocks"]:
-            for line in block.get("lines", []):
+        for block_index, block in enumerate(page.get_text("dict")["blocks"]):
+            for line_index, line in enumerate(block.get("lines", [])):
                 spans = [span for span in line["spans"] if span["text"].strip()]
                 if spans:
                     lines.append(TextLine("".join(s["text"] for s in spans).strip(),
                                           tuple(line["bbox"]), max(s["size"] for s in spans),
-                                          spans[0]["font"]))
+                                          spans[0]["font"], block_index, line_index))
 
     def location(line: TextLine) -> str:
         return f"page 1 bbox ({', '.join(f'{value:.1f}' for value in line.bbox)})"
@@ -77,10 +79,33 @@ def read_pdf_score_metadata(path: str | Path) -> MetadataReading:
     else:
         diagnostics.append("pdf_music_unreadable: page 1 top 18%; no explicit music credit")
 
-    rights = [line for line in lines if "©" in line.text or re.search(r"\bcopyright\b", line.text, re.I)]
-    copyright_text = rights[0].text if len(rights) == 1 else ""
-    if len(rights) > 1:
-        diagnostics.append("pdf_copyright_ambiguous: " + "; ".join(location(line) for line in rights))
-    elif not rights:
+    # GP prints a standard rights notice after its Copyright field. Across the
+    # 30 measured pages, the two real holder fields are the immediately prior
+    # centered line in that same block (vertical gaps 3 and 1 pt); the third
+    # notice has only a page number before it. Never return the notice itself.
+    notice = re.compile(r"(?:©\s*)?All Rights Reserved\s*[-–]\s*International Copyright Secured", re.I)
+    standard = [line for line in lines if notice.fullmatch(line.text)]
+    marked = [line for line in lines if
+              ("©" in line.text or re.search(r"\bcopyright\b", line.text, re.I))
+              and not notice.fullmatch(line.text)]
+    copyright_text = ""
+    if standard:
+        holders = []
+        for line in standard:
+            preceding = next((candidate for candidate in lines
+                              if candidate.block == line.block and candidate.line == line.line - 1), None)
+            if (preceding and preceding.text and preceding.bbox[3] <= line.bbox[1]
+                    and line.bbox[1] - preceding.bbox[3] <= max(4, line.size * .5)
+                    and abs((preceding.bbox[0] + preceding.bbox[2]) / 2 - width / 2) <= width * .08):
+                holders.append(preceding)
+        if len(standard) == 1 and len(holders) == 1 and not marked:
+            copyright_text = holders[0].text
+        else:
+            diagnostics.append("pdf_copyright_ambiguous: " + "; ".join(location(line) for line in standard + marked))
+    elif len(marked) == 1:
+        copyright_text = marked[0].text
+    elif marked:
+        diagnostics.append("pdf_copyright_ambiguous: " + "; ".join(location(line) for line in marked))
+    else:
         diagnostics.append("pdf_copyright_unreadable: page 1; no copyright line")
     return MetadataReading(title, music, copyright_text, tuple(diagnostics))

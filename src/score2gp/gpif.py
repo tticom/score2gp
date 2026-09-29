@@ -13,7 +13,7 @@ SUPPORTED_MINIMAL_TECHNIQUES = {"slide", "vibrato", "hammer-on", "pull-off", "ti
 FIRST_PAGE_HEADER = (
     '<html><body><p align="center">%TITLE%</p><p align="center">%SUBTITLE%</p>'
     '<p align="center">%ARTIST%</p><p align="center">%ALBUM%</p>'
-    '<p align="center">%WORDS&amp;MUSIC%</p></body></html>'
+    '<p align="center">%WORDS&MUSIC%</p></body></html>'
 )
 PAGE_FOOTER = '<html><body><p align="right">Page %page%/%pages%</p></body></html>'
 
