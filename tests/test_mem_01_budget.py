@@ -12,8 +12,8 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PDF = ROOT / "tests/fixtures/pdf/layout_01/uneven_engraved_rows.pdf"
-# Baseline checkout on this fixture: 355,429 bytes / 3 bars = 118,476 bytes per bar.
-# The bound leaves room above the measured compact result (9,014 bytes/bar).
+# Verified base conversion: 355,341 bytes / 3 bars = 118,447 bytes per bar.
+# The bound leaves room above the measured compact result (9,017 bytes/bar).
 MAX_IR_BYTES_PER_BAR = 20_000
 
 

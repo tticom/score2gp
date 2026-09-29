@@ -4029,10 +4029,12 @@ def _provenance_coordinate(
 ) -> float | None:
     if prov.raw.get(axis) is not None:
         return prov.raw[axis]
+    if candidates is not None and prov.raw_token_id in candidates:
+        candidate_coordinate = getattr(candidates[prov.raw_token_id], axis)
+        if candidate_coordinate is not None:
+            return candidate_coordinate
     if prov.bbox is not None:
         return (getattr(prov.bbox, axis + "0") + getattr(prov.bbox, axis + "1")) / 2
-    if candidates is not None and prov.raw_token_id in candidates:
-        return getattr(candidates[prov.raw_token_id], axis)
     return None
 
 

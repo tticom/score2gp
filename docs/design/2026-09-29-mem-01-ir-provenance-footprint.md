@@ -15,7 +15,7 @@ Search scope: `git grep` over `src/`, `scripts/`, and `tests/` for
 | Consumer | Fields used | Resolution |
 | --- | --- | --- |
 | `pdf_tab_event_factory.py` | candidate id and location on events and notes | Emits compact reference; grouping and duration evidence stays in TabRaw. |
-| `build_ir.py` placement, symbol and technique attachment | id, page, system, staff, bar, x, y | Id and location retained; bbox centre supplies x/y, with a local id lookup into TabRaw when bbox is absent. The measured extracted fret candidates have centre coordinates equal to their bboxes. Direct `TabCandidate.raw` reads before IR creation remain unchanged. |
+| `build_ir.py` placement, symbol and technique attachment | id, page, system, staff, bar, x, y | Id and location retained; an id lookup into TabRaw supplies the original x/y during attachment, with bbox centre as a fallback. Direct `TabCandidate.raw` reads before IR creation remain unchanged. |
 | `build_ir.py` MusicXML alignment | alignment strategy and pitch comparison | Small derived alignment fields remain in MusicXML-aligned note provenance; full TabRaw candidate is absent. |
 | `build_ir.py` warnings and diagnostics | candidate id and bar | Retained. Direct `TabCandidate.raw` reads are unaffected. |
 | `report.py` attachment map and diagnostics | provenance candidate id | Retained. Grouping diagnostics read `tab_raw.json` directly. |
@@ -32,22 +32,24 @@ for a removed grouping field.
 
 ## Budget and measurement
 
-The public `uneven_engraved_rows.pdf` baseline conversion wrote 355,429 IR
-bytes for 3 bars (118,476 bytes/bar). The compact conversion wrote 27,042 bytes
-for 3 bars (9,014 bytes/bar). The regression bound is 20,000 bytes/bar; the
-new test was run against the exact base source and failed at 355,429 / 3.
+The public `uneven_engraved_rows.pdf` verified baseline conversion wrote 355,341 IR
+bytes for 3 bars (118,447 bytes/bar). The compact conversion wrote 27,050 bytes
+for 3 bars (9,017 bytes/bar). The regression bound is 20,000 bytes/bar; the
+new test was run against a verified `582ff20` source snapshot and failed.
 
 For private measurements, the CLI ran with `--pdf-only-tab
 --time-signature 4/4`, without a reference GP, using the product venv. An
 in-process thread sampled `GetProcessMemoryInfo` / `PeakWorkingSetSize` every
-50 ms. Wall time uses `time.perf_counter`. Each run has its own output directory
-under `work/mem01/`. Counts and sizes only are recorded here; private artifacts
-remain ignored under `work/`.
+50 ms. Wall time uses `time.perf_counter`. The base source was reconstructed
+from `git show 582ff20:<path>` for every `src/score2gp` file, and imports used
+that snapshot through `PYTHONPATH`. Each run has its own output directory under
+`work/mem01/verified/`. Counts and sizes only are recorded here; private
+artifacts remain ignored under `work/`.
 
 | Source | IR before | IR after | Reduction | Peak working set before | Peak after | Time before | Time after |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Lesson 3 | 53,789,145 B | 1,285,220 B | 97.61% | 415,875,072 B | TBD | 17.72 s | TBD |
-| Lesson 6 | 27,839,741 B | 715,982 B | 97.43% | 399,294,464 B | 390,852,608 B | 22.35 s | 24.02 s |
+| Lesson 3 | 53,789,155 B | 1,285,230 B | 97.61% | 415,363,072 B | 398,049,280 B | 20.62 s | 17.66 s |
+| Lesson 6 | 27,839,751 B | 715,992 B | 97.43% | 398,626,816 B | 390,815,744 B | 22.45 s | 26.56 s |
 
 The GPIF oracle compares `Content/score.gpif` byte for byte on Lessons 3–7
 and Can't Find My Way Home. GPIF equality also guards DUR-02 durations, rests,
