@@ -314,7 +314,7 @@ def test_privacy_sanitization_and_no_leakage_audit(tmp_path: Path) -> None:
     # 2. Build ScoreIR and verify no raw object pointers or unhandled exceptions occur
     whole = support.records([[[support.note(cand.x - support.event_x(0, 0.0), "whole")]]])
     score_ir, diagnostics = build_ir_from_tabraw_only(tabraw_file, note_durations=whole)
-    assert score_ir.schema_version == "0.1.0"
+    assert score_ir.schema_version == "0.1.1"
 
     ir_json_str = score_ir.model_dump_json()
     assert "object at 0x" not in ir_json_str
