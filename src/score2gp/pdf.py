@@ -254,7 +254,7 @@ def extract_tab(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
     if "floating_barlines" in meta:
         raw["floating_barlines"] = meta["floating_barlines"]
 
-    structural_signals = {"sections": [], "repeats": [], "lyrics": []}
+    structural_signals = {"sections": [], "repeats": [], "lyrics": [], "barlines": meta.get("barline_signals", [])}
     for page in inspection.get("pages", []):
         for cand_dict in page.get("geometry_candidates", []):
             if "sections" in cand_dict:
@@ -908,6 +908,7 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
             if "floating_barlines" not in meta:
                 meta["floating_barlines"] = []
             for system in systems:
+                meta.setdefault("barline_signals", []).extend(_barline_signals(system))
                 if getattr(system, "floating_barlines", None):
                     meta["floating_barlines"].extend(system.floating_barlines)
                 seen_k = set()
@@ -4588,6 +4589,9 @@ def filter_tab_barline_candidates(
             "rejection_reason": reason,
             "barline_style": barline_style,
             "cluster_size": cluster_size,
+            "stroke_width": _visible_thickness(item["segment"]),
+            "primitive_kind": item["segment"].primitive_kind,
+            "primitive_id": item["segment"].primitive_id,
         }
         if "inherited" in item["segment"].__dict__ or hasattr(item["segment"], "inherited"):
             inherited_val = getattr(item["segment"], "inherited", None)
@@ -4604,6 +4608,242 @@ def filter_tab_barline_candidates(
         "details": details,
         "barline_candidates_details": details,
     }
+
+
+def _is_thin_barline_pair(
+    first_kind: str | None, first_width: float | None,
+    second_kind: str | None, second_width: float | None, gap: float | None,
+) -> bool:
+    return (first_kind == second_kind and first_kind in ("rect_edge", "line")
+            and first_width is not None and second_width is not None
+            and 0.45 <= first_width <= 1.0 and 0.45 <= second_width <= 1.0
+            and abs(first_width - second_width) <= 0.2
+            and gap is not None and 1.5 <= gap <= 3.2)
+
+
+def _barline_signals(system: _TabSystem) -> list[dict[str, Any]]:
+    """Read paired strokes at accepted bar ends without changing bar topology.
+
+    Thin, equal-width strokes at a narrow gap are the measured double shape.
+    Wider and more distant pairs remain unresolved for repeat/final/stem evidence.
+    """
+    details = system.barline_candidates_details or []
+    signals = []
+    for box in system.bar_boxes:
+        end_x = box["x1"]
+        accepted_by_stroke = {(d["primitive_id"], d["x"]): d for d in details
+                              if d["final_decision"] == "accepted"
+                              and abs(d["x"] - end_x) <= 0.75}
+        accepted = list(accepted_by_stroke.values())
+        if len(accepted) != 1 or accepted[0]["barline_style"] != "double":
+            continue
+        lead = accepted[0]
+        partners = [d for d in details if d["barline_style"] == "double"
+                    and d["rejection_reason"] == "pdf_barline_double_secondary"
+                    and d["primitive_id"] != lead["primitive_id"]
+                    and abs(d["x"] - lead["x"]) <= DOUBLE_BARLINE_CLUSTERING_TOLERANCE
+                    and min(d["y_max"], lead["y_max"]) > max(d["y_min"], lead["y_min"])]
+        partners.sort(key=lambda d, lead_x=lead["x"]: abs(d["x"] - lead_x))
+        partner = partners[0] if partners else None
+        widths = (lead["stroke_width"], partner["stroke_width"] if partner else None)
+        gap = abs(lead["x"] - partner["x"]) if partner else None
+        # Measured ordinary doubles in Lessons 3, 4, 6 and 7: 0.68 pt
+        # rectangles separated by 2.38 pt. Thick repeat/final shapes are
+        # 1.88-2.13 pt; unrelated line pairs are 8.4-11.8 pt apart.
+        thin_pair = (partner is not None and _is_thin_barline_pair(
+            lead["primitive_kind"], widths[0], partner["primitive_kind"], widths[1], gap))
+        strokes = [{"primitive_id": d["primitive_id"], "x": d["x"],
+                    "y_min": d["y_min"], "y_max": d["y_max"],
+                    "width": d["stroke_width"]} for d in (lead, partner) if d is not None]
+        signals.append({"schema": "pdf-barline-signals.v0.1",
+                        "page_index": system.page_index, "system_index": system.system_index,
+                        "staff_index": system.staff_index, "bar_index": box["bar_index"],
+                        "status": "read" if thin_pair else "refused",
+                        "kind": "double" if thin_pair else None,
+                        "reason": None if thin_pair else "pdf_barline_pair_kind_unresolved",
+                        "strokes": strokes})
+    return signals
+
+
+def _notation_strokes_at_end(
+    segments: list[_LineSegment], end_x: float, top: float, bottom: float,
+) -> list[_LineSegment]:
+    by_id: dict[str, _LineSegment] = {}
+    for stroke in segments:
+        if (abs(stroke.x0 - stroke.x1) > 2.0
+                or abs((stroke.x0 + stroke.x1) / 2 - end_x) > 5.0
+                or min(stroke.y0, stroke.y1) > top + 1.0
+                or max(stroke.y0, stroke.y1) < bottom - 1.0):
+            continue
+        if stroke.primitive_id is not None:
+            by_id.setdefault(stroke.primitive_id, stroke)
+    return sorted(by_id.values(), key=lambda stroke: min(stroke.x0, stroke.x1))
+
+
+def _repeat_dots_near(
+    drawings: list[dict[str, Any]], top: float, space: float, thin_x: float, side: int,
+) -> list[tuple[int, float, float, Any]]:
+    shapes = []
+    for index, drawing in enumerate(drawings):
+        rect = drawing["rect"]
+        cx = (rect.x0 + rect.x1) / 2.0
+        cy = (rect.y0 + rect.y1) / 2.0
+        if (drawing.get("fill") is not None
+                and 0.7 <= rect.width <= 3.5 and 0.7 <= rect.height <= 3.5
+                and 2.0 <= side * (cx - thin_x) <= 9.0):
+            shapes.append((index, cx, cy, rect))
+    return [shape for shape in shapes
+            if top + space <= shape[2] <= top + 3.5 * space]
+
+
+def _repeat_glyphs_near(
+    glyphs: list[tuple[str, int, tuple[int, int, int, int], float, float, Any]],
+    top: float, space: float, thin_x: float, side: int,
+) -> list[tuple[str, float, float, Any, int]]:
+    """Use character origins: GP's U+E044 boxes overlap and span four spaces."""
+    return [(f"text-{font}-{codepoint:04x}-{index}", x, y, rect, codepoint)
+            for font, codepoint, index, x, y, rect in glyphs
+            if 1.5 <= side * (x - thin_x) <= 9.0
+            and top + space <= y <= top + 3.5 * space]
+
+
+def _classify_wide_notation_pair(
+    strokes: list[_LineSegment], drawings: list[dict[str, Any]],
+    glyphs: list[tuple[str, int, tuple[int, int, int, int], float, float, Any]],
+    top: float, bottom: float, is_final: bool, widths: tuple[float, float], gap: float,
+) -> tuple[str | None, list[tuple[int, float, float, Any] | tuple[str, float, float, Any, int]]]:
+    thin = 0 if widths[0] < widths[1] else 1
+    thick = 1 - thin
+    if not (0.45 <= widths[thin] <= 1.0 and 1.5 <= widths[thick] <= 3.0
+            and 2.0 <= gap <= 5.0):
+        return None, []
+    thin_x = min(strokes[thin].x0, strokes[thin].x1)
+    side = -1 if thick == 1 else 1
+    space = (bottom - top) / 4.0
+    dots = _repeat_dots_near(drawings, top, space, thin_x, side)
+    dots.extend(_repeat_glyphs_near(glyphs, top, space, thin_x, side))
+    # GP exports one U+E044 per dot. Its origin is two and three staff
+    # spaces below the top line; painted drawing dots sit half a space higher.
+    glyph_pair = (len(dots) == 2 and all(len(dot) == 5 for dot in dots)
+                  and all(dot[4] in (0xe043, 0xe044) for dot in dots)
+                  and all(abs(dot[2] - (top + step * space)) <= 0.3 * space
+                          for dot, step in zip(sorted(dots, key=lambda d: d[2]), (2.0, 3.0))))
+    drawing_pair = (len(dots) == 2 and all(len(dot) == 4 for dot in dots)
+                    and abs(dots[0][1] - dots[1][1]) <= 1.0
+                    and all(abs(dot[2] - (top + step * space)) <= 0.3 * space
+                            for dot, step in zip(sorted(dots, key=lambda d: d[2]), (1.5, 2.5))))
+    if glyph_pair or drawing_pair:
+        return ("repeat-end" if thick == 1 else "repeat-start"), dots
+    if is_final and thick == 1 and not dots:
+        return "end", []
+    return None, dots
+
+
+def _classify_notation_barline(
+    strokes: list[_LineSegment], drawings: list[dict[str, Any]],
+    glyphs: list[tuple[str, int, tuple[int, int, int, int], float, float, Any]],
+    top: float, bottom: float, is_final: bool,
+) -> tuple[str | None, str | None, list[tuple[int, float, float, Any] | tuple[str, float, float, Any, int]]]:
+    if len(strokes) == 1:
+        width = _visible_thickness(strokes[0])
+        reason = "pdf_barline_thick_single_kind_unresolved" if width and width >= 1.5 else None
+        return None, reason, []
+    if len(strokes) < 2:
+        return None, None, []
+    widths = [_visible_thickness(stroke) for stroke in strokes]
+    gap = abs(min(strokes[1].x0, strokes[1].x1) - min(strokes[0].x0, strokes[0].x1))
+    if len(strokes) == 2 and _is_thin_barline_pair(
+        strokes[0].primitive_kind, widths[0], strokes[1].primitive_kind, widths[1], gap,
+    ):
+        return "double", None, []
+    if len(strokes) == 2 and widths[0] and widths[1]:
+        kind, dots = _classify_wide_notation_pair(
+            strokes, drawings, glyphs, top, bottom, is_final,
+            (float(widths[0]), float(widths[1])), gap,
+        )
+        return kind, None if kind is not None else "pdf_barline_pair_kind_unresolved", dots
+    return None, "pdf_barline_pair_kind_unresolved", []
+
+
+def _notation_stroke_source(stroke: _LineSegment) -> dict[str, Any]:
+    return {"primitive_id": stroke.primitive_id,
+            "x": round(min(stroke.x0, stroke.x1), 3),
+            "y_min": round(min(stroke.y0, stroke.y1), 3),
+            "y_max": round(max(stroke.y0, stroke.y1), 3),
+            "width": _visible_thickness(stroke)}
+
+
+def _notation_system_barline_signals(
+    system: dict[str, Any], segments: list[_LineSegment],
+    drawings: list[dict[str, Any]],
+    glyphs: list[tuple[str, int, tuple[int, int, int, int], float, float, Any]],
+    final_bar_index: int,
+) -> list[dict[str, Any]]:
+    signals = []
+    top, bottom = system["staff"]["top"], system["staff"]["bottom"]
+    for local_index, (_, end_x) in enumerate(system["bars"]):
+        strokes = _notation_strokes_at_end(segments, end_x, top, bottom)
+        bar_index = system["first_bar_index"] + local_index + 1
+        kind, reason, dots = _classify_notation_barline(
+            strokes, drawings, glyphs, top, bottom, bar_index == final_bar_index,
+        )
+        if reason is None and kind is None:
+            continue
+        sources = [_notation_stroke_source(stroke) for stroke in strokes]
+        sources.extend({"primitive_id": (dot[0] if isinstance(dot[0], str)
+                                          else f"drawing-{dot[0]}"),
+                        "x": round(dot[1], 3),
+                        "y_min": round(dot[3].y0, 3),
+                        "y_max": round(dot[3].y1, 3),
+                        "width": round(dot[3].width, 3)} for dot in dots)
+        signals.append({
+            "schema": "pdf-barline-signals.v0.1",
+            "page_index": system["page_index"] + 1,
+            "system_index": system["system_index"] + 1,
+            "staff_index": 0,
+            "bar_index": bar_index,
+            "status": "read" if kind is not None else "refused",
+            "kind": kind, "reason": reason, "strokes": sources,
+        })
+    return signals
+
+
+def read_notation_barline_signals(
+    pdf_path: str | Path, note_durations: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Classify painted strokes at measured notation bar ends by PDF primitive ID."""
+    import pymupdf as fitz  # type: ignore[import-not-found]
+
+    signals = []
+    final_bar_index = sum(system["bar_count"] for system in note_durations.get("systems", []))
+    with fitz.open(pdf_path) as doc:
+        page_segments: dict[int, list[_LineSegment]] = {}
+        page_drawings: dict[int, list[dict[str, Any]]] = {}
+        page_glyphs: dict[int, list[tuple[str, int, tuple[int, int, int, int], float, float, Any]]] = {}
+        for system in note_durations.get("systems", []):
+            page_index = system["page_index"]
+            if page_index not in page_segments:
+                page_drawings[page_index] = doc[page_index].get_drawings()
+                page_segments[page_index] = list(_drawing_segments(page_drawings[page_index]))
+                page_glyphs[page_index] = [
+                    (span["font"], ord(char["c"]),
+                     (block_index, line_index, span_index, index),
+                     char["origin"][0], char["origin"][1], fitz.Rect(char["bbox"]))
+                    for block_index, block in enumerate(
+                        doc[page_index].get_text("rawdict")["blocks"])
+                    if "lines" in block
+                    for line_index, line in enumerate(block["lines"])
+                    for span_index, span in enumerate(line["spans"])
+                    for index, char in enumerate(span["chars"])
+                    if ("bravura" in span["font"].lower()
+                        or "smufl" in span["font"].lower()
+                        or "music" in span["font"].lower()
+                        or ord(char["c"]) in (0xe043, 0xe044))]
+            signals.extend(_notation_system_barline_signals(
+                system, page_segments[page_index], page_drawings[page_index],
+                page_glyphs[page_index], final_bar_index,
+            ))
+    return signals
 
 
 def _detect_tab_systems(

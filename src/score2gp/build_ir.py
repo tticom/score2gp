@@ -1867,7 +1867,23 @@ def build_ir_from_tabraw_only(
     score.warnings = warnings_list
 
     # Attach symbols and techniques
-    _attach_symbols_and_techniques(score, tabraw, placed_frets=placed)
+    # PDF stroke evidence belongs to extraction. A saved TabRaw must remain
+    # convertible after its source PDF has been moved or removed.
+    notation_barlines = tabraw.structural_signals.get("notation_barlines")
+    if notation_barlines is None:
+        first_system = next(iter(note_durations.get("systems", [])), {})
+        score.warnings.append(WarningItem(
+            code="barline_evidence_unavailable",
+            message="Notation barline evidence is absent from TabRaw; existing TAB barline behaviour is retained.",
+            provenance=[Provenance(
+                source_stage=SourceStage.PDF_TEXT,
+                page=first_system.get("page_index", 0) + 1,
+                system_id=f"system-{first_system.get('system_index', 0) + 1}",
+                bar_index=1,
+            )],
+        ))
+    _attach_symbols_and_techniques(score, tabraw, placed_frets=placed,
+                                   notation_barlines=notation_barlines)
 
     # Construct diagnostics
     tabraw_candidates_loaded = len(tabraw.candidates)
@@ -3958,6 +3974,7 @@ def _remove_not_aligned_warning(score: ScoreIR, candidate: TabCandidate) -> None
 
 def _attach_symbols_and_techniques(
     score: ScoreIR, tabraw: TabRaw, *, placed_frets: dict[int, list[TabCandidate]] | None = None,
+    notation_barlines: list[dict[str, object]] | None = None,
 ) -> None:
     bars_by_index = {bar.index: bar for bar in score.bars}
 
@@ -3979,7 +3996,7 @@ def _attach_symbols_and_techniques(
         }
 
 
-    if hasattr(tabraw, "structural_signals") and tabraw.structural_signals:
+    if tabraw.structural_signals or notation_barlines is not None:
         for section in tabraw.structural_signals.get("sections", []):
             page = section.get("page_index")
             sys_idx = section.get("system_index")
@@ -4043,6 +4060,49 @@ def _attach_symbols_and_techniques(
                     closest_bar.barline = "repeat-start"
                 elif direction == "end":
                     closest_bar.barline = "repeat-end"
+
+        for signal in (notation_barlines if notation_barlines is not None
+                       else tabraw.structural_signals.get("barlines", [])):
+            source_index = signal["bar_index"]
+            kind = signal.get("kind")
+            key = (signal["page_index"], signal["system_index"],
+                   signal["staff_index"], source_index)
+            output_index = (source_index if notation_barlines is not None
+                            else bar_key_to_output_idx.get(key))
+            if kind == "repeat-start" and output_index is not None:
+                output_index += 1
+            target = bars_by_index.get(output_index) if output_index is not None else None
+            reason = signal.get("reason")
+            if target is None:
+                reason = "pdf_barline_target_bar_unresolved"
+            elif (signal["status"] == "read" and target.barline not in (None, "regular", kind)):
+                reason = "pdf_barline_conflicts_with_existing_bar_kind"
+            provenance = Provenance(
+                source_stage=SourceStage.PDF_TEXT,
+                page=signal["page_index"],
+                system_id=f"system-{signal['system_index']}",
+                staff_id=f"staff-{signal['staff_index']}",
+                bar_index=source_index,
+                raw={"strokes": signal["strokes"], "output_bar_index": output_index,
+                     "source_reason": signal.get("reason"), "source_kind": kind},
+            )
+            if reason is not None:
+                score.warnings.append(WarningItem(
+                    code=reason,
+                    message=f"Barline kind unresolved at source bar {source_index}.",
+                    provenance=[provenance],
+                ))
+            else:
+                # GPIF MasterBars encode doubles and repeats with dedicated
+                # elements. The private GP7/8 references have no Barline/End
+                # element, so retain the read diagnostic without writing one.
+                if kind != "end":
+                    target.barline = kind
+                score.warnings.append(WarningItem(
+                    code=f"pdf_{kind.replace('-', '_')}_barline_read",
+                    message=f"{kind} barline read at source bar {source_index}.",
+                    severity="info", provenance=[provenance],
+                ))
 
     for candidate in tabraw.candidates:
         if candidate.kind not in ("chord-symbol", "technique-text", "visual-vibrato", "visual-slide"):

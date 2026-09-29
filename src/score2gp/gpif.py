@@ -1532,7 +1532,9 @@ def _master_bars(parent: ET.Element, score: ScoreIR) -> None:
             barline_val = barline_map.get(bar.barline, "Simple")
             _text(node, "Barline", barline_val)
 
-            if bar.barline == "repeat-start":
+            if bar.barline == "double":
+                ET.SubElement(node, "DoubleBar")
+            elif bar.barline == "repeat-start":
                 ET.SubElement(node, "RepeatStart")
             elif bar.barline == "repeat-end":
                 repeat_count = getattr(bar, "repeat_count", None) or 2

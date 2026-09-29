@@ -1177,6 +1177,15 @@ def convert_command(
             from .notation_omr.note_duration import read_note_durations
             note_durations = read_note_durations(pdf, pages=parse_page_range(pages), time_signature=declared_time_signature)
             (actual_work_dir / "note-durations.json").write_text(json.dumps(note_durations, indent=2) + "\n", encoding="utf-8")
+            # Finish PDF evidence extraction before handing TabRaw to the IR builder.
+            from .pdf import read_notation_barline_signals
+            from .tabraw import TabRaw
+            # Extraction normally writes this file. Some callers supply TabRaw
+            # directly to the builder; leave its absent evidence untouched.
+            if tabraw_path.is_file():
+                tabraw = TabRaw.from_json_file(tabraw_path)
+                tabraw.structural_signals["notation_barlines"] = read_notation_barline_signals(pdf, note_durations)
+                tabraw.to_json_file(tabraw_path)
             tabraw_kwargs = {
                 "tabraw_path": tabraw_path,
                 "note_durations": note_durations,
