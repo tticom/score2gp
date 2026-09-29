@@ -1250,6 +1250,10 @@ def _tracks(parent: ET.Element, score: ScoreIR, track_cd_maps: dict[str, dict[st
             parts = [str(sys_size)] * num_full
             if rem > 0:
                 parts.append(str(rem))
+            source_parts = track.source_system_bars
+            if (source_parts and all(isinstance(part, int) and part > 0 for part in source_parts)
+                    and sum(source_parts) == total_measures):
+                parts = [str(part) for part in source_parts]
             systems_layout_str = " ".join(parts) if parts else str(sys_size)
             _text(node, "SystemsLayout", systems_layout_str)
         else:

@@ -66,6 +66,45 @@ def read_gp_template_text(gp: Path | bytes) -> dict[str, str]:
             ("FirstPageHeader", "FirstPageFooter", "PageHeader", "PageFooter")}
 
 
+def read_gp_systems_layout(gp: Path | bytes) -> list[dict[str, object]]:
+    """Read each track's literal layout elements from the packaged GPIF."""
+    data = gp if isinstance(gp, bytes) else Path(gp).read_bytes()
+    root = ET.fromstring(zipfile.ZipFile(io.BytesIO(data)).read("Content/score.gpif"))
+    tracks = root.find("Tracks")
+    if tracks is None:
+        return []
+    out = []
+    for track in tracks.findall("Track"):
+        raw = track.findtext("SystemsLayout")
+        if raw is None:
+            layout = None
+        else:
+            try:
+                layout = tuple(int(part) for part in raw.split())
+            except ValueError as exc:
+                raise OracleRefusal(f"track {track.get('id')}: invalid SystemsLayout {raw!r}") from exc
+            if not layout or any(part <= 0 for part in layout):
+                raise OracleRefusal(f"track {track.get('id')}: invalid SystemsLayout {raw!r}")
+        out.append({"track_id": track.get("id"),
+                    "default": track.findtext("SystemsDefautLayout"),
+                    "layout": layout})
+    return out
+
+
+def compare_gp_systems_layout(truth: Path | bytes, produced: Path | bytes) -> list[dict[str, object]]:
+    expected, actual = read_gp_systems_layout(truth), read_gp_systems_layout(produced)
+    differences = []
+    if len(expected) != len(actual):
+        differences.append({"track_index": None, "field": "track_count",
+                            "expected": len(expected), "actual": len(actual)})
+    for index, (want, have) in enumerate(zip(expected, actual)):
+        for field in ("default", "layout"):
+            if want[field] != have[field]:
+                differences.append({"track_index": index, "field": field,
+                                    "expected": want[field], "actual": have[field]})
+    return differences
+
+
 def read_gp_bars(gp: Path | bytes) -> list[dict[str, Any]]:
     """Per bar: its time signature and its events, or ``events=None`` for a bar with no beats."""
     data = gp if isinstance(gp, bytes) else Path(gp).read_bytes()
@@ -149,6 +188,11 @@ def compare_gp(truth: Path | bytes, produced: Path | bytes,
     """Every difference between the produced file and the truth, by bar and event index."""
     want, have = read_gp_bars(truth), read_gp_bars(produced)
     differences: list[dict[str, Any]] = []
+    for item in compare_gp_systems_layout(truth, produced):
+        differences.append({"bar_index": None, "event_index": None,
+                            "field": f"systems_{item['field']}",
+                            "track_index": item["track_index"],
+                            "expected": item["expected"], "actual": item["actual"]})
     written_bars = compared_events = equal_events = 0
     if len(want) != len(have):
         differences.append({"bar_index": None, "event_index": None, "field": "bar_count",
@@ -205,9 +249,14 @@ def _counts(values) -> dict[str, int]:
 
 def _gp(bars: list[list[dict[str, Any]] | None],
         keys: list[tuple[int, str] | None] | None = None,
-        barlines: list[tuple[bool, bool, int | None]] | None = None) -> bytes:
+        barlines: list[tuple[bool, bool, int | None]] | None = None,
+        layout: tuple[int, ...] | None = None) -> bytes:
     """A minimal GPIF package. Each event: kind, written, dots, tuplet, tie, positions."""
     root = ET.Element("GPIF")
+    if layout is not None:
+        track = ET.SubElement(ET.SubElement(root, "Tracks"), "Track", {"id": "0"})
+        ET.SubElement(track, "SystemsDefautLayout").text = "3"
+        ET.SubElement(track, "SystemsLayout").text = " ".join(map(str, layout))
     masters, bar_db, voice_db, beat_db = (ET.SubElement(root, n) for n in ("MasterBars", "Bars", "Voices", "Beats"))
     note_db, rhythm_db = ET.SubElement(root, "Notes"), ET.SubElement(root, "Rhythms")
     names = {"whole": "Whole", "half": "Half", "quarter": "Quarter", "eighth": "Eighth",
@@ -325,6 +374,14 @@ def test_master_bar_double_and_repeats_are_independent_even_on_empty_bars():
 def test_identical_files_have_no_difference():
     result = compare_gp(_gp([_bar(), _bar()]), _gp([_bar(), _bar()]))
     assert result["differences"] == [] and result["written_bars"] == 2 and result["equal_events"] == 12
+
+
+def test_system_layout_oracle_catches_fixed_doublebar_off_by_one_and_dropped_final_row():
+    truth = _gp([_bar()] * 7, layout=(2, 3, 2))
+    for mutant in ((3, 3, 1), (3, 4), (2, 2, 3), (2, 3)):
+        differences = compare_gp(truth, _gp([_bar()] * 7, layout=mutant))["differences"]
+        assert [(item["track_index"], item["field"]) for item in differences] == [
+            (0, "systems_layout")]
 
 
 def test_key_count_is_compared_on_every_bar_including_empty_bars():
