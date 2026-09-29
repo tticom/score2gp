@@ -207,6 +207,7 @@ class Track(BaseModel):
     mixer: Mixer | None = None
     color: str | None = None
     systems_layout: int | None = Field(default=None, ge=1, le=3)
+    source_system_bars: list[int] | None = None
     sound: SoundConfig | None = None
     layout_preferences: TrackLayoutPreferences | None = None
     expressions: list[TrackExpression] | None = None

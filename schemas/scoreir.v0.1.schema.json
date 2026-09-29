@@ -3392,6 +3392,21 @@
           ],
           "default": null
         },
+        "source_system_bars": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source System Bars"
+        },
         "staff_count": {
           "default": 1,
           "maximum": 4,

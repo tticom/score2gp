@@ -1625,6 +1625,44 @@ def build_ir_with_diagnostics_from_imports(
     return score, diagnostics
 
 
+def _source_system_row_counts(
+    systems: list[dict[str, object]], bars: list[Bar],
+) -> tuple[list[int] | None, WarningItem | None]:
+    """Transfer PDF row lengths only when every source bar retains its ordinal."""
+    expected_first = 0
+    bad_system = None
+    previous_page = None
+    for system in systems:
+        count = system.get("bar_count")
+        page_index = system.get("page_index")
+        if (type(count) is not int or count <= 0
+                or system.get("first_bar_index") != expected_first
+                or type(page_index) is not int
+                or (previous_page is not None and page_index not in (previous_page, previous_page + 1))):
+            bad_system = system
+            break
+        expected_first += count
+        previous_page = page_index
+    if (systems and bad_system is None and expected_first == len(bars)
+            and [bar.index for bar in bars] == list(range(1, len(bars) + 1))):
+        return [int(system["bar_count"]) for system in systems], None
+    location = bad_system or (systems[-1] if systems else {})
+    page_value = location.get("page_index")
+    system_value = location.get("system_index")
+    page = (page_value if type(page_value) is int and page_value >= 0 else 0) + 1
+    system_index = (system_value if type(system_value) is int and system_value >= 0 else 0) + 1
+    warning = WarningItem(
+        code="pdf_systems_layout_fallback", severity="warning",
+        message=(f"PDF row layout unavailable or disagrees with written bars at page {page}, "
+                 f"system {system_index}; source bars {expected_first}, written bars {len(bars)}. "
+                 "Using the track's SystemsDefautLayout as fixed bars per row."),
+        provenance=[Provenance(source_stage=SourceStage.PDF_TEXT, page=page,
+                               system_id=f"system-{system_index}",
+                               bar_index=max(1, expected_first + 1))],
+    )
+    return None, warning
+
+
 def build_ir_from_tabraw_only(
     tabraw_path: str | Path,
     *,
@@ -1828,6 +1866,16 @@ def build_ir_from_tabraw_only(
         bars=bars,
         warnings=warnings_list,
     )
+
+    # A refused bar remains an empty, indexed MasterBar. That preserves the
+    # source-to-output ordinal; only a missing, merged, or reordered bar makes
+    # the PDF row boundaries unsafe to transfer.
+    row_counts, layout_warning = _source_system_row_counts(note_durations.get("systems", []), bars)
+    if row_counts is not None:
+        for track in score.tracks:
+            track.source_system_bars = row_counts
+    if layout_warning is not None:
+        warnings_list.append(layout_warning)
 
     # The note-duration sidecar and TAB route share the same notation-system bar
     # indices. Attach only glyph-backed counts; unresolved mode uses the GPIF
