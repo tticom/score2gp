@@ -12,16 +12,18 @@ import pymupdf
 from .ir import Provenance, ScoreIR, SourceStage, WarningItem
 
 
-_TECHNIQUE = re.compile(r"(?i)^(?:h|p|sl\.?|s|b|r|tr|pm|let ring|vib\.?|t|tap)$")
+_TECHNIQUE = re.compile(r"(?i)^(?:h|p|sl\.?|s|b|r|tr|p\.?m\.?|let ring|vib\.?|t|tap|rit\.?|ppp?|mp|mf|fff?)$")
 _CHORD = re.compile(r"(?i)^[A-G](?:#|b)?(?:m|maj|min|dim|aug|sus|add|ø)?\d*(?:alt)?(?:[/()][A-G#b0-9mø]+\)?)?$")
 _TEMPO = re.compile(r"(?i)^(?:(?:[♩♪♫\s.]*|[A-GQqEe])=\s*\d+|(?:largo|andante|moderato|allegro|presto)\b.*)$")
 _FURNITURE = re.compile(r"(?i)^(?:standard tuning|tuning\s*:.*|(?:music|words|lyrics|transcribed|arranged) by\b.*|copyright\b.*|©.*|all rights reserved.*)$")
+_BARE_TIMESTAMP = re.compile(r"^\[\d+:[0-5]\d\]$")
 
 
 def _classify(text: str, font: str, size: float, above_system: bool) -> str:
     if _TEMPO.fullmatch(text):
         return "pdf_text_tempo"
-    if not text or not any(ch.isalpha() for ch in text):
+    timestamp = bool(_BARE_TIMESTAMP.fullmatch(text))
+    if not text or (not timestamp and not any(ch.isalpha() for ch in text)):
         return "pdf_text_non_label_glyph"
     if any("\ue000" <= ch <= "\uf8ff" for ch in text):
         return "pdf_text_music_symbol"
