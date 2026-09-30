@@ -33,6 +33,33 @@ class OracleRefusal(Exception):
     """The reader met a GPIF element it does not read; it refuses rather than skipping it."""
 
 
+def read_gp_free_text(gp: Path | bytes) -> list[tuple[int, int, str]]:
+    """Read beat FreeText independently from the packaged GPIF."""
+    data = gp if isinstance(gp, bytes) else Path(gp).read_bytes()
+    root = ET.fromstring(zipfile.ZipFile(io.BytesIO(data)).read("Content/score.gpif"))
+    beats = {node.get("id"): node for node in root.findall("Beats/Beat")}
+    voices = {node.get("id"): node for node in root.findall("Voices/Voice")}
+    bars = {node.get("id"): node for node in root.findall("Bars/Bar")}
+    result = []
+    for bar_index, master in enumerate(root.findall("MasterBars/MasterBar"), start=1):
+        for bar_id in (master.findtext("Bars") or "").split():
+            for voice_id in (bars[bar_id].findtext("Voices") or "").split():
+                if voice_id not in voices:
+                    continue
+                for beat_index, beat_id in enumerate((voices[voice_id].findtext("Beats") or "").split(), start=1):
+                    value = beats[beat_id].findtext("FreeText")
+                    if value:
+                        result.append((bar_index, beat_index, value))
+    return result
+
+
+def compare_gp_free_text(truth: Path | bytes, produced: Path | bytes) -> list[dict[str, object]]:
+    expected, actual = read_gp_free_text(truth), read_gp_free_text(produced)
+    if expected == actual:
+        return []
+    return [{"expected": expected, "actual": actual}]
+
+
 def read_gp_metadata(gp: Path | bytes) -> dict[str, object]:
     """Read final GPIF score fields without importing production code."""
     data = gp if isinstance(gp, bytes) else Path(gp).read_bytes()

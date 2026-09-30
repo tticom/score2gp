@@ -1194,6 +1194,12 @@ def convert_command(
             if tempo_bpm is not None:
                 tabraw_kwargs["tempo_bpm"] = tempo_bpm
             score, diagnostics = build_ir_from_tabraw_only(**tabraw_kwargs)
+            from .pdf_text_labels import attach_pdf_text_labels
+            text_label_report = attach_pdf_text_labels(pdf, note_durations, score)
+            (actual_work_dir / "text-labels.json").write_text(
+                json.dumps(text_label_report, indent=2) + "\n", encoding="utf-8"
+            )
+            summary["pdf_text_labels"] = text_label_report["counts_by_reason"]
             _write_note_type_route(actual_work_dir, diagnostics.note_type_route)
             score.to_json_file(ir_path)
         else:
@@ -1414,6 +1420,7 @@ def convert_command(
                 "matched_candidate_count": diagnostics.matched_candidate_count if diagnostics else 0,
                 "unmatched_musicxml_event_count": diagnostics.unmatched_musicxml_event_count if diagnostics else 0,
                 "unmatched_tabraw_candidate_count": diagnostics.unmatched_tabraw_candidate_count if diagnostics else 0,
+                "pdf_text_candidate_counts_by_reason": summary.get("pdf_text_labels", {}),
             },
             pdf_only_diagnostics=pdf_only_diag_payload
         )
@@ -1625,4 +1632,3 @@ def generate_sidecar_command(
 if __name__ == "__main__":
 
     app()
-
