@@ -305,6 +305,7 @@ class _TabSystem:
     inferred_left: float | None = None
     inferred_right: float | None = None
     inferred_warnings: list[str] = None
+    segmented_lines_recovered: bool = False
 
     @property
     def staff_bbox(self) -> dict[str, float | int]:
@@ -435,6 +436,8 @@ class _TabSystem:
             tolerance = max(6.0, self.line_spacing * 0.75)
         else:
             tolerance = max(5.0, self.line_spacing * 0.48)
+        if self.segmented_lines_recovered:
+            tolerance = min(tolerance, self.line_spacing * 0.4)
 
 
 
@@ -4846,6 +4849,64 @@ def read_notation_barline_signals(
     return signals
 
 
+def _recovered_segmented_tab_groups(
+    page: Any,
+    segments: list[_LineSegment],
+    full_lines: list[_LineSegment],
+    existing_groups: list[list[_LineSegment]],
+) -> list[list[_LineSegment]]:
+    """Join drawn short TAB pieces only beside three intact lines and a notation partner.
+
+    The ordinary horizontal filter requires a 75 pt primitive. On a staff whose
+    played strings are interrupted at every digit, its upper lines have only
+    shorter primitives. They still have their own drawn y coordinates; no
+    missing string position is extrapolated from the reference score.
+    """
+    short_and_full = [
+        segment for segment in segments
+        if abs(segment.y1 - segment.y0) <= 1.0 and abs(segment.x1 - segment.x0) >= 30.0
+    ]
+    joined = merge_collinear_horizontal_segments(short_and_full)
+    notation_groups = [group for group in existing_groups if classify_staff_line_group(group, page) == "notation"]
+    recovered = []
+
+    def bounds(group: list[_LineSegment]) -> tuple[float, float, float, float]:
+        return (min(min(line.x0, line.x1) for line in group),
+                max(max(line.x0, line.x1) for line in group),
+                min((line.y0 + line.y1) / 2 for line in group),
+                max((line.y0 + line.y1) / 2 for line in group))
+
+    for group in _tab_line_groups(joined):
+        if len(group) != 6 or classify_staff_line_group(group, page) != "tab":
+            continue
+        x0, x1, y0, y1 = bounds(group)
+        if any(sum(any(abs((line.y0 + line.y1 - previous.y0 - previous.y1) / 2) <= 1.0
+                       for line in group) for previous in old) >= 4 and
+               max(0.0, min(x1, bounds(old)[1]) - max(x0, bounds(old)[0])) >= 0.7 * min(x1-x0, bounds(old)[1]-bounds(old)[0])
+               for old in (group for group in existing_groups
+                           if classify_staff_line_group(group, page) in ("tab", "incomplete_tab_candidate"))):
+            continue
+        # Three long lines are independent evidence of one staff width. Short
+        # fragments alone can form text underlines, diagrams or a legend.
+        intact = sum(any(abs((line.y0 + line.y1 - full.y0 - full.y1) / 2) <= 1.0
+                         and min(full.x0, full.x1) <= x0 + 2.0
+                         and max(full.x0, full.x1) >= x1 - 2.0
+                         for full in full_lines) for line in group)
+        # A five-line legacy row also anchors the missing short row even when
+        # each surviving line is itself interrupted and lacks full width.
+        old_line_rows = sum(any(abs((line.y0 + line.y1 - full.y0 - full.y1) / 2) <= 1.0
+                                for full in full_lines) for line in group)
+        if intact < 3 and old_line_rows < 5:
+            continue
+        if not any(bounds(partner)[3] < y0 and y0 - bounds(partner)[3] <= 250.0
+                   and max(0.0, min(x1, bounds(partner)[1]) - max(x0, bounds(partner)[0])) >=
+                   0.7 * min(x1 - x0, bounds(partner)[1] - bounds(partner)[0])
+                   for partner in notation_groups):
+            continue
+        recovered.append(group)
+    return recovered
+
+
 def _detect_tab_systems(
     page: Any,
     page_index: int,
@@ -4857,6 +4918,12 @@ def _detect_tab_systems(
     notehead_shapes = _notehead_candidate_shapes(drawings, [info["bbox"] for info in getattr(page, "get_image_info", lambda: [])()])
     raw_horizontal = sorted((segment for segment in segments if segment.is_horizontal), key=lambda segment: segment.y0)
     horizontal = sorted(merge_collinear_horizontal_segments(raw_horizontal), key=lambda segment: segment.y0)
+    line_groups = _tab_line_groups(horizontal)
+    recovered_groups = _recovered_segmented_tab_groups(page, segments, horizontal, line_groups)
+    line_groups.extend(recovered_groups)
+    if recovered_groups:
+        line_groups.sort(key=lambda group: (min((line.y0 + line.y1) / 2 for line in group),
+                                            min(min(line.x0, line.x1) for line in group)))
 
     # Extract vertical candidates with a wider margin
     raw_verticals = []
@@ -4892,7 +4959,7 @@ def _detect_tab_systems(
 
     # Step 1: Discover all systems and their notation partners to establish topological boundaries
     systems_topologies = []
-    for group in _tab_line_groups(horizontal):
+    for group in line_groups:
         classification = classify_staff_line_group(group, page)
         if classification in ("notation", "ambiguous"):
             continue
@@ -4906,7 +4973,7 @@ def _detect_tab_systems(
         best_partner = None
         best_partner_dist = 999999.0
 
-        for other_group in _tab_line_groups(horizontal):
+        for other_group in line_groups:
             if other_group == group:
                 continue
 
@@ -5208,6 +5275,7 @@ def _detect_tab_systems(
                 staff_index=1,
                 first_bar_index=next_bar_index,
                 line_ys=[round(ly + cumulative_y_offset, 3) for ly in line_ys],
+                segmented_lines_recovered=any(group is recovered for recovered in recovered_groups),
                 x0=x0,
                 x1=x1,
                 barlines=valid_barlines,
