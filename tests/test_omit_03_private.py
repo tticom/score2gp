@@ -23,11 +23,11 @@ EXPECTED_MISSING_DIGEST = {
     3: EMPTY_POSITIONS,
     4: "80b90ec3799c6da1781fdf74743b91bfdac44231a7d17a667c7f4a852cfcc178",
     5: EMPTY_POSITIONS,
-    6: "04070085e83b8b3938cfd2830ad0b6aa58b70561152bbe57aac201db7b5b17ce",
+    6: EMPTY_POSITIONS,
     7: EMPTY_POSITIONS,
 }
 EXPECTED_COUNTS = {3: (12, 12, 0), 4: (18, 17, 1), 5: (7, 7, 0),
-                   6: (26, 5, 21), 7: (25, 25, 0)}
+                   6: (26, 26, 0), 7: (25, 25, 0)}
 
 
 def _position_digest(positions: set[tuple[int, int]]) -> str:

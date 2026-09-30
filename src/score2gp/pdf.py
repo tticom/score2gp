@@ -4886,6 +4886,12 @@ def _recovered_segmented_tab_groups(
                for old in (group for group in existing_groups
                            if classify_staff_line_group(group, page) in ("tab", "incomplete_tab_candidate"))):
             continue
+        # A row already drawn as a line of an accepted staff is not also a row of another:
+        # alternate lines of two neighbouring staves can be equally spaced and would form a false group.
+        if any(abs((line.y0 + line.y1 - used.y0 - used.y1) / 2) <= 1.0
+               and min(max(line.x0, line.x1), max(used.x0, used.x1)) > max(min(line.x0, line.x1), min(used.x0, used.x1))
+               for line in group for accepted in existing_groups for used in accepted):
+            continue
         # Three long lines are independent evidence of one staff width. Short
         # fragments alone can form text underlines, diagrams or a legend.
         intact = sum(any(abs((line.y0 + line.y1 - full.y0 - full.y1) / 2) <= 1.0
@@ -4907,6 +4913,61 @@ def _recovered_segmented_tab_groups(
     return recovered
 
 
+def _right_extended_tab_groups(
+    page: Any,
+    segments: list[_LineSegment],
+    existing_groups: list[list[_LineSegment]],
+) -> list[tuple[list[_LineSegment], list[_LineSegment]]]:
+    """Extend an accepted TAB group over a final bar narrower than the 75 pt line filter.
+
+    Such a bar draws each line as one piece of about 70 pt, which the ordinary
+    filter drops, so the group and its last barline stop one bar early and that
+    bar's digits lie outside the system. The group (six lines, or the five of an
+    incomplete candidate) is extended only where every one of its own lines
+    continues, from its right edge to one common end, and three of them do so as
+    a single drawn piece. Its line y coordinates are left unchanged.
+    """
+    pieces = [
+        segment for segment in segments
+        if abs(segment.y1 - segment.y0) <= 1.0 and abs(segment.x1 - segment.x0) >= 30.0
+    ]
+    joined = merge_collinear_horizontal_segments(pieces)
+    extended = []
+    for old in existing_groups:
+        if len(old) not in (5, 6) or classify_staff_line_group(old, page) not in ("tab", "incomplete_tab_candidate"):
+            continue
+        old_x1 = max(max(line.x0, line.x1) for line in old)
+        continuations = []
+        for line in old:
+            y = (line.y0 + line.y1) / 2
+            same_row = [
+                candidate for candidate in joined
+                if abs((candidate.y0 + candidate.y1) / 2 - y) <= 1.0
+                and min(candidate.x0, candidate.x1) <= min(line.x0, line.x1) + 2.0
+                and max(candidate.x0, candidate.x1) >= max(line.x0, line.x1) - 2.0
+            ]
+            if not same_row:
+                break
+            continuations.append(max(same_row, key=lambda candidate: max(candidate.x0, candidate.x1)))
+        if len(continuations) != len(old):
+            continue
+        ends = [max(line.x0, line.x1) for line in continuations]
+        new_x1 = max(ends)
+        if new_x1 - old_x1 < 30.0 or min(ends) < new_x1 - 2.0:
+            continue
+        intact = sum(any(abs((piece.y0 + piece.y1) / 2 - (line.y0 + line.y1) / 2) <= 1.0
+                         and min(piece.x0, piece.x1) <= old_x1 + 2.0
+                         and max(piece.x0, piece.x1) >= new_x1 - 2.0
+                         for piece in pieces) for line in old)
+        if intact < 3:
+            continue
+        extended.append((old, [
+            line.merge_with(continuation, min(line.x0, line.x1), line.y0, new_x1, line.y1)
+            for line, continuation in zip(old, continuations)
+        ]))
+    return extended
+
+
 def _detect_tab_systems(
     page: Any,
     page_index: int,
@@ -4920,6 +4981,10 @@ def _detect_tab_systems(
     horizontal = sorted(merge_collinear_horizontal_segments(raw_horizontal), key=lambda segment: segment.y0)
     line_groups = _tab_line_groups(horizontal)
     recovered_groups = _recovered_segmented_tab_groups(page, segments, horizontal, line_groups)
+    previous_right_edge: dict[int, float] = {}
+    for old_group, extended_group in _right_extended_tab_groups(page, segments, line_groups):
+        line_groups[next(i for i, group in enumerate(line_groups) if group is old_group)] = extended_group
+        previous_right_edge[id(extended_group)] = max(max(line.x0, line.x1) for line in old_group)
     line_groups.extend(recovered_groups)
     if recovered_groups:
         line_groups.sort(key=lambda group: (min((line.y0 + line.y1) / 2 for line in group),
@@ -5159,15 +5224,20 @@ def _detect_tab_systems(
             # Same inheritance logic as main
             inherited_from_partner = []
             rejected_inherited = {}
-            tab_left = min(valid_barlines) if len(valid_barlines) >= 2 else None
-            tab_right = max(valid_barlines) if len(valid_barlines) >= 2 else None
+            # The bounds for inheriting notation barlines are those of the staff as drawn before any
+            # right-edge extension, so the barlines of the extended final bar do not reject earlier ones.
+            own_barlines = valid_barlines
+            if id(group) in previous_right_edge:
+                own_barlines = [b for b in valid_barlines if b <= previous_right_edge[id(group)] + 2.0]
+            tab_left = min(own_barlines) if len(own_barlines) >= 2 else None
+            tab_right = max(own_barlines) if len(own_barlines) >= 2 else None
 
             for pb in partner_valid:
                 if tab_left is not None and tab_right is not None:
                     if pb <= tab_left + 15.0 or pb >= tab_right - 15.0:
                         rejected_inherited[pb] = "pdf_barline_outside_system_bounds"
                         continue
-                if any(15.0 < abs(pb - tb) < MIN_INHERITED_INTERNAL_BAR_WIDTH for tb in valid_barlines):
+                if any(15.0 < abs(pb - tb) < MIN_INHERITED_INTERNAL_BAR_WIDTH for tb in own_barlines):
                     rejected_inherited[pb] = "pdf_barline_inherited_too_close"
                     continue
                 if any(15.0 < abs(pb - other) < MIN_INHERITED_INTERNAL_BAR_WIDTH for other in partner_valid if other != pb):
