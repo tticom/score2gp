@@ -1632,4 +1632,3 @@ def generate_sidecar_command(
 if __name__ == "__main__":
 
     app()
-

@@ -13,21 +13,23 @@ from .ir import Provenance, ScoreIR, SourceStage, WarningItem
 
 
 _TECHNIQUE = re.compile(r"(?i)^(?:h|p|sl\.?|s|b|r|tr|pm|let ring|vib\.?|t|tap)$")
-_CHORD = re.compile(r"(?i)^[A-G](?:#|b)?(?:m|maj|min|dim|aug|sus|add)?\d*(?:[/()][A-G#b0-9]+)?$")
-_TEMPO = re.compile(r"(?i)^(?:[♩♪♫\s.]*[=]\s*\d+|(?:q|e)\s*=\s*\d+|(?:largo|andante|moderato|allegro|presto)\b.*)$")
-_FURNITURE = re.compile(r"(?i)^(?:standard tuning|(?:music|words|lyrics|transcribed|arranged) by\b.*|copyright\b.*|©.*|all rights reserved.*)$")
+_CHORD = re.compile(r"(?i)^[A-G](?:#|b)?(?:m|maj|min|dim|aug|sus|add|ø)?\d*(?:alt)?(?:[/()][A-G#b0-9mø]+\)?)?$")
+_TEMPO = re.compile(r"(?i)^(?:(?:[♩♪♫\s.]*|[A-GQqEe])=\s*\d+|(?:largo|andante|moderato|allegro|presto)\b.*)$")
+_FURNITURE = re.compile(r"(?i)^(?:standard tuning|tuning\s*:.*|(?:music|words|lyrics|transcribed|arranged) by\b.*|copyright\b.*|©.*|all rights reserved.*)$")
 
 
 def _classify(text: str, font: str, size: float, above_system: bool) -> str:
-    if not text or not any(ch.isalpha() for ch in text):
-        return "pdf_text_non_label_glyph"
-    if any(token in font.lower() for token in ("bravura", "maestro", "musical", "symbol")):
-        return "pdf_text_music_symbol"
     if _TEMPO.fullmatch(text):
         return "pdf_text_tempo"
+    if not text or not any(ch.isalpha() for ch in text):
+        return "pdf_text_non_label_glyph"
+    if any("\ue000" <= ch <= "\uf8ff" for ch in text):
+        return "pdf_text_music_symbol"
+    if any(token in font.lower() for token in ("bravura", "maestro", "musical", "symbol")):
+        return "pdf_text_music_symbol"
     if _TECHNIQUE.fullmatch(text):
         return "pdf_text_technique"
-    if _CHORD.fullmatch(text):
+    if _CHORD.fullmatch(text.replace(" ", "")):
         return "pdf_text_chord"
     if _FURNITURE.fullmatch(text):
         return "pdf_text_page_furniture"
