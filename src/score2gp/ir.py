@@ -7,7 +7,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, RootModel, field_validator, model_validator
 
-SCHEMA_VERSION = "0.1.0"
+SCHEMA_VERSION = "0.1.1"
 DEFAULT_TICKS_PER_QUARTER = 960
 
 
@@ -873,7 +873,7 @@ class ScoreLayout(BaseModel):
 class ScoreIR(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal["0.1.0"] = SCHEMA_VERSION
+    schema_version: Literal["0.1.0", "0.1.1"] = SCHEMA_VERSION
     metadata: Metadata = Field(default_factory=Metadata)
     conversion: ConversionInfo = Field(default_factory=ConversionInfo)
     tempo: Tempo
@@ -1019,7 +1019,7 @@ class BookletCoverPage(BaseModel):
 class ScoreBooklet(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal["0.1.0"] = SCHEMA_VERSION
+    schema_version: Literal["0.1.0", "0.1.1"] = SCHEMA_VERSION
     booklet_title: str = "Untitled Booklet"
     metadata: Metadata = Field(default_factory=Metadata)
     scores: list[ScoreIR] = Field(min_length=1)

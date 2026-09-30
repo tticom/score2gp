@@ -4002,23 +4002,39 @@ def _classify_technique(text: str) -> str | None:
 TECHNIQUE_ATTACHMENT_AMBIGUITY_EPSILON = 2.0
 
 
-def _get_note_x(note: Note) -> float | None:
+def _get_note_x(note: Note, candidates: dict[str, TabCandidate] | None = None) -> float | None:
     for prov in note.provenance:
-        if prov.raw and prov.raw.get("x") is not None:
+        value = _provenance_coordinate(prov, "x", candidates)
+        if value is not None:
             try:
-                return float(prov.raw["x"])
+                return float(value)
             except (ValueError, TypeError):
                 pass
     return None
 
 
-def _get_note_y(note: Note) -> float | None:
+def _get_note_y(note: Note, candidates: dict[str, TabCandidate] | None = None) -> float | None:
     for prov in note.provenance:
-        if prov.raw and prov.raw.get("y") is not None:
+        value = _provenance_coordinate(prov, "y", candidates)
+        if value is not None:
             try:
-                return float(prov.raw["y"])
+                return float(value)
             except (ValueError, TypeError):
                 pass
+    return None
+
+
+def _provenance_coordinate(
+    prov: Provenance, axis: str, candidates: dict[str, TabCandidate] | None = None,
+) -> float | None:
+    if prov.raw.get(axis) is not None:
+        return prov.raw[axis]
+    if candidates is not None and prov.raw_token_id in candidates:
+        candidate_coordinate = getattr(candidates[prov.raw_token_id], axis)
+        if candidate_coordinate is not None:
+            return candidate_coordinate
+    if prov.bbox is not None:
+        return (getattr(prov.bbox, axis + "0") + getattr(prov.bbox, axis + "1")) / 2
     return None
 
 
@@ -4034,6 +4050,7 @@ def _attach_symbols_and_techniques(
     notation_barlines: list[dict[str, object]] | None = None,
 ) -> None:
     bars_by_index = {bar.index: bar for bar in score.bars}
+    candidates_by_id = {candidate.id: candidate for candidate in tabraw.candidates}
 
     fret_candidates = [c for c in tabraw.candidates if c.kind == "fret" and c.bar_index is not None]
     source_bar_keys = sorted(list({(c.page_index or 1, c.system_index or 1, c.staff_index or 1, c.bar_index) for c in fret_candidates}))
@@ -4070,8 +4087,8 @@ def _attach_symbols_and_techniques(
                         sys_match = prov.system_id in (str(sys_idx), f"system-{sys_idx}")
                         staff_match = prov.staff_id in (str(staff_idx), f"staff-{staff_idx}")
                         if prov.page == page and sys_match and staff_match:
-                            if "x" in prov.raw:
-                                bar_x = prov.raw["x"]
+                            if _provenance_coordinate(prov, "x", candidates_by_id) is not None:
+                                bar_x = _provenance_coordinate(prov, "x", candidates_by_id)
                                 break
                     if bar_x is not None:
                         break
@@ -4101,8 +4118,8 @@ def _attach_symbols_and_techniques(
                         sys_match = prov.system_id in (str(sys_idx), f"system-{sys_idx}")
                         staff_match = prov.staff_id in (str(staff_idx), f"staff-{staff_idx}")
                         if prov.page == page and sys_match and staff_match:
-                            if "x" in prov.raw:
-                                bar_x = prov.raw["x"]
+                            if _provenance_coordinate(prov, "x", candidates_by_id) is not None:
+                                bar_x = _provenance_coordinate(prov, "x", candidates_by_id)
                                 break
                     if bar_x is not None:
                         break
@@ -4241,9 +4258,9 @@ def _attach_symbols_and_techniques(
                 x_coords = []
                 for note in event.notes:
                     for prov in note.provenance:
-                        if prov.raw and prov.raw.get("x") is not None:
+                        if _provenance_coordinate(prov, "x", candidates_by_id) is not None:
                             try:
-                                x_val = float(prov.raw["x"])
+                                x_val = float(_provenance_coordinate(prov, "x", candidates_by_id))
                                 x_coords.append(x_val)
                             except (ValueError, TypeError):
                                 pass
@@ -4336,7 +4353,7 @@ def _attach_symbols_and_techniques(
                         if event.is_rest:
                             continue
                         for note in event.notes:
-                            x_val = _get_note_x(note)
+                            x_val = _get_note_x(note, candidates_by_id)
                             if x_val is not None:
                                 notes_by_group[(event.track_id, event.timing.voice, note.string)].append((event, note, x_val))
 
@@ -4361,9 +4378,9 @@ def _attach_symbols_and_techniques(
                         if current_events and next_events:
                             last_event, first_event = current_events[-1], next_events[0]
                             for origin in last_event.notes:
-                                x1 = _get_note_x(origin)
+                                x1 = _get_note_x(origin, candidates_by_id)
                                 for destination in first_event.notes:
-                                    x2 = _get_note_x(destination)
+                                    x2 = _get_note_x(destination, candidates_by_id)
                                     provenance = destination.provenance[0] if destination.provenance else None
                                     same_system = (provenance is not None and
                                                    provenance.page == candidate.page_index and
@@ -4444,9 +4461,9 @@ def _attach_symbols_and_techniques(
                         if first_event.is_rest or second_event.is_rest:
                             continue
                         for first_note in first_event.notes:
-                            x1 = _get_note_x(first_note)
+                            x1 = _get_note_x(first_note, candidates_by_id)
                             for second_note in second_event.notes:
-                                x2 = _get_note_x(second_note)
+                                x2 = _get_note_x(second_note, candidates_by_id)
                                 if (first_note.string == second_note.string and
                                         x1 is not None and x2 is not None and
                                         x1 < candidate.x < x2):
@@ -4481,7 +4498,7 @@ def _attach_symbols_and_techniques(
                         if event.is_rest:
                             continue
                         for note in event.notes:
-                            x_val = _get_note_x(note)
+                            x_val = _get_note_x(note, candidates_by_id)
                             if x_val is not None:
                                 notes_with_x.append((abs(x_val - candidate.x), note))
 
@@ -4541,7 +4558,7 @@ def _attach_symbols_and_techniques(
                 if cand_x0 is not None:
                     ev_dists = []
                     for ev in playable_events:
-                        note_xs = [_get_note_x(n) for n in ev.notes if _get_note_x(n) is not None]
+                        note_xs = [_get_note_x(n, candidates_by_id) for n in ev.notes if _get_note_x(n, candidates_by_id) is not None]
                         if note_xs:
                             ev_x = sum(note_xs) / len(note_xs)
                             ev_dists.append((abs(ev_x - cand_x0), ev))
@@ -4580,7 +4597,7 @@ def _attach_symbols_and_techniques(
                     candidate_end_events = []
                     for ev in playable_events:
                         if ev.timing.onset_ticks >= start_onset:
-                            note_xs = [_get_note_x(n) for n in ev.notes if _get_note_x(n) is not None]
+                            note_xs = [_get_note_x(n, candidates_by_id) for n in ev.notes if _get_note_x(n, candidates_by_id) is not None]
                             if note_xs:
                                 ev_x = sum(note_xs) / len(note_xs)
                                 if ev_x <= cand_x1 + 15.0:
@@ -4660,7 +4677,7 @@ def _attach_symbols_and_techniques(
             if candidate.x is not None:
                 event_dists = []
                 for ev in playable_events:
-                    note_xs = [_get_note_x(n) for n in ev.notes if _get_note_x(n) is not None]
+                    note_xs = [_get_note_x(n, candidates_by_id) for n in ev.notes if _get_note_x(n, candidates_by_id) is not None]
                     if note_xs:
                         ev_x = sum(note_xs) / len(note_xs)
                         dist = abs(ev_x - candidate.x)
@@ -4689,7 +4706,7 @@ def _attach_symbols_and_techniques(
             if target_note is None and candidate.y is not None:
                 notes_with_y = []
                 for note in target_event.notes:
-                    y_val = _get_note_y(note)
+                    y_val = _get_note_y(note, candidates_by_id)
                     if y_val is not None:
                         notes_with_y.append((abs(y_val - candidate.y), note))
                 if notes_with_y:
@@ -4727,13 +4744,13 @@ def _attach_symbols_and_techniques(
             for ev in playable_events:
                 for note in ev.notes:
                     if target_string is None or note.string == target_string:
-                        x_val = _get_note_x(note)
+                        x_val = _get_note_x(note, candidates_by_id)
                         notes_on_string.append((ev, note, x_val))
 
             if not notes_on_string:
                 for ev in playable_events:
                     for note in ev.notes:
-                        notes_on_string.append((ev, note, _get_note_x(note)))
+                        notes_on_string.append((ev, note, _get_note_x(note, candidates_by_id)))
 
             if notes_on_string:
                 if cand_x0 is not None:
