@@ -10,6 +10,12 @@ from score2gp.pdf import _detect_tab_systems, extract_tab
 FIXTURES = Path(__file__).parent / "fixtures" / "pdf" / "dur_03"
 
 
+def _work_dir() -> Path:
+    work = Path(__file__).resolve().parents[1] / "work"
+    work.mkdir(parents=True, exist_ok=True)
+    return work
+
+
 def test_segmented_top_three_lines_recover_six_strings() -> None:
     pdf = FIXTURES / "segmented_top_three.pdf"
     with pymupdf.open(pdf) as document:
@@ -19,7 +25,7 @@ def test_segmented_top_three_lines_recover_six_strings() -> None:
     assert [round(y) for y in systems[0].line_ys] == [100, 106, 112, 118, 124, 130]
     for y, expected in ((100, 1), (106, 2), (112, 3)):
         assert systems[0].string_for_y(y)[0] == expected
-    with TemporaryDirectory(dir=Path(__file__).resolve().parents[1] / "work") as directory:
+    with TemporaryDirectory(dir=_work_dir()) as directory:
         raw = extract_tab(pdf, directory)
     assert [(c["raw_text"], c.get("string"), c.get("bar_index"))
             for c in sorted(raw["candidates"], key=lambda item: item["bbox"]["x0"])] == [
@@ -35,7 +41,7 @@ def test_digit_between_recovered_lines_is_refused() -> None:
     assert len(systems) == 1
     assert systems[0].string_for_y(103)[0] is None
     assert "pdf_string_assignment_between_lines" in systems[0].string_for_y(103)[3]
-    with TemporaryDirectory(dir=Path(__file__).resolve().parents[1] / "work") as directory:
+    with TemporaryDirectory(dir=_work_dir()) as directory:
         raw = extract_tab(pdf, directory)
     first = next(c for c in raw["candidates"] if c["raw_text"] == "3")
     assert first.get("string") is None
@@ -48,7 +54,7 @@ def test_two_intact_lines_cannot_recover_staff() -> None:
 
 
 def _digits(pdf: Path) -> list[tuple[str, int | None, int | None]]:
-    with TemporaryDirectory(dir=Path(__file__).resolve().parents[1] / "work") as directory:
+    with TemporaryDirectory(dir=_work_dir()) as directory:
         raw = extract_tab(pdf, directory)
     return [(c["raw_text"], c.get("string"), c.get("bar_index"))
             for c in sorted(raw["candidates"], key=lambda item: item["bbox"]["x0"])
