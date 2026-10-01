@@ -3443,16 +3443,14 @@ def test_private_acceptance_lesson5() -> None:
     # Confirms the conversion change properly limits partner topology.
     # Previously failed by reporting 12 systems (due to ambiguous overlap).
     unique_systems = set(c.get("system_index") for c in cands if c.get("system_index") is not None)
-    assert len(unique_systems) == 5
+    assert len(unique_systems) == 6
 
     unique_bars = set()
     for p, bars in page_bars.items():
         unique_bars.update(bars)
     # L3-01: the former 48 counted beamed note stems as barlines. Lesson-5.gp has 43 measures.
-    # With stems rejected, production detects 35: page 3's third system (measures 41-43) and its
-    # final barline are still undetected, a known shortfall that predates this change. The bound
-    # stops over-segmentation from passing again.
-    assert len(unique_bars) == 35
+    # DUR-03 recovers the final system and its barlines; the exact count still guards topology.
+    assert len(unique_bars) == 43
     assert len(unique_bars) <= 43
 
 def test_topology_cross_system_barline_rejection(tmp_path) -> None:
@@ -3525,7 +3523,7 @@ def test_private_acceptance_lesson6() -> None:
     cands = _extract_pdf_text_candidates(lesson6_path, warnings, meta)
 
     unique_systems = set(c.get("system_index") for c in cands if c.get("system_index") is not None)
-    assert len(unique_systems) == 3
+    assert len(unique_systems) == 7
 
     page_bars = {}
     for c in cands:
@@ -3538,9 +3536,8 @@ def test_private_acceptance_lesson6() -> None:
     for p, bars in page_bars.items():
         unique_bars.update(bars)
     # L3-01: the former 25 included note stems read as barlines. Lesson-6.gp has 72 measures;
-    # production detects far fewer because Lesson-6 system detection is incomplete, a known
-    # shortfall that predates this change. The bound stops over-segmentation from passing again.
-    assert len(unique_bars) == 21
+    # DUR-03 recovers the segmented TAB staves; the exact count guards topology.
+    assert len(unique_bars) == 72
     assert len(unique_bars) <= 72
 
 
@@ -3582,11 +3579,61 @@ def test_private_acceptance_lesson6_duration_and_negative_control() -> None:
 
         cand_5_1_1 = next(c for c in has_dur if c.get("parsed_fret") == 5 and c.get("string") == 1 and c.get("bar_index") == 1)
         assert cand_5_1_1["raw"]["duration_evidence"]["duration_name"] == oracle_data["cand_5_1_1"]
-
         cands_15_1 = [c for c in has_dur if c.get("parsed_fret") == 15 and c.get("string") == 1]
         assert len(cands_15_1) > 0
+
+        # TabRaw duration_evidence is legacy; the PDF-only writer uses notation durations.
+        # Check every written event against the independent GPIF reader instead.
+        import os
+        import subprocess
+        import sys
+        from test_dur_02_oracle import read_gp_bars
+
+        reference = lesson6_path.with_suffix(".gp")
+        scratch_root = repo_root / "work"
+        scratch_root.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=scratch_root) as directory:
+            output = Path(directory) / "written.gp"
+            result = subprocess.run(
+                [sys.executable, "-m", "score2gp.cli", "convert", "--pdf", str(lesson6_path),
+                 "--pdf-only-tab", "--time-signature", "4/4", "--out", str(output),
+                 "--work-dir", str(Path(directory) / "build")],
+                env={**os.environ, "PYTHONPATH": str(repo_root / "src")},
+                text=True, capture_output=True,
+            )
+            assert result.returncode == 0, result.stderr[-1200:]
+            expected_bars = read_gp_bars(reference)
+            written_bars = read_gp_bars(output)
+
+        assert len(expected_bars) == len(written_bars) == 72
+        assert sum(bar["events"] is not None for bar in written_bars) == 71
+        assert all(len(expected["events"] or []) == len(produced["events"])
+                   for expected, produced in zip(expected_bars, written_bars)
+                   if produced["events"] is not None)
+        # Each former fret-15 case remains represented on its own source bar.
         for cand in cands_15_1:
-            assert cand["raw"]["duration_evidence"]["duration_name"] == oracle_data["cands_15_1"]
+            bar_index = cand["bar_index"] - 1
+            position = (6 - cand["string"], cand["parsed_fret"])
+            assert any(position in event["positions"]
+                       for event in expected_bars[bar_index]["events"] or [])
+            assert any(position in event["positions"]
+                       for event in written_bars[bar_index]["events"] or [])
+
+        def duration_differences(actual):
+            return [(bar_index, event_index) for bar_index, (expected, produced) in
+                    enumerate(zip(expected_bars, actual)) if produced["events"] is not None
+                    for event_index, (want, have) in
+                    enumerate(zip(expected["events"] or [], produced["events"]))
+                    if want["written"] != have["written"] or want["dots"] != have["dots"]
+                    or want["tuplet"] != have["tuplet"]]
+
+        assert duration_differences(written_bars) == []
+        # A changed emitted duration must make the reference comparison fail.
+        import copy
+        mutant = copy.deepcopy(written_bars)
+        first_written = next(bar for bar in mutant if bar["events"])
+        first_written["events"][0]["written"] = "mutated"
+        assert len(duration_differences(mutant)) == 1
 
         # Part 2: Negative control (missing notehead)
         original_extract = score2gp.pdf_staff_notation_diagnostics.extract_notation_diagnostics_dict
@@ -3613,3 +3660,8 @@ def test_private_acceptance_lesson6_duration_and_negative_control() -> None:
             assert "pdf_notation_rhythm_missing_notehead" in refused[0]["raw"]["refusal_reason"]
             for c in refused:
                 assert "duration_evidence" not in c.get("raw", {})
+            mutant_refusal = copy.deepcopy(refused[0])
+            mutant_refusal["raw"]["duration_evidence"] = {"duration_name": "mutated"}
+            assert "duration_evidence" in mutant_refusal["raw"]
+            assert not all("duration_evidence" not in c.get("raw", {})
+                           for c in [mutant_refusal, *refused[1:]])
