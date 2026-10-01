@@ -49,7 +49,7 @@ from ..pdf import (
     _path_subpaths,
 )
 
-SCHEMA = "note-duration-records.v0.4"  # v0.4: located key signature per bar
+SCHEMA = "note-duration-records.v0.5"  # v0.5: grace notes, located non-events; v0.4: located key signature per bar
 
 WRITTEN_VALUES = {
     "whole": Fraction(4), "half": Fraction(2), "quarter": Fraction(1), "eighth": Fraction(1, 2),
@@ -58,6 +58,16 @@ WRITTEN_VALUES = {
 FLAGGED_VALUES = ["quarter", "eighth", "16th", "32nd", "64th"]  # by flag hooks or beam lines
 
 # Staff and symbol geometry, in staff spaces.
+# A small head (a grace or cue size) is narrower and lower than a full-size head of the same staff: measured
+# 0.88 x 0.75 spaces against 1.18 x 1.0 for every other head, and 1.13 x 1.13 for the round ones; so a head
+# under 1.0 wide and under 0.85 high is small. Both are ratios of this staff's own space, never points.
+SMALL_HEAD_MAX_WIDTH_SPACES = 1.0
+SMALL_HEAD_MAX_HEIGHT_SPACES = 0.85
+# A grace note is engraved just before the note it ornaments: its head ends within this reach of the next
+# head or accidental run of that note.
+GRACE_MAX_GAP_SPACES = 3.0
+# A stroke fragment of a wave glyph (vibrato, arpeggio) is thinner than any notehead measured (0.75 spaces).
+STROKE_FRAGMENT_MAX_THIN_SPACES = 0.7
 STAFF_LINE_MIN_LENGTH_PT = 50.0
 STAFF_LINE_MERGE_GAP_PT = 20.0  # TAB lines are interrupted around fret numbers
 # A staff line is mostly ink along its span (TAB lines about 0.8 despite fret-number gaps); a chain
@@ -481,6 +491,23 @@ def _is_notehead(glyph: Glyph, space: float) -> str | None:
     across = len(_runs(glyph.shape, False, glyph.cy, glyph.bbox[0] - 1, glyph.bbox[2] + 1))
     down = len(_runs(glyph.shape, True, glyph.cx, glyph.bbox[1] - 1, glyph.bbox[3] + 1))
     return "hollow" if across == 2 and down == 2 else None
+
+
+def _is_small_head(glyph: Glyph, space: float) -> bool:
+    """A notehead drawn smaller than this staff's full-size heads (grace and cue size)."""
+    return glyph.w < SMALL_HEAD_MAX_WIDTH_SPACES * space and glyph.h < SMALL_HEAD_MAX_HEIGHT_SPACES * space
+
+
+def _is_stroke_fragment_outside_band(glyph: Glyph, staff: Staff) -> bool:
+    """A thin piece of a wave glyph (vibrato squiggle, arpeggio stroke) lying wholly outside the five-line band.
+
+    A rest stands within the band (its glyph touches or crosses it) and every notehead is at least as
+    thin as the smallest head, so a piece thinner than that, above the top line or below the bottom
+    line, is neither a note nor a rest.
+    """
+    s = staff.space
+    outside = glyph.bbox[3] <= staff.top or glyph.bbox[1] >= staff.bottom
+    return outside and glyph.curved and glyph.filled and min(glyph.w, glyph.h) < STROKE_FRAGMENT_MAX_THIN_SPACES * s
 
 
 def _is_dot(glyph: Glyph, space: float) -> bool:
@@ -951,6 +978,8 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
             heads.append(g)
             head_kind[g.ident] = kind
     head_ids = set(head_kind)
+    small_ids = {h.ident for h in heads if _is_small_head(h, s)}
+    non_events: list[dict[str, Any]] = []
     dots = [g for g in glyphs if g.ident not in head_ids and _is_dot(g, s)]
     dot_ids = {d.ident for d in dots}
     beams = [g for g in glyphs if g.ident not in head_ids and g.ident not in dot_ids and _is_beam(g, s)]
@@ -1011,11 +1040,26 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
     events: list[dict[str, Any]] = []
     for stem in stems:
         chord = sorted(stem.heads, key=lambda h: h.cy)
-        events.append({"_heads": chord, "_stem": stem, "_cx": sum(h.cx for h in chord) / len(chord)})
+        event = {"_heads": chord, "_stem": stem, "_cx": sum(h.cx for h in chord) / len(chord)}
+        small = [h.ident in small_ids for h in chord]
+        if all(small):
+            event["_grace"] = True  # a small head on a stem: a grace note when its flag is read
+        elif any(small):
+            event["_unread"] = "small_notehead_mixed_with_full_size"
+        events.append(event)
     loose = sorted((h for h in heads if h.ident not in stem_of), key=lambda h: h.bbox[0])
     for head in loose:
+        if head.ident in small_ids:
+            if head_kind[head.ident] == "filled":
+                # A small filled head with no stem has no beat of its own: it is recorded and left out.
+                non_events.append({"reason": "small_notehead_without_stem", "glyph": head, "cx": head.cx,
+                                   "width_spaces": head.w / s, "height_spaces": head.h / s})
+            else:
+                events.append({"_heads": [head], "_stem": None, "_cx": head.cx, "_unread": "small_notehead_unclassified",
+                               "_loose_small": True})
+            continue
         for event in events:
-            if event["_stem"] is None and any(h.bbox[0] <= head.bbox[2] and head.bbox[0] <= h.bbox[2] for h in event["_heads"]):
+            if event["_stem"] is None and "_loose_small" not in event and any(h.bbox[0] <= head.bbox[2] and head.bbox[0] <= h.bbox[2] for h in event["_heads"]):
                 event["_heads"].append(head)
                 break
         else:
@@ -1064,6 +1108,11 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
         else:
             beside = None
         kind = _rest_glyph(g, staff)
+        if not beside and kind not in WRITTEN_VALUES and _is_stroke_fragment_outside_band(g, staff):
+            non_events.append({"reason": "stroke_fragment_outside_staff_band", "glyph": g, "cx": g.cx,
+                               "width_spaces": g.w / s, "height_spaces": g.h / s,
+                               "distance_spaces": max(staff.top - g.bbox[3], g.bbox[1] - staff.bottom) / s})
+            continue
         if beside:
             # A glyph whose own form identifies a rest value is a rest even beside a note (another
             # voice's rest printed over it): never dropped.
@@ -1089,6 +1138,17 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
     bar_count = len(bars)
     if bars and not any(e["_bar"] == bar_count - 1 for e in events) and bars[-1][1] - bars[-1][0] < 3 * s:
         bars = bars[:-1]  # the sliver after a final barline drawn short of the staff end
+
+    for item in non_events:
+        glyph = item.pop("glyph")
+        cx = item.pop("cx")
+        bar = next((i for i, (a, b) in enumerate(bars) if a <= cx <= b), None)
+        located = {"page_index": staff.page_index, "system_index": state["system_index"],
+                   "bar_index": None if bar is None else state["bar_offset"] + bar,
+                   "bbox": [round(v, 3) for v in glyph.bbox], **{k: round(v, 3) for k, v in item.items() if k != "reason"}}
+        state["diagnostics"]["non_events"].append({"reason": item["reason"], **located})
+        by_reason = state["diagnostics"]["non_events_by_reason"]
+        by_reason[item["reason"]] = by_reason.get(item["reason"], 0) + 1
 
     # Bar numbers are printed before the first event of their bar.
     first_x_in_bar: dict[int, float] = {}
@@ -1150,8 +1210,9 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
             state["diagnostics"]["unassociated_numbers"] += 1
 
     # Ties: an arc from one notehead to the next notehead at the same staff position.
+    tie_events = [e for e in events if not e.get("_grace")]  # a tie joins the notes either side of a grace
     for arc in arcs:
-        tie = _tie_ends(arc, events, s)
+        tie = _tie_ends(arc, tie_events, s)
         if tie is None:
             state["diagnostics"]["arcs_not_ties"] += 1
             continue
@@ -1183,6 +1244,7 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
         index = per_bar.get(bar, 0)
         per_bar[bar] = index + 1
         records.append(_record(event, staff, state, bar, index, parts_by_stem, head_kind, s))
+    _attach_graces(records, s)
     by_reason = state["diagnostics"]["ignored_symbols_by_reason"]
     for reason, count in ignored.items():
         state["diagnostics"]["ignored_symbols"] += count
@@ -1240,7 +1302,7 @@ def _record(event: dict[str, Any], staff: Staff, state: dict[str, Any], bar: int
         "beams": {"count": 0, "sources": [], "group": None, "group_size": 0},
         "dots": {"count": dot_count, "sources": sorted({d.ident for row in dot_rows for d in row})},
         "rest": None, "tuplet": event.get("_tuplet"), "tie": tie,
-        "written": None, "value_quarters": None, "duration_quarters": None,
+        "written": None, "value_quarters": None, "duration_quarters": None, "grace": None,
     }
     parts = {"kind": "rest", "head_kind": None, "has_stem": False, "flag_hooks": 0, "beam_count": 0,
              "beam_group_size": 0, "rest_glyph": None}
@@ -1288,18 +1350,66 @@ def _record(event: dict[str, Any], staff: Staff, state: dict[str, Any], bar: int
             parts["beam_group_size"] = event.get("_beam_group_size", 0)
     written, value_reason = _written_value(parts)
     reason = reason or value_reason
+    grace = bool(event.get("_grace"))
+    if grace:
+        # A grace has no metrical duration: the printed value is evidence, never part of the bar total.
+        # A flag is what makes it a grace; a beam, a dot or a tuplet on it is not read.
+        if not parts["flag_hooks"] and not parts["beam_count"]:
+            reason = reason or "grace_note_without_flag"
+        elif parts["flag_hooks"] != 1:
+            reason = reason or "grace_note_unsupported_flag_count"
+        elif parts["beam_count"]:
+            reason = reason or "grace_note_beamed"
+        elif dot_count:
+            reason = reason or "grace_note_with_dot"
+        elif record["tuplet"]:
+            reason = reason or "grace_note_in_tuplet"
+        heads = event["_heads"]
+        record["grace"] = {"head_width_spaces": round(max(h.w for h in heads) / space, 3),
+                           "head_height_spaces": round(max(h.h for h in heads) / space, 3),
+                           "beat_event_index": None, "gap_spaces": None}
     if reason:
         record["status"] = "unread"
         record["reason"] = reason
         return record
     value = WRITTEN_VALUES[written] * (2 - Fraction(1, 2 ** dot_count))
-    duration = value
-    if record["tuplet"]:
+    duration = Fraction(0) if grace else value
+    if record["tuplet"] and not grace:
         duration = value * Fraction(record["tuplet"]["normal"], record["tuplet"]["actual"])
     record["written"] = written
     record["value_quarters"] = _frac(value)
     record["duration_quarters"] = _frac(duration)
     return record
+
+
+def _attach_graces(records: list[dict[str, Any]], space: float) -> None:
+    """Attach each grace to the beat it ornaments: the first full note after it in its bar, if it follows close.
+
+    The grace stands before its note, so the beat is the next event to its right once any graces
+    between are passed (a run of graces ornaments one beat). A grace with no note after it in the bar,
+    a rest after it, or a gap wider than ``GRACE_MAX_GAP_SPACES`` is unread: it is never given a beat by guess.
+    """
+    for i, record in enumerate(records):
+        if not record["grace"]:
+            continue
+        bar = record["bar_index"]
+        j = i + 1
+        while j < len(records) and records[j]["bar_index"] == bar and records[j]["grace"]:
+            j += 1
+        beat = records[j] if j < len(records) and records[j]["bar_index"] == bar else None
+        gap = None if beat is None else (beat["location"]["bbox"][0] - record["location"]["bbox"][2]) / space
+        record["grace"]["gap_spaces"] = None if gap is None else round(gap, 3)
+        if beat is None:
+            reason = "grace_note_without_following_note"
+        elif beat["kind"] not in ("note", "chord"):
+            reason = "grace_note_before_rest"
+        elif not 0 <= gap <= GRACE_MAX_GAP_SPACES:
+            reason = "grace_note_beat_too_far"
+        else:
+            record["grace"]["beat_event_index"] = beat["event_index"]
+            continue
+        if record["status"] == "read":
+            record.update(status="unread", reason=reason, written=None, value_quarters=None, duration_quarters=None)
 
 
 # --- document -------------------------------------------------------------------------------
@@ -1346,7 +1456,8 @@ def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = No
     bar_signatures: dict[int, dict[str, Any] | None] = {}
     state: dict[str, Any] = {"bar_offset": 0, "system_number": 0, "time_signature": None,
                              "diagnostics": {"ignored_symbols": 0, "ignored_symbols_by_reason": {}, "arcs_not_ties": 0, "unassociated_numbers": 0, "label_numbers": 0,
-                                             "events_outside_bars": 0, "pages_without_notation_staff": 0}}
+                                             "events_outside_bars": 0, "pages_without_notation_staff": 0,
+                                             "non_events": [], "non_events_by_reason": {}}}
     declared = {"value": time_signature, "source": "caller_declared", "sources": []} if time_signature else None
     with pymupdf.open(path) as doc:
         page_heights = [round(float(page.rect.height), 3) for page in doc]
