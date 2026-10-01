@@ -970,7 +970,9 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
             brush_dir = brush.get("direction").lower() if brush is not None else None
 
             arpeggio = b.find("Arpeggio")
-            arp_dir = arpeggio.get("direction").lower() if arpeggio is not None else None
+            # Guitar Pro writes the direction as element text; the attribute is a legacy fallback.
+            arp_text = ((arpeggio.text or "").strip() or (arpeggio.get("direction") or "").strip()) if arpeggio is not None else ""
+            arp_dir = arp_text.lower() or None
 
             chord_symbol = _first_text(b, ["Chord"])
 

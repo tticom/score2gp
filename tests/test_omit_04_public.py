@@ -11,11 +11,13 @@ import subprocess
 import sys
 import tempfile
 import xml.etree.ElementTree as ET
+import zipfile
 
 import pymupdf
 
 from test_dur_02_oracle import read_gp_arpeggios
 from score2gp.ir import ScoreIR
+from score2gp.gp_package import extract_score_ir_from_gp
 from score2gp.gpif import build_gpif
 from score2gp.notation_omr.note_duration import read_note_durations
 from score2gp.pdf_arpeggios import _marks, attach_pdf_arpeggios
@@ -99,3 +101,67 @@ def test_source_chord_attachment_and_refusal() -> None:
                 assert score.warnings[-1].code == "pdf_arpeggio_chord_ambiguous"
                 assert score.warnings[-1].provenance[0].page == 1
                 assert score.warnings[-1].provenance[0].raw["stroke_indices"]
+
+FIXTURE_IR = ROOT / "fixtures/public/test_gpif_beat_symbols.ir.json"
+
+# build_gpif switches to a classic test-only layout while pytest is loaded, so the production
+# (relational) package that Guitar Pro reads must be written by a process without pytest.
+_WRITE_SCRIPT = """
+import sys
+from score2gp.gp_package import write_gp
+from score2gp.ir import ScoreIR
+ir_path, out_path, direction = sys.argv[1:4]
+score = ScoreIR.from_json_file(ir_path)
+for bar in score.bars:
+    for event in bar.events:
+        event.arpeggio = None if direction == "none" else (direction if event.arpeggio else None)
+assert write_gp(score, out_path) == []
+"""
+
+
+def _write_production_gp(directory: Path, name: str, direction: str) -> Path:
+    out = directory / name
+    run = subprocess.run(
+        [sys.executable, "-c", _WRITE_SCRIPT, str(FIXTURE_IR), str(out), direction],
+        cwd=ROOT, env={**os.environ, "PYTHONPATH": str(ROOT / "src")}, text=True, capture_output=True,
+    )
+    assert run.returncode == 0, run.stderr[-1200:]
+    return out
+
+
+def _arpeggios(score: ScoreIR) -> list[str | None]:
+    return [event.arpeggio for bar in score.bars for event in bar.events if event.arpeggio]
+
+
+def test_gp_reader_round_trips_both_arpeggio_directions() -> None:
+    assert _arpeggios(ScoreIR.from_json_file(FIXTURE_IR)) == ["up"]
+    scratch_root = ROOT / "work"
+    scratch_root.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=scratch_root) as directory:
+        for direction, text in (("up", "Up"), ("down", "Down")):
+            written = _write_production_gp(Path(directory), f"{direction}.gp", direction)
+            with zipfile.ZipFile(written) as package:
+                gpif = package.read("Content/score.gpif")
+            assert f"<Arpeggio>{text}</Arpeggio>".encode() in gpif
+            assert extract_score_ir_from_gp(written) is not None
+            assert _arpeggios(extract_score_ir_from_gp(written)) == [direction]
+
+
+def test_gp_reader_tolerates_absent_and_empty_arpeggio_elements() -> None:
+    scratch_root = ROOT / "work"
+    scratch_root.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=scratch_root) as directory:
+        absent = _write_production_gp(Path(directory), "absent.gp", "none")
+        assert b"<Arpeggio" not in zipfile.ZipFile(absent).read("Content/score.gpif")
+        assert _arpeggios(extract_score_ir_from_gp(absent)) == []
+
+        written = _write_production_gp(Path(directory), "up.gp", "up")
+        emptied = Path(directory) / "empty.gp"
+        with zipfile.ZipFile(written) as zin, zipfile.ZipFile(emptied, "w") as zout:
+            for item in zin.infolist():
+                data = zin.read(item.filename)
+                if item.filename == "Content/score.gpif":
+                    assert b"<Arpeggio>Up</Arpeggio>" in data
+                    data = data.replace(b"<Arpeggio>Up</Arpeggio>", b"<Arpeggio />")
+                zout.writestr(item, data)
+        assert _arpeggios(extract_score_ir_from_gp(emptied)) == []

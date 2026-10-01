@@ -997,16 +997,14 @@ def test_gpif_beat_symbols(tmp_path) -> None:
 
         # Event e2: Arpeggio up
         e2 = event_map["e2"]
+        # Guitar Pro's own form is element text, <Arpeggio>Up</Arpeggio>
         arp2 = e2.find("Arpeggio")
         assert arp2 is not None
-        assert arp2.get("direction") == "Up"
-        assert arp2.get("duration") == "Eighth"
+        assert arp2.text == "Up"
 
-        # Arpeggio property inside Properties
+        # Guitar Pro writes no Arpeggio property
         arp_prop = e2.find(".//Properties/Property[@name='Arpeggio']")
-        assert arp_prop is not None
-        assert arp_prop.find("Direction").text == "Up"
-        assert arp_prop.find("Duration").text == "Eighth"
+        assert arp_prop is None
 
         # Event e3: Brush down
         e3 = event_map["e3"]
