@@ -1200,6 +1200,12 @@ def convert_command(
                 json.dumps(text_label_report, indent=2) + "\n", encoding="utf-8"
             )
             summary["pdf_text_labels"] = text_label_report["counts_by_reason"]
+            from .pdf_arpeggios import attach_pdf_arpeggios
+            arpeggio_report = attach_pdf_arpeggios(pdf, note_durations, score)
+            (actual_work_dir / "arpeggios.json").write_text(
+                json.dumps(arpeggio_report, indent=2) + "\n", encoding="utf-8"
+            )
+            summary["pdf_arpeggios"] = arpeggio_report["counts_by_reason"]
             _write_note_type_route(actual_work_dir, diagnostics.note_type_route)
             score.to_json_file(ir_path)
         else:
