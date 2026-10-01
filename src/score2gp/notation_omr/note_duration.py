@@ -1302,7 +1302,7 @@ def _record(event: dict[str, Any], staff: Staff, state: dict[str, Any], bar: int
         "beams": {"count": 0, "sources": [], "group": None, "group_size": 0},
         "dots": {"count": dot_count, "sources": sorted({d.ident for row in dot_rows for d in row})},
         "rest": None, "tuplet": event.get("_tuplet"), "tie": tie,
-        "written": None, "value_quarters": None, "duration_quarters": None, "grace": None,
+        "written": None, "value_quarters": None, "duration_quarters": None,
     }
     parts = {"kind": "rest", "head_kind": None, "has_stem": False, "flag_hooks": 0, "beam_count": 0,
              "beam_group_size": 0, "rest_glyph": None}
@@ -1390,11 +1390,11 @@ def _attach_graces(records: list[dict[str, Any]], space: float) -> None:
     a rest after it, or a gap wider than ``GRACE_MAX_GAP_SPACES`` is unread: it is never given a beat by guess.
     """
     for i, record in enumerate(records):
-        if not record["grace"]:
+        if "grace" not in record:
             continue
         bar = record["bar_index"]
         j = i + 1
-        while j < len(records) and records[j]["bar_index"] == bar and records[j]["grace"]:
+        while j < len(records) and records[j]["bar_index"] == bar and "grace" in records[j]:
             j += 1
         beat = records[j] if j < len(records) and records[j]["bar_index"] == bar else None
         gap = None if beat is None else (beat["location"]["bbox"][0] - record["location"]["bbox"][2]) / space

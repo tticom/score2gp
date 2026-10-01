@@ -25,5 +25,3 @@ The full GPIF XML stayed byte-identical on Lessons 3–7, Gloria and Boring Scal
 | Melodic Expressions, chapter 19 | 6, 21 | 2 small flagged heads in each; gaps 2.626/2.746 and 1.38/1.38 spaces; 8/8 and 7/8 notation events/TAB digits |
 | Melodic Expressions, chapter 19 | 8, 9, 10, 11, 20 | 4, 8, 4, 8, 3 thin curved fragments outside the staff band; 8 notation events in each, with 20, 16, 24, 16, 12 TAB digits respectively |
 | EXACT System | 46 | 2 small flagged heads, each gap 1.38 spaces; 6 notation events and 6 TAB digits |
-
-

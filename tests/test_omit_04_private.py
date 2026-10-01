@@ -59,16 +59,49 @@ def test_other_reference_arpeggios_have_located_refusals() -> None:
             env={**os.environ, "PYTHONPATH": str(ROOT / "src")}, text=True, capture_output=True,
         )
         assert run.returncode == 0, run.stderr[-1200:]
-        assert len(read_gp_arpeggios(reference)) == 5
-        assert read_gp_arpeggios(output) == []
+        expected = [(2, 6, "Down"), (6, 6, "Down"), (18, 6, "Down"), (19, 6, "Down")]
+        truth = read_gp_arpeggios(reference)
+        assert truth == [(2, 6, "Down"), (6, 6, "Down"), (7, 6, "Down"),
+                         (18, 6, "Down"), (19, 6, "Down")]
+        assert read_gp_arpeggios(output) == expected
         report = json.loads((scratch / "build/arpeggios.json").read_text())
         assert report["counts_by_reason"] == {
-            "pdf_arpeggio_beat_unavailable": 5, "pdf_arpeggio_tab_duplicate": 5,
+            "pdf_arpeggio_attached": 4, "pdf_arpeggio_beat_unavailable": 1,
+            "pdf_arpeggio_tab_duplicate": 5,
         }
+        attached = [item for item in report["decisions"]
+                    if item["code"] == "pdf_arpeggio_attached"]
+        assert [(item["bar_index"], item["beat_index"], item["direction"])
+                for item in attached] == [(bar, beat, direction.lower())
+                                           for bar, beat, direction in expected]
+        durations = json.loads((scratch / "build/note-durations.json").read_text())
+        for item in attached:
+            x0, y0, x1, y1 = item["bbox"]
+            chord = [event for event in durations["events"]
+                     if event["bar_index"] == item["bar_index"] - 1
+                     and event["event_index"] == item["beat_index"] - 1]
+            assert len(chord) == 1 and chord[0]["kind"] == "chord"
+            bx0, by0, _, by1 = chord[0]["location"]["bbox"]
+            assert 0 <= bx0 - x1 <= 12
+            assert min(by1, y1) - max(by0, y0) >= 0.6 * (by1 - by0)
+            # A mark must identify one source chord, never a nearby second chord.
+            neighbors = [event for event in durations["events"]
+                         if event["bar_index"] == item["bar_index"] - 1
+                         and event["kind"] == "chord"
+                         and 0 <= event["location"]["bbox"][0] - x1 <= 12
+                         and min(event["location"]["bbox"][3], y1)
+                         - max(event["location"]["bbox"][1], y0)
+                         >= 0.6 * (event["location"]["bbox"][3]
+                                    - event["location"]["bbox"][1])]
+            assert neighbors == chord
         refusals = [item for item in report["decisions"]
                     if item["code"] == "pdf_arpeggio_beat_unavailable"]
-        assert len(refusals) == 5
+        assert len(refusals) == 1
         assert all(item["page_index"] >= 0 and item["stroke_indices"] for item in refusals)
+        duplicates = [item for item in report["decisions"]
+                      if item["code"] == "pdf_arpeggio_tab_duplicate"]
+        assert len(duplicates) == 5
+        assert all(item["page_index"] >= 0 and item["stroke_indices"] for item in duplicates)
 
 def test_lesson_3_reference_arpeggios_read_back_as_written() -> None:
     reference = ROOT / "fixtures/private/Lesson-3.gp"

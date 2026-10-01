@@ -64,7 +64,7 @@ def test_staff_scale_controls_the_small_head_rule(monkeypatch):
     # An absolute-point threshold would miss the same engraved head at twice the page scale.
     monkeypatch.setattr(nd, "_is_small_head", lambda glyph, space: glyph.w < 4.25 and glyph.h < 3.61)
     mutant = _read("grace_stemless_wave_2x.pdf")
-    assert mutant["events"][0]["grace"] is None
+    assert "grace" not in mutant["events"][0]
     assert mutant["bar_checks"][0]["status"] != "match"
 
 
