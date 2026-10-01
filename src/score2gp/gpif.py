@@ -776,8 +776,7 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
 
                         if getattr(event, "arpeggio", None) in ("up", "down"):
                             arp_dir = "Up" if event.arpeggio == "up" else "Down"
-                            arp_dur = duration_map.get(getattr(event, "arpeggio_duration", None) or "eighth", "Eighth")
-                            ET.SubElement(beat_node, "Arpeggio", {"direction": arp_dir, "duration": arp_dur})
+                            _text(beat_node, "Arpeggio", arp_dir)
 
                         if getattr(event, "chord_diagram", None) is not None:
                             tmap = track_cd_maps.get(event.track_id, {})
@@ -1815,12 +1814,10 @@ def _event(parent: ET.Element, event: Event, hopo_dests: set[tuple[int, int, int
 
     if getattr(event, "arpeggio", None) in ("up", "down"):
         arp_dir = "Up" if event.arpeggio == "up" else "Down"
-        arp_dur = duration_map.get(getattr(event, "arpeggio_duration", None) or "eighth", "Eighth")
-        ET.SubElement(node, "Arpeggio", {"direction": arp_dir, "duration": arp_dur})
+        _text(node, "Arpeggio", arp_dir)
 
     has_brush = getattr(event, "brush", None) in ("up", "down")
-    has_arpeggio = getattr(event, "arpeggio", None) in ("up", "down")
-    if has_brush or has_arpeggio:
+    if has_brush:
         props_node = ET.SubElement(node, "Properties")
         if has_brush:
             brush_dir = "Up" if event.brush == "up" else "Down"
@@ -1828,12 +1825,6 @@ def _event(parent: ET.Element, event: Event, hopo_dests: set[tuple[int, int, int
             prop_brush = ET.SubElement(props_node, "Property", {"name": "Brush"})
             _text(prop_brush, "Direction", brush_dir)
             _text(prop_brush, "Duration", brush_dur)
-        if has_arpeggio:
-            arp_dir = "Up" if event.arpeggio == "up" else "Down"
-            arp_dur = duration_map.get(getattr(event, "arpeggio_duration", None) or "eighth", "Eighth")
-            prop_arp = ET.SubElement(props_node, "Property", {"name": "Arpeggio"})
-            _text(prop_arp, "Direction", arp_dir)
-            _text(prop_arp, "Duration", arp_dur)
 
     if event.techniques:
         techniques = ET.SubElement(node, "Techniques")
