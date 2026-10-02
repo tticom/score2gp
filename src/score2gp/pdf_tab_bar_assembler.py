@@ -149,8 +149,11 @@ def _time_signature(check: dict[str, Any]) -> TimeSignature:
 
 
 def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict[str, Any], *,
-                            track_id: str) -> tuple[list[Bar], dict[str, Any]]:
+                            track_id: str, refused_tab_system: Any = None) -> tuple[list[Bar], dict[str, Any]]:
     """Bars for every notation bar, written from note types and TAB positions or refused and left empty.
+
+    ``refused_tab_system`` (PARTIAL-01) is the one TAB system whose layout is refused; its digits are
+    not among ``digits`` and every bar of its notation system is refused, located, and left empty.
 
     Returns the bars and the route record: per bar its status, reason, location and per-event match.
     """
@@ -203,7 +206,12 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
         unread = next((r for r in records if r["status"] != "read"), None)
         refusal = None
         matched: list[dict[str, Any]] = []
-        if unread is not None:
+        if (refused_tab_system is not None
+                and (system["page_index"], system["system_index"])
+                == (refused_tab_system.notation_page_index, refused_tab_system.notation_system_index)):
+            refusal = _refusal(refused_tab_system.code, None,
+                               f"TAB page {refused_tab_system.page_index}, system {refused_tab_system.system_index}")
+        elif unread is not None:
             refusal = _refusal("note_duration_event_unread", unread["event_index"], unread["reason"])
         elif not records:
             refusal = _refusal("bar_without_notation_event")
@@ -246,7 +254,7 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
     for entry in route_bars:
         for event in entry["events"] if entry["status"] == "written" else []:
             match_kinds[event["match"]["kind"]] = match_kinds.get(event["match"]["kind"], 0) + 1
-    route = {
+    route: dict[str, Any] = {
         "schema": "note-type-route.v0.1",
         "note_durations_schema": note_durations["schema"],
         "bars": route_bars,
@@ -261,4 +269,7 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
             "unplaced_tab_digits": len(unplaced),
         },
     }
+    if refused_tab_system is not None:
+        route["refused_tab_systems"] = [refused_tab_system.to_json()]
+        route["summary"]["refused_tab_systems"] = 1
     return bars, route
