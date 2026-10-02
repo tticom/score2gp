@@ -9,6 +9,7 @@ from .ir import (
     GraceTiming,
     NotatedDuration,
     Note,
+    NoteSpelling,
     TieTechnique,
     Timing,
     Tuplet,
@@ -22,6 +23,8 @@ if TYPE_CHECKING:
 # Guitar Pro writes a grace note as a 32nd beat tagged ``GraceNotes OnBeat``; the printed value read from the
 # notation is evidence only, and a grace takes no time of its own.
 GRACE_WRITTEN_VALUE = "32nd"
+
+BLACK_KEYS = frozenset({1, 3, 6, 8, 10})
 
 _STRING_TO_BASE_PITCH: dict[int, int] = {
     1: 64,  # E4
@@ -43,6 +46,12 @@ def _tie_state(tie: dict[str, Any]) -> str | None:
     return None
 
 
+def unjoined_accidentals(record: dict[str, Any], positions: Sequence[tuple[int, int]]) -> list[dict[str, Any]]:
+    """Printed accidentals of a notation event whose pitch class no TAB note of the event has."""
+    pitch_classes = {(_STRING_TO_BASE_PITCH[string] + fret) % 12 for string, fret in positions}
+    return [a for a in record.get("accidentals") or () if a["pitch_class"] not in pitch_classes]
+
+
 def build_note_type_event(
     record: dict[str, Any],
     *,
@@ -61,17 +70,21 @@ def build_note_type_event(
     is_rest = record["kind"] == "rest"
     tie_state = None if is_rest else _tie_state(record.get("tie") or {})
     by_position = {(c.string, c.parsed_fret): c for c in candidates}
+    printed = {a["pitch_class"]: a["direction"] for a in record.get("accidentals") or ()}
     notes: list[Note] = []
     for string, fret in positions:
         candidate = by_position.get((string, fret))
+        pitch = _STRING_TO_BASE_PITCH[string] + fret
         notes.append(
             Note(
                 string=string,
                 fret=fret,
-                pitch=_STRING_TO_BASE_PITCH[string] + fret,
+                pitch=pitch,
                 confidence=candidate.confidence if candidate else 1.0,
                 provenance=[candidate.to_provenance()] if candidate else [],
                 techniques=[TieTechnique(state=tie_state)] if tie_state else [],
+                spelling=(NoteSpelling(accidental=printed[pitch % 12], source="printed")
+                          if pitch % 12 in printed and pitch % 12 in BLACK_KEYS else None),
             )
         )
     tuplet = record.get("tuplet")

@@ -49,7 +49,7 @@ def test_build_ir_creates_valid_scoreir_from_synthetic_musicxml_and_tabraw(tmp_p
 
     assert errors == []
     assert validated is not None
-    assert score.schema_version == "0.1.1"
+    assert score.schema_version == "0.1.2"
     assert score.metadata.title == "Tiny MusicXML Test"
     assert score.tempo.bpm == 96
     assert score.tracks[0].tuning.name == "Standard guitar"

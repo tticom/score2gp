@@ -9,6 +9,7 @@ from typing import Iterable, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .black_key_spelling import apply_black_key_spelling
 from .pdf_tab_bar_assembler import PdfTabBarAssemblerError, assemble_note_type_bars, place_tab_digits
 from .ascii_alignment import ALIGNMENT_SCHEMA_VERSION, AsciiMusicXmlAlignment, compute_sha256
 from . import __version__
@@ -1951,6 +1952,7 @@ def build_ir_from_tabraw_only(
                          f"system {system['system_index'] + 1}; GPIF Major is the format default "
                          "and is not a recognised mode."),
             ))
+    warnings_list.extend(apply_black_key_spelling(bars, note_type_route["bars"]))
     score.warnings = warnings_list
 
     # Attach symbols and techniques
