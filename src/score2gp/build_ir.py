@@ -1747,13 +1747,26 @@ def build_ir_from_tabraw_only(
                 found_unsafe = code
                 break
 
+    refused_tab_system = None
+    partial_digits = None
     if found_unsafe:
-        raise BuildIrInputRiskError(
-            category="pdf_only_tab_grouping_unsafe",
-            stage="layout-gating",
-            message=f"PDF-only tab building refused due to unsafe layout warning: {found_unsafe}",
-            details={"refusal_warning_code": found_unsafe},
-        )
+        # PARTIAL-01: refuse only the one TAB system the warnings come from, when the rest stand on their own.
+        partition = None
+        if note_durations is not None:
+            from .pdf_tab_system_partition import partition_tab_systems
+            partition = partition_tab_systems(
+                tabraw,
+                [c for c in tabraw.candidates if c.parsed_fret is not None and c.kind == "fret"],
+                note_durations, unsafe_warning_codes,
+            )
+        if partition is None:
+            raise BuildIrInputRiskError(
+                category="pdf_only_tab_grouping_unsafe",
+                stage="layout-gating",
+                message=f"PDF-only tab building refused due to unsafe layout warning: {found_unsafe}",
+                details={"refusal_warning_code": found_unsafe},
+            )
+        refused_tab_system, partial_digits = partition
 
     fret_candidates = [c for c in tabraw.candidates if (c.parsed_fret is not None and c.kind == "fret") or c.raw_text == "quarter_rest"]
     if not fret_candidates:
@@ -1764,6 +1777,10 @@ def build_ir_from_tabraw_only(
         )
 
     for candidate in fret_candidates:
+        if (refused_tab_system is not None
+                and (candidate.page_index, candidate.system_index)
+                == (refused_tab_system.page_index, refused_tab_system.system_index)):
+            continue  # its system is refused: no digit of it is read
         if (candidate.string is None and candidate.raw_text != "quarter_rest") or candidate.bar_index is None or candidate.system_index is None or candidate.x is None:
             raise BuildIrInputRiskError(
                 category="pdf_only_tab_grouping_unsafe",
@@ -1781,8 +1798,11 @@ def build_ir_from_tabraw_only(
 
     # 2. Durations from note types, positions from the TAB
     digits = [c for c in fret_candidates if c.kind == "fret" and c.parsed_fret is not None]
+    if partial_digits is not None:
+        digits = partial_digits
     try:
-        bars, note_type_route = assemble_note_type_bars(digits, note_durations, track_id=TRACK_ID)
+        bars, note_type_route = assemble_note_type_bars(
+            digits, note_durations, track_id=TRACK_ID, refused_tab_system=refused_tab_system)
     except PdfTabBarAssemblerError as err:
         raise BuildIrInputRiskError(
             category=err.category,
@@ -1815,6 +1835,16 @@ def build_ir_from_tabraw_only(
             severity="info",
         )
     ]
+    if refused_tab_system is not None:
+        warnings_list.append(
+            WarningItem(
+                code="pdf_partial_tab_system_refused",
+                message=(f"TAB system refused ({refused_tab_system.code}) at page {refused_tab_system.page_index}, "
+                         f"system {refused_tab_system.system_index}; its {refused_tab_system.digit_count} TAB digits "
+                         "are not written and its notation bars are written empty. The file is a partial conversion."),
+                severity="warning",
+            )
+        )
     for entry in note_type_route["bars"]:
         if entry["status"] == "refused":
             location = entry["location"]

@@ -1396,6 +1396,12 @@ def convert_command(
                 "inferred_rhythm_status": "note_type",
                 "gp_package_written": True,
             }
+            refused_tab_systems = (diagnostics.note_type_route or {}).get("refused_tab_systems") if diagnostics else None
+            if refused_tab_systems:
+                # PARTIAL-01: the written systems are safe; the file is not a complete conversion.
+                pdf_only_diag_payload["pdf_grouping_status"] = "partial"
+                pdf_only_diag_payload["conversion_complete"] = False
+                pdf_only_diag_payload["refused_tab_systems"] = refused_tab_systems
             if ref_gp:
                 try:
                     from .gp_package import compare_gp
