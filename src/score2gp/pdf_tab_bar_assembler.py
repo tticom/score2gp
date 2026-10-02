@@ -99,6 +99,14 @@ def _match_bar(records: list[dict[str, Any]], digits: list[TabCandidate], space:
             previous = None
             continue
         heads = record["notehead"]["count"]
+        grace = record.get("grace")
+        if grace:
+            # A grace stands on its own TAB column and takes no tie; a later tie continues from the note before it.
+            following = next((r for r in records[index + 1:] if not r.get("grace")), None)
+            if following is None or grace["beat_event_index"] != following["event_index"]:
+                return matched, _refusal("grace_note_beat_unattached", index)
+            if not near:
+                return matched, _refusal("notation_note_without_tab_digit", index)
         if not near:
             tie = record.get("tie") or {}
             if tie.get("stop") and previous is not None and len(previous["positions"]) == heads:
@@ -121,7 +129,8 @@ def _match_bar(records: list[dict[str, Any]], digits: list[TabCandidate], space:
         matched.append({"record": record, "positions": positions, "candidates": cands,
                         "match": {"kind": "tab_column", "candidate_ids": [c.id for c in cands],
                                   "dx_spaces": round(near[0][0] / space, 3)}})
-        previous = {"positions": positions, "location": _location(record)}
+        if not grace:
+            previous = {"positions": positions, "location": _location(record)}
     unused = [i for i in range(len(columns)) if i not in used]
     if unused:
         refusal = _refusal("tab_digit_without_notation_event")
@@ -212,7 +221,7 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
                 events.append(build_note_type_event(
                     m["record"], positions=m["positions"], candidates=m["candidates"], output_bar_idx=output_index,
                     event_idx=i, onset_ticks=ticks_for_quarters(onset) if onset else 0, track_id=track_id))
-                onset += Fraction(m["record"]["duration_quarters"])
+                onset += Fraction(m["record"]["duration_quarters"])  # a grace adds none
             last = matched[-1]
             tied_from = ({"positions": last["positions"], "location": _location(last["record"])}
                          if last["record"]["kind"] != "rest" else None)

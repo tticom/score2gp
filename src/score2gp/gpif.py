@@ -736,6 +736,8 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
                         beats_count += 1
                         beat_node = ET.SubElement(beats_db, "Beat", {"id": beat_id})
 
+                        if event.timing.grace is not None:
+                            _text(beat_node, "GraceNotes", "OnBeat" if event.timing.grace.position == "on-beat" else "BeforeBeat")
                         _text(beat_node, "Dynamic", event.dynamic.upper() if event.dynamic else "MF")
 
 

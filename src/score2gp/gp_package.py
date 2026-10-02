@@ -976,7 +976,11 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
 
             chord_symbol = _first_text(b, ["Chord"])
 
+            grace_node = b.find("GraceNotes")
+            grace_text = (grace_node.text or "").strip() if grace_node is not None else None
+
             beats[b_id] = {
+                "grace_notes": grace_text,
                 "dynamic": dyn,
                 "duration_ticks": r_info["ticks"],
                 "duration_obj": r_info["duration_obj"],
@@ -1127,16 +1131,32 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
                                 ))
 
                         from .ir import Timing
-                        timing = Timing(
-                            bar_index=mb_idx,
-                            onset_ticks=onset,
-                            duration_ticks=beat["duration_ticks"],
-                            voice=voice_num,
-                            notated_duration=beat["duration_obj"],
-                            tuplet=beat["tuplet_obj"]
-                        )
+                        is_grace = beat["grace_notes"] is not None
+                        if is_grace:
+                            # A grace beat takes no bar time: zero ticks, onset not advanced.
+                            from .ir import GraceTiming
+                            timing = Timing(
+                                bar_index=mb_idx,
+                                onset_ticks=onset,
+                                duration_ticks=0,
+                                voice=voice_num,
+                                notated_duration=beat["duration_obj"],
+                                grace=GraceTiming(
+                                    position="on-beat" if beat["grace_notes"] == "OnBeat" else "before",
+                                    duration=beat["duration_obj"].value,
+                                ),
+                            )
+                        else:
+                            timing = Timing(
+                                bar_index=mb_idx,
+                                onset_ticks=onset,
+                                duration_ticks=beat["duration_ticks"],
+                                voice=voice_num,
+                                notated_duration=beat["duration_obj"],
+                                tuplet=beat["tuplet_obj"]
+                            )
 
-                        ev_id = f"e_m{mb_idx}_s{s_idx}_v{voice_num}_{onset}"
+                        ev_id = f"e_m{mb_idx}_s{s_idx}_v{voice_num}_{onset}" + ("_g" if is_grace else "")
 
                         from .ir import Event
                         events.append(Event(
@@ -1152,7 +1172,8 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
                             chord_symbol=beat["chord_symbol"]
                         ))
 
-                        onset += beat["duration_ticks"]
+                        if not is_grace:
+                            onset += beat["duration_ticks"]
 
             bars.append(
                 Bar(

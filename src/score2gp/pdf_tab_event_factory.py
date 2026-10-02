@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, Sequence
 from .ir import (
     DEFAULT_TICKS_PER_QUARTER,
     Event,
+    GraceTiming,
     NotatedDuration,
     Note,
     TieTechnique,
@@ -17,6 +18,10 @@ from .pdf_tab_measure_timing import ticks_for_quarters
 if TYPE_CHECKING:
     from .tabraw import TabCandidate
 
+
+# Guitar Pro writes a grace note as a 32nd beat tagged ``GraceNotes OnBeat``; the printed value read from the
+# notation is evidence only, and a grace takes no time of its own.
+GRACE_WRITTEN_VALUE = "32nd"
 
 _STRING_TO_BASE_PITCH: dict[int, int] = {
     1: 64,  # E4
@@ -70,17 +75,28 @@ def build_note_type_event(
             )
         )
     tuplet = record.get("tuplet")
-    return Event(
-        id=f"bar-{output_bar_idx}-event-{event_idx + 1}",
-        track_id=track_id,
-        timing=Timing(
+    if record.get("grace"):
+        timing = Timing(
+            bar_index=output_bar_idx,
+            onset_ticks=onset_ticks,
+            duration_ticks=0,
+            ticks_per_quarter=DEFAULT_TICKS_PER_QUARTER,
+            notated_duration=NotatedDuration(value=GRACE_WRITTEN_VALUE, dots=0),
+            grace=GraceTiming(position="on-beat", duration=GRACE_WRITTEN_VALUE),
+        )
+    else:
+        timing = Timing(
             bar_index=output_bar_idx,
             onset_ticks=onset_ticks,
             duration_ticks=ticks_for_quarters(Fraction(record["duration_quarters"])),
             ticks_per_quarter=DEFAULT_TICKS_PER_QUARTER,
             notated_duration=NotatedDuration(value=record["written"], dots=record["dots"]["count"]),
             tuplet=Tuplet(actual_notes=tuplet["actual"], normal_notes=tuplet["normal"]) if tuplet else None,
-        ),
+        )
+    return Event(
+        id=f"bar-{output_bar_idx}-event-{event_idx + 1}",
+        track_id=track_id,
+        timing=timing,
         is_rest=is_rest,
         notes=notes,
         confidence=sum(c.confidence for c in candidates) / len(candidates) if candidates else 1.0,

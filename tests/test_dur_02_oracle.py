@@ -26,7 +26,7 @@ WRITTEN = {"Whole": "whole", "Half": "half", "Quarter": "quarter", "Eighth": "ei
            "16th": "16th", "32nd": "32nd", "64th": "64th"}
 RHYTHM_TAGS = {"NoteValue", "AugmentationDot", "PrimaryTuplet"}
 TECHNIQUE_FIELDS = ("hopo_origin", "hopo_destination", "slide", "vibrato", "palm_mute", "let_ring")
-EVENT_FIELDS = ("kind", "written", "dots", "tuplet", "tie", "positions", *TECHNIQUE_FIELDS)
+EVENT_FIELDS = ("kind", "written", "dots", "tuplet", "tie", "positions", "grace", *TECHNIQUE_FIELDS)
 
 
 class OracleRefusal(Exception):
@@ -155,7 +155,7 @@ def compare_gp_systems_layout(truth: Path | bytes, produced: Path | bytes) -> li
     return differences
 
 
-def read_gp_bars(gp: Path | bytes) -> list[dict[str, Any]]:
+def read_gp_bars(gp: Path | bytes, *, include_grace: bool = False) -> list[dict[str, Any]]:
     """Per bar: its time signature and its events, or ``events=None`` for a bar with no beats."""
     data = gp if isinstance(gp, bytes) else Path(gp).read_bytes()
     root = ET.fromstring(zipfile.ZipFile(io.BytesIO(data)).read("Content/score.gpif"))
@@ -219,6 +219,7 @@ def read_gp_bars(gp: Path | bytes) -> list[dict[str, Any]]:
                     "tuplet": (int(tuplet.get("num")), int(tuplet.get("den"))) if tuplet is not None else None,
                     "tie": (any(origins), any(destinations)),
                     "positions": sorted(positions),
+                    **({"grace": beat.findtext("GraceNotes")} if include_grace else {}),
                     **{field: sorted(values) for field, values in techniques.items()},
                 })
         key = master.find("Key")
@@ -236,7 +237,7 @@ def read_gp_bars(gp: Path | bytes) -> list[dict[str, Any]]:
 def compare_gp(truth: Path | bytes, produced: Path | bytes,
                mode_evidence: set[int] | None = None) -> dict[str, Any]:
     """Every difference between the produced file and the truth, by bar and event index."""
-    want, have = read_gp_bars(truth), read_gp_bars(produced)
+    want, have = read_gp_bars(truth, include_grace=True), read_gp_bars(produced, include_grace=True)
     differences: list[dict[str, Any]] = []
     for item in compare_gp_systems_layout(truth, produced):
         differences.append({"bar_index": None, "event_index": None,
@@ -351,6 +352,8 @@ def _gp(bars: list[list[dict[str, Any]] | None],
             counters["beat"] += 1
             beat_ids.append(beat_id)
             beat = ET.SubElement(beat_db, "Beat", {"id": beat_id})
+            if event.get("grace"):
+                ET.SubElement(beat, "GraceNotes").text = event["grace"]
             ET.SubElement(beat, "Rhythm", {"ref": rhythm_id})
             note_ids = []
             for string, fret in event.get("positions", []):
@@ -522,6 +525,16 @@ def test_a_note_value_guitar_pro_does_not_write_is_a_difference():
 def test_a_missing_event_is_located():
     result = compare_gp(_gp([_bar()]), _gp([_bar()[:-1]]))
     assert [(d["bar_index"], d["event_index"], d["field"]) for d in result["differences"]] == [(0, 5, "presence")]
+
+
+def test_the_grace_tag_is_compared_on_its_own_and_located():
+    grace = {"kind": "note", "written": "32nd", "positions": [(2, 3)], "grace": "OnBeat"}
+    truth = _gp([[grace, *_bar()]])
+    assert compare_gp(truth, _gp([[grace, *_bar()]]))["differences"] == []
+    untagged = {k: v for k, v in grace.items() if k != "grace"}
+    result = compare_gp(truth, _gp([[untagged, *_bar()]]))
+    assert [(d["bar_index"], d["event_index"], d["field"], d["expected"], d["actual"])
+            for d in result["differences"]] == [(0, 0, "grace", "OnBeat", None)]
 
 
 def test_the_oracle_never_imports_score2gp():
