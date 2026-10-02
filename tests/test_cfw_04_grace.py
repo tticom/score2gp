@@ -10,6 +10,9 @@ import tempfile
 from fractions import Fraction
 from pathlib import Path
 
+import pytest
+
+from score2gp import pdf_tab_bar_assembler as assembler
 from score2gp.notation_omr import note_duration as nd
 
 
@@ -99,3 +102,106 @@ def test_dotted_cross_bar_stays_refused_at_its_location():
     bar = route["bars"][0]
     assert bar["reason"] == "bar_total_mismatch"
     assert bar["location"] == {"page_index": 0, "system_index": 0, "bar_index": 0}
+
+
+def _round_trip(name: str):
+    from score2gp.gp_package import extract_score_ir_from_gp
+
+    work = ROOT / "work"
+    work.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="cfw04rt-", dir=work) as directory:
+        folder = Path(directory)
+        output = folder / "output.gp"
+        cmd = [sys.executable, "-m", "score2gp.cli", "convert", "--pdf", str(FIXTURES / name),
+               "--out", str(output), "--work-dir", str(folder / "intermediate"),
+               "--json-report", str(folder / "report.json"), "--pdf-only-tab", "--time-signature", "4/4",
+               "--no-strict"]
+        assert subprocess.run(cmd, capture_output=True, text=True, check=False).returncode == 0
+        return extract_score_ir_from_gp(output)
+
+
+def test_written_grace_reads_back_as_a_zero_tick_grace():
+    score = _round_trip("grace_stemless_wave.pdf")
+    events = sorted(score.bars[0].events, key=lambda e: (e.timing.onset_ticks, 0 if e.timing.grace else 1))
+    assert len(events) == 5
+    grace, principal = events[0], events[1]
+    assert grace.timing.grace is not None
+    assert grace.timing.grace.position == "on-beat"
+    assert grace.timing.grace.duration == "32nd"
+    assert grace.timing.duration_ticks == 0
+    assert grace.timing.notated_duration.value == "32nd"
+    assert principal.timing.grace is None
+    assert principal.timing.onset_ticks == grace.timing.onset_ticks
+    assert principal.timing.notated_duration.value == "quarter"
+    assert principal.timing.duration_ticks == 960
+    assert len({e.id for e in events}) == 5
+    assert sum(e.timing.duration_ticks for e in events) == score.bars[0].time_signature.numerator * 960
+
+
+# --- fail-closed gates: each fixture is engraved like the source it stands for, and each refusal is located ---
+
+REFUSED_GRACE_FIXTURES = [
+    ("grace_too_far.pdf", 1, "grace_note_beat_too_far"),
+    ("grace_before_rest.pdf", 1, "grace_note_before_rest"),
+    ("grace_without_flag.pdf", 0, "grace_note_without_flag"),
+    ("mixed_small_full_chord.pdf", 0, "small_notehead_mixed_with_full_size"),
+]
+
+
+@pytest.mark.parametrize(("name", "event_index", "reason"), REFUSED_GRACE_FIXTURES)
+def test_gate_refuses_the_event_at_its_location_and_writes_no_bar(name, event_index, reason):
+    read = _read(name)
+    event = read["events"][event_index]
+    assert (event["status"], event["reason"]) == ("unread", reason)
+    assert event["written"] is None and event["duration_quarters"] is None
+    assert event["bar_index"] == 0 and len(event["location"]["bbox"]) == 4
+    assert read["bar_checks"][0]["status"] != "match"
+    # No other event is refused: the located refusal is the one gate under test.
+    assert [e["reason"] for e in read["events"] if e["status"] != "read"] == [reason]
+    code, route, package = _convert(name)
+    assert code != 0 and package is None
+    assert route["summary"]["written_bars"] == 0
+    bar = route["bars"][0]
+    assert bar["reason"] == "note_duration_event_unread"
+    assert bar["detail"] == reason
+    assert bar["location"] == {"page_index": 0, "system_index": 0, "bar_index": 0, "event_index": event_index}
+
+
+def test_grace_gap_is_over_the_limit_and_before_rest_gap_is_within_it():
+    too_far = _read("grace_too_far.pdf")["events"][1]["grace"]
+    assert too_far["gap_spaces"] > nd.GRACE_MAX_GAP_SPACES
+    before_rest = _read("grace_before_rest.pdf")["events"][1]["grace"]
+    # Close enough to attach: only the rest after it refuses it, never the gap.
+    assert 0 <= before_rest["gap_spaces"] <= nd.GRACE_MAX_GAP_SPACES
+
+
+def test_unflagged_small_stemmed_head_is_not_written_as_a_grace():
+    read = _read("grace_without_flag.pdf")
+    assert read["events"][0]["flags"]["count"] == 0
+    assert read["events"][0]["grace"]["beat_event_index"] is not None  # close to its beat: the flag is the only gate
+    assert read["events"][0]["status"] == "unread" and read["events"][0]["duration_quarters"] is None
+
+
+def test_tie_runs_over_a_grace_between_its_two_notes():
+    read = _read("tie_over_grace.pdf")
+    assert read["bar_checks"][0]["status"] == "match"
+    grace = read["events"][1]
+    assert grace["grace"]["beat_event_index"] == read["events"][2]["event_index"]
+    assert grace["tie"] == {"start": False, "stop": False, "sources": []}
+    assert read["events"][0]["tie"]["start"] is True
+    assert read["events"][2]["tie"]["stop"] is True
+    code, route, package = _convert("tie_over_grace.pdf")
+    assert code == 0 and package is not None
+    assert route["summary"]["written_bars"] == 1
+    assert route["summary"]["match_kinds"].get("tie_continuation") == 1
+
+
+def test_grace_whose_beat_is_not_the_next_note_is_refused_unattached_at_its_event():
+    read = _read("grace_stemless_wave.pdf")
+    records = [dict(e) for e in read["events"]]
+    assert records[0]["grace"]["beat_event_index"] == records[1]["event_index"]
+    records[0]["grace"] = {**records[0]["grace"], "beat_event_index": None}
+    matched, refusal = assembler._match_bar(records, [], 4.25, None)
+    assert matched == []
+    assert refusal["reason"] == "grace_note_beat_unattached"
+    assert refusal["event_index"] == records[0]["event_index"]
