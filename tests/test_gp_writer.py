@@ -2161,7 +2161,7 @@ def test_gpif_standard_guitar_pitch_stave_display(tmp_path) -> None:
         # (string, fret, pitch, expected_step, expected_accidental, expected_concert_oct, expected_trans_oct)
         # Note: string index in ScoreIR: 1 is E4, 2 is B3, 3 is G3, 4 is D3, 5 is A2, 6 is E2.
         (6, 0, 40, "E", "", 3, 4),  # Sounding E2 (open 6th string) -> Concert E3, Transposed E4
-        (6, 2, 42, "F", "Sharp", 3, 4),  # Sounding F#2 (6th string fret 2) -> Concert F#3, Transposed F#4
+        (6, 2, 42, "F", "#", 3, 4),  # Sounding F#2 (6th string fret 2) -> Concert F#3, Transposed F#4
         (6, 3, 43, "G", "", 3, 4),  # Sounding G2 (6th string fret 3) -> Concert G3, Transposed G4
         (5, 2, 47, "B", "", 3, 4),  # Sounding B2 (5th string fret 2) -> Concert B3, Transposed B4
         (5, 5, 50, "D", "", 4, 5),  # Sounding D3 (5th string fret 5) -> Concert D4, Transposed D5

@@ -845,9 +845,9 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
                             _text(midi_prop, "Number", note.pitch)
 
                             pitch_map = {
-                                0: ("C", ""), 1: ("C", "Sharp"), 2: ("D", ""), 3: ("D", "Sharp"),
-                                4: ("E", ""), 5: ("F", ""), 6: ("F", "Sharp"), 7: ("G", ""),
-                                8: ("G", "Sharp"), 9: ("A", ""), 10: ("A", "Sharp"), 11: ("B", "")
+                                0: ("C", ""), 1: ("C", "#"), 2: ("D", ""), 3: ("D", "#"),
+                                4: ("E", ""), 5: ("F", ""), 6: ("F", "#"), 7: ("G", ""),
+                                8: ("G", "#"), 9: ("A", ""), 10: ("A", "#"), 11: ("B", "")
                             }
                             step, accidental = pitch_map[note.pitch % 12]
                             octave = note.pitch // 12
