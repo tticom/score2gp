@@ -996,6 +996,48 @@ def _zone(staff: Staff, all_staves: list[Staff]) -> tuple[float, float]:
     return upper, lower
 
 
+def _tab_text_rows(staff: Staff, symbols: PageSymbols) -> list[tuple[float, float, float, float, float]]:
+    """Six broad, equally spaced horizontal rows below a notation staff.
+
+    This uses the union of line fragments at each height. Fret gaps can split
+    the fragments beyond the stricter endpoint matching in ``find_staves``.
+    A row is evidence only when all six lines cover most of the notation
+    staff's horizontal extent; short beams and ledger lines cannot qualify.
+    """
+    rows: list[dict[str, Any]] = []
+    for seg in sorted((s for s in symbols.segments if s.horizontal and s.y0 > staff.bottom + 0.5 * staff.space),
+                      key=lambda s: s.y0):
+        y = (seg.y0 + seg.y1) / 2
+        if rows and abs(rows[-1]["y"] - y) <= 0.01 * staff.space:
+            row = rows[-1]
+            row["x0"] = min(row["x0"], seg.x0)
+            row["x1"] = max(row["x1"], seg.x1)
+            row["pieces"].append((seg.x0, seg.x1))
+        else:
+            rows.append({"y": y, "x0": seg.x0, "x1": seg.x1, "pieces": [(seg.x0, seg.x1)]})
+    width = staff.x1 - staff.x0
+    broad = [r for r in rows if r["x1"] - r["x0"] >= 0.8 * width
+             and abs(r["x0"] - staff.x0) <= staff.space
+             and abs(r["x1"] - staff.x1) <= staff.space
+             and _coverage(r["pieces"]) >= STAFF_LINE_MIN_COVERAGE * (r["x1"] - r["x0"])]
+    found = []
+    for start in range(len(broad) - 5):
+        run = broad[start:start + 6]
+        steps = [b["y"] - a["y"] for a, b in zip(run, run[1:])]
+        step = statistics.median(steps)
+        if step <= 0 or any(abs(gap - step) > STAFF_GAP_TOLERANCE * step + 0.01 * staff.space for gap in steps):
+            continue
+        found.append((run[0]["y"], run[-1]["y"], min(r["x0"] for r in run),
+                      max(r["x1"] for r in run), step))
+    return found
+
+
+def _on_tab_text_row(text: Text, rows: list[tuple[float, float, float, float, float]]) -> bool:
+    """A digit centred on or between six TAB lines belongs to that row."""
+    return any(x0 <= text.cx <= x1 and top - 0.1 * step <= text.cy <= bottom + 0.1 * step
+               for top, bottom, x0, x1, step in rows)
+
+
 def _barlines(staff: Staff, symbols: PageSymbols) -> list[tuple[float, float]]:
     """Bar boundaries (left edge, right edge) along the staff, double barlines merged."""
     s = staff.space
@@ -1233,8 +1275,11 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
         box = _event_bbox(e)
         if e["_bar"] is not None:
             first_x_in_bar[e["_bar"]] = min(first_x_in_bar.get(e["_bar"], math.inf), box[0])
+    tab_text_rows = _tab_text_rows(staff, symbols)
     tuplet_digits = []
     for t in digit_texts:
+        if _on_tab_text_row(t, tab_text_rows):
+            continue
         # A number printed on a barline belongs to the bar starting there.
         bar = next((i for i, (_, end) in enumerate(bars) if t.cx <= end), None)
         if bar is not None and t.cx < first_x_in_bar.get(bar, math.inf) and t.cy < staff.top:
