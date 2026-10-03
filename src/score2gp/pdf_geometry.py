@@ -9,6 +9,13 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 FRAGMENTED_STAFF_LINE_NEIGHBOR_MAX_GAP = 360.0
+# A TAB string line broken by a fret digit leaves a gap of about 0.75 of the string spacing. When every
+# string is broken at the same x (a full chord) no neighbouring line spans the gap, so the gap is bridged
+# only if it is no longer than this multiple of the measured string spacing.
+FULL_CHORD_GAP_MAX_STRING_SPACING_RATIO = 0.8
+FULL_CHORD_GAP_MIN_STRINGS = 4
+FULL_CHORD_GAP_ALIGNMENT_TOLERANCE = 1.5
+FULL_CHORD_GAP_SPACING_UNIFORMITY = 0.15
 
 
 class VisualVibratoEvidence(BaseModel):
@@ -357,6 +364,48 @@ def _drawing_segments(drawings: list[dict[str, Any]]) -> list[_LineSegment]:
     return segments
 
 
+def _is_full_chord_gap(
+    pieces: list[_LineSegment],
+    row_y: float,
+    gap_start: float,
+    gap_end: float,
+    tolerance_y: float,
+) -> bool:
+    """True if the gap is narrow and every string of an evenly spaced run is broken at this x.
+
+    The caller only sees pieces long enough to pass the horizontal-line filter, so a string whose
+    far side of the break is a short piece shows only the near edge. A row therefore counts as broken
+    here when a piece ends at ``gap_start`` or a piece begins at ``gap_end`` (within
+    ``FULL_CHORD_GAP_ALIGNMENT_TOLERANCE``). These rows must contain this row in a run of at least
+    ``FULL_CHORD_GAP_MIN_STRINGS`` rows of uniform spacing, and the gap may be at most
+    ``FULL_CHORD_GAP_MAX_STRING_SPACING_RATIO`` of that spacing. Two staves standing side by side on
+    one line are separated by far more than a digit, so they fail the width test.
+    """
+    tol = FULL_CHORD_GAP_ALIGNMENT_TOLERANCE
+    broken: list[float] = []
+    for piece in sorted(pieces, key=lambda item: (item.y0 + item.y1) / 2):
+        y = (piece.y0 + piece.y1) / 2
+        x0, x1 = min(piece.x0, piece.x1), max(piece.x0, piece.x1)
+        if (abs(x1 - gap_start) <= tol or abs(x0 - gap_end) <= tol) and not any(abs(y - seen) <= tolerance_y for seen in broken):
+            broken.append(y)
+    if not any(abs(y - row_y) <= tolerance_y for y in broken) or len(broken) < FULL_CHORD_GAP_MIN_STRINGS:
+        return False
+    diffs = [b - a for a, b in zip(broken, broken[1:])]
+    spacing = sorted(diffs)[len(diffs) // 2]
+    if spacing <= 0.0:
+        return False
+    # The run of evenly spaced rows that contains this row.
+    index = min(range(len(broken)), key=lambda i: abs(broken[i] - row_y))
+    low = high = index
+    while low > 0 and abs((broken[low] - broken[low - 1]) - spacing) <= FULL_CHORD_GAP_SPACING_UNIFORMITY * spacing:
+        low -= 1
+    while high < len(broken) - 1 and abs((broken[high + 1] - broken[high]) - spacing) <= FULL_CHORD_GAP_SPACING_UNIFORMITY * spacing:
+        high += 1
+    if high - low + 1 < FULL_CHORD_GAP_MIN_STRINGS:
+        return False
+    return gap_end - gap_start <= FULL_CHORD_GAP_MAX_STRING_SPACING_RATIO * spacing
+
+
 def merge_collinear_horizontal_segments(segments: list[_LineSegment], tolerance_y: float = 1.0, max_gap_x: float = 120.0) -> list[_LineSegment]:
     if not segments:
         return []
@@ -452,6 +501,8 @@ def merge_collinear_horizontal_segments(segments: list[_LineSegment], tolerance_
                                 has_matching_split_neighbors = True
 
                     if has_continuous_neighbor or has_matching_split_neighbors:
+                        should_merge = True
+                    elif _is_full_chord_gap(pass1_merged, seg_y, gap_start, gap_end, tolerance_y):
                         should_merge = True
 
             elif max_gap_x < gap_len <= FRAGMENTED_STAFF_LINE_NEIGHBOR_MAX_GAP:
