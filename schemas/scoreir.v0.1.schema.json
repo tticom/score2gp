@@ -1758,6 +1758,17 @@
           "default": null,
           "title": "Right Hand Fingering"
         },
+        "spelling": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NoteSpelling"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "string": {
           "maximum": 12,
           "minimum": 1,
@@ -1856,6 +1867,36 @@
         "pitch"
       ],
       "title": "Note",
+      "type": "object"
+    },
+    "NoteSpelling": {
+      "additionalProperties": false,
+      "description": "How a black-key note is spelled. Pitch is never changed by it.\n\n``printed`` is an accidental printed on the note in its bar, ``printed_carried`` the same\naccidental persisting to a later note of that pitch in the bar (or across a tie), ``key``\nthe direction of the key signature read for the bar, and ``default`` the format's sharp,\nchosen with no evidence at all (reported as ``spelling_unevidenced``).",
+      "properties": {
+        "accidental": {
+          "enum": [
+            "flat",
+            "sharp"
+          ],
+          "title": "Accidental",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "printed",
+            "printed_carried",
+            "key",
+            "default"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "accidental",
+        "source"
+      ],
+      "title": "NoteSpelling",
       "type": "object"
     },
     "PageMargins": {
@@ -2271,10 +2312,11 @@
           "default": null
         },
         "schema_version": {
-          "default": "0.1.1",
+          "default": "0.1.2",
           "enum": [
             "0.1.0",
-            "0.1.1"
+            "0.1.1",
+            "0.1.2"
           ],
           "title": "Schema Version",
           "type": "string"
@@ -2375,10 +2417,11 @@
           "$ref": "#/$defs/Metadata"
         },
         "schema_version": {
-          "default": "0.1.1",
+          "default": "0.1.2",
           "enum": [
             "0.1.0",
-            "0.1.1"
+            "0.1.1",
+            "0.1.2"
           ],
           "title": "Schema Version",
           "type": "string"

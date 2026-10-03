@@ -849,7 +849,12 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
                                 4: ("E", ""), 5: ("F", ""), 6: ("F", "#"), 7: ("G", ""),
                                 8: ("G", "#"), 9: ("A", ""), 10: ("A", "#"), 11: ("B", "")
                             }
-                            step, accidental = pitch_map[note.pitch % 12]
+                            flat_map = {1: ("D", "b"), 3: ("E", "b"), 6: ("G", "b"), 8: ("A", "b"), 10: ("B", "b")}
+                            spelling = getattr(note, "spelling", None)
+                            if spelling is not None and spelling.accidental == "flat" and note.pitch % 12 in flat_map:
+                                step, accidental = flat_map[note.pitch % 12]
+                            else:
+                                step, accidental = pitch_map[note.pitch % 12]
                             octave = note.pitch // 12
 
                             cp_prop = ET.SubElement(props, "Property", {"name": "ConcertPitch"})

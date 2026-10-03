@@ -1090,12 +1090,23 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
     # (and counted) as something else. Nothing that could be a rest is dropped silently.
     ignored: dict[str, int] = {}
     head_boxes = [h.bbox for h in heads]
+    accidental_marks: list[tuple[tuple[float, float, float, float], str, str, float]] = []
+    for t in symbols.texts:
+        direction = ACCIDENTAL_TEXT.get(t.text)
+        if direction and in_zone(t.cx, t.cy):
+            accidental_marks.append((t.bbox, direction, t.ident, t.bbox[3]))  # text boxes rise above the pitch
     for g in glyphs:
         if g.ident in head_ids | dot_ids | attached_beam_ids | flag_ids | arc_ids or g.bbox[2] <= header_end:
             continue
         # Rests stand within reach of the staff; beyond it are tempo marks, text symbols and the like.
         if not (staff.top - REST_VERTICAL_REACH_SPACES * s <= g.bbox[1] and g.bbox[3] <= staff.bottom + REST_VERTICAL_REACH_SPACES * s):
             ignored["outside_rest_reach"] = ignored.get("outside_rest_reach", 0) + 1
+            # A note on a ledger line has its accidental out of the rests' reach: still a printed accidental.
+            if any(b[0] - g.bbox[2] <= ACCIDENTAL_REACH_SPACES * s and g.bbox[2] <= b[0] + 0.1 * s
+                   and g.bbox[1] <= b[3] and b[1] <= g.bbox[3] for b in head_boxes):
+                direction = _accidental_direction(g, s)
+                if direction:
+                    accidental_marks.append((g.bbox, direction, g.ident, _glyph_anchor(g, direction, s)))
             continue
         # Accidentals sit just left of a notehead; articulations sit over or under one.
         if any(b[0] - g.bbox[2] <= ACCIDENTAL_REACH_SPACES * s and g.bbox[2] <= b[0] + 0.1 * s
@@ -1120,6 +1131,10 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
                 events.append({"_rest": g, "_rest_kind": kind, "_cx": g.cx, "_unread": "rest_glyph_beside_note"})
             else:
                 ignored[beside] = ignored.get(beside, 0) + 1
+                if beside == "accidental_beside_notehead":
+                    direction = _accidental_direction(g, s)
+                    if direction:
+                        accidental_marks.append((g.bbox, direction, g.ident, _glyph_anchor(g, direction, s)))
             continue
         if kind is None:
             if _is_thick_barline(g, staff):
@@ -1129,6 +1144,8 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
                                "_unread": "symbol_unclassified"})
             continue
         events.append({"_rest": g, "_rest_kind": kind, "_cx": g.cx})
+
+    _attach_accidentals(events, accidental_marks, staff)
 
     # Assign events to bars.
     edges = [staff.x0] + [x for pair in boundaries for x in pair] + [staff.x1]
@@ -1252,6 +1269,52 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
     return {"records": records, "bar_count": len(bars), "bars": bars, "time_signature": state.get("time_signature")}
 
 
+ACCIDENTAL_TEXT = {"#": "sharp", "♯": "sharp", "b": "flat", "♭": "flat"}
+# Treble-clef natural pitch classes by staff step, counted from the bottom line (E).
+_TREBLE_STEP_PITCH_CLASSES = (4, 5, 7, 9, 11, 0, 2)
+
+
+def _accidental_direction(glyph: Glyph, space: float) -> str | None:
+    from .key_signature import _kind  # key_signature imports this module
+
+    return _kind(glyph, space)
+
+
+def _glyph_anchor(glyph: Glyph, direction: str, space: float) -> float:
+    """The y of the pitch a painted accidental belongs to: a sharp is centred on it, a flat's bowl
+    (measured on the corpus, half a space below the outline's centre) is."""
+    return glyph.cy + (0.5 * space if direction == "flat" else 0.0)
+
+
+def _attach_accidentals(events: list[dict[str, Any]], marks: list[tuple[tuple[float, float, float, float], str, str, float]],
+                        staff: Staff) -> None:
+    """Attach each printed flat or sharp to the notehead it stands left of.
+
+    The staff step of that head, read as a treble clef, names the letter, so the accidental
+    names a pitch class that the build step must find among the TAB notes of the event; an
+    accidental whose pitch class no TAB note has is reported there, never forced onto a note.
+    """
+    space = staff.space
+    for box, direction, ident, anchor in marks:
+        best = None
+        for event in events:
+            for head in event.get("_heads", ()):
+                b = head.bbox
+                if (b[0] - box[2] <= ACCIDENTAL_REACH_SPACES * space and box[2] <= b[0] + 0.1 * space
+                        and box[1] <= b[3] and b[1] <= box[3]):
+                    distance = abs(head.cy - anchor)
+                    if best is None or distance < best[0]:
+                        best = (distance, event, head)
+        if best is None:
+            continue
+        _, event, head = best
+        step = round((staff.bottom - head.cy) / (space / 2))
+        natural = _TREBLE_STEP_PITCH_CLASSES[step % 7]
+        pitch_class = (natural + (1 if direction == "sharp" else -1)) % 12
+        event.setdefault("_accidentals", []).append(
+            {"direction": direction, "pitch_class": pitch_class, "source": ident})
+
+
 def _event_bbox(event: dict[str, Any]) -> tuple[float, float, float, float]:
     if "_rest" in event:
         return event["_rest"].bbox
@@ -1323,6 +1386,8 @@ def _record(event: dict[str, Any], staff: Staff, state: dict[str, Any], bar: int
                               "sources": [h.ident for h in heads]}
         parts["kind"] = "note"
         parts["head_kind"] = kinds[0]
+        if event.get("_accidentals"):
+            record["accidentals"] = event["_accidentals"]
         if len(kinds) > 1:
             reason = reason or "mixed_notehead_kinds"
         stem = event["_stem"]

@@ -1,6 +1,6 @@
 # MEM-01: IR provenance footprint
 
-ScoreIR 0.1.1 stores a reference to a TabRaw candidate in event, note, and
+ScoreIR 0.1.1 and later store a reference to a TabRaw candidate in event, note, and
 candidate-warning provenance. The reference retains source stage, candidate id,
 page, system, staff, bar, bbox, and confidence. The complete candidate is stored
 once in `tab/tab_raw.json` and can be located by `candidates[].id`. MusicXML

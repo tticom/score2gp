@@ -7,7 +7,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, RootModel, field_validator, model_validator
 
-SCHEMA_VERSION = "0.1.1"
+SCHEMA_VERSION = "0.1.2"
 DEFAULT_TICKS_PER_QUARTER = 960
 
 
@@ -492,6 +492,21 @@ Technique = Annotated[
 ]
 
 
+class NoteSpelling(BaseModel):
+    """How a black-key note is spelled. Pitch is never changed by it.
+
+    ``printed`` is an accidental printed on the note in its bar, ``printed_carried`` the same
+    accidental persisting to a later note of that pitch in the bar (or across a tie), ``key``
+    the direction of the key signature read for the bar, and ``default`` the format's sharp,
+    chosen with no evidence at all (reported as ``spelling_unevidenced``).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    accidental: Literal["flat", "sharp"]
+    source: Literal["printed", "printed_carried", "key", "default"]
+
+
 class Note(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -506,6 +521,7 @@ class Note(BaseModel):
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     provenance: list[Provenance] = Field(default_factory=list)
     expression_controller: ExpressionController | None = None
+    spelling: NoteSpelling | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -873,7 +889,7 @@ class ScoreLayout(BaseModel):
 class ScoreIR(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal["0.1.0", "0.1.1"] = SCHEMA_VERSION
+    schema_version: Literal["0.1.0", "0.1.1", "0.1.2"] = SCHEMA_VERSION
     metadata: Metadata = Field(default_factory=Metadata)
     conversion: ConversionInfo = Field(default_factory=ConversionInfo)
     tempo: Tempo
@@ -1019,7 +1035,7 @@ class BookletCoverPage(BaseModel):
 class ScoreBooklet(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal["0.1.0", "0.1.1"] = SCHEMA_VERSION
+    schema_version: Literal["0.1.0", "0.1.1", "0.1.2"] = SCHEMA_VERSION
     booklet_title: str = "Untitled Booklet"
     metadata: Metadata = Field(default_factory=Metadata)
     scores: list[ScoreIR] = Field(min_length=1)

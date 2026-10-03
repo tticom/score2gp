@@ -16,7 +16,7 @@ from typing import Any, Sequence
 
 from .ir import Bar, Event, TimeSignature
 from .notation_omr.note_duration import SCHEMA as NOTE_DURATION_SCHEMA
-from .pdf_tab_event_factory import build_note_type_event
+from .pdf_tab_event_factory import build_note_type_event, unjoined_accidentals
 from .pdf_tab_measure_timing import PdfTabBarAssemblerError, ticks_for_quarters
 from .tabraw import TabCandidate
 
@@ -225,6 +225,11 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
         events: list[Event] = []
         if refusal is None:
             onset = Fraction(0)
+            unjoined = [{"event_index": m["record"]["event_index"], "sources": [a["source"] for a in bad]}
+                        for m in matched if m["record"]["kind"] != "rest"
+                        for bad in [unjoined_accidentals(m["record"], m["positions"])] if bad]
+            if unjoined:
+                entry["unjoined_accidentals"] = unjoined
             for i, m in enumerate(matched):
                 events.append(build_note_type_event(
                     m["record"], positions=m["positions"], candidates=m["candidates"], output_bar_idx=output_index,
