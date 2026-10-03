@@ -24,3 +24,21 @@ def test_scaled_staves_and_filled_rectangle_barlines(name: str, space: float) ->
         assert [x for x, _ in bars] == pytest.approx(
             [300 * space / 5.31 - 0.08 * space, 500 * space / 5.31 - 0.08 * space], abs=0.05
         )
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "12 Bar Blues Solo Guitar Jam.pdf",
+        "5 MUST KNOW Pentatonic Licks In Em.pdf",
+        "Finger postition tips TAB (1).pdf",
+    ],
+)
+def test_tab_only_private_controls_have_no_notation_staves(name: str) -> None:
+    pdf = Path("fixtures/private") / name
+    if not pdf.exists():
+        pytest.skip("mounted private corpus is unavailable")
+    with pymupdf.open(pdf) as document:
+        for page_index, page in enumerate(document):
+            notation, _ = find_staves(extract_page_symbols(page, page_index))
+            assert len(notation) == 0
