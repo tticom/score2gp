@@ -28,6 +28,8 @@ from __future__ import annotations
 import hashlib
 import math
 import re
+import statistics
+from collections import Counter
 from dataclasses import dataclass, field
 from fractions import Fraction
 from pathlib import Path
@@ -75,6 +77,17 @@ STAFF_LINE_MERGE_GAP_PT = 20.0  # TAB lines are interrupted around fret numbers
 STAFF_LINE_MIN_COVERAGE = 0.6
 STAFF_LINE_END_TOLERANCE_PT = 3.0
 STAFF_GAP_TOLERANCE = 0.03  # relative spacing tolerance between the lines of one staff
+# Measured ordinary notation steps are about 4.25-6.38 pt in the mounted corpus. The largest
+# filled vertical barline there is 0.68 pt; the enlarged source is 17.72 spaces with
+# 2.84-pt bars. These bounds stay below normal rest-block widths.
+RECT_VERTICAL_MAX_THICKNESS_SPACES = 0.24
+RECT_HORIZONTAL_MAX_THICKNESS_SPACES = 0.16
+STAFF_FIRST_STEP_MAX_SPACES = 2.35
+# A page with no repeated long-line step has no scale to derive from; it keeps the limits
+# the detector always used there (points) so its behaviour is unchanged.
+UNSCALED_RECT_VERTICAL_MAX_PT = 1.5
+UNSCALED_RECT_HORIZONTAL_MAX_PT = 1.0
+UNSCALED_STAFF_FIRST_STEP_MAX_PT = 15.0
 ZONE_REACH_SPACES = 8.0
 BARLINE_END_TOLERANCE_SPACES = 0.15
 BARLINE_MAX_WIDTH_SPACES = 1.0
@@ -249,6 +262,7 @@ class PageSymbols:
     polylines: list[Polyline]
     texts: list[Text]
     head_shapes: list[_NoteheadShape]
+    page_staff_space: float | None = None
 
 
 # --- fill scanning --------------------------------------------------------------------------
@@ -308,9 +322,44 @@ def _column_counts(glyph: Glyph, fractions: tuple[float, ...]) -> list[int]:
 
 # --- extraction -----------------------------------------------------------------------------
 
+def _measured_page_staff_space(drawings: list[dict[str, Any]], page_width: float) -> float | None:
+    """Read the repeated staff-line step from long horizontal strokes before classifying rectangles.
+
+    The same PDF path can contain notation and TAB with different line steps. The smaller
+    repeated step is the conservative scale for both; a barline or TAB line still has to
+    pass the ordinary staff-local geometry checks later. Isolated ledger lines cannot
+    supply the required repeated step.
+    """
+    by_span: dict[tuple[float, float], set[float]] = {}
+    for drawing in drawings:
+        if not _paints_ink(drawing.get("color"), drawing.get("stroke_opacity"), None):
+            continue
+        if _paints_ink(drawing.get("fill"), drawing.get("fill_opacity"), None):
+            continue
+        for item in drawing.get("items", []):
+            if item[0] != "l" or abs(float(item[1].y - item[2].y)) > 0.05:
+                continue
+            x0, x1 = sorted((float(item[1].x), float(item[2].x)))
+            if x1 - x0 < 0.08 * page_width:
+                continue
+            by_span.setdefault((round(x0, 1), round(x1, 1)), set()).add(round(float(item[1].y), 2))
+    gaps: list[float] = []
+    for positions in by_span.values():
+        ys = sorted(positions)
+        if len(ys) < 4:
+            continue
+        gaps.extend(b - a for a, b in zip(ys, ys[1:]) if b > a)
+    bins = Counter(round(gap, 1) for gap in gaps)
+    repeated = [key for key, count in bins.items() if count >= 3]
+    if not repeated:
+        return None
+    smallest = min(repeated)
+    return statistics.median(gap for gap in gaps if round(gap, 1) == smallest)
+
 def extract_page_symbols(page: Any, page_index: int) -> PageSymbols:
     """Split a PyMuPDF page's drawings into glyphs, straight segments, polylines and texts."""
     drawings = page.get_drawings()
+    page_staff_space = _measured_page_staff_space(drawings, float(page.rect.width))
     try:
         image_rects = [tuple(info["bbox"]) for info in page.get_image_info()]
     except Exception:  # noqa: BLE001 - image metadata is optional evidence
@@ -353,11 +402,17 @@ def extract_page_symbols(page: Any, page_index: int) -> PageSymbols:
         if kinds == {"re"} and len(items) == 1:
             r = items[0][1]
             w, h = float(r.x1 - r.x0), float(r.y1 - r.y0)
-            if w <= 1.5 and h > 3 * w:  # a vertical drawn as a filled rectangle
+            if page_staff_space:
+                vertical_limit = RECT_VERTICAL_MAX_THICKNESS_SPACES * page_staff_space
+                horizontal_limit = RECT_HORIZONTAL_MAX_THICKNESS_SPACES * page_staff_space
+            else:
+                vertical_limit = UNSCALED_RECT_VERTICAL_MAX_PT
+                horizontal_limit = UNSCALED_RECT_HORIZONTAL_MAX_PT
+            if w <= vertical_limit and h > 3 * w:  # a vertical drawn as a filled rectangle
                 x = float(r.x0 + r.x1) / 2
                 segments.append(Segment(ident, x, float(r.y0), x, float(r.y1), w))
                 continue
-            if h <= 1.0 and w > 3 * h:  # a horizontal drawn as a filled rectangle
+            if h <= horizontal_limit and w > 3 * h:  # a horizontal drawn as a filled rectangle
                 y = float(r.y0 + r.y1) / 2
                 segments.append(Segment(ident, float(r.x0), y, float(r.x1), y, h))
                 continue
@@ -378,7 +433,7 @@ def extract_page_symbols(page: Any, page_index: int) -> PageSymbols:
                     box = _bbox_union([tuple(float(v) for v in c["bbox"]) for c in chars])
                     texts.append(Text(f"p{page_index}:t{len(texts)}", text, box))
     head_shapes = [g.shape for g in glyphs if g.curved]
-    return PageSymbols(page_index, glyphs, segments, polylines, texts, head_shapes)
+    return PageSymbols(page_index, glyphs, segments, polylines, texts, head_shapes, page_staff_space)
 
 
 def _tokens(chars: list[dict[str, Any]], size: float) -> list[list[dict[str, Any]]]:
@@ -456,7 +511,12 @@ def find_staves(symbols: PageSymbols) -> tuple[list[Staff], list[Staff]]:
                 continue
             step = other["y"] - lines[run[-1]]["y"]
             if gap is None:
-                if step > 15.0:
+                first_step_limit = (
+                    STAFF_FIRST_STEP_MAX_SPACES * symbols.page_staff_space
+                    if symbols.page_staff_space
+                    else UNSCALED_STAFF_FIRST_STEP_MAX_PT
+                )
+                if step > first_step_limit:
                     break
                 gap = step
                 run.append(j)
