@@ -20,7 +20,15 @@ jobs:
         run: |
           (cd .private-fixtures && python scripts/fixture_audit.py)
           mkdir -p fixtures/private
-          cp -a .private-fixtures/fixtures/private/. fixtures/private/
+          if test -d .private-fixtures/fixtures/with-score; then
+            for file in .private-fixtures/fixtures/*/*; do
+              name="$(basename "$file")"
+              test ! -e "fixtures/private/$name"
+              cp "$file" fixtures/private/
+            done
+          else
+            cp -a .private-fixtures/fixtures/private/. fixtures/private/
+          fi
           test -s fixtures/private/Lesson-5.pdf
           test -s fixtures/private/Lesson-6.pdf
           test -s "fixtures/private/Derek Trucks BB King.gp"

@@ -6,7 +6,9 @@ import hashlib
 
 def main():
     repo_root = Path(__file__).resolve().parent.parent.parent
-    gp_path = repo_root.parent / "score2gp-private-fixtures" / "fixtures" / "private" / "Lesson-6.gp"
+    gp_path = repo_root.parent / "score2gp-private-fixtures" / "fixtures" / "with-score" / "Lesson-6.gp"
+    if not gp_path.exists():
+        gp_path = repo_root / "fixtures" / "private" / "Lesson-6.gp"
 
     if not gp_path.exists():
         print(f"Skipping: {gp_path} not found")

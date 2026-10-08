@@ -230,18 +230,19 @@ def main():
         inputs.append((args.pdf, args.musicxml))
     else:
         # Directory scan mode
-        private_dir = PROJECT_ROOT / "fixtures" / "private"
+        sibling_fixtures = PROJECT_ROOT.parent / "score2gp-private-fixtures" / "fixtures"
+        private_dir = sibling_fixtures if (sibling_fixtures / "with-score").exists() else PROJECT_ROOT / "fixtures" / "private"
         if not private_dir.exists():
             print(f"No private fixtures directory found at {private_dir}", file=sys.stderr)
             sys.exit(0)
             
-        pdf_paths = sorted(private_dir.glob("*.pdf"))
+        pdf_paths = sorted(private_dir.rglob("*.pdf"))
         for pdf_path in pdf_paths:
             # Check for matching MusicXML
             musicxml_candidates = [
-                private_dir / f"{pdf_path.stem}.mxl",
-                private_dir / f"{pdf_path.stem}.musicxml",
-                private_dir / f"{pdf_path.stem}.xml",
+                pdf_path.parent / f"{pdf_path.stem}.mxl",
+                pdf_path.parent / f"{pdf_path.stem}.musicxml",
+                pdf_path.parent / f"{pdf_path.stem}.xml",
             ]
             matching_musicxml = None
             for candidate in musicxml_candidates:

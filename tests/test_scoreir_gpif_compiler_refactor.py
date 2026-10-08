@@ -12,16 +12,16 @@ from score2gp.notation_omr.pipeline import run_recognition_on_file
 
 
 
-def _ensure_fixture(fixture_name: str) -> Path:
+def _ensure_fixture(fixture_name: str, output_dir: Path) -> Path:
     from score2gp.notation_omr.pipeline import run_recognition_on_file
     import json
 
     repo_root = Path(__file__).resolve().parent.parent
-    fixtures_dir = repo_root.parent / "score2gp-private-fixtures" / "fixtures" / "private"
+    fixtures_dir = repo_root.parent / "score2gp-private-fixtures" / "fixtures" / "with-score"
     if not fixtures_dir.exists():
         fixtures_dir = repo_root / "fixtures" / "private"
 
-    artifact_path = fixtures_dir / fixture_name
+    artifact_path = output_dir / fixture_name
     if not artifact_path.exists():
         # Produce the required fixture by running the system
         lesson6_path = fixtures_dir / "Lesson-6.pdf"
@@ -118,7 +118,7 @@ def test_compiler_reference_gp_isolation():
 
 @pytest.mark.xfail(reason="Strict capacity checks now reject Lesson 6 due to known upstream OMR barline recognition issues")
 def test_private_fixture_lesson6_gp_compilation():
-    lesson6 = (Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "private" if (Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "private").exists() else Path(__file__).resolve().parent.parent / "fixtures" / "private") / "Lesson-6.pdf"
+    lesson6 = (Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "with-score" if (Path(__file__).resolve().parent.parent.parent / "score2gp-private-fixtures" / "fixtures" / "with-score").exists() else Path(__file__).resolve().parent.parent / "fixtures" / "private") / "Lesson-6.pdf"
 
     res = run_recognition_on_file(lesson6, assume_treble_clef=True)
     assert res is not None
@@ -135,13 +135,13 @@ def test_private_fixture_lesson6_gp_compilation():
         assert out_gp.exists()
         assert out_gp.stat().st_size > 0
 
-def test_compiler_unowned_notes_crash():
+def test_compiler_unowned_notes_crash(tmp_path):
     from score2gp.scoreir_compiler import ScoreIRCompiler
     from score2gp.errors import HumanReadableConversionError
     import json
     import pytest
 
-    artifact_path = _ensure_fixture("Lesson-6_unowned_artifact.json")
+    artifact_path = _ensure_fixture("Lesson-6_unowned_artifact.json", tmp_path)
     with open(artifact_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
@@ -157,13 +157,13 @@ def test_compiler_unowned_notes_crash():
         )
     assert exc_info.value is not None
 
-def test_compiler_capacity_violation_error():
+def test_compiler_capacity_violation_error(tmp_path):
     from score2gp.scoreir_compiler import ScoreIRCompiler
     from score2gp.errors import HumanReadableConversionError
     import json
     import pytest
 
-    artifact_path = _ensure_fixture("Lesson-6_invalid_artifact.json")
+    artifact_path = _ensure_fixture("Lesson-6_invalid_artifact.json", tmp_path)
     with open(artifact_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
