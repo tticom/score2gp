@@ -3413,7 +3413,9 @@ def test_private_acceptance_lesson5() -> None:
     from score2gp.pdf import _extract_pdf_text_candidates
 
     repo_root = Path(__file__).resolve().parent.parent
-    lesson5_path = repo_root.parent / "score2gp-private-fixtures" / "fixtures" / "private" / "Lesson-5.pdf"
+    lesson5_path = repo_root.parent / "score2gp-private-fixtures" / "fixtures" / "with-score" / "Lesson-5.pdf"
+    if not lesson5_path.exists():
+        lesson5_path = repo_root / "fixtures" / "private" / "Lesson-5.pdf"
     if not lesson5_path.exists():
         pytest.skip("Lesson-5.pdf required for this private-fixture acceptance test.")
 
@@ -3515,7 +3517,9 @@ def test_private_acceptance_lesson6() -> None:
     from score2gp.pdf import _extract_pdf_text_candidates
 
     repo_root = Path(__file__).resolve().parent.parent
-    lesson6_path = repo_root.parent / "score2gp-private-fixtures" / "fixtures" / "private" / "Lesson-6.pdf"
+    lesson6_path = repo_root.parent / "score2gp-private-fixtures" / "fixtures" / "with-score" / "Lesson-6.pdf"
+    if not lesson6_path.exists():
+        lesson6_path = repo_root / "fixtures" / "private" / "Lesson-6.pdf"
     if not lesson6_path.exists():
         pytest.skip("Lesson-6.pdf required for this private-fixture acceptance test.")
 
@@ -3550,7 +3554,9 @@ def test_private_acceptance_lesson6_duration_and_negative_control() -> None:
     import score2gp.pdf_staff_notation_diagnostics
 
     repo_root = Path(__file__).resolve().parent.parent
-    lesson6_path = repo_root.parent / "score2gp-private-fixtures" / "fixtures" / "private" / "Lesson-6.pdf"
+    lesson6_path = repo_root.parent / "score2gp-private-fixtures" / "fixtures" / "with-score" / "Lesson-6.pdf"
+    if not lesson6_path.exists():
+        lesson6_path = repo_root / "fixtures" / "private" / "Lesson-6.pdf"
     if not lesson6_path.exists():
         pytest.skip("Lesson-6.pdf required for this private-fixture acceptance test.")
 

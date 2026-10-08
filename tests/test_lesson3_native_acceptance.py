@@ -29,7 +29,7 @@ import native_slice_reference as reference  # noqa: E402
 
 PDF_SHA256 = "fbd44cefad9e33adac992a5bd73c5cc46202c7cfc64d0586bb94cf42d3b41004"
 GP_SHA256 = "9e1ca7b682ecce6b401da83820020650b8a3c122807c51b37029dc441c36516d"
-SIBLING = ROOT.parent / "score2gp-private-fixtures" / "fixtures" / "private"
+SIBLING = ROOT.parent / "score2gp-private-fixtures" / "fixtures" / "with-score"
 CORPUS = SIBLING if SIBLING.exists() else ROOT / "fixtures" / "private"
 ORACLE = Path(os.environ.get("SCORE2GP_L3_ORACLE", ROOT / "work" / "l3-oracle" / "manifest.json"))
 

@@ -119,6 +119,12 @@ fixtures/private/
 
 That directory is ignored by Git except for `.gitkeep`. Do not commit copyrighted or licence-unclear examples.
 
+The sibling `score2gp-private-fixtures` repository now groups inputs under
+`fixtures/with-score/`, `fixtures/no-score/`, `fixtures/ascii/`,
+`fixtures/hand-written/`, and `fixtures/Books/`. To use the local flat mount
+expected by older tools, copy the files from those category directories into
+`score2gp/fixtures/private/`. CI performs this mount after auditing the corpus.
+
 Expected local private fixtures for current development:
 
 ```text

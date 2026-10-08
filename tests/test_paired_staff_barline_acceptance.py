@@ -143,7 +143,7 @@ def test_notehead_attachment_is_rendered_contact_in_staff_spaces(scale: float) -
 # Same resolution as tests/test_lesson3_native_acceptance.py: a sibling checkout locally, or the
 # copy CI mounts at fixtures/private. The tests stay mandatory: a missing corpus fails, never skips.
 ROOT = Path(__file__).resolve().parents[1]
-SIBLING = ROOT.parent / "score2gp-private-fixtures" / "fixtures" / "private"
+SIBLING = ROOT.parent / "score2gp-private-fixtures" / "fixtures" / "with-score"
 CORPUS = SIBLING if SIBLING.exists() else ROOT / "fixtures" / "private"
 
 

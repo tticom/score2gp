@@ -303,7 +303,11 @@ def main():
 
     else:
 
-        private_dir = args.in_dir if args.in_dir else PROJECT_ROOT.parent / "score2gp-private-fixtures" / "fixtures" / "private"
+        sibling_fixtures = PROJECT_ROOT.parent / "score2gp-private-fixtures" / "fixtures"
+        private_dir = args.in_dir if args.in_dir else (
+            sibling_fixtures if (sibling_fixtures / "with-score").exists()
+            else PROJECT_ROOT / "fixtures" / "private"
+        )
 
         if not private_dir.exists():
 
@@ -313,17 +317,17 @@ def main():
 
 
 
-        pdf_paths = sorted(private_dir.glob("*.pdf"))
+        pdf_paths = sorted(private_dir.rglob("*.pdf"))
 
         for pdf_path in pdf_paths:
 
             musicxml_candidates = [
 
-                private_dir / f"{pdf_path.stem}.mxl",
+                pdf_path.parent / f"{pdf_path.stem}.mxl",
 
-                private_dir / f"{pdf_path.stem}.musicxml",
+                pdf_path.parent / f"{pdf_path.stem}.musicxml",
 
-                private_dir / f"{pdf_path.stem}.xml",
+                pdf_path.parent / f"{pdf_path.stem}.xml",
 
             ]
 

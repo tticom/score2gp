@@ -12,7 +12,9 @@ from score2gp.pdf_staff_tab_timing_aligner import (
 def test_real_source_irregular_layout_alignment(tmp_path) -> None:
     # This test provides real-world evidence for the NPG-05 Layout Resilience domain change.
     repo_root = Path(__file__).resolve().parent.parent
-    lesson7_path = repo_root.parent / "score2gp-private-fixtures" / "fixtures" / "private" / "Lesson-7.pdf"
+    lesson7_path = repo_root.parent / "score2gp-private-fixtures" / "fixtures" / "with-score" / "Lesson-7.pdf"
+    if not lesson7_path.exists():
+        lesson7_path = repo_root / "fixtures" / "private" / "Lesson-7.pdf"
 
     if not lesson7_path.exists():
         pytest.skip("Lesson-7.pdf required for this private-fixture acceptance test.")
