@@ -166,13 +166,14 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
         )
     systems = note_durations["systems"]
     checks = {c["bar_index"]: c for c in note_durations["bar_checks"]}
+    bar_bases = {int(bar): basis for bar, basis in note_durations.get("diagnostics", {}).get("bar_time_signatures", {}).items()}
     unsigned = sorted(bar for bar, check in checks.items() if not check.get("time_signature"))
     if unsigned:
         raise PdfTabBarAssemblerError(
             category="pdf_only_tab_time_signature_unread",
             stage="note-type-route",
-            message=(f"No time signature is read for {len(unsigned)} bar(s), first bar index {unsigned[0]}; "
-                     "declare one with --time-signature."),
+            message=(f"No time signature is printed or readable for {len(unsigned)} bar(s), first bar index "
+                     f"{unsigned[0]}; declare one with --time-signature."),
             details={"first_bar_index": str(unsigned[0]), "bars": str(len(unsigned)),
                      "remediation_hint": "Declare the printed time signature with --time-signature (e.g. 4/4)."},
         )
@@ -187,6 +188,7 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
     tied_from: dict[str, Any] | None = None
     for source_bar in sorted(checks):
         check = checks[source_bar]
+        basis = bar_bases.get(source_bar)
         system = system_of[source_bar]
         records = sorted(by_bar.get(source_bar, []), key=lambda r: r["event_index"])
         bar_digits = placed.get(source_bar, [])
@@ -194,6 +196,10 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
         entry: dict[str, Any] = {
             "source_bar_index": source_bar, "output_bar_index": output_index,
             "time_signature": check["time_signature"], "time_signature_source": check["time_signature_source"],
+            "time_signature_basis": basis["basis"] if basis else None,
+            "time_signature_origin": basis["origin"] if basis else None,
+            "declared_time_signature": basis["declared"] if basis else None,
+            "time_signature_unread": basis["unread"] if basis else None,
             "notation_events": len(records), "tab_digits": len(bar_digits), "events": [],
         }
         crowded = max(len(records), len(_columns(bar_digits, system["staff_space"])))
@@ -211,6 +217,9 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
                 == (refused_tab_system.notation_page_index, refused_tab_system.notation_system_index)):
             refusal = _refusal(refused_tab_system.code, None,
                                f"TAB page {refused_tab_system.page_index}, system {refused_tab_system.system_index}")
+        elif check["status"] == "signature_conflict":
+            refusal = _refusal("time_signature_conflict", None,
+                               f"printed {check['time_signature']}, declared {basis['declared']}")
         elif unread is not None:
             refusal = _refusal("note_duration_event_unread", unread["event_index"], unread["reason"])
         elif not records:

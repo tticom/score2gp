@@ -856,7 +856,8 @@ def convert_command(
     pdf_only_tab: bool = typer.Option(False, "--pdf-only-tab", help="Enable direct PDF-to-GP conversion without a MusicXML timing source"),
     time_signature: Optional[str] = typer.Option(
         None, "--time-signature",
-        help="With --pdf-only-tab: a declared time signature (e.g. '4/4') for the bar check only, where none is printed",
+        help=("With --pdf-only-tab: a declared time signature (e.g. '4/4'), used only where none is printed or readable. "
+              "A printed signature is read from the PDF; a declared one that differs from it refuses the affected bars."),
     ),
     require_precise_timing: bool = typer.Option(False, "--require-precise-timing", help="Reject input if reliable precise timing evidence is missing."),
     tempo_bpm: Optional[float] = typer.Option(None, "--tempo-bpm", help="Explicit tempo override in BPM for PDF-only TabRaw conversion."),
@@ -1575,7 +1576,7 @@ def read_note_durations_command(
     pages: Optional[str] = typer.Option(None, "--pages", help="Page range to read (e.g. '1-2')"),
     time_signature: Optional[str] = typer.Option(
         None, "--time-signature",
-        help="Caller-declared time signature (e.g. '4/4') for the bar check only, where none is printed as text",
+        help="Caller-declared time signature (e.g. '4/4'), used only where none is printed or readable",
     ),
 ) -> None:
     """Read each note's and rest's duration from its note type and grouping (DUR-01)."""

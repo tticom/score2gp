@@ -51,7 +51,7 @@ from ..pdf import (
     _path_subpaths,
 )
 
-SCHEMA = "note-duration-records.v0.5"  # v0.5: grace notes, located non-events; v0.4: located key signature per bar
+SCHEMA = "note-duration-records.v0.6"  # v0.6: printed time signature per bar with its basis; v0.5: grace notes, located non-events; v0.4: located key signature per bar
 
 WRITTEN_VALUES = {
     "whole": Fraction(4), "half": Fraction(2), "quarter": Fraction(1), "eighth": Fraction(1, 2),
@@ -1597,7 +1597,9 @@ def _bar_checks(records: list[dict[str, Any]], bar_signatures: dict[int, dict[st
             expected = Fraction(4 * numerator, denominator)
             check.update(time_signature=f"{numerator}/{denominator}", time_signature_source=signature["source"],
                          expected_quarters=_frac(expected))
-        if unread:
+        if signature and signature.get("conflict"):
+            check["status"] = "signature_conflict"
+        elif unread:
             check["status"] = "incomplete"
         elif not signature:
             check["status"] = "time_signature_unread"
@@ -1607,15 +1609,45 @@ def _bar_checks(records: list[dict[str, Any]], bar_signatures: dict[int, dict[st
     return checks
 
 
+def _signature_basis(signature: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Why a bar has the signature it has: printed or caller-declared, the declared value, any unread reading."""
+    if not signature:
+        return None
+    declared = signature.get("declared")
+    return {"basis": signature["basis"], "origin": signature.get("origin"), "shape": signature.get("shape"),
+            "declared": f"{declared[0]}/{declared[1]}" if declared else None, "unread": signature.get("unread")}
+
+
+def _governing_signature(printed: dict[str, Any] | None, origin: str | None, declared: dict[str, Any] | None,
+                         unread: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The signature that governs a system's bars, and why.
+
+    A printed signature wins; the caller's declared value is only used where none is printed or readable,
+    and a declared value that differs from a printed one is carried as a conflict, never chosen between.
+    """
+    if printed:
+        signature = {**printed, "basis": "printed", "origin": origin}
+        if declared:
+            signature["declared"] = declared["value"]
+            if tuple(declared["value"]) != tuple(printed["value"]):
+                signature["conflict"] = True
+        return signature
+    if declared:
+        return {**declared, "basis": "caller_declared", "origin": None, "unread": unread}
+    return None
+
+
 def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = None,
                         time_signature: tuple[int, int] | None = None) -> dict[str, Any]:
     """Read a duration record for every event on every notation staff of the PDF.
 
     ``pages`` is an inclusive 1-based page range. ``time_signature`` is a caller-declared
-    signature used only for the bar check, and only where none is printed as text.
+    signature used for the bar check only where none is printed or readable; a declared value that
+    differs from a printed one makes the affected bars ``signature_conflict`` (TS-READ-01).
     """
     import pymupdf  # noqa: PLC0415 - PyMuPDF is only needed when reading a PDF
     from .key_signature import read_bar_key_signatures, read_system_key_signature  # noqa: PLC0415 - avoid module import cycle
+    from .time_signature import read_system_time_signature  # noqa: PLC0415 - avoid module import cycle
 
     path = Path(pdf_path)
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -1624,6 +1656,9 @@ def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = No
     key_signatures = []
     bar_key_signatures: dict[int, dict[str, Any]] = {}
     bar_signatures: dict[int, dict[str, Any] | None] = {}
+    bar_time_signatures: dict[int, dict[str, Any] | None] = {}
+    time_signatures: list[dict[str, Any]] = []
+    carried: dict[str, Any] | None = None  # the last printed signature, in force until another is printed
     state: dict[str, Any] = {"bar_offset": 0, "system_number": 0, "time_signature": None,
                              "diagnostics": {"ignored_symbols": 0, "ignored_symbols_by_reason": {}, "arcs_not_ties": 0, "unassociated_numbers": 0, "label_numbers": 0,
                                              "events_outside_bars": 0, "pages_without_notation_staff": 0,
@@ -1640,15 +1675,39 @@ def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = No
             for system_index, staff in enumerate(sorted(notation, key=lambda st: st.top)):
                 key_signature = read_system_key_signature(staff, symbols)
                 state["system_index"] = system_index
+                text_before = state["time_signature"]
                 result = _read_staff(staff, symbols, notation + tab, state)
                 records.extend(result["records"])
                 for bar, bar_key in enumerate(read_bar_key_signatures(
                     staff, symbols, result["bars"], key_signature,
                 )):
                     bar_key_signatures[state["bar_offset"] + bar] = bar_key
-                signature = state["time_signature"] or declared
+                reading = None
+                unread = None
+                if state["time_signature"] is not text_before:  # printed as text glyphs at this system start
+                    carried, origin = state["time_signature"], "system_start"
+                    reading = {"status": "read", "shape": "text_glyphs", "reason": None, "sources": carried["sources"]}
+                else:
+                    reading = read_system_time_signature(staff, symbols)
+                    if reading["status"] == "read":
+                        value = (reading["numerator"], reading["denominator"])
+                        carried = {"value": value, "source": "vector_glyphs", "sources": reading["sources"],
+                                   "shape": reading["shape"]}
+                        origin = "system_start"
+                    elif reading["status"] == "unreadable" and reading["reason"] != "time_signature_clef_unread":
+                        carried, origin = None, None  # a candidate we cannot read: nothing earlier is assumed to hold
+                        unread = {"reason": reading["reason"], "location": reading["location"]}
+                    else:  # absent, or no clef to search from: whatever is printed already stays in force
+                        origin = "carried"
+                signature = _governing_signature(carried, origin, declared, unread)
+                time_signatures.append({"system_number": state["system_number"], "page_index": page_index,
+                                        "first_bar_index": state["bar_offset"], "status": reading["status"],
+                                        "shape": reading.get("shape"), "reason": reading.get("reason"),
+                                        "value": list(carried["value"]) if carried and reading["status"] == "read" else None,
+                                        "sources": reading.get("sources", []), "location": reading.get("location")})
                 for bar in range(result["bar_count"]):
                     bar_signatures[state["bar_offset"] + bar] = signature
+                    bar_time_signatures[state["bar_offset"] + bar] = _signature_basis(signature)
                 key_signatures.append(key_signature)
                 systems.append({"page_index": page_index, "system_index": system_index,
                                 "system_number": state["system_number"], "first_bar_index": state["bar_offset"],
@@ -1665,6 +1724,8 @@ def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = No
         if r["reason"]:
             reasons[r["reason"]] = reasons.get(r["reason"], 0) + 1
     state["diagnostics"]["key_signatures"] = key_signatures
+    state["diagnostics"]["time_signatures"] = time_signatures
+    state["diagnostics"]["bar_time_signatures"] = bar_time_signatures
     state["diagnostics"]["bar_key_signatures"] = bar_key_signatures
     return {
         "schema": SCHEMA,
