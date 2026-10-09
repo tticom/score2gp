@@ -31,7 +31,7 @@ def test_scaled_staves_and_filled_rectangle_barlines(name: str, space: float) ->
     [
         "12 Bar Blues Solo Guitar Jam.pdf",
         "5 MUST KNOW Pentatonic Licks In Em.pdf",
-        "Finger postition tips TAB (1).pdf",
+        "Finger postition tips TAB.pdf",
     ],
 )
 def test_tab_only_private_controls_have_no_notation_staves(name: str) -> None:

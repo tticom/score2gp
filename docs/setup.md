@@ -125,6 +125,13 @@ The sibling `score2gp-private-fixtures` repository now groups inputs under
 expected by older tools, copy the files from those category directories into
 `score2gp/fixtures/private/`. CI performs this mount after auditing the corpus.
 
+CI sets `SCORE2GP_REQUIRE_PRIVATE_CORPUS=1` immediately after mounting the corpus.
+The pytest guard fails the run if any test skips for a source-corpus availability
+reason from the skip census. It lists skipped test IDs and reasons, including
+unrecognised reasons; unrelated platform and local-oracle skips remain allowed.
+Without this variable, local skip behaviour is unchanged. Use `python -m pytest -rs`
+to see skip reasons locally, or set the variable to require the mounted corpus.
+
 Expected local private fixtures for current development:
 
 ```text
