@@ -65,10 +65,12 @@ def test_every_mismatch_would_be_located_by_page_bar_and_event(comparison):
         assert {"page_index", "system_index", "bar_index", "event_index", "cause"} <= set(row)
 
 
-def test_bar_total_is_only_a_check_against_the_declared_signature(comparison):
+def test_bar_total_is_only_a_check_against_the_printed_signature(comparison):
+    # TS-READ-01: Lesson-3 prints 4/4 as vector numerals, so the printed signature (not the declared one) is
+    # the source, a matching declared value changes nothing, and an undeclared read needs no flag.
     records, _ = comparison
     assert records["summary"]["bar_check_status"] == {"match": 66}
-    assert {c["time_signature_source"] for c in records["bar_checks"]} == {"caller_declared"}
+    assert {c["time_signature_source"] for c in records["bar_checks"]} == {"vector_glyphs"}
     undeclared = read_note_durations(PDF)
     assert [e["duration_quarters"] for e in undeclared["events"]] == [e["duration_quarters"] for e in records["events"]]
-    assert undeclared["summary"]["bar_check_status"] == {"time_signature_unread": 66}
+    assert undeclared["summary"]["bar_check_status"] == {"match": 66}
