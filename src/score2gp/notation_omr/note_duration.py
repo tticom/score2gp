@@ -558,6 +558,22 @@ def _is_small_head(glyph: Glyph, space: float) -> bool:
     return glyph.w < SMALL_HEAD_MAX_WIDTH_SPACES * space and glyph.h < SMALL_HEAD_MAX_HEIGHT_SPACES * space
 
 
+def _is_dead_note_x_head(glyph: Glyph, space: float) -> bool:
+    """A head-sized cross has two arms on either side and one crossing at its centre.
+
+    These are ownership evidence only: UNREAD-01 never gives an X a written value.
+    The real-source census includes ledger-line crosses outside the rest window.
+    """
+    if not glyph.curved or not glyph.filled:
+        return False
+    if not (NOTEHEAD_MIN_WIDTH_SPACES <= glyph.w / space <= NOTEHEAD_MAX_WIDTH_SPACES
+            and NOTEHEAD_MIN_HEIGHT_SPACES <= glyph.h / space <= NOTEHEAD_MAX_HEIGHT_SPACES):
+        return False
+    rows = _row_counts(glyph)
+    return (rows[0] == rows[-1] == 2 and rows[len(rows) // 2] == 1
+            and _column_counts(glyph, (0.1, 0.5, 0.9)) == [2, 1, 2])
+
+
 def _is_stroke_fragment_outside_band(glyph: Glyph, staff: Staff) -> bool:
     """A thin piece of a wave glyph (vibrato squiggle, arpeggio stroke) lying wholly outside the five-line band.
 
@@ -1072,9 +1088,13 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
         return upper <= y <= lower and staff.x0 - 1.0 <= x <= staff.x1 + 1.0
 
     glyphs = [g for g in symbols.glyphs if in_zone(g.cx, g.cy)]
+    dead_heads = [g for g in glyphs if _is_dead_note_x_head(g, s)]
+    dead_ids = {g.ident for g in dead_heads}
     heads: list[Glyph] = []
     head_kind: dict[str, str] = {}
     for g in glyphs:
+        if g.ident in dead_ids:
+            continue
         kind = _is_notehead(g, s)
         if kind:
             heads.append(g)
@@ -1086,6 +1106,25 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
     dot_ids = {d.ident for d in dots}
     beams = [g for g in glyphs if g.ident not in head_ids and g.ident not in dot_ids and _is_beam(g, s)]
     beam_ids = {b.ident for b in beams}
+
+    # Keep every band touching a dead-head stem out of other notes' beam groups.
+    # The cross owns its stem even though this task cannot write its TAB event.
+    dead_stems = []
+    for seg in symbols.segments:
+        if not seg.vertical or seg.width > STEM_MAX_WIDTH_SPACES * s:
+            continue
+        x = (seg.x0 + seg.x1) / 2
+        y0, y1 = sorted((seg.y0, seg.y1))
+        if y1 - y0 < STEM_MIN_LENGTH_SPACES * s or not in_zone(x, (y0 + y1) / 2):
+            continue
+        stem = Stem(seg.ident, x, y0, y1, seg.width / 2)
+        _attach_heads(stem, dead_heads)
+        if any(h.bbox[1] <= y0 <= h.bbox[3] or h.bbox[1] <= y1 <= h.bbox[3]
+               for h in stem.heads):
+            dead_stems.append(stem)
+    dead_beam_ids = {beam.ident for beam in beams for stem in dead_stems
+                     if _paints_into(beam.shape, stem.rect)}
+    beams = [beam for beam in beams if beam.ident not in dead_beam_ids]
 
     # Stems: verticals in painted contact with a notehead at one of their ends.
     boundaries = _barlines(staff, symbols)
@@ -1110,7 +1149,7 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
         for head in stem.heads:
             stem_of.setdefault(head.ident, []).append(stem)
 
-    used = head_ids | dot_ids | beam_ids
+    used = dead_ids | head_ids | dot_ids | beam_ids
     flag_candidates = [g for g in glyphs if g.ident not in used and g.filled]
     arcs = [g for g in glyphs if g.ident not in used and _is_arc(g, s)]
     arc_ids = {a.ident for a in arcs}
@@ -1169,6 +1208,8 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
     for event in events:
         if event["_stem"] is None:
             event["_cx"] = sum(h.cx for h in event["_heads"]) / len(event["_heads"])
+    events.extend({"_rest": g, "_rest_kind": None, "_cx": g.cx, "_kind": "unclassified",
+                   "_unread": "dead_note_x_head"} for g in dead_heads)
 
     # The system header (clef, key and time signature) is the run of symbols from the staff start.
     first_note_x = min((h.bbox[0] for h in heads), default=staff.x1)
@@ -1198,7 +1239,11 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
         if direction and in_zone(t.cx, t.cy):
             accidental_marks.append((t.bbox, direction, t.ident, t.bbox[3]))  # text boxes rise above the pitch
     for g in glyphs:
-        if g.ident in head_ids | dot_ids | attached_beam_ids | flag_ids | arc_ids or g.bbox[2] <= header_end:
+        if g.ident in dead_ids | head_ids | dot_ids | attached_beam_ids | flag_ids | arc_ids or g.bbox[2] <= header_end:
+            continue
+        if g.ident in dead_beam_ids:
+            events.append({"_rest": g, "_rest_kind": None, "_cx": g.cx, "_kind": "unclassified",
+                           "_unread": "beam_attached_to_dead_note_x_head"})
             continue
         # Rests stand within reach of the staff; beyond it are tempo marks, text symbols and the like.
         if not (staff.top - REST_VERTICAL_REACH_SPACES * s <= g.bbox[1] and g.bbox[3] <= staff.bottom + REST_VERTICAL_REACH_SPACES * s):
