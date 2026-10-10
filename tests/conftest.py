@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
 
+pytest_plugins = ["private_corpus_guard"]
+
 # Add src/ and project root to sys.path and PYTHONPATH so that test subprocesses can find modules.
 project_root = Path(__file__).parent.parent.resolve()
 src_path = project_root / "src"
