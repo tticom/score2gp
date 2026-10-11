@@ -360,6 +360,7 @@ def _measured_page_staff_space(drawings: list[dict[str, Any]], page_width: float
 
 def extract_page_symbols(page: Any, page_index: int) -> PageSymbols:
     """Split a PyMuPDF page's drawings into glyphs, straight segments, polylines and texts."""
+    import pymupdf  # noqa: PLC0415 - image-free text extraction flags
     drawings = page.get_drawings() + music_font_drawings(page)
     page_staff_space = _measured_page_staff_space(drawings, float(page.rect.width))
     try:
@@ -427,7 +428,9 @@ def extract_page_symbols(page: Any, page_index: int) -> PageSymbols:
         )
         glyphs.append(Glyph(ident, drawing, shape.bbox, shape, False, True))
     texts: list[Text] = []
-    for block in page.get_text("rawdict").get("blocks", []):
+    # Image geometry is already collected above; no text consumer needs image
+    # bytes. Keep the text route bounded by text, including on refused scans.
+    for block in page.get_text("rawdict", flags=pymupdf.TEXTFLAGS_RAWDICT & ~pymupdf.TEXT_PRESERVE_IMAGES).get("blocks", []):
         for line in block.get("lines", []):
             for span in line.get("spans", []):
                 for chars in _tokens([c for c in span.get("chars", []) if not is_music_font_text(c["c"])],
@@ -1272,7 +1275,6 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
         unsupported = [g for head in event.get("_heads", [])
                        for g in parentheses.get(head.ident, [])]
         if unsupported:
-            event["_unread"] = event.get("_unread") or "notehead_parenthesis"
             event["_unread_symbols"] = unsupported
     events.extend({"_rest": g, "_rest_kind": None, "_cx": g.cx, "_kind": "unclassified",
                    "_unread": "dead_note_x_head"} for g in dead_heads)
@@ -1588,11 +1590,16 @@ def _record(event: dict[str, Any], staff: Staff, state: dict[str, Any], bar: int
     reason = event.get("_unread")
     if event.get("_unread_symbols"):
         record["unread_symbols"] = [
-            {"class": "notehead_parenthesis", "source": glyph.ident,
+            {"status": "unread", "class": "parenthesized_head_unrepresented",
+             "reason": "parenthesized_head_unrepresented", "source": glyph.ident,
              "location": {**location, "bbox": [round(v, 3) for v in glyph.bbox]},
              "width_spaces": round(glyph.w / space, 3),
              "height_spaces": round(glyph.h / space, 3)}
             for glyph in event["_unread_symbols"]]
+        # The existing IR has no ghost-note representation. Preserve the
+        # source-read duration while exposing each unsupported owning-head
+        # annotation as a located unread symbol, rather than erasing that note.
+        state["diagnostics"].setdefault("unread_symbols", []).extend(record["unread_symbols"])
     if len({len(row) for row in dot_rows}) > 1:
         reason = reason or "dot_rows_disagree"
     if "_rest" in event:

@@ -38,13 +38,17 @@ def is_music_font_text(text: str) -> bool:
 
 def music_font_drawings(page: Any) -> list[dict[str, Any]]:
     """Outline private-use text only; ordinary text keeps its existing route."""
+    import pymupdf  # noqa: PLC0415 - PDF runtime is optional outside recognition
+
+    # Recognition needs text, never embedded raster image bytes. On scanned
+    # books rawdict's default image preservation decodes every page even though
+    # there is no font glyph to outline. Exclude images before testing for text.
+    text = page.get_text("rawdict", flags=pymupdf.TEXTFLAGS_RAWDICT & ~pymupdf.TEXT_PRESERVE_IMAGES)
     if not any(is_music_font_text(char["c"])
-               for block in page.get_text("rawdict").get("blocks", [])
+               for block in text.get("blocks", [])
                for line in block.get("lines", []) for span in line.get("spans", [])
                for char in span.get("chars", [])):
         return []
-    import pymupdf  # noqa: PLC0415 - PDF runtime is optional outside recognition
-
     source = ET.fromstring(page.get_svg_image(text_as_path=True))
     codes: list[str] = []
 

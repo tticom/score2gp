@@ -23,9 +23,9 @@ def test_derek_music_font_keys_are_read_or_located_by_the_existing_gate():
     assert all(refused[0]["location"][k] is not None for k in
                ("page_index", "system_index", "bar_index"))
     assert result["summary"]["bars"] == 16
-    assert result["summary"]["read_events"] == 213
+    assert result["summary"]["read_events"] == 217
     assert result["summary"]["unread_reasons"] == {
-        "grace_note_in_tuplet": 9, "notehead_parenthesis": 4, "rest_glyph_unidentified": 1}
+        "grace_note_in_tuplet": 9, "rest_glyph_unidentified": 1}
 
 
 @pytest.mark.parametrize("name,read,unread", [
@@ -96,7 +96,7 @@ def test_music_font_outlines_work_in_a_fresh_process(name, counts):
 
 
 @pytest.mark.parametrize("name, beam_events", [
-    ("Derek Trucks BB King", 117), ("G-Am-C-Lick", 54), ("Lesson-3", 448),
+    ("Derek Trucks BB King", 120), ("G-Am-C-Lick", 54), ("Lesson-3", 448),
 ])
 def test_real_source_beams_reach_read_events(name, beam_events):
     source = ROOT / "fixtures/private" / (name + ".pdf")
