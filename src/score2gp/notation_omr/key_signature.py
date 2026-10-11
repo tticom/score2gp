@@ -118,6 +118,8 @@ def read_system_key_signature(staff: Staff, symbols: PageSymbols) -> dict[str, A
                for i in range(1, len(candidates))):
             reasons = "key_signature_partial_or_ambiguous"
     if reasons:
+        if clef.drawing.get("source_form") == "font_glyph_outline":
+            reasons = "font_glyph_key_signature_partial_or_ambiguous"
         return {"status": "refused", "fifths": None, "mode": None,
                 "sources": [c[3] for c in candidates], "reason": reasons,
                 "location": location}

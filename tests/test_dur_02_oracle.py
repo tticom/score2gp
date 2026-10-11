@@ -33,6 +33,37 @@ class OracleRefusal(Exception):
     """The reader met a GPIF element it does not read; it refuses rather than skipping it."""
 
 
+def _selected_staff(root: ET.Element, track_id: str | None,
+                    staff_index: int | None) -> tuple[int, int] | None:
+    """Resolve an explicit GPIF track/staff using only the package topology.
+
+    No note content, product output or recognition result chooses a track.
+    Preserve the single-staff guard when the caller supplies no selection.
+    """
+    if track_id is None:
+        if staff_index is not None:
+            raise OracleRefusal("staff selection requires a track ID")
+        return None
+    tracks = {t.get("id"): t for t in root.findall("Tracks/Track")}
+    order = (root.findtext("MasterTrack/Tracks") or "").split()
+    if not order or len(order) != len(set(order)) or set(order) != set(tracks):
+        raise OracleRefusal("track order is absent or ambiguous")
+    if track_id not in tracks:
+        raise OracleRefusal(f"unknown track ID {track_id}")
+    counts = [len(tracks[ident].findall("Staves/Staff")) for ident in order]
+    if any(count < 1 for count in counts):
+        raise OracleRefusal("track staff topology is absent")
+    selected = order.index(track_id)
+    count = counts[selected]
+    if staff_index is None:
+        if count != 1:
+            raise OracleRefusal(f"track {track_id}: select one of {count} staves explicitly")
+        staff_index = 0
+    if type(staff_index) is not int or not 0 <= staff_index < count:
+        raise OracleRefusal(f"track {track_id}: invalid staff index")
+    return sum(counts[:selected]) + staff_index, sum(counts)
+
+
 def read_gp_free_text(gp: Path | bytes) -> list[tuple[int, int, str]]:
     """Read beat FreeText independently from the packaged GPIF."""
     data = gp if isinstance(gp, bytes) else Path(gp).read_bytes()
@@ -116,15 +147,22 @@ def read_gp_template_text(gp: Path | bytes) -> dict[str, str]:
             ("FirstPageHeader", "FirstPageFooter", "PageHeader", "PageFooter")}
 
 
-def read_gp_systems_layout(gp: Path | bytes) -> list[dict[str, object]]:
+def read_gp_systems_layout(gp: Path | bytes, *, track_id: str | None = None) -> list[dict[str, object]]:
     """Read each track's literal layout elements from the packaged GPIF."""
     data = gp if isinstance(gp, bytes) else Path(gp).read_bytes()
     root = ET.fromstring(zipfile.ZipFile(io.BytesIO(data)).read("Content/score.gpif"))
     tracks = root.find("Tracks")
     if tracks is None:
+        if track_id is not None:
+            raise OracleRefusal(f"unknown track ID {track_id}")
         return []
     out = []
-    for track in tracks.findall("Track"):
+    selected = tracks.findall("Track")
+    if track_id is not None:
+        selected = [track for track in selected if track.get("id") == track_id]
+        if len(selected) != 1:
+            raise OracleRefusal(f"unknown or ambiguous track ID {track_id}")
+    for track in selected:
         raw = track.findtext("SystemsLayout")
         if raw is None:
             layout = None
@@ -141,8 +179,11 @@ def read_gp_systems_layout(gp: Path | bytes) -> list[dict[str, object]]:
     return out
 
 
-def compare_gp_systems_layout(truth: Path | bytes, produced: Path | bytes) -> list[dict[str, object]]:
-    expected, actual = read_gp_systems_layout(truth), read_gp_systems_layout(produced)
+def compare_gp_systems_layout(truth: Path | bytes, produced: Path | bytes, *,
+                              truth_track_id: str | None = None,
+                              produced_track_id: str | None = None) -> list[dict[str, object]]:
+    expected = read_gp_systems_layout(truth, track_id=truth_track_id)
+    actual = read_gp_systems_layout(produced, track_id=produced_track_id)
     differences = []
     if len(expected) != len(actual):
         differences.append({"track_index": None, "field": "track_count",
@@ -155,7 +196,8 @@ def compare_gp_systems_layout(truth: Path | bytes, produced: Path | bytes) -> li
     return differences
 
 
-def read_gp_bars(gp: Path | bytes, *, include_grace: bool = False) -> list[dict[str, Any]]:
+def read_gp_bars(gp: Path | bytes, *, include_grace: bool = False,
+                 track_id: str | None = None, staff_index: int | None = None) -> list[dict[str, Any]]:
     """Per bar: its time signature and its events, or ``events=None`` for a bar with no beats."""
     data = gp if isinstance(gp, bytes) else Path(gp).read_bytes()
     root = ET.fromstring(zipfile.ZipFile(io.BytesIO(data)).read("Content/score.gpif"))
@@ -164,14 +206,22 @@ def read_gp_bars(gp: Path | bytes, *, include_grace: bool = False) -> list[dict[
         node = root.find(container)
         return {} if node is None else {e.get("id"): e for e in node.findall(item)}
 
+    selected = _selected_staff(root, track_id, staff_index)
     bars, voices, beats = table("Bars", "Bar"), table("Voices", "Voice"), table("Beats", "Beat")
     rhythms, notes = table("Rhythms", "Rhythm"), table("Notes", "Note")
     out = []
     for index, master in enumerate(root.find("MasterBars").findall("MasterBar")):
         bar_ids = master.find("Bars").text.split()
-        if len(bar_ids) != 1:
-            raise OracleRefusal(f"bar {index}: {len(bar_ids)} staves")
-        voice_ids = [v for v in (bars[bar_ids[0]].findtext("Voices") or "").split() if v != "-1"]
+        if selected is None:
+            if len(bar_ids) != 1:
+                raise OracleRefusal(f"bar {index}: {len(bar_ids)} staves")
+            bar_id = bar_ids[0]
+        else:
+            slot, total = selected
+            if len(bar_ids) != total:
+                raise OracleRefusal(f"bar {index}: staff topology disagrees with tracks")
+            bar_id = bar_ids[slot]
+        voice_ids = [v for v in (bars[bar_id].findtext("Voices") or "").split() if v != "-1"]
         voice_ids = [v for v in voice_ids if (voices[v].findtext("Beats") or "").split()]
         if len(voice_ids) > 1:
             raise OracleRefusal(f"bar {index}: {len(voice_ids)} voices")
@@ -235,11 +285,15 @@ def read_gp_bars(gp: Path | bytes, *, include_grace: bool = False) -> list[dict[
 
 
 def compare_gp(truth: Path | bytes, produced: Path | bytes,
-               mode_evidence: set[int] | None = None) -> dict[str, Any]:
+               mode_evidence: set[int] | None = None, *,
+               truth_track_id: str | None = None, truth_staff_index: int | None = None,
+               produced_track_id: str | None = None, produced_staff_index: int | None = None) -> dict[str, Any]:
     """Every difference between the produced file and the truth, by bar and event index."""
-    want, have = read_gp_bars(truth, include_grace=True), read_gp_bars(produced, include_grace=True)
+    want = read_gp_bars(truth, include_grace=True, track_id=truth_track_id, staff_index=truth_staff_index)
+    have = read_gp_bars(produced, include_grace=True, track_id=produced_track_id, staff_index=produced_staff_index)
     differences: list[dict[str, Any]] = []
-    for item in compare_gp_systems_layout(truth, produced):
+    for item in compare_gp_systems_layout(truth, produced, truth_track_id=truth_track_id,
+                                         produced_track_id=produced_track_id):
         differences.append({"bar_index": None, "event_index": None,
                             "field": f"systems_{item['field']}",
                             "track_index": item["track_index"],
@@ -540,3 +594,26 @@ def test_the_grace_tag_is_compared_on_its_own_and_located():
 def test_the_oracle_never_imports_score2gp():
     source = Path(__file__).read_text(encoding="utf-8")
     assert "import " + "score2gp" not in source and "from " + "score2gp" not in source
+
+
+# Real reference topology, independent of all source recognition and writer code.
+def test_explicit_reference_track_selection_preserves_the_default_guard():
+    import pytest
+
+    reference = Path(__file__).resolve().parents[1] / "fixtures/private/Derek Trucks BB King.gp"
+    assert reference.is_file(), "required approved private reference missing"
+    with pytest.raises(OracleRefusal, match="3 staves"):
+        read_gp_bars(reference)
+    selected = read_gp_bars(reference, track_id="0")
+    assert len(selected) == 16
+    assert sum(len(bar["events"] or []) for bar in selected) == 226
+    with pytest.raises(OracleRefusal, match="select one of 2 staves explicitly"):
+        read_gp_bars(reference, track_id="1")
+    with pytest.raises(OracleRefusal, match="2 voices"):
+        read_gp_bars(reference, track_id="1", staff_index=0)
+    empty = read_gp_bars(reference, track_id="1", staff_index=1)
+    assert all(bar["events"] is None for bar in empty)
+    with pytest.raises(OracleRefusal, match="unknown track ID"):
+        read_gp_bars(reference, track_id="unknown")
+    with pytest.raises(OracleRefusal, match="invalid staff index"):
+        read_gp_bars(reference, track_id="0", staff_index=1)
