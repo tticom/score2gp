@@ -1276,8 +1276,10 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
                        for g in parentheses.get(head.ident, [])]
         if unsupported:
             event["_unread_symbols"] = unsupported
-    events.extend({"_rest": g, "_rest_kind": None, "_cx": g.cx, "_kind": "unclassified",
-                   "_unread": "dead_note_x_head"} for g in dead_heads)
+    # Located-only symbols are recorded with their class but never enter the event
+    # stream: a refused bar keeps the bar-level reason it had before they were seen.
+    located_events = [{"_rest": g, "_rest_kind": None, "_cx": g.cx, "_kind": "unclassified",
+                       "_dots": [], "_unread": "dead_note_x_head"} for g in dead_heads]
 
     # The system header (clef, key and time signature) is the run of symbols from the staff start.
     first_note_x = min((h.bbox[0] for h in heads), default=staff.x1)
@@ -1300,6 +1302,7 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
     # Every other glyph after the header is a rest, a located unread event, or a symbol classified
     # (and counted) as something else. Nothing that could be a rest is dropped silently.
     ignored: dict[str, int] = {}
+    overlaps: list[dict[str, Any]] = []
     head_boxes = [h.bbox for h in heads]
     accidental_marks: list[tuple[tuple[float, float, float, float], str, str, float]] = []
     for t in symbols.texts:
@@ -1310,8 +1313,8 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
         if g.ident in parenthesis_ids | dead_ids | head_ids | dot_ids | attached_beam_ids | flag_ids | arc_ids or g.bbox[2] <= header_end:
             continue
         if g.ident in dead_beam_ids:
-            events.append({"_rest": g, "_rest_kind": None, "_cx": g.cx, "_kind": "unclassified",
-                           "_unread": "beam_attached_to_dead_note_x_head"})
+            located_events.append({"_rest": g, "_rest_kind": None, "_cx": g.cx, "_kind": "unclassified",
+                                   "_dots": [], "_unread": "beam_attached_to_dead_note_x_head"})
             continue
         # Rests stand within reach of the staff; beyond it are tempo marks, text symbols and the like.
         if not (staff.top - REST_VERTICAL_REACH_SPACES * s <= g.bbox[1] and g.bbox[3] <= staff.bottom + REST_VERTICAL_REACH_SPACES * s):
@@ -1346,10 +1349,13 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
                 events.append({"_rest": g, "_rest_kind": kind, "_cx": g.cx, "_unread": "rest_glyph_beside_note"})
             else:
                 ignored[beside] = ignored.get(beside, 0) + 1
-                if beside == "accidental_beside_notehead":
-                    direction = _accidental_direction(g, s)
-                    if direction:
-                        accidental_marks.append((g.bbox, direction, g.ident, _glyph_anchor(g, direction, s)))
+                direction = _accidental_direction(g, s) if beside == "accidental_beside_notehead" else None
+                if direction:
+                    accidental_marks.append((g.bbox, direction, g.ident, _glyph_anchor(g, direction, s)))
+                else:
+                    # DUR-01-FU1: an unclassified form on a head or stem is located with its class,
+                    # not only counted by reason. It does not change the bar's reading (no value).
+                    overlaps.append({"glyph": g, "cx": g.cx, "position": beside})
             continue
         if kind is None:
             if _is_thick_barline(g, staff):
@@ -1381,6 +1387,19 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
         state["diagnostics"]["non_events"].append({"reason": item["reason"], **located})
         by_reason = state["diagnostics"]["non_events_by_reason"]
         by_reason[item["reason"]] = by_reason.get(item["reason"], 0) + 1
+
+    for item in overlaps:
+        glyph = item["glyph"]
+        bar = next((i for i, (a, b) in enumerate(bars) if a <= item["cx"] <= b), None)
+        position = None if bar is None else sum(
+            1 for e in events if e["_bar"] == bar and e["_cx"] < item["cx"])
+        state["diagnostics"].setdefault("unread_symbols", []).append({
+            "status": "unread", "class": "unsupported_overlapping_form", "reason": item["position"],
+            "shape_class": _unread_shape_class(glyph, s), "source": glyph.ident,
+            "location": {"page_index": staff.page_index, "system_index": state["system_index"],
+                         "bar_index": None if bar is None else state["bar_offset"] + bar,
+                         "event_index": position, "bbox": [round(v, 3) for v in glyph.bbox]},
+            "width_spaces": round(glyph.w / s, 3), "height_spaces": round(glyph.h / s, 3)})
 
     # Bar numbers are printed before the first event of their bar.
     first_x_in_bar: dict[int, float] = {}
@@ -1471,6 +1490,16 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
 
     records = []
     per_bar: dict[int, int] = {}
+    located_records = []
+    for event in sorted(located_events, key=lambda e: e["_cx"]):
+        bar = next((i for i, (a, b) in enumerate(bars) if a <= event["_cx"] <= b), None)
+        if bar is None:
+            state["diagnostics"]["events_outside_bars"] += 1  # counted, never silently dropped
+            continue
+        event["_bar"] = bar
+        # Position in the bar's event order: the number of ordinary events left of it.
+        position = sum(1 for e in events if e["_bar"] == bar and e["_cx"] < event["_cx"])
+        located_records.append(_record(event, staff, state, bar, position, parts_by_stem, head_kind, s))
     for event in events:
         bar = event["_bar"]
         if bar is None:
@@ -1480,6 +1509,7 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
         per_bar[bar] = index + 1
         records.append(_record(event, staff, state, bar, index, parts_by_stem, head_kind, s))
     _attach_graces(records, s)
+    state["diagnostics"].setdefault("located_unread_events", []).extend(located_records)
     by_reason = state["diagnostics"]["ignored_symbols_by_reason"]
     for reason, count in ignored.items():
         state["diagnostics"]["ignored_symbols"] += count
@@ -1717,14 +1747,22 @@ def _attach_graces(records: list[dict[str, Any]], space: float) -> None:
 
 # --- document -------------------------------------------------------------------------------
 
-def _bar_checks(records: list[dict[str, Any]], bar_signatures: dict[int, dict[str, Any] | None]) -> list[dict[str, Any]]:
+def _bar_checks(records: list[dict[str, Any]], bar_signatures: dict[int, dict[str, Any] | None],
+                located: list[dict[str, Any]] = ()) -> list[dict[str, Any]]:
+    """Per-bar totals. ``located`` symbols (UNREAD-01) never change a status except that they stop a bar
+    that would match from being written: a located unread symbol is not a value, and its bar is refused."""
     checks = []
     for bar, signature in sorted(bar_signatures.items()):
         events = [r for r in records if r["bar_index"] == bar]
         unread = sum(1 for r in events if r["status"] != "read")
         total = sum((Fraction(r["duration_quarters"]) for r in events if r["status"] == "read"), Fraction(0))
+        held = [{"class": r["shape_class"], "reason": r["reason"], "page_index": r["page_index"],
+                 "system_index": r["system_index"], "bar_index": r["bar_index"], "event_index": r["event_index"]}
+                for r in located if r["bar_index"] == bar]
         check = {"bar_index": bar, "events": len(events), "unread_events": unread, "total_quarters": _frac(total),
                  "time_signature": None, "time_signature_source": None, "expected_quarters": None}
+        if held:
+            check["located_unread"] = held
         if signature:
             numerator, denominator = signature["value"]
             expected = Fraction(4 * numerator, denominator)
@@ -1737,7 +1775,7 @@ def _bar_checks(records: list[dict[str, Any]], bar_signatures: dict[int, dict[st
         elif not signature:
             check["status"] = "time_signature_unread"
         else:
-            check["status"] = "match" if total == expected else "mismatch"
+            check["status"] = "match" if total == expected and not held else "mismatch"
         checks.append(check)
     return checks
 
@@ -1852,7 +1890,7 @@ def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = No
                                 "bars": [[round(a, 3), round(b, 3)] for a, b in result["bars"]]})
                 state["bar_offset"] += result["bar_count"]
                 state["system_number"] += 1
-    checks = _bar_checks(records, bar_signatures)
+    checks = _bar_checks(records, bar_signatures, state["diagnostics"].get("located_unread_events", []))
     read = sum(1 for r in records if r["status"] == "read")
     reasons: dict[str, int] = {}
     for r in records:

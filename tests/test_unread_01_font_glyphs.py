@@ -28,15 +28,17 @@ def test_derek_music_font_keys_are_read_or_located_by_the_existing_gate():
         "grace_note_in_tuplet": 9, "rest_glyph_unidentified": 1}
 
 
-@pytest.mark.parametrize("name,read,unread", [
-    ("G-Am-C-Lick", 70, 38), ("Lesson-3", 465, 0),
+@pytest.mark.parametrize("name,read,unread,located", [
+    ("G-Am-C-Lick", 70, 2, 36), ("Lesson-3", 465, 0, 0),
 ])
-def test_approved_drawing_sources_keep_their_reader_events(name, read, unread):
+def test_approved_drawing_sources_keep_their_reader_events(name, read, unread, located):
     source = ROOT / "fixtures/private" / (name + ".pdf")
     assert source.is_file(), "required approved private source missing"
     result = read_note_durations(source)
     assert result["summary"]["read_events"] == read
     assert result["summary"]["unread_events"] == unread
+    # Located-only symbols (dead-note X heads and their bands) are outside the event stream.
+    assert len(result["diagnostics"].get("located_unread_events", [])) == located
 
 
 @pytest.mark.parametrize("scale", [0.5, 2.0])

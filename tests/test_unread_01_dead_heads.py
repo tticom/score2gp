@@ -14,7 +14,8 @@ def test_every_real_x_head_is_located_including_ledger_line_heads():
     source = ROOT / "fixtures/private/G-Am-C-Lick.pdf"
     assert source.is_file(), "required approved private source missing"
     result = read_note_durations(source)
-    dead = [e for e in result["events"] if e["reason"] == "dead_note_x_head"]
+    located = result["diagnostics"]["located_unread_events"]
+    dead = [e for e in located if e["reason"] == "dead_note_x_head"]
     # Source contour census: twenty crosses, including sixteen formerly outside rest reach.
     assert len(dead) == 20
     assert {e["bar_index"] for e in dead} == set(range(8))
@@ -22,8 +23,11 @@ def test_every_real_x_head_is_located_including_ledger_line_heads():
         assert e["status"] == "unread" and e["written"] is None
         assert all(e["location"][k] is not None for k in
                    ("page_index", "system_index", "bar_index", "event_index"))
-    assert all(c["status"] == "incomplete" for c in result["bar_checks"][:8])
-    blocked = {e["rest"]["source"] for e in result["events"]
+    # A located symbol keeps its bar refused and never replaces the bar-level status.
+    assert all(c["status"] != "match" and c["located_unread"]
+               for c in result["bar_checks"] if c["bar_index"] in {e["bar_index"] for e in dead})
+    assert not [e for e in result["events"] if e["reason"] == "dead_note_x_head"]
+    blocked = {e["rest"]["source"] for e in located
                if e["reason"] == "beam_attached_to_dead_note_x_head"}
     assert blocked
     read_beams = {source for e in result["events"] if e["status"] == "read"
@@ -47,7 +51,8 @@ def test_real_source_crosses_keep_their_located_refusal_when_scaled(scale):
                 output.show_pdf_page(output.rect, original, i)
             derived.save(target)
         result = read_note_durations(target)
-        dead = [e for e in result["events"] if e["reason"] == "dead_note_x_head"]
+        dead = [e for e in result["diagnostics"]["located_unread_events"]
+                if e["reason"] == "dead_note_x_head"]
         assert len(dead) == 20
         assert all(e["status"] == "unread" for e in dead)
         assert all(e["location"][k] is not None for e in dead for k in

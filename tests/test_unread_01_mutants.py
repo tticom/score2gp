@@ -47,7 +47,8 @@ def test_fixed_point_beam_size_mutant_fails_on_scaled_approved_sources(monkeypat
 
 def _assert_dead_head_refusals(source):
     result = nd.read_note_durations(source)
-    dead = [e for e in result["events"] if e["reason"] == "dead_note_x_head"]
+    dead = [e for e in result["diagnostics"].get("located_unread_events", [])
+            if e["reason"] == "dead_note_x_head"]
     assert len(dead) == 20
     assert all(e["status"] == "unread" and e["written"] is None for e in dead)
     assert all(e["location"][key] is not None for e in dead
@@ -63,7 +64,9 @@ def test_silent_unclassified_drop_mutant_fails_on_the_real_source(monkeypatch):
     needle = "    # Assign events to bars."
     assert code.count(needle) == 1
     code = code.replace(needle,
-        '    events = [e for e in events if e.get("_kind") != "unclassified"]\n' + needle)
+        '    events = [e for e in events if e.get("_kind") != "unclassified"]\n'
+        '    located_events = [e for e in located_events if e.get("_kind") != "unclassified"]\n'
+        + needle)
     namespace = dict(nd.__dict__)
     exec(compile(code, "<silent-symbol-drop-mutant>", "exec"), namespace)
     monkeypatch.setattr(nd, "_read_staff", namespace["_read_staff"])
