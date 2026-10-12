@@ -35,6 +35,8 @@ from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
+from .font_glyphs import is_music_font_text, music_font_drawings
+
 from ..pdf import (
     CURVE_FLATTENING_TOLERANCE_PT,
     NOTEHEAD_MAX_HEIGHT_SPACES,
@@ -356,9 +358,12 @@ def _measured_page_staff_space(drawings: list[dict[str, Any]], page_width: float
     smallest = min(repeated)
     return statistics.median(gap for gap in gaps if round(gap, 1) == smallest)
 
-def extract_page_symbols(page: Any, page_index: int) -> PageSymbols:
+def extract_page_symbols(page: Any, page_index: int, *, include_music_font: bool = True) -> PageSymbols:
     """Split a PyMuPDF page's drawings into glyphs, straight segments, polylines and texts."""
+    import pymupdf  # noqa: PLC0415 - image-free text extraction flags
     drawings = page.get_drawings()
+    if include_music_font:
+        drawings += music_font_drawings(page)
     page_staff_space = _measured_page_staff_space(drawings, float(page.rect.width))
     try:
         image_rects = [tuple(info["bbox"]) for info in page.get_image_info()]
@@ -425,10 +430,14 @@ def extract_page_symbols(page: Any, page_index: int) -> PageSymbols:
         )
         glyphs.append(Glyph(ident, drawing, shape.bbox, shape, False, True))
     texts: list[Text] = []
-    for block in page.get_text("rawdict").get("blocks", []):
+    # Image geometry is already collected above; no text consumer needs image
+    # bytes. Keep the text route bounded by text, including on refused scans.
+    for block in page.get_text("rawdict", flags=pymupdf.TEXTFLAGS_RAWDICT & ~pymupdf.TEXT_PRESERVE_IMAGES).get("blocks", []):
         for line in block.get("lines", []):
             for span in line.get("spans", []):
-                for chars in _tokens(span.get("chars", []), float(span.get("size") or 0.0)):
+                for chars in _tokens([c for c in span.get("chars", [])
+                                      if not include_music_font or not is_music_font_text(c["c"])],
+                                     float(span.get("size") or 0.0)):
                     text = "".join(c["c"] for c in chars)
                     box = _bbox_union([tuple(float(v) for v in c["bbox"]) for c in chars])
                     texts.append(Text(f"p{page_index}:t{len(texts)}", text, box))
@@ -556,6 +565,77 @@ def _is_notehead(glyph: Glyph, space: float) -> str | None:
 def _is_small_head(glyph: Glyph, space: float) -> bool:
     """A notehead drawn smaller than this staff's full-size heads (grace and cue size)."""
     return glyph.w < SMALL_HEAD_MAX_WIDTH_SPACES * space and glyph.h < SMALL_HEAD_MAX_HEIGHT_SPACES * space
+
+
+def _is_dead_note_x_head(glyph: Glyph, space: float) -> bool:
+    """A head-sized cross has two arms on either side and one crossing at its centre.
+
+    These are ownership evidence only: UNREAD-01 never gives an X a written value.
+    The real-source census includes ledger-line crosses outside the rest window.
+    """
+    if not glyph.curved or not glyph.filled:
+        return False
+    if not (NOTEHEAD_MIN_WIDTH_SPACES <= glyph.w / space <= NOTEHEAD_MAX_WIDTH_SPACES
+            and NOTEHEAD_MIN_HEIGHT_SPACES <= glyph.h / space <= NOTEHEAD_MAX_HEIGHT_SPACES):
+        return False
+    rows = _row_counts(glyph)
+    return (rows[0] == rows[-1] == 2 and rows[len(rows) // 2] == 1
+            and _column_counts(glyph, (0.1, 0.5, 0.9)) == [2, 1, 2])
+
+
+def _unread_shape_class(glyph: Glyph, space: float) -> str:
+    """Name the measured form of an unread glyph without accepting its value."""
+    if _is_dead_note_x_head(glyph, space):
+        return "dead_note_x_head"
+    if _is_beam(glyph, space):
+        return "constant_thickness_band"
+    if glyph.curved:
+        if glyph.w <= space and glyph.h <= 1.1 * space:
+            return "narrow_curved_stroke"
+        if glyph.h >= 2 * space:
+            return "rest_sized_curve"
+        return "other_curved_form"
+    return "straight_form"
+
+
+def _notehead_parentheses(glyphs: list[Glyph], heads: list[Glyph],
+                          space: float) -> dict[str, list[Glyph]]:
+    """Paired curved strokes enclosing one head, not a new note or a rest.
+
+    The approved contours have one horizontal paint run and two vertical
+    runs toward the open side. Their size and contact with the enclosed head
+    are staff-relative. Parenthesized/ghost-note output has no IR contract,
+    so this locates an unsupported form; it does not discard an annotation.
+    """
+    sides: dict[str, list[Glyph]] = {"left": [], "right": []}
+    for glyph in glyphs:
+        if not (glyph.curved and glyph.filled
+                and 0.4 <= glyph.w / space <= 1.0
+                and 0.75 <= glyph.h / space <= 1.25):
+            continue
+        if any(count != 1 for count in _row_counts(glyph)):
+            continue
+        columns = _column_counts(glyph, (0.1, 0.5, 0.9))
+        if columns == [0, 2, 2]:
+            sides["left"].append(glyph)
+        elif columns == [2, 2, 0]:
+            sides["right"].append(glyph)
+    pairs: dict[str, list[Glyph]] = {}
+    for head in heads:
+        left = [g for g in sides["left"]
+                if abs(g.cy - head.cy) <= 0.15 * space
+                and abs(g.bbox[2] - head.bbox[0]) <= 0.25 * space]
+        right = [g for g in sides["right"]
+                 if abs(g.cy - head.cy) <= 0.15 * space
+                 and abs(g.bbox[0] - head.bbox[2]) <= 0.25 * space]
+        if len(left) == len(right) == 1 and abs(left[0].h - right[0].h) <= 0.1 * space:
+            pairs[head.ident] = [left[0], right[0]]
+    ownership: dict[str, int] = {}
+    for pair in pairs.values():
+        for glyph in pair:
+            ownership[glyph.ident] = ownership.get(glyph.ident, 0) + 1
+    return {head: pair for head, pair in pairs.items()
+            if all(ownership[g.ident] == 1 for g in pair)}
 
 
 def _is_stroke_fragment_outside_band(glyph: Glyph, staff: Staff) -> bool:
@@ -1072,20 +1152,46 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
         return upper <= y <= lower and staff.x0 - 1.0 <= x <= staff.x1 + 1.0
 
     glyphs = [g for g in symbols.glyphs if in_zone(g.cx, g.cy)]
+    base_equivalent = state.get("base_equivalent", False)
+    dead_heads = [] if base_equivalent else [g for g in glyphs if _is_dead_note_x_head(g, s)]
+    dead_ids = {g.ident for g in dead_heads}
     heads: list[Glyph] = []
     head_kind: dict[str, str] = {}
     for g in glyphs:
+        if g.ident in dead_ids:
+            continue
         kind = _is_notehead(g, s)
         if kind:
             heads.append(g)
             head_kind[g.ident] = kind
     head_ids = set(head_kind)
+    parentheses = {} if base_equivalent else _notehead_parentheses(glyphs, heads, s)
+    parenthesis_ids = {g.ident for pair in parentheses.values() for g in pair}
     small_ids = {h.ident for h in heads if _is_small_head(h, s)}
     non_events: list[dict[str, Any]] = []
     dots = [g for g in glyphs if g.ident not in head_ids and _is_dot(g, s)]
     dot_ids = {d.ident for d in dots}
     beams = [g for g in glyphs if g.ident not in head_ids and g.ident not in dot_ids and _is_beam(g, s)]
     beam_ids = {b.ident for b in beams}
+
+    # Keep every band touching a dead-head stem out of other notes' beam groups.
+    # The cross owns its stem even though this task cannot write its TAB event.
+    dead_stems = []
+    for seg in symbols.segments:
+        if not seg.vertical or seg.width > STEM_MAX_WIDTH_SPACES * s:
+            continue
+        x = (seg.x0 + seg.x1) / 2
+        y0, y1 = sorted((seg.y0, seg.y1))
+        if y1 - y0 < STEM_MIN_LENGTH_SPACES * s or not in_zone(x, (y0 + y1) / 2):
+            continue
+        stem = Stem(seg.ident, x, y0, y1, seg.width / 2)
+        _attach_heads(stem, dead_heads)
+        if any(h.bbox[1] <= y0 <= h.bbox[3] or h.bbox[1] <= y1 <= h.bbox[3]
+               for h in stem.heads):
+            dead_stems.append(stem)
+    dead_beam_ids = {beam.ident for beam in beams for stem in dead_stems
+                     if _paints_into(beam.shape, stem.rect)}
+    beams = [beam for beam in beams if beam.ident not in dead_beam_ids]
 
     # Stems: verticals in painted contact with a notehead at one of their ends.
     boundaries = _barlines(staff, symbols)
@@ -1110,7 +1216,7 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
         for head in stem.heads:
             stem_of.setdefault(head.ident, []).append(stem)
 
-    used = head_ids | dot_ids | beam_ids
+    used = dead_ids | head_ids | dot_ids | beam_ids
     flag_candidates = [g for g in glyphs if g.ident not in used and g.filled]
     arcs = [g for g in glyphs if g.ident not in used and _is_arc(g, s)]
     arc_ids = {a.ident for a in arcs}
@@ -1169,6 +1275,15 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
     for event in events:
         if event["_stem"] is None:
             event["_cx"] = sum(h.cx for h in event["_heads"]) / len(event["_heads"])
+    for event in events:
+        unsupported = [g for head in event.get("_heads", [])
+                       for g in parentheses.get(head.ident, [])]
+        if unsupported:
+            event["_unread_symbols"] = unsupported
+    # Located-only symbols are recorded with their class but never enter the event
+    # stream: a refused bar keeps the bar-level reason it had before they were seen.
+    located_events = [{"_rest": g, "_rest_kind": None, "_cx": g.cx, "_kind": "unclassified",
+                       "_dots": [], "_unread": "dead_note_x_head"} for g in dead_heads]
 
     # The system header (clef, key and time signature) is the run of symbols from the staff start.
     first_note_x = min((h.bbox[0] for h in heads), default=staff.x1)
@@ -1191,6 +1306,7 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
     # Every other glyph after the header is a rest, a located unread event, or a symbol classified
     # (and counted) as something else. Nothing that could be a rest is dropped silently.
     ignored: dict[str, int] = {}
+    overlaps: list[dict[str, Any]] = []
     head_boxes = [h.bbox for h in heads]
     accidental_marks: list[tuple[tuple[float, float, float, float], str, str, float]] = []
     for t in symbols.texts:
@@ -1198,7 +1314,11 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
         if direction and in_zone(t.cx, t.cy):
             accidental_marks.append((t.bbox, direction, t.ident, t.bbox[3]))  # text boxes rise above the pitch
     for g in glyphs:
-        if g.ident in head_ids | dot_ids | attached_beam_ids | flag_ids | arc_ids or g.bbox[2] <= header_end:
+        if g.ident in parenthesis_ids | dead_ids | head_ids | dot_ids | attached_beam_ids | flag_ids | arc_ids or g.bbox[2] <= header_end:
+            continue
+        if g.ident in dead_beam_ids:
+            located_events.append({"_rest": g, "_rest_kind": None, "_cx": g.cx, "_kind": "unclassified",
+                                   "_dots": [], "_unread": "beam_attached_to_dead_note_x_head"})
             continue
         # Rests stand within reach of the staff; beyond it are tempo marks, text symbols and the like.
         if not (staff.top - REST_VERTICAL_REACH_SPACES * s <= g.bbox[1] and g.bbox[3] <= staff.bottom + REST_VERTICAL_REACH_SPACES * s):
@@ -1233,10 +1353,13 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
                 events.append({"_rest": g, "_rest_kind": kind, "_cx": g.cx, "_unread": "rest_glyph_beside_note"})
             else:
                 ignored[beside] = ignored.get(beside, 0) + 1
-                if beside == "accidental_beside_notehead":
-                    direction = _accidental_direction(g, s)
-                    if direction:
-                        accidental_marks.append((g.bbox, direction, g.ident, _glyph_anchor(g, direction, s)))
+                direction = _accidental_direction(g, s) if beside == "accidental_beside_notehead" else None
+                if direction:
+                    accidental_marks.append((g.bbox, direction, g.ident, _glyph_anchor(g, direction, s)))
+                elif not base_equivalent:
+                    # The assembler decides preservation from the base-equivalent
+                    # route; a located overlap never supplies a duration.
+                    overlaps.append({"glyph": g, "cx": g.cx, "position": beside})
             continue
         if kind is None:
             if _is_thick_barline(g, staff):
@@ -1268,6 +1391,19 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
         state["diagnostics"]["non_events"].append({"reason": item["reason"], **located})
         by_reason = state["diagnostics"]["non_events_by_reason"]
         by_reason[item["reason"]] = by_reason.get(item["reason"], 0) + 1
+
+    for item in overlaps:
+        glyph = item["glyph"]
+        bar = next((i for i, (a, b) in enumerate(bars) if a <= item["cx"] <= b), None)
+        position = None if bar is None else sum(
+            1 for e in events if e["_bar"] == bar and e["_cx"] < item["cx"])
+        state["diagnostics"].setdefault("unread_symbols", []).append({
+            "status": "unread", "class": "unsupported_overlapping_form", "reason": item["position"],
+            "shape_class": _unread_shape_class(glyph, s), "source": glyph.ident,
+            "location": {"page_index": staff.page_index, "system_index": state["system_index"],
+                         "bar_index": None if bar is None else state["bar_offset"] + bar,
+                         "event_index": position, "bbox": [round(v, 3) for v in glyph.bbox]},
+            "width_spaces": round(glyph.w / s, 3), "height_spaces": round(glyph.h / s, 3)})
 
     # Bar numbers are printed before the first event of their bar.
     first_x_in_bar: dict[int, float] = {}
@@ -1358,6 +1494,16 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
 
     records = []
     per_bar: dict[int, int] = {}
+    located_records = []
+    for event in sorted(located_events, key=lambda e: e["_cx"]):
+        bar = next((i for i, (a, b) in enumerate(bars) if a <= event["_cx"] <= b), None)
+        if bar is None:
+            state["diagnostics"]["events_outside_bars"] += 1  # counted, never silently dropped
+            continue
+        event["_bar"] = bar
+        # Position in the bar's event order: the number of ordinary events left of it.
+        position = sum(1 for e in events if e["_bar"] == bar and e["_cx"] < event["_cx"])
+        located_records.append(_record(event, staff, state, bar, position, parts_by_stem, head_kind, s))
     for event in events:
         bar = event["_bar"]
         if bar is None:
@@ -1367,6 +1513,7 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
         per_bar[bar] = index + 1
         records.append(_record(event, staff, state, bar, index, parts_by_stem, head_kind, s))
     _attach_graces(records, s)
+    state["diagnostics"].setdefault("located_unread_events", []).extend(located_records)
     by_reason = state["diagnostics"]["ignored_symbols_by_reason"]
     for reason, count in ignored.items():
         state["diagnostics"]["ignored_symbols"] += count
@@ -1475,6 +1622,18 @@ def _record(event: dict[str, Any], staff: Staff, state: dict[str, Any], bar: int
     parts = {"kind": "rest", "head_kind": None, "has_stem": False, "flag_hooks": 0, "beam_count": 0,
              "beam_group_size": 0, "rest_glyph": None}
     reason = event.get("_unread")
+    if event.get("_unread_symbols"):
+        record["unread_symbols"] = [
+            {"status": "unread", "class": "parenthesized_head_unrepresented",
+             "reason": "parenthesized_head_unrepresented", "source": glyph.ident,
+             "location": {**location, "bbox": [round(v, 3) for v in glyph.bbox]},
+             "width_spaces": round(glyph.w / space, 3),
+             "height_spaces": round(glyph.h / space, 3)}
+            for glyph in event["_unread_symbols"]]
+        # The existing IR has no ghost-note representation. Preserve the
+        # source-read duration while exposing each unsupported owning-head
+        # annotation as a located unread symbol, rather than erasing that note.
+        state["diagnostics"].setdefault("unread_symbols", []).extend(record["unread_symbols"])
     if len({len(row) for row in dot_rows}) > 1:
         reason = reason or "dot_rows_disagree"
     if "_rest" in event:
@@ -1539,6 +1698,14 @@ def _record(event: dict[str, Any], staff: Staff, state: dict[str, Any], bar: int
                            "head_height_spaces": round(max(h.h for h in heads) / space, 3),
                            "beat_event_index": None, "gap_spaces": None}
     if reason:
+        if "_rest" in event:
+            glyph = event["_rest"]
+            record["shape_class"] = _unread_shape_class(glyph, space)
+            record["source_form"] = glyph.drawing.get("source_form", "drawing")
+            record["width_spaces"] = round(glyph.w / space, 3)
+            record["height_spaces"] = round(glyph.h / space, 3)
+        elif event.get("_unread_symbols"):
+            record["shape_class"] = "notehead_parenthesis"
         record["status"] = "unread"
         record["reason"] = reason
         return record
@@ -1584,14 +1751,22 @@ def _attach_graces(records: list[dict[str, Any]], space: float) -> None:
 
 # --- document -------------------------------------------------------------------------------
 
-def _bar_checks(records: list[dict[str, Any]], bar_signatures: dict[int, dict[str, Any] | None]) -> list[dict[str, Any]]:
+def _bar_checks(records: list[dict[str, Any]], bar_signatures: dict[int, dict[str, Any] | None],
+                located: list[dict[str, Any]] = ()) -> list[dict[str, Any]]:
+    """Per-bar totals. ``located`` symbols (UNREAD-01) never change a status except that they stop a bar
+    that would match from being written: a located unread symbol is not a value, and its bar is refused."""
     checks = []
     for bar, signature in sorted(bar_signatures.items()):
         events = [r for r in records if r["bar_index"] == bar]
         unread = sum(1 for r in events if r["status"] != "read")
         total = sum((Fraction(r["duration_quarters"]) for r in events if r["status"] == "read"), Fraction(0))
+        held = [{"class": r["shape_class"], "reason": r["reason"], "page_index": r["page_index"],
+                 "system_index": r["system_index"], "bar_index": r["bar_index"], "event_index": r["event_index"]}
+                for r in located if r["bar_index"] == bar]
         check = {"bar_index": bar, "events": len(events), "unread_events": unread, "total_quarters": _frac(total),
                  "time_signature": None, "time_signature_source": None, "expected_quarters": None}
+        if held:
+            check["located_unread"] = held
         if signature:
             numerator, denominator = signature["value"]
             expected = Fraction(4 * numerator, denominator)
@@ -1604,7 +1779,7 @@ def _bar_checks(records: list[dict[str, Any]], bar_signatures: dict[int, dict[st
         elif not signature:
             check["status"] = "time_signature_unread"
         else:
-            check["status"] = "match" if total == expected else "mismatch"
+            check["status"] = "match" if total == expected and not held else "mismatch"
         checks.append(check)
     return checks
 
@@ -1638,7 +1813,8 @@ def _governing_signature(printed: dict[str, Any] | None, origin: str | None, dec
 
 
 def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = None,
-                        time_signature: tuple[int, int] | None = None) -> dict[str, Any]:
+                        time_signature: tuple[int, int] | None = None, *,
+                        _base_equivalent: bool = False) -> dict[str, Any]:
     """Read a duration record for every event on every notation staff of the PDF.
 
     ``pages`` is an inclusive 1-based page range. ``time_signature`` is a caller-declared
@@ -1660,6 +1836,7 @@ def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = No
     time_signatures: list[dict[str, Any]] = []
     carried: dict[str, Any] | None = None  # the last printed signature, in force until another is printed
     state: dict[str, Any] = {"bar_offset": 0, "system_number": 0, "time_signature": None,
+                             "base_equivalent": _base_equivalent,
                              "diagnostics": {"ignored_symbols": 0, "ignored_symbols_by_reason": {}, "arcs_not_ties": 0, "unassociated_numbers": 0, "label_numbers": 0,
                                              "events_outside_bars": 0, "pages_without_notation_staff": 0,
                                              "non_events": [], "non_events_by_reason": {}}}
@@ -1668,12 +1845,15 @@ def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = No
         page_heights = [round(float(page.rect.height), 3) for page in doc]
         first, last = pages if pages else (1, len(doc))
         for page_index in range(first - 1, min(last, len(doc))):
-            symbols = extract_page_symbols(doc[page_index], page_index)
+            symbols = (extract_page_symbols(doc[page_index], page_index, include_music_font=False)
+                       if _base_equivalent else extract_page_symbols(doc[page_index], page_index))
             notation, tab = find_staves(symbols)
             if not notation:
                 state["diagnostics"]["pages_without_notation_staff"] += 1
             for system_index, staff in enumerate(sorted(notation, key=lambda st: st.top)):
                 key_signature = read_system_key_signature(staff, symbols)
+                key_signature["location"].update({"system_index": system_index,
+                                                  "bar_index": state["bar_offset"]})
                 state["system_index"] = system_index
                 text_before = state["time_signature"]
                 result = _read_staff(staff, symbols, notation + tab, state)
@@ -1717,7 +1897,7 @@ def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = No
                                 "bars": [[round(a, 3), round(b, 3)] for a, b in result["bars"]]})
                 state["bar_offset"] += result["bar_count"]
                 state["system_number"] += 1
-    checks = _bar_checks(records, bar_signatures)
+    checks = _bar_checks(records, bar_signatures, state["diagnostics"].get("located_unread_events", []))
     read = sum(1 for r in records if r["status"] == "read")
     reasons: dict[str, int] = {}
     for r in records:
@@ -1727,6 +1907,17 @@ def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = No
     state["diagnostics"]["time_signatures"] = time_signatures
     state["diagnostics"]["bar_time_signatures"] = bar_time_signatures
     state["diagnostics"]["bar_key_signatures"] = bar_key_signatures
+    if not _base_equivalent and any(
+        symbol["class"] in ("unsupported_overlapping_form", "parenthesized_head_unrepresented")
+        for symbol in state["diagnostics"].get("unread_symbols", [])
+    ):
+        # UNREAD-01 preservation is source-derived, never a fixture/bar list.
+        # The unchanged drawing-only reader did not see music-font contours,
+        # dead-head ownership or paired parentheses. Route that same evidence
+        # through the ordinary assembler before deciding whether an overlap or parenthesis
+        # must refuse a newly writable bar. No reference is consulted.
+        state["diagnostics"]["base_equivalent_note_durations"] = read_note_durations(
+            path, pages, time_signature, _base_equivalent=True)
     return {
         "schema": SCHEMA,
         "source": {"pdf_sha256": digest, "pages": list(pages) if pages else None, "page_heights": page_heights},

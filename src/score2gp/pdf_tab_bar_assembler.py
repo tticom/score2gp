@@ -182,6 +182,27 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
         by_bar.setdefault(record["bar_index"], []).append(record)
     placed, unplaced = place_tab_digits(digits, note_durations)
     system_of = {s["first_bar_index"] + i: s for s in systems for i in range(s["bar_count"])}
+    diagnostics = note_durations.get("diagnostics", {})
+    overlaps: dict[int, list[dict[str, Any]]] = {}
+    for symbol in diagnostics.get("unread_symbols", []):
+        if symbol["class"] in ("unsupported_overlapping_form", "parenthesized_head_unrepresented"):
+            overlaps.setdefault(symbol["location"]["bar_index"], []).append(symbol)
+    base_written: set[tuple[Any, ...]] = set()
+    baseline = diagnostics.get("base_equivalent_note_durations")
+    if overlaps and baseline is not None:
+        try:
+            _, base_route = assemble_note_type_bars(
+                digits, baseline, track_id=track_id, refused_tab_system=refused_tab_system)
+        except PdfTabBarAssemblerError:
+            # A base route that could not build a score wrote no bar.
+            pass
+        else:
+            written = {b["source_bar_index"] for b in base_route["bars"] if b["status"] == "written"}
+            base_written = {
+                (s["page_index"], s["system_index"], *bounds)
+                for s in baseline["systems"] for i, bounds in enumerate(s["bars"])
+                if s["first_bar_index"] + i in written
+            }
 
     bars: list[Bar] = []
     route_bars: list[dict[str, Any]] = []
@@ -231,6 +252,17 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
                                    detail=f"{check['total_quarters']} of {check['expected_quarters']} quarters")
         entry["events"] = [{"event_index": m["record"]["event_index"], "kind": m["record"]["kind"],
                             "match": m["match"]} for m in matched]
+        if source_bar in overlaps:
+            bounds = system["bars"][source_bar - system["first_bar_index"]]
+            preserved = (system["page_index"], system["system_index"], *bounds) in base_written
+            entry["unread_symbols"] = overlaps[source_bar]
+            entry["overlap_preservation_basis"] = (
+                "base_equivalent_written" if preserved else "base_equivalent_refused")
+            if refusal is None and not preserved:
+                symbol = overlaps[source_bar][0]
+                refusal = _refusal("note_duration_event_unread",
+                                   symbol["location"]["event_index"], symbol["class"])
+                entry["events"] = []
         events: list[Event] = []
         if refusal is None:
             onset = Fraction(0)

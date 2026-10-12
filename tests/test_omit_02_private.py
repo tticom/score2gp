@@ -65,13 +65,18 @@ def test_real_repeat_end_decision_does_not_depend_on_last_bar_position():
     if not pdf.exists():
         pytest.skip("private repeat corpus absent")
     durations = read_note_durations(pdf, time_signature=(4, 4))
+    # Run 5 source evidence: 15 strokes touch filled U+E0A4 heads and are
+    # stems, not barlines. Source boundaries give 5/4/3 partitions, including
+    # the leading header-only partition: 11 musical bars, also 11 reference
+    # master bars. Repeat indices below come from those source boundaries.
+    assert [system["bar_count"] for system in durations["systems"]] == [5, 4, 3]
     full = {signal["bar_index"]: signal for signal in
             read_notation_barline_signals(pdf, durations)}
     assert (full[1]["status"], full[1]["kind"]) == ("read", "repeat-start")
-    assert [(full[i]["status"], full[i]["kind"]) for i in (12, 19, 24)] == [
+    assert [(full[i]["status"], full[i]["kind"]) for i in (5, 7, 9)] == [
         ("read", "repeat-end")] * 3
-    assert all(full[i]["kind"] not in ("double", "end") for i in (12, 19, 24))
+    assert all(full[i]["kind"] not in ("double", "end") for i in (5, 7, 9))
     durations["systems"] = durations["systems"][:2]
     truncated = {signal["bar_index"]: signal for signal in
                  read_notation_barline_signals(pdf, durations)}
-    assert (truncated[24]["status"], truncated[24]["kind"]) == ("read", "repeat-end")
+    assert (truncated[9]["status"], truncated[9]["kind"]) == ("read", "repeat-end")
