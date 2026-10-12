@@ -1,12 +1,15 @@
 """Mutants reach approved source contours and the production event reader."""
 from pathlib import Path
 import inspect
+import json
 import tempfile
 
 import pymupdf
 import pytest
+from typer.testing import CliRunner
 
 from score2gp.notation_omr import note_duration as nd
+from score2gp.cli import app
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -64,6 +67,29 @@ def _assert_located_symbols(source, dead_heads, overlaps):
     dead_bars = {e["bar_index"] for e in dead}
     assert all(bar["status"] != "match" and bar["located_unread"]
                for bar in result["bar_checks"] if bar["bar_index"] in dead_bars)
+    # Exercise the ordinary conversion route too: recognition diagnostics alone
+    # do not prove that a newly writable overlap bar is actually refused.
+    work = ROOT / "work"
+    work.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="unread01-route-mutant-", dir=work) as directory:
+        folder = Path(directory)
+        run = CliRunner().invoke(app, [
+            "convert", "--pdf", source.as_posix(), "--pdf-only-tab",
+            "--out", (folder / "output.gp").as_posix(), "--work-dir", folder.as_posix(),
+        ])
+        assert run.exit_code == 0, run.output
+        route = json.loads((folder / "note-type-route.json").read_text())
+        overlap_bars = {s["location"]["bar_index"] for s in unsupported}
+        for bar in route["bars"]:
+            if bar["source_bar_index"] not in overlap_bars:
+                continue
+            assert bar["unread_symbols"]
+            if bar["overlap_preservation_basis"] == "base_equivalent_refused":
+                assert bar["status"] == "refused"
+                # Existing refusals retain their matched-event diagnostics.
+                # Newly refused overlaps have no emitted route events.
+                if bar["detail"] == "unsupported_overlapping_form":
+                    assert not bar["events"]
 
 
 @pytest.mark.parametrize("name,dead_heads,overlaps", [
@@ -73,8 +99,8 @@ def test_silent_unclassified_drop_mutant_fails_on_the_real_source(
         monkeypatch, name, dead_heads, overlaps):
     source = ROOT / "fixtures/private" / (name + ".pdf")
     assert source.is_file(), "required approved private source missing"
-    # Counts come from the located source-contour census. Lesson overlaps are
-    # diagnostics on preserved bars; dead-head bars must remain refused.
+    # Counts come from the source-contour census. Base-written overlaps remain
+    # located diagnostics; newly writable overlap and dead-head bars refuse.
     _assert_located_symbols(source, dead_heads, overlaps)
     original = nd._read_staff
     code = inspect.getsource(original)

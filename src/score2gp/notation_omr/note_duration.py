@@ -358,10 +358,12 @@ def _measured_page_staff_space(drawings: list[dict[str, Any]], page_width: float
     smallest = min(repeated)
     return statistics.median(gap for gap in gaps if round(gap, 1) == smallest)
 
-def extract_page_symbols(page: Any, page_index: int) -> PageSymbols:
+def extract_page_symbols(page: Any, page_index: int, *, include_music_font: bool = True) -> PageSymbols:
     """Split a PyMuPDF page's drawings into glyphs, straight segments, polylines and texts."""
     import pymupdf  # noqa: PLC0415 - image-free text extraction flags
-    drawings = page.get_drawings() + music_font_drawings(page)
+    drawings = page.get_drawings()
+    if include_music_font:
+        drawings += music_font_drawings(page)
     page_staff_space = _measured_page_staff_space(drawings, float(page.rect.width))
     try:
         image_rects = [tuple(info["bbox"]) for info in page.get_image_info()]
@@ -433,7 +435,8 @@ def extract_page_symbols(page: Any, page_index: int) -> PageSymbols:
     for block in page.get_text("rawdict", flags=pymupdf.TEXTFLAGS_RAWDICT & ~pymupdf.TEXT_PRESERVE_IMAGES).get("blocks", []):
         for line in block.get("lines", []):
             for span in line.get("spans", []):
-                for chars in _tokens([c for c in span.get("chars", []) if not is_music_font_text(c["c"])],
+                for chars in _tokens([c for c in span.get("chars", [])
+                                      if not include_music_font or not is_music_font_text(c["c"])],
                                      float(span.get("size") or 0.0)):
                     text = "".join(c["c"] for c in chars)
                     box = _bbox_union([tuple(float(v) for v in c["bbox"]) for c in chars])
@@ -1149,7 +1152,8 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
         return upper <= y <= lower and staff.x0 - 1.0 <= x <= staff.x1 + 1.0
 
     glyphs = [g for g in symbols.glyphs if in_zone(g.cx, g.cy)]
-    dead_heads = [g for g in glyphs if _is_dead_note_x_head(g, s)]
+    base_equivalent = state.get("base_equivalent", False)
+    dead_heads = [] if base_equivalent else [g for g in glyphs if _is_dead_note_x_head(g, s)]
     dead_ids = {g.ident for g in dead_heads}
     heads: list[Glyph] = []
     head_kind: dict[str, str] = {}
@@ -1161,7 +1165,7 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
             heads.append(g)
             head_kind[g.ident] = kind
     head_ids = set(head_kind)
-    parentheses = _notehead_parentheses(glyphs, heads, s)
+    parentheses = {} if base_equivalent else _notehead_parentheses(glyphs, heads, s)
     parenthesis_ids = {g.ident for pair in parentheses.values() for g in pair}
     small_ids = {h.ident for h in heads if _is_small_head(h, s)}
     non_events: list[dict[str, Any]] = []
@@ -1352,9 +1356,9 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
                 direction = _accidental_direction(g, s) if beside == "accidental_beside_notehead" else None
                 if direction:
                     accidental_marks.append((g.bbox, direction, g.ident, _glyph_anchor(g, direction, s)))
-                else:
-                    # DUR-01-FU1: an unclassified form on a head or stem is located with its class,
-                    # not only counted by reason. It does not change the bar's reading (no value).
+                elif not base_equivalent:
+                    # The assembler decides preservation from the base-equivalent
+                    # route; a located overlap never supplies a duration.
                     overlaps.append({"glyph": g, "cx": g.cx, "position": beside})
             continue
         if kind is None:
@@ -1809,7 +1813,8 @@ def _governing_signature(printed: dict[str, Any] | None, origin: str | None, dec
 
 
 def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = None,
-                        time_signature: tuple[int, int] | None = None) -> dict[str, Any]:
+                        time_signature: tuple[int, int] | None = None, *,
+                        _base_equivalent: bool = False) -> dict[str, Any]:
     """Read a duration record for every event on every notation staff of the PDF.
 
     ``pages`` is an inclusive 1-based page range. ``time_signature`` is a caller-declared
@@ -1831,6 +1836,7 @@ def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = No
     time_signatures: list[dict[str, Any]] = []
     carried: dict[str, Any] | None = None  # the last printed signature, in force until another is printed
     state: dict[str, Any] = {"bar_offset": 0, "system_number": 0, "time_signature": None,
+                             "base_equivalent": _base_equivalent,
                              "diagnostics": {"ignored_symbols": 0, "ignored_symbols_by_reason": {}, "arcs_not_ties": 0, "unassociated_numbers": 0, "label_numbers": 0,
                                              "events_outside_bars": 0, "pages_without_notation_staff": 0,
                                              "non_events": [], "non_events_by_reason": {}}}
@@ -1839,7 +1845,8 @@ def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = No
         page_heights = [round(float(page.rect.height), 3) for page in doc]
         first, last = pages if pages else (1, len(doc))
         for page_index in range(first - 1, min(last, len(doc))):
-            symbols = extract_page_symbols(doc[page_index], page_index)
+            symbols = (extract_page_symbols(doc[page_index], page_index, include_music_font=False)
+                       if _base_equivalent else extract_page_symbols(doc[page_index], page_index))
             notation, tab = find_staves(symbols)
             if not notation:
                 state["diagnostics"]["pages_without_notation_staff"] += 1
@@ -1900,6 +1907,17 @@ def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = No
     state["diagnostics"]["time_signatures"] = time_signatures
     state["diagnostics"]["bar_time_signatures"] = bar_time_signatures
     state["diagnostics"]["bar_key_signatures"] = bar_key_signatures
+    if not _base_equivalent and any(
+        symbol["class"] == "unsupported_overlapping_form"
+        for symbol in state["diagnostics"].get("unread_symbols", [])
+    ):
+        # UNREAD-01 preservation is source-derived, never a fixture/bar list.
+        # The unchanged drawing-only reader did not see music-font contours,
+        # dead-head ownership or paired parentheses. Route that same evidence
+        # through the ordinary assembler before deciding whether an overlap
+        # must refuse a newly writable bar. No reference is consulted.
+        state["diagnostics"]["base_equivalent_note_durations"] = read_note_durations(
+            path, pages, time_signature, _base_equivalent=True)
     return {
         "schema": SCHEMA,
         "source": {"pdf_sha256": digest, "pages": list(pages) if pages else None, "page_heights": page_heights},
