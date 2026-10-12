@@ -30,7 +30,9 @@ def _assert_beams(source, expected):
                for e in result["events"]) == expected
 
 
-@pytest.mark.parametrize("name,expected", [("G-Am-C-Lick", 54), ("Lesson-3", 448)])
+@pytest.mark.parametrize("name,expected", [
+    ("G-Am-C-Lick", 54), ("Lesson-3", 448), ("Derek Trucks BB King", 120),
+])
 def test_fixed_point_beam_size_mutant_fails_on_scaled_approved_sources(monkeypatch, name, expected):
     # A point-sized substitute for measured staff space must not read the
     # same class on a transformed copy of genuine notation.
@@ -45,20 +47,35 @@ def test_fixed_point_beam_size_mutant_fails_on_scaled_approved_sources(monkeypat
             _assert_beams(source, expected)
 
 
-def _assert_dead_head_refusals(source):
+def _assert_located_symbols(source, dead_heads, overlaps):
     result = nd.read_note_durations(source)
     dead = [e for e in result["diagnostics"].get("located_unread_events", [])
             if e["reason"] == "dead_note_x_head"]
-    assert len(dead) == 20
+    assert len(dead) == dead_heads
     assert all(e["status"] == "unread" and e["written"] is None for e in dead)
     assert all(e["location"][key] is not None for e in dead
                for key in ("page_index", "system_index", "bar_index", "event_index"))
+    unsupported = [e for e in result["diagnostics"].get("unread_symbols", [])
+                   if e["class"] == "unsupported_overlapping_form"]
+    assert len(unsupported) == overlaps
+    assert all(e["status"] == "unread" and e["shape_class"] for e in unsupported)
+    assert all(e["location"][key] is not None for e in unsupported
+               for key in ("page_index", "system_index", "bar_index", "event_index"))
+    dead_bars = {e["bar_index"] for e in dead}
+    assert all(bar["status"] != "match" and bar["located_unread"]
+               for bar in result["bar_checks"] if bar["bar_index"] in dead_bars)
 
 
-def test_silent_unclassified_drop_mutant_fails_on_the_real_source(monkeypatch):
-    source = ROOT / "fixtures/private/G-Am-C-Lick.pdf"
+@pytest.mark.parametrize("name,dead_heads,overlaps", [
+    ("G-Am-C-Lick", 20, 11), ("Lesson-3", 0, 12), ("Derek Trucks BB King", 0, 12),
+])
+def test_silent_unclassified_drop_mutant_fails_on_the_real_source(
+        monkeypatch, name, dead_heads, overlaps):
+    source = ROOT / "fixtures/private" / (name + ".pdf")
     assert source.is_file(), "required approved private source missing"
-    _assert_dead_head_refusals(source)
+    # Counts come from the located source-contour census. Lesson overlaps are
+    # diagnostics on preserved bars; dead-head bars must remain refused.
+    _assert_located_symbols(source, dead_heads, overlaps)
     original = nd._read_staff
     code = inspect.getsource(original)
     needle = "    # Assign events to bars."
@@ -66,9 +83,10 @@ def test_silent_unclassified_drop_mutant_fails_on_the_real_source(monkeypatch):
     code = code.replace(needle,
         '    events = [e for e in events if e.get("_kind") != "unclassified"]\n'
         '    located_events = [e for e in located_events if e.get("_kind") != "unclassified"]\n'
+        '    overlaps = []\n'
         + needle)
     namespace = dict(nd.__dict__)
     exec(compile(code, "<silent-symbol-drop-mutant>", "exec"), namespace)
     monkeypatch.setattr(nd, "_read_staff", namespace["_read_staff"])
     with pytest.raises(AssertionError):
-        _assert_dead_head_refusals(source)
+        _assert_located_symbols(source, dead_heads, overlaps)
