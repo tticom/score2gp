@@ -185,7 +185,7 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
     diagnostics = note_durations.get("diagnostics", {})
     overlaps: dict[int, list[dict[str, Any]]] = {}
     for symbol in diagnostics.get("unread_symbols", []):
-        if symbol["class"] == "unsupported_overlapping_form":
+        if symbol["class"] in ("unsupported_overlapping_form", "parenthesized_head_unrepresented"):
             overlaps.setdefault(symbol["location"]["bar_index"], []).append(symbol)
     base_written: set[tuple[Any, ...]] = set()
     baseline = diagnostics.get("base_equivalent_note_durations")
@@ -261,7 +261,7 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
             if refusal is None and not preserved:
                 symbol = overlaps[source_bar][0]
                 refusal = _refusal("note_duration_event_unread",
-                                   symbol["location"]["event_index"], "unsupported_overlapping_form")
+                                   symbol["location"]["event_index"], symbol["class"])
                 entry["events"] = []
         events: list[Event] = []
         if refusal is None:

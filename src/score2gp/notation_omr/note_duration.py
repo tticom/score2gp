@@ -1908,13 +1908,13 @@ def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = No
     state["diagnostics"]["bar_time_signatures"] = bar_time_signatures
     state["diagnostics"]["bar_key_signatures"] = bar_key_signatures
     if not _base_equivalent and any(
-        symbol["class"] == "unsupported_overlapping_form"
+        symbol["class"] in ("unsupported_overlapping_form", "parenthesized_head_unrepresented")
         for symbol in state["diagnostics"].get("unread_symbols", [])
     ):
         # UNREAD-01 preservation is source-derived, never a fixture/bar list.
         # The unchanged drawing-only reader did not see music-font contours,
         # dead-head ownership or paired parentheses. Route that same evidence
-        # through the ordinary assembler before deciding whether an overlap
+        # through the ordinary assembler before deciding whether an overlap or parenthesis
         # must refuse a newly writable bar. No reference is consulted.
         state["diagnostics"]["base_equivalent_note_durations"] = read_note_durations(
             path, pages, time_signature, _base_equivalent=True)
