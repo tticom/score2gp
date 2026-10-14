@@ -508,11 +508,17 @@ class NoteSpelling(BaseModel):
 
 
 class Note(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={
+        "anyOf": [
+            {"required": ["is_dead"], "properties": {"is_dead": {"const": True}}},
+            {"required": ["fret", "pitch"], "properties": {
+                "fret": {"type": "integer"}, "pitch": {"type": "integer"}}},
+        ]
+    })
 
     string: int = Field(ge=1, le=12)
-    fret: int = Field(ge=0, le=36)
-    pitch: int = Field(ge=0, le=127)
+    fret: int | None = Field(default=None, ge=0, le=36)
+    pitch: int | None = Field(default=None, ge=0, le=127)
     is_dead: bool = False
     articulations: list[Literal["staccato", "staccatissimo", "accent", "marcato", "tenuto"]] = Field(default_factory=list)
     techniques: list[Technique] = Field(default_factory=list)
@@ -522,6 +528,12 @@ class Note(BaseModel):
     provenance: list[Provenance] = Field(default_factory=list)
     expression_controller: ExpressionController | None = None
     spelling: NoteSpelling | None = None
+
+    @model_validator(mode="after")
+    def pitched_note_requires_position(self) -> "Note":
+        if not self.is_dead and (self.fret is None or self.pitch is None):
+            raise ValueError("A non-dead note requires fret and pitch")
+        return self
 
     @model_validator(mode="before")
     @classmethod
@@ -967,6 +979,8 @@ class ScoreIR(BaseModel):
                             f"event '{event.id}' uses string {note.string}, but track '{track.id}' tuning does not define it"
                         )
                         continue
+                    if note.is_dead and (note.fret is None or note.pitch is None):
+                        continue  # A percussive strike has no sounding pitch to validate.
                     expected_pitch = open_pitch + note.fret
                     if note.pitch != expected_pitch:
                         errors.append(

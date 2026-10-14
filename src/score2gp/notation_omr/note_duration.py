@@ -1158,9 +1158,7 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
     heads: list[Glyph] = []
     head_kind: dict[str, str] = {}
     for g in glyphs:
-        if g.ident in dead_ids:
-            continue
-        kind = _is_notehead(g, s)
+        kind = "cross" if g.ident in dead_ids else _is_notehead(g, s)
         if kind:
             heads.append(g)
             head_kind[g.ident] = kind
@@ -1191,7 +1189,9 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
             dead_stems.append(stem)
     dead_beam_ids = {beam.ident for beam in beams for stem in dead_stems
                      if _paints_into(beam.shape, stem.rect)}
-    beams = [beam for beam in beams if beam.ident not in dead_beam_ids]
+    # Preserve the numeric-head beam gate. Only the newly admitted crosses
+    # gain ownership of bands previously quarantined for their stems.
+    numeric_beams = [beam for beam in beams if beam.ident not in dead_beam_ids]
 
     # Stems: verticals in painted contact with a notehead at one of their ends.
     boundaries = _barlines(staff, symbols)
@@ -1225,7 +1225,8 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
     parts_by_stem: dict[str, dict[str, Any]] = {}
     groups = _UnionFind()
     for stem in stems:
-        lines = _beam_lines_at_stem(stem, beams, s)
+        strike_owner = any(head_kind[h.ident] == "cross" for h in stem.heads)
+        lines = _beam_lines_at_stem(stem, beams if strike_owner else numeric_beams, s)
         flags = [f for f in _flags_at_stem(stem, flag_candidates, s) if f.ident not in arc_ids]
         parts_by_stem[stem.ident] = {"lines": lines, "flags": flags}
         if isinstance(lines, list):
@@ -1282,8 +1283,7 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
             event["_unread_symbols"] = unsupported
     # Located-only symbols are recorded with their class but never enter the event
     # stream: a refused bar keeps the bar-level reason it had before they were seen.
-    located_events = [{"_rest": g, "_rest_kind": None, "_cx": g.cx, "_kind": "unclassified",
-                       "_dots": [], "_unread": "dead_note_x_head"} for g in dead_heads]
+    located_events = []
 
     # The system header (clef, key and time signature) is the run of symbols from the staff start.
     first_note_x = min((h.bbox[0] for h in heads), default=staff.x1)
@@ -1648,13 +1648,22 @@ def _record(event: dict[str, Any], staff: Staff, state: dict[str, Any], bar: int
         record["kind"] = "chord" if len(heads) > 1 else "note"
         record["notehead"] = {"kind": kinds[0] if len(kinds) == 1 else "mixed", "count": len(heads),
                               "sources": [h.ident for h in heads]}
+        if "cross" in kinds:
+            record["notehead"]["heads"] = [
+                {"source": h.ident, "kind": head_kind[h.ident],
+                 "staff_position_index": round((h.cy - staff.top) / (space / 2)),
+                 "width_spaces": round(h.w / space, 3), "height_spaces": round(h.h / space, 3)}
+                for h in heads]
         parts["kind"] = "note"
-        parts["head_kind"] = kinds[0]
+        duration_kinds = {"filled" if kind == "cross" else kind for kind in kinds}
+        parts["head_kind"] = sorted(duration_kinds)[0]
         if event.get("_accidentals"):
             record["accidentals"] = event["_accidentals"]
-        if len(kinds) > 1:
+        if len(duration_kinds) > 1:
             reason = reason or "mixed_notehead_kinds"
         stem = event["_stem"]
+        if "cross" in kinds and stem is None:
+            reason = reason or "percussive_strike_without_owning_stem"
         if stem is not None:
             record["stem"] = {"source": stem.ident, "direction": "up" if stem.up else "down"}
             parts["has_stem"] = True

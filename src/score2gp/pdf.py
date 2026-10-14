@@ -2168,6 +2168,19 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                 assignment_warnings = list(pc.get("warnings", []))
                 is_fret_candidate = parse_fret_text(raw_text) is not None and not pc.get("is_tuning_evidence")
 
+                # The source census retains X text but the numeric-only assignment
+                # drops its string. Recover only this distinct token, within one
+                # measured string band; numeric assignment is unchanged.
+                is_strike_candidate = raw_text.strip().lower() in {"x", "×"}
+                if is_strike_candidate and system is not None and system.line_ys:
+                    distances = sorted((abs(y - line_y), i + 1)
+                                       for i, line_y in enumerate(system.line_ys))
+                    string_distance, nearest = distances[0]
+                    reach = system.line_spacing * (0.4 if system.segmented_lines_recovered else 0.48)
+                    if (system.x0 <= x <= system.x1 and string_distance <= reach
+                            and pc["y1"] - pc["y0"] <= 1.5 * system.line_spacing):
+                        string = line_index = nearest
+
                 duration_ev_val = None
                 if system is not None and is_fret_candidate:
                     sys_map = system_duration_mapping.get(system.system_index, {})
@@ -2233,7 +2246,7 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                             assignment_warnings.append("pdf_candidates_unassigned_to_string")
                         elif len(raw_text) > 1:
                             assignment_warnings.append("pdf_multidigit_fret_string_assigned")
-                    else:
+                    elif not is_strike_candidate:
                         if "pdf_non_playable_text_not_string_assigned" not in assignment_warnings:
                             assignment_warnings.append("pdf_non_playable_text_not_string_assigned")
                     for w in string_warnings:
@@ -5884,7 +5897,7 @@ def _is_standard_music_symbol_or_parenthesis(text: str) -> bool:
 
 
 def _should_keep_candidate(candidate: dict[str, Any]) -> bool:
-    if candidate.get("kind") in {"fret", "chord-symbol", "technique-text"}:
+    if candidate.get("kind") in {"fret", "percussive-strike", "chord-symbol", "technique-text"}:
         return True
     text = str(candidate.get("raw_text", "")).strip().lower()
     raw = candidate.get("raw", {})

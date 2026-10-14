@@ -1648,8 +1648,9 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
                 notes: list[Note] = []
                 for n_node in ev_node.findall(".//Note"):
                     string = int(n_node.get("string") or 1)
-                    fret = int(n_node.get("fret") or 0)
-                    pitch = int(n_node.get("pitch") or 0)
+                    is_dead = n_node.get("is_dead") == "true" or n_node.find("DeadNote") is not None
+                    fret = int(n_node.get("fret")) if n_node.get("fret") is not None else None
+                    pitch = int(n_node.get("pitch")) if n_node.get("pitch") is not None else None
 
                     # Parse techniques (Slide, Hammer-On, Pull-Off, Bend)
                     techniques = []
@@ -1790,6 +1791,7 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
                         string=string,
                         fret=fret,
                         pitch=pitch,
+                        is_dead=is_dead,
                         techniques=techniques,
                         expression_controller=note_ec,
                         left_hand_fingering=lh_fingering,

@@ -7,6 +7,30 @@ from .ir import Event, Note, ScoreIR, Technique, ScoreBooklet
 
 SUPPORTED_MINIMAL_TECHNIQUES = {"slide", "vibrato", "hammer-on", "pull-off", "tie", "slur", "bend", "let-ring", "palm-mute", "grace", "dead-note", "tremolo-bar", "tremolo-picking", "slap", "pop", "tapping", "trill", "rasgueado"}
 
+
+def percussive_strike_storage(score: ScoreIR, event: Event, note: Note) -> tuple[int, int, str]:
+    """GPIF storage convention only; never assign these values back to ScoreIR."""
+    track = next(t for t in score.tracks if t.id == event.track_id)
+    open_pitch = track.tuning.pitch_for_string(note.string)
+    if open_pitch is None:
+        raise ValueError("Percussive strike uses an undefined string")
+    for provenance in note.provenance:
+        printed = provenance.raw.get("printed_head_midi")
+        if isinstance(printed, int) and 0 <= printed - open_pitch <= 36:
+            return printed - open_pitch, printed, "printed_head_position"
+    sequence = sorted((e for b in score.bars for e in b.events
+                       if e.track_id == event.track_id and e.timing.voice == event.timing.voice),
+                      key=lambda e: (e.timing.bar_index, e.timing.onset_ticks, e.id))
+    index = next(i for i, e in enumerate(sequence) if e.id == event.id)
+    for direction, events in (("next_same_string", sequence[index + 1:]),
+                              ("previous_same_string", reversed(sequence[:index]))):
+        for other in events:
+            pitched = next((n for n in other.notes if n.string == note.string and n.fret is not None
+                            and n.pitch is not None), None)
+            if pitched is not None:
+                return pitched.fret, open_pitch + pitched.fret, direction
+    return 0, open_pitch, "open_string"
+
 # Guitar Pro 7's default page layout, represented as Qt rich text. The policy
 # mirrors the token order in the app-created reference files, never their score
 # content. Markup styling is intentionally minimal; GP evaluates the tokens.
@@ -836,13 +860,16 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
 
                             props = ET.SubElement(note_node, "Properties")
                             fret_prop = ET.SubElement(props, "Property", {"name": "Fret"})
-                            _text(fret_prop, "Fret", note.fret)
+                            stored_fret, stored_pitch = note.fret, note.pitch
+                            if note.is_dead and (note.fret is None or note.pitch is None):
+                                stored_fret, stored_pitch, _ = percussive_strike_storage(score, event, note)
+                            _text(fret_prop, "Fret", stored_fret)
 
                             string_prop = ET.SubElement(props, "Property", {"name": "String"})
                             _text(string_prop, "String", max(0, min(num_strings - 1, num_strings - note.string)))
 
                             midi_prop = ET.SubElement(props, "Property", {"name": "Midi"})
-                            _text(midi_prop, "Number", note.pitch)
+                            _text(midi_prop, "Number", stored_pitch)
 
                             pitch_map = {
                                 0: ("C", ""), 1: ("C", "#"), 2: ("D", ""), 3: ("D", "#"),
@@ -851,11 +878,11 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
                             }
                             flat_map = {1: ("D", "b"), 3: ("E", "b"), 6: ("G", "b"), 8: ("A", "b"), 10: ("B", "b")}
                             spelling = getattr(note, "spelling", None)
-                            if spelling is not None and spelling.accidental == "flat" and note.pitch % 12 in flat_map:
-                                step, accidental = flat_map[note.pitch % 12]
+                            if spelling is not None and spelling.accidental == "flat" and stored_pitch % 12 in flat_map:
+                                step, accidental = flat_map[stored_pitch % 12]
                             else:
-                                step, accidental = pitch_map[note.pitch % 12]
-                            octave = note.pitch // 12
+                                step, accidental = pitch_map[stored_pitch % 12]
+                            octave = stored_pitch // 12
 
                             cp_prop = ET.SubElement(props, "Property", {"name": "ConcertPitch"})
                             pitch_node = ET.SubElement(cp_prop, "Pitch")
@@ -1852,6 +1879,10 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
             "confidence": f"{note.confidence:.3f}",
         },
     )
+    if note.is_dead and (note.fret is None or note.pitch is None):
+        note_node.attrib.pop("fret", None)
+        note_node.attrib.pop("pitch", None)
+        note_node.set("is_dead", "true")
 
     if getattr(note, "expression_controller", None) is not None:
         ec = note.expression_controller
@@ -1942,7 +1973,7 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
                 target_ev = event_map.get(target_id)
                 if target_ev:
                     target_note = next((n for n in target_ev.notes if n.string == note.string), None)
-                    if target_note:
+                    if target_note and target_note.pitch is not None and note.pitch is not None:
                         if target_note.pitch > note.pitch:
                             has_hammer_on = True
                             has_hopo_origin = True

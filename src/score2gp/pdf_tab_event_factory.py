@@ -48,7 +48,8 @@ def _tie_state(tie: dict[str, Any]) -> str | None:
 
 def unjoined_accidentals(record: dict[str, Any], positions: Sequence[tuple[int, int]]) -> list[dict[str, Any]]:
     """Printed accidentals of a notation event whose pitch class no TAB note of the event has."""
-    pitch_classes = {(_STRING_TO_BASE_PITCH[string] + fret) % 12 for string, fret in positions}
+    pitch_classes = {(_STRING_TO_BASE_PITCH[string] + fret) % 12 for string, fret in positions
+                     if fret is not None}
     return [a for a in record.get("accidentals") or () if a["pitch_class"] not in pitch_classes]
 
 
@@ -74,17 +75,19 @@ def build_note_type_event(
     notes: list[Note] = []
     for string, fret in positions:
         candidate = by_position.get((string, fret))
-        pitch = _STRING_TO_BASE_PITCH[string] + fret
+        is_strike = candidate is not None and candidate.kind == "percussive-strike"
+        pitch = None if is_strike else _STRING_TO_BASE_PITCH[string] + fret
         notes.append(
             Note(
                 string=string,
                 fret=fret,
                 pitch=pitch,
+                is_dead=is_strike,
                 confidence=candidate.confidence if candidate else 1.0,
                 provenance=[candidate.to_provenance()] if candidate else [],
                 techniques=[TieTechnique(state=tie_state)] if tie_state else [],
                 spelling=(NoteSpelling(accidental=printed[pitch % 12], source="printed")
-                          if pitch % 12 in printed and pitch % 12 in BLACK_KEYS else None),
+                          if pitch is not None and pitch % 12 in printed and pitch % 12 in BLACK_KEYS else None),
             )
         )
     tuplet = record.get("tuplet")

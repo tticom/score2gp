@@ -23,6 +23,7 @@ class TabCandidate(BaseModel):
     id: str
     kind: Literal[
         "fret",
+        "percussive-strike",
         "chord-symbol",
         "technique-text",
         "candidate-text",
@@ -37,12 +38,23 @@ class TabCandidate(BaseModel):
     string: int | None = Field(default=None, ge=1, le=12)
     raw_text: str
     parsed_fret: int | None = Field(default=None, ge=0, le=36)
+    parsed_strike: Literal["X"] | None = None
     x: float | None = None
     y: float | None = None
     bbox: BoundingBox | None = None
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
     source_stage: SourceStage = SourceStage.PDF_TEXT
     raw: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def strike_contract(self) -> "TabCandidate":
+        if self.kind == "percussive-strike":
+            if self.parsed_fret is not None or self.raw_text.strip().lower() not in {"x", "×"}:
+                raise ValueError("A percussive strike is X, never a numeric fret")
+            self.parsed_strike = "X"
+        elif self.parsed_strike is not None:
+            raise ValueError("A parsed strike requires its own candidate kind")
+        return self
 
     @property
     def duration_evidence(self) -> TabDurationEvidence | None:
@@ -319,6 +331,8 @@ def _candidate_kind(raw_text: str, parsed_fret: int | None) -> str:
     if parsed_fret is not None:
         return "fret"
     stripped = raw_text.strip()
+    if stripped.lower() in {"x", "×"}:
+        return "percussive-strike"
     technique_tokens = ("slide", "bend", "vib", "let", "ring", "hammer", "pull", "p.m.", "palm")
     if any(token in lower for token in technique_tokens):
         if "string" not in lower:

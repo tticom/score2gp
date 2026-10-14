@@ -126,6 +126,11 @@ def _match_bar(records: list[dict[str, Any]], digits: list[TabCandidate], space:
         if len(cands) != heads or len({c.string for c in cands}) != len(cands):
             return matched, _refusal("notehead_digit_count_mismatch", index)
         positions = [(c.string, c.parsed_fret) for c in cands]
+        cross_count = sum(h["kind"] == "cross" for h in record["notehead"].get("heads", []))
+        if sum(c.kind == "percussive-strike" for c in cands) != cross_count:
+            refusal = _refusal("percussive_strike_without_owning_head", index)
+            refusal["candidate_ids"] = [c.id for c in cands if c.kind == "percussive-strike"]
+            return matched, refusal
         matched.append({"record": record, "positions": positions, "candidates": cands,
                         "match": {"kind": "tab_column", "candidate_ids": [c.id for c in cands],
                                   "dx_spaces": round(near[0][0] / space, 3)}})
@@ -133,7 +138,10 @@ def _match_bar(records: list[dict[str, Any]], digits: list[TabCandidate], space:
             previous = {"positions": positions, "location": _location(record)}
     unused = [i for i in range(len(columns)) if i not in used]
     if unused:
-        refusal = _refusal("tab_digit_without_notation_event")
+        reason = ("percussive_strike_without_owning_note"
+                  if any(c.kind == "percussive-strike" for c in columns[unused[0]])
+                  else "tab_digit_without_notation_event")
+        refusal = _refusal(reason)
         refusal["candidate_ids"] = [c.id for c in columns[unused[0]]]
         return matched, refusal
     return matched, None
