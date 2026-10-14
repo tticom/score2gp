@@ -835,9 +835,13 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
                 from .ir import PalmMuteTechnique
                 techniques.append(PalmMuteTechnique())
 
-            if n.find("DeadNote") is not None:
-                from .ir import Technique
-                techniques.append(Technique(kind="dead-note"))
+            is_dead = n.find("DeadNote") is not None or (
+                props is not None and props.find("Property[@name='DeadNote']") is not None
+            )
+            if is_dead:
+                # GPIF's Fret/Midi are storage values for a percussive strike,
+                # not source readings. Never expose them in recovered ScoreIR.
+                fret = pitch = None
 
             acc = n.find("Accent")
             if acc is not None:
@@ -940,6 +944,7 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
                 "string_idx": string_idx,
                 "fret": fret,
                 "pitch": pitch,
+                "is_dead": is_dead,
                 "techniques": techniques,
                 "articulations": articulations,
                 "left_hand_fingering": lh_fingering,
@@ -1124,6 +1129,7 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
                                     string=physical_string,
                                     fret=n_dict["fret"],
                                     pitch=n_dict["pitch"],
+                                    is_dead=n_dict["is_dead"],
                                     techniques=n_dict["techniques"],
                                     articulations=n_dict["articulations"],
                                     left_hand_fingering=n_dict["left_hand_fingering"],

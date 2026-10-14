@@ -238,7 +238,7 @@ def normalize_tabraw_payload(data: dict[str, Any]) -> dict[str, Any]:
         candidates.append(
             {
                 "id": item.get("id") or f"legacy-candidate-{index:04d}",
-                "kind": _candidate_kind(raw_text, parsed_fret),
+                "kind": _candidate_kind(raw_text, parsed_fret, item.get("string")),
                 "page_index": page_index,
                 "system_index": item.get("system_index"),
                 "staff_index": item.get("staff_index"),
@@ -309,7 +309,7 @@ def make_tab_candidate(
 
     return TabCandidate(
         id=candidate_id,
-        kind=kind or _candidate_kind(raw_text, parsed_fret),
+        kind=kind or _candidate_kind(raw_text, parsed_fret, string),
         page_index=page_index,
         system_index=system_index,
         staff_index=staff_index,
@@ -326,12 +326,12 @@ def make_tab_candidate(
     )
 
 
-def _candidate_kind(raw_text: str, parsed_fret: int | None) -> str:
+def _candidate_kind(raw_text: str, parsed_fret: int | None, string: int | None = None) -> str:
     lower = raw_text.lower()
     if parsed_fret is not None:
         return "fret"
     stripped = raw_text.strip()
-    if stripped.lower() in {"x", "×"}:
+    if string is not None and stripped.lower() in {"x", "×"}:
         return "percussive-strike"
     technique_tokens = ("slide", "bend", "vib", "let", "ring", "hammer", "pull", "p.m.", "palm")
     if any(token in lower for token in technique_tokens):

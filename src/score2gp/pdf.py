@@ -2428,7 +2428,7 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                             for c in sys_cands:
                                 cand_dict = candidates[page_cand_start_idx + page_cands.index(c)]
                                 cand_raw = cand_dict.get("raw", {})
-                                warnings_list = cand_raw.get("assignment_warnings", [])
+                                warnings_list = cand_raw.get("assignment_warnings") or []
                                 if "pdf_notation_rhythm_missing_notehead" not in warnings_list:
                                     warnings_list.append("pdf_notation_rhythm_missing_notehead")
                                 cand_raw["assignment_warnings"] = warnings_list

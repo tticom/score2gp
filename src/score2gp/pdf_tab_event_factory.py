@@ -72,7 +72,7 @@ def build_note_type_event(
     tie_state = None if is_rest else _tie_state(record.get("tie") or {})
     by_position = {(c.string, c.parsed_fret): c for c in candidates}
     printed = {a["pitch_class"]: a["direction"] for a in record.get("accidentals") or ()}
-    strike_heads = sorted((h for h in record["notehead"].get("heads", [])
+    strike_heads = sorted((h for h in (record.get("notehead") or {}).get("heads", [])
                            if h["kind"] == "cross"), key=lambda h: h["staff_position_index"]) if not is_rest else []
     strike_candidates = sorted((c for c in candidates if c.kind == "percussive-strike"),
                                key=lambda c: c.string)

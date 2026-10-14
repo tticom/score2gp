@@ -99,6 +99,12 @@ def _match_bar(records: list[dict[str, Any]], digits: list[TabCandidate], space:
             previous = None
             continue
         heads = record["notehead"]["count"]
+        cross_count = sum(h["kind"] == "cross" for h in record["notehead"].get("heads", []))
+        if cross_count > 1:
+            # Multiple crossed strings describe a muted strum in the measured
+            # corpus. This task reads individual strikes only; refuse the
+            # unresolved multi-string form rather than assign pitches to it.
+            return matched, _refusal("multiple_percussive_heads_out_of_scope", index)
         grace = record.get("grace")
         if grace:
             # A grace stands on its own TAB column and takes no tie; a later tie continues from the note before it.
@@ -126,7 +132,6 @@ def _match_bar(records: list[dict[str, Any]], digits: list[TabCandidate], space:
         if len(cands) != heads or len({c.string for c in cands}) != len(cands):
             return matched, _refusal("notehead_digit_count_mismatch", index)
         positions = [(c.string, c.parsed_fret) for c in cands]
-        cross_count = sum(h["kind"] == "cross" for h in record["notehead"].get("heads", []))
         if sum(c.kind == "percussive-strike" for c in cands) != cross_count:
             refusal = _refusal("percussive_strike_without_owning_head", index)
             refusal["candidate_ids"] = [c.id for c in cands if c.kind == "percussive-strike"]

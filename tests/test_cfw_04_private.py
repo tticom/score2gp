@@ -39,9 +39,10 @@ def test_every_written_bar_matches_reference_and_every_refusal_is_located():
         refused = [bar for bar in route["bars"] if bar["status"] == "refused"]
         assert [(bar["source_bar_index"], bar["reason"]) for bar in refused] == [
             (3, "notehead_digit_count_mismatch"),
-            (6, "bar_total_mismatch"),
+            (6, "note_duration_event_unread"),
             (9, "notehead_digit_count_mismatch"),
         ]
+        assert route["bars"][6]["detail"] == "unsupported_overlapping_form"
         assert all(bar["location"]["bar_index"] == bar["source_bar_index"] for bar in refused)
 
         spec = importlib.util.spec_from_file_location("cfw04_oracle", ROOT / "tests" / "test_dur_02_oracle.py")
