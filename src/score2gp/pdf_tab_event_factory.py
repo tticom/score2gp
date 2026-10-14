@@ -72,11 +72,24 @@ def build_note_type_event(
     tie_state = None if is_rest else _tie_state(record.get("tie") or {})
     by_position = {(c.string, c.parsed_fret): c for c in candidates}
     printed = {a["pitch_class"]: a["direction"] for a in record.get("accidentals") or ()}
+    strike_heads = sorted((h for h in record["notehead"].get("heads", [])
+                           if h["kind"] == "cross"), key=lambda h: h["staff_position_index"]) if not is_rest else []
+    strike_candidates = sorted((c for c in candidates if c.kind == "percussive-strike"),
+                               key=lambda c: c.string)
+    head_by_candidate = {c.id: h for c, h in zip(strike_candidates, strike_heads)}
     notes: list[Note] = []
     for string, fret in positions:
         candidate = by_position.get((string, fret))
         is_strike = candidate is not None and candidate.kind == "percussive-strike"
         pitch = None if is_strike else _STRING_TO_BASE_PITCH[string] + fret
+        provenance = [candidate.to_provenance()] if candidate else []
+        if is_strike:
+            head = head_by_candidate[candidate.id]
+            provenance[0].raw = {"notation_head_source": head["source"],
+                                 "staff_position_index": head["staff_position_index"]}
+            if "printed_head_midi" in head:
+                provenance[0].raw["printed_head_midi"] = head["printed_head_midi"]
+                provenance[0].raw["printed_position_basis"] = head["printed_position_basis"]
         notes.append(
             Note(
                 string=string,
@@ -84,7 +97,7 @@ def build_note_type_event(
                 pitch=pitch,
                 is_dead=is_strike,
                 confidence=candidate.confidence if candidate else 1.0,
-                provenance=[candidate.to_provenance()] if candidate else [],
+                provenance=provenance,
                 techniques=[TieTechnique(state=tie_state)] if tie_state else [],
                 spelling=(NoteSpelling(accidental=printed[pitch % 12], source="printed")
                           if pitch is not None and pitch % 12 in printed and pitch % 12 in BLACK_KEYS else None),

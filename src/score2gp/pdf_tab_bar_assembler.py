@@ -323,6 +323,14 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
             "unplaced_tab_digits": len(unplaced),
         },
     }
+    unowned_strikes = [c for c in unplaced if c.kind == "percussive-strike"]
+    if unowned_strikes:
+        route["located_refusals"] = [
+            {"class": "percussive_strike", "reason": "percussive_strike_without_owning_note",
+             "candidate_id": c.id, "location": {"page_index": (c.page_index or 1) - 1,
+             "system_index": c.system_index, "bar_index": c.bar_index, "string": c.string,
+             "bbox": c.bbox.model_dump() if c.bbox else None}}
+            for c in unowned_strikes]
     if refused_tab_system is not None:
         route["refused_tab_systems"] = [refused_tab_system.to_json()]
         route["summary"]["refused_tab_systems"] = 1

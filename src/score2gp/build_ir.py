@@ -1816,6 +1816,13 @@ def build_ir_from_tabraw_only(
         ) from err
     summary = note_type_route["summary"]
     if summary["source_bars"] == 0:
+        if note_type_route.get("located_refusals"):
+            raise BuildIrInputRiskError(
+                category="percussive_strike_without_owning_note",
+                stage="note-type-route",
+                message="TAB percussive strike has no owning notation note; no note was invented.",
+                details={"note_type_route": note_type_route},
+            )
         raise BuildIrInputRiskError(
             category="pdf_only_tab_no_notation_bars",
             stage="note-type-route",

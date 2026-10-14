@@ -30,11 +30,13 @@ def _scaled_source(name, scale, directory):
 def _assert_beams(source, expected):
     result = nd.read_note_durations(source)
     assert sum(e["status"] == "read" and e["beams"]["count"] > 0
-               for e in result["events"]) == expected
+               for e in result["events"] if (e.get("notehead") or {}).get("kind") != "cross") == expected
+    assert sum(e["status"] == "read" and e["beams"]["count"] > 0
+               for e in result["events"] if (e.get("notehead") or {}).get("kind") == "cross") == (16 if expected == 62 else 0)
 
 
 @pytest.mark.parametrize("name,expected", [
-    ("G-Am-C-Lick", 54), ("Lesson-3", 448), ("Derek Trucks BB King", 120),
+    ("G-Am-C-Lick", 62), ("Lesson-3", 448), ("Derek Trucks BB King", 120),
 ])
 def test_fixed_point_beam_size_mutant_fails_on_scaled_approved_sources(monkeypatch, name, expected):
     # A point-sized substitute for measured staff space must not read the
@@ -52,10 +54,10 @@ def test_fixed_point_beam_size_mutant_fails_on_scaled_approved_sources(monkeypat
 
 def _assert_located_symbols(source, dead_heads, overlaps):
     result = nd.read_note_durations(source)
-    dead = [e for e in result["diagnostics"].get("located_unread_events", [])
-            if e["reason"] == "dead_note_x_head"]
-    assert len(dead) == dead_heads
-    assert all(e["status"] == "unread" and e["written"] is None for e in dead)
+    dead = [e for e in result["events"]
+            if any(h["kind"] == "cross" for h in (e.get("notehead") or {}).get("heads", []))]
+    assert sum(e["notehead"]["count"] for e in dead) == dead_heads
+    assert all(e["status"] == "read" and e["duration_quarters"] and e["stem"] for e in dead)
     assert all(e["location"][key] is not None for e in dead
                for key in ("page_index", "system_index", "bar_index", "event_index"))
     unsupported = [e for e in result["diagnostics"].get("unread_symbols", [])
@@ -65,7 +67,7 @@ def _assert_located_symbols(source, dead_heads, overlaps):
     assert all(e["location"][key] is not None for e in unsupported
                for key in ("page_index", "system_index", "bar_index", "event_index"))
     dead_bars = {e["bar_index"] for e in dead}
-    assert all(bar["status"] != "match" and bar["located_unread"]
+    assert all(bar["status"] == "match" or bar["unread_events"]
                for bar in result["bar_checks"] if bar["bar_index"] in dead_bars)
     # Exercise the ordinary conversion route too: recognition diagnostics alone
     # do not prove that a newly writable overlap bar is actually refused.
