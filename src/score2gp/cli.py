@@ -21,6 +21,11 @@ from .gp_package import compare_gp, dumps_summary, inspect_gp, validate_gp, writ
 from .ir import ScoreIR, compare_score_ir, export_scoreir_schema, validate_score_ir_file
 from .pdf import extract_tab as extract_tab_file
 from .pdf import inspect_pdf as inspect_pdf_file
+from .pdf_resource_budget import (
+    INSPECTION_BUDGET_CODE,
+    INSPECTION_PAGE_NODE_LIMIT,
+    PdfInspectionResourceLimit,
+)
 from .report import write_conversion_report, write_warnings
 from .sidecar_evaluator import evaluate_sidecar, validate_sidecar_manifest
 
@@ -985,6 +990,26 @@ def convert_command(
     try:
         pdf_summary = inspect_pdf_file(pdf, actual_work_dir / "inspect")
         summary["pdf"] = pdf_summary
+    except PdfInspectionResourceLimit as exc:
+        counts = {
+            "inspection_page_nodes": exc.count,
+            "limit": INSPECTION_PAGE_NODE_LIMIT,
+            "page_index": exc.page_index,
+        }
+        warnings.append({"code": INSPECTION_BUDGET_CODE, "message": str(exc),
+                         "severity": "error", **counts})
+        write_warnings(actual_work_dir / "warnings.json", warnings)
+        if json_report:
+            _write_convert_report(
+                report_path=json_report, status="refused", stage="pdf-inspection",
+                exit_code=1, work_dir=actual_work_dir,
+                error_type=type(exc).__name__, refusal_code=INSPECTION_BUDGET_CODE,
+                recommended_action="Review the located inspection count; this workload exceeds the supported resource budget.",
+                output_written=False, strict=strict, summary_counts=counts,
+                musicxml_sidecar_info=mxl_info,
+            )
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1)
     except Exception as exc:
         warnings.append({"code": "pdf_inspect_failed", "message": f"PDF inspection failed: {str(exc)}", "severity": "error"})
         write_warnings(actual_work_dir / "warnings.json", warnings)

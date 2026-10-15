@@ -7,6 +7,8 @@ import re
 import sys
 from typing import Any
 
+from .pdf_resource_budget import check_inspection_budget, inspection_page_nodes
+
 from .pdf_tab_duration_associator import (
     BeamPrimitiveCandidate,
     FlagPrimitiveCandidate,
@@ -78,6 +80,7 @@ def inspect_pdf(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
         total_systems = 0
         systems_with_barline_candidates = 0
         has_ascii_rows = False
+        inspection_nodes = 0
 
         for index, page in enumerate(doc, start=1):
             text_blocks = page.get_text("blocks")
@@ -169,6 +172,8 @@ def inspect_pdf(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
                     for s in extract_visual_slide_evidence(drawings, diags_model.staves if hasattr(diags_model, "staves") else None)
                 ],
             }
+            inspection_nodes += inspection_page_nodes(page_info)
+            check_inspection_budget(inspection_nodes, index)
             summary["pages"].append(page_info)
 
         if vector_pages == doc.page_count and text_items_total:
