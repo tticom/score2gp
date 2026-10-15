@@ -99,6 +99,12 @@ def _match_bar(records: list[dict[str, Any]], digits: list[TabCandidate], space:
             previous = None
             continue
         heads = record["notehead"]["count"]
+        cross_count = sum(h["kind"] == "cross" for h in record["notehead"].get("heads", []))
+        if cross_count > 1:
+            # Multiple crossed strings describe a muted strum in the measured
+            # corpus. This task reads individual strikes only; refuse the
+            # unresolved multi-string form rather than assign pitches to it.
+            return matched, _refusal("multiple_percussive_heads_out_of_scope", index)
         grace = record.get("grace")
         if grace:
             # A grace stands on its own TAB column and takes no tie; a later tie continues from the note before it.
@@ -126,6 +132,10 @@ def _match_bar(records: list[dict[str, Any]], digits: list[TabCandidate], space:
         if len(cands) != heads or len({c.string for c in cands}) != len(cands):
             return matched, _refusal("notehead_digit_count_mismatch", index)
         positions = [(c.string, c.parsed_fret) for c in cands]
+        if sum(c.kind == "percussive-strike" for c in cands) != cross_count:
+            refusal = _refusal("percussive_strike_without_owning_head", index)
+            refusal["candidate_ids"] = [c.id for c in cands if c.kind == "percussive-strike"]
+            return matched, refusal
         matched.append({"record": record, "positions": positions, "candidates": cands,
                         "match": {"kind": "tab_column", "candidate_ids": [c.id for c in cands],
                                   "dx_spaces": round(near[0][0] / space, 3)}})
@@ -133,7 +143,10 @@ def _match_bar(records: list[dict[str, Any]], digits: list[TabCandidate], space:
             previous = {"positions": positions, "location": _location(record)}
     unused = [i for i in range(len(columns)) if i not in used]
     if unused:
-        refusal = _refusal("tab_digit_without_notation_event")
+        reason = ("percussive_strike_without_owning_note"
+                  if any(c.kind == "percussive-strike" for c in columns[unused[0]])
+                  else "tab_digit_without_notation_event")
+        refusal = _refusal(reason)
         refusal["candidate_ids"] = [c.id for c in columns[unused[0]]]
         return matched, refusal
     return matched, None
@@ -315,6 +328,14 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
             "unplaced_tab_digits": len(unplaced),
         },
     }
+    unowned_strikes = [c for c in unplaced if c.kind == "percussive-strike"]
+    if unowned_strikes:
+        route["located_refusals"] = [
+            {"class": "percussive_strike", "reason": "percussive_strike_without_owning_note",
+             "candidate_id": c.id, "location": {"page_index": (c.page_index or 1) - 1,
+             "system_index": c.system_index, "bar_index": c.bar_index, "string": c.string,
+             "bbox": c.bbox.model_dump() if c.bbox else None}}
+            for c in unowned_strikes]
     if refused_tab_system is not None:
         route["refused_tab_systems"] = [refused_tab_system.to_json()]
         route["summary"]["refused_tab_systems"] = 1

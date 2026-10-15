@@ -1757,7 +1757,8 @@ def build_ir_from_tabraw_only(
             from .pdf_tab_system_partition import partition_tab_systems
             partition = partition_tab_systems(
                 tabraw,
-                [c for c in tabraw.candidates if c.parsed_fret is not None and c.kind == "fret"],
+                [c for c in tabraw.candidates if (c.parsed_fret is not None and c.kind == "fret")
+                 or c.kind == "percussive-strike"],
                 note_durations, unsafe_warning_codes,
             )
         if partition is None:
@@ -1769,7 +1770,8 @@ def build_ir_from_tabraw_only(
             )
         refused_tab_system, partial_digits = partition
 
-    fret_candidates = [c for c in tabraw.candidates if (c.parsed_fret is not None and c.kind == "fret") or c.raw_text == "quarter_rest"]
+    fret_candidates = [c for c in tabraw.candidates if (c.parsed_fret is not None and c.kind == "fret")
+                       or c.kind == "percussive-strike" or c.raw_text == "quarter_rest"]
     if not fret_candidates:
         raise BuildIrInputRiskError(
             category="pdf_only_tab_grouping_unsafe",
@@ -1798,7 +1800,8 @@ def build_ir_from_tabraw_only(
         )
 
     # 2. Durations from note types, positions from the TAB
-    digits = [c for c in fret_candidates if c.kind == "fret" and c.parsed_fret is not None]
+    digits = [c for c in fret_candidates if (c.kind == "fret" and c.parsed_fret is not None)
+              or c.kind == "percussive-strike"]
     if partial_digits is not None:
         digits = partial_digits
     try:
@@ -1813,6 +1816,13 @@ def build_ir_from_tabraw_only(
         ) from err
     summary = note_type_route["summary"]
     if summary["source_bars"] == 0:
+        if note_type_route.get("located_refusals"):
+            raise BuildIrInputRiskError(
+                category="percussive_strike_without_owning_note",
+                stage="note-type-route",
+                message="TAB percussive strike has no owning notation note; no note was invented.",
+                details={"note_type_route": note_type_route},
+            )
         raise BuildIrInputRiskError(
             category="pdf_only_tab_no_notation_bars",
             stage="note-type-route",
@@ -4835,7 +4845,8 @@ def optimize_fret_snapping(score: ScoreIR) -> None:
         events_to_optimize = []
         for bar in score.bars:
             for event in bar.events:
-                if event.track_id == track.id and not event.is_rest and event.notes:
+                if (event.track_id == track.id and not event.is_rest and event.notes
+                        and not any(n.is_dead and n.pitch is None for n in event.notes)):
                     events_to_optimize.append(event)
 
         if not events_to_optimize:

@@ -1677,6 +1677,32 @@
     },
     "Note": {
       "additionalProperties": false,
+      "anyOf": [
+        {
+          "properties": {
+            "is_dead": {
+              "const": true
+            }
+          },
+          "required": [
+            "is_dead"
+          ]
+        },
+        {
+          "properties": {
+            "fret": {
+              "type": "integer"
+            },
+            "pitch": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "fret",
+            "pitch"
+          ]
+        }
+      ],
       "properties": {
         "articulations": {
           "items": {
@@ -1711,10 +1737,18 @@
           "default": null
         },
         "fret": {
-          "maximum": 36,
-          "minimum": 0,
-          "title": "Fret",
-          "type": "integer"
+          "anyOf": [
+            {
+              "maximum": 36,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fret"
         },
         "is_dead": {
           "default": false,
@@ -1734,10 +1768,18 @@
           "title": "Left Hand Fingering"
         },
         "pitch": {
-          "maximum": 127,
-          "minimum": 0,
-          "title": "Pitch",
-          "type": "integer"
+          "anyOf": [
+            {
+              "maximum": 127,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pitch"
         },
         "provenance": {
           "items": {
@@ -1862,9 +1904,7 @@
         }
       },
       "required": [
-        "string",
-        "fret",
-        "pitch"
+        "string"
       ],
       "title": "Note",
       "type": "object"

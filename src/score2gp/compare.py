@@ -16,6 +16,7 @@ class NoteData:
     string: int | None = None
     fret: int | None = None
     tie_type: str | None = None
+    is_dead: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -23,7 +24,14 @@ class NoteData:
             "string": self.string,
             "fret": self.fret,
             "tie_type": self.tie_type,
+            **({"is_dead": True} if self.is_dead else {}),
         }
+
+
+def _note_order(note: NoteData) -> tuple[int, int | str]:
+    # Absence sorts before a value; it is never an open string or a MIDI zero.
+    return (note.string if note.string is not None else -1,
+            note.pitch if note.pitch is not None else -1)
 
 
 @dataclass
@@ -104,8 +112,10 @@ def compact_bar_summary(bar: BarData) -> dict[str, Any]:
             dur_str += "~"
 
         note_details = []
-        for n in sorted(ev.notes, key=lambda x: (x.string or 0, x.pitch or 0)):
+        for n in sorted(ev.notes, key=_note_order):
             n_info = []
+            if n.is_dead:
+                n_info.append("percussive strike")
             if n.pitch is not None:
                 n_info.append(f"p={n.pitch}")
             if n.string is not None:
@@ -170,6 +180,7 @@ def _extract_bars_from_score_ir(score: ScoreIR) -> list[BarData]:
                     string=n.string,
                     fret=n.fret,
                     tie_type=tie_state,
+                    is_dead=n.is_dead,
                 ))
 
             ev_type = "rest" if ev.is_rest else ("chord" if len(notes_data) > 1 or ev.chord_symbol else "note")
@@ -308,16 +319,20 @@ def _extract_bars_from_gp_xml(root: ET.Element) -> list[BarData]:
                                     string_val = int(props["String"].findtext("String", "1")) if "String" in props else 1
                                     fret_val = int(props["Fret"].findtext("Fret", "0")) if "Fret" in props else 0
                                     midi_val = int(props["Midi"].findtext("Number", "60")) if "Midi" in props else None
+                                    is_dead = n_elem.find("DeadNote") is not None or (
+                                        "Muted" in props and props["Muted"].find("Enable") is not None
+                                    )
 
                                     tie_state = None
                                     if "Tie" in props:
                                         tie_state = props["Tie"].findtext("State", "Start").lower()
 
                                     notes_data.append(NoteData(
-                                        pitch=midi_val,
+                                        pitch=None if is_dead else midi_val,
                                         string=string_val,
-                                        fret=fret_val,
+                                        fret=None if is_dead else fret_val,
                                         tie_type=tie_state,
+                                        is_dead=is_dead,
                                     ))
 
                             ev_type = "rest" if is_rest else ("chord" if len(notes_data) > 1 else "note")
@@ -340,6 +355,12 @@ def _extract_bars_from_gp_file(gp_path: Path) -> list[BarData]:
         if "Content/score.gpif" in zf.namelist():
             xml_data = zf.read("Content/score.gpif")
             root = ET.fromstring(xml_data)
+            if (root.find(".//DeadNote") is not None
+                    or root.find(".//Property[@name='Muted']/Enable") is not None):
+                # Strike packages need the class-aware summary/relational
+                # reader. Keep the established numeric-only comparison path.
+                from .gp_package import _extract_score_ir_from_gpif_root
+                return _extract_bars_from_score_ir(_extract_score_ir_from_gpif_root(root))
             return _extract_bars_from_gp_xml(root)
     return []
 
@@ -517,6 +538,7 @@ def _parse_single_bar_dict(d: dict[str, Any], default_index: int = 1) -> BarData
                 string=n_d.get("string"),
                 fret=n_d.get("fret"),
                 tie_type=n_d.get("tie_type"),
+                is_dead=bool(n_d.get("is_dead", False)),
             ))
 
         timing_d = ev_d.get("timing")
@@ -863,15 +885,25 @@ def compare_bar_scores(actual_source: Any, expected_source: Any | None = None) -
                     "message": f"Bar {b_idx} event {ev_i} note count mismatch: actual={len(act_e.notes)}, expected={len(exp_e.notes)}",
                 })
 
-            act_notes_sorted = sorted(act_e.notes, key=lambda n: (n.string or 0, n.pitch or 0))
-            exp_notes_sorted = sorted(exp_e.notes, key=lambda n: (n.string or 0, n.pitch or 0))
+            act_notes_sorted = sorted(act_e.notes, key=_note_order)
+            exp_notes_sorted = sorted(exp_e.notes, key=_note_order)
             min_notes = min(len(act_notes_sorted), len(exp_notes_sorted))
 
             for n_i in range(min_notes):
                 an = act_notes_sorted[n_i]
                 en = exp_notes_sorted[n_i]
 
-                if an.pitch is not None and en.pitch is not None and an.pitch != en.pitch:
+                if an.is_dead != en.is_dead:
+                    mismatches.append({
+                        "bar_index": b_idx,
+                        "field": f"events[{ev_i}].notes[{n_i}].is_dead",
+                        "actual": an.is_dead,
+                        "expected": en.is_dead,
+                        "message": f"Bar {b_idx} event {ev_i} note {n_i} percussive strike class mismatch",
+                    })
+
+                strike = an.is_dead or en.is_dead
+                if an.pitch != en.pitch and (strike or (an.pitch is not None and en.pitch is not None)):
                     mismatches.append({
                         "bar_index": b_idx,
                         "field": f"events[{ev_i}].notes[{n_i}].pitch",
@@ -889,7 +921,7 @@ def compare_bar_scores(actual_source: Any, expected_source: Any | None = None) -
                         "message": f"Bar {b_idx} event {ev_i} note {n_i} string mismatch: actual={an.string}, expected={en.string}",
                     })
 
-                if an.fret is not None and en.fret is not None and an.fret != en.fret:
+                if an.fret != en.fret and (strike or (an.fret is not None and en.fret is not None)):
                     mismatches.append({
                         "bar_index": b_idx,
                         "field": f"events[{ev_i}].notes[{n_i}].fret",

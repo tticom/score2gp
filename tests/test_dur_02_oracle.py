@@ -26,7 +26,7 @@ WRITTEN = {"Whole": "whole", "Half": "half", "Quarter": "quarter", "Eighth": "ei
            "16th": "16th", "32nd": "32nd", "64th": "64th"}
 RHYTHM_TAGS = {"NoteValue", "AugmentationDot", "PrimaryTuplet"}
 TECHNIQUE_FIELDS = ("hopo_origin", "hopo_destination", "slide", "vibrato", "palm_mute", "let_ring")
-EVENT_FIELDS = ("kind", "written", "dots", "tuplet", "tie", "positions", "grace", *TECHNIQUE_FIELDS)
+EVENT_FIELDS = ("kind", "written", "dots", "tuplet", "tie", "positions", "grace", "percussive_strikes", *TECHNIQUE_FIELDS)
 
 
 class OracleRefusal(Exception):
@@ -238,13 +238,17 @@ def read_gp_bars(gp: Path | bytes, *, include_grace: bool = False,
                 dot = rhythm.find("AugmentationDot")
                 tuplet = rhythm.find("PrimaryTuplet")
                 note_ids = (beat.findtext("Notes") or "").split()
-                positions, origins, destinations = [], [], []
+                positions, origins, destinations, strikes = [], [], [], []
                 techniques: dict[str, list[tuple[Any, ...]]] = {field: [] for field in TECHNIQUE_FIELDS}
                 for nid in note_ids:
                     note = notes[nid]
                     props = {p.get("name"): p for p in note.iterfind("Properties/Property")}
                     position = (int(props["String"].findtext("String")), int(props["Fret"].findtext("Fret")))
                     positions.append(position)
+                    # Read the package's native flag independently of ScoreIR
+                    # and of the writer's legacy DeadNote extension.
+                    if "Muted" in props and props["Muted"].find("Enable") is not None:
+                        strikes.append(position[0])
                     for field, prop_name in (("hopo_origin", "HopoOrigin"),
                                              ("hopo_destination", "HopoDestination")):
                         if prop_name in props:
@@ -269,6 +273,7 @@ def read_gp_bars(gp: Path | bytes, *, include_grace: bool = False,
                     "tuplet": (int(tuplet.get("num")), int(tuplet.get("den"))) if tuplet is not None else None,
                     "tie": (any(origins), any(destinations)),
                     "positions": sorted(positions),
+                    **({"percussive_strikes": sorted(strikes)} if strikes else {}),
                     **({"grace": beat.findtext("GraceNotes")} if include_grace else {}),
                     **{field: sorted(values) for field, values in techniques.items()},
                 })
@@ -326,10 +331,10 @@ def compare_gp(truth: Path | bytes, produced: Path | bytes,
                                     "expected": index < len(w_events), "actual": index < len(h["events"])})
                 continue
             compared_events += 1
-            fields = [f for f in EVENT_FIELDS if w_events[index][f] != h["events"][index][f]]
+            fields = [f for f in EVENT_FIELDS if w_events[index].get(f) != h["events"][index].get(f)]
             for f in fields:
                 differences.append({"bar_index": bar, "event_index": index, "field": f,
-                                    "expected": w_events[index][f], "actual": h["events"][index][f]})
+                                    "expected": w_events[index].get(f), "actual": h["events"][index].get(f)})
             equal_events += not fields
     return {
         "source_bars": len(want),

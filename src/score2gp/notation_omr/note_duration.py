@@ -1158,9 +1158,7 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
     heads: list[Glyph] = []
     head_kind: dict[str, str] = {}
     for g in glyphs:
-        if g.ident in dead_ids:
-            continue
-        kind = _is_notehead(g, s)
+        kind = "cross" if g.ident in dead_ids else _is_notehead(g, s)
         if kind:
             heads.append(g)
             head_kind[g.ident] = kind
@@ -1191,7 +1189,9 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
             dead_stems.append(stem)
     dead_beam_ids = {beam.ident for beam in beams for stem in dead_stems
                      if _paints_into(beam.shape, stem.rect)}
-    beams = [beam for beam in beams if beam.ident not in dead_beam_ids]
+    # A band is owned through painted head/stem contact and the duration gate,
+    # including when it joins numeric heads and crosses. Shape alone is never
+    # sufficient; _beam_lines_at_stem still checks each stem's attachment.
 
     # Stems: verticals in painted contact with a notehead at one of their ends.
     boundaries = _barlines(staff, symbols)
@@ -1282,8 +1282,7 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
             event["_unread_symbols"] = unsupported
     # Located-only symbols are recorded with their class but never enter the event
     # stream: a refused bar keeps the bar-level reason it had before they were seen.
-    located_events = [{"_rest": g, "_rest_kind": None, "_cx": g.cx, "_kind": "unclassified",
-                       "_dots": [], "_unread": "dead_note_x_head"} for g in dead_heads]
+    located_events = []
 
     # The system header (clef, key and time signature) is the run of symbols from the staff start.
     first_note_x = min((h.bbox[0] for h in heads), default=staff.x1)
@@ -1648,13 +1647,22 @@ def _record(event: dict[str, Any], staff: Staff, state: dict[str, Any], bar: int
         record["kind"] = "chord" if len(heads) > 1 else "note"
         record["notehead"] = {"kind": kinds[0] if len(kinds) == 1 else "mixed", "count": len(heads),
                               "sources": [h.ident for h in heads]}
+        if "cross" in kinds:
+            record["notehead"]["heads"] = [
+                {"source": h.ident, "kind": head_kind[h.ident],
+                 "staff_position_index": round((h.cy - staff.top) / (space / 2)),
+                 "width_spaces": round(h.w / space, 3), "height_spaces": round(h.h / space, 3)}
+                for h in heads]
         parts["kind"] = "note"
-        parts["head_kind"] = kinds[0]
+        duration_kinds = {"filled" if kind == "cross" else kind for kind in kinds}
+        parts["head_kind"] = sorted(duration_kinds)[0]
         if event.get("_accidentals"):
             record["accidentals"] = event["_accidentals"]
-        if len(kinds) > 1:
+        if len(duration_kinds) > 1:
             reason = reason or "mixed_notehead_kinds"
         stem = event["_stem"]
+        if "cross" in kinds and stem is None:
+            reason = reason or "percussive_strike_without_owning_stem"
         if stem is not None:
             record["stem"] = {"source": stem.ident, "direction": "up" if stem.up else "down"}
             parts["has_stem"] = True
@@ -1812,6 +1820,62 @@ def _governing_signature(printed: dict[str, Any] | None, origin: str | None, dec
     return None
 
 
+def _resolve_strike_head_positions(records: list[dict[str, Any]], staff: Staff,
+                                   symbols: PageSymbols, keys: list[dict[str, Any]]) -> None:
+    """Source staff position for writer storage only, never a sounding strike pitch.
+
+    Reuse the existing proportional clef classifier and staff-step mapping. A
+    header that cannot resolve its clef or key leaves the position unresolved.
+    """
+    from ..logical_clef_candidate_classifier import classify_logical_clef_candidate
+    from ..pdf_geometry_candidates import LeftMarginPrimitiveCandidate
+    from ..pdf_pitch_mapper import map_staff_step_to_midi_pitch
+    from .time_signature import _clef
+
+    if not any((r.get("notehead") or {}).get("heads") for r in records):
+        return
+    clef = _clef(staff, symbols)
+    if clef is None:
+        return
+    x0, y0, x1, y1 = clef.bbox
+    classified = classify_logical_clef_candidate([
+        LeftMarginPrimitiveCandidate(page_index=staff.page_index + 1,
+            system_index=1, staff_index=1, x0=x0, y0=y0, x1=x1, y1=y1,
+            kind="curve", source="left_margin")], staff.space,
+        staff.bottom - staff.top, staff.x0)
+    clef_kind = classified["label"].removesuffix("_clef_candidate")
+    if clef_kind not in {"treble", "bass", "alto"}:
+        return
+    # An octave annotation is not read by this clef classifier. Do not resolve
+    # a header containing another nearby glyph or text as an ordinary clef.
+    adjacent = [g for g in symbols.glyphs if g.ident != clef.ident
+                and abs(g.cx - clef.cx) <= staff.space
+                and 0 <= g.bbox[1] - clef.bbox[3] <= 2 * staff.space]
+    adjacent += [t for t in symbols.texts if abs(t.cx - clef.cx) <= staff.space
+                 and 0 <= t.bbox[1] - clef.bbox[3] <= 2 * staff.space]
+    if adjacent:
+        return
+    for record in records:
+        if any(r.get("accidentals") for r in records if r["bar_index"] == record["bar_index"]):
+            # The existing accidental reader returns event pitch classes, not
+            # a per-head octave owner. Keep the storage position unresolved.
+            continue
+        key = keys[record["bar_in_system"]]
+        if key["status"] != "read":
+            continue
+        fifths = key["fifths"]
+        altered = ("FCGDAEB"[:fifths] if fifths >= 0 else "BEADGCF"[:-fifths])
+        for head in (record.get("notehead") or {}).get("heads", []):
+            if head["kind"] != "cross":
+                continue
+            natural = map_staff_step_to_midi_pitch(head["staff_position_index"], clef_kind)
+            letter = {0: "C", 2: "D", 4: "E", 5: "F", 7: "G", 9: "A", 11: "B"}[natural % 12]
+            modifier = (1 if fifths > 0 else -1) if letter in altered else 0
+            head["printed_head_midi"] = natural + modifier
+            head["printed_position_basis"] = {"clef": clef_kind, "clef_source": clef.ident,
+                                               "fifths": fifths, "octave_shift": 0}
+
+
 def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = None,
                         time_signature: tuple[int, int] | None = None, *,
                         _base_equivalent: bool = False) -> dict[str, Any]:
@@ -1858,9 +1922,11 @@ def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = No
                 text_before = state["time_signature"]
                 result = _read_staff(staff, symbols, notation + tab, state)
                 records.extend(result["records"])
-                for bar, bar_key in enumerate(read_bar_key_signatures(
+                system_keys = read_bar_key_signatures(
                     staff, symbols, result["bars"], key_signature,
-                )):
+                )
+                _resolve_strike_head_positions(result["records"], staff, symbols, system_keys)
+                for bar, bar_key in enumerate(system_keys):
                     bar_key_signatures[state["bar_offset"] + bar] = bar_key
                 reading = None
                 unread = None

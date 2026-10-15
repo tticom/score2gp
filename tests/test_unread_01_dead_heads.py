@@ -1,4 +1,4 @@
-"""Real-source X ownership remains refused for UNREAD-02; no synthetic evidence."""
+"""Real-source percussive strikes retain head/stem ownership; no synthetic evidence."""
 from pathlib import Path
 import tempfile
 
@@ -15,24 +15,25 @@ def test_every_real_x_head_is_located_including_ledger_line_heads():
     assert source.is_file(), "required approved private source missing"
     result = read_note_durations(source)
     located = result["diagnostics"]["located_unread_events"]
-    dead = [e for e in located if e["reason"] == "dead_note_x_head"]
+    dead = [e for e in result["events"] if any(h["kind"] == "cross" for h in (e.get("notehead") or {}).get("heads", []))]
     # Source contour census: twenty crosses, including sixteen formerly outside rest reach.
-    assert len(dead) == 20
+    assert sum(e["notehead"]["count"] for e in dead) == 20
     assert {e["bar_index"] for e in dead} == set(range(8))
     for e in dead:
-        assert e["status"] == "unread" and e["written"] is None
+        assert e["status"] == "read" and e["duration_quarters"] in {"1/4", "1/2"} and e["stem"]
         assert all(e["location"][k] is not None for k in
                    ("page_index", "system_index", "bar_index", "event_index"))
     # A located symbol keeps its bar refused and never replaces the bar-level status.
-    assert all(c["status"] != "match" and c["located_unread"]
+    assert all(c["status"] == "match" or c["unread_events"]
                for c in result["bar_checks"] if c["bar_index"] in {e["bar_index"] for e in dead})
     assert not [e for e in result["events"] if e["reason"] == "dead_note_x_head"]
     blocked = {e["rest"]["source"] for e in located
                if e["reason"] == "beam_attached_to_dead_note_x_head"}
-    assert blocked
+    assert not blocked
     read_beams = {source for e in result["events"] if e["status"] == "read"
                   for group in e["beams"]["sources"] for source in group.split(",")}
-    assert not blocked & read_beams
+    assert all(source in read_beams for e in dead for group in e["beams"]["sources"]
+               for source in group.split(","))
 
 
 @pytest.mark.parametrize("scale", [0.5, 2.0])
@@ -51,10 +52,9 @@ def test_real_source_crosses_keep_their_located_refusal_when_scaled(scale):
                 output.show_pdf_page(output.rect, original, i)
             derived.save(target)
         result = read_note_durations(target)
-        dead = [e for e in result["diagnostics"]["located_unread_events"]
-                if e["reason"] == "dead_note_x_head"]
-        assert len(dead) == 20
-        assert all(e["status"] == "unread" for e in dead)
+        dead = [e for e in result["events"] if any(h["kind"] == "cross" for h in (e.get("notehead") or {}).get("heads", []))]
+        assert sum(e["notehead"]["count"] for e in dead) == 20
+        assert all(e["status"] == "read" and e["stem"] and e["duration_quarters"] for e in dead)
         assert all(e["location"][k] is not None for e in dead for k in
                    ("page_index", "system_index", "bar_index", "event_index"))
         # This checks the cross classifier's scale, not the existing staff detector.

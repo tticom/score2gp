@@ -49,6 +49,8 @@ def apply_black_key_spelling(bars: Sequence[Bar], route_bars: Sequence[dict[str,
         for event in sorted(bar.events, key=lambda e: e.timing.onset_ticks):
             fresh: dict[int, str] = {}
             for note in event.notes:
+                if note.is_dead and note.pitch is None:
+                    continue  # Percussive strikes carry no pitch spelling.
                 if note.pitch % 12 not in BLACK_KEYS:
                     continue
                 if note.spelling is not None:

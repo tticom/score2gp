@@ -48,7 +48,8 @@ def _tie_state(tie: dict[str, Any]) -> str | None:
 
 def unjoined_accidentals(record: dict[str, Any], positions: Sequence[tuple[int, int]]) -> list[dict[str, Any]]:
     """Printed accidentals of a notation event whose pitch class no TAB note of the event has."""
-    pitch_classes = {(_STRING_TO_BASE_PITCH[string] + fret) % 12 for string, fret in positions}
+    pitch_classes = {(_STRING_TO_BASE_PITCH[string] + fret) % 12 for string, fret in positions
+                     if fret is not None}
     return [a for a in record.get("accidentals") or () if a["pitch_class"] not in pitch_classes]
 
 
@@ -71,20 +72,35 @@ def build_note_type_event(
     tie_state = None if is_rest else _tie_state(record.get("tie") or {})
     by_position = {(c.string, c.parsed_fret): c for c in candidates}
     printed = {a["pitch_class"]: a["direction"] for a in record.get("accidentals") or ()}
+    strike_heads = sorted((h for h in (record.get("notehead") or {}).get("heads", [])
+                           if h["kind"] == "cross"), key=lambda h: h["staff_position_index"]) if not is_rest else []
+    strike_candidates = sorted((c for c in candidates if c.kind == "percussive-strike"),
+                               key=lambda c: c.string)
+    head_by_candidate = {c.id: h for c, h in zip(strike_candidates, strike_heads)}
     notes: list[Note] = []
     for string, fret in positions:
         candidate = by_position.get((string, fret))
-        pitch = _STRING_TO_BASE_PITCH[string] + fret
+        is_strike = candidate is not None and candidate.kind == "percussive-strike"
+        pitch = None if is_strike else _STRING_TO_BASE_PITCH[string] + fret
+        provenance = [candidate.to_provenance()] if candidate else []
+        if is_strike:
+            head = head_by_candidate[candidate.id]
+            provenance[0].raw = {"notation_head_source": head["source"],
+                                 "staff_position_index": head["staff_position_index"]}
+            if "printed_head_midi" in head:
+                provenance[0].raw["printed_head_midi"] = head["printed_head_midi"]
+                provenance[0].raw["printed_position_basis"] = head["printed_position_basis"]
         notes.append(
             Note(
                 string=string,
                 fret=fret,
                 pitch=pitch,
+                is_dead=is_strike,
                 confidence=candidate.confidence if candidate else 1.0,
-                provenance=[candidate.to_provenance()] if candidate else [],
+                provenance=provenance,
                 techniques=[TieTechnique(state=tie_state)] if tie_state else [],
                 spelling=(NoteSpelling(accidental=printed[pitch % 12], source="printed")
-                          if pitch % 12 in printed and pitch % 12 in BLACK_KEYS else None),
+                          if pitch is not None and pitch % 12 in printed and pitch % 12 in BLACK_KEYS else None),
             )
         )
     tuplet = record.get("tuplet")

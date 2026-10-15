@@ -29,7 +29,7 @@ def test_derek_music_font_keys_are_read_or_located_by_the_existing_gate():
 
 
 @pytest.mark.parametrize("name,read,unread,located", [
-    ("G-Am-C-Lick", 70, 2, 36), ("Lesson-3", 465, 0, 0),
+    ("G-Am-C-Lick", 86, 2, 0), ("Lesson-3", 465, 0, 0),
 ])
 def test_approved_drawing_sources_keep_their_reader_events(name, read, unread, located):
     source = ROOT / "fixtures/private" / (name + ".pdf")
@@ -37,7 +37,7 @@ def test_approved_drawing_sources_keep_their_reader_events(name, read, unread, l
     result = read_note_durations(source)
     assert result["summary"]["read_events"] == read
     assert result["summary"]["unread_events"] == unread
-    # Located-only symbols (dead-note X heads and their bands) are outside the event stream.
+    # Owned percussive strikes and their bands enter the event stream.
     assert len(result["diagnostics"].get("located_unread_events", [])) == located
 
 
@@ -98,11 +98,14 @@ def test_music_font_outlines_work_in_a_fresh_process(name, counts):
 
 
 @pytest.mark.parametrize("name, beam_events", [
-    ("Derek Trucks BB King", 120), ("G-Am-C-Lick", 54), ("Lesson-3", 448),
+    ("Derek Trucks BB King", 120), ("G-Am-C-Lick", 62), ("Lesson-3", 448),
 ])
 def test_real_source_beams_reach_read_events(name, beam_events):
     source = ROOT / "fixtures/private" / (name + ".pdf")
     assert source.is_file(), "required approved private source missing"
     result = read_note_durations(source)
     assert sum(e["status"] == "read" and e["beams"]["count"] > 0
-               for e in result["events"]) == beam_events
+               for e in result["events"] if (e.get("notehead") or {}).get("kind") != "cross") == beam_events
+    strikes = sum(e["status"] == "read" and e["beams"]["count"] > 0
+                  for e in result["events"] if (e.get("notehead") or {}).get("kind") == "cross")
+    assert strikes == (16 if name == "G-Am-C-Lick" else 0)
