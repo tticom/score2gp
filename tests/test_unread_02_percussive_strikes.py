@@ -1,5 +1,7 @@
 """Real-source strike acceptance. The two model checks supplement infrastructure only."""
 import json
+import importlib.util
+import io
 import subprocess
 import sys
 import tempfile
@@ -18,6 +20,7 @@ from score2gp.gp_package import extract_score_ir_from_gp, write_gp
 from score2gp.notation_omr.note_duration import read_note_durations
 from score2gp.pdf import _extract_pdf_text_candidates
 from score2gp.tabraw import TabRaw, make_tab_candidate
+from score2gp.compare import compare_bar_scores, load_bar_data
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED = {
@@ -84,6 +87,9 @@ def test_real_source_strike_events_round_trip_through_summary_with_absence(conve
     summary = folder / "summary.gp"
     write_gp(strike_score, summary)
     _assert_strikes(extract_score_ir_from_gp(summary).bars, name)
+    compared = load_bar_data(summary)
+    assert sum(n.is_dead for b in compared for e in b.events for n in e.notes) == len(EXPECTED[name])
+    assert compare_bar_scores(compared, strike_score)["matches"]
 
 
 def test_real_source_storage_fret_is_writer_only_with_rule_receipts(converted):
@@ -98,6 +104,101 @@ def test_real_source_storage_fret_is_writer_only_with_rule_receipts(converted):
     assert written == expected[0] == [fret for fret, pitch, rule in receipts]
     assert [rule for fret, pitch, rule in receipts] == [expected[1]] * len(written)
     _assert_strikes(score.bars, name)
+
+
+@pytest.mark.parametrize("dead", [False, True])
+def test_real_source_comparison_rejects_fret_zero_in_both_directions(converted, dead):
+    name, score, output, reading, tab, folder = converted
+    expected = load_bar_data(score)
+    assert compare_bar_scores(expected, expected)["matches"]
+    mutant = score.model_copy(deep=True)
+    for bar in mutant.bars:
+        for event in bar.events:
+            for note in event.notes:
+                if note.is_dead:
+                    note.is_dead = dead
+                    note.fret = 0
+                    note.pitch = 40
+    changed = load_bar_data(mutant)
+    for actual, reference in ((changed, expected), (expected, changed)):
+        result = compare_bar_scores(actual, reference)
+        assert not result["matches"]
+        fields = [m["field"].rsplit(".", 1)[-1] for m in result["mismatches"]]
+        assert fields.count("fret") == len(EXPECTED[name])
+        assert fields.count("pitch") == len(EXPECTED[name])
+        assert fields.count("is_dead") == (0 if dead else len(EXPECTED[name]))
+
+
+def test_real_source_comparison_summary_keeps_strike_absence(converted):
+    name, score, output, reading, tab, folder = converted
+    summary = [bar.to_dict() for bar in load_bar_data(score)]
+    strikes = [n for bar in summary for event in bar["events"] for n in event["notes"]
+               if n.get("is_dead")]
+    assert len(strikes) == len(EXPECTED[name])
+    assert all(n["fret"] is None and n["pitch"] is None for n in strikes)
+    assert compare_bar_scores(load_bar_data(summary), load_bar_data(score))["matches"]
+
+
+def test_real_source_native_gp_flag_and_independent_oracle_reject_dropped_flag(converted):
+    name, score, output, reading, tab, folder = converted
+    spec = importlib.util.spec_from_file_location("unread02_oracle", ROOT / "tests/test_dur_02_oracle.py")
+    oracle = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(oracle)
+    bars = oracle.read_gp_bars(output)
+    assert sum(len(e.get("percussive_strikes", [])) for b in bars for e in b["events"] or []) == len(EXPECTED[name])
+    with zipfile.ZipFile(output) as package:
+        root = ET.fromstring(package.read("Content/score.gpif"))
+    strikes = [n for n in root.findall("Notes/Note") if n.find("DeadNote") is not None]
+    assert len(strikes) == len(EXPECTED[name])
+    for note in strikes:
+        props = note.find("Properties")
+        native = props.find("Property[@name='Muted']")
+        assert native is not None and native.find("Enable") is not None
+        props.remove(native)
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as package:
+        package.writestr("Content/score.gpif", ET.tostring(root))
+    result = oracle.compare_gp(output, buffer.getvalue())
+    assert len(result["differences"]) == len(EXPECTED[name])
+    assert {d["field"] for d in result["differences"]} == {"percussive_strikes"}
+
+
+def test_real_source_native_gp_reader_keeps_absence_without_legacy_summary(converted):
+    name, score, output, reading, tab, folder = converted
+    # A provenance-preserving extract avoids unrelated empty-beat/grace reader
+    # limitations. Keep the source events, but require the native GPIF flag
+    # alone to carry the class, without Score/Bars or DeadNote fallback.
+    strike_score = score.model_copy(deep=True)
+    # Keep the complete bar topology and source bar numbers in this extract.
+    for bar in strike_score.bars:
+        bar.events = [e for e in bar.events if any(n.is_dead for n in e.notes)]
+    package_path = folder / "native-only.gp"
+    source_ir = folder / "native-only.json"
+    source_ir.write_text(strike_score.model_dump_json(), encoding="utf-8")
+    # The existing writer selects hierarchical output inside pytest. A normal
+    # process must exercise its production relational tables instead.
+    run = subprocess.run([sys.executable, "-c",
+                          "import sys; from score2gp.ir import ScoreIR; "
+                          "from score2gp.gp_package import write_gp; "
+                          "write_gp(ScoreIR.from_json_file(sys.argv[1]),sys.argv[2])",
+                          str(source_ir), str(package_path)], capture_output=True, text=True)
+    assert run.returncode == 0, run.stderr
+    with zipfile.ZipFile(package_path) as package:
+        root = ET.fromstring(package.read("Content/score.gpif"))
+    summary = root.find("Score/Bars")
+    if summary is not None:
+        root.find("Score").remove(summary)
+    assert root.find("Beats") is not None
+    for note in root.findall("Notes/Note"):
+        if note.find("DeadNote") is not None:
+            note.remove(note.find("DeadNote"))
+    with zipfile.ZipFile(package_path, "w") as package:
+        package.writestr("Content/score.gpif", ET.tostring(root))
+    recovered = extract_score_ir_from_gp(package_path)
+    # Relational GPIF renumbers this event extract's bars from one.
+    assert [(n.string, e.timing.duration_ticks, n.is_dead, n.fret, n.pitch)
+            for b in recovered.bars for e in b.events for n in e.notes] == [
+                (string, duration, True, None, None) for bar, string, duration in EXPECTED[name]]
 
 
 def _assemble(reading, tab):

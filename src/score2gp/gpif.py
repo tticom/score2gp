@@ -863,6 +863,10 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
                             stored_fret, stored_pitch = note.fret, note.pitch
                             if note.is_dead and (note.fret is None or note.pitch is None):
                                 stored_fret, stored_pitch, _ = percussive_strike_storage(score, event, note)
+                                # Native GPIF flag (also present in approved GP
+                                # references). Retain DeadNote for our readers.
+                                muted = ET.SubElement(props, "Property", {"name": "Muted"})
+                                ET.SubElement(muted, "Enable")
                             _text(fret_prop, "Fret", stored_fret)
 
                             string_prop = ET.SubElement(props, "Property", {"name": "String"})
@@ -2191,14 +2195,16 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
     ):
         properties_node = ET.SubElement(note_node, "Properties")
 
-        fret_prop = ET.SubElement(properties_node, "Property", {"name": "Fret"})
-        _text(fret_prop, "Fret", note.fret)
+        if note.fret is not None:
+            fret_prop = ET.SubElement(properties_node, "Property", {"name": "Fret"})
+            _text(fret_prop, "Fret", note.fret)
 
         string_prop = ET.SubElement(properties_node, "Property", {"name": "String"})
         _text(string_prop, "String", note.string)
 
-        midi_prop = ET.SubElement(properties_node, "Property", {"name": "Midi"})
-        _text(midi_prop, "Number", note.pitch)
+        if note.pitch is not None:
+            midi_prop = ET.SubElement(properties_node, "Property", {"name": "Midi"})
+            _text(midi_prop, "Number", note.pitch)
 
         if lh_val:
             lh_map = {

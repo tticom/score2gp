@@ -837,6 +837,8 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
 
             is_dead = n.find("DeadNote") is not None or (
                 props is not None and props.find("Property[@name='DeadNote']") is not None
+            ) or (
+                props is not None and props.find("Property[@name='Muted']/Enable") is not None
             )
             if is_dead:
                 # GPIF's Fret/Midi are storage values for a percussive strike,
