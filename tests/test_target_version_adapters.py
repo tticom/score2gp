@@ -15,6 +15,7 @@ from xml.etree import ElementTree as ET
 from zipfile import ZipFile
 
 import pytest
+from rich.text import Text
 from typer.testing import CliRunner
 
 from score2gp.cli import app
@@ -48,17 +49,21 @@ def test_unsupported_target_refuses_at_every_writer_boundary(target, tmp_path):
 
 @pytest.mark.parametrize('target', ['GP6', 'GP8', 'unknown', ''])
 @pytest.mark.parametrize('command', ['write-gp', 'convert'])
-def test_cli_refuses_target_before_input_processing(target, command, tmp_path):
+@pytest.mark.parametrize('color', [False, True], ids=['plain', 'color'])
+def test_cli_refuses_target_before_input_processing(target, command, color, tmp_path):
     # Mutant: remove the CLI gate; a missing input must not mask selection.
     out = tmp_path / 'uncreated' / 'output.gp'
     args = ['write-gp', str(IR), '--out', str(out)] if command == 'write-gp' else [
         'convert', '--pdf', str(tmp_path / 'absent.pdf'), '--out', str(out),
         '--work-dir', str(tmp_path / 'uncreated')]
-    result = CliRunner().invoke(app, args + ['--target', target])
+    result = CliRunner().invoke(app, args + ['--target', target], color=color)
+    # Rich can insert ANSI styling inside --target; check the visible message
+    # in both terminal modes without weakening the refusal or no-output checks.
+    output = Text.from_ansi(result.output).plain
     assert result.exit_code != 0
-    assert '--target' in result.output
-    assert target in result.output
-    assert 'unsupported' in result.output.lower()
+    assert '--target' in output
+    assert target in output
+    assert 'unsupported' in output.lower()
     assert not out.parent.exists()
 
 
