@@ -8,8 +8,19 @@ from pathlib import Path
 from score2gp.diagnostics import run_system_diagnostics, get_process_memory
 
 
+def supported_manifest(tmp_path: Path) -> Path:
+    # OUT-01 removes fabricated GP6/GP8 selections. Preserve all three source
+    # payloads and round-trip checks using the retained GPIF-ZIP target.
+    payloads = json.loads(Path("fixtures/public/test_system_integration_manifest.json").read_text())
+    for payload in payloads:
+        payload["target_version"] = "GP7"
+    manifest = tmp_path / "supported_manifest.json"
+    manifest.write_text(json.dumps(payloads))
+    return manifest
+
+
 def test_system_diagnostics_runner(tmp_path) -> None:
-    manifest_path = Path("fixtures/public/test_system_integration_manifest.json")
+    manifest_path = supported_manifest(tmp_path)
     workdir = tmp_path / "diagnostics_work"
 
     # Execute system diagnostics orchestrator
@@ -37,7 +48,7 @@ def test_system_diagnostics_runner(tmp_path) -> None:
 
 
 def test_cli_diagnose_command(tmp_path) -> None:
-    manifest_path = "fixtures/public/test_system_integration_manifest.json"
+    manifest_path = str(supported_manifest(tmp_path))
     workdir = tmp_path / "diagnose_cli_work"
 
     # Run the diagnose command via subprocess to verify CLI integration and output

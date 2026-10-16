@@ -11,6 +11,7 @@ from typing import Any
 
 from .build_ir import build_ir_with_diagnostics_from_files, BuildIrInputRiskError
 from .gp_package import write_gp
+from .version_adapter import validate_target
 from .cache import PipelineCacheManager, compute_payload_hash
 
 
@@ -50,6 +51,7 @@ def run_single_payload(
     payload_hash = None
 
     try:
+        validate_target(target_version)
         if not musicxml or not tabraw:
             raise ValueError("Both musicxml and tabraw paths must be provided in payload.")
 
