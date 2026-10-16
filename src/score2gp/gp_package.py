@@ -8,7 +8,7 @@ from typing import Any
 from xml.etree import ElementTree as ET
 
 from .gpif import build_gpif, gpif_warnings
-from .version_adapter import adapt_gpif, get_version_file_content
+from .version_adapter import adapt_gpif, get_version_file_content, validate_target
 from .ir import (
     ScoreIR, ScoreBooklet, Track, Tuning, TuningString, Mixer, SoundConfig,
     TrackLayoutPreferences, TrackExpression, TrackAutomation, ScoreLayout,
@@ -28,6 +28,7 @@ def write_gp(
     template: str | Path | None = None,
     target_version: str = "GP7"
 ) -> list[str]:
+    validate_target(target_version)
     warnings: list[str] = gpif_warnings(score)
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)

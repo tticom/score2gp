@@ -2218,7 +2218,7 @@ def test_gpif_standard_guitar_pitch_stave_display(tmp_path) -> None:
 
     out = tmp_path / "guitar_pitch_display.gp"
     try:
-        warnings = write_gp(score, out, target_version="GP8")
+        warnings = write_gp(score, out, target_version="GP7")
     finally:
         # Restore originals immediately to prevent test runner issues
         sys.modules = orig_modules

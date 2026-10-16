@@ -28,6 +28,7 @@ from .pdf_resource_budget import (
 )
 from .report import write_conversion_report, write_warnings
 from .sidecar_evaluator import evaluate_sidecar, validate_sidecar_manifest
+from .version_adapter import validate_target
 
 def parse_page_range(pages_str: str | None) -> tuple[int, int] | None:
     if not pages_str:
@@ -141,12 +142,20 @@ def compare_bars_command(
         raise typer.Exit(1)
 
 
+def _validate_cli_target(value: str) -> str:
+    try:
+        validate_target(value)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--target") from exc
+    return value
+
+
 @app.command("write-gp")
 def write_gp_command(
     ir_json: Path,
     template: Optional[Path] = typer.Option(None),
     out: Path = typer.Option(...),
-    target: str = typer.Option("GP7", "--target", help="Target Guitar Pro version profile (GP6, GP7, GP8)"),
+    target: str = typer.Option("GP7", "--target", callback=_validate_cli_target, help="Output target: GP7 (current GPIF-ZIP output only)"),
 ) -> None:
     """Write a minimal GP7-style package from ScoreIR JSON or Booklet JSON."""
     score, errors = validate_score_ir_file(ir_json)
@@ -868,6 +877,7 @@ def convert_command(
     tempo_bpm: Optional[float] = typer.Option(None, "--tempo-bpm", help="Explicit tempo override in BPM for PDF-only TabRaw conversion."),
     ref_gp: Optional[Path] = typer.Option(None, "--ref-gp", help="Path to optional reference GP package for semantic comparison"),
     sidecar_manifest: Optional[Path] = typer.Option(None, "--sidecar-manifest", help="Path to sidecar provenance manifest JSON file"),
+    target: str = typer.Option("GP7", "--target", callback=_validate_cli_target, help="Output target: GP7 (current GPIF-ZIP output only)"),
 ) -> None:
     """Run the complete conversion pipeline: extraction, alignment, IR generation, and GP7 package writing."""
     actual_work_dir = work_dir or workdir
