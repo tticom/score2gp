@@ -4998,6 +4998,8 @@ def _detect_tab_systems(
     raw_horizontal = sorted((segment for segment in segments if segment.is_horizontal), key=lambda segment: segment.y0)
     horizontal = sorted(merge_collinear_horizontal_segments(raw_horizontal), key=lambda segment: segment.y0)
     line_groups = _tab_line_groups(horizontal)
+    from .pdf_grouping_evidence import notation_anchored_line_groups
+    line_groups = notation_anchored_line_groups(page, horizontal, line_groups)
     recovered_groups = _recovered_segmented_tab_groups(page, segments, horizontal, line_groups)
     previous_right_edge: dict[int, float] = {}
     for old_group, extended_group in _right_extended_tab_groups(page, segments, line_groups):
