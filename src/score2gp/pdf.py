@@ -256,6 +256,7 @@ def extract_tab(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
     else:
         raw["candidates"].extend(_extract_pdf_text_candidates(Path(path), raw["warnings"], meta, inspection_data=inspection))
         raw["candidates"].extend(_leading_slide_candidates(raw["candidates"], inspection))
+        raw["candidates"].extend(_tab_vibrato_candidates(raw["candidates"], inspection))
 
     if "floating_barlines" in meta:
         raw["floating_barlines"] = meta["floating_barlines"]
@@ -278,6 +279,67 @@ def extract_tab(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
     if raw.get("warnings"):
         write_warnings(out / "warnings.json", raw["warnings"])
     return raw
+
+
+def _tab_vibrato_candidates(candidates: list[dict[str, Any]], inspection: dict[str, Any]) -> list[dict[str, Any]]:
+    """Read a run of repeated wave glyphs immediately above TAB, at its left edge.
+
+    Inspection's curve clusters also include noteheads, clefs and slurs. Require
+    at least three congruent overlapping horizontal glyphs, then an unambiguous
+    digit column under the start. The duplicate mark over notation is excluded
+    by the measured TAB line spacing.
+    """
+    result = []
+    offset = 0.0
+    for page in inspection.get("pages", []):
+        groups: list[list[dict[str, Any]]] = []
+        for mark in sorted(page.get("visual_vibrato_evidence", []),
+                           key=lambda v: (round(v["bbox"][1], 1), v["bbox"][0])):
+            x0, y0, x1, y1 = mark["bbox"]
+            width = x1 - x0
+            if width <= y1 - y0 or mark["cycles"] < 4:
+                continue
+            group = next((g for g in groups
+                          if abs(g[-1]["bbox"][1] - y0) < 0.01
+                          and abs(g[-1]["bbox"][3] - y1) < 0.01
+                          and abs(g[-1]["bbox"][2] - g[-1]["bbox"][0] - width) < 0.01
+                          and g[-1]["cycles"] == mark["cycles"]
+                          and 0 < x0 - g[-1]["bbox"][0] <= width), None)
+            if group is None:
+                groups.append([mark])
+            else:
+                group.append(mark)
+        for index, group in enumerate(groups):
+            if len(group) < 3:
+                continue
+            x0, y0, _, y1 = group[0]["bbox"]
+            targets = []
+            for digit in candidates:
+                if digit.get("kind") != "fret" or digit.get("page_index") != page["page"]:
+                    continue
+                lines = digit.get("raw", {}).get("tab_line_ys", [])
+                box = digit.get("bbox")
+                if len(lines) != 6 or not box:
+                    continue
+                gap = (lines[-1] - lines[0]) / 5
+                if (0 < lines[0] - (y1 + offset) <= 2 * gap
+                        and box["x0"] <= x0 <= box["x1"]):
+                    targets.append(digit)
+            if len(targets) != 1:
+                continue
+            target = targets[0]
+            result.append(make_tab_candidate(
+                candidate_id=f"pdf-p{page['page']:03d}-tab-vibrato-{index}",
+                raw_text="vibrato", kind="visual-vibrato", confidence=0.85,
+                page_index=target["page_index"], system_index=target.get("system_index"),
+                staff_index=target.get("staff_index"), bar_index=target.get("bar_index"),
+                string=target["string"],
+                bbox_values=[x0, y0 + offset, group[-1]["bbox"][2], y1 + offset],
+                raw={"amplitude": group[0]["amplitude"],
+                     "target_candidate_id": target["id"]},
+            ).model_dump(mode="json", exclude_none=True))
+        offset += page["height"]
+    return result
 
 
 def _leading_slide_candidates(candidates: list[dict[str, Any]], inspection: dict[str, Any]) -> list[dict[str, Any]]:

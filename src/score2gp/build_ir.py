@@ -4257,7 +4257,8 @@ def _attach_symbols_and_techniques(
             cand_key = (candidate.page_index or 1, candidate.system_index or 1, candidate.staff_index or 1, bar_idx)
             if cand_key in bar_key_to_output_idx:
                 bar_idx = bar_key_to_output_idx[cand_key]
-            elif technique_bars is not None and candidate.id in technique_bars:
+            elif (technique_bars is not None and candidate.id in technique_bars
+                  and len(destinations.get(cand_key, ())) > 1):
                 bar_idx = technique_bars[candidate.id]
             elif placed_frets is not None:
                 bar_idx = None
@@ -4433,7 +4434,12 @@ def _attach_symbols_and_techniques(
                                            ev1.timing.onset_ticks == ev2.timing.onset_ticks))
                             bounded = (x1 < candidate.x < x2 and
                                        event_order[ev2.id] == event_order[ev1.id] + 1)
-                            if sequential and (placed_frets is None or bounded):
+                            # Only the newly resolved split-system placement
+                            # needs this pairing rule. Preserve the established
+                            # one-to-one bar route's attachment decisions.
+                            split_placement = (technique_bars is not None
+                                               and len(destinations.get(cand_key, ())) > 1)
+                            if sequential and (not split_placement or bounded):
                                 mid_x = (x1 + x2) / 2.0
                                 dist = abs(mid_x - candidate.x)
                                 candidate_pairs.append((dist, ev1, note1, ev2, note2))
@@ -4731,6 +4737,21 @@ def _attach_symbols_and_techniques(
                 _remove_not_aligned_warning(score, candidate)
 
         elif candidate.kind == "visual-vibrato":
+            if candidate.raw.get("target_candidate_id"):
+                # This repair supplies marks lost with a split TAB-system key;
+                # the established one-to-one attachment route stays unchanged.
+                if placed_frets is not None and len(destinations.get(cand_key, ())) <= 1:
+                    continue
+                targets = [note for event in bar.events for note in event.notes
+                           if any(p.raw_token_id == candidate.raw["target_candidate_id"]
+                                  for p in note.provenance)]
+                if len(targets) == 1:
+                    targets[0].techniques.append(VibratoTechnique(
+                        kind="vibrato", width="wide" if candidate.raw["amplitude"] > 3.0 else "narrow",
+                        speed="unknown",
+                    ))
+                    targets[0].provenance.append(candidate.to_provenance())
+                continue
             playable_events = [ev for ev in bar.events if not ev.is_rest and ev.notes]
             if not playable_events:
                 score.warnings.append(
