@@ -1988,8 +1988,20 @@ def build_ir_from_tabraw_only(
                 bar_index=1,
             )],
         ))
+    # A TabRaw system can contain several notation bars. Locate its technique
+    # labels by the same page/staff/bar geometry as the digits, rather than
+    # discarding the whole system's labels when its old bar key is split.
+    technique_candidates = [c for c in tabraw.candidates
+                            if c.kind in ("technique-text", "visual-vibrato", "visual-slide")
+                            and c.bar_index is not None]
+    placed_techniques, _ = place_tab_digits(technique_candidates, note_durations)
+    technique_systems = {s["first_bar_index"] + i: s for s in note_durations["systems"]
+                         for i in range(s["bar_count"])}
+    technique_bars = {c.id: index + 1 for index, labels in placed_techniques.items() for c in labels
+                      if c.system_index == technique_systems[index]["system_index"] + 1}
     _attach_symbols_and_techniques(score, tabraw, placed_frets=placed,
-                                   notation_barlines=notation_barlines)
+                                   notation_barlines=notation_barlines,
+                                   technique_bars=technique_bars)
 
     # Construct diagnostics
     tabraw_candidates_loaded = len(tabraw.candidates)
@@ -4097,6 +4109,7 @@ def _remove_not_aligned_warning(score: ScoreIR, candidate: TabCandidate) -> None
 def _attach_symbols_and_techniques(
     score: ScoreIR, tabraw: TabRaw, *, placed_frets: dict[int, list[TabCandidate]] | None = None,
     notation_barlines: list[dict[str, object]] | None = None,
+    technique_bars: dict[str, int] | None = None,
 ) -> None:
     bars_by_index = {bar.index: bar for bar in score.bars}
     candidates_by_id = {candidate.id: candidate for candidate in tabraw.candidates}
@@ -4244,6 +4257,9 @@ def _attach_symbols_and_techniques(
             cand_key = (candidate.page_index or 1, candidate.system_index or 1, candidate.staff_index or 1, bar_idx)
             if cand_key in bar_key_to_output_idx:
                 bar_idx = bar_key_to_output_idx[cand_key]
+            elif (technique_bars is not None and candidate.id in technique_bars
+                  and len(destinations.get(cand_key, ())) > 1):
+                bar_idx = technique_bars[candidate.id]
             elif placed_frets is not None:
                 bar_idx = None
                 reason = "ambiguous" if cand_key in destinations else "unplaced"
@@ -4407,12 +4423,23 @@ def _attach_symbols_and_techniques(
                                 notes_by_group[(event.track_id, event.timing.voice, note.string)].append((event, note, x_val))
 
                     candidate_pairs = []
+                    event_order = {event.id: index for index, event in enumerate(bar.events)}
                     for group_key, group_notes in notes_by_group.items():
                         group_notes.sort(key=lambda item: item[0].timing.onset_ticks)
                         for i in range(len(group_notes) - 1):
                             ev1, note1, x1 = group_notes[i]
                             ev2, note2, x2 = group_notes[i+1]
-                            if ev1.timing.onset_ticks < ev2.timing.onset_ticks:
+                            sequential = (ev1.timing.onset_ticks < ev2.timing.onset_ticks or
+                                          (ev1.timing.grace is not None and ev2.timing.grace is None and
+                                           ev1.timing.onset_ticks == ev2.timing.onset_ticks))
+                            bounded = (x1 < candidate.x < x2 and
+                                       event_order[ev2.id] == event_order[ev1.id] + 1)
+                            # Only the newly resolved split-system placement
+                            # needs this pairing rule. Preserve the established
+                            # one-to-one bar route's attachment decisions.
+                            split_placement = (technique_bars is not None
+                                               and len(destinations.get(cand_key, ())) > 1)
+                            if sequential and (not split_placement or bounded):
                                 mid_x = (x1 + x2) / 2.0
                                 dist = abs(mid_x - candidate.x)
                                 candidate_pairs.append((dist, ev1, note1, ev2, note2))
@@ -4710,6 +4737,21 @@ def _attach_symbols_and_techniques(
                 _remove_not_aligned_warning(score, candidate)
 
         elif candidate.kind == "visual-vibrato":
+            if candidate.raw.get("target_candidate_id"):
+                # This repair supplies marks lost with a split TAB-system key;
+                # the established one-to-one attachment route stays unchanged.
+                if placed_frets is not None and len(destinations.get(cand_key, ())) <= 1:
+                    continue
+                targets = [note for event in bar.events for note in event.notes
+                           if any(p.raw_token_id == candidate.raw["target_candidate_id"]
+                                  for p in note.provenance)]
+                if len(targets) == 1:
+                    targets[0].techniques.append(VibratoTechnique(
+                        kind="vibrato", width="wide" if candidate.raw["amplitude"] > 3.0 else "narrow",
+                        speed="unknown",
+                    ))
+                    targets[0].provenance.append(candidate.to_provenance())
+                continue
             playable_events = [ev for ev in bar.events if not ev.is_rest and ev.notes]
             if not playable_events:
                 score.warnings.append(
@@ -4772,6 +4814,17 @@ def _attach_symbols_and_techniques(
             _remove_not_aligned_warning(score, candidate)
 
         elif candidate.kind == "visual-slide":
+            if candidate.raw.get("placement") == "before-note":
+                targets = [(ev, note) for ev in bar.events for note in ev.notes
+                           if any(p.raw_token_id == candidate.raw.get("target_candidate_id")
+                                  for p in note.provenance)]
+                if len(targets) == 1:
+                    _, target = targets[0]
+                    target.techniques.append(SlideTechnique(
+                        kind="slide", style="slide-in", direction=candidate.raw["direction"],
+                    ))
+                    target.provenance.append(candidate.to_provenance())
+                continue
             playable_events = [ev for ev in bar.events if not ev.is_rest and ev.notes]
             if not playable_events:
                 score.warnings.append(
