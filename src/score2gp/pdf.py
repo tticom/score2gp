@@ -255,6 +255,7 @@ def extract_tab(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
         raw["warnings"].append({"code": "pymupdf-unavailable", "message": str(exc), "severity": "error"})
     else:
         raw["candidates"].extend(_extract_pdf_text_candidates(Path(path), raw["warnings"], meta, inspection_data=inspection))
+        raw["candidates"].extend(_leading_slide_candidates(raw["candidates"], inspection))
 
     if "floating_barlines" in meta:
         raw["floating_barlines"] = meta["floating_barlines"]
@@ -277,6 +278,50 @@ def extract_tab(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
     if raw.get("warnings"):
         write_warnings(out / "warnings.json", raw["warnings"])
     return raw
+
+
+def _leading_slide_candidates(candidates: list[dict[str, Any]], inspection: dict[str, Any]) -> list[dict[str, Any]]:
+    """A short diagonal ending immediately before a TAB digit is a slide into it.
+
+    Bind both endpoints to the digit's printed box. Diagonals elsewhere on the
+    page (accidentals, text, stems) have no authority to create a technique.
+    """
+    result = []
+    for page in inspection.get("pages", []):
+        page_offset = sum(p["height"] for p in inspection["pages"] if p["page"] < page["page"])
+        digits = [c for c in candidates if c.get("kind") == "fret" and c.get("bbox")
+                  and c.get("page_index") == page["page"] and c.get("string") is not None]
+        for index, stroke in enumerate(page.get("visual_slide_evidence", [])):
+            x0, y0, x1, y1 = stroke["bbox"]
+            targets = []
+            for digit in digits:
+                box = digit["bbox"]
+                width = box["x1"] - box["x0"]
+                endpoint_y = y0 if stroke["direction"] == "up" else y1
+                if (0 < box["x0"] - x1 <= width / 2 and
+                        box["y0"] - page_offset <= endpoint_y <= box["y1"] - page_offset and
+                        width / 2 <= x1 - x0 <= 2 * width and
+                        y1 - y0 <= box["y1"] - box["y0"]):
+                    targets.append(digit)
+            if len(targets) != 1:
+                continue
+            target = targets[0]
+            # Only a system-leading stroke has no possible written origin.
+            # A preceding digit, however far away, makes this a
+            # connecting/independent slide whose type needs a different reading.
+            if any(d.get("system_index") == target.get("system_index") and
+                   d["bbox"]["x1"] <= x0 for d in digits):
+                continue
+            result.append(make_tab_candidate(
+                candidate_id=f"pdf-p{page['page']:03d}-leading-slide-{index}",
+                raw_text="slide", kind="visual-slide", confidence=0.85, page_index=target["page_index"],
+                system_index=target.get("system_index"), staff_index=target.get("staff_index"),
+                bar_index=target.get("bar_index"), string=target["string"],
+                bbox_values=[x0, y0 + page_offset, x1, y1 + page_offset],
+                raw={"direction": stroke["direction"], "placement": "before-note",
+                     "target_candidate_id": target["id"]},
+            ).model_dump(mode="json", exclude_none=True))
+    return result
 
 from .pdf_geometry import (
     _LineSegment,

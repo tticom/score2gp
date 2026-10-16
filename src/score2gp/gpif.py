@@ -48,7 +48,7 @@ def _text(parent: ET.Element, tag: str, value: object | None) -> ET.Element:
     return child
 
 
-def _find_hopo_destinations(score: ScoreIR) -> set[tuple[int, int, int]]:
+def _find_hopo_destinations(score: ScoreIR) -> set[tuple[str, int]]:
     destinations = set()
     event_map = {}
     for bar in score.bars:
@@ -64,7 +64,9 @@ def _find_hopo_destinations(score: ScoreIR) -> set[tuple[int, int, int]]:
                         if target_ev:
                             for target_note in target_ev.notes:
                                 if target_note.string == note.string:
-                                    destinations.add((target_ev.timing.bar_index, target_ev.timing.onset_ticks, target_note.string))
+                                    # Grace and ordinary events can share an onset.
+                                    # The technique names an event, not a time slot.
+                                    destinations.add((target_ev.id, target_note.string))
     return destinations
 
 
@@ -820,7 +822,7 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
                             note_node = ET.SubElement(notes_db, "Note", {"id": note_id})
                             _text(note_node, "InstrumentArticulation", "0")
 
-                            is_hopo_dest = (bar.index, event.timing.onset_ticks, note.string) in hopo_dests
+                            is_hopo_dest = (event.id, note.string) in hopo_dests
                             is_let_ring = (bar.index, event.timing.onset_ticks, note.string) in let_ring_notes
                             is_palm_mute = (bar.index, event.timing.onset_ticks, note.string) in palm_mute_notes
 
@@ -1869,10 +1871,10 @@ def _event(parent: ET.Element, event: Event, hopo_dests: set[tuple[int, int, int
         for technique in event.techniques:
             ET.SubElement(techniques, "Technique", {"name": technique.kind})
     for note in event.notes:
-        _note(node, note, event.timing.bar_index, event.timing.onset_ticks, event.timing.duration_ticks, hopo_dests, let_ring_notes, palm_mute_notes, event_map)
+        _note(node, note, event.timing.bar_index, event.timing.onset_ticks, event.timing.duration_ticks, hopo_dests, let_ring_notes, palm_mute_notes, event_map, event_id=event.id)
 
 
-def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, duration_ticks: int, hopo_dests: set[tuple[int, int, int]], let_ring_notes: set[tuple[int, int, int]], palm_mute_notes: set[tuple[int, int, int]], event_map: dict[str, Event]) -> None:
+def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, duration_ticks: int, hopo_dests: set[tuple[str, int]], let_ring_notes: set[tuple[int, int, int]], palm_mute_notes: set[tuple[int, int, int]], event_map: dict[str, Event], *, event_id: str) -> None:
     note_node = ET.SubElement(
         parent,
         "Note",
@@ -1899,7 +1901,7 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
                 "value": f"{pt.value:.6f}"
             })
 
-    is_hopo_dest = (bar_index, onset_ticks, note.string) in hopo_dests
+    is_hopo_dest = (event_id, note.string) in hopo_dests
     is_let_ring = (bar_index, onset_ticks, note.string) in let_ring_notes
     is_palm_mute = (bar_index, onset_ticks, note.string) in palm_mute_notes
 
