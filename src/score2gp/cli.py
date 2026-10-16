@@ -1310,6 +1310,8 @@ def convert_command(
                     "inferred_rhythm_status": None,
                     "gp_package_written": False,
                 }
+                if exc.details.get("located_grouping_refusals"):
+                    pdf_only_diag_payload["located_grouping_refusals"] = exc.details["located_grouping_refusals"]
             _write_convert_report(
                 report_path=json_report,
                 status="refused",

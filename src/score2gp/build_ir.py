@@ -1762,11 +1762,18 @@ def build_ir_from_tabraw_only(
                 note_durations, unsafe_warning_codes,
             )
         if partition is None:
+            details = {"refusal_warning_code": found_unsafe}
+            if (found_unsafe == "pdf_no_systems_detected" and note_durations is not None
+                    and tabraw.source_pdf):
+                from .pdf_grouping_evidence import locate_unclassified_tab_groups
+                located = locate_unclassified_tab_groups(tabraw.source_pdf, note_durations)
+                if located:
+                    details["located_grouping_refusals"] = located
             raise BuildIrInputRiskError(
                 category="pdf_only_tab_grouping_unsafe",
                 stage="layout-gating",
                 message=f"PDF-only tab building refused due to unsafe layout warning: {found_unsafe}",
-                details={"refusal_warning_code": found_unsafe},
+                details=details,
             )
         refused_tab_system, partial_digits = partition
 
