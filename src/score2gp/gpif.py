@@ -643,6 +643,35 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
         track_id_map = {track.id: str(idx) for idx, track in enumerate(score.tracks)}
         _master_track(root, score, track_id_map=track_id_map)
         _tracks(root, score, track_cd_maps, is_relational=True, track_id_map=track_id_map)
+        # Beat/Chord is a DiagramCollection ID. A printed name supplies no
+        # fingering or harmonic analysis: write only its name and hide the
+        # empty diagram, rather than inventing frets or emitting a dangling ID.
+        symbol_ids = {}
+        recovered_symbols = {event.id for bar in score.bars for event in bar.events
+                             if any(p.raw.get("notation_attachment_recovered") for p in event.provenance)}
+        for track, track_node in zip(score.tracks, root.findall("Tracks/Track")):
+            names = list(dict.fromkeys(event.chord_symbol for bar in score.bars for event in bar.events
+                                       if event.track_id == track.id and event.chord_symbol
+                                       and event.chord_diagram is None and event.id in recovered_symbols))
+            if not names:
+                continue
+            properties = track_node.find("Staves/Staff/Properties")
+            collection = properties.find("Property[@name='DiagramCollection']")
+            if collection is None:
+                collection = ET.SubElement(properties, "Property", {"name": "DiagramCollection"})
+                ET.SubElement(collection, "Items")
+            items = collection.find("Items")
+            first = len(items) + 1
+            for offset, name in enumerate(names):
+                ident = str(first + offset)
+                symbol_ids[track.id, name] = ident
+                item = ET.SubElement(items, "Item", {"id": ident, "name": name})
+                diagram = ET.SubElement(item, "Diagram", {
+                    "stringCount": str(len(track.tuning.strings)), "fretCount": "5", "baseFret": "0",
+                    "barsStates": "1 1 1 1 1"})
+                ET.SubElement(diagram, "Property", {"name": "ShowName", "type": "bool", "value": "true"})
+                ET.SubElement(diagram, "Property", {"name": "ShowDiagram", "type": "bool", "value": "false"})
+                ET.SubElement(diagram, "Property", {"name": "ShowFingering", "type": "bool", "value": "false"})
 
         master_bars_db = ET.SubElement(root, "MasterBars")
         for bar in score.bars:
@@ -816,7 +845,9 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
                             if cd_id:
                                 _text(beat_node, "Chord", cd_id)
                         elif event.chord_symbol:
-                            _text(beat_node, "Chord", event.chord_symbol)
+                            value = (symbol_ids[event.track_id, event.chord_symbol]
+                                     if event.id in recovered_symbols else event.chord_symbol)
+                            _text(beat_node, "Chord", value)
 
                         note_refs = []
                         for note in event.notes:

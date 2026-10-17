@@ -2010,6 +2010,8 @@ def build_ir_from_tabraw_only(
     _attach_symbols_and_techniques(score, tabraw, placed_frets=placed,
                                    notation_barlines=notation_barlines,
                                    technique_bars=technique_bars)
+    from .pdf_attachment_recovery import recover_unplaced_attachments
+    recover_unplaced_attachments(score, tabraw, note_durations, classify=_classify_technique)
 
     # Construct diagnostics
     tabraw_candidates_loaded = len(tabraw.candidates)
