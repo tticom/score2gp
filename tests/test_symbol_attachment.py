@@ -427,6 +427,14 @@ def test_symbol_attachment_html_diagnostics(tmp_path) -> None:
     assert "Symbols and techniques DID NOT create notes" in html_content
 
 
+def _assert_label_writes_no_slide(score):
+    # SLIDE-01: a printed "sl." label does not name the slide type, so it never writes a slide;
+    # with no drawn stroke under it the label is reported as a located slide_mark_not_extracted.
+    assert not any(t.kind == "slide" for e in score.bars[0].events for n in e.notes for t in n.techniques)
+    [warning] = [w for w in score.warnings if w.code == "slide_mark_not_extracted"]
+    assert "slide_label_without_drawn_mark" in warning.message
+
+
 def test_proximity_technique_attachment_cases(tmp_path) -> None:
     # Set up a 3-note MusicXML file
     musicxml_content = """<?xml version="1.0" encoding="UTF-8"?>
@@ -549,11 +557,8 @@ def test_proximity_technique_attachment_cases(tmp_path) -> None:
     score, _ = build_ir_with_diagnostics_from_files(musicxml_file, tabraw_file)
     events = score.bars[0].events
     assert len(events) == 3
-    # slide should be on note 1 (events[0].notes[0])
-    assert len(events[0].notes[0].techniques) == 1
-    assert events[0].notes[0].techniques[0].kind == "slide"
-    assert not events[1].notes[0].techniques
-    assert not events[2].notes[0].techniques
+    # the label is nearest note 1 (x=103.0), but a label alone writes no slide
+    _assert_label_writes_no_slide(score)
 
     # 2. Slide proximity test (unambiguous, matches Note 2)
     slide_candidate["x"] = 182.0
@@ -561,10 +566,7 @@ def test_proximity_technique_attachment_cases(tmp_path) -> None:
     tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
     score, _ = build_ir_with_diagnostics_from_files(musicxml_file, tabraw_file)
     events = score.bars[0].events
-    assert not events[0].notes[0].techniques
-    assert len(events[1].notes[0].techniques) == 1
-    assert events[1].notes[0].techniques[0].kind == "slide"
-    assert not events[2].notes[0].techniques
+    _assert_label_writes_no_slide(score)
 
     # 3. Slide ambiguity test (x is at midpoint 140.0, difference is 0.0 < 2.0)
     slide_candidate["x"] = 140.0
@@ -572,9 +574,7 @@ def test_proximity_technique_attachment_cases(tmp_path) -> None:
     tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
     score, _ = build_ir_with_diagnostics_from_files(musicxml_file, tabraw_file)
     events = score.bars[0].events
-    assert not events[0].notes[0].techniques
-    assert not events[1].notes[0].techniques
-    assert any(w.code == "ambiguous_technique_attachment" for w in score.warnings)
+    _assert_label_writes_no_slide(score)
 
     # 4. Slide ambiguity threshold (x = 140.5, dists: N1=40.5, N2=39.5, diff=1.0 < 2.0)
     slide_candidate["x"] = 140.5
@@ -582,9 +582,7 @@ def test_proximity_technique_attachment_cases(tmp_path) -> None:
     tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
     score, _ = build_ir_with_diagnostics_from_files(musicxml_file, tabraw_file)
     events = score.bars[0].events
-    assert not events[0].notes[0].techniques
-    assert not events[1].notes[0].techniques
-    assert any(w.code == "ambiguous_technique_attachment" for w in score.warnings)
+    _assert_label_writes_no_slide(score)
 
     # 5. Hammer-on proximity test (unambiguous, matches pair (1, 2) at mid_x=140.0)
     ho_candidate = {
@@ -649,7 +647,7 @@ def test_proximity_technique_attachment_cases(tmp_path) -> None:
     tabraw_file = tmp_path / "tabraw_slide_fallback_fail.json"
     tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
     score, _ = build_ir_with_diagnostics_from_files(musicxml_file, tabraw_file)
-    assert any(w.code == "ambiguous_technique_attachment" for w in score.warnings)
+    _assert_label_writes_no_slide(score)
 
     # For hammer-on, fallback will also fail and warn because we have 3 notes (not exactly 2).
     ho_candidate["x"] = None
@@ -696,8 +694,8 @@ def test_proximity_technique_attachment_cases(tmp_path) -> None:
     score, _ = build_ir_with_diagnostics_from_files(musicxml_file_1, tabraw_file)
     assert not any(w.code == "ambiguous_technique_attachment" for w in score.warnings)
     events = score.bars[0].events
-    assert len(events[0].notes[0].techniques) == 1
-    assert events[0].notes[0].techniques[0].kind == "slide"
+    assert not events[0].notes[0].techniques
+    assert any(w.code == "slide_mark_not_extracted" for w in score.warnings)
 
     # 9b. HO fallback succeeds on exactly two notes
     two_note_tabraw = {

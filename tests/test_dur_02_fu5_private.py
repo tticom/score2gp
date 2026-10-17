@@ -9,6 +9,7 @@ from tempfile import TemporaryDirectory
 import zipfile
 
 import pytest
+from slide_gpif import gpif_without_slides_sha256
 
 ROOT = Path(__file__).resolve().parents[1]
 PRIVATE = ROOT / "fixtures/private"
@@ -63,7 +64,12 @@ def test_real_source_techniques_survive_notation_bar_placement(converted):
     assert result["refused_bars"] == [3, 6, 9]
     differences = [(d["bar_index"], d["event_index"], d["field"])
                    for d in result["differences"] if d["field"] in _oracle().TECHNIQUE_FIELDS]
-    assert differences == []
+    # SLIDE-01: slides whose type the page does not decide are no longer guessed. The three reference
+    # slides the old fixed-type writer matched by default are now reported as slide_mark_not_extracted
+    # (one refused bar, one label without a drawn stroke, one stroke end bound to no digit); every
+    # other technique still matches exactly.
+    assert [d for d in differences if d[2] != "slide"] == []
+    assert [d for d in differences if d[2] == "slide"] == [(7, 2, "slide"), (15, 4, "slide"), (15, 12, "slide")]
 
 
 def test_preserve_second_source():
@@ -74,12 +80,17 @@ def test_preserve_second_source():
     with _convert("Bebop Licks in Am") as (result, output):
         assert result["written_bars"] == 14
         assert result["refused_bars"] == []
+        # SLIDE-01 changes the written slides only (four shift slides now carry the shift flag); the
+        # whole-GPIF digest is the new head value and the digest without slide marks is the base one.
         assert _gpif_hash(output) == (
-            "45266703a5b1ea623ab5617bb3b44e78d281eedac67d80ca02c37bc6207a43ac")
+            "b3083f043c1e20e74d090f805fe1cca27e47e419fe3fcde1122f826020f476dd")
+        with zipfile.ZipFile(output) as package:
+            assert gpif_without_slides_sha256(package.read("Content/score.gpif")) == (
+                "fda893ce3ac4a7e9dea5c40a07b4787a3d28a04bd3f71eea5e0daf7b6812af15")
 
 
 @pytest.mark.parametrize("cause,fields,bars", [
-    ("split_bar_placement", {"hopo_origin", "hopo_destination", "slide"}, None),
+    ("split_bar_placement", {"hopo_origin", "hopo_destination"}, None),  # slides: see SLIDE-01 above
     ("bounded_pair", {"hopo_origin", "hopo_destination"}, {10, 14, 18}),
     ("grace_pair", {"hopo_origin"}, {1, 5, 17}),
     ("destination_event_identity", {"hopo_destination"}, {1, 5, 17}),
