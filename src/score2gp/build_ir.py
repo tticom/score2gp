@@ -4467,14 +4467,16 @@ def _attach_symbols_and_techniques(
                             sequential = (ev1.timing.onset_ticks < ev2.timing.onset_ticks or
                                           (ev1.timing.grace is not None and ev2.timing.grace is None and
                                            ev1.timing.onset_ticks == ev2.timing.onset_ticks))
-                            bounded = (x1 < candidate.x < x2 and
-                                       event_order[ev2.id] == event_order[ev1.id] + 1)
-                            # Only the newly resolved split-system placement
-                            # needs this pairing rule. Preserve the established
-                            # one-to-one bar route's attachment decisions.
+                            # The printed span joins two digits, so its marker
+                            # must lie strictly between them; the nearest
+                            # midpoint alone says nothing about which side.
+                            # Split-system placement also keeps the pair on
+                            # neighbouring events, as before.
                             split_placement = (technique_bars is not None
                                                and len(destinations.get(cand_key, ())) > 1)
-                            if sequential and (not split_placement or bounded):
+                            adjacent = (not split_placement
+                                        or event_order[ev2.id] == event_order[ev1.id] + 1)
+                            if sequential and adjacent and x1 < candidate.x < x2:
                                 mid_x = (x1 + x2) / 2.0
                                 dist = abs(mid_x - candidate.x)
                                 candidate_pairs.append((dist, ev1, note1, ev2, note2))
@@ -4497,6 +4499,30 @@ def _attach_symbols_and_techniques(
                                                    provenance.page == candidate.page_index and
                                                    provenance.system_id in (str(candidate.system_index),
                                                                             f"system-{candidate.system_index}"))
+                                    if (origin.string == destination.string and same_system and
+                                            x1 is not None and x2 is not None and
+                                            x1 < candidate.x < x2):
+                                        candidate_pairs.append((abs((x1 + x2) / 2 - candidate.x),
+                                                                last_event, origin, first_event, destination))
+
+                    # A marker keyed to the destination bar joins the last digit of
+                    # the previous bar to this bar's first digit on the same string
+                    # and system, again strictly between the two digits.
+                    previous_bar = bars_by_index.get(bar_idx - 1)
+                    if placed_frets is not None and previous_bar is not None:
+                        previous_events = [ev for ev in previous_bar.events if not ev.is_rest and ev.notes]
+                        current_events = [ev for ev in bar.events if not ev.is_rest and ev.notes]
+                        if previous_events and current_events:
+                            last_event, first_event = previous_events[-1], current_events[0]
+                            for origin in last_event.notes:
+                                x1 = _get_note_x(origin, candidates_by_id)
+                                provenance = origin.provenance[0] if origin.provenance else None
+                                same_system = (provenance is not None and
+                                               provenance.page == candidate.page_index and
+                                               provenance.system_id in (str(candidate.system_index),
+                                                                        f"system-{candidate.system_index}"))
+                                for destination in first_event.notes:
+                                    x2 = _get_note_x(destination, candidates_by_id)
                                     if (origin.string == destination.string and same_system and
                                             x1 is not None and x2 is not None and
                                             x1 < candidate.x < x2):
@@ -4541,6 +4567,21 @@ def _attach_symbols_and_techniques(
                         continue
 
                     note1, note2 = notes
+                    if candidate.x is not None:
+                        # With the marker and both digits located, the marker must lie
+                        # between them; a marker outside is another span's, not a guess.
+                        fallback_x = [_get_note_x(note, candidates_by_id) for note in (note1, note2)]
+                        if None not in fallback_x and not min(fallback_x) < candidate.x < max(fallback_x):
+                            score.warnings.append(
+                                WarningItem(
+                                    code="ambiguous_technique_attachment",
+                                    message=(f"Span technique '{candidate.raw_text}' lies outside the two notes "
+                                             f"of bar {bar_idx} and joins no pair there."),
+                                    severity="warning",
+                                    provenance=[candidate.to_provenance()],
+                                )
+                            )
+                            continue
                     event1 = next((ev for ev in bar.events if note1 in ev.notes), None)
                     event2 = next((ev for ev in bar.events if note2 in ev.notes), None)
 
