@@ -629,15 +629,16 @@ def test_proximity_technique_attachment_cases(tmp_path) -> None:
     assert not events[1].notes[0].techniques
     assert any(w.code == "ambiguous_technique_attachment" for w in score.warnings)
 
-    # 8. Hammer-on ambiguity threshold (x = 180.5, dists: (1,2)=40.5, (2,3)=39.5, diff 1.0 < 2.0)
+    # 8. HOPO-01: a marker 0.5 right of note 2 (x = 180.5) lies between notes 2 and 3 only. The old
+    # nearest-midpoint rule called this ambiguous (dists 40.5 vs 39.5); betweenness makes it pair (2, 3).
     ho_candidate["x"] = 180.5
     tabraw_file = tmp_path / "tabraw_ho_ambig_thresh.json"
     tabraw_file.write_text(json.dumps(tabraw_data), encoding="utf-8")
     score, _ = build_ir_with_diagnostics_from_files(musicxml_file, tabraw_file)
     events = score.bars[0].events
     assert not events[0].notes[0].techniques
-    assert not events[1].notes[0].techniques
-    assert any(w.code == "ambiguous_technique_attachment" for w in score.warnings)
+    assert [t.target_event_id for t in events[1].notes[0].techniques] == [events[2].id]
+    assert not any(w.code == "ambiguous_technique_attachment" for w in score.warnings)
 
     # 9. Fallback preservation test (x is None, original count-based checks)
     # For slide, since we have 3 notes, fallback will fail and warn.

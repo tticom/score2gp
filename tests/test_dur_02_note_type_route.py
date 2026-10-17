@@ -358,12 +358,17 @@ def test_symbols_spans_slides_and_hopo_use_notation_bar(tmp_path):
     first, second = sorted(placed[2], key=lambda c: c.x)[:2]
     layout = dict(page_index=first.page_index, system_index=first.system_index,
                   staff_index=first.staff_index, bar_index=first.bar_index)
+    # HOPO-01: the span marker must lie between the two digits of one string. `first` and `second` sit on
+    # different strings, so the old midpoint-only pairing attached a marker that lay between neither pair.
+    same_string = next(g for g in ([d for d in sorted(placed[2], key=lambda c: c.x) if d.string == s]
+                                   for s in {d.string for d in placed[2]}) if len(g) >= 2)
+    hopo_from, hopo_to = same_string[:2]
     raw.candidates.extend([
         make_tab_candidate(candidate_id="chord", raw_text="C", kind="chord-symbol", confidence=0.9,
                            bbox_values=(first.x - 4, first.y - 16, first.x + 4, first.y - 8), **layout),
         make_tab_candidate(candidate_id="hopo", raw_text="h", kind="technique-text", confidence=0.9,
-                           bbox_values=((first.x + second.x) / 2 - 4, first.y - 14,
-                                        (first.x + second.x) / 2 + 4, first.y - 6), **layout),
+                           bbox_values=((hopo_from.x + hopo_to.x) / 2 - 4, hopo_from.y - 14,
+                                        (hopo_from.x + hopo_to.x) / 2 + 4, hopo_from.y - 6), **layout),
         make_palm_mute_candidate(candidate_id="pm", string=None, bbox_values=(first.x - 3, first.y - 20,
                                  second.x + 3, first.y - 12), **layout),
         make_tab_candidate(candidate_id="lr", raw_text="l.r.", kind="technique-text", confidence=0.9,
