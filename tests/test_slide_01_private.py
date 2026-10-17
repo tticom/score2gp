@@ -6,6 +6,7 @@ Mutants these tests reject (each shown failing in the SLIDE-01 handback):
   * invert the arc rule (legato <-> shift)          -> Lesson 4 and Bebop tests
   * inject a default type, keep the warning         -> test_lesson_5_unextracted_mark_writes_no_slide
   * drop the diagnostic                             -> Lesson 5 / Bebop diagnostic tests
+  * restrict slur evidence to each string height     -> test_chord_slide_uses_one_slur_for_all_strings
   * swap slide-in and slide-out                     -> test_leading_slide_into_a_note_is_slide_in
 """
 
@@ -37,6 +38,7 @@ def _require(*names: str) -> None:
 
 
 _converted: dict[str, tuple[Counter, list[dict]]] = {}
+_gpifs: dict[str, ET.Element] = {}
 
 
 def _convert(stem: str) -> tuple[Counter, list[dict]]:
@@ -56,6 +58,7 @@ def _convert(stem: str) -> tuple[Counter, list[dict]]:
             )
             assert result.returncode == 0, result.stderr[-1000:]
             gpif = ET.fromstring(zipfile.ZipFile(output).read("Content/score.gpif"))
+            _gpifs[stem] = gpif
             flags = Counter(n.findtext("Flags") for n in gpif.findall('.//Property[@name="Slide"]'))
             warnings = json.loads((scratch / "work" / "warnings.json").read_text(encoding="utf-8"))
         _converted[stem] = (flags, [w for w in warnings if w["code"] == CODE])
@@ -121,3 +124,27 @@ def test_leading_slide_into_a_note_is_slide_in():
     assert readings == {"legato": 4, "slide_endpoint_not_bound_to_digit": 1}
     written, _ = _convert("Can't Find My Way Home (open chord shenanigans)")
     assert written["16"] == 1 and written["1"] == 0
+
+
+def test_chord_slide_uses_one_slur_for_all_strings():
+    """Reject the old per-string arc window: it reads shift on the lowest chord string.
+
+    The actual page has one slur over each three-string chord slide in bars 3 and 4.
+    Check each drawn reading and preserve the final GPIF bar refusals.
+    """
+    stem = "Melodic_Expressions_Chap_19_"
+    marks = [m for m in _slide_candidates(stem) if m["page_index"] == 1
+             and m["bar_index"] in (3, 4)]
+    _convert(stem)
+    gpif = _gpifs[stem]
+    bars = gpif.findall("./Bars/Bar")
+    for bar in (3, 4):
+        # The normal pipeline currently refuses these bars for other reasons.
+        # Sharing slur evidence must not bypass that bar-level gate.
+        assert bars[bar - 1].findtext("Voices").split() == ["-1"] * 4
+
+    for bar in (3, 4):
+        chord = [m for m in marks if m["bar_index"] == bar]
+        assert len(chord) == 3
+        assert all(m["system_index"] == 2 for m in chord)
+        assert all(m["raw"]["reading"] == {"status": "read", "style": "legato"} for m in chord)

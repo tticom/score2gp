@@ -15,6 +15,11 @@ tolerance the leading-slide reader always used: within half a digit width, at th
 | stroke joins two digits on one string, a slur arc spans both | legato | 2 |
 | stroke joins two digits on one string, no arc spans both | shift | 1 |
 
+A slur over a chord applies to every slide stroke joining the same two fret columns in the
+same system and bar. The reader checks the full height of that chord, so its lower strings
+use the same slur evidence as its upper strings. A nearby slide with different endpoint
+columns does not share that evidence. Multiple spanning arcs remain ambiguous and refused.
+
 Anything else is **refused**: no slide technique is written and a diagnostic is reported.
 
 ## Diagnostic

@@ -75,11 +75,22 @@ def _binds_right(stroke: dict[str, Any], digit: dict[str, Any], offset: float) -
             and box["y0"] - offset <= endpoint_y <= box["y1"] - offset)
 
 
-def _arcs_over_pair(arcs, stroke, left, right, offset: float) -> list[tuple[float, float, float]]:
+def _arcs_over_pair(arcs, stroke, left, right, pairs) -> list[tuple[float, float, float]]:
     lines = left.get("raw", {}).get("tab_line_ys") or []
     gap = (lines[-1] - lines[0]) / 5 if len(lines) == 6 else 6.4
     lbox, rbox = left["bbox"], right["bbox"]
     _, sy0, _, sy1 = stroke["bbox"]
+    # One slur can span a chord: all its parallel slides share both fret columns.
+    # Require overlap at BOTH endpoints and the same bar/system, rather than
+    # extending the arc window to unrelated notes elsewhere on the staff.
+    for peer_stroke, peer_left, peer_right in pairs:
+        if (peer_left.get("system_index"), peer_left.get("bar_index")) != (
+                left.get("system_index"), left.get("bar_index")):
+            continue
+        if all(max(box["x0"], peer["bbox"]["x0"]) <= min(box["x1"], peer["bbox"]["x1"])
+               for box, peer in ((lbox, peer_left), (rbox, peer_right))):
+            sy0 = min(sy0, peer_stroke["bbox"][1])
+            sy1 = max(sy1, peer_stroke["bbox"][3])
     return [a for a in arcs
             if a[0] <= lbox["x1"] and a[2] >= rbox["x0"]
             and sy0 - 2 * gap <= a[1] <= sy1 + 2 * gap]
@@ -95,10 +106,17 @@ def read_slide_marks(
 
     ``status`` is ``read`` with a ``style``/``direction``, or ``refused`` with a ``reason``.
     """
+    bindings = [([d for d in digits if _binds_left(stroke, d, page_offset)],
+                 [d for d in digits if _binds_right(stroke, d, page_offset)]) for stroke in strokes]
+    pairs = [(stroke, lefts[0], rights[0])
+             for stroke, (lefts, rights) in zip(strokes, bindings)
+             if len(lefts) == len(rights) == 1
+             and lefts[0] is not rights[0]
+             and lefts[0].get("string") == rights[0].get("string")
+             and (lefts[0].get("system_index"), lefts[0].get("bar_index")) ==
+                 (rights[0].get("system_index"), rights[0].get("bar_index"))]
     marks = []
-    for index, stroke in enumerate(strokes):
-        lefts = [d for d in digits if _binds_left(stroke, d, page_offset)]
-        rights = [d for d in digits if _binds_right(stroke, d, page_offset)]
+    for index, (stroke, (lefts, rights)) in enumerate(zip(strokes, bindings)):
         if not lefts and not rights:
             continue
         x0, y0, x1, y1 = stroke["bbox"]
@@ -131,7 +149,7 @@ def read_slide_marks(
             elif left.get("string") != right.get("string"):
                 mark.update(status="refused", reason=REASON_DIFFERENT_STRINGS)
             else:
-                over = _arcs_over_pair(arcs, stroke, left, right, page_offset)
+                over = _arcs_over_pair(arcs, stroke, left, right, pairs)
                 if len(over) > 1:
                     mark.update(status="refused", reason=REASON_SLUR_AMBIGUOUS)
                 else:
