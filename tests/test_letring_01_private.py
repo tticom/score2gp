@@ -110,10 +110,33 @@ def test_chapter_19_dashed_spans_cover_exactly_the_printed_note_columns():
 
 def test_let_ring_preserves_every_other_gpif_byte():
     """Reject incidental changes to other techniques, rhythms, positions or bars."""
-    for stem in ("Lesson-5", "Derek Trucks BB King", "Melodic_Expressions_Chap_19_"):
+    for stem in ("Lesson-5", "Derek Trucks BB King", "Melodic_Expressions_Chap_19_",
+                 "Can't Find My Way Home (open chord shenanigans)"):
         data, _, _ = convert(stem)
         baseline, _, _ = convert(stem, disabled=True)
         if data is None:
             assert baseline is None
         else:
             assert re.sub(rb"(?m)^[ \t]*<LetRing />\r?\n", b"", data) == baseline
+
+
+def test_cant_find_my_way_home_let_ring_throughout_is_located_and_refused():
+    """Reject ignoring the page text and any per-note technique for a track-wide mark.
+
+    The reference carries a track-level LetRingThroughout and no per-note LetRing;
+    ScoreIR has no track field, so the reader must locate and refuse the mark.
+    """
+    stem = "Can't Find My Way Home (open chord shenanigans)"
+    reference = PRIVATE / f"{stem}.gp"
+    assert reference.is_file(), "required approved reference absent"
+    gpif = zipfile.ZipFile(reference).read("Content/score.gpif")
+    assert gpif.count(b"<LetRingThroughout />") == 1 and b"<LetRing />" not in gpif
+    data, report, warnings = convert(stem)
+    assert report["counts_by_reason"] == {"pdf_let_ring_throughout_track_scope_unsupported": 1}
+    [decision] = report["decisions"]
+    assert decision["page_index"] == 0 and decision["bbox"]
+    if data is not None:
+        assert b"<LetRing" not in data
+    [warning] = [w for w in warnings if w["code"] == decision["code"]]
+    [where] = warning["provenance"]
+    assert where["page"] == 1 and where["raw"]["bbox"]

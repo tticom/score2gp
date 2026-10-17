@@ -66,7 +66,8 @@ def attach_pdf_let_ring(pdf: Path, note_durations: dict[str, Any], score: ScoreI
             for block_index, block in enumerate(page.get_text("dict")["blocks"]):
                 for line_index, line in enumerate(block.get("lines", [])):
                     text = " ".join("".join(s["text"] for s in line["spans"]).split()).lower()
-                    if text not in {"let ring", "l.r.", "l.r"}:
+                    throughout = text == "let ring throughout"
+                    if text not in {"let ring", "l.r.", "l.r"} and not throughout:
                         continue
                     box = list(line["bbox"])
                     anchor = (box[0] + box[2]) / 2
@@ -76,6 +77,12 @@ def attach_pdf_let_ring(pdf: Path, note_durations: dict[str, Any], score: ScoreI
                               and float(s["staff"]["x0"]) <= anchor <= float(s["staff"]["x1"])
                               and 0 <= box[1] - float(s["staff"]["bottom"]) <= 10 * float(s["staff_space"])]
                     reason = "pdf_let_ring_system_ambiguous"
+                    if throughout:
+                        # The reference writes this as a track-wide property
+                        # (LetRingThroughout), not as per-note techniques; ScoreIR has
+                        # no track-level field, so the mark is located and refused.
+                        nearby = []
+                        reason = "pdf_let_ring_throughout_track_scope_unsupported"
                     provenance = Provenance(source_stage=SourceStage.PDF_TEXT, page=page_index + 1,
                                             raw_token_id=f"pdf-p{page_index + 1}-b{block_index}-l{line_index}",
                                             raw={"bbox": box})
