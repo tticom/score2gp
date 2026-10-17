@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import zipfile
+from collections import Counter
 from fractions import Fraction
 from pathlib import Path
 from typing import Any
@@ -231,6 +232,15 @@ def compare_gp(expected: str | Path, actual: str | Path) -> dict[str, Any]:
         for field in fields
         if expected_summary.get(field) != actual_summary.get(field)
     }
+    extra_children = []
+    for index, children in enumerate(actual_summary["master_bar_children"]):
+        expected_children = (expected_summary["master_bar_children"][index]
+                             if index < len(expected_summary["master_bar_children"]) else [])
+        extra = sorted((Counter(children) - Counter(expected_children)).elements())
+        if extra:
+            extra_children.append({"bar_index": index, "expected": [], "actual": extra})
+    if extra_children:
+        differences["master_bar_extra_children"] = extra_children
     return {
         "expected": str(expected),
         "actual": str(actual),
@@ -328,6 +338,8 @@ def _summarize_gpif(root: ET.Element) -> dict[str, Any]:
     template_prelude_bar_count = 0
 
     return {
+        "master_bar_children": [[child.tag for child in bar]
+                                for bar in root.findall("MasterBars/MasterBar")],
         "tracks": tracks,
         "tunings": tunings,
         "tempo": tempo,
@@ -1086,13 +1098,19 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
                 }
                 barline = barline_inv_map.get(barline_val, "regular")
 
+            if mb_node.find("DoubleBar") is not None:
+                barline = "double"
+
             if mb_node.find("RepeatStart") is not None:
                 barline = "repeat-start"
 
             repeat_count = None
             repeat_node = mb_node.find("Repeat")
             if repeat_node is not None:
-                barline = "repeat-end"
+                if repeat_node.get("start") == "true":
+                    barline = "repeat-start"
+                if repeat_node.get("end", "true") == "true":
+                    barline = "repeat-end"
                 repeat_count_str = repeat_node.get("count")
                 repeat_count = int(repeat_count_str) if repeat_count_str else 2
 
@@ -1568,13 +1586,19 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
                 }
                 barline = barline_inv_map.get(barline_val, "regular")
 
+            if mb_node.find("DoubleBar") is not None:
+                barline = "double"
+
             if mb_node.find("RepeatStart") is not None:
                 barline = "repeat-start"
 
             repeat_count = None
             repeat_node = mb_node.find("Repeat")
             if repeat_node is not None:
-                barline = "repeat-end"
+                if repeat_node.get("start") == "true":
+                    barline = "repeat-start"
+                if repeat_node.get("end", "true") == "true":
+                    barline = "repeat-end"
                 repeat_count_str = repeat_node.get("count")
                 repeat_count = int(repeat_count_str) if repeat_count_str else 2
 

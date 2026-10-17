@@ -683,14 +683,17 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
                     "repeat-start": "RepeatStart",
                     "repeat-end": "RepeatEnd",
                 }
-                _text(mb_node, "Barline", barline_map.get(bar.barline, "Simple"))
+                if bar.barline not in {"double", "repeat-start", "repeat-end"}:
+                    _text(mb_node, "Barline", barline_map.get(bar.barline, "Simple"))
                 if bar.barline == "double":
                     ET.SubElement(mb_node, "DoubleBar")
-                elif bar.barline == "repeat-start":
-                    ET.SubElement(mb_node, "RepeatStart")
-                elif bar.barline == "repeat-end":
+                elif bar.barline in {"repeat-start", "repeat-end"}:
                     repeat_count = getattr(bar, "repeat_count", None) or 2
-                    ET.SubElement(mb_node, "Repeat", {"count": str(repeat_count)})
+                    ET.SubElement(mb_node, "Repeat", {
+                        "start": str(bar.barline == "repeat-start").lower(),
+                        "end": str(bar.barline == "repeat-end").lower(),
+                        "count": str(repeat_count),
+                    })
 
         rhythms_db = ET.SubElement(root, "Rhythms")
         notes_db = ET.SubElement(root, "Notes")
@@ -1583,15 +1586,18 @@ def _master_bars(parent: ET.Element, score: ScoreIR) -> None:
                 "dashed": "Dashed",
             }
             barline_val = barline_map.get(bar.barline, "Simple")
-            _text(node, "Barline", barline_val)
+            if bar.barline not in {"double", "repeat-start", "repeat-end"}:
+                _text(node, "Barline", barline_val)
 
             if bar.barline == "double":
                 ET.SubElement(node, "DoubleBar")
-            elif bar.barline == "repeat-start":
-                ET.SubElement(node, "RepeatStart")
-            elif bar.barline == "repeat-end":
+            elif bar.barline in {"repeat-start", "repeat-end"}:
                 repeat_count = getattr(bar, "repeat_count", None) or 2
-                ET.SubElement(node, "Repeat", {"count": str(repeat_count)})
+                ET.SubElement(node, "Repeat", {
+                    "start": str(bar.barline == "repeat-start").lower(),
+                    "end": str(bar.barline == "repeat-end").lower(),
+                    "count": str(repeat_count),
+                })
 
         if getattr(bar, "measure_layout", None) is not None:
             ml_node = ET.SubElement(node, "MeasureLayout")

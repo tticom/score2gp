@@ -10,7 +10,7 @@ from zipfile import ZipFile
 
 import pytest
 
-from slide_gpif import gpif_without_slides_sha256
+from slide_gpif import gpif_without_slides_sha256, gpif_with_legacy_double_barlines
 from score2gp.notation_omr.note_duration import read_note_durations
 from test_dur_02_oracle import read_gp_bars
 
@@ -123,8 +123,12 @@ def test_base_written_parentheses_keep_byte_identical_gpif(
         head_route, head_gp = _convert(name, folder / "head")
         with ZipFile(head_gp) as after:
             gpif = after.read("Content/score.gpif")
-            assert hashlib.sha256(gpif).hexdigest() == head_gpif_sha256
-            assert gpif_without_slides_sha256(gpif) == base_gpif_without_slides_sha256
+            # OMIT-02-FU1 deliberately removes the redundant double-bar line.
+            # Preserve both exact old digests and every parenthesis/count check.
+            assert b"<Barline>" not in gpif
+            legacy = gpif_with_legacy_double_barlines(gpif)
+            assert hashlib.sha256(legacy).hexdigest() == head_gpif_sha256
+            assert gpif_without_slides_sha256(legacy) == base_gpif_without_slides_sha256
         for index in indices:
             after = next(b for b in head_route["bars"] if b["source_bar_index"] == index)
             assert after["status"] == "written"

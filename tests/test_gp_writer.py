@@ -5,7 +5,7 @@ import zipfile
 from xml.etree import ElementTree as ET
 from unittest.mock import patch
 
-from score2gp.gp_package import compare_gp, inspect_gp, validate_gp, write_gp
+from score2gp.gp_package import compare_gp, inspect_gp, validate_gp, write_gp, extract_score_ir_from_gp
 from score2gp.ir import ScoreIR, ScoreBooklet, NotatedDuration
 
 
@@ -897,16 +897,18 @@ def test_gpif_pickup_barlines(tmp_path) -> None:
 
         mb2 = root.find(".//MasterBar[@index='2']")
         assert mb2 is not None
-        assert mb2.find("Barline").text == "Double"
+        assert mb2.find("Barline") is None
+        assert mb2.find("DoubleBar") is not None
 
         mb3 = root.find(".//MasterBar[@index='3']")
         assert mb3 is not None
-        assert mb3.find("Barline").text == "RepeatStart"
-        assert mb3.find("RepeatStart") is not None
+        assert mb3.find("Barline") is None
+        assert mb3.find("Repeat").get("start") == "true"
+        assert mb3.find("Repeat").get("end") == "false"
 
         mb4 = root.find(".//MasterBar[@index='4']")
         assert mb4 is not None
-        assert mb4.find("Barline").text == "RepeatEnd"
+        assert mb4.find("Barline") is None
         rep_end = mb4.find("Repeat")
         assert rep_end is not None
         assert rep_end.get("count") == "3"
@@ -914,6 +916,11 @@ def test_gpif_pickup_barlines(tmp_path) -> None:
         mb5 = root.find(".//MasterBar[@index='5']")
         assert mb5 is not None
         assert mb5.find("Barline").text == "End"
+
+    # File-format infrastructure supplement: native-only flags remain readable.
+    imported = extract_score_ir_from_gp(out)
+    assert [b.barline for b in imported.bars] == [b.barline for b in score.bars]
+    assert imported.bars[3].repeat_count == 3
 
 
 def test_gpif_dynamics_articulations(tmp_path) -> None:

@@ -163,8 +163,9 @@ def test_engraved_barline_reaches_master_gpif(source, expected):
             root = ET.fromstring(package.read("Content/score.gpif"))
         bars = root.find("MasterBars").findall("MasterBar")
         flags = [(bar.find("DoubleBar") is not None,
-                  bar.find("RepeatStart") is not None,
-                  int(bar.find("Repeat").get("count")) if bar.find("Repeat") is not None else None)
+                  bar.find("Repeat") is not None and bar.find("Repeat").get("start") == "true",
+                  int(bar.find("Repeat").get("count")) if bar.find("Repeat") is not None
+                  and bar.find("Repeat").get("end", "true") == "true" else None)
                  for bar in bars]
         assert flags == expected
         if source in {"standard_double", "repeat_dots", "repeat_glyph_final", "repeat_start", "final_heavy", "thick_single"}:

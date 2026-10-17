@@ -29,18 +29,22 @@ def test_timeline_refinements_xml(tmp_path) -> None:
 
         # MasterBar 2: repeat-start
         mb2 = mb_map[2]
-        assert mb2.find("Barline").text == "RepeatStart"
-        assert mb2.find("RepeatStart") is not None
+        assert mb2.find("Barline") is None
+        assert mb2.find("Repeat").get("start") == "true"
+        assert mb2.find("Repeat").get("end") == "false"
 
         # MasterBar 3: repeat-start
         mb3 = mb_map[3]
-        assert mb3.find("Barline").text == "RepeatStart"
-        assert mb3.find("RepeatStart") is not None
+        assert mb3.find("Barline") is None
+        assert mb3.find("Repeat").get("start") == "true"
+        assert mb3.find("Repeat").get("end") == "false"
 
         # MasterBar 4: repeat-end (count = 2)
         mb4 = mb_map[4]
-        assert mb4.find("Barline").text == "RepeatEnd"
+        assert mb4.find("Barline") is None
         assert mb4.find("Repeat") is not None
+        assert mb4.find("Repeat").get("end") == "true"
+        assert mb4.find("Repeat").get("start") == "false"
         assert mb4.find("Repeat").get("count") == "2"
 
         # MasterBar 5: alternate ending passes [1, 3] (bitmask = 5)
@@ -54,8 +58,10 @@ def test_timeline_refinements_xml(tmp_path) -> None:
         ae6 = mb6.find("AlternateEndings")
         assert ae6 is not None
         assert ae6.text == "10"
-        assert mb6.find("Barline").text == "RepeatEnd"
+        assert mb6.find("Barline") is None
         assert mb6.find("Repeat") is not None
+        assert mb6.find("Repeat").get("end") == "true"
+        assert mb6.find("Repeat").get("start") == "false"
         assert mb6.find("Repeat").get("count") == "4"
 
         # Retrieve all bars
