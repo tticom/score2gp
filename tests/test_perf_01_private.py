@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 from tempfile import TemporaryDirectory
@@ -130,7 +131,14 @@ def test_real_control_inspection_count_and_gpif_are_unchanged(name, nodes, gpif_
         # every previous whole-file digest by reconstructing that exact old line;
         # the native output must also reject the old writer's redundant element.
         assert b"<Barline>" not in actual
-        legacy = gpif_with_legacy_double_barlines(actual)
+        # LETRING-01 adds ten page-read note tags on this real control source.
+        # Keep both original GPIF digests and the exact inspection count: remove
+        # only those added tags, whose exact bar/beat membership is also checked
+        # by test_letring_01_private. Dropping the feature fails the count here.
+        expected_let_ring_notes = 10 if name == "Melodic_Expressions_Chap_19_.pdf" else 0
+        assert actual.count(b"<LetRing />") == expected_let_ring_notes
+        before_let_ring = re.sub(rb"(?m)^[ \t]*<LetRing />\r?\n", b"", actual)
+        legacy = gpif_with_legacy_double_barlines(before_let_ring)
         assert hashlib.sha256(legacy).hexdigest() == gpif_digest
         if without_slides_digest:
             assert gpif_without_slides_sha256(legacy) == without_slides_digest
