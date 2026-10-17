@@ -10,6 +10,7 @@ from tempfile import TemporaryDirectory
 from zipfile import ZipFile
 
 import pytest
+from slide_gpif import gpif_without_slides_sha256
 from typer.testing import CliRunner
 
 from score2gp import pdf
@@ -88,13 +89,16 @@ def test_old_unbounded_behavior_is_rejected_on_main_source(monkeypatch):
         _assert_main_refusal(monkeypatch)
 
 
-@pytest.mark.parametrize("name,nodes,gpif_digest", [
+# SLIDE-01 deliberately changes written slide marks, so the Melodic_Expressions whole-GPIF digest is the
+# new head value; its digest with slide marks removed is the base digest (unchanged apart from slides).
+@pytest.mark.parametrize("name,nodes,gpif_digest,without_slides_digest", [
     ("Lesson-6.pdf", 676202,
-     "902d5262822a5944a650d981c776feec3ea1bb4ce541c471456c02c17d1072b6"),
+     "902d5262822a5944a650d981c776feec3ea1bb4ce541c471456c02c17d1072b6", None),
     ("Melodic_Expressions_Chap_19_.pdf", 581458,
-     "4a8ce9039885fbccd9b336da391be831ed85a7e00d6f3ee5c08aedb29edf06c7"),
+     "06822271fe49678a8d562e721715dd506bc17e8434b922df85d1863dd0e4c927",
+     "e6d650202f421d0ba083e5b594300e8d9dc154c291b0c4c7c0de79cda386564b"),
 ])
-def test_real_control_inspection_count_and_gpif_are_unchanged(name, nodes, gpif_digest):
+def test_real_control_inspection_count_and_gpif_are_unchanged(name, nodes, gpif_digest, without_slides_digest):
     # Counts and GPIF SHA-256 come from fresh CLI conversions at product base
     # 7ff8c66cebf9fd147de5b64a59a4a4f867729b64, without sidecars/references.
     work = ROOT / "work"
@@ -123,3 +127,5 @@ def test_real_control_inspection_count_and_gpif_are_unchanged(name, nodes, gpif_
         with ZipFile(scratch / "result.gp") as package:
             actual = package.read("Content/score.gpif")
         assert hashlib.sha256(actual).hexdigest() == gpif_digest
+        if without_slides_digest:
+            assert gpif_without_slides_sha256(actual) == without_slides_digest

@@ -255,7 +255,7 @@ def extract_tab(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
         raw["warnings"].append({"code": "pymupdf-unavailable", "message": str(exc), "severity": "error"})
     else:
         raw["candidates"].extend(_extract_pdf_text_candidates(Path(path), raw["warnings"], meta, inspection_data=inspection))
-        raw["candidates"].extend(_leading_slide_candidates(raw["candidates"], inspection))
+        raw["candidates"].extend(_slide_mark_candidates(raw["candidates"], inspection, Path(path)))
         raw["candidates"].extend(_tab_vibrato_candidates(raw["candidates"], inspection))
 
     if "floating_barlines" in meta:
@@ -342,48 +342,52 @@ def _tab_vibrato_candidates(candidates: list[dict[str, Any]], inspection: dict[s
     return result
 
 
-def _leading_slide_candidates(candidates: list[dict[str, Any]], inspection: dict[str, Any]) -> list[dict[str, Any]]:
-    """A short diagonal ending immediately before a TAB digit is a slide into it.
+def _slide_mark_candidates(candidates: list[dict[str, Any]], inspection: dict[str, Any],
+                           pdf_path: Path) -> list[dict[str, Any]]:
+    """Turn drawn diagonal strokes that touch TAB digits into typed or refused slide marks.
 
-    Bind both endpoints to the digit's printed box. Diagonals elsewhere on the
-    page (accidentals, text, stems) have no authority to create a technique.
+    Diagonals elsewhere on the page (accidentals, text, stems) touch no digit and have
+    no authority to create a technique. See ``pdf_slide_marks`` for the reading rules.
     """
+    import pymupdf as fitz  # type: ignore[import-not-found]
+    from .pdf_slide_marks import read_slide_marks, slur_arcs
+
     result = []
+    arcs_by_page: dict[int, list] = {}
     for page in inspection.get("pages", []):
+        strokes = page.get("visual_slide_evidence", [])
+        if not strokes:
+            continue
         page_offset = sum(p["height"] for p in inspection["pages"] if p["page"] < page["page"])
         digits = [c for c in candidates if c.get("kind") == "fret" and c.get("bbox")
                   and c.get("page_index") == page["page"] and c.get("string") is not None]
-        for index, stroke in enumerate(page.get("visual_slide_evidence", [])):
-            x0, y0, x1, y1 = stroke["bbox"]
-            targets = []
-            for digit in digits:
-                box = digit["bbox"]
-                width = box["x1"] - box["x0"]
-                endpoint_y = y0 if stroke["direction"] == "up" else y1
-                if (0 < box["x0"] - x1 <= width / 2 and
-                        box["y0"] - page_offset <= endpoint_y <= box["y1"] - page_offset and
-                        width / 2 <= x1 - x0 <= 2 * width and
-                        y1 - y0 <= box["y1"] - box["y0"]):
-                    targets.append(digit)
-            if len(targets) != 1:
-                continue
-            target = targets[0]
-            # Only a system-leading stroke has no possible written origin.
-            # A preceding digit, however far away, makes this a
-            # connecting/independent slide whose type needs a different reading.
-            if any(d.get("system_index") == target.get("system_index") and
-                   d["bbox"]["x1"] <= x0 for d in digits):
-                continue
+        if page["page"] not in arcs_by_page:
+            with fitz.open(pdf_path) as doc:
+                arcs_by_page[page["page"]] = slur_arcs(doc[page["page"] - 1].get_drawings())
+        by_id = {d["id"]: d for d in digits}
+        for mark in read_slide_marks(digits, strokes, arcs_by_page[page["page"]], page_offset):
+            anchor = by_id[mark["anchor_candidate_id"]]
+            x0, y0, x1, y1 = mark["bbox"]
+            if mark["placement"] == "before-note":
+                candidate_id = f"pdf-p{page['page']:03d}-leading-slide-{mark['index']}"
+                raw = {"direction": mark["direction"], "placement": "before-note",
+                       "target_candidate_id": mark["target_candidate_id"]}
+            else:
+                candidate_id = f"pdf-p{page['page']:03d}-slide-mark-{mark['index']}"
+                reading = {k: mark[k] for k in ("status", "style", "reason") if k in mark}
+                raw = {"direction": mark["direction"], "placement": mark["placement"], "reading": reading}
+                for key in ("source_candidate_id", "target_candidate_id"):
+                    if key in mark:
+                        raw[key] = mark[key]
             result.append(make_tab_candidate(
-                candidate_id=f"pdf-p{page['page']:03d}-leading-slide-{index}",
-                raw_text="slide", kind="visual-slide", confidence=0.85, page_index=target["page_index"],
-                system_index=target.get("system_index"), staff_index=target.get("staff_index"),
-                bar_index=target.get("bar_index"), string=target["string"],
-                bbox_values=[x0, y0 + page_offset, x1, y1 + page_offset],
-                raw={"direction": stroke["direction"], "placement": "before-note",
-                     "target_candidate_id": target["id"]},
+                candidate_id=candidate_id,
+                raw_text="slide", kind="visual-slide", confidence=0.85, page_index=anchor["page_index"],
+                system_index=anchor.get("system_index"), staff_index=anchor.get("staff_index"),
+                bar_index=anchor.get("bar_index"), string=anchor["string"],
+                bbox_values=[x0, y0 + page_offset, x1, y1 + page_offset], raw=raw,
             ).model_dump(mode="json", exclude_none=True))
     return result
+
 
 from .pdf_geometry import (
     _LineSegment,

@@ -9,6 +9,8 @@ import tempfile
 from zipfile import ZipFile
 
 import pytest
+
+from slide_gpif import gpif_without_slides_sha256
 from score2gp.notation_omr.note_duration import read_note_durations
 from test_dur_02_oracle import read_gp_bars
 
@@ -97,13 +99,19 @@ def test_new_parenthesized_bars_are_located_refusals_in_final_output(name, refus
                 assert final_bars[entry["source_bar_index"]]["events"] is None
 
 
-@pytest.mark.parametrize("name,indices,base_gpif_sha256", [
+# SLIDE-01 deliberately changes the written slide marks (type read from the drawn mark, unreadable
+# marks no longer guessed). The whole-GPIF digests below are the new head values; the digests of the
+# GPIF with its slide marks removed are the base digests above, so everything else stays byte-identical.
+@pytest.mark.parametrize("name,indices,head_gpif_sha256,base_gpif_without_slides_sha256", [
     ("Melodic Soloing Masterclass", (7,),
-     "617f1764bf748cfe044cc8d9277678ac736b3f78b23985df7ea069fb8b4f2f76"),
+     "5d58c37f097d15d81613225e11d74ab914bf3246060edaa48d38a41e7f8c09e7",
+     "eef50156ec15497a93f53e518689ad6598974281f83fc9db526f7a86017c7a66"),
     ("Melodic_Expressions_Chap_19_", (21, 23),
-     "4a8ce9039885fbccd9b336da391be831ed85a7e00d6f3ee5c08aedb29edf06c7"),
+     "06822271fe49678a8d562e721715dd506bc17e8434b922df85d1863dd0e4c927",
+     "e6d650202f421d0ba083e5b594300e8d9dc154c291b0c4c7c0de79cda386564b"),
 ])
-def test_base_written_parentheses_keep_byte_identical_gpif(name, indices, base_gpif_sha256):
+def test_base_written_parentheses_keep_byte_identical_gpif(
+        name, indices, head_gpif_sha256, base_gpif_without_slides_sha256):
     # Whole-GPIF byte digests from ordinary no-reference conversion at actual
     # base dfe05d05978d6625a0e3658fe54280aec3189f53; rechecked in the frozen
     # base/head corpus sweep. No private musical content is embedded here.
@@ -114,7 +122,9 @@ def test_base_written_parentheses_keep_byte_identical_gpif(name, indices, base_g
         folder = Path(directory)
         head_route, head_gp = _convert(name, folder / "head")
         with ZipFile(head_gp) as after:
-            assert hashlib.sha256(after.read("Content/score.gpif")).hexdigest() == base_gpif_sha256
+            gpif = after.read("Content/score.gpif")
+            assert hashlib.sha256(gpif).hexdigest() == head_gpif_sha256
+            assert gpif_without_slides_sha256(gpif) == base_gpif_without_slides_sha256
         for index in indices:
             after = next(b for b in head_route["bars"] if b["source_bar_index"] == index)
             assert after["status"] == "written"

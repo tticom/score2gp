@@ -13,6 +13,14 @@ from .black_key_spelling import apply_black_key_spelling
 from .pdf_tab_bar_assembler import PdfTabBarAssemblerError, assemble_note_type_bars, place_tab_digits
 from .ascii_alignment import ALIGNMENT_SCHEMA_VERSION, AsciiMusicXmlAlignment, compute_sha256
 from . import __version__
+from .pdf_slide_marks import (
+    REASON_END_UNBOUND,
+    REASON_LABEL_WITHOUT_MARK,
+    REASON_NOTE_NOT_FOUND,
+    REASON_TYPE_NOT_READ,
+    SLIDE_MARK_NOT_EXTRACTED,
+    SLIDE_NOT_WRITTEN,
+)
 from .ir import (
     DEFAULT_TICKS_PER_QUARTER,
     Bar,
@@ -4099,6 +4107,31 @@ def _provenance_coordinate(
     return None
 
 
+def _notes_by_candidate_id(bar: Any, candidate_id: Any) -> list[tuple[Any, Any]]:
+    return [(ev, note) for ev in bar.events for note in ev.notes
+            if any(p.raw_token_id == candidate_id for p in note.provenance)]
+
+
+def _slide_marks_under_label(label: TabCandidate, candidates: list[TabCandidate]) -> list[TabCandidate]:
+    """Drawn slide marks (read or refused) in the label's bar whose stroke spans the label's x."""
+    if label.x is None:
+        return []
+    return [c for c in candidates
+            if c.kind == "visual-slide" and c.bbox is not None
+            and (c.page_index, c.system_index, c.bar_index) == (label.page_index, label.system_index, label.bar_index)
+            and c.bbox.x0 <= label.x <= c.bbox.x1]
+
+
+def _slide_not_extracted_warning(candidate: TabCandidate, bar_idx: int, reason: str) -> WarningItem:
+    """A slide mark was seen but no slide is written: located by system and bar, with the reason."""
+    return WarningItem(
+        code=SLIDE_MARK_NOT_EXTRACTED,
+        message=(f"Slide mark not extracted on page {candidate.page_index}, system {candidate.system_index}, "
+                 f"bar {bar_idx}: {reason}; run status {SLIDE_NOT_WRITTEN}."),
+        severity="warning", provenance=[candidate.to_provenance()],
+    )
+
+
 def _remove_not_aligned_warning(score: ScoreIR, candidate: TabCandidate) -> None:
     score.warnings = [
         w for w in score.warnings
@@ -4530,89 +4563,13 @@ def _attach_symbols_and_techniques(
                     _remove_not_aligned_warning(score, candidate)
 
             elif kind == "slide":
-                attached = False
-                if candidate.x is not None and placed_frets is not None:
-                    spanning_origins = []
-                    for first_event, second_event in zip(bar.events, bar.events[1:]):
-                        if first_event.is_rest or second_event.is_rest:
-                            continue
-                        for first_note in first_event.notes:
-                            x1 = _get_note_x(first_note, candidates_by_id)
-                            for second_note in second_event.notes:
-                                x2 = _get_note_x(second_note, candidates_by_id)
-                                if (first_note.string == second_note.string and
-                                        x1 is not None and x2 is not None and
-                                        x1 < candidate.x < x2):
-                                    spanning_origins.append((first_note, (x1 + x2) / 2))
-                    if len(spanning_origins) == 1:
-                        target_note, midpoint = spanning_origins[0]
-                        if abs(candidate.x - midpoint) < TECHNIQUE_ATTACHMENT_AMBIGUITY_EPSILON / 2:
-                            score.warnings.append(WarningItem(
-                                code="ambiguous_technique_attachment",
-                                message=f"Technique '{candidate.raw_text}' is centered between notes in bar {bar_idx}.",
-                                severity="warning", provenance=[candidate.to_provenance()],
-                            ))
-                        else:
-                            if not any(t.kind == "slide" for t in target_note.techniques):
-                                target_note.techniques.append(SlideTechnique(
-                                    kind="slide", style="unknown", direction="unknown",
-                                    target_event_id=None,
-                                ))
-                            target_note.provenance.append(candidate.to_provenance())
-                            _remove_not_aligned_warning(score, candidate)
-                        attached = True
-                    elif len(spanning_origins) > 1:
-                        score.warnings.append(WarningItem(
-                            code="ambiguous_technique_attachment",
-                            message=f"Technique '{candidate.raw_text}' spans multiple pairs in bar {bar_idx}.",
-                            severity="warning", provenance=[candidate.to_provenance()],
-                        ))
-                        attached = True
-                if candidate.x is not None and not attached:
-                    notes_with_x = []
-                    for event in bar.events:
-                        if event.is_rest:
-                            continue
-                        for note in event.notes:
-                            x_val = _get_note_x(note, candidates_by_id)
-                            if x_val is not None:
-                                notes_with_x.append((abs(x_val - candidate.x), note))
-
-                    if notes_with_x:
-                        notes_with_x.sort(key=lambda item: item[0])
-                        if len(notes_with_x) > 1 and abs(notes_with_x[0][0] - notes_with_x[1][0]) < TECHNIQUE_ATTACHMENT_AMBIGUITY_EPSILON:
-                            score.warnings.append(
-                                WarningItem(
-                                    code="ambiguous_technique_attachment",
-                                    message=f"Technique '{candidate.raw_text}' has ambiguous visual targets in bar {bar_idx}.",
-                                    severity="warning",
-                                    provenance=[candidate.to_provenance()],
-                                )
-                            )
-                        else:
-                            best_dist, target_note = notes_with_x[0]
-                            tech = SlideTechnique(kind="slide", style="unknown", direction="unknown", target_event_id=None)
-                            target_note.techniques.append(tech)
-                            target_note.provenance.append(candidate.to_provenance())
-                            _remove_not_aligned_warning(score, candidate)
-                        attached = True
-
-                if not attached:
-                    if len(notes) != 1:
-                        score.warnings.append(
-                            WarningItem(
-                                code="ambiguous_technique_attachment",
-                                message=f"Technique '{candidate.raw_text}' requires exactly one note target in bar {bar_idx}.",
-                                severity="warning",
-                                provenance=[candidate.to_provenance()],
-                            )
-                        )
-                        continue
-
-                    target_note = notes[0]
-                    tech = SlideTechnique(kind="slide", style="unknown", direction="unknown", target_event_id=None)
-                    target_note.techniques.append(tech)
-                    target_note.provenance.append(candidate.to_provenance())
+                # The printed label does not say which slide it is. The drawn stroke under it does,
+                # and writes (or refuses) the slide on its own; a label with no drawn mark writes nothing.
+                if _slide_marks_under_label(candidate, tabraw.candidates):
+                    _remove_not_aligned_warning(score, candidate)
+                else:
+                    score.warnings.append(_slide_not_extracted_warning(
+                        candidate, bar_idx, REASON_LABEL_WITHOUT_MARK))
                     _remove_not_aligned_warning(score, candidate)
 
             elif kind in ("palm-mute", "let-ring"):
@@ -4814,83 +4771,39 @@ def _attach_symbols_and_techniques(
             _remove_not_aligned_warning(score, candidate)
 
         elif candidate.kind == "visual-slide":
-            if candidate.raw.get("placement") == "before-note":
-                targets = [(ev, note) for ev in bar.events for note in ev.notes
-                           if any(p.raw_token_id == candidate.raw.get("target_candidate_id")
-                                  for p in note.provenance)]
+            placement = candidate.raw.get("placement")
+            if placement == "before-note":
+                targets = _notes_by_candidate_id(bar, candidate.raw.get("target_candidate_id"))
                 if len(targets) == 1:
                     _, target = targets[0]
                     target.techniques.append(SlideTechnique(
                         kind="slide", style="slide-in", direction=candidate.raw["direction"],
                     ))
                     target.provenance.append(candidate.to_provenance())
-                continue
-            playable_events = [ev for ev in bar.events if not ev.is_rest and ev.notes]
-            if not playable_events:
-                score.warnings.append(
-                    WarningItem(
-                        code="technique_attachment_requires_note_target",
-                        message=f"Visual slide requires note targets in bar {bar_idx}.",
-                        severity="warning",
-                        provenance=[candidate.to_provenance()],
-                    )
-                )
-                continue
-
-            target_string = candidate.string
-            direction = candidate.raw.get("direction", "unknown")
-
-            cand_x0 = candidate.bbox.x0 if candidate.bbox else candidate.x
-
-            notes_on_string = []
-            for ev in playable_events:
-                for note in ev.notes:
-                    if target_string is None or note.string == target_string:
-                        x_val = _get_note_x(note, candidates_by_id)
-                        notes_on_string.append((ev, note, x_val))
-
-            if not notes_on_string:
-                for ev in playable_events:
-                    for note in ev.notes:
-                        notes_on_string.append((ev, note, _get_note_x(note, candidates_by_id)))
-
-            if notes_on_string:
-                if cand_x0 is not None:
-                    notes_on_string.sort(
-                        key=lambda item: (
-                            0 if item[2] is not None and item[2] <= cand_x0 + 15.0 else 1,
-                            abs(item[2] - cand_x0) if item[2] is not None else float("inf"),
-                        )
-                    )
-
-                source_ev, source_note, _ = notes_on_string[0]
-
-                target_event_id = None
-                source_onset = source_ev.timing.onset_ticks
-                seq_targets = [
-                    ev for ev in playable_events
-                    if ev.timing.onset_ticks > source_onset and any(n.string == source_note.string for n in ev.notes)
-                ]
-                if seq_targets:
-                    seq_targets.sort(key=lambda ev: ev.timing.onset_ticks)
-                    target_event_id = seq_targets[0].id
-
-                if target_event_id is not None:
-                    slide_style = "shift"
                 else:
-                    slide_style = "slide-out" if direction == "down" else ("slide-in" if direction == "up" else "unknown")
-
-                tech = SlideTechnique(
-                    kind="slide",
-                    style=slide_style,
-                    direction=direction,
-                    target_event_id=target_event_id,
-                )
+                    score.warnings.append(_slide_not_extracted_warning(candidate, bar_idx, REASON_NOTE_NOT_FOUND))
+                continue
+            if placement in ("between-notes", "after-note", "unbound"):
+                reading = candidate.raw.get("reading") or {}
+                if reading.get("status") != "read":
+                    score.warnings.append(_slide_not_extracted_warning(
+                        candidate, bar_idx, reading.get("reason", REASON_END_UNBOUND)))
+                    continue
+                sources = _notes_by_candidate_id(bar, candidate.raw.get("source_candidate_id"))
+                targets = _notes_by_candidate_id(bar, candidate.raw.get("target_candidate_id"))
+                if len(sources) != 1 or len(targets) != 1 or sources[0][0].timing.onset_ticks >= targets[0][0].timing.onset_ticks:
+                    score.warnings.append(_slide_not_extracted_warning(candidate, bar_idx, REASON_NOTE_NOT_FOUND))
+                    continue
+                (_, source_note), (target_event, _) = sources[0], targets[0]
                 if not any(t.kind == "slide" for t in source_note.techniques):
-                    source_note.techniques.append(tech)
+                    source_note.techniques.append(SlideTechnique(
+                        kind="slide", style=reading["style"], direction=candidate.raw["direction"],
+                        target_event_id=target_event.id,
+                    ))
                 source_note.provenance.append(candidate.to_provenance())
-
-                _remove_not_aligned_warning(score, candidate)
+                continue
+            # A bare diagonal (slope and direction only) names no slide type: nothing is written.
+            score.warnings.append(_slide_not_extracted_warning(candidate, bar_idx, REASON_TYPE_NOT_READ))
 
 
 def optimize_fret_snapping(score: ScoreIR) -> None:

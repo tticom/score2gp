@@ -368,9 +368,13 @@ def test_symbols_spans_slides_and_hopo_use_notation_bar(tmp_path):
                                  second.x + 3, first.y - 12), **layout),
         make_tab_candidate(candidate_id="lr", raw_text="l.r.", kind="technique-text", confidence=0.9,
                            bbox_values=(first.x - 3, first.y - 26, second.x + 3, first.y - 18), **layout),
-        make_visual_slide_candidate(candidate_id="slide", string=second.string,
-                                    bbox_values=(second.x - 3, second.y - 10, second.x + 8, second.y - 2),
-                                    slope=1.0, direction="up", **layout),
+        # SLIDE-01: a slide is written only from a read drawn mark; a bare diagonal names no type.
+        make_tab_candidate(candidate_id="slide", raw_text="slide", kind="visual-slide", confidence=0.85,
+                           string=first.string,
+                           bbox_values=(first.x + 1, first.y - 2, second.x - 1, first.y + 2),
+                           raw={"direction": "up", "placement": "between-notes",
+                                "source_candidate_id": first.id, "target_candidate_id": second.id,
+                                "reading": {"status": "read", "style": "legato"}}, **layout),
     ])
     raw.to_json_file(raw_path)
     score, _ = build_ir_from_tabraw_only(raw_path, note_durations=records)
@@ -448,23 +452,40 @@ def test_hopo_span_can_cross_adjacent_bars_on_same_system(tmp_path):
 
 
 def test_slide_marker_between_same_string_notes_uses_origin(tmp_path):
+    # SLIDE-01: a printed "sl." label no longer writes a slide by itself (it does not name the type);
+    # the drawn stroke under it writes the slide on the origin note, with the type the stroke shows.
     from score2gp.build_ir import _attach_symbols_and_techniques
     from score2gp.tabraw import make_tab_candidate
 
     score, raw, placed = _attachment_probe(tmp_path)
     first, second = sorted(placed[0], key=lambda c: c.x)[:2]
+    layout = dict(page_index=first.page_index, system_index=first.system_index,
+                  staff_index=first.staff_index, bar_index=first.bar_index)
     marker = make_tab_candidate(
         candidate_id="between-notes-slide", raw_text="sl.", kind="technique-text",
         confidence=0.9,
         bbox_values=((first.x + second.x) / 2, first.y - 12,
-                     (first.x + second.x) / 2 + 4, first.y - 4),
-        page_index=first.page_index, system_index=first.system_index,
-        staff_index=first.staff_index, bar_index=first.bar_index,
+                     (first.x + second.x) / 2 + 4, first.y - 4), **layout,
     )
     raw.candidates = [marker]
     _attach_symbols_and_techniques(score, raw, placed_frets=placed)
-    assert any(t.kind == "slide" for t in score.bars[0].events[0].notes[0].techniques)
+    assert not any(t.kind == "slide" for e in score.bars[0].events for n in e.notes for t in n.techniques)
+    [warning] = [w for w in score.warnings if w.code == "slide_mark_not_extracted"]
+    assert "slide_label_without_drawn_mark" in warning.message
+
+    score, raw, placed = _attachment_probe(tmp_path)
+    stroke = make_tab_candidate(
+        candidate_id="between-notes-stroke", raw_text="slide", kind="visual-slide", confidence=0.85,
+        bbox_values=(first.x + 1, first.y - 2, second.x - 1, first.y + 2), string=first.string,
+        raw={"direction": "down", "placement": "between-notes", "source_candidate_id": first.id,
+             "target_candidate_id": second.id, "reading": {"status": "read", "style": "shift"}}, **layout,
+    )
+    raw.candidates = [marker, stroke]
+    _attach_symbols_and_techniques(score, raw, placed_frets=placed)
+    [slide] = [t for t in score.bars[0].events[0].notes[0].techniques if t.kind == "slide"]
+    assert slide.style == "shift" and slide.target_event_id == score.bars[0].events[1].id
     assert not any(t.kind == "slide" for t in score.bars[0].events[1].notes[0].techniques)
+    assert not [w for w in score.warnings if w.code == "slide_mark_not_extracted"]
 
 
 def test_unplaced_attachment_has_a_located_warning(tmp_path):
