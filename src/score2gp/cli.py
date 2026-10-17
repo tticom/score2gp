@@ -1242,6 +1242,12 @@ def convert_command(
                 json.dumps(arpeggio_report, indent=2) + "\n", encoding="utf-8"
             )
             summary["pdf_arpeggios"] = arpeggio_report["counts_by_reason"]
+            from .pdf_let_ring import attach_pdf_let_ring
+            let_ring_report = attach_pdf_let_ring(pdf, note_durations, score)
+            (actual_work_dir / "let-ring.json").write_text(
+                json.dumps(let_ring_report, indent=2) + "\n", encoding="utf-8"
+            )
+            summary["pdf_let_ring"] = let_ring_report["counts_by_reason"]
             _write_note_type_route(actual_work_dir, diagnostics.note_type_route)
             score.to_json_file(ir_path)
         else:
@@ -1271,6 +1277,13 @@ def convert_command(
         payload = exc.to_diagnostics_payload()
         if pdf_only_tab and isinstance(exc.details.get("note_type_route"), dict):
             _write_note_type_route(actual_work_dir, exc.details["note_type_route"])
+            from .pdf_let_ring import attach_pdf_let_ring
+            let_ring_report = attach_pdf_let_ring(pdf, note_durations, None)
+            (actual_work_dir / "let-ring.json").write_text(
+                json.dumps(let_ring_report, indent=2) + "\n", encoding="utf-8"
+            )
+            warnings.extend(let_ring_report["warnings"])
+            summary["pdf_let_ring"] = let_ring_report["counts_by_reason"]
         if exc.category == "missing_pdf_grouping":
             payload["artifacts"] = _grouping_artifacts_for_tabraw(tabraw_path)
         diagnostics_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")

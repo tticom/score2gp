@@ -3,6 +3,7 @@ from pathlib import Path
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -126,7 +127,13 @@ def test_base_written_parentheses_keep_byte_identical_gpif(
             # OMIT-02-FU1 deliberately removes the redundant double-bar line.
             # Preserve both exact old digests and every parenthesis/count check.
             assert b"<Barline>" not in gpif
-            legacy = gpif_with_legacy_double_barlines(gpif)
+            # LETRING-01 adds ten note tags in the other, explicitly inspected
+            # bars of Chapter 19. Retain both old digests and all assertions on
+            # the preserved parenthesized bars; reject dropping the new marks.
+            expected_let_ring_notes = 10 if name == "Melodic_Expressions_Chap_19_" else 0
+            assert gpif.count(b"<LetRing />") == expected_let_ring_notes
+            before_let_ring = re.sub(rb"(?m)^[ \t]*<LetRing />\r?\n", b"", gpif)
+            legacy = gpif_with_legacy_double_barlines(before_let_ring)
             assert hashlib.sha256(legacy).hexdigest() == head_gpif_sha256
             assert gpif_without_slides_sha256(legacy) == base_gpif_without_slides_sha256
         for index in indices:
