@@ -10,7 +10,7 @@ from tempfile import TemporaryDirectory
 from zipfile import ZipFile
 
 import pytest
-from slide_gpif import gpif_without_slides_sha256
+from slide_gpif import gpif_without_slides_sha256, gpif_with_legacy_double_barlines
 from typer.testing import CliRunner
 
 from score2gp import pdf
@@ -126,6 +126,11 @@ def test_real_control_inspection_count_and_gpif_are_unchanged(name, nodes, gpif_
         assert sum(count_values(page) for page in inspection["pages"]) == nodes
         with ZipFile(scratch / "result.gp") as package:
             actual = package.read("Content/score.gpif")
-        assert hashlib.sha256(actual).hexdigest() == gpif_digest
+        # OMIT-02-FU1 removes only the redundant double-bar extension. Retain
+        # every previous whole-file digest by reconstructing that exact old line;
+        # the native output must also reject the old writer's redundant element.
+        assert b"<Barline>" not in actual
+        legacy = gpif_with_legacy_double_barlines(actual)
+        assert hashlib.sha256(legacy).hexdigest() == gpif_digest
         if without_slides_digest:
-            assert gpif_without_slides_sha256(actual) == without_slides_digest
+            assert gpif_without_slides_sha256(legacy) == without_slides_digest

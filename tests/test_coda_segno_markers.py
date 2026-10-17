@@ -37,7 +37,11 @@ def test_coda_segno_markers_xml(tmp_path) -> None:
 
         # Bar 2: repeat-start barline & Segno direction glyph
         mb2 = mb_map[2]
-        assert mb2.find("RepeatStart") is not None
+        # OMIT-02-FU1: the native start flag replaces the legacy element.
+        assert mb2.find("RepeatStart") is None
+        assert mb2.find("Barline") is None
+        assert mb2.find("Repeat").get("start") == "true"
+        assert mb2.find("Repeat").get("end") == "false"
         dirs2 = mb2.find("Directions")
         assert dirs2 is not None
         assert dirs2.find("Segno") is not None

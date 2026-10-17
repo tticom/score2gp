@@ -15,6 +15,7 @@ comparator to report exactly that difference, located by bar and event index.
 from __future__ import annotations
 
 import io
+from collections import Counter
 import html
 import re
 import xml.etree.ElementTree as ET
@@ -279,12 +280,16 @@ def read_gp_bars(gp: Path | bytes, *, include_grace: bool = False,
                 })
         key = master.find("Key")
         count = int(key.findtext("AccidentalCount")) if key is not None else None
+        repeat = master.find("Repeat")
+        repeat_start = master.find("RepeatStart") is not None or (
+            repeat is not None and repeat.get("start") == "true")
+        repeat_end = repeat is not None and repeat.get("end", "true") == "true"
         out.append({"time": master.findtext("Time"), "key_count": count,
                      "key_mode": key.findtext("Mode") if key is not None else None,
+                    "master_bar_children": [child.tag for child in master],
                     "double_bar": master.find("DoubleBar") is not None,
-                    "repeat_start": master.find("RepeatStart") is not None,
-                    "repeat_count": (int(master.find("Repeat").get("count"))
-                                     if master.find("Repeat") is not None else None),
+                    "repeat_start": repeat_start,
+                    "repeat_count": (int(repeat.get("count")) if repeat_end else None),
                     "events": events})
     return out
 
@@ -308,6 +313,10 @@ def compare_gp(truth: Path | bytes, produced: Path | bytes,
         differences.append({"bar_index": None, "event_index": None, "field": "bar_count",
                             "expected": len(want), "actual": len(have)})
     for bar, (w, h) in enumerate(zip(want, have)):
+        extra = sorted((Counter(h["master_bar_children"]) - Counter(w["master_bar_children"])).elements())
+        if extra:
+            differences.append({"bar_index": bar, "event_index": None,
+                                "field": "master_bar_extra_children", "expected": [], "actual": extra})
         for field in ("double_bar", "repeat_start", "repeat_count"):
             if w[field] != h[field]:
                 differences.append({"bar_index": bar, "event_index": None, "field": field,
@@ -480,7 +489,8 @@ def test_master_bar_double_and_repeats_are_independent_even_on_empty_bars():
     produced = _gp([None, _bar()], barlines=[(False, False, None), (True, False, 2)])
     differences = compare_gp(truth, produced)["differences"]
     assert [(d["bar_index"], d["field"]) for d in differences] == [
-        (0, "double_bar"), (1, "double_bar"), (1, "repeat_start"), (1, "repeat_count")]
+        (0, "double_bar"), (1, "master_bar_extra_children"), (1, "double_bar"),
+        (1, "repeat_start"), (1, "repeat_count")]
 
 
 def test_identical_files_have_no_difference():
