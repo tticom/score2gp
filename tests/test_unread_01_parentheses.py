@@ -12,6 +12,7 @@ from zipfile import ZipFile
 import pytest
 
 from slide_gpif import gpif_without_slides_sha256, gpif_with_legacy_double_barlines
+from chord_gpif import without_verified_chord_additions
 from score2gp.notation_omr.note_duration import read_note_durations
 from test_dur_02_oracle import read_gp_bars
 
@@ -133,6 +134,12 @@ def test_base_written_parentheses_keep_byte_identical_gpif(
             expected_let_ring_notes = 10 if name == "Melodic_Expressions_Chap_19_" else 0
             assert gpif.count(b"<LetRing />") == expected_let_ring_notes
             before_let_ring = re.sub(rb"(?m)^[ \t]*<LetRing />\r?\n", b"", gpif)
+            if name == "Melodic Soloing Masterclass":
+                # CFW-03 recovers eight printed chord labels. Verify every name
+                # and beat against the real reference, then retain both old
+                # digests over every byte outside these explicit additions.
+                before_let_ring = without_verified_chord_additions(
+                    before_let_ring, ROOT / "fixtures/private" / (name + ".gp"), count=8)
             legacy = gpif_with_legacy_double_barlines(before_let_ring)
             assert hashlib.sha256(legacy).hexdigest() == head_gpif_sha256
             assert gpif_without_slides_sha256(legacy) == base_gpif_without_slides_sha256
