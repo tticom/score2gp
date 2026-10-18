@@ -20,7 +20,7 @@ import time
 from zipfile import ZipFile
 
 
-def measure(root, item, time_signature=None):
+def measure(root, item, time_signature=None, source_root=None):
     index, pdf = item
     with TemporaryDirectory(prefix="gpif-layout-", dir=root / "work") as directory:
         scratch = Path(directory)
@@ -32,7 +32,7 @@ def measure(root, item, time_signature=None):
             command.extend(["--time-signature", time_signature])
         start = time.monotonic()
         result = subprocess.run(command, capture_output=True,
-                                env={**os.environ, "PYTHONPATH": str(root / "src")})
+                                env={**os.environ, "PYTHONPATH": str(source_root or root / "src")})
         row = {"index": index, "exit_code": result.returncode,
                "seconds": round(time.monotonic() - start, 3), "gpif_sha256": None}
         if output.is_file():
@@ -47,6 +47,8 @@ def main():
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--time-signature", help="Optional declaration passed unchanged to the CLI")
+    parser.add_argument("--source-root", type=Path,
+                        help="Source tree from a recorded revision; inputs and scratch stay in this checkout")
     args = parser.parse_args()
     root = Path.cwd()
     sources = sorted((root / "fixtures/private").glob("*.pdf"))
@@ -55,7 +57,8 @@ def main():
     (root / "work").mkdir(exist_ok=True)
     rows = []
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
-        futures = [pool.submit(measure, root, item, args.time_signature) for item in enumerate(sources, 1)]
+        futures = [pool.submit(measure, root, item, args.time_signature, args.source_root)
+                   for item in enumerate(sources, 1)]
         for future in as_completed(futures):
             row = future.result()
             rows.append(row)
