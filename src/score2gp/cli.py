@@ -878,6 +878,7 @@ def convert_command(
     ref_gp: Optional[Path] = typer.Option(None, "--ref-gp", help="Path to optional reference GP package for semantic comparison"),
     sidecar_manifest: Optional[Path] = typer.Option(None, "--sidecar-manifest", help="Path to sidecar provenance manifest JSON file"),
     target: str = typer.Option("GP7", "--target", callback=_validate_cli_target, help="Output target: GP7 (current GPIF-ZIP output only)"),
+    debug_barline_candidates: bool = typer.Option(False, "--debug-barline-candidates", help="Include full barline candidate geometry in the HTML report (can be very large)"),
 ) -> None:
     """Run the complete conversion pipeline: extraction, alignment, IR generation, and GP7 package writing."""
     actual_work_dir = work_dir or workdir
@@ -1023,7 +1024,10 @@ def convert_command(
     except Exception as exc:
         warnings.append({"code": "pdf_inspect_failed", "message": f"PDF inspection failed: {str(exc)}", "severity": "error"})
         write_warnings(actual_work_dir / "warnings.json", warnings)
-        write_conversion_report(actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary)
+        write_conversion_report(
+            actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary,
+            debug_barline_candidates=debug_barline_candidates,
+        )
         if json_report:
             _write_convert_report(
                 report_path=json_report,
@@ -1086,7 +1090,10 @@ def convert_command(
     except Exception as exc:
         warnings.append({"code": "tab_extraction_failed", "message": f"Tab extraction failed: {str(exc)}", "severity": "error"})
         write_warnings(actual_work_dir / "warnings.json", warnings)
-        write_conversion_report(actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary)
+        write_conversion_report(
+            actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary,
+            debug_barline_candidates=debug_barline_candidates,
+        )
         if json_report:
             _write_convert_report(
                 report_path=json_report,
@@ -1113,7 +1120,10 @@ def convert_command(
             })
             summary["blocking_reason"] = "missing_musicxml"
             write_warnings(actual_work_dir / "warnings.json", warnings)
-            write_conversion_report(actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary)
+            write_conversion_report(
+                actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary,
+                debug_barline_candidates=debug_barline_candidates,
+            )
             if json_report:
                 _write_convert_report(
                     report_path=json_report,
@@ -1138,7 +1148,10 @@ def convert_command(
                 "severity": "error",
             })
             write_warnings(actual_work_dir / "warnings.json", warnings)
-            write_conversion_report(actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary)
+            write_conversion_report(
+                actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary,
+                debug_barline_candidates=debug_barline_candidates,
+            )
             if json_report:
                 _write_convert_report(
                     report_path=json_report,
@@ -1182,7 +1195,10 @@ def convert_command(
         except Exception as exc:
             warnings.append({"code": "ascii_alignment_failed", "message": f"ASCII/MusicXML alignment failed: {str(exc)}", "severity": "error"})
             write_warnings(actual_work_dir / "warnings.json", warnings)
-            write_conversion_report(actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary)
+            write_conversion_report(
+                actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary,
+                debug_barline_candidates=debug_barline_candidates,
+            )
             if json_report:
                 _write_convert_report(
                     report_path=json_report,
@@ -1308,7 +1324,10 @@ def convert_command(
             "message": str(exc),
         }
         write_warnings(actual_work_dir / "warnings.json", warnings)
-        write_conversion_report(actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary)
+        write_conversion_report(
+            actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary,
+            debug_barline_candidates=debug_barline_candidates,
+        )
 
         exit_code = _convert_exit_code_for_error(exc)
         refusal_code = exc.category
@@ -1358,7 +1377,10 @@ def convert_command(
     except Exception as exc:
         warnings.append({"code": "build_ir_failed", "message": f"ScoreIR generation failed: {str(exc)}", "severity": "error"})
         write_warnings(actual_work_dir / "warnings.json", warnings)
-        write_conversion_report(actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary)
+        write_conversion_report(
+            actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary,
+            debug_barline_candidates=debug_barline_candidates,
+        )
         if json_report:
             if pdf_only_tab:
                 pdf_only_diag_payload = {
@@ -1411,7 +1433,10 @@ def convert_command(
         except Exception as exc:
             warnings.append({"code": "gp_write_failed", "message": f"Guitar Pro package writing failed: {str(exc)}", "severity": "error"})
             write_warnings(actual_work_dir / "warnings.json", warnings)
-            write_conversion_report(actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary)
+            write_conversion_report(
+                actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary,
+                debug_barline_candidates=debug_barline_candidates,
+            )
             if json_report:
                 if pdf_only_tab:
                     pdf_only_diag_payload = {
@@ -1437,7 +1462,10 @@ def convert_command(
 
     # Write warnings and conversion-report
     write_warnings(actual_work_dir / "warnings.json", warnings)
-    write_conversion_report(actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary)
+    write_conversion_report(
+        actual_work_dir / "conversion-report.html", "score2gp conversion report", warnings, summary,
+        debug_barline_candidates=debug_barline_candidates,
+    )
 
     # Write successful JSON report
     if json_report:

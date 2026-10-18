@@ -6,6 +6,63 @@ from pathlib import Path
 from typing import Any
 
 GROUPING_DIAGNOSTICS_SCHEMA_VERSION = "pdf-grouping-diagnostics.v0.1"
+BARLINE_REJECTION_EXAMPLE_LIMIT = 3
+
+
+def _bounded_conversion_summary(summary: dict[str, Any]) -> dict[str, Any]:
+    """Summarise per-system evidence without repeating it for every TAB digit.
+
+    This is a rendering projection only: extraction and compiler provenance
+    must retain their original data. Accepted geometry is preserved once per
+    system; rejected geometry is represented by counts and located examples.
+    """
+    def without_details(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {key: without_details(item) for key, item in value.items()
+                    if key != "barline_candidates_details"}
+        if isinstance(value, list):
+            return [without_details(item) for item in value]
+        return value
+
+    result = without_details(summary)
+    systems = set()
+    counts: dict[str, int] = {}
+    examples: dict[str, list[dict[str, Any]]] = {}
+    accepted = []
+    for candidate in summary.get("tab", {}).get("candidates", []):
+        raw = candidate.get("raw", {})
+        details = raw.get("barline_candidates_details")
+        if not isinstance(details, list):
+            continue
+        location = {
+            "page_index": candidate.get("page_index"),
+            "system_index": candidate.get("system_index"),
+            "staff_bbox": raw.get("tab_staff_bbox"),
+        }
+        # The extractor shares each system's details across its text candidates.
+        # Count rejection decisions, rather than those repeated references.
+        key = json.dumps(location, sort_keys=True)
+        if key in systems:
+            continue
+        systems.add(key)
+        for detail in details:
+            located = {**location, "candidate": detail}
+            if detail.get("final_decision") != "rejected":
+                accepted.append(located)
+                continue
+            reason = str(detail.get("rejection_reason") or "unspecified")
+            counts[reason] = counts.get(reason, 0) + 1
+            bucket = examples.setdefault(reason, [])
+            if len(bucket) < BARLINE_REJECTION_EXAMPLE_LIMIT:
+                bucket.append(located)
+    if systems:
+        result["barline_candidate_summary"] = {
+            "system_count": len(systems),
+            "accepted_candidates": accepted,
+            "rejected_counts_by_reason": counts,
+            "rejected_examples_by_reason": examples,
+        }
+    return result
 
 
 def write_warnings(path: str | Path, warnings: list[dict[str, Any]]) -> None:
@@ -14,7 +71,12 @@ def write_warnings(path: str | Path, warnings: list[dict[str, Any]]) -> None:
     out.write_text(json.dumps(warnings, indent=2), encoding="utf-8")
 
 
-def write_conversion_report(path: str | Path, title: str, warnings: list[dict[str, Any]], summary: dict[str, Any]) -> None:
+def write_conversion_report(
+    path: str | Path, title: str, warnings: list[dict[str, Any]], summary: dict[str, Any],
+    *, debug_barline_candidates: bool = False,
+) -> None:
+    if not debug_barline_candidates:
+        summary = _bounded_conversion_summary(summary)
     warning_items = "\n".join(
         f"<li><strong>{html.escape(item.get('code', 'warning'))}</strong>: {html.escape(item.get('message', ''))}</li>"
         for item in warnings
