@@ -7,7 +7,6 @@ private score is read.
 from __future__ import annotations
 
 import re
-import sys
 import types
 import zipfile
 from pathlib import Path
@@ -135,12 +134,6 @@ def test_each_rule_removed_fails(name: str) -> None:
 
 # --- writer and IR ----------------------------------------------------------------------------
 
-@pytest.fixture
-def product_gpif_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sys, "modules", {k: v for k, v in sys.modules.items() if "pytest" not in k})
-    monkeypatch.setattr(sys, "argv", [a for a in sys.argv if "pytest" not in a])
-
-
 def _written(tmp_path: Path, spelling: NoteSpelling | None, pitch: int) -> tuple[list[str], list[str], list[str]]:
     score = _score([(None, [[(pitch, None, None)]])])
     score.bars[0].events[0].notes[0].spelling = spelling
@@ -152,25 +145,25 @@ def _written(tmp_path: Path, spelling: NoteSpelling | None, pitch: int) -> tuple
             re.findall(r"<Number>(\d+)</Number>", text))
 
 
-def test_writer_spells_flats_with_b(tmp_path: Path, product_gpif_path: None) -> None:
+def test_writer_spells_flats_with_b(tmp_path: Path) -> None:
     steps, accidentals, _ = _written(tmp_path, NoteSpelling(accidental="flat", source="key"), BB4)
     assert steps == ["B", "B"] and accidentals == ["b", "b"]
 
 
 @pytest.mark.parametrize("spelling", [None, NoteSpelling(accidental="sharp", source="key"),
                                       NoteSpelling(accidental="sharp", source="default")])
-def test_writer_keeps_the_sharp_for_sharps_and_old_ir(tmp_path: Path, product_gpif_path: None, spelling) -> None:
+def test_writer_keeps_the_sharp_for_sharps_and_old_ir(tmp_path: Path, spelling) -> None:
     steps, accidentals, _ = _written(tmp_path, spelling, BB4)
     assert steps == ["A", "A"] and accidentals == ["#", "#"]
 
 
-def test_flat_and_sharp_spellings_write_the_same_midi(tmp_path: Path, product_gpif_path: None) -> None:
+def test_flat_and_sharp_spellings_write_the_same_midi(tmp_path: Path) -> None:
     flat = _written(tmp_path, NoteSpelling(accidental="flat", source="key"), BB4)[2]
     sharp = _written(tmp_path, NoteSpelling(accidental="sharp", source="key"), BB4)[2]
     assert flat == sharp and str(BB4) in flat
 
 
-def test_a_flat_spelling_on_a_white_key_is_ignored(tmp_path: Path, product_gpif_path: None) -> None:
+def test_a_flat_spelling_on_a_white_key_is_ignored(tmp_path: Path) -> None:
     steps, accidentals, _ = _written(tmp_path, NoteSpelling(accidental="flat", source="key"), 62)
     assert steps == ["D", "D"] and "b" not in accidentals and "#" not in accidentals
 

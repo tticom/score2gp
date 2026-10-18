@@ -104,8 +104,7 @@ def test_source_chord_attachment_and_refusal() -> None:
 
 FIXTURE_IR = ROOT / "fixtures/public/test_gpif_beat_symbols.ir.json"
 
-# build_gpif switches to a classic test-only layout while pytest is loaded, so the production
-# (relational) package that Guitar Pro reads must be written by a process without pytest.
+# Exercise default relational serialization and packaging in a fresh interpreter.
 _WRITE_SCRIPT = """
 import sys
 from score2gp.gp_package import write_gp

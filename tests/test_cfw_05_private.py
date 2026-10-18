@@ -66,7 +66,7 @@ def _assert_strike_alignment(output, reference):
 def _write_probe(score, folder, name):
     source, produced = folder / (name + ".json"), folder / (name + ".gp")
     source.write_text(score.model_dump_json(), encoding="utf-8")
-    # Normal relational GPIF writer, outside pytest's legacy writer selection.
+    # Also exercise the default relational GPIF writer in a fresh interpreter.
     run = subprocess.run([sys.executable, "-c",
                           "import sys; from score2gp.ir import ScoreIR; "
                           "from score2gp.gp_package import write_gp; "

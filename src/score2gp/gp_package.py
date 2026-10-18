@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree as ET
 
-from .gpif import build_gpif, gpif_warnings
+from .gpif import DEFAULT_GPIF_LAYOUT, GpifLayout, build_gpif, gpif_warnings
 from .version_adapter import adapt_gpif, get_version_file_content, validate_target
 from .ir import (
     ScoreIR, ScoreBooklet, Track, Tuning, TuningString, Mixer, SoundConfig,
@@ -27,8 +27,11 @@ def write_gp(
     score: ScoreIR | ScoreBooklet,
     out_path: str | Path,
     template: str | Path | None = None,
-    target_version: str = "GP7"
+    target_version: str = "GP7",
+    *,
+    gpif_layout: GpifLayout = DEFAULT_GPIF_LAYOUT,
 ) -> list[str]:
+    """Package a score with relational GPIF by default."""
     validate_target(target_version)
     warnings: list[str] = gpif_warnings(score)
     out = Path(out_path)
@@ -104,7 +107,7 @@ def write_gp(
 
     if isinstance(score, ScoreBooklet):
         # Build main/primary score GPIF with Booklet index embedded
-        gpif = build_gpif(score)
+        gpif = build_gpif(score, layout=gpif_layout)
         gpif = adapt_gpif(gpif, target_version)
         copied["Content/score.gpif"] = gpif
 
@@ -112,7 +115,7 @@ def write_gp(
         start_page = score.pagination.start_page if score.pagination else 1
         movements_list = []
         for idx, s in enumerate(score.scores):
-            mov_gpif = build_gpif(s, booklet=score)
+            mov_gpif = build_gpif(s, booklet=score, layout=gpif_layout)
             mov_gpif = adapt_gpif(mov_gpif, target_version)
             mov_path = f"Content/movement_{idx + 1}.gpif"
             copied[mov_path] = mov_gpif
@@ -136,7 +139,7 @@ def write_gp(
         }
         copied["Content/booklet_index.json"] = json.dumps(booklet_index, indent=2).encode("utf-8")
     else:
-        gpif = build_gpif(score)
+        gpif = build_gpif(score, layout=gpif_layout)
         gpif = adapt_gpif(gpif, target_version)
         copied["Content/score.gpif"] = gpif
 
@@ -455,14 +458,16 @@ def extract_score_ir_from_gp(path: str | Path) -> ScoreIR | ScoreBooklet:
 
 def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
     # 1. Parse Metadata
-    meta_node = root.find(".//Metadata")
+    meta_node = root.find("Score")
+    if meta_node is None or meta_node.find("Title") is None:
+        meta_node = root.find(".//Metadata")
     metadata = Metadata()
     if meta_node is not None:
         metadata.title = _first_text(meta_node, ["Title"]) or "Untitled"
         metadata.artist = _first_text(meta_node, ["Artist"])
-        metadata.composer = _first_text(meta_node, ["Composer"])
+        metadata.composer = _first_text(meta_node, ["Composer", "Music"])
         metadata.album = _first_text(meta_node, ["Album"])
-        metadata.transcriber = _first_text(meta_node, ["Transcriber"])
+        metadata.transcriber = _first_text(meta_node, ["Transcriber", "Tabber"])
         metadata.copyright = _first_text(meta_node, ["Copyright"])
 
     # 2. Parse Tempo
@@ -797,8 +802,8 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
                 num = int(tuplet.get("num") or 1)
                 den = int(tuplet.get("den") or 1)
                 ticks = int(ticks * den / num)
-                from .ir import PrimaryTuplet
-                tuplet_obj = PrimaryTuplet(actual_notes=num, normal_notes=den)
+                from .ir import Tuplet
+                tuplet_obj = Tuplet(actual_notes=num, normal_notes=den)
 
             from .ir import NotatedDuration
             inv_val_map = {
@@ -978,10 +983,10 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
             rhythm_ref = b.find("Rhythm").get("ref")
             r_info = rhythms[rhythm_ref]
 
-            rest = b.find("Rest") is not None
-
             notes_ref_text = b.find("Notes")
             notes_refs = notes_ref_text.text.split() if notes_ref_text is not None and notes_ref_text.text else []
+            # The native GPIF rest representation has no note references.
+            rest = b.find("Rest") is not None or not notes_refs
 
             free_text = b.find("FreeText")
             text = free_text.text if free_text is not None else None
@@ -2001,8 +2006,21 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
 
 
 def validate_roundtrip(path: str | Path, original: ScoreIR | ScoreBooklet) -> dict[str, Any]:
+    """Validate stored fields, resolving native database track labels first."""
     recovered = extract_score_ir_from_gp(path)
     from .ir import semantic_scoreir_summary
+
+    # Relational GPIF transports track identifiers as local database references.
+    # Detect each actual movement's format; legacy identity checks stay exact.
+    with zipfile.ZipFile(path) as package:
+        members = ["Content/score.gpif"]
+        if isinstance(recovered, ScoreBooklet):
+            index = json.loads(package.read("Content/booklet_index.json"))
+            members = [movement["file"] for movement in index["movements"]]
+        native_layouts = []
+        for member in members:
+            root = ET.fromstring(package.read(member))
+            native_layouts.append(root.find("Beats") is not None and root.find(".//Score/Bars") is None)
 
     if isinstance(original, ScoreBooklet):
         if not isinstance(recovered, ScoreBooklet):
@@ -2052,7 +2070,7 @@ def validate_roundtrip(path: str | Path, original: ScoreIR | ScoreBooklet) -> di
             errors.append(f"booklet scores count mismatch: original={len(original.scores)}, recovered={len(recovered.scores)}")
         else:
             for idx, (orig_s, rec_s) in enumerate(zip(original.scores, recovered.scores)):
-                sub_res = _validate_score_ir_roundtrip(orig_s, rec_s)
+                sub_res = _validate_score_ir_roundtrip(orig_s, rec_s, native_layout=native_layouts[idx])
                 for err in sub_res:
                     errors.append(f"score {idx}: {err}")
 
@@ -2073,7 +2091,7 @@ def validate_roundtrip(path: str | Path, original: ScoreIR | ScoreBooklet) -> di
             }
         original_sum = semantic_scoreir_summary(original)
         recovered_sum = semantic_scoreir_summary(recovered)
-        errors = _validate_score_ir_roundtrip(original, recovered)
+        errors = _validate_score_ir_roundtrip(original, recovered, native_layout=native_layouts[0])
         return {
             "valid": len(errors) == 0,
             "errors": errors,
@@ -2082,8 +2100,34 @@ def validate_roundtrip(path: str | Path, original: ScoreIR | ScoreBooklet) -> di
         }
 
 
-def _validate_score_ir_roundtrip(original: ScoreIR, recovered: ScoreIR) -> list[str]:
+def _canonical_gpif_track_references(score: ScoreIR) -> ScoreIR:
+    """Normalize database labels while retaining every track/reference check."""
+    result = score.model_copy(deep=True)
+    identifiers = {track.id: f"track:{index}" for index, track in enumerate(result.tracks)}
+    if len(identifiers) != len(result.tracks):
+        raise ValueError("Duplicate native GPIF track identifiers")
+    for track in result.tracks:
+        track.id = identifiers[track.id]
+    for bar in result.bars:
+        for event in bar.events:
+            if event.track_id not in identifiers:
+                raise ValueError(f"Unresolved native GPIF track reference: {event.track_id}")
+            event.track_id = identifiers[event.track_id]
+    if result.layout is not None:
+        order = result.layout.track_order or list(identifiers)
+        if len(order) != len(set(order)) or any(ref not in identifiers for ref in order):
+            raise ValueError("Invalid native GPIF layout track references")
+        result.layout.track_order = [identifiers[ref] for ref in order]
+    return result
+
+
+def _validate_score_ir_roundtrip(
+    original: ScoreIR, recovered: ScoreIR, *, native_layout: bool = False,
+) -> list[str]:
     from .ir import normalize_lh_fingering, normalize_rh_fingering
+    if native_layout:
+        original = _canonical_gpif_track_references(original)
+        recovered = _canonical_gpif_track_references(recovered)
     errors = []
 
     for k in ["title", "artist", "composer", "album", "transcriber", "copyright"]:

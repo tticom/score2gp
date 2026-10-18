@@ -16,7 +16,8 @@ from score2gp.ir import Note, ScoreIR
 from score2gp import pdf_tab_bar_assembler as assembler
 from score2gp.black_key_spelling import apply_black_key_spelling
 from score2gp.gpif import percussive_strike_storage
-from score2gp.gp_package import extract_score_ir_from_gp, write_gp
+from score2gp.gp_package import extract_score_ir_from_gp
+from gpif_test_helpers import legacy_write_gp as write_gp
 from score2gp.notation_omr.note_duration import read_note_durations
 from score2gp.pdf import _extract_pdf_text_candidates
 from score2gp.tabraw import TabRaw, make_tab_candidate
@@ -175,8 +176,7 @@ def test_real_source_native_gp_reader_keeps_absence_without_legacy_summary(conve
     package_path = folder / "native-only.gp"
     source_ir = folder / "native-only.json"
     source_ir.write_text(strike_score.model_dump_json(), encoding="utf-8")
-    # The existing writer selects hierarchical output inside pytest. A normal
-    # process must exercise its production relational tables instead.
+    # Also exercise production relational tables through a fresh interpreter.
     run = subprocess.run([sys.executable, "-c",
                           "import sys; from score2gp.ir import ScoreIR; "
                           "from score2gp.gp_package import write_gp; "

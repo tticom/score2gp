@@ -18,8 +18,7 @@ from score2gp.gp_package import _extract_score_ir_from_gpif_root
 
 
 def _production_gpif(value: str, ticks: int) -> ET.Element:
-    # build_gpif has a legacy branch selected by pytest in sys.modules. Exercise
-    # the CLI's production branch in a fresh interpreter instead.
+    # Also exercise default production serialization in a fresh interpreter.
     code = (
         "from pathlib import Path; from score2gp.ir import ScoreIR; "
         "from score2gp.gpif import build_gpif; "
