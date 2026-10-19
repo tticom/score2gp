@@ -13,7 +13,7 @@ authors = [{ name = "Niall Finlay" }]
 dependencies = [
   "pydantic>=2.6",
   "typer>=0.12",
-  "pymupdf>=1.23",
+  "pymupdf==1.28.2",
 ]
 
 [project.optional-dependencies]
