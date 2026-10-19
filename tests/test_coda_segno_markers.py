@@ -2,7 +2,7 @@ import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 from score2gp.ir import ScoreIR
-from score2gp.gp_package import write_gp
+from gpif_test_helpers import legacy_write_gp as write_gp
 
 
 def test_coda_segno_markers_xml(tmp_path) -> None:

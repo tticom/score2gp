@@ -5,7 +5,8 @@ import zipfile
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
-from score2gp.gp_package import write_gp, extract_score_ir_from_gp, validate_roundtrip
+from score2gp.gp_package import extract_score_ir_from_gp, validate_roundtrip
+from gpif_test_helpers import legacy_write_gp as write_gp
 from score2gp.ir import ScoreBooklet, BookletCoverPage, BarNumberingOverride
 
 

@@ -38,19 +38,7 @@ def test_relational_gpif_clef_transposition_invariants(tmp_path):
 
     out_gp = tmp_path / "transposition_invariant.gp"
 
-    # Mock system modules to compile the default relational GPIF-ZIP XML under pytest
-    import sys
-    orig_modules = sys.modules
-    orig_argv = sys.argv
-    custom_modules = {k: v for k, v in sys.modules.items() if "pytest" not in k}
-    sys.modules = custom_modules
-    sys.argv = [arg for arg in sys.argv if "pytest" not in arg]
-
-    try:
-        warnings = write_gp(score, out_gp, target_version="GP7")
-    finally:
-        sys.modules = orig_modules
-        sys.argv = orig_argv
+    warnings = write_gp(score, out_gp, target_version="GP7")
 
     assert warnings == []
     assert zipfile.is_zipfile(out_gp)
@@ -124,19 +112,7 @@ def test_relational_gpif_four_four_beam_grouping_readability(tmp_path):
 
     out_gp = tmp_path / "beam_grouping_readability.gp"
 
-    # Mock system modules to compile the default relational GPIF-ZIP XML under pytest
-    import sys
-    orig_modules = sys.modules
-    orig_argv = sys.argv
-    custom_modules = {k: v for k, v in sys.modules.items() if "pytest" not in k}
-    sys.modules = custom_modules
-    sys.argv = [arg for arg in sys.argv if "pytest" not in arg]
-
-    try:
-        warnings = write_gp(score, out_gp, target_version="GP7")
-    finally:
-        sys.modules = orig_modules
-        sys.argv = orig_argv
+    warnings = write_gp(score, out_gp, target_version="GP7")
 
     assert warnings == []
     assert zipfile.is_zipfile(out_gp)

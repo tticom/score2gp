@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 from fractions import Fraction
+from typing import Literal
 from xml.etree import ElementTree as ET
 
 from .ir import Event, Note, ScoreIR, Technique, ScoreBooklet
+
+GpifLayout = Literal["relational", "legacy"]
+DEFAULT_GPIF_LAYOUT: GpifLayout = "relational"
 
 SUPPORTED_MINIMAL_TECHNIQUES = {"slide", "vibrato", "hammer-on", "pull-off", "tie", "slur", "bend", "let-ring", "palm-mute", "grace", "dead-note", "tremolo-bar", "tremolo-picking", "slap", "pop", "tapping", "trill", "rasgueado"}
 
@@ -177,15 +181,20 @@ def _master_track(parent: ET.Element, score: ScoreIR, track_id_map: dict[str, st
                     "name": k,
                     "value": str(v)
                 })
-def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = None) -> bytes:
+def build_gpif(
+    score: ScoreIR | ScoreBooklet,
+    booklet: ScoreBooklet | None = None,
+    *,
+    layout: GpifLayout = DEFAULT_GPIF_LAYOUT,
+) -> bytes:
+    """Serialize relational GPIF unless the legacy hierarchy is requested."""
+    if layout not in ("relational", "legacy"):
+        raise ValueError(f"Unknown GPIF layout: {layout!r}")
     if isinstance(score, ScoreBooklet):
-        return build_gpif(score.scores[0], booklet=score)
+        return build_gpif(score.scores[0], booklet=score, layout=layout)
 
-    import sys
-    is_testing = "pytest" in sys.modules or any("pytest" in arg for arg in sys.argv)
-
-    if is_testing:
-        # Build pure classic hierarchical XML so all 391 legacy tests pass perfectly!
+    if layout == "legacy":
+        # Explicit compatibility serialization for hierarchical consumers.
         root = ET.Element("GPIF", {"version": "7", "generator": "score2gp"})
         score_node = ET.SubElement(root, "Score")
 
@@ -1042,7 +1051,7 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
             "Rhythms",
             "ScoreViews"
         ]
-        _apply_relational_defaults(root)
+        _apply_relational_defaults(root, score.tempo.bpm)
 
         root_children = list(root)
         root_children.sort(key=lambda x: ROOT_TAG_ORDER.index(x.tag) if x.tag in ROOT_TAG_ORDER else len(ROOT_TAG_ORDER))
@@ -1052,7 +1061,7 @@ def build_gpif(score: ScoreIR | ScoreBooklet, booklet: ScoreBooklet | None = Non
         return ET.tostring(root, encoding="utf-8", xml_declaration=True)
 
 
-def _apply_relational_defaults(root: ET.Element) -> None:
+def _apply_relational_defaults(root: ET.Element, tempo_bpm: int) -> None:
     # 1. MasterTrack defaults
     mt = root.find("MasterTrack")
     if mt is not None:
@@ -1064,7 +1073,7 @@ def _apply_relational_defaults(root: ET.Element) -> None:
             _text(auto, "Bar", "0")
             _text(auto, "Position", "0")
             _text(auto, "Visible", "true")
-            _text(auto, "Value", "120 2")
+            _text(auto, "Value", f"{tempo_bpm} 2")
         if mt.find("RSE") is None:
             rse = ET.SubElement(mt, "RSE")
             master = ET.SubElement(rse, "Master")

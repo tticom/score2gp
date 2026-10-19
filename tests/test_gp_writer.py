@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 import zipfile
 from xml.etree import ElementTree as ET
-from unittest.mock import patch
 
-from score2gp.gp_package import compare_gp, inspect_gp, validate_gp, write_gp, extract_score_ir_from_gp
+from score2gp.gp_package import compare_gp, inspect_gp, validate_gp, write_gp as production_write_gp, extract_score_ir_from_gp
+from gpif_test_helpers import legacy_write_gp as write_gp
 from score2gp.ir import ScoreIR, ScoreBooklet, NotatedDuration
 
 
@@ -2214,22 +2214,8 @@ def test_gpif_standard_guitar_pitch_stave_display(tmp_path) -> None:
     score.bars[0].time_signature.denominator = 4
 
     # 4. Compile the GPIF and write standard .gp package
-    import sys
-    orig_modules = sys.modules
-    orig_argv = sys.argv
-
-    # Create custom modules and argv that do not mention pytest
-    custom_modules = {k: v for k, v in sys.modules.items() if "pytest" not in k}
-    sys.modules = custom_modules
-    sys.argv = [arg for arg in sys.argv if "pytest" not in arg]
-
     out = tmp_path / "guitar_pitch_display.gp"
-    try:
-        warnings = write_gp(score, out, target_version="GP7")
-    finally:
-        # Restore originals immediately to prevent test runner issues
-        sys.modules = orig_modules
-        sys.argv = orig_argv
+    warnings = production_write_gp(score, out, target_version="GP7")
 
     assert warnings == []
 
@@ -2415,19 +2401,10 @@ def test_gpif_palm_mute_let_ring_roundtrip(tmp_path) -> None:
     assert any(t.kind == "let-ring" for t in r_notes[0].techniques), "LetRing not recovered in relational path"
     assert any(t.kind == "palm-mute" for t in r_notes[1].techniques), "PalmMute not recovered in relational path"
 
-    # 3. Test relational writer serialization directly by bypassing pytest check
-    import sys
-    from unittest.mock import patch
+    # 3. The default writer directly exercises production relational GPIF.
     from score2gp.gpif import build_gpif
 
-    with patch.dict(sys.modules):
-        # Remove pytest from sys.modules
-        pytest_keys = [k for k in list(sys.modules.keys()) if "pytest" in k]
-        for k in pytest_keys:
-            del sys.modules[k]
-
-        with patch.object(sys, "argv", [arg for arg in sys.argv if "pytest" not in arg]):
-            relational_bytes = build_gpif(score)
+    relational_bytes = build_gpif(score)
 
     rel_writer_root = ET.fromstring(relational_bytes)
     rel_writer_notes = rel_writer_root.findall(".//Note")
@@ -2439,7 +2416,7 @@ def test_gpif_palm_mute_let_ring_roundtrip(tmp_path) -> None:
 
 
 def test_gpif_slur_roundtrip(tmp_path) -> None:
-    from score2gp.gp_package import validate_roundtrip, write_gp
+    from score2gp.gp_package import validate_roundtrip
     from score2gp.ir import SlurTechnique
     import xml.etree.ElementTree as ET
 
@@ -2625,21 +2602,7 @@ def test_gpif_rests(tmp_path) -> None:
 
     out = tmp_path / "rests.gp"
 
-    # Patch sys.modules to bypass the pytest-only legacy XML path
-    # and force the production relational XML generation
-    with patch.dict("sys.modules"):
-        import sys
-        if "pytest" in sys.modules:
-            del sys.modules["pytest"]
-
-        original_argv = sys.argv
-        # clear any pytest references from argv
-        sys.argv = [arg for arg in sys.argv if "pytest" not in arg]
-
-        try:
-            warnings = write_gp(score, out)
-        finally:
-            sys.argv = original_argv
+    warnings = production_write_gp(score, out)
 
     assert warnings == []
     assert zipfile.is_zipfile(out)

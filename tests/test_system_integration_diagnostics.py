@@ -19,7 +19,8 @@ def supported_manifest(tmp_path: Path) -> Path:
     return manifest
 
 
-def test_system_diagnostics_runner(tmp_path) -> None:
+def test_system_diagnostics_runner(tmp_path, legacy_batch_gpif) -> None:
+    # Preserve the legacy format's exact metadata/identifier round-trip contract.
     manifest_path = supported_manifest(tmp_path)
     workdir = tmp_path / "diagnostics_work"
 

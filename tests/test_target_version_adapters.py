@@ -1,7 +1,6 @@
 """OUT-01 containment. Public IR tests cover selection plumbing, not fidelity.
 
-Real-source output is audited in a fresh interpreter: the legacy serializer
-selects different XML under pytest, so in-process writer tests cannot prove it.
+Real-source output is also audited through the CLI in a fresh interpreter.
 """
 from __future__ import annotations
 
@@ -67,7 +66,8 @@ def test_cli_refuses_target_before_input_processing(target, command, color, tmp_
     assert not out.parent.exists()
 
 
-def test_batch_manifest_refuses_fabricated_targets(tmp_path):
+def test_batch_manifest_refuses_fabricated_targets(tmp_path, legacy_batch_gpif):
+    # The root version attribute below is a legacy-layout contract.
     # Mutant: restore the previous three-success manifest behavior.
     result = run_batch_pipeline(ROOT / 'fixtures/public/test_version_adapters_manifest.json', tmp_path)
     assert result['total_payloads'] == 3

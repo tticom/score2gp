@@ -1,8 +1,7 @@
 """TS-READ-01 on genuine sources: the printed time signature is read, used, and never silently overridden.
 
 These tests need the private corpus mounted in ``fixtures/private`` (CI mounts it); they fail, not skip, when
-it is absent. Conversions run under ``<repo>/work`` in a ``tempfile.TemporaryDirectory`` (never pytest's
-``tmp_path``: ``gpif.build_gpif`` writes a legacy layout when "pytest" is in a path).
+it is absent. Private conversions stay under ``<repo>/work`` in a ``tempfile.TemporaryDirectory``.
 
 No reference ``.gp`` exists for Combining_Maj_minor_pent_-_A: its conversion is asserted on what the PDF
 prints (signature, bars written, refusal codes), not against a reference.

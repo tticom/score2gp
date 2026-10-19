@@ -106,7 +106,6 @@ def test_real_control_inspection_count_and_gpif_are_unchanged(name, nodes, gpif_
     work.mkdir(exist_ok=True)
     with TemporaryDirectory(prefix="perf01-control-", dir=work) as directory:
         scratch = Path(directory)
-        # gpif.build_gpif has a pre-existing pytest-specific format branch.
         # A subprocess exercises the normal CLI and the actual shipped GPIF.
         result = subprocess.run([
             sys.executable, "-m", "score2gp.cli", "convert", "--pdf", str(_source(name)),

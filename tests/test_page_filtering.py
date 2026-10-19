@@ -2,7 +2,8 @@ import pytest
 from pathlib import Path
 from score2gp.build_ir import BuildIrInputRiskError, build_ir_from_files
 from score2gp.ir import ScoreIR
-from score2gp.gp_package import write_gp, validate_roundtrip
+from score2gp.gp_package import validate_roundtrip
+from gpif_test_helpers import legacy_write_gp as write_gp
 
 
 def test_page_filtering_remediation(tmp_path) -> None:

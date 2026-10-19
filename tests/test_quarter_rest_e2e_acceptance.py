@@ -1,8 +1,6 @@
 import zipfile
-import pytest
 from pathlib import Path
 from xml.etree import ElementTree as ET
-from unittest.mock import patch
 
 from score2gp.whole_note_recogniser import run_recognition_on_file
 from score2gp.notation_bridge import build_ir_from_notation_outcomes
@@ -36,17 +34,7 @@ def test_quarter_rest_e2e_acceptance(tmp_path):
     # 3. Export boundary
     out = tmp_path / "test_e2e.gp"
 
-    # Patch sys.modules to bypass pytest-only legacy XML path
-    with patch.dict("sys.modules"):
-        import sys
-        if "pytest" in sys.modules:
-            del sys.modules["pytest"]
-        original_argv = sys.argv
-        sys.argv = [arg for arg in sys.argv if "pytest" not in arg]
-        try:
-            warnings = write_gp(score, out)
-        finally:
-            sys.argv = original_argv
+    warnings = write_gp(score, out)
 
     assert warnings == []
     assert zipfile.is_zipfile(out)

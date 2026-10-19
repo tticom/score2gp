@@ -4,8 +4,9 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 from score2gp.ir import ScoreIR
-from score2gp.gpif import build_gpif
-from score2gp.gp_package import write_gp, extract_score_ir_from_gp, validate_gp
+from gpif_test_helpers import legacy_build_gpif as build_gpif
+from score2gp.gp_package import extract_score_ir_from_gp, validate_gp
+from gpif_test_helpers import legacy_write_gp as write_gp
 
 FIXTURE_PATH = Path(__file__).parent.parent / "fixtures" / "public" / "test_gpif_binary_hardening.ir.json"
 
