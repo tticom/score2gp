@@ -1660,10 +1660,15 @@ def _source_system_row_counts(
     system_value = location.get("system_index")
     page = (page_value if type(page_value) is int and page_value >= 0 else 0) + 1
     system_index = (system_value if type(system_value) is int and system_value >= 0 else 0) + 1
+    source_counts = [system.get("bar_count") for system in systems]
+    source_total = (sum(source_counts)
+                    if all(type(count) is int and count > 0 for count in source_counts)
+                    else "unknown")
     warning = WarningItem(
         code="pdf_systems_layout_fallback", severity="warning",
         message=(f"PDF row layout unavailable or disagrees with written bars at page {page}, "
-                 f"system {system_index}; source bars {expected_first}, written bars {len(bars)}. "
+                 f"system {system_index}; source bars {source_total}, "
+                 f"consumed bars {expected_first}, written bars {len(bars)}. "
                  "Using the track's SystemsDefautLayout as fixed bars per row."),
         provenance=[Provenance(source_stage=SourceStage.PDF_TEXT, page=page,
                                system_id=f"system-{system_index}",
