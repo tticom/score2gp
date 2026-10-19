@@ -19,12 +19,15 @@ class GPIFBuilder:
         position_ownership: list[Any],
         time_signature: tuple[int, int] = (4, 4),
         bpm: int = 120,
+        *,
+        source_pdf: str | Path | None = None,
     ) -> ScoreIR:
         return self.compiler.compile(
             bar_timelines=bar_timelines,
             position_ownership=position_ownership,
             time_signature=time_signature,
             bpm=bpm,
+            source_pdf=source_pdf,
         )
 
     def write_gp_file(

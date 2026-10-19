@@ -1,5 +1,6 @@
 """Unified ScoreIR compiler for OMR evidence, timelines, and fretboard positions."""
 
+from pathlib import Path
 from typing import Any, List, Dict, Tuple, Optional
 from score2gp.ir import (
     ScoreIR,
@@ -14,12 +15,14 @@ from score2gp.ir import (
     TimeSignature,
     Metadata,
     ConversionInfo,
+    WarningItem,
 )
 from score2gp.notation_omr.position_optimizer import (
     FretTokenOwnership,
     STANDARD_TUNING,
 )
 from score2gp.errors import HumanReadableConversionError
+from score2gp.pdf_score_metadata import read_pdf_score_metadata
 
 STANDARD_STRING_NAMES = ["E4", "B3", "G3", "D3", "A2", "E2"]
 
@@ -45,10 +48,14 @@ class ScoreIRCompiler:
         position_ownership: list[FretTokenOwnership] | list[dict[str, Any]],
         time_signature: tuple[int, int] = (4, 4),
         bpm: int | None = None,
+        *,
+        source_pdf: str | Path | None = None,
     ) -> ScoreIR:
         """
         Compiles TopologicallyLockedBarTimeline timelines and FretTokenOwnership records into ScoreIR.
         Enforces valid ScoreIR semantic contracts without synthetic note generation.
+        Reads the title from source_pdf; absent or unreadable titles stay empty
+        with a route-located warning in the returned ScoreIR.
         """
         ownership_map: dict[str, FretTokenOwnership] = {}
         for item in position_ownership:
@@ -236,12 +243,29 @@ class ScoreIRCompiler:
             )
 
         tempo = Tempo(bpm=bpm or self.default_bpm)
+        title = ""
+        warnings: list[WarningItem] = []
+        route = "scoreir_compiler.compile"
+        if source_pdf is None:
+            warnings.append(WarningItem(
+                code="scoreir_title_source_missing",
+                message=f"{route}: no source PDF supplied; title left empty",
+            ))
+        else:
+            reading = read_pdf_score_metadata(source_pdf)
+            title = reading.title
+            for diagnostic in reading.diagnostics:
+                if diagnostic.startswith("pdf_title_"):
+                    code, _, location = diagnostic.partition(": ")
+                    warnings.append(WarningItem(code=code, message=f"{route}: {location}"))
+
         score = ScoreIR(
-            metadata=Metadata(title="Compiled Score"),
+            metadata=Metadata(title=title),
             conversion=ConversionInfo(),
             tempo=tempo,
             tracks=[track],
             bars=bars,
+            warnings=warnings,
         )
 
         score.semantic_contract_is_valid()
