@@ -35,15 +35,28 @@ def percussive_strike_storage(score: ScoreIR, event: Event, note: Note) -> tuple
                 return pitched.fret, open_pitch + pitched.fret, direction
     return 0, open_pitch, "open_string"
 
-# Guitar Pro 7's default page layout, represented as Qt rich text. The policy
-# mirrors the token order in the app-created reference files, never their score
-# content. Markup styling is intentionally minimal; GP evaluates the tokens.
-FIRST_PAGE_HEADER = (
-    '<html><body><p align="center">%TITLE%</p><p align="center">%SUBTITLE%</p>'
-    '<p align="center">%ARTIST%</p><p align="center">%ALBUM%</p>'
-    '<p align="center">%WORDS&MUSIC%</p></body></html>'
+# Project-owned Guitar Pro default-template policy, not score-derived formatting.
+# Provenance: independently measured app-created default templates in five
+# approved lesson references; see docs/design/omit-05-page-metadata.md,
+# "Default point-size policy (OMIT-05-FU1)". These constants are fixed at build
+# time; conversion never loads a reference GP to choose sizes or template text.
+DEFAULT_FIRST_PAGE_HEADER_FIELDS_PT = (
+    ("TITLE", 35),
+    ("SUBTITLE", 16),
+    ("ARTIST", 16),
+    ("ALBUM", 16),
+    ("WORDS&MUSIC", 12),
 )
-PAGE_FOOTER = '<html><body><p align="right">Page %page%/%pages%</p></body></html>'
+DEFAULT_PAGE_FOOTER_FONT_SIZE_PT = 14
+
+FIRST_PAGE_HEADER = '<html><body>' + ''.join(
+    f'<p align="center" style="font-size:{size}pt;">%{field}%</p>'
+    for field, size in DEFAULT_FIRST_PAGE_HEADER_FIELDS_PT
+) + '</body></html>'
+PAGE_FOOTER = (
+    f'<html><body><p align="right" style="font-size:{DEFAULT_PAGE_FOOTER_FONT_SIZE_PT}pt;">'
+    'Page %page%/%pages%</p></body></html>'
+)
 
 
 def _text(parent: ET.Element, tag: str, value: object | None) -> ET.Element:

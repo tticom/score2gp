@@ -45,7 +45,64 @@ Across 30 page-one probes, three sources print the standard GP rights line. Indi
 
 ## GP page-template policy
 
-The writer emits Guitar Pro 7 default Qt-rich-text page templates with ordered tokens `TITLE`, `SUBTITLE`, `ARTIST`, `ALBUM`, `WORDS&MUSIC` in FirstPageHeader and `page`, `pages` in FirstPageFooter and PageFooter. PageHeader is empty. Provenance is the app-created GP 7 page-layout shape inspected in the mounted reference files; their text values are never inputs to conversion. The independent oracle compares ordered tokens from parsed GPIF text without an extra HTML unescape, and separately rejects literal score title or music embedded in templates.
+The writer emits default Qt-rich-text page templates with ordered tokens `TITLE`, `SUBTITLE`, `ARTIST`, `ALBUM`, `WORDS&MUSIC` in FirstPageHeader and `page`, `pages` in FirstPageFooter and PageFooter. PageHeader is empty. Provenance is the app-created page-layout shape inspected in the mounted reference files; their text values are never inputs to conversion. The independent oracle compares ordered tokens from parsed GPIF text without an extra HTML unescape, and separately rejects literal score title or music embedded in templates.
+
+### Default point-size policy (OMIT-05-FU1)
+
+The project adopts the measured app-created template defaults as a fixed output
+policy, rather than inferring formatting from a PDF or loading a reference at
+runtime. `DEFAULT_FIRST_PAGE_HEADER_FIELDS_PT` and
+`DEFAULT_PAGE_FOOTER_FONT_SIZE_PT` in `src/score2gp/gpif.py` own this policy.
+Only inline point-size declarations are added to the existing template
+paragraphs; tokens, alignment, text, font-family behavior and musical GPIF stay
+unchanged. This is a default-template policy, not support for arbitrary reference
+styling or a claim about every Guitar Pro version.
+
+Before implementation, the five lesson reference packages (indices 1 through 5
+in lesson order) were opened as ZIP, `Content/score.gpif` parsed as XML, and the
+inline CSS at each template token inspected with body/paragraph/span inheritance.
+Every row below was measured separately. Reference indices 1, 3, 4 and 5 declare
+GPVersion 8.1.0 / GPRevision 13006; index 2 declares 8.1.4 / 13007. This corrects
+the earlier GP 7 provenance description; no GP 7 reference was established by
+these measurements. Sizes are points; `none` means no token and no size to emit.
+No private score text or reference markup is stored here.
+
+| reference index | TITLE | SUBTITLE | ARTIST | ALBUM | WORDS&MUSIC | FirstPageFooter page/pages | PageHeader | PageFooter page/pages |
+|---:|---:|---:|---:|---:|---:|---:|---|---:|
+| 1 | 35 | 16 | 16 | 16 | 12 | 14 / 14 | none | 14 / 14 |
+| 2 | 35 | 16 | 16 | 16 | 12 | 14 / 14 | none | 14 / 14 |
+| 3 | 35 | 16 | 16 | 16 | 12 | 14 / 14 | none | 14 / 14 |
+| 4 | 35 | 16 | 16 | 16 | 12 | 14 / 14 | none | 14 / 14 |
+| 5 | 35 | 16 | 16 | 16 | 12 | 14 / 14 | none | 14 / 14 |
+
+The reference header body declares 16 pt, its paragraphs 10 pt, and its token
+spans override those with the five effective sizes above. Both footer bodies
+declare 13 pt and their paragraphs override that with 14 pt. The base writer
+emits no explicit font size for any of these nine tokens; the new writer emits
+the effective sizes above directly on paragraphs. Empty PageHeader stays empty.
+These are newly authored project policy constants supported by the repeated
+default-template measurements, not copied score-specific values or markup.
+
+The independent standard-library oracle reads each token's inherited inline
+point size and compares it separately from the existing metadata/token checks.
+`test_private_template_sizes_without_reference_access` converts all five genuine
+PDFs through the normal CLI under `TemporaryDirectory` in `work`. An audit hook
+blocks GP/GPX/GPIF opens outside that scratch directory during conversion; only
+the parent test subsequently opens the reference. The test must reject missing
+sizes, a wrong title/credit field mapping, and a conversion-time reference read.
+The I/O guard is infrastructure; acceptance comes from genuine PDFs and their
+app-created references, without synthetic musical fixtures.
+
+DUR-02-FU5, PERF-01 and UNREAD-01 freeze whole-GPIF hashes. Their regression normalization
+first verifies emitted template sizes against the independent default-policy
+reference, then removes only the seven added size attributes inside the three
+affected template fields, without XML reserialization. Every original digest,
+inspection count and musical assertion is retained. Missing or wrongly mapped
+sizes fail before normalization; unrelated bytes remain under the old hashes.
+
+The maintainer must still open a fresh output in Guitar Pro to confirm the
+visible result. Parsed markup proves emitted point sizes, not application
+rendering or font substitution.
 
 ## Public fixture
 
