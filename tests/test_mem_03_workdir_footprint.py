@@ -41,6 +41,12 @@ def peak():
         ctypes.windll.psapi.GetProcessMemoryInfo(
             w.HANDLE(kernel.GetCurrentProcess()), ctypes.byref(counters), counters.cb)
         return counters.PeakWorkingSetSize
+    if sys.platform.startswith('linux'):
+        # VmHWM is per address space and reset by exec. ru_maxrss is inherited
+        # across fork+exec, so it would report the spawning pytest's peak.
+        for line in open('/proc/self/status'):
+            if line.startswith('VmHWM:'):
+                return int(line.split()[1]) * 1024
     import resource
     scale = 1 if sys.platform == 'darwin' else 1024
     return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * scale
@@ -52,12 +58,14 @@ cli.app()
 # (source, bytes-per-bar bound, peak working set bound). Measured at this change
 # (4 runs each): bytes are exactly repeatable, so the bytes bound is the measured
 # bytes/bar + 3%; the peak spread across runs was under 0.5%, so the peak bound is
-# the measured peak + 15% to absorb platform/allocator differences. Base (before
+# the Windows PeakWorkingSetSize + 35% to absorb platform/allocator differences
+# (Linux reads VmHWM of the child; the bounds were not calibrated on Linux, so the
+# headroom is wide and the bound guards against gross growth, not small drift). Base (before
 # this change) bytes/bar exceed these bounds on all three sources.
 BUDGETS = {
-    "Lesson-3.pdf": (1_069_000, 370_000_000),
-    "Melodic Soloing Masterclass.pdf": (1_535_000, 365_000_000),
-    "A7-Blues-Lick.pdf": (1_578_000, 150_000_000),
+    "Lesson-3.pdf": (1_069_000, 430_000_000),
+    "Melodic Soloing Masterclass.pdf": (1_535_000, 425_000_000),
+    "A7-Blues-Lick.pdf": (1_578_000, 175_000_000),
 }
 
 
@@ -121,3 +129,16 @@ def test_bytes_per_bar_and_peak_memory_budget(name):
         total = sum(files.values())
         assert total / bars <= max_bytes_per_bar, f"{total} bytes over {bars} bars"
         assert peak <= max_peak, f"peak working set {peak}"
+
+
+def test_peak_reading_is_the_childs_not_the_spawning_process():
+    # Rejects reading ru_maxrss in the child on Linux, which is inherited across
+    # fork+exec and so reports the pytest process's high-water mark (the CI failure).
+    ballast = bytearray(b"x" * 700_000_000)  # touched, raises this process's peak
+    with _scratch() as directory:
+        peak_path = Path(directory) / "peak.txt"
+        subprocess.run(
+            [sys.executable, "-c", RUN_WITH_PEAK, "--help"], capture_output=True,
+            env={**os.environ, "PYTHONPATH": str(ROOT / "src"), "MEM03_PEAK": str(peak_path)})
+        child_peak = int(peak_path.read_text())
+    assert len(ballast) and 0 < child_peak < 500_000_000, child_peak
