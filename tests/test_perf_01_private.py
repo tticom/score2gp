@@ -11,7 +11,10 @@ from tempfile import TemporaryDirectory
 from zipfile import ZipFile
 
 import pytest
-from slide_gpif import gpif_without_slides_sha256, gpif_with_legacy_double_barlines
+from slide_gpif import (
+    gpif_without_slides_sha256, gpif_with_legacy_double_barlines,
+    without_verified_default_template_sizes,
+)
 from typer.testing import CliRunner
 
 from score2gp import pdf
@@ -136,7 +139,10 @@ def test_real_control_inspection_count_and_gpif_are_unchanged(name, nodes, gpif_
         # by test_letring_01_private. Dropping the feature fails the count here.
         expected_let_ring_notes = 10 if name == "Melodic_Expressions_Chap_19_.pdf" else 0
         assert actual.count(b"<LetRing />") == expected_let_ring_notes
-        before_let_ring = re.sub(rb"(?m)^[ \t]*<LetRing />\r?\n", b"", actual)
+        # OMIT-05-FU1 adds only verified default template sizes. Keep every
+        # original digest and count after removing those seven attributes.
+        before_sizes = without_verified_default_template_sizes(actual)
+        before_let_ring = re.sub(rb"(?m)^[ \t]*<LetRing />\r?\n", b"", before_sizes)
         legacy = gpif_with_legacy_double_barlines(before_let_ring)
         assert hashlib.sha256(legacy).hexdigest() == gpif_digest
         if without_slides_digest:

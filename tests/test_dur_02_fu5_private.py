@@ -9,7 +9,7 @@ from tempfile import TemporaryDirectory
 import zipfile
 
 import pytest
-from slide_gpif import gpif_without_slides_sha256
+from slide_gpif import gpif_without_slides_sha256, without_verified_default_template_sizes
 
 ROOT = Path(__file__).resolve().parents[1]
 PRIVATE = ROOT / "fixtures/private"
@@ -27,7 +27,10 @@ def _gpif_hash(output):
     # Close before asserting: a failing assertion must not leave the package
     # locked during TemporaryDirectory cleanup on Windows.
     with zipfile.ZipFile(output) as package:
-        return hashlib.sha256(package.read("Content/score.gpif")).hexdigest()
+        # OMIT-05-FU1 adds verified default sizes; preserve the old whole-file
+        # hash over every other byte, rejecting missing/wrong sizes first.
+        data = without_verified_default_template_sizes(package.read("Content/score.gpif"))
+        return hashlib.sha256(data).hexdigest()
 
 
 @contextmanager
@@ -85,7 +88,8 @@ def test_preserve_second_source():
         assert _gpif_hash(output) == (
             "b3083f043c1e20e74d090f805fe1cca27e47e419fe3fcde1122f826020f476dd")
         with zipfile.ZipFile(output) as package:
-            assert gpif_without_slides_sha256(package.read("Content/score.gpif")) == (
+            before_sizes = without_verified_default_template_sizes(package.read("Content/score.gpif"))
+            assert gpif_without_slides_sha256(before_sizes) == (
                 "fda893ce3ac4a7e9dea5c40a07b4787a3d28a04bd3f71eea5e0daf7b6812af15")
 
 

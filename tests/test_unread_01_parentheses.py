@@ -133,7 +133,11 @@ def test_base_written_parentheses_keep_byte_identical_gpif(
             # the preserved parenthesized bars; reject dropping the new marks.
             expected_let_ring_notes = 10 if name == "Melodic_Expressions_Chap_19_" else 0
             assert gpif.count(b"<LetRing />") == expected_let_ring_notes
-            before_let_ring = re.sub(rb"(?m)^[ \t]*<LetRing />\r?\n", b"", gpif)
+            # OMIT-05-FU1 deliberately adds default template sizes. Verify
+            # them before removing only those attributes for the old digests.
+            from slide_gpif import without_verified_default_template_sizes
+            before_sizes = without_verified_default_template_sizes(gpif)
+            before_let_ring = re.sub(rb"(?m)^[ \t]*<LetRing />\r?\n", b"", before_sizes)
             if name == "Melodic Soloing Masterclass":
                 # CFW-03 recovers eight printed chord labels. Verify every name
                 # and beat against the real reference, then retain both old

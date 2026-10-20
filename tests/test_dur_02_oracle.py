@@ -17,6 +17,7 @@ from __future__ import annotations
 import io
 from collections import Counter
 import html
+from html.parser import HTMLParser
 import re
 import xml.etree.ElementTree as ET
 import zipfile
@@ -135,7 +136,57 @@ def read_gp_metadata(gp: Path | bytes) -> dict[str, object]:
 
 def compare_gp_metadata(truth: Path | bytes, produced: Path | bytes) -> dict[str, tuple[object, object]]:
     expected, actual = read_gp_metadata(truth), read_gp_metadata(produced)
+    expected.update({f"{name}.font_sizes": sizes for name, sizes in read_gp_template_sizes(truth).items()})
+    actual.update({f"{name}.font_sizes": sizes for name, sizes in read_gp_template_sizes(produced).items()})
     return {name: (expected[name], actual[name]) for name in expected if expected[name] != actual[name]}
+
+
+class _TemplateSizes(HTMLParser):
+    """Read effective inline Qt font sizes, including body/p/span inheritance.
+
+    Unspecified sizes stay None: browser/app defaults are not evidence of an
+    explicit point size. Associate sizes with tokens, not the order of CSS rules.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.stack: list[tuple[str, float | None]] = []
+        self.tokens: list[tuple[str, float | None]] = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag in {"meta", "br", "hr", "img", "link"}:
+            return
+        size = self.stack[-1][1] if self.stack else None
+        style = dict(attrs).get("style", "")
+        match = re.search(r"(?:^|;)\s*font-size\s*:\s*(\d+(?:\.\d+)?)pt\s*(?:;|$)", style)
+        if match:
+            size = float(match.group(1))
+        self.stack.append((tag, size))
+
+    def handle_endtag(self, tag):
+        for index in range(len(self.stack) - 1, -1, -1):
+            if self.stack[index][0] == tag:
+                del self.stack[index:]
+                break
+
+    def handle_data(self, data):
+        self.tokens.extend((token, self.stack[-1][1] if self.stack else None)
+                           for token in re.findall(r"%[A-Za-z&]+%", data))
+
+
+def read_gp_template_sizes(gp: Path | bytes) -> dict[str, tuple[tuple[str, float | None], ...]]:
+    """Read point sizes at each page-template token independently of production."""
+    data = gp if isinstance(gp, bytes) else Path(gp).read_bytes()
+    root = ET.fromstring(zipfile.ZipFile(io.BytesIO(data)).read("Content/score.gpif"))
+    score = root.find("Score")
+    if score is None:
+        raise OracleRefusal("Score absent")
+    result = {}
+    for name in ("FirstPageHeader", "FirstPageFooter", "PageHeader", "PageFooter"):
+        parser = _TemplateSizes()
+        parser.feed(score.findtext(name) or "")
+        result[name] = tuple(parser.tokens)
+    return result
 
 
 def read_gp_template_text(gp: Path | bytes) -> dict[str, str]:
