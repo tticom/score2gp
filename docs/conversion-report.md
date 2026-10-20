@@ -25,3 +25,19 @@ Each report must also remain below 41,000,000 bytes for this corpus.
 The test checks counts against the captured original renderer input, bounds the examples,
 compares all other summary fields and HTML sections, and exercises the debug
 flag on a real source.
+
+## Work-directory footprint (MEM-03)
+
+`convert` inspects the PDF once: `inspect/inspect_pdf.json` and
+`inspect/pages/` are the only copy, and the extraction stage reuses that result
+rather than inspecting and rendering the pages again under `tab/inspect/`.
+(`extract-tab` run on its own still inspects into its own output directory.)
+
+The grouping overlay PNGs, `grouping-diagnostics.html` and the
+`pdf-edge-boundary-report.*` files under `tab/` are written only when
+`--diagnostic-artifacts` is added to `convert`. TabRaw, the conversion report
+and the GP output are identical with or without it. The `diagnostics.json`
+sidecar names these files only when they exist.
+
+`tests/test_mem_03_workdir_footprint.py` converts approved private sources and
+bounds the bytes written per bar and the peak working set of the conversion.

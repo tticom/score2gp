@@ -879,6 +879,7 @@ def convert_command(
     sidecar_manifest: Optional[Path] = typer.Option(None, "--sidecar-manifest", help="Path to sidecar provenance manifest JSON file"),
     target: str = typer.Option("GP7", "--target", callback=_validate_cli_target, help="Output target: GP7 (current GPIF-ZIP output only)"),
     debug_barline_candidates: bool = typer.Option(False, "--debug-barline-candidates", help="Include full barline candidate geometry in the HTML report (can be very large)"),
+    diagnostic_artifacts: bool = typer.Option(False, "--diagnostic-artifacts", help="Also write the heavy grouping diagnostics (overlay PNGs and grouping/edge-boundary reports) under tab/"),
 ) -> None:
     """Run the complete conversion pipeline: extraction, alignment, IR generation, and GP7 package writing."""
     actual_work_dir = work_dir or workdir
@@ -1046,7 +1047,9 @@ def convert_command(
 
     try:
         tabraw_path = actual_work_dir / "tab" / "tab_raw.json"
-        tab_summary = extract_tab_file(pdf, tabraw_path)
+        tab_summary = extract_tab_file(
+            pdf, tabraw_path, inspection=pdf_summary, diagnostic_artifacts=diagnostic_artifacts,
+        )
         summary["tab"] = tab_summary
         if tab_summary.get("warnings"):
             p_range = parse_page_range(pages)

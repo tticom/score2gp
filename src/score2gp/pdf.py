@@ -213,7 +213,16 @@ def inspect_pdf(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
     return summary
 
 
-def extract_tab(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
+def extract_tab(
+    path: str | Path,
+    out_dir: str | Path,
+    *,
+    inspection: dict[str, Any] | None = None,
+    diagnostic_artifacts: bool = True,
+) -> dict[str, Any]:
+    """Extract TabRaw. ``inspection`` reuses a caller's inspect_pdf result instead of
+    inspecting (and rendering the pages) a second time; ``diagnostic_artifacts=False``
+    skips the grouping overlays and HTML/JSON diagnostics, leaving TabRaw unchanged."""
     out_target = Path(out_dir)
     if out_target.suffix.lower() == ".json":
         out = out_target.parent
@@ -222,7 +231,8 @@ def extract_tab(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
         out = out_target
         tabraw_path = out / "tab_raw.json"
     out.mkdir(parents=True, exist_ok=True)
-    inspection = inspect_pdf(path, out / "inspect")
+    if inspection is None:
+        inspection = inspect_pdf(path, out / "inspect")
     meta = {
         "detected_systems": 0,
         "detected_staves": 0,
@@ -274,7 +284,8 @@ def extract_tab(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
 
     _append_grouping_warnings(raw, meta)
     raw = TabRaw.model_validate(raw).model_dump(mode="json", exclude_none=True)
-    _write_grouping_artifacts(Path(path), out, tabraw_path, inspection, raw)
+    if diagnostic_artifacts:
+        _write_grouping_artifacts(Path(path), out, tabraw_path, inspection, raw)
     tabraw_path.write_text(json.dumps(raw, indent=2), encoding="utf-8")
     if raw.get("warnings"):
         write_warnings(out / "warnings.json", raw["warnings"])
