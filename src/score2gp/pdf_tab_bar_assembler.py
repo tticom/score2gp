@@ -130,7 +130,18 @@ def _match_bar(records: list[dict[str, Any]], digits: list[TabCandidate], space:
         used.add(column)
         cands = sorted(columns[column], key=lambda c: c.string)
         if len(cands) != heads or len({c.string for c in cands}) != len(cands):
-            return matched, _refusal("notehead_digit_count_mismatch", index)
+            refusal = _refusal("notehead_digit_count_mismatch", index)
+            # Keep the measured disagreement, rather than asking a caller to
+            # reconstruct it from a partial match list. In particular, fewer
+            # TAB digits never authorise copying positions from another chord.
+            refusal["evidence"] = {
+                "source": "notation_tab_column", "bbox": record["location"]["bbox"],
+                "notation_head_count": heads, "tab_candidate_count": len(cands),
+                "distinct_tab_strings": len({c.string for c in cands}),
+                "tab_candidate_ids": [c.id for c in cands],
+                "dx_spaces": round(near[0][0] / space, 3),
+            }
+            return matched, refusal
         positions = [(c.string, c.parsed_fret) for c in cands]
         if sum(c.kind == "percussive-strike" for c in cands) != cross_count:
             refusal = _refusal("percussive_strike_without_owning_head", index)
@@ -256,6 +267,10 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
                                f"printed {check['time_signature']}, declared {basis['declared']}")
         elif unread is not None:
             refusal = _refusal("note_duration_event_unread", unread["event_index"], unread["reason"])
+            refusal["evidence"] = {
+                "source": "note_duration_record", "cause": unread["reason"],
+                "bbox": unread["location"]["bbox"],
+            }
         elif not records:
             refusal = _refusal("bar_without_notation_event")
         else:
@@ -275,6 +290,11 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
                 symbol = overlaps[source_bar][0]
                 refusal = _refusal("note_duration_event_unread",
                                    symbol["location"]["event_index"], symbol["class"])
+                refusal["evidence"] = {
+                    "source": "unread_symbol", "cause": symbol["class"],
+                    "position": symbol["reason"], "source_id": symbol["source"],
+                    "bbox": symbol["location"]["bbox"],
+                }
                 entry["events"] = []
         events: list[Event] = []
         if refusal is None:
@@ -302,6 +322,8 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
             if refusal.get("candidate_ids"):
                 location["tab_candidate_ids"] = refusal["candidate_ids"]
             entry.update(status="refused", reason=refusal["reason"], detail=refusal["detail"], location=location)
+            if "evidence" in refusal:
+                entry["refusal_evidence"] = refusal["evidence"]
         route_bars.append(entry)
         bars.append(Bar(index=output_index, time_signature=_time_signature(check), events=events))
 

@@ -256,6 +256,12 @@ takes every duration from DUR-01's note-duration records and every position from
   `notation_note_without_tab_digit`, `tab_digit_without_notation_event`, `rest_over_tab_digit`,
   `notehead_digit_count_mismatch`, `notation_tab_column_ambiguous`, `bar_without_notation_event` or
   `bar_total_mismatch`. A refused bar is written empty.
+  For unread duration records, unsupported overlapping symbols and head/TAB count
+  mismatches, `refusal_evidence` retains the source bounding box and evidence
+  class. Count mismatches also retain both counts, distinct TAB strings, candidate
+  IDs and the horizontal distance in staff spaces. These measurements explain
+  the refusal; they never supply missing positions or rhythm. The bar's existing
+  page/system/bar/event location and primary refusal code remain authoritative.
 * **`pdf_tab_event_factory.py`**: `build_note_type_event` builds one event from its record and TAB positions.
 * **`pdf_tab_measure_timing.py`**: `ticks_for_quarters` converts a record's exact duration to ticks, refusing a
   duration off the tick grid.
