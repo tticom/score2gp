@@ -28,5 +28,11 @@ The genuine Lesson 7 negative controls retain four displaced flats at
 1.344–1.464 spaces, plus an additional displaced sharp at 1.344 spaces. They
 remain note accidentals with unchanged bar keys. These source checks and GPIF
 preservation establish compatibility, not recognition of a new real key
-change. The constructed P3 diagnostic demonstrates refusal at gaps of
-0.5–1.5 spaces; it carries no real-source recognition acceptance weight.
+change. Under the maintainer's 2026-10-22 exception (acceptance item 4),
+`tests/test_omit_01_fu1_constructed.py` exercises constructed P3 geometry at
+gaps of 0.5–1.5 spaces through the production bar-key reader. It asserts the
+refusal, unset key, source ID, exact location and bar-refusal marker. Restoring
+the base reader, always reading a key change, or always carrying the old key
+each fails all six cases. This constructed test carries acceptance only for
+the detached slot-0 ambiguity branch; it supplies no other real-source
+recognition, geometry or fidelity evidence.
