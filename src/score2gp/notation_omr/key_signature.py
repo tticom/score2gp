@@ -194,11 +194,13 @@ def read_bar_key_signatures(staff: Staff, symbols: PageSymbols,
                      and left < g.bbox[0] < right
                      and staff.top - 4 * space <= g.cy <= staff.bottom + 4 * space]
         first_note_x = min((g.bbox[0] for g in noteheads), default=None)
-        first_heads = ([g for g in noteheads if g.bbox[0] - first_note_x <= 0.5 * space]
+        note_column_tolerance = 0.5 * space
+        first_heads = ([g for g in noteheads if g.bbox[0] - first_note_x <= note_column_tolerance]
                        if first_note_x is not None else [])
         candidates = []
         expected = ()
         ambiguous = False
+        refuse_bar = bool(current.get("refuse_bar"))
         for candidate in adjacent:
             position = (candidate[1] - staff.top) / space
             order = len(candidates)
@@ -217,10 +219,17 @@ def read_bar_key_signatures(staff: Staff, symbols: PageSymbols,
             # Painted contours center on their note pitch. Text glyph bboxes
             # extend above it, so their lower edge is the pitch anchor.
             if attached:
-                # With no independently read signature prefix, this is a
-                # note accidental. After a prefix, a candidate that also
-                # fits the next signature slot has two plausible owners.
-                ambiguous = bool(candidates) and in_order and in_spacing
+                # A close mark shares the first note column. A detached mark
+                # in a signature slot has two plausible owners even without a
+                # prefix: do not silently carry the previous key. Keep the
+                # barline window above narrow; later chord accidentals can be
+                # displaced by more than a staff space from their own heads.
+                in_note_column = (first_note_x is not None and
+                                  first_note_x - candidate[4] < note_column_tolerance)
+                ambiguous = in_order and in_spacing and (bool(candidates) or not in_note_column)
+                if ambiguous and not candidates:
+                    candidates.append(candidate)  # retain the ambiguous source in the refusal
+                    refuse_bar = True
                 break
             if not in_order or not in_spacing:
                 ambiguous = True
@@ -247,5 +256,7 @@ def read_bar_key_signatures(staff: Staff, symbols: PageSymbols,
             current = {"status": "refused", "fifths": None, "mode": None,
                        "sources": [c[3] for c in candidates],
                        "reason": "key_signature_partial_or_ambiguous", "location": location}
+        if refuse_bar and not valid:
+            current["refuse_bar"] = True
         result.append(current)
     return result

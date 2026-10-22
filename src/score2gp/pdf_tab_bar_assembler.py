@@ -191,6 +191,7 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
     systems = note_durations["systems"]
     checks = {c["bar_index"]: c for c in note_durations["bar_checks"]}
     bar_bases = {int(bar): basis for bar, basis in note_durations.get("diagnostics", {}).get("bar_time_signatures", {}).items()}
+    bar_keys = {int(bar): key for bar, key in note_durations.get("diagnostics", {}).get("bar_key_signatures", {}).items()}
     unsigned = sorted(bar for bar, check in checks.items() if not check.get("time_signature"))
     if unsigned:
         raise PdfTabBarAssemblerError(
@@ -234,6 +235,7 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
     for source_bar in sorted(checks):
         check = checks[source_bar]
         basis = bar_bases.get(source_bar)
+        key = bar_keys.get(source_bar, {})
         system = system_of[source_bar]
         records = sorted(by_bar.get(source_bar, []), key=lambda r: r["event_index"])
         bar_digits = placed.get(source_bar, [])
@@ -262,6 +264,12 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
                 == (refused_tab_system.notation_page_index, refused_tab_system.notation_system_index)):
             refusal = _refusal(refused_tab_system.code, None,
                                f"TAB page {refused_tab_system.page_index}, system {refused_tab_system.system_index}")
+        elif key.get("status") == "refused" and key.get("refuse_bar"):
+            refusal = _refusal(key["reason"])
+            refusal["evidence"] = {
+                "source": "bar_key_signature", "source_ids": key["sources"],
+                "location": key["location"],
+            }
         elif check["status"] == "signature_conflict":
             refusal = _refusal("time_signature_conflict", None,
                                f"printed {check['time_signature']}, declared {basis['declared']}")
