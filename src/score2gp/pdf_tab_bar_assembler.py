@@ -26,6 +26,23 @@ BAR_EDGE_SPACES = 0.5  # a TAB digit this close outside a notation bar's barline
 MAX_EVENTS_PER_BAR = 64  # more notation events or TAB columns than this in one bar is unsafe grouping
 
 
+def empty_notation_source(note_durations: dict[str, Any] | None) -> bool:
+    """Printed notation bars with no events, including no unread or out-of-bar events.
+
+    This is a source-level decision. Callers must also exclude TAB digits; an empty bar in a
+    source containing music retains the existing refusal rules.
+    """
+    if not note_durations or note_durations.get("schema") != NOTE_DURATION_SCHEMA:
+        return False
+    count = sum(s["bar_count"] for s in note_durations["systems"])
+    diagnostics = note_durations.get("diagnostics", {})
+    return (count > 0 and len(note_durations["bar_checks"]) == count
+            and not note_durations["events"]
+            and not diagnostics.get("located_unread_events")
+            and not diagnostics.get("events_outside_bars")
+            and not diagnostics.get("unread_symbols"))
+
+
 def _refusal(reason: str, event_index: int | None = None, detail: str | None = None) -> dict[str, Any]:
     return {"reason": reason, "event_index": event_index, "detail": detail}
 
@@ -208,6 +225,7 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
     placed, unplaced = place_tab_digits(digits, note_durations)
     system_of = {s["first_bar_index"] + i: s for s in systems for i in range(s["bar_count"])}
     diagnostics = note_durations.get("diagnostics", {})
+    empty_source = not digits and empty_notation_source(note_durations)
     overlaps: dict[int, list[dict[str, Any]]] = {}
     for symbol in diagnostics.get("unread_symbols", []):
         if symbol["class"] in ("unsupported_overlapping_form", "parenthesized_head_unrepresented"):
@@ -280,7 +298,7 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
                 "bbox": unread["location"]["bbox"],
             }
         elif not records:
-            refusal = _refusal("bar_without_notation_event")
+            refusal = None if empty_source else _refusal("bar_without_notation_event")
         else:
             matched, refusal = _match_bar(records, bar_digits, system["staff_space"], tied_from)
             if refusal is None and check["status"] != "match":
@@ -317,9 +335,9 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
                     m["record"], positions=m["positions"], candidates=m["candidates"], output_bar_idx=output_index,
                     event_idx=i, onset_ticks=ticks_for_quarters(onset) if onset else 0, track_id=track_id))
                 onset += Fraction(m["record"]["duration_quarters"])  # a grace adds none
-            last = matched[-1]
+            last = matched[-1] if matched else None
             tied_from = ({"positions": last["positions"], "location": _location(last["record"])}
-                         if last["record"]["kind"] != "rest" else None)
+                         if last is not None and last["record"]["kind"] != "rest" else None)
             entry.update(status="written", reason=None, detail=None, location=None)
         else:
             tied_from = None

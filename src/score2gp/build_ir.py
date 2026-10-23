@@ -10,7 +10,9 @@ from typing import Iterable, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from .black_key_spelling import apply_black_key_spelling
-from .pdf_tab_bar_assembler import PdfTabBarAssemblerError, assemble_note_type_bars, place_tab_digits
+from .pdf_tab_bar_assembler import (
+    PdfTabBarAssemblerError, assemble_note_type_bars, empty_notation_source, place_tab_digits,
+)
 from .ascii_alignment import ALIGNMENT_SCHEMA_VERSION, AsciiMusicXmlAlignment, compute_sha256
 from . import __version__
 from .pdf_slide_marks import (
@@ -1709,8 +1711,12 @@ def build_ir_from_tabraw_only(
             }
         )
 
+    empty_source = (empty_notation_source(note_durations)
+                    and not any(c.kind in ("fret", "percussive-strike") or c.raw_text == "quarter_rest"
+                                for c in tabraw.candidates))
+
     # Safety checks
-    if not tabraw.candidates:
+    if not tabraw.candidates and not empty_source:
         raise BuildIrInputRiskError(
             category="pdf_only_tab_grouping_unsafe",
             stage="layout-gating",
@@ -1792,7 +1798,7 @@ def build_ir_from_tabraw_only(
 
     fret_candidates = [c for c in tabraw.candidates if (c.parsed_fret is not None and c.kind == "fret")
                        or c.kind == "percussive-strike" or c.raw_text == "quarter_rest"]
-    if not fret_candidates:
+    if not fret_candidates and not empty_source:
         raise BuildIrInputRiskError(
             category="pdf_only_tab_grouping_unsafe",
             stage="layout-gating",
