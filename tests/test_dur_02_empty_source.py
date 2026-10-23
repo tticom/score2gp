@@ -14,9 +14,22 @@ from score2gp.cli import app
 
 def _private(name):
     path = Path("fixtures/private") / name
-    if not path.exists():
-        pytest.skip(f"private corpus not mounted: {name}")
+    assert path.is_file(), (
+        f"mandatory real-source input is unavailable: {name}; "
+        "mount score2gp-private-fixtures before running tests"
+    )
     return path
+
+
+@pytest.mark.parametrize("name", ["No Notes.pdf", "no-notes.gp"])
+def test_required_private_input_fails_when_missing(name, tmp_path, monkeypatch):
+    """Infrastructure check: reject silently skipping a missing mandatory input."""
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(AssertionError, match=f"mandatory real-source input is unavailable: {name}"):
+        try:
+            _private(name)
+        except pytest.skip.Exception:
+            pytest.fail("missing mandatory input was skipped instead of failing")
 
 
 def _gpif(path):
