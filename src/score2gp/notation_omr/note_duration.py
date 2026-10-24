@@ -678,6 +678,66 @@ def _is_arc(glyph: Glyph, space: float) -> bool:
             and glyph.h <= ARC_MAX_HEIGHT_SPACES * space and _fill_ratio(glyph) <= ARC_MAX_FILL_RATIO)
 
 
+def _is_slanted_arc(glyph: Glyph, space: float) -> bool:
+    """A tapered crescent, measuring its bow relative to its endpoint slope.
+
+    A slanted slur's axis-aligned box includes the change in head position.
+    Keep the existing curvature bound, but measure the painted bow above or
+    below the line joining its ends. Every scan must cross one thin band,
+    tapering at both ends; a box or a low fill ratio alone is insufficient.
+    """
+    if not (glyph.curved and glyph.filled and glyph.w >= ARC_MIN_WIDTH_SPACES * space
+            and _fill_ratio(glyph) <= ARC_MAX_FILL_RATIO):
+        return False
+    fractions = (0.05, 0.25, 0.5, 0.75, 0.95)
+    scans = [_runs(glyph.shape, True, glyph.bbox[0] + f * glyph.w,
+                   glyph.bbox[1] - 1, glyph.bbox[3] + 1) for f in fractions]
+    if any(len(runs) != 1 for runs in scans):
+        return False
+    widths = [runs[0][1] - runs[0][0] for runs in scans]
+    if not (max(widths[0], widths[-1]) < min(widths[1:-1])
+            and max(widths) < BEAM_MIN_THICKNESS_SPACES * space):
+        return False
+    centers = [(runs[0][0] + runs[0][1]) / 2 for runs in scans]
+    residuals = [centers[i] - (centers[0] + (centers[-1] - centers[0])
+                 * (f - fractions[0]) / (fractions[-1] - fractions[0]))
+                 for i, f in enumerate(fractions) if 0 < i < len(fractions) - 1]
+    return ((all(v > 0 for v in residuals) or all(v < 0 for v in residuals))
+            and max(map(abs, residuals)) <= ARC_MAX_HEIGHT_SPACES * space)
+
+
+def _slanted_slur_ids(glyphs: list[Glyph], events: list[dict[str, Any]], space: float) -> set[str]:
+    """Only uniquely owned slurs between adjacent single-head stemmed notes.
+
+    Different staff positions establish a slur rather than a tie. Do not feed
+    these contours into tie inference or infer a held chord member from them.
+    Check ownership before the more expensive painted-contour scans.
+    """
+    notes = [(e, e["_heads"][0]) for e in events if len(e.get("_heads", [])) == 1
+             and e.get("_stem") is not None and not e.get("_grace")]
+    result: set[str] = set()
+    reach = TIE_END_REACH_SPACES * space
+    for glyph in glyphs:
+        if not (glyph.curved and glyph.filled and glyph.w >= ARC_MIN_WIDTH_SPACES * space):
+            continue
+        starts = [(e, h) for e, h in notes
+                  if h.bbox[0] - 0.3 * space <= glyph.bbox[0] <= h.bbox[2] + reach
+                  and abs(h.cy - glyph.cy) <= TIE_VERTICAL_REACH_SPACES * space]
+        stops = [(e, h) for e, h in notes
+                 if h.bbox[0] - reach <= glyph.bbox[2] <= h.bbox[2] + 0.3 * space
+                 and abs(h.cy - glyph.cy) <= TIE_VERTICAL_REACH_SPACES * space]
+        if len(starts) != 1 or len(stops) != 1:
+            continue
+        start, first = starts[0]
+        stop, last = stops[0]
+        following = min((e for e in events if e["_cx"] > start["_cx"] and not e.get("_grace")),
+                        key=lambda e: e["_cx"], default=None)
+        if (following is stop and abs(first.cy - last.cy) > TIE_SAME_POSITION_SPACES * space
+                and _is_slanted_arc(glyph, space)):
+            result.add(glyph.ident)
+    return result
+
+
 def _attach_heads(stem: Stem, heads: list[Glyph]) -> None:
     for head in heads:
         x0, y0, x1, y1 = head.bbox
@@ -1301,6 +1361,11 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
         state["time_signature"] = {"value": (time_signature["numerator"], time_signature["denominator"]),
                                    "source": "text_glyphs", "sources": time_signature["sources"]}
         digit_texts = [t for t in digit_texts if t.ident not in time_signature["sources"]]
+
+    slur_ids = _slanted_slur_ids(
+        [g for g in glyphs if g.ident not in used | flag_ids | arc_ids | parenthesis_ids], events, s)
+    arc_ids |= slur_ids
+    state["diagnostics"]["arcs_not_ties"] += len(slur_ids)
 
     # Every other glyph after the header is a rest, a located unread event, or a symbol classified
     # (and counted) as something else. Nothing that could be a rest is dropped silently.

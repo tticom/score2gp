@@ -25,7 +25,7 @@ from score2gp.compare import compare_bar_scores, load_bar_data
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED = {
-    "G-Am-C-Lick": [(bar, 6, 240) for bar in (3, 5, 7) for _ in range(2)],
+    "G-Am-C-Lick": [(bar, 6, 240) for bar in (1, 3, 5, 7) for _ in range(2)],
     "E_Chord_Lick_Chord": [(bar, 6, 480) for bar in (5, 7, 13)],
 }
 
@@ -99,7 +99,7 @@ def test_real_source_storage_fret_is_writer_only_with_rule_receipts(converted):
         root = ET.fromstring(package.read("Content/score.gpif"))
     written = [int(n.findtext("Properties/Property[@name='Fret']/Fret"))
                for n in root.findall("Notes/Note") if n.find("DeadNote") is not None]
-    expected = ([12] * 6, "printed_head_position") if name == "G-Am-C-Lick" else ([9, 5, 9], "next_same_string")
+    expected = ([12] * 8, "printed_head_position") if name == "G-Am-C-Lick" else ([9, 5, 9], "next_same_string")
     receipts = [percussive_strike_storage(score, event, note)
                 for bar in score.bars for event in bar.events for note in event.notes if note.is_dead]
     assert written == expected[0] == [fret for fret, pitch, rule in receipts]

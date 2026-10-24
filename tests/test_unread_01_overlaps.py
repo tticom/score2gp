@@ -22,7 +22,8 @@ def _overlaps(name):
     return result, located
 
 
-@pytest.mark.parametrize("name,expected", [("G-Am-C-Lick", 11), ("Lesson-3", 12), ("Derek Trucks BB King", 12)])
+# FU5 recognises three printed slanted slurs in G-Am-C-Lick and one in Derek.
+@pytest.mark.parametrize("name,expected", [("G-Am-C-Lick", 8), ("Lesson-3", 12), ("Derek Trucks BB King", 11)])
 def test_every_counted_overlap_is_a_located_unread_symbol(name, expected):
     result, located = _overlaps(name)
     counted = result["diagnostics"]["ignored_symbols_by_reason"]
