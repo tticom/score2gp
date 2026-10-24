@@ -436,12 +436,14 @@ def extract_page_symbols(page: Any, page_index: int, *, include_music_font: bool
         for line in block.get("lines", []):
             for span in line.get("spans", []):
                 for chars in _tokens([c for c in span.get("chars", [])
-                                      if not include_music_font or not is_music_font_text(c["c"])],
+                                      if not include_music_font or not is_music_font_text(c["c"], span.get("font", ""))],
                                      float(span.get("size") or 0.0)):
                     text = "".join(c["c"] for c in chars)
                     box = _bbox_union([tuple(float(v) for v in c["bbox"]) for c in chars])
                     texts.append(Text(f"p{page_index}:t{len(texts)}", text, box))
-    head_shapes = [g.shape for g in glyphs if g.curved]
+    head_shapes = [g.shape for g in glyphs if g.curved or (
+        g.drawing.get("source_form") == "font_glyph_outline"
+        and page_staff_space and _is_dead_note_x_head(g, page_staff_space))]
     return PageSymbols(page_index, glyphs, segments, polylines, texts, head_shapes, page_staff_space)
 
 
@@ -573,7 +575,7 @@ def _is_dead_note_x_head(glyph: Glyph, space: float) -> bool:
     These are ownership evidence only: UNREAD-01 never gives an X a written value.
     The real-source census includes ledger-line crosses outside the rest window.
     """
-    if not glyph.curved or not glyph.filled:
+    if not glyph.filled or (not glyph.curved and glyph.drawing.get("source_form") != "font_glyph_outline"):
         return False
     if not (NOTEHEAD_MIN_WIDTH_SPACES <= glyph.w / space <= NOTEHEAD_MAX_WIDTH_SPACES
             and NOTEHEAD_MIN_HEIGHT_SPACES <= glyph.h / space <= NOTEHEAD_MAX_HEIGHT_SPACES):

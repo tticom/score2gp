@@ -1782,6 +1782,10 @@ def build_ir_from_tabraw_only(
             )
         if partition is None:
             details = {"refusal_warning_code": found_unsafe}
+            if note_durations is not None and note_durations.get("systems"):
+                from .pdf_grouping_evidence import locate_unsafe_notation_bars
+                details["located_bar_refusals"] = locate_unsafe_notation_bars(
+                    tabraw, note_durations, unsafe_warning_codes)
             if (found_unsafe == "pdf_no_systems_detected" and note_durations is not None
                     and tabraw.source_pdf):
                 from .pdf_grouping_evidence import locate_unclassified_tab_groups

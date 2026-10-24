@@ -8,6 +8,72 @@ from pathlib import Path
 from typing import Any
 
 
+def locate_unsafe_notation_bars(tabraw: Any, note_durations: dict,
+                               unsafe_codes: set[str]) -> list[dict]:
+    """Keep every notation bar and its strikes visible at a whole-file refusal.
+
+    This does not accept TAB geometry or assign a duration/string/fret. Warnings
+    can block the whole source when independent partitioning is unavailable;
+    distinguish that fact from a local candidate warning instead of attributing
+    the first warning to every bar. Locations are the notation reader's own.
+    """
+    from .pdf_tab_bar_assembler import place_tab_digits
+
+    digits = [c for c in tabraw.candidates if c.kind == "percussive-strike"
+              or c.kind == "fret" and c.parsed_fret is not None]
+    geometric = [c for c in digits if c.x is not None and c.y is not None
+                 and c.page_index is not None]
+    placed, unplaced = place_tab_digits(geometric, note_durations)
+    unlocated_count = len(digits) - len(geometric) + len(unplaced)
+    blockers = [
+        {key: warning[key] for key in ("code", "page_index", "system_index") if key in warning}
+        for warning in list(tabraw.warnings) + [{"code": c} for c in tabraw.pdf_layout_warnings]
+        if warning.get("code") in unsafe_codes
+    ]
+    records: dict[int, list[dict]] = {}
+    for record in note_durations.get("events", []):
+        records.setdefault(record["bar_index"], []).append(record)
+    located = []
+    for system in note_durations.get("systems", []):
+        for local, (left, right) in enumerate(system["bars"]):
+            index = system["first_bar_index"] + local
+            events = records.get(index, [])
+            candidates = placed.get(index, [])
+            local_codes = sorted({code for candidate in candidates
+                                  for code in (candidate.raw or {}).get("grouping_warnings", [])
+                                  + (candidate.raw or {}).get("assignment_warnings", [])
+                                  if code in unsafe_codes})
+            strikes = [
+                {"location": event["location"], "head_count": len(heads),
+                 "head_sources": [head["source"] for head in heads]}
+                for event in events
+                if (heads := [h for h in (event.get("notehead") or {}).get("heads", [])
+                              if h["kind"] == "cross"])
+            ]
+            located.append({
+                "reason": "unsafe_tab_layout_not_independently_partitionable",
+                "location": {"page_index": system["page_index"],
+                             "system_index": system["system_index"], "bar_index": index,
+                             "bbox": [left, system["staff"]["top"], right, system["staff"]["bottom"]]},
+                "blocking_layout_warnings": blockers,
+                "local_candidate_warning_codes": local_codes,
+                "notation_head_count": sum((e.get("notehead") or {}).get("count", 0) for e in events),
+                "tab_candidate_count": len(candidates),
+                "unlocated_tab_candidate_count": unlocated_count,
+                "nearest_tab_dx_spaces": [
+                    {"event_index": event["event_index"],
+                     "distance": round(min(abs(c.x - (event["location"]["bbox"][0]
+                                                        + event["location"]["bbox"][2]) / 2)
+                                           for c in candidates) / system["staff_space"], 3)}
+                    for event in events if event.get("notehead") and candidates
+                ],
+                "notation_strike_count": sum(s["head_count"] for s in strikes),
+                "notation_strikes": strikes,
+                "tab_strike_candidate_count": sum(c.kind == "percussive-strike" for c in candidates),
+            })
+    return located
+
+
 def notation_anchored_line_groups(page: Any, horizontal: list, groups: list) -> list:
     """Keep five actual notation rows out of six-line TAB/ledger hypotheses.
 
