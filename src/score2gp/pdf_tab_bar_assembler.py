@@ -267,6 +267,24 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
             "time_signature_unread": basis["unread"] if basis else None,
             "notation_events": len(records), "tab_digits": len(bar_digits), "events": [],
         }
+        # Account for the entire bar, including events after its first refusal.
+        # Refusing a bar withholds its strikes; it must not erase their locations.
+        strikes = []
+        for record in records:
+            heads = [h for h in (record.get("notehead") or {}).get("heads", []) if h["kind"] == "cross"]
+            if heads:
+                strikes.append({"location": record["location"], "head_count": len(heads),
+                                "head_sources": [h["source"] for h in heads]})
+        entry["percussive_strikes"] = {
+            "notation_head_count": sum(r["head_count"] for r in strikes),
+            "notation_events": strikes,
+            "tab_candidates": [
+                {"candidate_id": c.id, "string": c.string,
+                 "bbox": [c.bbox.x0, c.bbox.y0, c.bbox.x1, c.bbox.y1] if c.bbox else None}
+                for c in sorted(bar_digits, key=lambda c: (c.x, c.string or 0, c.id))
+                if c.kind == "percussive-strike"
+            ],
+        }
         crowded = max(len(records), len(_columns(bar_digits, system["staff_space"])))
         if crowded > MAX_EVENTS_PER_BAR:
             raise PdfTabBarAssemblerError(

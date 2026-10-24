@@ -46,7 +46,8 @@ def converted():
 def test_written_bars_match_independent_printed_notation_and_tab_ledger(converted):
     """Reject equal-count/spacing rhythm guesses and changed string/fret output."""
     route, bars, output = converted
-    assert [b["output_bar_index"] for b in route["bars"] if b["status"] == "written"] == list(LEDGER)
+    # FU5 independently reads recovered bar 1 in test_omit_04_fu5_private.
+    assert [b["output_bar_index"] for b in route["bars"] if b["status"] == "written"] == [1, *LEDGER]
     for number, (count, digest) in LEDGER.items():
         events = bars[number - 1]["events"]
         assert len(events) == count, (number, "event_count")
@@ -63,18 +64,17 @@ def test_written_bars_match_independent_printed_notation_and_tab_ledger(converte
             })
         encoded = json.dumps(actual, sort_keys=True, separators=(",", ":")).encode()
         assert hashlib.sha256(encoded).hexdigest() == digest, (number, "source_ledger_mismatch")
-    # Exact base bytes protect every native strike property and its storage
+    # Exact head bytes protect every native strike property and its storage
     # position as well as ties, slides and the remaining package fields.
     with zipfile.ZipFile(output) as package:
         assert hashlib.sha256(package.read("Content/score.gpif")).hexdigest() == (
-            "15c8978d144517410cfad95db4cbf83828bccd54033972665325fc795291b52b")
+            "8d9e7893986785965288ac62ece369b1b79849bae7afca2588d1d89d7baa211c")
 
 
 def test_refused_bars_keep_measured_located_causes_and_no_written_beats(converted):
     """Reject dropped refusal evidence, old unmeasured reports and unsafe writes."""
     route, bars, _ = converted
     expected = {
-        1: (0, 7, "note_duration_event_unread", "unsupported_overlapping_form", "unread_symbol"),
         2: (0, 8, "notehead_digit_count_mismatch", None, "notation_tab_column"),
         4: (1, 7, "note_duration_event_unread", "rest_glyph_beside_note", "note_duration_record"),
         6: (1, 8, "notehead_digit_count_mismatch", None, "notation_tab_column"),
