@@ -88,13 +88,27 @@ def assert_located_refusals(located, name):
                    for s in refusal["notation_strikes"])
 
 
+def assert_local_observations(located, reading):
+    """Diagnostic completeness only; not an independent musical-value oracle."""
+    for refusal in located:
+        bar = refusal["location"]["bar_index"]
+        expected = [{"code": event["reason"], "location": event["location"]}
+                    for event in reading["events"]
+                    if event["bar_index"] == bar and event["status"] != "read"]
+        assert refusal.get("unread_notation_events") == expected, "unread_bar_evidence"
+        assert refusal.get("refusal_scope") == "source_layout", "inherited_refusal_scope"
+        assert refusal.get("strike_candidate_count_matches") == (
+            refusal["notation_strike_count"] == refusal["tab_strike_candidate_count"]
+        ), "strike_candidate_disagreement"
+
+
 def test_normal_cli_refuses_all_printed_bars_with_strike_locations(census, tmp_path):
     """Reject the old whole-file-only refusal and silently omitted X heads.
 
     This asserts continued refusal, not correct written musical events. No GP
     may be emitted while the layout is unsafe.
     """
-    name, source, _ = census
+    name, source, reading = census
     output = tmp_path / "out.gp"
     folder = tmp_path / "build"
     result = CliRunner().invoke(app, ["convert", "--pdf", str(source), "--pdf-only-tab",
@@ -105,6 +119,19 @@ def test_normal_cli_refuses_all_printed_bars_with_strike_locations(census, tmp_p
     assert diagnostic["category"] == "pdf_only_tab_grouping_unsafe"
     located = diagnostic["details"]["located_bar_refusals"]
     assert_located_refusals(located, name)
+    assert_local_observations(located, reading)
+    # Named diagnostic mutants: restore the old record (drop this change),
+    # attribute a source refusal to the local bar, and hide a strike mismatch.
+    for field, value, message in [
+        ("unread_notation_events", None, "unread_bar_evidence"),
+        ("refusal_scope", "local_bar", "inherited_refusal_scope"),
+        ("strike_candidate_count_matches", True, "strike_candidate_disagreement"),
+    ]:
+        mutant = copy.deepcopy(located)
+        first = next(r for r in mutant if r["notation_strike_count"])
+        first[field] = value
+        with pytest.raises(AssertionError, match=message):
+            assert_local_observations(mutant, reading)
     # Named output mutants: erase the old missing ledger, or drop one strike.
     with pytest.raises(AssertionError, match="located_bar_count"):
         assert_located_refusals([], name)

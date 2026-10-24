@@ -50,6 +50,16 @@ def locate_unsafe_notation_bars(tabraw: Any, note_durations: dict,
                 if (heads := [h for h in (event.get("notehead") or {}).get("heads", [])
                               if h["kind"] == "cross"])
             ]
+            # These are observations, not a hypothetical successful conversion.
+            # In particular, an unread event blocks its own bar even if a later
+            # layout repair succeeds. Keep inherited file blockers separate: a
+            # warning on another system is not evidence of a local defect.
+            unread = [
+                {"code": event["reason"], "location": event["location"]}
+                for event in events if event.get("status") != "read"
+            ]
+            strike_count = sum(s["head_count"] for s in strikes)
+            tab_strike_count = sum(c.kind == "percussive-strike" for c in candidates)
             located.append({
                 "reason": "unsafe_tab_layout_not_independently_partitionable",
                 "location": {"page_index": system["page_index"],
@@ -57,6 +67,9 @@ def locate_unsafe_notation_bars(tabraw: Any, note_durations: dict,
                              "bbox": [left, system["staff"]["top"], right, system["staff"]["bottom"]]},
                 "blocking_layout_warnings": blockers,
                 "local_candidate_warning_codes": local_codes,
+                "unread_notation_events": unread,
+                "strike_candidate_count_matches": strike_count == tab_strike_count,
+                "refusal_scope": "source_layout",
                 "notation_head_count": sum((e.get("notehead") or {}).get("count", 0) for e in events),
                 "tab_candidate_count": len(candidates),
                 "unlocated_tab_candidate_count": unlocated_count,
@@ -67,9 +80,9 @@ def locate_unsafe_notation_bars(tabraw: Any, note_durations: dict,
                                            for c in candidates) / system["staff_space"], 3)}
                     for event in events if event.get("notehead") and candidates
                 ],
-                "notation_strike_count": sum(s["head_count"] for s in strikes),
+                "notation_strike_count": strike_count,
                 "notation_strikes": strikes,
-                "tab_strike_candidate_count": sum(c.kind == "percussive-strike" for c in candidates),
+                "tab_strike_candidate_count": tab_strike_count,
             })
     return located
 
