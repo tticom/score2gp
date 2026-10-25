@@ -2172,6 +2172,9 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
             for system in systems:
                 all_page_candidates.extend(system_digits_merged[system.system_index])
             all_page_candidates.extend(non_playable_words)
+            from .pdf_tab_strikes import drawn_tab_crosses
+            all_page_candidates.extend(drawn_tab_crosses(
+                drawings, systems, cumulative_y_offset, all_page_candidates))
 
             all_page_candidates.sort(key=lambda c: (round(c["y0"], 3), round(c["x0"], 3), c["text"]))
 
@@ -2464,6 +2467,7 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                     duration_evidence=duration_ev_val,
                     raw={
                         "pdf_word_index": pc["word_index"],
+                        "vector_drawing_index": pc.get("vector_drawing_index"),
                         "pdf_block_number": pc["block_no"],
                         "pdf_line_number": pc["line_no"],
                         "pdf_word_number": pc["word_no"],
@@ -5113,15 +5117,26 @@ def _detect_tab_systems(
     page_index: int,
     first_bar_index: int = 1,
     cumulative_y_offset: float = 0.0,
+    *,
+    _recover_paint: bool = False,
 ) -> list[_TabSystem]:
     drawings = page.get_drawings()
     segments = list(_drawing_segments(drawings))
     notehead_shapes = _notehead_candidate_shapes(drawings, [info["bbox"] for info in getattr(page, "get_image_info", lambda: [])()])
-    raw_horizontal = sorted((segment for segment in segments if segment.is_horizontal), key=lambda segment: segment.y0)
-    horizontal = sorted(merge_collinear_horizontal_segments(raw_horizontal), key=lambda segment: segment.y0)
+    if _recover_paint:
+        from .notation_omr.note_duration import extract_page_symbols
+        notehead_shapes = extract_page_symbols(page, page_index - 1).head_shapes
+    # Join digit-interrupted painted rows before applying the system-length
+    # filter. A short piece is evidence for a row, never a staff on its own.
+    raw_horizontal = sorted((segment for segment in segments if (
+        abs(segment.y0 - segment.y1) <= 0.1 and abs(segment.x1 - segment.x0) > 2.0
+        if _recover_paint else segment.is_horizontal)), key=lambda segment: segment.y0)
+    horizontal = sorted((segment for segment in merge_collinear_horizontal_segments(raw_horizontal)
+                         if not _recover_paint or abs(segment.x1 - segment.x0) >= 75.0),
+                        key=lambda segment: segment.y0)
     line_groups = _tab_line_groups(horizontal)
     from .pdf_grouping_evidence import notation_anchored_line_groups
-    line_groups = notation_anchored_line_groups(page, horizontal, line_groups)
+    line_groups = notation_anchored_line_groups(page, horizontal, line_groups, recover_all=_recover_paint)
     recovered_groups = _recovered_segmented_tab_groups(page, segments, horizontal, line_groups)
     previous_right_edge: dict[int, float] = {}
     for old_group, extended_group in _right_extended_tab_groups(page, segments, line_groups):
@@ -5539,6 +5554,14 @@ def _detect_tab_systems(
                 updated_fbs.append(fb_copy)
         final_systems.append(replace(system, system_index=idx, first_bar_index=cur_bar, floating_barlines=updated_fbs))
         cur_bar += max(1, len(system.barlines) - 1)
+    if (not _recover_paint and callable(getattr(page, "get_svg_image", None))
+            and (not final_systems or any(s.grouping_warnings for s in final_systems))):
+        from .notation_omr.font_glyphs import music_font_drawings
+        if music_font_drawings(page):
+            recovered = _detect_tab_systems(page, page_index, first_bar_index,
+                                            cumulative_y_offset, _recover_paint=True)
+            if recovered and not any(s.grouping_warnings for s in recovered):
+                return recovered
     return final_systems
 
 

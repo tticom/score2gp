@@ -8,7 +8,110 @@ from pathlib import Path
 from typing import Any
 
 
-def notation_anchored_line_groups(page: Any, horizontal: list, groups: list) -> list:
+def common_ended_line_groups(horizontal: list) -> list:
+    """Recovered rows must share both drawn ends, excluding ending brackets.
+
+    Ordinary accepted geometry does not use this recovery rule. A long bracket
+    can share a string's height and right end; it cannot supply its left end.
+    """
+    from .notation_omr.note_duration import STAFF_LINE_END_TOLERANCE_PT
+    from .pdf import _tab_line_groups
+
+    spans: list[list] = []
+    for line in horizontal:
+        left, right = sorted((line.x0, line.x1))
+        bucket = next((rows for rows in spans
+                       if abs(min(rows[0].x0, rows[0].x1) - left) <= STAFF_LINE_END_TOLERANCE_PT
+                       and abs(max(rows[0].x0, rows[0].x1) - right) <= STAFF_LINE_END_TOLERANCE_PT), None)
+        if bucket is None:
+            spans.append([line])
+        else:
+            bucket.append(line)
+    return sorted([group for rows in spans for group in _tab_line_groups(rows)],
+                  key=lambda group: (min(line.y0 for line in group), min(line.x0 for line in group)))
+
+
+def locate_unsafe_notation_bars(tabraw: Any, note_durations: dict,
+                               unsafe_codes: set[str]) -> list[dict]:
+    """Keep every notation bar and its strikes visible at a whole-file refusal.
+
+    This does not accept TAB geometry or assign a duration/string/fret. Warnings
+    can block the whole source when independent partitioning is unavailable;
+    distinguish that fact from a local candidate warning instead of attributing
+    the first warning to every bar. Locations are the notation reader's own.
+    """
+    from .pdf_tab_bar_assembler import place_tab_digits
+
+    digits = [c for c in tabraw.candidates if c.kind == "percussive-strike"
+              or c.kind == "fret" and c.parsed_fret is not None]
+    geometric = [c for c in digits if c.x is not None and c.y is not None
+                 and c.page_index is not None]
+    placed, unplaced = place_tab_digits(geometric, note_durations)
+    unlocated_count = len(digits) - len(geometric) + len(unplaced)
+    blockers = [
+        {key: warning[key] for key in ("code", "page_index", "system_index") if key in warning}
+        for warning in list(tabraw.warnings) + [{"code": c} for c in tabraw.pdf_layout_warnings]
+        if warning.get("code") in unsafe_codes
+    ]
+    records: dict[int, list[dict]] = {}
+    for record in note_durations.get("events", []):
+        records.setdefault(record["bar_index"], []).append(record)
+    located = []
+    for system in note_durations.get("systems", []):
+        for local, (left, right) in enumerate(system["bars"]):
+            index = system["first_bar_index"] + local
+            events = records.get(index, [])
+            candidates = placed.get(index, [])
+            local_codes = sorted({code for candidate in candidates
+                                  for code in (candidate.raw or {}).get("grouping_warnings", [])
+                                  + (candidate.raw or {}).get("assignment_warnings", [])
+                                  if code in unsafe_codes})
+            strikes = [
+                {"location": event["location"], "head_count": len(heads),
+                 "head_sources": [head["source"] for head in heads]}
+                for event in events
+                if (heads := [h for h in (event.get("notehead") or {}).get("heads", [])
+                              if h["kind"] == "cross"])
+            ]
+            # These are observations, not a hypothetical successful conversion.
+            # In particular, an unread event blocks its own bar even if a later
+            # layout repair succeeds. Keep inherited file blockers separate: a
+            # warning on another system is not evidence of a local defect.
+            unread = [
+                {"code": event["reason"], "location": event["location"]}
+                for event in events if event.get("status") != "read"
+            ]
+            strike_count = sum(s["head_count"] for s in strikes)
+            tab_strike_count = sum(c.kind == "percussive-strike" for c in candidates)
+            located.append({
+                "reason": "unsafe_tab_layout_not_independently_partitionable",
+                "location": {"page_index": system["page_index"],
+                             "system_index": system["system_index"], "bar_index": index,
+                             "bbox": [left, system["staff"]["top"], right, system["staff"]["bottom"]]},
+                "blocking_layout_warnings": blockers,
+                "local_candidate_warning_codes": local_codes,
+                "unread_notation_events": unread,
+                "strike_candidate_count_matches": strike_count == tab_strike_count,
+                "refusal_scope": "source_layout",
+                "notation_head_count": sum((e.get("notehead") or {}).get("count", 0) for e in events),
+                "tab_candidate_count": len(candidates),
+                "unlocated_tab_candidate_count": unlocated_count,
+                "nearest_tab_dx_spaces": [
+                    {"event_index": event["event_index"],
+                     "distance": round(min(abs(c.x - (event["location"]["bbox"][0]
+                                                        + event["location"]["bbox"][2]) / 2)
+                                           for c in candidates) / system["staff_space"], 3)}
+                    for event in events if event.get("notehead") and candidates
+                ],
+                "notation_strike_count": strike_count,
+                "notation_strikes": strikes,
+                "tab_strike_candidate_count": tab_strike_count,
+            })
+    return located
+
+
+def notation_anchored_line_groups(page: Any, horizontal: list, groups: list, *,
+                                 recover_all: bool = False) -> list:
     """Keep five actual notation rows out of six-line TAB/ledger hypotheses.
 
     The notation reader independently requires uniform spacing, common ends and
@@ -23,7 +126,7 @@ def notation_anchored_line_groups(page: Any, horizontal: list, groups: list) -> 
     # A ledger hypothesis has rows with different drawn ends. Common-ended
     # six-row groups already stand on their own; preserve the geometry-only
     # interface and avoid extracting text/fonts for those ordinary groups.
-    if not any(len(group) == 6 and (
+    if not recover_all and not any(len(group) == 6 and (
         max(min(line.x0, line.x1) for line in group) - min(min(line.x0, line.x1) for line in group)
         > STAFF_LINE_END_TOLERANCE_PT
         or max(max(line.x0, line.x1) for line in group) - min(max(line.x0, line.x1) for line in group)
@@ -38,7 +141,7 @@ def notation_anchored_line_groups(page: Any, horizontal: list, groups: list) -> 
         ) >= 2
         for group in groups for staff in notation
     )
-    if not conflicts:
+    if not conflicts and not recover_all:
         return groups
 
     anchors = []
@@ -56,7 +159,8 @@ def notation_anchored_line_groups(page: Any, horizontal: list, groups: list) -> 
         and min(max(line.x0, line.x1), staff.x1) > max(min(line.x0, line.x1), staff.x0)
         for staff in notation
     )]
-    return sorted(_tab_line_groups(remaining) + anchors,
+    tab_groups = common_ended_line_groups(remaining) if recover_all else _tab_line_groups(remaining)
+    return sorted(tab_groups + anchors,
                   key=lambda group: (min(line.y0 for line in group), min(line.x0 for line in group)))
 
 

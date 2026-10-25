@@ -7,11 +7,17 @@ font, a reference score, or a duration inferred from character spacing.
 from __future__ import annotations
 
 import copy
+import re
 from typing import Any
 import xml.etree.ElementTree as ET
 
 SVG = "{http://www.w3.org/2000/svg}"
 XLINK = "{http://www.w3.org/1999/xlink}"
+
+# Legacy symbol fonts need their embedded paint, just as SMuFL fonts do. Their
+# subset encodings may map the same character to different symbols in different
+# documents. This is a font-family declaration, never a character-to-note table.
+LEGACY_MUSIC_FONT_FAMILIES = frozenset({"TTkStava"})
 
 
 def _svg_bytes(outlined: ET.Element) -> bytes:
@@ -32,19 +38,32 @@ def _svg_bytes(outlined: ET.Element) -> bytes:
     return ET.tostring(source)
 
 
-def is_music_font_text(text: str) -> bool:
-    return any(0xE000 <= ord(char) <= 0xF8FF for char in text)
+def is_music_font_text(text: str, font: str = "") -> bool:
+    return (font.rsplit("+", 1)[-1] in LEGACY_MUSIC_FONT_FAMILIES
+            or any(0xE000 <= ord(char) <= 0xF8FF for char in text))
 
 
 def music_font_drawings(page: Any) -> list[dict[str, Any]]:
-    """Outline private-use text only; ordinary text keeps its existing route."""
+    """Outline music text using its embedded paint, not its decoded character.
+
+    For legacy fonts MuPDF's SVG data-text can differ from PDF ToUnicode text.
+    Select their uses by the source text origins instead. Ordinary text retains
+    its existing route, even when it shares a decoded character with music.
+    """
     import pymupdf  # noqa: PLC0415 - PDF runtime is optional outside recognition
 
     # Recognition needs text, never embedded raster image bytes. On scanned
     # books rawdict's default image preservation decodes every page even though
     # there is no font glyph to outline. Exclude images before testing for text.
     text = page.get_text("rawdict", flags=pymupdf.TEXTFLAGS_RAWDICT & ~pymupdf.TEXT_PRESERVE_IMAGES)
-    if not any(is_music_font_text(char["c"])
+    legacy_origins = {
+        tuple(char["origin"])
+        for block in text.get("blocks", [])
+        for line in block.get("lines", []) for span in line.get("spans", [])
+        if span.get("font", "").rsplit("+", 1)[-1] in LEGACY_MUSIC_FONT_FAMILIES
+        for char in span.get("chars", [])
+    }
+    if not legacy_origins and not any(is_music_font_text(char["c"])
                for block in text.get("blocks", [])
                for line in block.get("lines", []) for span in line.get("spans", [])
                for char in span.get("chars", [])):
@@ -57,7 +76,16 @@ def music_font_drawings(page: Any) -> list[dict[str, Any]]:
             return copy.deepcopy(node)
         if node.tag == SVG + "use":
             text = node.get("data-text", "")
-            if not is_music_font_text(text):
+            transform = node.get("transform", "")
+            matrix = re.fullmatch(r"matrix\(([^)]+)\)", transform)
+            values = [float(v) for v in re.split(r"[ ,]+", matrix[1].strip())] if matrix else []
+            # SVG decimal serialization and PDF float coordinates can straddle
+            # a rounding boundary. Compare coordinates directly instead of
+            # rounding both into a bin and silently losing a glyph.
+            legacy = (len(values) == 6 and any(
+                abs(values[4] - x) <= 0.001 and abs(values[5] - y) <= 0.001
+                for x, y in legacy_origins))
+            if not is_music_font_text(text) and not legacy:
                 return None
             codes.append(text)
             return copy.deepcopy(node)

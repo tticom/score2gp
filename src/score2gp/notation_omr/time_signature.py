@@ -125,12 +125,22 @@ def classify_numeral(raster: list[list[bool]]) -> tuple[str | None, str | None]:
     crossbar = widest_single_run(*FOUR_BAR_BAND) >= BAR_SHARE
     stem_full = any(len(runs) == 1 and (runs[0][1] - runs[0][0]) / rows >= STEM_FULL
                     for runs in (_runs_of([raster[r][c] for r in range(rows)]) for c in range(columns)))
+    # An open calligraphic 4 has a descending left diagonal, a separate
+    # right stem and a low crossbar. Its right stem need not reach the top.
+    # Require the two separated strokes above the crossbar and continuous
+    # right-hand paint from the crossbar to the foot, rather than a font code.
+    split_rows = [r for r in range(int(0.45 * rows), int(0.7 * rows))
+                  if len(row_runs[r]) == 2]
+    open_four = (not counters and crossbar and len(split_rows) >= int(0.2 * rows)
+                 and row_runs[split_rows[-1]][0][0] < row_runs[split_rows[0]][0][0]
+                 and any(all(raster[r][c] for r in range(int(0.6 * rows), rows))
+                         for c in range(columns // 2, columns)))
     if len(counters) > 2:
         return None, "numeral_more_than_two_counters"
     if len(counters) == 2:
         upper, lower = sorted(counters, key=lambda p: p[1])
         return ("8", None) if upper[1] < 0.5 < lower[1] else (None, "numeral_two_counters_misplaced")
-    if len(counters) <= 1 and stem_full and crossbar:
+    if (len(counters) <= 1 and stem_full and crossbar) or open_four:
         return "4", None  # a full-height stem crossed by a full-width bar; the apex may be open or closed
     if len(counters) == 1:
         centre = counters[0][1]
