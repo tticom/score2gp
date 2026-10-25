@@ -117,11 +117,12 @@ def _match_bar(records: list[dict[str, Any]], digits: list[TabCandidate], space:
             continue
         heads = record["notehead"]["count"]
         cross_count = sum(h["kind"] == "cross" for h in record["notehead"].get("heads", []))
-        if cross_count > 1:
-            # Multiple crossed strings describe a muted strum in the measured
-            # corpus. This task reads individual strikes only; refuse the
-            # unresolved multi-string form rather than assign pitches to it.
-            return matched, _refusal("multiple_percussive_heads_out_of_scope", index)
+        tie = record.get("tie") or {}
+        if cross_count and cross_count < heads and (tie.get("start") or tie.get("stop")):
+            # The duration reader locates an event-level tie, not the owning
+            # head within a mixed chord. Applying it to every note would invent
+            # ties on strikes. Keep the bar refused until ownership is read.
+            return matched, _refusal("mixed_percussive_tie_ownership_unread", index)
         grace = record.get("grace")
         if grace:
             # A grace stands on its own TAB column and takes no tie; a later tie continues from the note before it.

@@ -8,6 +8,29 @@ from pathlib import Path
 from typing import Any
 
 
+def common_ended_line_groups(horizontal: list) -> list:
+    """Recovered rows must share both drawn ends, excluding ending brackets.
+
+    Ordinary accepted geometry does not use this recovery rule. A long bracket
+    can share a string's height and right end; it cannot supply its left end.
+    """
+    from .notation_omr.note_duration import STAFF_LINE_END_TOLERANCE_PT
+    from .pdf import _tab_line_groups
+
+    spans: list[list] = []
+    for line in horizontal:
+        left, right = sorted((line.x0, line.x1))
+        bucket = next((rows for rows in spans
+                       if abs(min(rows[0].x0, rows[0].x1) - left) <= STAFF_LINE_END_TOLERANCE_PT
+                       and abs(max(rows[0].x0, rows[0].x1) - right) <= STAFF_LINE_END_TOLERANCE_PT), None)
+        if bucket is None:
+            spans.append([line])
+        else:
+            bucket.append(line)
+    return sorted([group for rows in spans for group in _tab_line_groups(rows)],
+                  key=lambda group: (min(line.y0 for line in group), min(line.x0 for line in group)))
+
+
 def locate_unsafe_notation_bars(tabraw: Any, note_durations: dict,
                                unsafe_codes: set[str]) -> list[dict]:
     """Keep every notation bar and its strikes visible at a whole-file refusal.
@@ -87,7 +110,8 @@ def locate_unsafe_notation_bars(tabraw: Any, note_durations: dict,
     return located
 
 
-def notation_anchored_line_groups(page: Any, horizontal: list, groups: list) -> list:
+def notation_anchored_line_groups(page: Any, horizontal: list, groups: list, *,
+                                 recover_all: bool = False) -> list:
     """Keep five actual notation rows out of six-line TAB/ledger hypotheses.
 
     The notation reader independently requires uniform spacing, common ends and
@@ -102,7 +126,7 @@ def notation_anchored_line_groups(page: Any, horizontal: list, groups: list) -> 
     # A ledger hypothesis has rows with different drawn ends. Common-ended
     # six-row groups already stand on their own; preserve the geometry-only
     # interface and avoid extracting text/fonts for those ordinary groups.
-    if not any(len(group) == 6 and (
+    if not recover_all and not any(len(group) == 6 and (
         max(min(line.x0, line.x1) for line in group) - min(min(line.x0, line.x1) for line in group)
         > STAFF_LINE_END_TOLERANCE_PT
         or max(max(line.x0, line.x1) for line in group) - min(max(line.x0, line.x1) for line in group)
@@ -117,7 +141,7 @@ def notation_anchored_line_groups(page: Any, horizontal: list, groups: list) -> 
         ) >= 2
         for group in groups for staff in notation
     )
-    if not conflicts:
+    if not conflicts and not recover_all:
         return groups
 
     anchors = []
@@ -135,7 +159,8 @@ def notation_anchored_line_groups(page: Any, horizontal: list, groups: list) -> 
         and min(max(line.x0, line.x1), staff.x1) > max(min(line.x0, line.x1), staff.x0)
         for staff in notation
     )]
-    return sorted(_tab_line_groups(remaining) + anchors,
+    tab_groups = common_ended_line_groups(remaining) if recover_all else _tab_line_groups(remaining)
+    return sorted(tab_groups + anchors,
                   key=lambda group: (min(line.y0 for line in group), min(line.x0 for line in group)))
 
 

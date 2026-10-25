@@ -1551,6 +1551,18 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
         else:
             start["_tie"]["continues_beyond_system"] = True
 
+    # A taller crescent ending on a whole head is outside the supported tie
+    # contour. If its ends locate adjacent heads at the same staff position,
+    # silently treating it as decoration would drop a possible tie. Refuse its owners;
+    # do not enlarge the accepted contour or assign a tie from spacing.
+    for start, stop, contour in _unclassified_tie_contours(glyphs, tie_events, s):
+        for owner in (start, stop):
+            owner["_unread"] = "unclassified_same_position_arc"
+        state["diagnostics"].setdefault("unclassified_tie_contours", []).append({
+            "source": contour.ident, "page_index": staff.page_index,
+            "system_index": state["system_index"], "bbox": list(contour.bbox),
+        })
+
     # Concurrent events (another voice) are not read by this reader.
     for a, b in zip(events, events[1:]):
         if "_heads" in a and "_heads" in b:
@@ -1637,6 +1649,43 @@ def _event_bbox(event: dict[str, Any]) -> tuple[float, float, float, float]:
     if "_rest" in event:
         return event["_rest"].bbox
     return _bbox_union([h.bbox for h in event["_heads"]])
+
+
+def _unclassified_tie_contours(glyphs: list[Glyph], events: list[dict[str, Any]], space: float
+                               ) -> list[tuple[dict, dict, Glyph]]:
+    """Unsupported tall crescents ending on an adjacent same-position whole head.
+
+    Stemmed notes can own other forms (including supported slanted slurs).
+    This guard is limited to the measured whole-head continuation case.
+    """
+    notes = [(e, e["_heads"][0]) for e in events if len(e.get("_heads", [])) == 1]
+    result = []
+    reach = TIE_END_REACH_SPACES * space
+    for contour in glyphs:
+        if not (contour.curved and contour.filled
+                and contour.w >= ARC_MIN_WIDTH_SPACES * space
+                and contour.h > ARC_MAX_HEIGHT_SPACES * space
+                and _fill_ratio(contour) <= ARC_MAX_FILL_RATIO):
+            continue
+        starts = [(e, h) for e, h in notes
+                  if h.bbox[0] - 0.3 * space <= contour.bbox[0] <= h.bbox[2] + reach]
+        stops = [(e, h) for e, h in notes
+                 if h.bbox[0] - reach <= contour.bbox[2] <= h.bbox[2] + 0.3 * space]
+        if len(starts) != 1 or len(stops) != 1:
+            continue
+        start, first = starts[0]
+        stop, last = stops[0]
+        following = min((e for e in events if e["_cx"] > start["_cx"]),
+                        key=lambda e: e["_cx"], default=None)
+        above = (contour.bbox[3] <= min(first.bbox[1], last.bbox[1])
+                 and max(first.bbox[1], last.bbox[1]) - contour.bbox[3] <= reach)
+        below = (contour.bbox[1] >= max(first.bbox[3], last.bbox[3])
+                 and contour.bbox[1] - min(first.bbox[3], last.bbox[3]) <= reach)
+        if (following is stop and stop.get("_stem") is None and _is_notehead(last, space) == "hollow"
+                and abs(first.cy - last.cy) <= TIE_SAME_POSITION_SPACES * space
+                and (above or below)):
+            result.append((start, stop, contour))
+    return result
 
 
 def _tie_ends(arc: Glyph, events: list[dict[str, Any]], space: float):

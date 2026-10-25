@@ -256,6 +256,7 @@ def test_real_source_x_without_notation_owners_stays_located_and_unwritten():
 
 
 def test_real_source_muted_strums_stay_out_of_scope_at_their_events():
+    """Multi-head writing still requires owning TAB candidates for each head."""
     source = ROOT / "fixtures/private/Melodic_Expressions.pdf"
     assert source.is_file(), "required approved private source missing"
     reading = read_note_durations(source, pages=(2, 2))
@@ -266,7 +267,7 @@ def test_real_source_muted_strums_stay_out_of_scope_at_their_events():
     for event in strums:
         matched, refusal = assembler._match_bar([event], [], system_space[event["system_index"]], None)
         assert matched == []
-        assert refusal["reason"] == "multiple_percussive_heads_out_of_scope"
+        assert refusal["reason"] == "notation_note_without_tab_digit"
         assert refusal["event_index"] == event["event_index"]
 
 
