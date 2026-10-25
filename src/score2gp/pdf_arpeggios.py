@@ -41,6 +41,9 @@ def _marks(page: pymupdf.Page) -> list[dict[str, Any]]:
         tip = diagonals[-2][2]
         if abs(tip.x - diagonals[-1][1].x) > 0.2 or abs(tip.y - diagonals[-1][1].y) > 0.2:
             continue
+        # Direction is the GPIF strum value, not the arrow's page direction.
+        # PDF y increases downward: a tip near y0 points upward on the staff.
+        # That low-to-high roll is GPIF Down; the reverse is GPIF Up.
         direction = "down" if abs(tip.y - rect.y0) < abs(tip.y - rect.y1) else "up"
         # The tip is at one end; the curls run away from it through the chord.
         nearby = [(i, curl) for i, curl in curls
