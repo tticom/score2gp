@@ -19,7 +19,8 @@ _FURNITURE = re.compile(r"(?i)^(?:standard tuning|tuning\s*:.*|(?:music|words|ly
 _BARE_TIMESTAMP = re.compile(r"^\[\d+:[0-5]\d\]$")
 
 
-def _classify(text: str, font: str, size: float, above_system: bool) -> str:
+def _classify(text: str, font: str, size: float, above_system: bool, *,
+              direction: tuple[float, float] = (1.0, 0.0)) -> str:
     if _TEMPO.fullmatch(text):
         return "pdf_text_tempo"
     timestamp = bool(_BARE_TIMESTAMP.fullmatch(text))
@@ -37,6 +38,10 @@ def _classify(text: str, font: str, size: float, above_system: bool) -> str:
         return "pdf_text_page_furniture"
     if size >= 16:
         return "pdf_text_title_or_subtitle"
+    # Staff furniture can be rotated beside a clef. Its text direction is a
+    # source role signal, independent of the horizontal annotation band.
+    if direction != (1.0, 0.0):
+        return "pdf_text_rotated_text"
     if not above_system:
         return "pdf_text_outside_annotation_band"
     if size < 7 or size > 15:
@@ -77,7 +82,8 @@ def attach_pdf_text_labels(pdf: Path, note_durations: dict[str, Any], score: Sco
                         if 0 <= gap <= 5 * spacing and x0 >= float(system["staff"]["x0"]) - 5 and x0 <= float(system["staff"]["x1"]):
                             near.append(system)
                     reason = _classify(value, spans[0].get("font", "") if spans else "",
-                                       max((float(span["size"]) for span in spans), default=0), bool(near))
+                                       max((float(span["size"]) for span in spans), default=0), bool(near),
+                                       direction=tuple(line["dir"]))
                     location = {"page_index": page_index, "block_index": block_index,
                                 "line_index": line_index, "bbox": [x0, y0, x1, y1]}
                     if reason == "pdf_text_label":
