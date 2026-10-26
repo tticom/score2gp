@@ -8,7 +8,7 @@ from typing import Any
 
 import pymupdf
 
-from .ir import Provenance, ScoreIR, SourceStage, WarningItem
+from .ir import Bar, Event, Provenance, ScoreIR, SourceStage, WarningItem
 
 
 def _kind(drawing: dict[str, Any]) -> str:
@@ -79,6 +79,120 @@ def _marks(page: pymupdf.Page) -> list[dict[str, Any]]:
     return marks
 
 
+# Attachment distances are PDF points; staff margins are multiples of staff_space.
+_TAB_DUPLICATE_X_TOLERANCE = 5
+_TAB_DUPLICATE_MAX_GAP = 70
+_NOTATION_MARGIN_BELOW = 4
+_NOTATION_MARGIN_ABOVE = 2
+_NOTATION_MIN_OVERLAP = 0.5
+_TAB_MIN_OFFSET = 2
+_TAB_MAX_OFFSET = 18
+_BAR_EDGE_MARGIN = 1
+_CHORD_MIN_NOTES = 2
+_CHORD_MAX_GAP = 12
+_CHORD_MIN_OVERLAP = 0.6
+
+
+def _is_tab_duplicate(mark: dict[str, Any], earlier_marks: list[dict[str, Any]]) -> bool:
+    """Recognize the lower copy of a roll printed on notation and TAB staves."""
+    x0, y0, _, _ = mark["bbox"]
+    return any(abs(prior["bbox"][0] - x0) <= _TAB_DUPLICATE_X_TOLERANCE
+               and 0 <= y0 - prior["bbox"][3] <= _TAB_DUPLICATE_MAX_GAP
+               for prior in earlier_marks)
+
+
+def _candidate_systems(
+    mark: dict[str, Any], page_index: int, systems: list[dict[str, Any]],
+) -> list[tuple[dict[str, Any], str]]:
+    """Select staff systems overlapping the mark, retaining notation/TAB kind."""
+    x0, y0, _, y1 = mark["bbox"]
+    possible = []
+    for system in systems:
+        if system["page_index"] != page_index:
+            continue
+        staff = system["staff"]
+        spacing = float(system["staff_space"])
+        overlap = (min(y1, float(staff["bottom"]) + _NOTATION_MARGIN_BELOW * spacing)
+                   - max(y0, float(staff["top"]) - _NOTATION_MARGIN_ABOVE * spacing))
+        if not float(staff["x0"]) <= x0 <= float(staff["x1"]):
+            continue
+        if overlap > _NOTATION_MIN_OVERLAP * (y1 - y0):
+            possible.append((system, "notation"))
+        elif (float(staff["bottom"]) + _TAB_MIN_OFFSET * spacing
+              <= y0 <= float(staff["bottom"]) + _TAB_MAX_OFFSET * spacing):
+            possible.append((system, "tab"))
+    return possible
+
+
+def _choose_beat(
+    mark: dict[str, Any], staff_kind: str,
+    candidates: list[dict[str, Any]], target: Bar,
+) -> tuple[int, Event] | None:
+    """Choose exactly one source chord by horizontal gap and vertical overlap."""
+    _, y0, x1, y1 = mark["bbox"]
+    matched = []
+    for beat_index, (source, beat) in enumerate(zip(candidates, target.events)):
+        bx0, by0, _, by1 = source["location"]["bbox"]
+        gap = float(bx0) - x1
+        overlap = min(float(by1), y1) - max(float(by0), y0)
+        if (len(beat.notes) >= _CHORD_MIN_NOTES and 0 <= gap <= _CHORD_MAX_GAP
+                and (staff_kind == "tab"
+                     or overlap >= _CHORD_MIN_OVERLAP * (float(by1) - float(by0)))):
+            matched.append((beat_index, beat))
+    return matched[0] if len(matched) == 1 else None
+
+
+def _locate_chord(
+    mark: dict[str, Any], page_index: int, systems: list[dict[str, Any]],
+    source_events: dict[int, list[dict[str, Any]]], bars: dict[int, Bar],
+) -> tuple[dict[str, Any], int, int, Event] | str:
+    """Locate a unique system, bar and beat, or return the original refusal code."""
+    possible_systems = _candidate_systems(mark, page_index, systems)
+    if len(possible_systems) != 1:
+        return "pdf_arpeggio_system_ambiguous"
+    system, staff_kind = possible_systems[0]
+    x0 = mark["bbox"][0]
+    local_bars = [int(system["first_bar_index"]) + local
+                  for local, (left, right) in enumerate(system["bars"])
+                  if float(left) + _BAR_EDGE_MARGIN < x0 < float(right) - _BAR_EDGE_MARGIN]
+    if len(local_bars) != 1:
+        return "pdf_arpeggio_bar_ambiguous"
+    bar_index = local_bars[0]
+    target = bars.get(bar_index + 1)
+    candidates = source_events[bar_index]
+    if target is None or len(candidates) != len(target.events):
+        return "pdf_arpeggio_beat_unavailable"
+    matched = _choose_beat(mark, staff_kind, candidates, target)
+    if matched is None:
+        return "pdf_arpeggio_chord_ambiguous"
+    beat_index, beat = matched
+    return system, bar_index, beat_index, beat
+
+
+def _attach_mark(
+    location: dict[str, Any], systems: list[dict[str, Any]],
+    source_events: dict[int, list[dict[str, Any]]], bars: dict[int, Bar],
+) -> str:
+    """Apply a located roll and its source citation, preserving existing rolls."""
+    page_index = location["page_index"]
+    chord = _locate_chord(location, page_index, systems, source_events, bars)
+    if isinstance(chord, str):
+        return chord
+    system, bar_index, beat_index, beat = chord
+    if beat.arpeggio in ("up", "down"):
+        return "pdf_arpeggio_duplicate"
+    beat.arpeggio = location["direction"]
+    beat.provenance.append(Provenance(
+        source_stage=SourceStage.PDF_TEXT, page=page_index + 1,
+        system_id=f"system-{system['system_index'] + 1}",
+        bar_index=bar_index + 1,
+        raw_token_id=f"pdf-p{page_index + 1}-d{location['stroke_indices'][0]}",
+        raw={"bbox": location["bbox"], "stroke_indices": location["stroke_indices"]},
+    ))
+    location.update({"bar_index": bar_index + 1, "beat_index": beat_index + 1})
+    return "pdf_arpeggio_attached"
+
+
 def attach_pdf_arpeggios(pdf: Path, note_durations: dict[str, Any], score: ScoreIR) -> dict[str, Any]:
     """Use source staff/bar/event geometry; refuse a mark without one source chord."""
     systems = note_durations.get("systems", [])
@@ -93,69 +207,16 @@ def attach_pdf_arpeggios(pdf: Path, note_durations: dict[str, Any], score: Score
         for page_index, page in enumerate(document):
             page_marks = _marks(page)
             for mark_number, mark in enumerate(page_marks):
-                x0, y0, x1, y1 = mark["bbox"]
                 location = {"page_index": page_index, **mark}
                 # Engraved notation+TAB pairs print the same roll twice. The
                 # upper mark carries beat geometry; keep the lower one's stroke
                 # IDs in the same source citation, without emitting twice.
-                paired = next((prior for prior in page_marks[:mark_number]
-                               if abs(prior["bbox"][0] - x0) <= 5
-                               and 0 <= y0 - prior["bbox"][3] <= 70), None)
-                if paired is not None:
+                if _is_tab_duplicate(mark, page_marks[:mark_number]):
                     location["code"] = "pdf_arpeggio_tab_duplicate"
                     counts[location["code"]] += 1
                     decisions.append(location)
                     continue
-                possible_systems = []
-                for system in systems:
-                    if system["page_index"] != page_index:
-                        continue
-                    staff = system["staff"]
-                    spacing = float(system["staff_space"])
-                    overlap = min(y1, float(staff["bottom"]) + 4 * spacing) - max(y0, float(staff["top"]) - 2 * spacing)
-                    if not float(staff["x0"]) <= x0 <= float(staff["x1"]):
-                        continue
-                    if overlap > 0.5 * (y1 - y0):
-                        possible_systems.append((system, "notation"))
-                    elif float(staff["bottom"]) + 2 * spacing <= y0 <= float(staff["bottom"]) + 18 * spacing:
-                        possible_systems.append((system, "tab"))
-                reason = "pdf_arpeggio_system_ambiguous"
-                if len(possible_systems) == 1:
-                    system, staff_kind = possible_systems[0]
-                    local_bars = [int(system["first_bar_index"]) + local
-                                  for local, (left, right) in enumerate(system["bars"])
-                                  if float(left) + 1 < x0 < float(right) - 1]
-                    reason = "pdf_arpeggio_bar_ambiguous"
-                    if len(local_bars) == 1:
-                        bar_index = local_bars[0]
-                        target = bars.get(bar_index + 1)
-                        candidates = source_events[bar_index]
-                        reason = "pdf_arpeggio_beat_unavailable"
-                        if target is not None and len(candidates) == len(target.events):
-                            matched = []
-                            for beat_index, (source, beat) in enumerate(zip(candidates, target.events)):
-                                bx0, by0, bx1, by1 = source["location"]["bbox"]
-                                gap = float(bx0) - x1
-                                overlap = min(float(by1), y1) - max(float(by0), y0)
-                                if (len(beat.notes) >= 2 and 0 <= gap <= 12
-                                        and (staff_kind == "tab" or overlap >= 0.6 * (float(by1) - float(by0)))):
-                                    matched.append((beat_index, beat))
-                            reason = "pdf_arpeggio_chord_ambiguous"
-                            if len(matched) == 1:
-                                beat_index, beat = matched[0]
-                                if beat.arpeggio in ("up", "down"):
-                                    reason = "pdf_arpeggio_duplicate"
-                                else:
-                                    beat.arpeggio = mark["direction"]
-                                    beat.provenance.append(Provenance(
-                                        source_stage=SourceStage.PDF_TEXT, page=page_index + 1,
-                                        system_id=f"system-{system['system_index'] + 1}",
-                                        bar_index=bar_index + 1,
-                                        raw_token_id=f"pdf-p{page_index + 1}-d{mark['stroke_indices'][0]}",
-                                        raw={"bbox": mark["bbox"], "stroke_indices": mark["stroke_indices"]},
-                                    ))
-                                    reason = "pdf_arpeggio_attached"
-                                    location.update({"bar_index": bar_index + 1, "beat_index": beat_index + 1})
+                reason = _attach_mark(location, systems, source_events, bars)
                 counts[reason] += 1
                 location["code"] = reason
                 decisions.append(location)
