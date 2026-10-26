@@ -75,5 +75,7 @@ bar and the read decision's source-stroke IDs.
 and places two `U+E044` text characters beside a final thin/wide pair. It is
 a public synthetic engraving control, not a copied private page. The older
 `repeat_dots.pdf` uses appended vector rectangles and remains a synthetic
-control; no measured private source in this task establishes vector repeat
-dots as its representation.
+control. Vector repeat dots are also a real engraving form: fresh measurement
+confirms one approved private PDF with three repeat-end marks on the notation
+staff (source bars 2, 5 and 8). Each uses two filled vector drawings: six dots
+across these marks. The PDF has no music font resources.
