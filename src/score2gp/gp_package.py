@@ -11,6 +11,7 @@ from xml.etree import ElementTree as ET
 from .gpif import DEFAULT_GPIF_LAYOUT, GpifLayout, build_gpif, gpif_warnings
 from .version_adapter import adapt_gpif, get_version_file_content, validate_target
 from .ir import (
+    SCHEMA_VERSION,
     ScoreIR, ScoreBooklet, Track, Tuning, TuningString, Mixer, SoundConfig,
     TrackLayoutPreferences, TrackExpression, TrackAutomation, ScoreLayout,
     Metadata, Tempo, TimeSignature, KeySignature, Bar, Event, Note,
@@ -443,7 +444,7 @@ def extract_score_ir_from_gp(path: str | Path) -> ScoreIR | ScoreBooklet:
                 scores.append(s)
 
             return ScoreBooklet(
-                schema_version="0.1.0",
+                schema_version=SCHEMA_VERSION,
                 booklet_title=booklet_title,
                 metadata=metadata,
                 pagination=pagination,
@@ -1248,7 +1249,7 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
                                 break
 
     return ScoreIR(
-        schema_version="0.1.0",
+        schema_version=SCHEMA_VERSION,
         metadata=metadata,
         tempo=tempo,
         tracks=tracks,
@@ -1996,7 +1997,7 @@ def _extract_score_ir_from_gpif_root(root: ET.Element) -> ScoreIR:
                                 break
 
     return ScoreIR(
-        schema_version="0.1.0",
+        schema_version=SCHEMA_VERSION,
         metadata=metadata,
         tempo=tempo,
         tracks=tracks,
