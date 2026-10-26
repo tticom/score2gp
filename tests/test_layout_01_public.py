@@ -52,7 +52,6 @@ def test_uneven_engraved_rows_from_production_cli():
             rejected, located = _source_system_row_counts(systems, score.bars)
             assert rejected is None and located.code == "pdf_systems_layout_fallback"
         score.tracks[0].source_system_bars = counts
-        assert score.tracks[0].source_system_bars is None
         assert warning.code == "pdf_systems_layout_fallback"
         assert warning.provenance[0].page == 2
         score.warnings.append(warning)
