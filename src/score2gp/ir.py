@@ -85,21 +85,9 @@ class Tempo(BaseModel):
 class TimeSignature(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    numerator: int = Field(gt=0, le=64)
-    denominator: int = Field(gt=0, le=64)
-
-    @model_validator(mode="before")
-    @classmethod
-    def sanitize_time_signature(cls, data: Any) -> Any:
-        if isinstance(data, dict):
-            for field_name in ("numerator", "denominator"):
-                if field_name in data:
-                    try:
-                        val = int(round(float(data[field_name])))
-                        data[field_name] = max(1, min(64, val))
-                    except (ValueError, TypeError):
-                        pass
-        return data
+    # Positive integer meter is canonical; writer limits belong to its capabilities.
+    numerator: int = Field(gt=0)
+    denominator: int = Field(gt=0)
 
     @field_validator("denominator")
     @classmethod
@@ -119,7 +107,7 @@ class KeySignature(BaseModel):
 class TuningString(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    number: int = Field(ge=1, le=12)
+    number: int = Field(ge=1)
     pitch: int = Field(ge=0, le=127)
     name: str
     volume_offset: float | None = None
@@ -130,7 +118,7 @@ class Tuning(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str
-    strings: list[TuningString] = Field(min_length=1, max_length=12)
+    strings: list[TuningString] = Field(min_length=1)
 
     @model_validator(mode="after")
     def string_numbers_are_unique(self) -> "Tuning":
@@ -246,30 +234,10 @@ class Timing(BaseModel):
     onset_ticks: int = Field(ge=0)
     duration_ticks: int = Field(ge=0)
     ticks_per_quarter: int = Field(default=DEFAULT_TICKS_PER_QUARTER, gt=0)
-    voice: int = Field(default=1, ge=1, le=8)
+    voice: int = Field(default=1, ge=1)
     notated_duration: NotatedDuration | None = None
     tuplet: Tuplet | None = None
     grace: GraceTiming | None = None
-
-    @model_validator(mode="before")
-    @classmethod
-    def sanitize_timing_data(cls, data: Any) -> Any:
-        if isinstance(data, dict):
-            for field_name in ("onset_ticks", "duration_ticks", "ticks_per_quarter", "bar_index", "voice"):
-                if field_name in data:
-                    try:
-                        val = int(round(float(data[field_name])))
-                        if field_name in ("onset_ticks", "duration_ticks"):
-                            data[field_name] = max(0, val)
-                        elif field_name == "ticks_per_quarter":
-                            data[field_name] = max(1, val)
-                        elif field_name == "bar_index":
-                            data[field_name] = max(1, val)
-                        elif field_name == "voice":
-                            data[field_name] = max(1, min(8, val))
-                    except (ValueError, TypeError):
-                        pass
-        return data
 
     @model_validator(mode="after")
     def duration_is_positive_unless_grace(self) -> "Timing":
@@ -448,7 +416,7 @@ class TrillTechnique(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["trill"] = "trill"
-    fret: int | None = Field(default=None, ge=0, le=36)
+    fret: int | None = Field(default=None, ge=0)
     interval: int | None = Field(default=None, ge=0, le=24)
     frequency: float | None = Field(default=None, ge=0.0)
 
@@ -516,8 +484,8 @@ class Note(BaseModel):
         ]
     })
 
-    string: int = Field(ge=1, le=12)
-    fret: int | None = Field(default=None, ge=0, le=36)
+    string: int = Field(ge=1)
+    fret: int | None = Field(default=None, ge=0)
     pitch: int | None = Field(default=None, ge=0, le=127)
     is_dead: bool = False
     articulations: list[Literal["staccato", "staccatissimo", "accent", "marcato", "tenuto"]] = Field(default_factory=list)
@@ -535,43 +503,19 @@ class Note(BaseModel):
             raise ValueError("A non-dead note requires fret and pitch")
         return self
 
-    @model_validator(mode="before")
-    @classmethod
-    def sanitize_note_data(cls, data: Any) -> Any:
-        if isinstance(data, dict):
-            if "string" in data:
-                try:
-                    val = int(round(float(data["string"])))
-                    data["string"] = max(1, min(12, val))
-                except (ValueError, TypeError):
-                    pass
-            if "fret" in data:
-                try:
-                    val = int(round(float(data["fret"])))
-                    data["fret"] = max(0, min(36, val))
-                except (ValueError, TypeError):
-                    pass
-            if "pitch" in data:
-                try:
-                    val = int(round(float(data["pitch"])))
-                    data["pitch"] = max(0, min(127, val))
-                except (ValueError, TypeError):
-                    pass
-        return data
-
 
 class ChordFret(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    string: int = Field(ge=1, le=12)
-    fret: int = Field(ge=0, le=36)
+    string: int = Field(ge=1)
+    fret: int = Field(ge=0)
 
 
 class ChordFinger(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    string: int = Field(ge=1, le=12)
-    fret: int = Field(ge=0, le=36)
+    string: int = Field(ge=1)
+    fret: int = Field(ge=0)
     finger: Literal["None", "Index", "Middle", "Ring", "Little", "Thumb"] = "None"
 
 
@@ -579,9 +523,9 @@ class ChordDiagram(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str
-    string_count: int = Field(default=6, ge=1, le=12)
+    string_count: int = Field(default=6, ge=1)
     fret_count: int = Field(default=5, ge=1, le=24)
-    base_fret: int = Field(default=0, ge=0, le=36)
+    base_fret: int = Field(default=0, ge=0)
     frets: list[ChordFret] = Field(default_factory=list)
     fingers: list[ChordFinger] = Field(default_factory=list)
     key_note_step: str = "C"
@@ -1095,7 +1039,7 @@ def format_validation_errors(exc: ValidationError) -> list[str]:
         message = str(error["msg"])
         if message.startswith("Value error, "):
             message = message.removeprefix("Value error, ")
-        messages.append(f"{prefix}{message}")
+        messages.append(f"{prefix}[{error['type']}] {message}")
     return messages
 
 

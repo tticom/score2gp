@@ -5,6 +5,7 @@ from typing import Literal
 from xml.etree import ElementTree as ET
 
 from .ir import Event, Note, ScoreIR, Technique, ScoreBooklet
+from .gpif_capabilities import validate_gpif_capabilities
 
 GpifLayout = Literal["relational", "legacy"]
 DEFAULT_GPIF_LAYOUT: GpifLayout = "relational"
@@ -203,6 +204,7 @@ def build_gpif(
     """Serialize relational GPIF unless the legacy hierarchy is requested."""
     if layout not in ("relational", "legacy"):
         raise ValueError(f"Unknown GPIF layout: {layout!r}")
+    validate_gpif_capabilities(score, layout=layout)
     if isinstance(score, ScoreBooklet):
         return build_gpif(score.scores[0], booklet=score, layout=layout)
 
@@ -789,7 +791,7 @@ def build_gpif(
                 for event in bar.events:
                     if event.track_id != track_id:
                         continue
-                    event_staff_idx = 0 if staff_count == 1 else min(staff_count - 1, (event.timing.voice - 1) // 4)
+                    event_staff_idx = (event.timing.voice - 1) // 4
                     if event_staff_idx == s_idx:
                         staff_events.append(event)
 
@@ -823,7 +825,7 @@ def build_gpif(
 
                         nd_val = event.timing.notated_duration.value if event.timing.notated_duration else "quarter"
                         dots = event.timing.notated_duration.dots if event.timing.notated_duration else 0
-                        gp_dur = duration_map.get(nd_val.lower(), "Quarter")
+                        gp_dur = duration_map[nd_val.lower()]
 
                         tuplet_num = 1
                         tuplet_den = 1
@@ -928,7 +930,7 @@ def build_gpif(
                             _text(fret_prop, "Fret", stored_fret)
 
                             string_prop = ET.SubElement(props, "Property", {"name": "String"})
-                            _text(string_prop, "String", max(0, min(num_strings - 1, num_strings - note.string)))
+                            _text(string_prop, "String", num_strings - note.string)
 
                             midi_prop = ET.SubElement(props, "Property", {"name": "Midi"})
                             _text(midi_prop, "Number", stored_pitch)
@@ -2102,7 +2104,7 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
 
             if getattr(technique, "points", None):
                 for pt in technique.points:
-                    off_pct = (pt.offset_ticks / max(1, duration_ticks)) * 100.0
+                    off_pct = (pt.offset_ticks / duration_ticks) * 100.0
                     val_gp = pt.semitones * 50.0
                     attrs = {
                         "offset": f"{off_pct:.6f}",
