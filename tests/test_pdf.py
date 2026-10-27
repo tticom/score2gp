@@ -3633,13 +3633,19 @@ def test_private_acceptance_lesson6_duration_and_negative_control() -> None:
                     if want["written"] != have["written"] or want["dots"] != have["dots"]
                     or want["tuplet"] != have["tuplet"]]
 
-        assert duration_differences(written_bars) == []
-        # A changed emitted duration must make the reference comparison fail.
+        def assert_durations_match(actual):
+            assert duration_differences(actual) == [], "written durations differ from reference"
+
+        assert_durations_match(written_bars)
+        # Each mutant must fail the same assertion used for the real output.
         import copy
-        mutant = copy.deepcopy(written_bars)
-        first_written = next(bar for bar in mutant if bar["events"])
-        first_written["events"][0]["written"] = "mutated"
-        assert len(duration_differences(mutant)) == 1
+        for field, value in (("written", "mutated"), ("dots", -1), ("tuplet", "mutated")):
+            mutant = copy.deepcopy(written_bars)
+            first_written = next(bar for bar in mutant if bar["events"])
+            first_written["events"][0][field] = value
+            assert len(duration_differences(mutant)) == 1
+            with pytest.raises(AssertionError, match="written durations differ from reference"):
+                assert_durations_match(mutant)
 
         # Part 2: Negative control (missing notehead)
         original_extract = score2gp.pdf_staff_notation_diagnostics.extract_notation_diagnostics_dict
@@ -3664,10 +3670,12 @@ def test_private_acceptance_lesson6_duration_and_negative_control() -> None:
             refused = [c for c in cands2 if "pdf_notation_rhythm_missing_notehead" in c.get("raw", {}).get("assignment_warnings", [])]
             assert len(refused) > 0
             assert "pdf_notation_rhythm_missing_notehead" in refused[0]["raw"]["refusal_reason"]
-            for c in refused:
-                assert "duration_evidence" not in c.get("raw", {})
+            def assert_refused_without_duration(candidates):
+                for c in candidates:
+                    assert "duration_evidence" not in c.get("raw", {}), "refused candidate has duration evidence"
+
+            assert_refused_without_duration(refused)
             mutant_refusal = copy.deepcopy(refused[0])
             mutant_refusal["raw"]["duration_evidence"] = {"duration_name": "mutated"}
-            assert "duration_evidence" in mutant_refusal["raw"]
-            assert not all("duration_evidence" not in c.get("raw", {})
-                           for c in [mutant_refusal, *refused[1:]])
+            with pytest.raises(AssertionError, match="refused candidate has duration evidence"):
+                assert_refused_without_duration([mutant_refusal, *refused[1:]])

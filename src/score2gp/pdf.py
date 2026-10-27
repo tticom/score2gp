@@ -5024,12 +5024,6 @@ def _recovered_segmented_tab_groups(
         if len(group) != 6 or classify_staff_line_group(group, page) != "tab":
             continue
         x0, x1, y0, y1 = bounds(group)
-        if any(sum(any(abs((line.y0 + line.y1 - previous.y0 - previous.y1) / 2) <= 1.0
-                       for line in group) for previous in old) >= 4 and
-               max(0.0, min(x1, bounds(old)[1]) - max(x0, bounds(old)[0])) >= 0.7 * min(x1-x0, bounds(old)[1]-bounds(old)[0])
-               for old in (group for group in existing_groups
-                           if classify_staff_line_group(group, page) in ("tab", "incomplete_tab_candidate"))):
-            continue
         # A row already drawn as a line of an accepted staff is not also a row of another:
         # alternate lines of two neighbouring staves can be equally spaced and would form a false group.
         if any(abs((line.y0 + line.y1 - used.y0 - used.y1) / 2) <= 1.0
