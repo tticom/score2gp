@@ -21,6 +21,7 @@ from .gp_package import compare_gp, dumps_summary, inspect_gp, validate_gp, writ
 from .ir import ScoreIR, compare_score_ir, export_scoreir_schema, validate_score_ir_file
 from .pdf import extract_tab as extract_tab_file
 from .pdf import inspect_pdf as inspect_pdf_file
+from .pdf_text_labels import attach_pdf_text_labels
 from .pdf_resource_budget import (
     INSPECTION_BUDGET_CODE,
     INSPECTION_PAGE_NODE_LIMIT,
@@ -1249,7 +1250,6 @@ def convert_command(
             if tempo_bpm is not None:
                 tabraw_kwargs["tempo_bpm"] = tempo_bpm
             score, diagnostics = build_ir_from_tabraw_only(**tabraw_kwargs)
-            from .pdf_text_labels import attach_pdf_text_labels
             text_label_report = attach_pdf_text_labels(pdf, note_durations, score)
             (actual_work_dir / "text-labels.json").write_text(
                 json.dumps(text_label_report, indent=2) + "\n", encoding="utf-8"
