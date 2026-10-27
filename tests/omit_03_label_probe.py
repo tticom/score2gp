@@ -30,10 +30,12 @@ from xml.etree import ElementTree
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "work/omit-03-fu1"
 MUTANTS = {
+    "band": ("_ANNOTATION_BAND_STAFF_SPACES = 5",
+             "_ANNOTATION_BAND_STAFF_SPACES = 7"),
     "system": ("len(near) != 1", "len(near) < 1"),
     "bar": ("len(matching) != 1", "len(matching) < 1"),
-    "margin": ("ranked[1][0] - ranked[0][0] < 2",
-               "ranked[1][0] - ranked[0][0] < 0.5"),
+    "margin": ("_BEAT_DISTANCE_MARGIN_PT = 2",
+               "_BEAT_DISTANCE_MARGIN_PT = 0.5"),
     "status": ('if event.get("status") == "read":', "if True:"),
 }
 
@@ -70,6 +72,7 @@ def suite_worker(name: str) -> int:
 
     return pytest.main([
         "-q", "tests/test_omit_03_public.py", "tests/test_omit_03_private.py",
+        "tests/test_omit_03_fu3_private.py",
         "--basetemp", str(ROOT.parent / ".tmp" / f"omit03-fu1-{name}"),
         "--junitxml", str(OUT / f"suite-{name}.xml"),
     ])
@@ -81,28 +84,27 @@ def observe_attachment(labels, pdf, durations, score):
     This tracing is test infrastructure for measuring reachability. It provides
     no independent oracle for the correctness of the recognition or geometry.
     """
-    function = labels.attach_pdf_text_labels
-    lines, start = inspect.getsourcelines(function)
     markers = {
-        "system": "if len(near) != 1:",
-        "bar": "if len(matching) != 1:",
-        "available": "if target_bar is None or not target_bar.events",
-        "margin": "if not ranked or (len(ranked) > 1",
+        "system": (labels._locate_bar, "if len(near) != 1:"),
+        "bar": (labels._locate_bar, "if len(matching) != 1:"),
+        "available": (labels._choose_beat, "if target_bar is None or not target_bar.events"),
+        "margin": (labels._choose_beat, "if not ranked or (len(ranked) > 1"),
     }
     sites = {}
-    for name, marker in markers.items():
+    for name, (function, marker) in markers.items():
+        lines, start = inspect.getsourcelines(function)
         matches = [start + i for i, line in enumerate(lines) if line.strip().startswith(marker)]
         if len(matches) != 1:
             raise ValueError(f"observer site drift: {name}")
-        sites[matches[0]] = name
+        sites[function.__code__, matches[0]] = name
     counts = Counter()
     gaps = []
     nonread_bars = {int(event["bar_index"]) for event in durations["events"]
                     if event.get("status") != "read"}
 
     def trace(frame, event, arg):
-        if frame.f_code is function.__code__ and event == "line":
-            site = sites.get(frame.f_lineno)
+        if event == "line":
+            site = sites.get((frame.f_code, frame.f_lineno))
             local = frame.f_locals
             if site == "system":
                 counts["label_candidates"] += 1
@@ -110,7 +112,7 @@ def observe_attachment(labels, pdf, durations, score):
             elif site == "bar":
                 counts[f"bar_matches_{len(local['matching'])}"] += 1
             elif site == "available":
-                has_nonread = local["source_bar"] in nonread_bars
+                has_nonread = frame.f_back.f_locals["source_bar"] in nonread_bars
                 counts["candidate_visits_with_nonread_events"] += has_nonread
                 target = local["target_bar"]
                 available = bool(target and target.events
@@ -128,7 +130,7 @@ def observe_attachment(labels, pdf, durations, score):
     previous = sys.gettrace()
     sys.settrace(trace)
     try:
-        result = function(pdf, durations, score)
+        result = labels.attach_pdf_text_labels(pdf, durations, score)
     finally:
         sys.settrace(previous)
     return result, dict(counts), min(gaps, default=None)
