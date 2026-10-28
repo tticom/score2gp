@@ -1,5 +1,6 @@
 """Public IR checks runner independence, with no musical fidelity claim."""
 
+import os
 import subprocess
 import sys
 from zipfile import ZipFile
@@ -10,13 +11,17 @@ from score2gp.cli import app
 
 
 def test_cli_gpif_bytes_are_independent_of_pytest(tmp_path):
-    # Mutant: choose legacy when pytest is in sys.modules (including at import
-    # time), or when sys.argv names pytest. A fresh child has neither state.
+    # Mutants: choose legacy when pytest is loaded or PYTEST_CURRENT_TEST is set.
+    # A fresh child must also lose inherited pytest environment markers.
     output = tmp_path / "pytest-output" / "score.gp"
     args = ["write-gp", "fixtures/public/tiny_score.ir.json", "--out", str(output)]
     assert "pytest" in sys.modules
+    assert "PYTEST_CURRENT_TEST" in os.environ
+    outside_env = {key: value for key, value in os.environ.items()
+                   if not key.upper().startswith("PYTEST_")}
     outside = subprocess.run(
-        [sys.executable, "-m", "score2gp.cli", *args], capture_output=True
+        [sys.executable, "-m", "score2gp.cli", *args], capture_output=True,
+        env=outside_env,
     )
     assert outside.returncode == 0, outside.stderr
     with ZipFile(output) as package:
