@@ -25,6 +25,12 @@ import pytest
 _gpif_acceptance_item = None
 
 
+def pytest_collection_modifyitems(items):
+    from windows_host_quarantine import apply_quarantine
+
+    apply_quarantine(items)
+
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_setup(item):
     global _gpif_acceptance_item
