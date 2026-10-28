@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import sys
 import argparse
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import pymupdf as fitz
 fitz = sys.modules.get("fitz", fitz)
@@ -209,7 +209,12 @@ def generate_report(json_mode: bool = False, test_manifest: str = None):
                     path_str = entry.get("path", "")
                     p = Path(path_str)
 
-                    if ".." in path_str or p.is_absolute():
+                    if (
+                        ".." in path_str
+                        or p.is_absolute()
+                        or PureWindowsPath(path_str).anchor
+                        or PurePosixPath(path_str).anchor
+                    ):
                         print("Warning: Rejecting unsafe test manifest path", file=sys.stderr)
                         continue
 
