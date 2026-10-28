@@ -152,3 +152,86 @@ def test_structural_comparator_locates_a_real_removed_section(tmp_path):
             assert not result['chords']['differences']
             return
     raise AssertionError('SECTION_REFERENCE_REQUIRED')
+
+
+@pytest.mark.parametrize('mutant,check,code', [
+    ('REPEAT_COUNT_ZERO', test_repeat_flags_and_counts_from_native_references, 'REPEAT_COUNT'),
+    ('REPEAT_START_DROPPED', test_repeat_flags_and_counts_from_native_references, 'REPEAT_START'),
+    ('ALTERNATE_ENDINGS_DROPPED', test_alternate_endings_from_native_references, 'ENDINGS'),
+    ('SECTION_DROPPED', test_section_letter_and_text_from_native_references, 'SECTION'),
+    ('SECTION_LETTER_DROPPED', test_section_letter_and_text_from_native_references, 'SECTION'),
+    ('SECTION_TEXT_DROPPED', test_section_letter_and_text_from_native_references, 'SECTION'),
+    ('CHORDS_DROPPED', test_staff_local_diagram_links_and_complete_geometry_from_native_references,
+     'CHORD_ATTACHMENT'),
+    ('DIAGRAM_FRET_DROPPED', test_staff_local_diagram_links_and_complete_geometry_from_native_references,
+     'DIAGRAM_FACTS'),
+    ('COMPARATOR_IGNORES_SECTIONS', test_structural_comparator_locates_a_real_removed_section,
+     'SECTION_DIFFERENCE_NOT_LOCATED'),
+])
+def test_named_reader_mutant_is_rejected(mutant, check, code, monkeypatch, tmp_path):
+    """Execute each wrong reader against the same native-reference assertions.
+
+    The control must pass first. A surviving mutant fails this test with
+    DID NOT RAISE; collection errors or reader refusals cannot count as kills.
+    Only the reader is replaced; approved packages remain untouched.
+    """
+    def run_check():
+        if mutant == 'COMPARATOR_IGNORES_SECTIONS':
+            check(tmp_path)
+        else:
+            check()
+
+    run_check()
+    if mutant in {'REPEAT_COUNT_ZERO', 'REPEAT_START_DROPPED', 'ALTERNATE_ENDINGS_DROPPED'}:
+        original = oracle._repeat
+
+        def wrong_repeat(*args):
+            result = original(*args)
+            if mutant == 'REPEAT_COUNT_ZERO' and result['end']:
+                result['count'] = 0
+            elif mutant == 'REPEAT_START_DROPPED':
+                result['start'] = False
+            elif mutant == 'ALTERNATE_ENDINGS_DROPPED':
+                result['endings'] = ()
+            return result
+
+        monkeypatch.setattr(oracle, '_repeat', wrong_repeat)
+    elif mutant.startswith('SECTION_'):
+        original = oracle._section
+
+        def wrong_section(*args):
+            result = original(*args)
+            if result is None or mutant == 'SECTION_DROPPED':
+                return None
+            return ('', result[1]) if mutant == 'SECTION_LETTER_DROPPED' else (result[0], '')
+
+        monkeypatch.setattr(oracle, '_section', wrong_section)
+    elif mutant == 'CHORDS_DROPPED':
+        original = oracle.read_gp_structure
+
+        def wrong_read(*args, **kwargs):
+            result = original(*args, **kwargs)
+            result['chords'] = {}
+            return result
+
+        monkeypatch.setattr(oracle, 'read_gp_structure', wrong_read)
+    elif mutant == 'DIAGRAM_FRET_DROPPED':
+        original = oracle._item
+
+        def wrong_item(node):
+            tag, attrs, text, children = original(node)
+            return tag, attrs, text, tuple(c for c in children if c[0] != 'Fret')
+
+        monkeypatch.setattr(oracle, '_item', wrong_item)
+    else:
+        original = oracle.compare_gp_structure
+
+        def wrong_compare(*args):
+            result = original(*args)
+            result['sections']['differences'] = []
+            return result
+
+        monkeypatch.setattr(oracle, 'compare_gp_structure', wrong_compare)
+
+    with pytest.raises(AssertionError, match=code):
+        run_check()

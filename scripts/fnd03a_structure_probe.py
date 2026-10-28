@@ -78,14 +78,42 @@ def run(corpus, scratch, reuse=False):
             row['generated_sha256'] = hashlib.sha256(output.read_bytes()).hexdigest()
             try:
                 row['generated'] = census(output)
-                if 'reference' in row:
-                    row['comparison'] = compare_gp_structure(reference, output)
+                row['comparison'] = compare_gp_structure(reference, output)
             except StructureRefusal as exc:
                 row['generated_refusal'] = str(exc)
         else:
             row['generated_refusal'] = 'NO_GP_WRITTEN'
         rows.append(row)
     return rows
+
+
+def defect_records(rows):
+    """One actionable, located record per disagreement or unproven comparison.
+
+    Locations use zero-based bar indices or (bar, staff, voice, beat).
+    Never serialize expected/actual musical values. These are oracle findings,
+    not a claim that every difference originates in the writer itself.
+    """
+    records = []
+    for row in rows:
+        def add(kind, location, code, fields):
+            records.append({'id': f'FND03A-{row["input"]:02d}-{len(records) + 1:04d}',
+                            'input': row['input'], 'kind': kind, 'location': location,
+                            'code': code, 'fields': fields, 'status': 'OPEN',
+                            'reference_sha256': row['reference_sha256'],
+                            'generated_sha256': row.get('generated_sha256')})
+
+        for key in ('reference_refusal', 'conversion_refusal', 'generated_refusal'):
+            if key in row:
+                add('package', 'Content/score.gpif' if key == 'reference_refusal' else 'output.gp',
+                    row[key], [key])
+        for kind, result in row.get('comparison', {}).items():
+            for key in ('reference_refusal', 'generated_refusal'):
+                if key in result:
+                    add(kind, result[key], 'STRUCTURE_REFUSAL', [key])
+            for difference in result.get('differences', []):
+                add(kind, difference['location'], 'STRUCTURE_DISAGREEMENT', difference['fields'])
+    return records
 
 
 if __name__ == '__main__':
@@ -97,6 +125,7 @@ if __name__ == '__main__':
     scratch = args.scratch.resolve()
     if not scratch.is_relative_to((ROOT / 'work').resolve()):
         raise SystemExit('SCRATCH_MUST_BE_UNDER_IGNORED_WORK')
-    print(json.dumps({'schema': 'fnd03a-structure-probe.v1',
+    rows = run(args.corpus, scratch, args.reuse)
+    print(json.dumps({'schema': 'fnd03a-structure-probe.v2',
                       'fresh_conversion': not args.reuse,
-                      'rows': run(args.corpus, scratch, args.reuse)}, indent=2))
+                      'rows': rows, 'defects': defect_records(rows)}, indent=2))
