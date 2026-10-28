@@ -1149,8 +1149,15 @@ def _extract_score_ir_from_relational_gpif_root(root: ET.Element) -> ScoreIR:
                         for nid in beat["notes_refs"]:
                             if nid in notes:
                                 n_dict = notes[nid]
+                                if not 0 <= n_dict["string_idx"] < num_strings:
+                                    raise ValueError(
+                                        "gpif_string_out_of_range at "
+                                        f"MasterBar[{mb_idx}]/Bar[{bar_id}]/Voice[{v_id}]/"
+                                        f"Beat[{beat_id}]/Note[{nid}]/String: "
+                                        f"{n_dict['string_idx']}; expected 0-{num_strings - 1} "
+                                        f"for track {track_id!r}"
+                                    )
                                 physical_string = num_strings - n_dict["string_idx"]
-                                physical_string = max(1, min(num_strings, physical_string))
                                 from .ir import Note
                                 resolved_notes.append(Note(
                                     string=physical_string,

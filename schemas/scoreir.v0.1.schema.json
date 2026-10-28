@@ -552,7 +552,6 @@
       "properties": {
         "base_fret": {
           "default": 0,
-          "maximum": 36,
           "minimum": 0,
           "title": "Base Fret",
           "type": "integer"
@@ -604,7 +603,6 @@
         },
         "string_count": {
           "default": 6,
-          "maximum": 12,
           "minimum": 1,
           "title": "String Count",
           "type": "integer"
@@ -633,13 +631,11 @@
           "type": "string"
         },
         "fret": {
-          "maximum": 36,
           "minimum": 0,
           "title": "Fret",
           "type": "integer"
         },
         "string": {
-          "maximum": 12,
           "minimum": 1,
           "title": "String",
           "type": "integer"
@@ -656,13 +652,11 @@
       "additionalProperties": false,
       "properties": {
         "fret": {
-          "maximum": 36,
           "minimum": 0,
           "title": "Fret",
           "type": "integer"
         },
         "string": {
-          "maximum": 12,
           "minimum": 1,
           "title": "String",
           "type": "integer"
@@ -1739,7 +1733,6 @@
         "fret": {
           "anyOf": [
             {
-              "maximum": 36,
               "minimum": 0,
               "type": "integer"
             },
@@ -1812,7 +1805,6 @@
           "default": null
         },
         "string": {
-          "maximum": 12,
           "minimum": 1,
           "title": "String",
           "type": "integer"
@@ -3264,13 +3256,11 @@
       "properties": {
         "denominator": {
           "exclusiveMinimum": 0,
-          "maximum": 64,
           "title": "Denominator",
           "type": "integer"
         },
         "numerator": {
           "exclusiveMinimum": 0,
-          "maximum": 64,
           "title": "Numerator",
           "type": "integer"
         }
@@ -3341,7 +3331,6 @@
         },
         "voice": {
           "default": 1,
-          "maximum": 8,
           "minimum": 1,
           "title": "Voice",
           "type": "integer"
@@ -3802,7 +3791,6 @@
         "fret": {
           "anyOf": [
             {
-              "maximum": 36,
               "minimum": 0,
               "type": "integer"
             },
@@ -3848,7 +3836,6 @@
           "items": {
             "$ref": "#/$defs/TuningString"
           },
-          "maxItems": 12,
           "minItems": 1,
           "title": "Strings",
           "type": "array"
@@ -3881,7 +3868,6 @@
           "type": "string"
         },
         "number": {
-          "maximum": 12,
           "minimum": 1,
           "title": "Number",
           "type": "integer"

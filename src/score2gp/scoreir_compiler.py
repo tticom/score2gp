@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from typing import Any, List, Dict, Tuple, Optional
+from pydantic import ValidationError
 from score2gp.ir import (
     ScoreIR,
     Track,
@@ -16,6 +17,7 @@ from score2gp.ir import (
     Metadata,
     ConversionInfo,
     WarningItem,
+    format_validation_errors,
 )
 from score2gp.notation_omr.position_optimizer import (
     FretTokenOwnership,
@@ -163,15 +165,23 @@ class ScoreIRCompiler:
             for (voice, onset), group in sorted(onset_groups.items(), key=lambda x: (x[0][0], x[0][1])):
                 event_counter += 1
                 evt_id = f"evt_{b_idx:02d}_{event_counter:03d}"
-                duration = max(1, group[0]["duration"])
+                duration = group[0]["duration"]
 
                 is_rest = all(g["is_rest"] for g in group)
-                timing = Timing(
-                    bar_index=b_idx,
-                    onset_ticks=onset,
-                    duration_ticks=duration,
-                    voice=voice,
-                )
+                try:
+                    timing = Timing(
+                        bar_index=b_idx,
+                        onset_ticks=onset,
+                        duration_ticks=duration,
+                        voice=voice,
+                    )
+                except ValidationError as exc:
+                    raise HumanReadableConversionError(
+                        f"scoreir_timing_invalid at event {evt_id}: "
+                        + "; ".join(format_validation_errors(exc)),
+                        page=page_idx, measure=b_idx, staff=staff_idx, voice=voice,
+                        beat=onset,
+                    ) from exc
 
                 if is_rest:
                     bar_events.append(
