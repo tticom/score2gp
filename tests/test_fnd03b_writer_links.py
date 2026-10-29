@@ -47,7 +47,10 @@ def convert_corpus(folder):
         command = [sys.executable, '-m', 'score2gp.cli', 'convert', '--pdf', str(pdf),
                    '--pdf-only-tab', '--out', str(output),
                    '--work-dir', str(destination / 'work')]
-        result = subprocess.run(command, cwd=ROOT, capture_output=True, timeout=180)
+        # Corpus conversion is correctness acceptance, not a speed benchmark.
+        # Let the runner bound the job: concurrent real PDFs can exceed a
+        # per-process deadline on shared CI hosts before any oracle runs.
+        result = subprocess.run(command, cwd=ROOT, capture_output=True)
         # Raw diagnostics remain private in scratch, never in assertion output.
         (destination / 'stdout.bin').write_bytes(result.stdout)
         (destination / 'stderr.bin').write_bytes(result.stderr)
