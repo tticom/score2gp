@@ -677,6 +677,11 @@ def build_gpif(
             names = list(dict.fromkeys(event.chord_symbol for bar in score.bars for event in bar.events
                                        if event.track_id == track.id and event.chord_symbol
                                        and event.chord_diagram is None and event.id in recovered_symbols))
+            # Keep existing recovered-symbol IDs stable, then append the other
+            # printed names. Every Beat/Chord must resolve in this staff's list.
+            names.extend(dict.fromkeys(event.chord_symbol for bar in score.bars for event in bar.events
+                                       if event.track_id == track.id and event.chord_symbol
+                                       and event.chord_diagram is None and event.chord_symbol not in names))
             if not names:
                 continue
             properties = track_node.find("Staves/Staff/Properties")
@@ -869,9 +874,7 @@ def build_gpif(
                             if cd_id:
                                 _text(beat_node, "Chord", cd_id)
                         elif event.chord_symbol:
-                            value = (symbol_ids[event.track_id, event.chord_symbol]
-                                     if event.id in recovered_symbols else event.chord_symbol)
-                            _text(beat_node, "Chord", value)
+                            _text(beat_node, "Chord", symbol_ids[event.track_id, event.chord_symbol])
 
                         note_refs = []
                         for note in event.notes:
