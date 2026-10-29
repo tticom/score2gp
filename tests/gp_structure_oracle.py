@@ -1,11 +1,29 @@
 """Independent, stdlib-only FND-03A GPIF structural reader.
 
 Field provenance: native approved GP7/8 references, cross-checked against
-CoderLine/alphaTab packages/alphatab/src/importer/GpifParser.ts, methods
-_parseMasterBar, _parseDiagramCollectionForStaff and _parseDiagramItem.
-No official GPIF specification was available. This is a storage-structure
-comparison, not a playback oracle. In particular, repeat counts retain their
-GP generation; no GP6/7 multiplier is inferred from one pair of scores.
+CoderLine/alphaTab v1.8.4 (022a45c8e42370f9e12e68949d11eada370da83d),
+packages/alphatab/src/importer/GpifParser.ts:
+_parseMasterBar (Repeat, AlternateEndings, Section),
+_parseDiagramCollectionForStaff, _parseDiagramItemForStaff and
+_parseDiagramItemForChord (staff-local diagrams). The full Item infoset is
+preserved from the references, including fields alphaTab does not interpret.
+Source: https://github.com/CoderLine/alphaTab/blob/022a45c8e42370f9e12e68949d11eada370da83d/packages/alphatab/src/importer/GpifParser.ts
+
+Official Guitar Pro documentation supplies the musical concepts, not an XML
+schema: /docs/gp8/score/directions (passes), /docs/gp8/score/sections
+(master-track bar markers), /docs/gp8/tools/chords-diagrams (geometry,
+fingering and display options), all under https://www.guitar-pro.com.
+No normative GPIF serialization specification was located.
+
+Repeat-count inference from an implementation, NOT a normative specification:
+GpifParser._parseMasterBar assigns the integer count directly to repeatCount,
+without a generation branch or multiplier. GpxImporter.readScore in
+packages/alphatab/src/importer/GpxImporter.ts uses this same GPIF parser.
+Thus alphaTab supplies no rule
+making the observed GP6 count 2 equivalent to GP7 count 4. Preserve the counts
+and their generation; do not normalize that pair into agreement. This reader
+still accepts ZIP GP7/8 only. GPX decoding and normalized playback order are
+outside its contract; this is a storage comparison, not a playback oracle.
 
 Chord IDs are staff-local and resolved per occurrence, through every voice.
 The complete attached Item (except its local ID) is retained, including fret,
