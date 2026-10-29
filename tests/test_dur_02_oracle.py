@@ -24,6 +24,10 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
+# Structural slice has its own API so existing event/coverage contracts remain
+# stable. It resolves native diagrams without importing any product module.
+from gp_structure_oracle import read_gp_structure, compare_gp_structure
+
 WRITTEN = {"Whole": "whole", "Half": "half", "Quarter": "quarter", "Eighth": "eighth",
            "16th": "16th", "32nd": "32nd", "64th": "64th"}
 RHYTHM_TAGS = {"NoteValue", "AugmentationDot", "PrimaryTuplet"}
