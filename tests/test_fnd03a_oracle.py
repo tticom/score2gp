@@ -100,7 +100,11 @@ def _read_facts(value, path=()):
 
 
 def test_staff_local_diagram_links_and_complete_geometry_from_native_references():
-    """Reject CHORDS_DROPPED, DIAGRAM_FRET_DROPPED and GLOBAL_CHORD_IDS."""
+    """Reject CHORDS_DROPPED, DIAGRAM_FRET_DROPPED and CHORD_BAR_INDEX_SHIFTED.
+
+    Resolve staff-local IDs independently, then check every complete location;
+    retaining geometry at the next bar must fail the attachment assertion.
+    """
     seen = 0
     for path, root in sources():
         rows = oracle.read_gp_structure(path)['chords']
@@ -163,6 +167,9 @@ def test_structural_comparator_locates_a_real_removed_section(tmp_path):
     ('SECTION_TEXT_DROPPED', test_section_letter_and_text_from_native_references, 'SECTION'),
     ('CHORDS_DROPPED', test_staff_local_diagram_links_and_complete_geometry_from_native_references,
      'CHORD_ATTACHMENT'),
+    ('CHORD_BAR_INDEX_SHIFTED',
+     test_staff_local_diagram_links_and_complete_geometry_from_native_references,
+     'CHORD_ATTACHMENT'),
     ('DIAGRAM_FRET_DROPPED', test_staff_local_diagram_links_and_complete_geometry_from_native_references,
      'DIAGRAM_FACTS'),
     ('COMPARATOR_IGNORES_SECTIONS', test_structural_comparator_locates_a_real_removed_section,
@@ -206,12 +213,16 @@ def test_named_reader_mutant_is_rejected(mutant, check, code, monkeypatch, tmp_p
             return ('', result[1]) if mutant == 'SECTION_LETTER_DROPPED' else (result[0], '')
 
         monkeypatch.setattr(oracle, '_section', wrong_section)
-    elif mutant == 'CHORDS_DROPPED':
+    elif mutant in {'CHORDS_DROPPED', 'CHORD_BAR_INDEX_SHIFTED'}:
         original = oracle.read_gp_structure
 
         def wrong_read(*args, **kwargs):
             result = original(*args, **kwargs)
-            result['chords'] = {}
+            if mutant == 'CHORDS_DROPPED':
+                result['chords'] = {}
+            else:
+                result['chords'] = {(bi + 1, si, vi, ei): item
+                                    for (bi, si, vi, ei), item in result['chords'].items()}
             return result
 
         monkeypatch.setattr(oracle, 'read_gp_structure', wrong_read)
