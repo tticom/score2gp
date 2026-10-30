@@ -1604,10 +1604,39 @@ ACCIDENTAL_TEXT = {"#": "sharp", "♯": "sharp", "b": "flat", "♭": "flat"}
 _TREBLE_STEP_PITCH_CLASSES = (4, 5, 7, 9, 11, 0, 2)
 
 
+def _is_natural_accidental(glyph: Glyph, space: float) -> bool:
+    """Two offset uprights joined by two separated oblique bands.
+
+    The left upright starts at the top, the right ends at the bottom. Scans
+    between them cross both connectors, with open space above, below and
+    between. This distinguishes a natural from a flat's bowl, a sharp's
+    crossing strokes and a thin arpeggio fragment. Position beside a head
+    establishes ownership elsewhere; it never establishes this glyph's type.
+    """
+    if not (glyph.filled and 0.5 <= glyph.w / space <= 1.1
+            and 2.1 <= glyph.h / space <= 3.2):
+        return False
+    scans = [
+        [((a - glyph.bbox[1]) / glyph.h, (b - glyph.bbox[1]) / glyph.h)
+         for a, b in _runs(glyph.shape, True, glyph.bbox[0] + f * glyph.w,
+                           glyph.bbox[1] - 1, glyph.bbox[3] + 1)]
+        for f in (0.1, 0.3, 0.5, 0.7, 0.9)
+    ]
+    if [len(scan) for scan in scans] != [1, 2, 2, 2, 1]:
+        return False
+    left, right = scans[0][0], scans[-1][0]
+    if not (left[0] <= 0.05 and 0.6 <= left[1] <= 0.85
+            and 0.15 <= right[0] <= 0.4 and right[1] >= 0.95):
+        return False
+    return all(0.15 <= a < b <= 0.5 and 0.5 <= c < d <= 0.85
+               and b - a <= 0.25 and d - c <= 0.25
+               for ((a, b), (c, d)) in scans[1:-1])
+
+
 def _accidental_direction(glyph: Glyph, space: float) -> str | None:
     from .key_signature import _kind  # key_signature imports this module
 
-    return _kind(glyph, space)
+    return _kind(glyph, space) or ("natural" if _is_natural_accidental(glyph, space) else None)
 
 
 def _glyph_anchor(glyph: Glyph, direction: str, space: float) -> float:
@@ -1640,9 +1669,10 @@ def _attach_accidentals(events: list[dict[str, Any]], marks: list[tuple[tuple[fl
         _, event, head = best
         step = round((staff.bottom - head.cy) / (space / 2))
         natural = _TREBLE_STEP_PITCH_CLASSES[step % 7]
-        pitch_class = (natural + (1 if direction == "sharp" else -1)) % 12
+        pitch_class = (natural + {"sharp": 1, "flat": -1, "natural": 0}[direction]) % 12
         event.setdefault("_accidentals", []).append(
-            {"direction": direction, "pitch_class": pitch_class, "source": ident})
+            {"direction": direction, "pitch_class": pitch_class, "source": ident,
+             "head_staff_position_index": round((head.cy - staff.top) / (space / 2))})
 
 
 def _event_bbox(event: dict[str, Any]) -> tuple[float, float, float, float]:
@@ -1972,10 +2002,14 @@ def _resolve_strike_head_positions(records: list[dict[str, Any]], staff: Staff,
     if adjacent:
         return
     for record in records:
-        if any(r.get("accidentals") for r in records if r["bar_index"] == record["bar_index"]):
+        printed = [a for r in records if r["bar_index"] == record["bar_index"]
+                   for a in r.get("accidentals") or ()]
+        if any(a["direction"] != "natural" for a in printed):
             # The existing accidental reader returns event pitch classes, not
             # a per-head octave owner. Keep the storage position unresolved.
             continue
+        # A natural only changes a head whose letter it can cancel in the key.
+        naturals = {a["head_staff_position_index"] for a in printed}
         key = keys[record["bar_in_system"]]
         if key["status"] != "read":
             continue
@@ -1986,6 +2020,8 @@ def _resolve_strike_head_positions(records: list[dict[str, Any]], staff: Staff,
                 continue
             natural = map_staff_step_to_midi_pitch(head["staff_position_index"], clef_kind)
             letter = {0: "C", 2: "D", 4: "E", 5: "F", 7: "G", 9: "A", 11: "B"}[natural % 12]
+            if letter in altered and head["staff_position_index"] in naturals:
+                continue
             modifier = (1 if fifths > 0 else -1) if letter in altered else 0
             head["printed_head_midi"] = natural + modifier
             head["printed_position_basis"] = {"clef": clef_kind, "clef_source": clef.ident,

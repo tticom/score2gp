@@ -95,7 +95,7 @@ def _assert_located_symbols(source, dead_heads, overlaps):
 
 
 @pytest.mark.parametrize("name,dead_heads,overlaps", [
-    ("G-Am-C-Lick", 20, 8), ("Lesson-3", 0, 12), ("Derek Trucks BB King", 0, 11),
+    ("G-Am-C-Lick", 20, 8), ("Lesson-3", 0, 12), ("Derek Trucks BB King", 0, 9),
 ])
 def test_silent_unclassified_drop_mutant_fails_on_the_real_source(
         monkeypatch, name, dead_heads, overlaps):

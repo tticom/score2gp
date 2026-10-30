@@ -90,7 +90,7 @@ def test_read_cross_keeps_unresolved_bar_located_and_empty(converted):
     assert bar["status"] == "refused" and bar["detail"] == "unsupported_overlapping_form"
     assert bar["location"]["bar_index"] == BAR
     assert bar["overlap_preservation_basis"] == "base_equivalent_refused"
-    assert len(bar["unread_symbols"]) == 5
+    assert len(bar["unread_symbols"]) == 3  # REFUSE-01B: two of the former five are now read as naturals
     assert all(s["location"]["bar_index"] == BAR and len(s["location"]["bbox"]) == 4
                for s in bar["unread_symbols"])
     events = [e for e in reading["events"] if e["bar_index"] == BAR]

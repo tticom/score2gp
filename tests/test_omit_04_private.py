@@ -142,7 +142,7 @@ def test_cfw_five_source_arpeggios_follow_written_bar_status(cfw_arpeggio_conver
     assert bar["reason"] == "note_duration_event_unread"
     assert bar["detail"] == "unsupported_overlapping_form"
     assert bar["location"] == {
-        "page_index": 0, "system_index": 3, "bar_index": 6, "event_index": 1,
+        "page_index": 0, "system_index": 3, "bar_index": 6, "event_index": 5,
     }
     marks = [item for item in report["decisions"] if item["code"] != "pdf_arpeggio_tab_duplicate"]
     assert len(marks) == 5
