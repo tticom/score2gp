@@ -18,6 +18,7 @@ from .musicxml import (
     parse_musicxml,
 )
 from .tabraw import TabCandidate, TabRaw
+from .meter import bar_capacity_ticks
 
 ALIGNMENT_SCHEMA_VERSION = "ascii-musicxml-alignment.v0.1"
 ALIGNMENT_TOLERANCE = 0.08
@@ -579,7 +580,7 @@ def _musicxml_onset_groups(measure: MusicXmlMeasure) -> list[dict[str, Any]]:
 
 
 def _expected_measure_duration_divisions(measure: MusicXmlMeasure) -> int | None:
-    value = Fraction(measure.time_signature.numerator * 4 * measure.divisions, measure.time_signature.denominator)
+    value = bar_capacity_ticks(measure.time_signature.numerator, measure.time_signature.denominator, measure.divisions)
     if value.denominator != 1:
         return None
     return int(value)

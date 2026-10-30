@@ -1,7 +1,10 @@
 """Staff timeline preview generation and topologically locked bar timelines."""
 
 from dataclasses import dataclass, field
+from fractions import Fraction
 from typing import Any, Dict, List, Optional
+
+from score2gp.meter import bar_capacity_ticks
 
 
 @dataclass
@@ -9,7 +12,8 @@ class TopologicallyLockedBarTimeline:
     """Owner of timing truth for a single topologically locked bar timeline."""
 
     measure_index: int
-    capacity_ticks: int = 3840
+    # Legacy default meter; evidence/default selection belongs to NPG-01C.
+    capacity_ticks: int | Fraction = field(default_factory=lambda: bar_capacity_ticks(4, 4, 960))
     voice_1_final_tick: int = 0
     voice_2_final_tick: int = 0
     valid: bool = True
@@ -328,7 +332,7 @@ def build_staff_timeline_preview(
                     cursor_2 = max(cursor_2, c_start + dur)
 
             # Resolve dynamic measure duration
-            D_measure = 3840
+            D_measure = bar_capacity_ticks(4, 4, 960)
             if semantic_candidates:
                 for sc in semantic_candidates:
                     ts = sc.get("time_signature") or sc.get("logical_time_signature") or sc.get("meter")
@@ -336,13 +340,13 @@ def build_staff_timeline_preview(
                         b = ts.get("beats") or ts.get("num") or ts.get("numerator")
                         bt = ts.get("beat_type") or ts.get("den") or ts.get("denominator")
                         if b and bt and int(bt) > 0:
-                            D_measure = int(b) * (3840 // int(bt))
+                            D_measure = bar_capacity_ticks(int(b), int(bt), 960)
                             break
                     elif "beats" in sc and "beat_type" in sc and int(sc["beat_type"]) > 0:
-                        D_measure = int(sc["beats"]) * (3840 // int(sc["beat_type"]))
+                        D_measure = bar_capacity_ticks(int(sc["beats"]), int(sc["beat_type"]), 960)
                         break
                     elif "time_signature_num" in sc and "time_signature_den" in sc and int(sc["time_signature_den"]) > 0:
-                        D_measure = int(sc["time_signature_num"]) * (3840 // int(sc["time_signature_den"]))
+                        D_measure = bar_capacity_ticks(int(sc["time_signature_num"]), int(sc["time_signature_den"]), 960)
                         break
 
             # Group identical chords and invalidate on overlap/polyphony

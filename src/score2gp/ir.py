@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import json
 from enum import StrEnum
+from fractions import Fraction
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, RootModel, field_validator, model_validator
+
+from .meter import bar_capacity_ticks
 
 SCHEMA_VERSION = "0.1.2"
 DEFAULT_TICKS_PER_QUARTER = 960
@@ -1013,8 +1016,8 @@ class ScoreIRRoot(RootModel[ScoreIR | ScoreBooklet]):
 
 
 
-def _bar_length_ticks(time_signature: TimeSignature, ticks_per_quarter: int) -> int:
-    return int(time_signature.numerator * ticks_per_quarter * 4 / time_signature.denominator)
+def _bar_length_ticks(time_signature: TimeSignature, ticks_per_quarter: int) -> Fraction:
+    return bar_capacity_ticks(time_signature.numerator, time_signature.denominator, ticks_per_quarter)
 
 
 def _validate_technique_links(

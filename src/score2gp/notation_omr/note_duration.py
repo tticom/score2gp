@@ -35,6 +35,8 @@ from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
+from score2gp.meter import bar_capacity_ticks
+
 from .font_glyphs import is_music_font_text, music_font_drawings
 
 from ..pdf import (
@@ -1923,7 +1925,7 @@ def _bar_checks(records: list[dict[str, Any]], bar_signatures: dict[int, dict[st
             check["located_unread"] = held
         if signature:
             numerator, denominator = signature["value"]
-            expected = Fraction(4 * numerator, denominator)
+            expected = bar_capacity_ticks(numerator, denominator, 1)
             check.update(time_signature=f"{numerator}/{denominator}", time_signature_source=signature["source"],
                          expected_quarters=_frac(expected))
         if signature and signature.get("conflict"):

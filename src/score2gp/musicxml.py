@@ -11,6 +11,7 @@ from zipfile import BadZipFile, ZipFile
 from pydantic import BaseModel, ConfigDict, Field
 
 from .ir import DEFAULT_TICKS_PER_QUARTER, TimeSignature
+from .meter import bar_capacity_ticks
 
 
 class MusicXmlWarning(BaseModel):
@@ -86,7 +87,7 @@ class MusicXmlVoiceCursorModel:
         measure_index: int,
         measure_number: str,
         divisions: int,
-        expected_duration_divisions: float | None,
+        expected_duration_divisions: int | float | Fraction | None,
         allow_remediation: bool = False,
     ):
         self.part_id = part_id
@@ -145,7 +146,8 @@ class MusicXmlVoiceCursorModel:
                             self.secondary_reasons.append("musicxml_chord_stack_without_anchor")
                         onset = self.parsing_cursor
 
-                    if self.allow_remediation and self.expected_duration_divisions is not None:
+                    if (self.allow_remediation and self.expected_duration_divisions is not None
+                            and int(self.expected_duration_divisions) == self.expected_duration_divisions):
                         expected = int(self.expected_duration_divisions)
                         if onset >= expected:
                             onset = expected
@@ -162,7 +164,8 @@ class MusicXmlVoiceCursorModel:
                     self.note_onsets[note_index] = onset
                 else:
                     onset = self.parsing_cursor
-                    if self.allow_remediation and self.expected_duration_divisions is not None:
+                    if (self.allow_remediation and self.expected_duration_divisions is not None
+                            and int(self.expected_duration_divisions) == self.expected_duration_divisions):
                         expected = int(self.expected_duration_divisions)
                         if onset >= expected:
                             onset = expected
@@ -1966,8 +1969,7 @@ def _parse_part(
 
         temp_expected = None
         if temp_time is not None:
-            val = Fraction(temp_time.numerator * temp_div * 4, temp_time.denominator)
-            temp_expected = float(val)
+            temp_expected = bar_capacity_ticks(temp_time.numerator, temp_time.denominator, temp_div)
 
         # Instantiate voice cursor model and simulate
         model = MusicXmlVoiceCursorModel(
@@ -2082,8 +2084,7 @@ def _parse_part(
 
         expected_divs = None
         if current_time is not None:
-            val = Fraction(current_time.numerator * current_divisions * 4, current_time.denominator)
-            expected_divs = float(val)
+            expected_divs = bar_capacity_ticks(current_time.numerator, current_time.denominator, current_divisions)
 
         unbalanced_bf = False
         if has_backup_or_forward and expected_divs is not None and cursor != expected_divs:
@@ -2449,9 +2450,8 @@ def _harmony_kind_suffix(kind: str | None) -> str:
     return mapping.get(kind, kind)
 
 
-def _expected_measure_duration_divisions(measure: MusicXmlMeasure) -> float | None:
-    value = Fraction(measure.time_signature.numerator * measure.divisions * 4, measure.time_signature.denominator)
-    return float(value)
+def _expected_measure_duration_divisions(measure: MusicXmlMeasure) -> Fraction:
+    return bar_capacity_ticks(measure.time_signature.numerator, measure.time_signature.denominator, measure.divisions)
 
 
 def _measure_timing_groups(measure: MusicXmlMeasure) -> list[list[MusicXmlNote]]:
