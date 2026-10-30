@@ -18,8 +18,12 @@ LEDGER = {'Heartbreaker': {1: (14, 'b44dc1a11bbf8943c23ca2d71284a2add6360c825b00
                   2: (16, '88f6d692cef9030915d90455c99bf5e8462d19e72745c8dbab4af717c310bf71'),
                   4: (9, '00c929d95dbcfed7d1b949300a77bac19e8dfa81dfba0d13ea7f5c4bcead202b'),
                   6: (7, '640882dc50d5a1b14bcfb3ff0fe0bd37569a77549f032c12330527cafdfdc73e')},
- 'Back In Black': {7: (13, 'dd2651581c9ee3e906e0678c419eeb3f8709560b81ed920e4bc0bff7cc06f99b')},
- 'Brown Sugar': {1: (4, 'fba59b99e2ac5a9b119749f5fd1eb1a4fe45c5a766759d5da37d52c8768a3a4d'),
+ 'Back In Black': {1: (11, '33935bb5b04df01f9fa3d9eb7ec92790aea54acdd642af6270b101cbc0a43341'),
+                   3: (12, '822c984d144bd21c18b80b248a46ce526e00b285ac5c65d66c8f5a803ce1e3b1'),
+                   6: (14, '317fb90d5e1f5077a3314049d7ca5fecf452b4da9f1f8919b57011ef53d765b8'),  # REFUSE-01B pins
+                   7: (13, 'dd2651581c9ee3e906e0678c419eeb3f8709560b81ed920e4bc0bff7cc06f99b')},
+ 'Brown Sugar': {6: (16, '05aa46b1d415fdff96fc92c7f6022bffef20a9afb7f3e8cb263a58c6106fd044'),  # REFUSE-01B pin
+                 1: (4, 'fba59b99e2ac5a9b119749f5fd1eb1a4fe45c5a766759d5da37d52c8768a3a4d'),
                  2: (7, 'f655b787b0ed94165bf15129f9088b867203f3c74f0cdba6833a0399e7c4ba2b')}}
 
 
