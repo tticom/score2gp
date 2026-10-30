@@ -6,6 +6,7 @@ from xml.etree import ElementTree as ET
 
 from .ir import Event, Note, ScoreIR, Technique, ScoreBooklet
 from .gpif_capabilities import validate_gpif_capabilities
+from .meter import bar_capacity_ticks
 
 GpifLayout = Literal["relational", "legacy"]
 DEFAULT_GPIF_LAYOUT: GpifLayout = "relational"
@@ -100,7 +101,7 @@ def _find_span_notes(score: ScoreIR) -> tuple[set[tuple[int, int, int]], set[tup
         tpq = 960
         if bar.events:
             tpq = bar.events[0].timing.ticks_per_quarter
-        bar_length = int(bar.time_signature.numerator * tpq * 4 / bar.time_signature.denominator)
+        bar_length = bar_capacity_ticks(bar.time_signature.numerator, bar.time_signature.denominator, tpq)
         current += bar_length
 
     # 2. Build map of event_id -> (absolute_onset, bar_index, onset_ticks)

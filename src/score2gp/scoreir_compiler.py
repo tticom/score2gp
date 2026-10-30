@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, List, Dict, Tuple, Optional
 from pydantic import ValidationError
 from score2gp.ir import (
+    DEFAULT_TICKS_PER_QUARTER,
     ScoreIR,
     Track,
     Tuning,
@@ -24,6 +25,7 @@ from score2gp.notation_omr.position_optimizer import (
     STANDARD_TUNING,
 )
 from score2gp.errors import HumanReadableConversionError
+from score2gp.meter import bar_capacity_ticks
 from score2gp.pdf_score_metadata import read_pdf_score_metadata
 
 STANDARD_STRING_NAMES = ["E4", "B3", "G3", "D3", "A2", "E2"]
@@ -236,6 +238,12 @@ class ScoreIRCompiler:
 
         if not bars:
             ts = TimeSignature(numerator=time_signature[0], denominator=time_signature[1])
+            capacity = bar_capacity_ticks(ts.numerator, ts.denominator, DEFAULT_TICKS_PER_QUARTER)
+            if capacity.denominator != 1:
+                raise HumanReadableConversionError(
+                    f"non_integral_bar_capacity: {capacity} ticks cannot represent a full-bar rest.",
+                    measure=1,
+                )
             bars.append(
                 Bar(
                     index=1,
@@ -244,7 +252,7 @@ class ScoreIRCompiler:
                         Event(
                             id="evt_01_001",
                             track_id=self.track_id,
-                            timing=Timing(bar_index=1, onset_ticks=0, duration_ticks=3840, voice=1),
+                            timing=Timing(bar_index=1, onset_ticks=0, duration_ticks=int(capacity), voice=1),
                             is_rest=True,
                             notes=[],
                         )
