@@ -1911,6 +1911,18 @@ def build_ir_from_tabraw_only(
                 )
             )
 
+    for entry in note_type_route["bars"]:
+        if entry["status"] == "written" and entry.get("implied_rests"):
+            warnings_list.append(
+                WarningItem(
+                    code="pdf_only_tab_implied_rest",
+                    message=(f"Bar {entry['output_bar_index']} (source bar {entry['source_bar_index'] + 1}): "
+                             f"{entry['implied_rests']} trailing rest(s) the page does not print were written to fill "
+                             "the bar to its time signature; the rhythm there is implied, not read."),
+                    severity="warning",
+                )
+            )
+
     for candidate in tabraw.candidates:
         if candidate.kind in ("chord-symbol", "technique-text"):
             warnings_list.append(

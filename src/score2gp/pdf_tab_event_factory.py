@@ -10,6 +10,8 @@ from .ir import (
     NotatedDuration,
     Note,
     NoteSpelling,
+    Provenance,
+    SourceStage,
     TieTechnique,
     Timing,
     Tuplet,
@@ -23,6 +25,10 @@ if TYPE_CHECKING:
 # Guitar Pro writes a grace note as a 32nd beat tagged ``GraceNotes OnBeat``; the printed value read from the
 # notation is evidence only, and a grace takes no time of its own.
 GRACE_WRITTEN_VALUE = "32nd"
+
+# A rest the page does not print (TABRHY-01 implied trailing rest) has no printed evidence at all: its duration
+# is the remainder of the meter, not a reading. It is carried at zero confidence, never at the 1.0 of a read symbol.
+IMPLIED_REST_CONFIDENCE = 0.0
 
 BLACK_KEYS = frozenset({1, 3, 6, 8, 10})
 
@@ -62,11 +68,14 @@ def build_note_type_event(
     event_idx: int,
     onset_ticks: int,
     track_id: str,
+    inherited: Sequence[TabCandidate] = (),
 ) -> Event:
     """One Event whose duration is its note-type record's, and whose (string, fret) positions come from the TAB.
 
     ``positions`` are the matched TAB column's digits or, for a tie continuation printed without
-    its own digit, the positions of the note it is tied from. A rest carries none.
+    its own digit, the positions of the note it is tied from (``inherited`` are that note's TAB digits,
+    recorded as the evidence of the copied positions). A rest carries none: a printed rest cites its
+    notation glyph, and an implied rest (the page prints none) is labelled and carried at zero confidence.
     """
     is_rest = record["kind"] == "rest"
     tie_state = None if is_rest else _tie_state(record.get("tie") or {})
@@ -77,12 +86,17 @@ def build_note_type_event(
     strike_candidates = sorted((c for c in candidates if c.kind == "percussive-strike"),
                                key=lambda c: c.string)
     head_by_candidate = {c.id: h for c, h in zip(strike_candidates, strike_heads)}
+    inherited_by_position = {(c.string, c.parsed_fret): c for c in inherited}
     notes: list[Note] = []
     for string, fret in positions:
         candidate = by_position.get((string, fret))
+        source = inherited_by_position.get((string, fret)) if candidate is None else None
         is_strike = candidate is not None and candidate.kind == "percussive-strike"
         pitch = None if is_strike else _STRING_TO_BASE_PITCH[string] + fret
         provenance = [candidate.to_provenance()] if candidate else []
+        if source is not None:
+            provenance = [source.to_provenance()]
+            provenance[0].raw = {"derived_from": "tie_continuation"}
         if is_strike:
             head = head_by_candidate[candidate.id]
             provenance[0].raw = {"notation_head_source": head["source"],
@@ -96,7 +110,7 @@ def build_note_type_event(
                 fret=fret,
                 pitch=pitch,
                 is_dead=is_strike,
-                confidence=candidate.confidence if candidate else 1.0,
+                confidence=candidate.confidence if candidate else (source.confidence if source else 1.0),
                 provenance=provenance,
                 techniques=[TieTechnique(state=tie_state)] if tie_state else [],
                 spelling=(NoteSpelling(accidental=printed[pitch % 12], source="printed")
@@ -122,12 +136,35 @@ def build_note_type_event(
             notated_duration=NotatedDuration(value=record["written"], dots=record["dots"]["count"]),
             tuplet=Tuplet(actual_notes=tuplet["actual"], normal_notes=tuplet["normal"]) if tuplet else None,
         )
+    event_provenance = [c.to_provenance() for c in candidates]
+    event_confidence = sum(c.confidence for c in candidates) / len(candidates) if candidates else 1.0
+    if not candidates and inherited:
+        event_provenance = [c.to_provenance() for c in inherited]
+        for item in event_provenance:
+            item.raw = {"derived_from": "tie_continuation"}
+        event_confidence = sum(c.confidence for c in inherited) / len(inherited)
+    if is_rest:
+        implied = bool((record.get("rest") or {}).get("implied"))
+        location = record.get("location") or {}
+        bbox = location.get("bbox")
+        evidence = Provenance(
+            source_stage=SourceStage.INFERRED if implied else SourceStage.UNKNOWN,
+            page=record["page_index"] + 1,
+            bar_index=output_bar_idx,
+            raw_token_id=None if implied else (record.get("rest") or {}).get("source"),
+            raw=({"basis": "implied_rest", "reason": "bar total below the time signature; no rest is printed",
+                  "quarters": record["duration_quarters"]}
+                 if implied else {"origin": "notation_rest_glyph", "glyph": (record.get("rest") or {}).get("glyph")}),
+            confidence=IMPLIED_REST_CONFIDENCE if implied else 1.0,
+        )
+        event_provenance = [evidence]
+        event_confidence = evidence.confidence
     return Event(
         id=f"bar-{output_bar_idx}-event-{event_idx + 1}",
         track_id=track_id,
         timing=timing,
         is_rest=is_rest,
         notes=notes,
-        confidence=sum(c.confidence for c in candidates) / len(candidates) if candidates else 1.0,
-        provenance=[c.to_provenance() for c in candidates],
+        confidence=event_confidence,
+        provenance=event_provenance,
     )

@@ -34,6 +34,25 @@ TICK_TYPE_MAPPINGS = {
     60: "64th"
 }
 
+SIDECAR_MEASURE_CAPACITY_INVALID = "sidecar_generation_measure_capacity_invalid"
+
+
+class SidecarMeasureCapacityError(ValueError):
+    """A measure of the first staff cannot be written: its timeline is invalid. Carries a stable code and its location."""
+
+    code = SIDECAR_MEASURE_CAPACITY_INVALID
+
+    def __init__(self, *, page_index: int | None, system_index: int | None, staff_index: int | None, measure_index: int):
+        self.page_index = page_index
+        self.system_index = system_index
+        self.staff_index = staff_index
+        self.measure_index = measure_index
+        super().__init__(
+            f"Capacity mismatch: Measure {measure_index} is invalid "
+            f"(page_index={page_index}, system_index={system_index}, staff_index={staff_index})"
+        )
+
+
 def get_note_type(duration_ticks: int) -> str:
     # Find closest match in TICK_TYPE_MAPPINGS
     for ticks, n_type in sorted(TICK_TYPE_MAPPINGS.items(), key=lambda x: abs(x[0] - duration_ticks)):
@@ -133,7 +152,12 @@ def generate_musicxml_from_omr(
     # Generate measures
     for m_data in preview["measures"]:
         if not m_data.get("valid", True):
-            raise ValueError(f"Capacity mismatch: Measure {m_data['measure_index']} is invalid")
+            raise SidecarMeasureCapacityError(
+                page_index=preview.get("page_index"),
+                system_index=preview.get("system_index"),
+                staff_index=preview.get("staff_index"),
+                measure_index=m_data["measure_index"],
+            )
         
         m_idx = m_data["measure_index"]
         measure = ET.SubElement(part, "measure", number=str(m_idx))

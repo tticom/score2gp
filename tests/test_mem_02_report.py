@@ -69,7 +69,8 @@ def _convert(name, scratch, debug=False):
     path = scratch / "conversion/conversion-report.html"
     payload = json.loads((scratch / "result.json").read_text(encoding="utf-8"))
     assert result.returncode == payload["exit_code"]
-    assert payload["status"] in ("success", "refused")
+    # SHORT-01A (G7): a run that wrote an implied (unprinted) rest is "partial", no longer "success".
+    assert payload["status"] in ("success", "partial", "refused")
     if not path.exists():
         # Base refuses this resource-heavy source before an HTML report exists.
         # Keep that early gate intact; any other missing report is a failure.
