@@ -710,8 +710,19 @@ def _is_slanted_arc(glyph: Glyph, space: float) -> bool:
             and max(map(abs, residuals)) <= ARC_MAX_HEIGHT_SPACES * space)
 
 
+def _arc_end_ys(glyph: Glyph) -> tuple[float, float] | None:
+    """Vertical centre of the painted band at each end of a crescent, or None."""
+    ends = []
+    for f in (0.05, 0.95):
+        runs = _runs(glyph.shape, True, glyph.bbox[0] + f * glyph.w, glyph.bbox[1] - 1, glyph.bbox[3] + 1)
+        if len(runs) != 1:
+            return None
+        ends.append((runs[0][0] + runs[0][1]) / 2)
+    return ends[0], ends[1]
+
+
 def _slanted_slur_ids(glyphs: list[Glyph], events: list[dict[str, Any]], space: float) -> set[str]:
-    """Only uniquely owned slurs between adjacent single-head stemmed notes.
+    """Only uniquely owned slurs between two single-head stemmed notes, adjacent or not.
 
     Different staff positions establish a slur rather than a tie. Do not feed
     these contours into tie inference or infer a held chord member from them.
@@ -731,12 +742,24 @@ def _slanted_slur_ids(glyphs: list[Glyph], events: list[dict[str, Any]], space: 
                  if h.bbox[0] - reach <= glyph.bbox[2] <= h.bbox[2] + 0.3 * space
                  and abs(h.cy - glyph.cy) <= TIE_VERTICAL_REACH_SPACES * space]
         if len(starts) != 1 or len(stops) != 1:
-            continue
+            # A slur over several notes has its box centre far from the lower
+            # end head. Locate each head from the painted end of the arc.
+            ends = _arc_end_ys(glyph)
+            if ends is None:
+                continue
+            starts = [(e, h) for e, h in notes
+                      if h.bbox[0] - 0.3 * space <= glyph.bbox[0] <= h.bbox[2] + reach
+                      and abs(h.cy - ends[0]) <= TIE_VERTICAL_REACH_SPACES * space]
+            stops = [(e, h) for e, h in notes
+                     if h.bbox[0] - reach <= glyph.bbox[2] <= h.bbox[2] + 0.3 * space
+                     and abs(h.cy - ends[1]) <= TIE_VERTICAL_REACH_SPACES * space]
+            if len(starts) != 1 or len(stops) != 1:
+                continue
         start, first = starts[0]
         stop, last = stops[0]
-        following = min((e for e in events if e["_cx"] > start["_cx"] and not e.get("_grace")),
-                        key=lambda e: e["_cx"], default=None)
-        if (following is stop and abs(first.cy - last.cy) > TIE_SAME_POSITION_SPACES * space
+        # A slur may span several notes (REFUSE-02): its ends are two different
+        # staff positions, so it is never a tie, and it carries no duration.
+        if (stop["_cx"] > start["_cx"] and abs(first.cy - last.cy) > TIE_SAME_POSITION_SPACES * space
                 and _is_slanted_arc(glyph, space)):
             result.add(glyph.ident)
     return result

@@ -104,6 +104,11 @@ LEDGER = {'Castles Made of Sand': {6: (16,
                 18: (13, 'fddc955c4f9fb50722d6d588078a14cb971ea2e8e32b1ae1a11e536f72359f6d'),
                 31: (14, '787894d0189d74f857139246ca8596efb6fc9f93146fbd9a7adb5021fa829879'),
                 35: (14, '45fdf87a86d546ca20bea0eb7069591da8b343ec4228666a12ba3202d7468c39'),
+                # REFUSE-02 bars (multi-note slurs): rhythm checked against the printed
+                # notation; strings/frets are a regression pin, not an independent transcription.
+                17: (9, 'a7077261837369f16fac600e2b90a296b12537d9d9079bf6445f0ec1bceed42d'),
+                20: (12, 'c205dd9fc5ec38aeea9ad9552063d56c975369dedfda8859329db6070ebf6ab5'),
+                36: (13, '166069462baac8a44ddeb92744215934664bc32b1d8f55326fd1476acb31d01e'),
                 12: (10, '94b67832ba65be9c5008f65768bf49d60f7ea738b622a5c74c37f82cb6fc6706'),
                 21: (13, 'a96e0c4d5ab7bf704227583df81567dc4f796631e3105c93b69ab1c87276877f'),
                 23: (14, 'ba7604f63bd42f94ef678754d77dc93e5d8d077e1828a407cb1d9b67a29481dc'),
