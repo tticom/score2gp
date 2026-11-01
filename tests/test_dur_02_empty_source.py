@@ -79,25 +79,27 @@ def test_private_empty_source_keeps_printed_bars_without_beats():
 
 
 @pytest.mark.parametrize("name", [
-    "12 Bar Blues Solo Guitar Jam.pdf",
-    "5 MUST KNOW Pentatonic Licks In Em.pdf",
     "7_Grateful_Dead_Melodies.pdf",
-    "Finger postition tips TAB.pdf",
 ])
-def test_private_digits_without_notation_keep_specific_refusal(name):
-    """Reject accepting rhythm-free digits or replacing the route reason with the generic guard."""
+def test_private_digits_without_printed_rhythm_are_never_written(name):
+    """Reject accepting rhythm-free digits (TABRHY-01 reads printed rhythm marks; this source prints none).
+
+    The other no-notation sources this test used to cover (12 Bar Blues, 5 MUST KNOW, Finger position tips) print
+    rhythm under the TAB and now convert; ``tests/test_tab_rhythm_real.py`` asserts that. This source prints a
+    whole-rest glyph in some bars and no stem, beam or other rhythm mark anywhere: every digit column must stay
+    unwritten and only the printed rests may be written.
+    """
     pdf = _private(name)
     work = Path("work")
     work.mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory(dir=work) as tmp:
         result, out, report = _convert(pdf, Path(tmp))
-        assert result.exit_code != 0, result.output
-        assert not out.exists()
-        assert report["status"] == "refused"
-        assert report["refusal_code"] == "pdf_only_tab_no_notation_bars"
         route = json.loads((Path(tmp) / "route/note-type-route.json").read_text(encoding="utf-8"))
-        assert route["summary"]["source_bars"] == 0
+        durations = json.loads((Path(tmp) / "route/note-durations.json").read_text(encoding="utf-8"))
         assert route["summary"]["tab_digits"] > 0
-        assert len(route["unplaced_tab_digits"]) == route["summary"]["tab_digits"]
-        assert all(digit["candidate_id"] and digit["page_index"] >= 0
-                   for digit in route["unplaced_tab_digits"])
+        assert set(route["summary"]["match_kinds"]) <= {"rest"}
+        assert "tab_column" not in route["summary"]["match_kinds"] and "tie_continuation" not in route["summary"]["match_kinds"]
+        columns = [r for r in durations["events"] if r["reason"] == "tab_column_without_rhythm_mark"]
+        assert columns and len(columns) <= route["summary"]["tab_digits"]
+        root = _gpif(out) if out.exists() else None
+        assert root is None or root.findall("./Notes/Note") == []

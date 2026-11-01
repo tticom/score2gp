@@ -1232,6 +1232,14 @@ def convert_command(
             from .build_ir import build_ir_from_tabraw_only
             from .notation_omr.note_duration import read_note_durations
             note_durations = read_note_durations(pdf, pages=parse_page_range(pages), time_signature=declared_time_signature)
+            if not note_durations["systems"] and tabraw_path.is_file():
+                # No printed notation staff on any page: read the rhythm printed under the TAB (TABRHY-01).
+                from .pdf_tab_rhythm import read_tab_rhythm
+                from .tabraw import TabRaw as _TabRaw
+                tab_rhythm = read_tab_rhythm(pdf, _TabRaw.from_json_file(tabraw_path), pages=parse_page_range(pages),
+                                             time_signature=declared_time_signature)
+                if tab_rhythm["summary"]["read_events"]:  # a source with no rhythm mark at all keeps its refusal
+                    note_durations = tab_rhythm
             (actual_work_dir / "note-durations.json").write_text(json.dumps(note_durations, indent=2) + "\n", encoding="utf-8")
             # Finish PDF evidence extraction before handing TabRaw to the IR builder.
             from .pdf import read_notation_barline_signals

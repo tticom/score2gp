@@ -358,6 +358,13 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
             tied_from = ({"positions": last["positions"], "location": _location(last["record"])}
                          if last is not None and last["record"]["kind"] != "rest" else None)
             entry.update(status="written", reason=None, detail=None, location=None)
+            implied = sum(1 for m in matched if (m["record"].get("rest") or {}).get("implied"))
+            if implied:
+                # TABRHY-01: a rest the printed marks do not show, written to fill the bar's end; never a printed rest.
+                entry["implied_rests"] = implied
+                entry["rhythm_basis"] = "printed_marks_with_implied_rest"
+            elif any(m["record"].get("tab_rhythm") for m in matched):
+                entry["rhythm_basis"] = "printed_marks"
         else:
             tied_from = None
             location = {"page_index": system["page_index"], "system_index": system["system_index"],
@@ -395,6 +402,11 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
             "unplaced_tab_digits": len(unplaced),
         },
     }
+    written = [e for e in route_bars if e["status"] == "written"]
+    if any("rhythm_basis" in e for e in route_bars):
+        route["summary"]["written_bars_printed_marks"] = sum(1 for e in written if e.get("rhythm_basis") == "printed_marks")
+        route["summary"]["written_bars_with_implied_rest"] = sum(1 for e in written if e.get("implied_rests"))
+        route["summary"]["implied_rests"] = sum(e.get("implied_rests", 0) for e in written)
     unowned_strikes = [c for c in unplaced if c.kind == "percussive-strike"]
     if unowned_strikes:
         route["located_refusals"] = [
