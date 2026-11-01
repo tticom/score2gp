@@ -50,6 +50,7 @@ MID_LEFT = (0.38, 0.5, 0.0, 0.28)
 INK_ABSENT, INK_PRESENT, INK_PRESENT_STEM = 0.1, 0.5, 0.3  # share of a region's cells that are painted
 SIX_NINE_SPLIT = 0.5
 SIX_NINE_MARGIN = 0.08
+ONE_MAX_ASPECT = 0.55  # width over height of the widest form read as a 1 when narrow_one_only is set
 FOUR_BAR_BAND = (0.5, 0.82)  # a 4's crossbar lies here; a 2's base bar lies below it
 
 
@@ -104,8 +105,12 @@ def _counters(raster: list[list[bool]]) -> list[tuple[float, float]]:
     return found
 
 
-def classify_numeral(raster: list[list[bool]]) -> tuple[str | None, str | None]:
-    """The digit this painted form is, or (None, why not). Ambiguous forms are not read."""
+def classify_numeral(raster: list[list[bool]], *, narrow_one_only: bool = False) -> tuple[str | None, str | None]:
+    """The digit this painted form is, or (None, why not). Ambiguous forms are not read.
+
+    ``narrow_one_only`` (TABRHY-01): a 1 is a lone stem, so a form wider than ``ONE_MAX_ASPECT`` of its height is
+    not read as one (a heavy 3 has a right edge that runs the full height). Off by default: notation reads unchanged.
+    """
     rows, columns = len(raster), len(raster[0])
     row_runs = [_runs_of(row) for row in raster]
     counters = _counters(raster)
@@ -149,7 +154,7 @@ def classify_numeral(raster: list[list[bool]]) -> tuple[str | None, str | None]:
         if centre <= SIX_NINE_SPLIT - SIX_NINE_MARGIN:
             return "9", None
         return None, "numeral_six_nine_ambiguous"
-    if stem_full and top_bar < BAR_SHARE:
+    if stem_full and top_bar < BAR_SHARE and not (narrow_one_only and columns / rows > ONE_MAX_ASPECT):
         return "1", None  # a lone stem, with a flag or a base serif at most
     if not stem_full and all(len(runs) <= 1 for runs in row_runs):
         return ("7", None) if top_bar >= BAR_SHARE else (None, "numeral_stroke_ambiguous")

@@ -61,17 +61,24 @@ def test_mixing_ledger_lines_do_not_block_the_real_tab_systems():
     ]
 
 
-def test_paranoid_unsupported_tab_groups_stay_refused_and_separate():
-    """Reject accepting unsafe groups and merging physical groups in diagnostics."""
+def test_paranoid_tab_groups_are_resolved_and_unsettled_bars_stay_refused_and_located():
+    """Reject restoring the blanket refusal, writing a digit that lies outside every detected bar, or refusing a bar
+    without a located reason (TABRHY-01 raised the grouping resolution for this source).
+
+    Its TAB staves have a line spacing between the two accepted ranges and lines broken at every digit. They are now
+    resolved by evidence (fret digits on the staff's own lines; three intact lines). A bar the printed marks do not
+    settle (a flag, a mark this reader does not read, a column with no rhythm mark) stays refused with a located
+    reason and the page position of the mark.
+    """
     code, written, report, route, diagnostics, _ = _convert("PARANOID - BLACK SABBATH.pdf")
-    assert code == 4 and not written and route is None
-    assert report["refusal_code"] == "pdf_only_tab_grouping_unsafe"
-    groups = diagnostics["details"]["located_grouping_refusals"]
-    assert [(g["page_index"], g["system_index"]) for g in groups] == [
-        (page, system) for page, count in enumerate((5, 6, 4)) for system in range(count)
-    ]
-    assert all(g["code"] == "tab_group_staff_spacing_unclassified" for g in groups)
-    assert all(g["line_count"] == 6 for g in groups)
-    assert all(g["notation_bar_count"] == 0 for g in groups)
-    assert all(g["timing_code"] == "tab_group_without_notation_timing" for g in groups)
-    assert report["pdf_only_diagnostics"]["located_grouping_refusals"] == groups
+    assert code == 0 and written and diagnostics is None
+    assert report["status"] == "success"
+    summary = route["summary"]
+    assert summary["unplaced_tab_digits"] == 0
+    assert summary["source_bars"] == 38 and summary["written_bars"] == 18 and summary["refused_bars"] == 20
+    assert summary["written_bars_printed_marks"] == 18 and summary["implied_rests"] == 0
+    refused = [b for b in route["bars"] if b["status"] == "refused"]
+    assert len(refused) == 20
+    assert all(b["reason"] and b["location"]["page_index"] >= 0 and "bar_index" in b["location"] for b in refused)
+    assert set(summary["refusal_reasons"]) <= {"bar_without_notation_event", "notation_note_without_tab_digit",
+                                               "note_duration_event_unread"}

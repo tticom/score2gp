@@ -3935,6 +3935,10 @@ def classify_staff_line_group(group: list[_LineSegment], page: Any = None) -> st
             return "tab"
         elif 15.0 < median_gap <= 32.0 and _is_coherent_large_tab_group(group):
             return "tab"
+        elif 7.2 < median_gap < 9.5 and has_fret:
+            # TABRHY-01: six lines are a TAB, not a notation staff (five); the gap alone is ambiguous between
+            # the two ranges above, so it is settled by the evidence that fret digits sit on these very lines.
+            return "tab"
         elif median_gap < 5.5:
             return "rejected"
         else:
@@ -5020,7 +5024,18 @@ def _recovered_segmented_tab_groups(
                 min((line.y0 + line.y1) / 2 for line in group),
                 max((line.y0 + line.y1) / 2 for line in group))
 
-    for group in _tab_line_groups(joined):
+    # TABRHY-01: a staffless TAB broken at every stacked digit draws its lower strings as pieces under 30 pt. The
+    # second candidate list admits those pieces, and only a group the 30 pt list did not already give is taken from it,
+    # so every group the earlier rule found is unchanged.
+    short_pieces = [
+        segment for segment in segments
+        if abs(segment.y1 - segment.y0) <= 1.0 and abs(segment.x1 - segment.x0) >= 8.0
+    ]
+    candidates = [(group, False) for group in _tab_line_groups(joined)]
+    for group in _tab_line_groups(merge_collinear_horizontal_segments(short_pieces)):
+        if not any(abs(bounds(group)[2] - bounds(known)[2]) <= 1.0 for known, _ in candidates if len(known) == 6):
+            candidates.append((group, True))
+    for group, staffless_only in candidates:
         if len(group) != 6 or classify_staff_line_group(group, page) != "tab":
             continue
         x0, x1, y0, y1 = bounds(group)
@@ -5046,6 +5061,12 @@ def _recovered_segmented_tab_groups(
                    and max(0.0, min(x1, bounds(partner)[1]) - max(x0, bounds(partner)[0])) >=
                    0.7 * min(x1 - x0, bounds(partner)[1] - bounds(partner)[0])
                    for partner in notation_groups):
+            # TABRHY-01: a staffless TAB has no notation partner. The same independent evidence stands in its
+            # place: three lines intact over the whole staff width (already required above) and fret digits
+            # sitting on the group's own lines, which a text underline, a diagram or a legend does not have.
+            if not (intact >= 3 and _has_fret_digit_intersection(group, page)):
+                continue
+        elif staffless_only:
             continue
         recovered.append(group)
     return recovered

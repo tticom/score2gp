@@ -32,7 +32,13 @@
    - A bar with an unread event, a notation/TAB mismatch or a total that disagrees with its time
      signature is refused with a located reason code and written empty. No duration is derived from
      an event count, spacing, a default or a bar total, and no rest is added to fill a bar.
-   - A PDF with no notation staff (TAB only) is refused: `pdf_only_tab_no_notation_bars`. The time
+   - A PDF with no notation staff (TAB only) reads the rhythm printed under the strings (TABRHY-01,
+     `pdf_tab_rhythm.py`, `docs/design/tabrhy-01-staffless-tab-rhythm.md`): stems, beams, dots, tuplet
+     brackets with their number, ties, the circle around a stemless chord and a whole-rest glyph. The
+     reader emits the same note-duration records, so the one route above writes a bar only when its
+     durations total the printed meter exactly. A trailing remainder with nothing printed is written
+     as an IMPLIED rest, labelled and counted apart from printed rests. Where no rhythm mark is read at all
+     the source keeps its refusal: `pdf_only_tab_no_notation_bars`. The time
      signature is read from the PDF (TS-READ-01, `notation_omr/time_signature.py`, see
      `docs/design/ts-read-01-printed-time-signature.md`); `--time-signature` is only used where none is
      printed or readable, and a declared value that differs from a printed one refuses the affected bars

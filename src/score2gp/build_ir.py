@@ -1829,6 +1829,17 @@ def build_ir_from_tabraw_only(
             details={"remediation_hint": "Read the note durations of the same PDF (score2gp read-note-durations) and pass them in."},
         )
 
+    unplaced_digits = ((note_durations.get("diagnostics") or {}).get("tab_rhythm") or {}).get("unplaced_digits")
+    if unplaced_digits:
+        # TABRHY-01: the TAB's bars are the reader's own, so a fret digit outside every one of them would be dropped
+        # and the bars after it renumbered. Refuse the source and locate each digit.
+        raise BuildIrInputRiskError(
+            category="pdf_only_tab_grouping_unsafe",
+            stage="layout-gating",
+            message=f"PDF-only tab building refused: {len(unplaced_digits)} fret digit(s) lie outside every detected TAB bar.",
+            details={"located_tab_digits_outside_bars": unplaced_digits},
+        )
+
     # 2. Durations from note types, positions from the TAB
     digits = [c for c in fret_candidates if (c.kind == "fret" and c.parsed_fret is not None)
               or c.kind == "percussive-strike"]
