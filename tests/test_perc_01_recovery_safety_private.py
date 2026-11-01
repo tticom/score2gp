@@ -16,6 +16,8 @@ from test_dur_02_oracle import read_gp_bars
 ROOT = Path(__file__).resolve().parents[1]
 LEDGER = {'Heartbreaker': {1: (14, 'b44dc1a11bbf8943c23ca2d71284a2add6360c825b004cc2aa49b8ca6106bea8'),
                   2: (16, '88f6d692cef9030915d90455c99bf5e8462d19e72745c8dbab4af717c310bf71'),
+                  # REFUSE-02 pin (multi-note slur): rhythm checked against the printed notation.
+                  3: (15, 'e3d5fd31f34c59f0fe2934808cdba7225f6d234009471f5e059d5970bc93ab35'),
                   4: (9, '00c929d95dbcfed7d1b949300a77bac19e8dfa81dfba0d13ea7f5c4bcead202b'),
                   6: (7, '640882dc50d5a1b14bcfb3ff0fe0bd37569a77549f032c12330527cafdfdc73e')},
  'Back In Black': {1: (11, '33935bb5b04df01f9fa3d9eb7ec92790aea54acdd642af6270b101cbc0a43341'),
