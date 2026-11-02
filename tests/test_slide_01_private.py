@@ -138,10 +138,20 @@ def test_chord_slide_uses_one_slur_for_all_strings():
     _convert(stem)
     gpif = _gpifs[stem]
     bars = gpif.findall("./Bars/Bar")
+    beats = {b.get("id"): b for b in gpif.findall("./Beats/Beat")}
+    voices = {v.get("id"): v for v in gpif.findall("./Voices/Voice")}
+    notes = {n.get("id"): n for n in gpif.findall("./Notes/Note")}
     for bar in (3, 4):
-        # The normal pipeline currently refuses these bars for other reasons.
-        # Sharing slur evidence must not bypass that bar-level gate.
-        assert bars[bar - 1].findtext("Voices").split() == ["-1"] * 4
+        # REFUSE-03 reads the rest a page-background shape had hidden, so these bars (source bars 2 and 3)
+        # are written: the first beat is the three-string chord slide, every string a legato slide
+        # (Flags 2), and no other beat carries a slide. Refusing the bar again, or writing a shift/no
+        # slide on any string, fails here.
+        voice = voices[bars[bar - 1].findtext("Voices").split()[0]]
+        slides = [[(p.findtext("Flags") if p.get("name") == "Slide" else None)
+                   for p in notes[n].findall("./Properties/Property") if p.get("name") == "Slide"]
+                  for beat in voice.findtext("Beats").split()
+                  for n in (beats[beat].findtext("Notes") or "").split()]
+        assert slides[:3] == [["2"]] * 3 and all(not s for s in slides[3:]), f"CHORD_SLIDE_FLAGS_{bar}"
 
     for bar in (3, 4):
         chord = [m for m in marks if m["bar_index"] == bar]

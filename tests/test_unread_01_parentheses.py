@@ -73,7 +73,7 @@ def _convert(name, folder, runtime=ROOT):
 
 @pytest.mark.parametrize("name,refused,written", [
     ("Derek Trucks BB King", (0, 14), (3, 11)),
-    ("Ex 2 Hands Up", (10,), (1, 2, 3, 4, 6, 8)),  # 6, 8 newly recovered by PERC-01 (9 source-verified events)
+    ("Ex 2 Hands Up", (10,), (1, 2, 3, 4, 6, 8, 11)),  # 6, 8 newly recovered by PERC-01 (9 source-verified events); 11 by REFUSE-03 (half note + half rest, equals the reference GP bar)
 ])
 def test_new_parenthesized_bars_are_located_refusals_in_final_output(name, refused, written):
     work = ROOT / "work"
@@ -101,6 +101,9 @@ def test_new_parenthesized_bars_are_located_refusals_in_final_output(name, refus
                 assert final_bars[entry["source_bar_index"]]["events"] is None
 
 
+# REFUSE-03 deliberately writes two more Melodic_Expressions bars (source bars 2 and 3: eighth, dotted half
+# with a legato slide, eighth rest; each totals 4/4) whose rest was hidden by a page-background shape. The
+# Melodic_Expressions digests below are the new head values; every other source digest is unchanged.
 # SLIDE-01 deliberately changes the written slide marks (type read from the drawn mark, unreadable
 # marks no longer guessed). The whole-GPIF digests below are the new head values; the digests of the
 # GPIF with its slide marks removed are the base digests above, so everything else stays byte-identical.
@@ -109,8 +112,8 @@ def test_new_parenthesized_bars_are_located_refusals_in_final_output(name, refus
      "5d58c37f097d15d81613225e11d74ab914bf3246060edaa48d38a41e7f8c09e7",
      "eef50156ec15497a93f53e518689ad6598974281f83fc9db526f7a86017c7a66"),
     ("Melodic_Expressions_Chap_19_", (21, 23),
-     "06822271fe49678a8d562e721715dd506bc17e8434b922df85d1863dd0e4c927",
-     "e6d650202f421d0ba083e5b594300e8d9dc154c291b0c4c7c0de79cda386564b"),
+     "6a8edd68f46b4388c2c7f3e1c1042d73915901b2d428835ef82715fd16573e2f",
+     "72a242fc55283c603fb04f715330261b7dc947ce228908235842ef8e0944060b"),
 ])
 def test_base_written_parentheses_keep_byte_identical_gpif(
         name, indices, head_gpif_sha256, base_gpif_without_slides_sha256):

@@ -1231,6 +1231,17 @@ def _barlines(staff: Staff, symbols: PageSymbols) -> list[tuple[float, float]]:
     return [(a, b) for a, b in clusters if a - staff.x0 > BARLINE_CLUSTER_SPACES * s]
 
 
+def _covers_staff(glyph: Glyph, staff: Staff) -> bool:
+    """A filled shape whose box encloses the whole staff (a page background or frame) is not a printed symbol.
+
+    No notation glyph spans a staff from its first line to its last and from its left end to its right end;
+    left in, such a shape sorts first in the header scan and makes the whole staff "header", hiding every
+    rest on it.
+    """
+    return (glyph.bbox[0] <= staff.x0 and glyph.bbox[2] >= staff.x1
+            and glyph.bbox[1] <= staff.top and glyph.bbox[3] >= staff.bottom)
+
+
 def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], state: dict[str, Any]) -> dict[str, Any]:
     s = staff.space
     upper, lower = _zone(staff, all_staves)
@@ -1238,7 +1249,7 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
     def in_zone(x: float, y: float) -> bool:
         return upper <= y <= lower and staff.x0 - 1.0 <= x <= staff.x1 + 1.0
 
-    glyphs = [g for g in symbols.glyphs if in_zone(g.cx, g.cy)]
+    glyphs = [g for g in symbols.glyphs if in_zone(g.cx, g.cy) and not _covers_staff(g, staff)]
     base_equivalent = state.get("base_equivalent", False)
     dead_heads = [] if base_equivalent else [g for g in glyphs if _is_dead_note_x_head(g, s)]
     dead_ids = {g.ident for g in dead_heads}
