@@ -135,9 +135,11 @@ def _match_bar(records: list[dict[str, Any]], digits: list[TabCandidate], space:
             tie = record.get("tie") or {}
             if tie.get("stop") and previous is not None and len(previous["positions"]) == heads:
                 entry = {"record": record, "positions": list(previous["positions"]), "candidates": [],
+                         "inherited": list(previous.get("candidates") or []),
                          "match": {"kind": "tie_continuation", "tied_from": previous["location"]}}
                 matched.append(entry)
-                previous = {"positions": entry["positions"], "location": _location(record)}
+                previous = {"positions": entry["positions"], "location": _location(record),
+                            "candidates": entry["inherited"]}
                 continue
             return matched, _refusal("notation_note_without_tab_digit", index)
         if len(near) > 1 and near[1][0] - near[0][0] < COLUMN_SPACES * space:
@@ -169,7 +171,7 @@ def _match_bar(records: list[dict[str, Any]], digits: list[TabCandidate], space:
                         "match": {"kind": "tab_column", "candidate_ids": [c.id for c in cands],
                                   "dx_spaces": round(near[0][0] / space, 3)}})
         if not grace:
-            previous = {"positions": positions, "location": _location(record)}
+            previous = {"positions": positions, "location": _location(record), "candidates": cands}
     unused = [i for i in range(len(columns)) if i not in used]
     if unused:
         reason = ("percussive_strike_without_owning_note"
@@ -352,10 +354,12 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
             for i, m in enumerate(matched):
                 events.append(build_note_type_event(
                     m["record"], positions=m["positions"], candidates=m["candidates"], output_bar_idx=output_index,
-                    event_idx=i, onset_ticks=ticks_for_quarters(onset) if onset else 0, track_id=track_id))
+                    event_idx=i, onset_ticks=ticks_for_quarters(onset) if onset else 0, track_id=track_id,
+                    inherited=m.get("inherited") or ()))
                 onset += Fraction(m["record"]["duration_quarters"])  # a grace adds none
             last = matched[-1] if matched else None
-            tied_from = ({"positions": last["positions"], "location": _location(last["record"])}
+            tied_from = ({"positions": last["positions"], "location": _location(last["record"]),
+                          "candidates": last["candidates"] or last.get("inherited") or []}
                          if last is not None and last["record"]["kind"] != "rest" else None)
             entry.update(status="written", reason=None, detail=None, location=None)
             implied = sum(1 for m in matched if (m["record"].get("rest") or {}).get("implied"))

@@ -1479,6 +1479,19 @@ def convert_command(
     )
 
     # Write successful JSON report
+    # G7: a rest the page does not print is written to fill a bar. That rhythm is implied, not read, so the run is not
+    # a plain success (the file is still written, exit code 0).
+    report_status = "success"
+    implied_rest_bars = []
+    if pdf_only_tab and diagnostics:
+        implied_rest_bars = [
+            {"output_bar_index": b["output_bar_index"], "source_bar_index": b["source_bar_index"],
+             "implied_rests": b["implied_rests"]}
+            for b in (diagnostics.note_type_route or {}).get("bars", [])
+            if b.get("status") == "written" and b.get("implied_rests")
+        ]
+        if implied_rest_bars:
+            report_status = "partial"
     if json_report:
         if pdf_only_tab:
             pdf_only_diag_payload = {
@@ -1486,6 +1499,10 @@ def convert_command(
                 "inferred_rhythm_status": "note_type",
                 "gp_package_written": True,
             }
+            if implied_rest_bars:
+                pdf_only_diag_payload["inferred_rhythm_status"] = "implied_rest"
+                pdf_only_diag_payload["conversion_complete"] = False
+                pdf_only_diag_payload["implied_rest_bars"] = implied_rest_bars
             refused_tab_systems = (diagnostics.note_type_route or {}).get("refused_tab_systems") if diagnostics else None
             if refused_tab_systems:
                 # PARTIAL-01: the written systems are safe; the file is not a complete conversion.
@@ -1507,7 +1524,7 @@ def convert_command(
                     }
         _write_convert_report(
             report_path=json_report,
-            status="success",
+            status=report_status,
             stage="gp-write",
             exit_code=0,
             work_dir=actual_work_dir,
@@ -1527,7 +1544,7 @@ def convert_command(
             pdf_only_diagnostics=pdf_only_diag_payload
         )
 
-    typer.echo(f"Success: GP package written to {out}")
+    typer.echo(f"{'Partial' if report_status == 'partial' else 'Success'}: GP package written to {out}")
     typer.echo(json.dumps({"workdir": str(actual_work_dir), "warnings": warnings}, indent=2))
 
 
@@ -1692,7 +1709,10 @@ def generate_sidecar_command(
 ) -> None:
     """Generate a timing-safe, validated MusicXML sidecar from a PDF score using OMR notation extraction."""
     from score2gp.notation_omr.pipeline import run_recognition_on_file
-    from score2gp.notation_omr.musicxml_generator import generate_musicxml_from_omr
+    from score2gp.notation_omr.musicxml_generator import (
+        SidecarMeasureCapacityError,
+        generate_musicxml_from_omr,
+    )
 
     typer.echo(f"Running OMR recognition on {pdf}...")
     recognition_result = run_recognition_on_file(
@@ -1705,11 +1725,20 @@ def generate_sidecar_command(
         raise typer.Exit(1)
 
     typer.echo("Compiling timeline to MusicXML...")
-    xml_str = generate_musicxml_from_omr(
-        recognition_result["read_only_recognition_outcomes"],
-        recognition_result.get("semantic_candidates"),
-        recognition_result.get("staff_geometry")
-    )
+    try:
+        xml_str = generate_musicxml_from_omr(
+            recognition_result["read_only_recognition_outcomes"],
+            recognition_result.get("semantic_candidates"),
+            recognition_result.get("staff_geometry")
+        )
+    except SidecarMeasureCapacityError as exc:
+        typer.echo(
+            f"Error: {exc.code}: measure {exc.measure_index} of the first staff "
+            f"(page_index={exc.page_index}, system_index={exc.system_index}, staff_index={exc.staff_index}) "
+            "cannot be written with a valid timeline; no sidecar was generated.",
+            err=True,
+        )
+        raise typer.Exit(1)
     if not xml_str:
         typer.echo("Error: MusicXML compilation failed.", err=True)
         raise typer.Exit(1)
