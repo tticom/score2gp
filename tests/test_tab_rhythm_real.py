@@ -210,7 +210,8 @@ def _bend_bar_note_counts(name: str, work: Path, declared: str | None = None, ta
                     continue
                 bar = bars[bar_index]
                 noteheads = _printed_columns(pdf, durations, bar_index)
-                digitless = sum(1 for e in bar.events if not e.is_rest and not e.provenance)
+                digitless = sum(1 for e in bar.events if not e.is_rest and
+                    all((pv.raw or {}).get("derived_from") == "tie_continuation" for pv in e.provenance))
                 out.append((bar_index + 1, sum(1 for e in bar.events if not e.is_rest), noteheads + digitless))
     return out
 

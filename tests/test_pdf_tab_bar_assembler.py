@@ -14,7 +14,7 @@ import pytest
 
 import score2gp.pdf_tab_bar_assembler as assembler
 from score2gp.build_ir import BuildIrInputRiskError, build_ir_from_tabraw_only
-from score2gp.ir import Bar, DEFAULT_TICKS_PER_QUARTER, Event, NotatedDuration, Note, TimeSignature, Timing, Tuplet
+from score2gp.ir import Bar, DEFAULT_TICKS_PER_QUARTER, Event, NotatedDuration, Note, Provenance, SourceStage, TimeSignature, Timing, Tuplet
 from score2gp.pdf_tab_bar_assembler import PdfTabBarAssemblerError, assemble_note_type_bars, place_tab_digits
 from score2gp.tabraw import TabRaw
 
@@ -149,6 +149,11 @@ def test_normalized_bar_equivalence() -> None:
     bars, _ = _assemble([[specs]], digits)
     by_id = {d.id: d for d in digits}
 
+    rest_record = records([[specs]])["events"][2]["rest"]
+    # SHORT-01A: a printed rest cites its notation glyph (full confidence: it is read, not synthesised).
+    rest_evidence = Provenance(source_stage=SourceStage.UNKNOWN, page=1, bar_index=1, raw_token_id=rest_record.get("source"),
+                               raw={"origin": "notation_rest_glyph", "glyph": rest_record.get("glyph")}, confidence=1.0)
+
     def ev(i, onset, ticks, written, ids, tuplet=None, is_rest=False):
         notes = [Note(string=by_id[c].string, fret=by_id[c].parsed_fret,
                       pitch={1: 64, 2: 59, 3: 55}[by_id[c].string] + by_id[c].parsed_fret,
@@ -157,7 +162,7 @@ def test_normalized_bar_equivalence() -> None:
                      timing=Timing(bar_index=1, onset_ticks=onset, duration_ticks=ticks, ticks_per_quarter=DEFAULT_TICKS_PER_QUARTER,
                                    notated_duration=NotatedDuration(value=written, dots=0), tuplet=tuplet),
                      is_rest=is_rest, notes=notes, confidence=0.9 if ids else 1.0,
-                     provenance=[by_id[c].to_provenance() for c in ids])
+                     provenance=[rest_evidence] if is_rest else [by_id[c].to_provenance() for c in ids])
 
     triplet = Tuplet(actual_notes=3, normal_notes=2)
     expected = Bar(index=1, time_signature=TimeSignature(numerator=4, denominator=4), events=[
