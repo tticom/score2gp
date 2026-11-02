@@ -31,17 +31,19 @@ def _route(source: str, tmp_path, *, tab_only_ok: bool = True):
 
 def _check(route):
     bars = route["bars"]
-    # Black Dog, bar 0: the printed bar totals less than the meter; bar 1 is a tied continuation of it.
-    total = bars[0]
-    assert (total["status"], total["reason"]) == ("refused", "bar_total_mismatch")
-    evidence = total["refusal_evidence"]
-    assert (evidence["cause"], evidence["total_quarters"], evidence["expected_quarters"]) == (
-        "notation_total_below_meter", "15/4", "4")
-    assert (evidence["notation_events"], evidence["tab_columns"]) == (1, 1)
-    tie = bars[1]
+    # Black Dog, bar 0: REFUSE-05 reads the dot painted on its eighth rest, so the bar now totals the meter
+    # and is written. Bar 1, which followed it as a tied continuation, now says the TAB has no column at
+    # one of its notation events (notation side has the extra item); that refusal stays.
+    assert (bars[0]["status"], bars[0]["reason"]) == ("written", None)
+    follow = bars[1]
+    assert (follow["status"], follow["reason"]) == ("refused", "notation_note_without_tab_digit")
+    evidence = follow["refusal_evidence"]
+    assert (evidence["cause"], evidence["tab_side"]) == ("no_tab_column_at_notation_event", "notation_has_extra")
+    assert (evidence["notation_events"], evidence["tab_columns"]) == (14, 10)
+    # A later bar in the same source keeps its located tie-continuation refusal.
+    tie = bars[4]
     assert (tie["status"], tie["reason"]) == ("refused", "notation_note_without_tab_digit")
     assert tie["refusal_evidence"]["cause"] == "tie_stop_without_written_predecessor"
-    assert tie["location"]["event_index"] == 0
 
 
 def test_black_dog_refusals_are_located(tmp_path):

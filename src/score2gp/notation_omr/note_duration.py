@@ -111,6 +111,12 @@ DOT_ROUNDNESS_SPACES = 0.15
 DOT_FIRST_GAP_SPACES = 1.3
 DOT_NEXT_GAP_SPACES = 1.0
 DOT_HEIGHT_TOLERANCE_SPACES = 0.75
+# A dot painted as a zero-length stroke with round caps (a stroked point). Its painted disc is the stroke
+# width; the stroke has no length of its own, so it is not a straight segment.
+POINT_DOT_FORM = "stroked_point_dot"
+POINT_DOT_MAX_LENGTH_FRACTION = 0.1  # of the stroke width
+POINT_DOT_ROUND_CAP = 1  # PDF line cap style 1
+POINT_DOT_RING_SIDES = 16
 ARC_MIN_WIDTH_SPACES = 1.5
 ARC_MAX_HEIGHT_SPACES = 1.3
 ARC_MAX_FILL_RATIO = 0.45  # below NOTEHEAD_MIN_FILL_RATIO: a crescent, never an oval
@@ -394,6 +400,21 @@ def extract_page_symbols(page: Any, page_index: int, *, include_music_font: bool
             glyphs.append(Glyph(ident, drawing, shape.bbox, shape, True, filled))
             continue
         kinds = {item[0] for item in items}
+        point = _stroked_point_dot(drawing, items) if stroked and not filled else None
+        if point is not None:
+            cx, cy, width = point
+            half = width / 2
+            ring = [(cx + half * math.cos(2 * math.pi * k / POINT_DOT_RING_SIDES),
+                     cy + half * math.sin(2 * math.pi * k / POINT_DOT_RING_SIDES))
+                    for k in range(POINT_DOT_RING_SIDES)]
+            shape = _NoteheadShape(
+                bbox=(cx - half, cy - half, cx + half, cy + half), fill_edges=_edges([ring], close=True),
+                stroke_edges=(), stroke_half_width=0.0, even_odd=False, fill_color=drawing.get("color"),
+                fill_opacity=drawing.get("stroke_opacity"))
+            point_drawing = dict(drawing)
+            point_drawing["source_form"] = POINT_DOT_FORM
+            glyphs.append(Glyph(ident, point_drawing, shape.bbox, shape, False, True))
+            continue
         if stroked and not filled and kinds == {"l"}:
             width = float(drawing.get("width") or 0.0)
             pieces = []
@@ -447,6 +468,18 @@ def extract_page_symbols(page: Any, page_index: int, *, include_music_font: bool
         g.drawing.get("source_form") == "font_glyph_outline"
         and page_staff_space and _is_dead_note_x_head(g, page_staff_space))]
     return PageSymbols(page_index, glyphs, segments, polylines, texts, head_shapes, page_staff_space)
+
+
+def _stroked_point_dot(drawing: dict[str, Any], items: list[Any]) -> tuple[float, float, float] | None:
+    """Centre and diameter of a dot painted as one zero-length round-capped stroke, else None."""
+    width = float(drawing.get("width") or 0.0)
+    caps = drawing.get("lineCap") or ()
+    if width <= 0 or len(items) != 1 or items[0][0] != "l" or not caps or any(c != POINT_DOT_ROUND_CAP for c in caps):
+        return None
+    a, b = items[0][1], items[0][2]
+    if math.hypot(float(a.x) - float(b.x), float(a.y) - float(b.y)) > POINT_DOT_MAX_LENGTH_FRACTION * width:
+        return None
+    return (float(a.x) + float(b.x)) / 2, (float(a.y) + float(b.y)) / 2, width
 
 
 def _tokens(chars: list[dict[str, Any]], size: float) -> list[list[dict[str, Any]]]:
@@ -859,6 +892,21 @@ def _flags_at_stem(stem: Stem, candidates: list[Glyph], space: float) -> list[Gl
     return found
 
 
+def _dot_fits(dot: Glyph, anchor: tuple[float, float, float, float], edge: float, row: list[Glyph],
+              space: float, rest: bool) -> bool:
+    """Whether ``dot`` stands where the next augmentation dot of this anchor would stand."""
+    x0, y0, x1, y1 = anchor
+    cy = (y0 + y1) / 2
+    reach = DOT_FIRST_GAP_SPACES if not row else DOT_NEXT_GAP_SPACES
+    if dot.bbox[0] < edge - 0.1 * space or dot.bbox[0] - edge > reach * space:
+        return False
+    if rest:
+        return y0 - 0.5 * space <= dot.cy <= y1 + 0.5 * space
+    if row:
+        return abs(dot.cy - row[-1].cy) <= 0.1 * space
+    return abs(dot.cy - cy) <= DOT_HEIGHT_TOLERANCE_SPACES * space
+
+
 def _augmentation_dots(anchors: list[tuple[float, float, float, float]], dots: list[Glyph], claimed: set[str],
                        space: float, rest: bool = False) -> list[list[Glyph]]:
     """The row of dots to the right of each notehead of the event (or of its rest).
@@ -867,26 +915,12 @@ def _augmentation_dots(anchors: list[tuple[float, float, float, float]], dots: l
     the length of a row, not the number of dot glyphs.
     """
     rows: list[list[Glyph]] = []
-    for x0, y0, x1, y1 in anchors:
-        cy = (y0 + y1) / 2
+    for anchor in anchors:
         row: list[Glyph] = []
-        edge = x1
+        edge = anchor[2]
         while True:
-            reach = DOT_FIRST_GAP_SPACES if not row else DOT_NEXT_GAP_SPACES
-            options = []
-            for dot in dots:
-                if dot.ident in claimed or dot in row or dot.bbox[0] < edge - 0.1 * space:
-                    continue
-                if dot.bbox[0] - edge > reach * space:
-                    continue
-                if rest:
-                    height_ok = y0 - 0.5 * space <= dot.cy <= y1 + 0.5 * space
-                elif row:
-                    height_ok = abs(dot.cy - row[-1].cy) <= 0.1 * space
-                else:
-                    height_ok = abs(dot.cy - cy) <= DOT_HEIGHT_TOLERANCE_SPACES * space
-                if height_ok:
-                    options.append(dot)
+            options = [dot for dot in dots
+                       if dot.ident not in claimed and dot not in row and _dot_fits(dot, anchor, edge, row, space, rest)]
             if not options:
                 break
             nearest = min(options, key=lambda d: d.bbox[0])
@@ -895,6 +929,26 @@ def _augmentation_dots(anchors: list[tuple[float, float, float, float]], dots: l
         if row:
             rows.append(row)
     return rows
+
+
+def _ambiguous_point_dots(events: list[dict[str, Any]], space: float) -> set[str]:
+    """Stroked-point dots that more than one event's first dot position accepts.
+
+    A point dot is read only where position and size attach it to exactly one note or rest. One that
+    could belong to two events is left unread (never guessed, never taken from the bar total).
+    """
+    claimants: dict[str, set[int]] = {}
+    point_dots = {d.ident: d for event in events for row in event.get("_dots", []) for d in row
+                  if d.drawing.get("source_form") == POINT_DOT_FORM}
+    if not point_dots:
+        return set()
+    for index, event in enumerate(events):
+        rest = "_rest" in event
+        for head in [h.bbox for h in event.get("_heads", [])] or [event["_rest"].bbox]:
+            for dot in point_dots.values():
+                if _dot_fits(dot, head, head[2], [], space, rest):
+                    claimants.setdefault(dot.ident, set()).add(index)
+    return {ident for ident, owners in claimants.items() if len(owners) > 1}
 
 
 # --- rests ----------------------------------------------------------------------------------
@@ -1546,6 +1600,17 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
         rows = _augmentation_dots(anchors, dots, claimed, s, rest="_rest" in event)
         claimed.update(d.ident for row in rows for d in row)
         event["_dots"] = rows
+    ambiguous = _ambiguous_point_dots(events, s)
+    if ambiguous:
+        # More than one note or rest could own the dot: it stays unread, as do any dots after it in its row.
+        for event in events:
+            kept = []
+            for row in event["_dots"]:
+                cut = next((i for i, d in enumerate(row) if d.ident in ambiguous), len(row))
+                if row[:cut]:
+                    kept.append(row[:cut])
+            event["_dots"] = kept
+        state["diagnostics"]["ambiguous_point_dots"] = state["diagnostics"].get("ambiguous_point_dots", 0) + len(ambiguous)
 
     group_info = []
     for root, members in group_members.items():

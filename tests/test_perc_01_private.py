@@ -85,7 +85,13 @@ def test_real_source_census_rejects_recognition_mutants(census, monkeypatch, mut
 
 # Independently transcribed from the printed notation and TAB. The private
 # event ledger stays under ignored work/; only counts and digests are tracked.
-LEDGER = {'Castles Made of Sand': {6: (16,
+LEDGER = {'Castles Made of Sand': {
+                          # REFUSE-05 pins (dotted notes painted as stroked points): rhythm checked against
+                          # the printed notation page; strings/frets are a regression pin, not an independent
+                          # transcription. No reference GP exists: not independently verified.
+                          2: (15, '2c37ba4c0b8a5f477965d48868d1874573919cc668acb1268bbb30a9f9ba2e2b'),
+                          7: (14, 'b7371d5323a5cf0555a6609893cdd9b1fd06de80347f7878dbaa4dd62aef564b'),
+                          6: (16,
                               '943bf00cbf4aa2ead525b28b64471add69e94402e95ca19426995322b2873005'),
                           8: (13,
                               'f7b87c5e9bd10c538aa1691f693c8c0f2ce10bd5a454959f8ecef4de607979a9'),
@@ -96,6 +102,11 @@ LEDGER = {'Castles Made of Sand': {6: (16,
                           12: (1,
                                'bbabb968b5dd1dd1b6906df6eb09b4be2f8c80a2b477bcba11d4e880282d686d')},
  'Crossroads': {3: (6, '3f7e44f06938d9b40b6c46975b47dfa3cccce99ca3702e5d965e75e12b6afea5'),
+                # REFUSE-05 pins (dotted notes painted as stroked points): rhythm checked against the printed
+                # notation page; strings/frets are a regression pin. Not independently verified.
+                4: (9, 'dac83adcfb575ca7b04c137652a068eb8d1bf8c5c96ebfa4524a72090cddd481'),
+                10: (10, '81dae99d7ddf18a4bdb5d60755e5529ed64b61845d45f1be214188d54311202c'),
+                11: (10, 'd14ab9a1b0ca195019ce14ed086f97dea71a88dd6addb7d7bb76da1b7fe5c697'),
                 # REFUSE-01B bars (natural signs): rhythm checked against the printed
                 # notation; strings/frets are a regression pin, not an independent transcription.
                 5: (12, '2ad74b0b23bef495cfabfac7e56ee70bccdd46cb94f6b2fccec52286d0dbd469'),

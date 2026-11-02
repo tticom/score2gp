@@ -19,6 +19,9 @@ LEDGER = {'Heartbreaker': {1: (14, 'b44dc1a11bbf8943c23ca2d71284a2add6360c825b00
                   # REFUSE-02 pin (multi-note slur): rhythm checked against the printed notation.
                   3: (15, 'e3d5fd31f34c59f0fe2934808cdba7225f6d234009471f5e059d5970bc93ab35'),
                   4: (9, '00c929d95dbcfed7d1b949300a77bac19e8dfa81dfba0d13ea7f5c4bcead202b'),
+                  # REFUSE-05 pin (dotted half painted as a stroked point): rhythm checked against the
+                  # printed notation page; strings/frets are a regression pin. Not independently verified.
+                  5: (3, '94d288f78f970008bf5095c26edd3060f218f7fbff5f7a2c2d5f62994d318dd0'),
                   6: (7, '640882dc50d5a1b14bcfb3ff0fe0bd37569a77549f032c12330527cafdfdc73e')},
  'Back In Black': {1: (11, '33935bb5b04df01f9fa3d9eb7ec92790aea54acdd642af6270b101cbc0a43341'),
                    3: (12, '822c984d144bd21c18b80b248a46ce526e00b285ac5c65d66c8f5a803ce1e3b1'),
