@@ -72,7 +72,7 @@ def _convert(name, folder, runtime=ROOT):
 
 
 @pytest.mark.parametrize("name,refused,written", [
-    ("Derek Trucks BB King", (0, 14), (3, 11)),
+    ("Derek Trucks BB King", (0, 14), (1, 3, 7, 8, 10, 11)),  # 1, 7, 8, 10 by REFUSE-06 (graces under a tuplet bracket; match the reference GP)
     ("Ex 2 Hands Up", (10,), (1, 2, 3, 4, 6, 8, 11)),  # 6, 8 newly recovered by PERC-01 (9 source-verified events); 11 by REFUSE-03 (half note + half rest, equals the reference GP bar)
 ])
 def test_new_parenthesized_bars_are_located_refusals_in_final_output(name, refused, written):
