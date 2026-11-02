@@ -93,14 +93,17 @@ def test_old_unbounded_behavior_is_rejected_on_main_source(monkeypatch):
         _assert_main_refusal(monkeypatch)
 
 
+# REFUSE-03 deliberately writes two more Melodic_Expressions bars (source bars 2 and 3: eighth, dotted half
+# with a legato slide, eighth rest; each totals 4/4) whose rest was hidden by a page-background shape. The
+# Melodic_Expressions digests below are the new head values; every other source digest is unchanged.
 # SLIDE-01 deliberately changes written slide marks, so the Melodic_Expressions whole-GPIF digest is the
 # new head value; its digest with slide marks removed is the base digest (unchanged apart from slides).
 @pytest.mark.parametrize("name,nodes,gpif_digest,without_slides_digest", [
     ("Lesson-6.pdf", 676202,
      "902d5262822a5944a650d981c776feec3ea1bb4ce541c471456c02c17d1072b6", None),
     ("Melodic_Expressions_Chap_19_.pdf", 581458,
-     "06822271fe49678a8d562e721715dd506bc17e8434b922df85d1863dd0e4c927",
-     "e6d650202f421d0ba083e5b594300e8d9dc154c291b0c4c7c0de79cda386564b"),
+     "6a8edd68f46b4388c2c7f3e1c1042d73915901b2d428835ef82715fd16573e2f",
+     "72a242fc55283c603fb04f715330261b7dc947ce228908235842ef8e0944060b"),
 ])
 def test_real_control_inspection_count_and_gpif_are_unchanged(name, nodes, gpif_digest, without_slides_digest):
     # Counts and GPIF SHA-256 come from fresh CLI conversions at product base
