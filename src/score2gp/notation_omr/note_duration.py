@@ -1946,12 +1946,11 @@ def _record(event: dict[str, Any], staff: Staff, state: dict[str, Any], bar: int
             reason = reason or "grace_note_beamed"
         elif dot_count:
             reason = reason or "grace_note_with_dot"
-        elif record["tuplet"]:
-            reason = reason or "grace_note_in_tuplet"
         heads = event["_heads"]
         record["grace"] = {"head_width_spaces": round(max(h.w for h in heads) / space, 3),
                            "head_height_spaces": round(max(h.h for h in heads) / space, 3),
                            "beat_event_index": None, "gap_spaces": None}
+        reason = reason or _grace_under_tuplet_reason(record)
     if reason:
         if "_rest" in event:
             glyph = event["_rest"]
@@ -1972,6 +1971,15 @@ def _record(event: dict[str, Any], staff: Staff, state: dict[str, Any], bar: int
     record["value_quarters"] = _frac(value)
     record["duration_quarters"] = _frac(duration)
     return record
+
+
+def _grace_under_tuplet_reason(record: dict[str, Any]) -> str | None:
+    """REFUSE-06: a grace under a tuplet bracket's span is read, never refused for it.
+
+    It has no metrical duration: the tuplet scales none of it and the bar total never counts it. The
+    printed bracket ratio is only carried on its beat, as the page shows it.
+    """
+    return None
 
 
 def _attach_graces(records: list[dict[str, Any]], space: float) -> None:

@@ -126,6 +126,7 @@ def build_note_type_event(
             ticks_per_quarter=DEFAULT_TICKS_PER_QUARTER,
             notated_duration=NotatedDuration(value=GRACE_WRITTEN_VALUE, dots=0),
             grace=GraceTiming(position="on-beat", duration=GRACE_WRITTEN_VALUE),
+            tuplet=Tuplet(actual_notes=tuplet["actual"], normal_notes=tuplet["normal"]) if tuplet else None,
         )
     else:
         timing = Timing(

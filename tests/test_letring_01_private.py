@@ -80,7 +80,9 @@ def test_derek_dashed_let_ring_locates_span_and_refuses_unwritten_bar():
     assert ET.fromstring(data).find(".//LetRing") is None
     actual = read_written_bars(data)
     assert actual[9]["events"] is None, "the unread source bar must remain empty"
-    assert sum(b["events"] is not None for b in actual) == 2
+    # REFUSE-06 reads graces under a tuplet bracket: four more bars (1, 7, 8, 10 of the source) are written
+    # and match the reference (see test_refuse_06); none holds a let-ring mark, so the count is 6, not 2.
+    assert sum(b["events"] is not None for b in actual) == 6
     [decision] = report["decisions"]
     assert decision["bar_index"] == 10
     assert decision["beat_indices"] == [7, 8, 9]

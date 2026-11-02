@@ -23,9 +23,11 @@ def test_derek_music_font_keys_are_read_or_located_by_the_existing_gate():
     assert all(refused[0]["location"][k] is not None for k in
                ("page_index", "system_index", "bar_index"))
     assert result["summary"]["bars"] == 16
-    assert result["summary"]["read_events"] == 217
+    # REFUSE-06 reads the 8 graces that stand under a tuplet bracket (they have no metrical duration); the
+    # ninth grace is now refused for another, located reason (too far from its beat).
+    assert result["summary"]["read_events"] == 225
     assert result["summary"]["unread_reasons"] == {
-        "grace_note_in_tuplet": 9, "rest_glyph_unidentified": 1}
+        "grace_note_beat_too_far": 1, "rest_glyph_unidentified": 1}
 
 
 @pytest.mark.parametrize("name,read,unread,located", [
