@@ -130,7 +130,10 @@ def _match_bar(records: list[dict[str, Any]], digits: list[TabCandidate], space:
             if following is None or grace["beat_event_index"] != following["event_index"]:
                 return matched, _refusal("grace_note_beat_unattached", index)
             if not near:
-                return matched, _refusal("notation_note_without_tab_digit", index)
+                refusal = _refusal("notation_note_without_tab_digit", index)
+                refusal["evidence"] = _disagreement_evidence(
+                    records, columns, digits, "grace_note_without_tab_column", record)
+                return matched, refusal
         if not near:
             tie = record.get("tie") or {}
             if tie.get("stop") and previous is not None and len(previous["positions"]) == heads:
@@ -141,7 +144,15 @@ def _match_bar(records: list[dict[str, Any]], digits: list[TabCandidate], space:
                 previous = {"positions": entry["positions"], "location": _location(record),
                             "candidates": entry["inherited"]}
                 continue
-            return matched, _refusal("notation_note_without_tab_digit", index)
+            refusal = _refusal("notation_note_without_tab_digit", index)
+            if tie.get("stop"):
+                # A tied continuation prints no TAB digit; it is written only from the chord it continues.
+                cause = ("tie_stop_without_written_predecessor" if previous is None
+                         else "tie_stop_head_count_differs_from_predecessor")
+            else:
+                cause = "no_tab_column_at_notation_event"
+            refusal["evidence"] = _disagreement_evidence(records, columns, digits, cause, record)
+            return matched, refusal
         if len(near) > 1 and near[1][0] - near[0][0] < COLUMN_SPACES * space:
             return matched, _refusal("notation_tab_column_ambiguous", index)
         column = near[0][1]
@@ -160,6 +171,7 @@ def _match_bar(records: list[dict[str, Any]], digits: list[TabCandidate], space:
                 "distinct_tab_strings": len({c.string for c in cands}),
                 "tab_candidate_ids": [c.id for c in cands],
                 "dx_spaces": round(near[0][0] / space, 3),
+                "tab_side": _side(heads, len(cands)),
             }
             return matched, refusal
         positions = [(c.string, c.parsed_fret) for c in cands]
@@ -181,6 +193,29 @@ def _match_bar(records: list[dict[str, Any]], digits: list[TabCandidate], space:
         refusal["candidate_ids"] = [c.id for c in columns[unused[0]]]
         return matched, refusal
     return matched, None
+
+
+def _side(notation: int, tab: int) -> str:
+    """Which side of a notation/TAB count disagreement has the extra item."""
+    if notation == tab:
+        return "counts_equal"
+    return "notation_has_extra" if notation > tab else "tab_has_extra"
+
+
+def _disagreement_evidence(records: list[dict[str, Any]], columns: Sequence[Sequence[TabCandidate]],
+                           digits: Sequence[TabCandidate], cause: str, record: dict[str, Any] | None = None,
+                           **more: Any) -> dict[str, Any]:
+    """Where and how the notation and the TAB of one bar disagree (REFUSE-04): counts and a cause, no content."""
+    played = [r for r in records if r["kind"] != "rest"]
+    evidence: dict[str, Any] = {
+        "source": "notation_tab_bar_counts", "cause": cause,
+        "notation_events": len(played), "tab_columns": len(columns), "tab_digits": len(digits),
+        "tab_side": _side(len(played), len(columns)),
+    }
+    if record is not None:
+        evidence["bbox"] = record["location"]["bbox"]
+    evidence.update(more)
+    return evidence
 
 
 def _location(record: dict[str, Any]) -> dict[str, Any]:
@@ -320,11 +355,24 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
             }
         elif not records:
             refusal = None if empty_source else _refusal("bar_without_notation_event")
+            if refusal is not None:
+                refusal["evidence"] = {
+                    "source": "notation_tab_bar_counts",
+                    "cause": ("tab_digits_without_notation_event" if bar_digits else "bar_without_notation_or_tab_item"),
+                    "notation_events": 0, "tab_columns": len(_columns(bar_digits, system["staff_space"])),
+                    "tab_digits": len(bar_digits), "tab_side": "tab_has_extra" if bar_digits else "counts_equal",
+                    "rhythm_source": "tab_rhythm" if "tab_rhythm" in diagnostics else "notation_staff",
+                }
         else:
             matched, refusal = _match_bar(records, bar_digits, system["staff_space"], tied_from)
             if refusal is None and check["status"] != "match":
                 refusal = _refusal("bar_total_mismatch",
                                    detail=f"{check['total_quarters']} of {check['expected_quarters']} quarters")
+                total, expected = Fraction(check["total_quarters"]), Fraction(check["expected_quarters"])
+                refusal["evidence"] = _disagreement_evidence(
+                    records, _columns(bar_digits, system["staff_space"]), bar_digits,
+                    "notation_total_below_meter" if total < expected else "notation_total_above_meter",
+                    status=check["status"], total_quarters=str(total), expected_quarters=str(expected))
         entry["events"] = [{"event_index": m["record"]["event_index"], "kind": m["record"]["kind"],
                             "match": m["match"]} for m in matched]
         if source_bar in overlaps:
