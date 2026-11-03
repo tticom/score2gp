@@ -72,13 +72,14 @@ def test_paranoid_tab_groups_are_resolved_and_unsettled_bars_stay_refused_and_lo
     """
     code, written, report, route, diagnostics, _ = _convert("PARANOID - BLACK SABBATH.pdf")
     assert code == 0 and written and diagnostics is None
-    assert report["status"] == "success"
+    # REFUSE-09: five flagged bars are read (three carry an implied trailing rest, so the run is "partial").
+    assert report["status"] == "partial"
     summary = route["summary"]
     assert summary["unplaced_tab_digits"] == 0
-    assert summary["source_bars"] == 38 and summary["written_bars"] == 18 and summary["refused_bars"] == 20
-    assert summary["written_bars_printed_marks"] == 18 and summary["implied_rests"] == 0
+    assert summary["source_bars"] == 38 and summary["written_bars"] == 23 and summary["refused_bars"] == 15
+    assert summary["written_bars_printed_marks"] == 20 and summary["implied_rests"] == 3
     refused = [b for b in route["bars"] if b["status"] == "refused"]
-    assert len(refused) == 20
+    assert len(refused) == 15
     assert all(b["reason"] and b["location"]["page_index"] >= 0 and "bar_index" in b["location"] for b in refused)
-    assert set(summary["refusal_reasons"]) <= {"bar_without_notation_event", "notation_note_without_tab_digit",
+    assert set(summary["refusal_reasons"]) <= {"bar_total_mismatch", "bar_without_notation_event", "notation_note_without_tab_digit",
                                                "note_duration_event_unread"}
