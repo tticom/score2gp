@@ -251,7 +251,7 @@ def test_real_source_x_without_notation_owners_stays_located_and_unwritten():
                and r["reason"] == "percussive_strike_without_owning_note"
                and r["location"]["page_index"] == 0
                and r["location"]["string"] == 5
-               and r["location"]["bar_index"] == 5
+               and r["location"]["bar_index"] == 6  # GROUP-02: start repeat barline now counted
                and r["location"]["bbox"] for r in refused)
 
 
