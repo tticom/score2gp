@@ -4423,13 +4423,83 @@ def _has_attached_notehead(
     return False
 
 
+REPEAT_START_THICK_MIN_WIDTH = 2.5
+REPEAT_START_THIN_MAX_WIDTH = 1.6
+REPEAT_DOT_MAX_SIDE = 4.5
+REPEAT_DOT_MAX_GAP = 10.0
+
+
+def _repeat_sign_dots(drawings: list[dict[str, Any]]) -> list[tuple[float, float]]:
+    """Centres of drawn filled dots (a closed fill made of curves only, small and square)."""
+    dots: list[tuple[float, float]] = []
+    for drawing in drawings:
+        items = drawing.get("items") or []
+        rect = drawing.get("rect")
+        if rect is None or drawing.get("fill") is None or not items:
+            continue
+        if any(item[0] != "c" for item in items):
+            continue
+        width, height = rect.x1 - rect.x0, rect.y1 - rect.y0
+        if 1.0 <= width <= REPEAT_DOT_MAX_SIDE and abs(width - height) <= 0.3:
+            dots.append(((rect.x0 + rect.x1) / 2, (rect.y0 + rect.y1) / 2))
+    return dots
+
+
+def _repeat_sign_cluster_kind(
+    cluster: list[dict[str, Any]], x0: float, ys: list[float], dots: list[tuple[float, float]] | None
+) -> str | None:
+    """GROUP-02: a repeat-sign barline is accepted only where it is drawn, not guessed.
+
+    "start": [optional thin line] + thick filled bar + thin filled bar at the system start, with a pair of dots
+    just right of the thin bar. "end": thin filled bar + thick filled bar, with a pair of dots just left of the
+    thin bar. Every stroke spans the whole TAB staff (the cluster only holds such strokes) and the dots stand in
+    the 2nd-3rd and 4th-5th string gaps, one in each. Anything else (no dots, extra strokes, dots on both sides,
+    other primitives) returns None and keeps its refusal.
+    """
+    if not dots or len(ys) != 6:
+        return None
+    parts: dict[Any, list[dict[str, Any]]] = {}
+    lines = []
+    for item in cluster:
+        seg = item["segment"]
+        if seg.primitive_kind == "rect_edge" and seg.primitive_id is not None:
+            parts.setdefault(seg.primitive_id, []).append(item)
+        elif seg.primitive_kind == "line":
+            lines.append(item)
+        else:
+            return None
+    if len(lines) > 1 or len(parts) != 2 or any(len(v) != 2 for v in parts.values()):
+        return None
+    first, second = sorted(((min(i["x"] for i in v), max(i["x"] for i in v)) for v in parts.values()))
+    width = lambda bar: bar[1] - bar[0]
+    wanted = [(ys[1] + ys[2]) / 2, (ys[3] + ys[4]) / 2]
+    tolerance = (ys[1] - ys[0]) * 0.2
+
+    def dots_beside(edge_of_bar: float, side: int) -> bool:
+        def beside(d: tuple[float, float]) -> bool:
+            return ys[0] <= d[1] <= ys[-1] and 0.0 < side * (d[0] - edge_of_bar) <= REPEAT_DOT_MAX_GAP
+        if sum(beside(d) for d in dots) != 2:
+            return False
+        return all(sum(beside(d) and abs(d[1] - target) <= tolerance for d in dots) == 1 for target in wanted)
+
+    thick_first = width(first) >= REPEAT_START_THICK_MIN_WIDTH and width(second) <= REPEAT_START_THIN_MAX_WIDTH
+    thin_first = width(first) <= REPEAT_START_THIN_MAX_WIDTH and width(second) >= REPEAT_START_THICK_MIN_WIDTH
+    if thick_first and second[0] > first[1] and min(i["x"] for i in cluster) <= x0 + 10.0:
+        if not lines or lines[0]["x"] < first[0] + 1.0:
+            return "start" if dots_beside(second[1], 1) else None
+    if thin_first and not lines and second[0] > first[1]:
+        return "end" if dots_beside(first[0], -1) else None
+    return None
+
+
 def filter_tab_barline_candidates(
     candidates: list[_LineSegment],
     y0: float,
     y1: float,
     line_ys: list[float],
     x0: float,
-    x1: float
+    x1: float,
+    repeat_dots: list[tuple[float, float]] | None = None,
 ) -> dict[str, Any]:
     rejection_reasons = {
         "pdf_barline_outside_system_bounds": 0,
@@ -4608,6 +4678,15 @@ def filter_tab_barline_candidates(
             else:
                 for item in cluster:
                     final_decisions[item["idx"]] = (False, "pdf_barline_mixed_primitive_provenance", "ambiguous", 2)
+        elif (repeat_kind := _repeat_sign_cluster_kind(cluster, x0, ys, repeat_dots)) is not None:
+            # One stroke of the drawn repeat sign is the system barline (the leftmost of a start sign, the
+            # rightmost of an end sign); the rest of the sign is secondary.
+            representative = cluster[0] if repeat_kind == "start" else cluster[-1]
+            for item in cluster:
+                if item is representative:
+                    final_decisions[item["idx"]] = (True, None, f"repeat_{repeat_kind}", len(cluster))
+                else:
+                    final_decisions[item["idx"]] = (False, "pdf_barline_double_secondary", f"repeat_{repeat_kind}", len(cluster))
         else:
             primitive_ids = {item["segment"].primitive_id for item in cluster if item["segment"].primitive_id is not None}
             has_rect = any(item["segment"].primitive_kind == "rect_edge" for item in cluster)
@@ -5199,6 +5278,7 @@ def _detect_tab_systems(
 ) -> list[_TabSystem]:
     drawings = page.get_drawings()
     segments = list(_drawing_segments(drawings))
+    repeat_dots = _repeat_sign_dots(drawings)
     notehead_shapes = _notehead_candidate_shapes(drawings, [info["bbox"] for info in getattr(page, "get_image_info", lambda: [])()])
     if _recover_paint:
         from .notation_omr.note_duration import extract_page_symbols
@@ -5391,7 +5471,8 @@ def _detect_tab_systems(
                 system_candidates.append(TruncatedLine(s, trunc_y_min, trunc_y_max))
 
         barline_candidates_count = len(system_candidates)
-        filtered = filter_tab_barline_candidates(system_candidates, y0, y1, line_ys, x0, x1)
+        filtered = filter_tab_barline_candidates(system_candidates, y0, y1, line_ys, x0, x1,
+                                                 repeat_dots=repeat_dots)
         valid_barlines = filtered["valid_barlines"]
         rejected_count = filtered["rejected_count"]
         rejection_reasons = dict(filtered["rejection_reasons"])
