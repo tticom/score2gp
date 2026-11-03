@@ -31,7 +31,7 @@ def test_derek_music_font_keys_are_read_or_located_by_the_existing_gate():
 
 
 @pytest.mark.parametrize("name,read,unread,located", [
-    ("G-Am-C-Lick", 86, 2, 0), ("Lesson-3", 465, 0, 0),
+    ("G-Am-C-Lick", 88, 0, 0), ("Lesson-3", 465, 0, 0),
 ])
 def test_approved_drawing_sources_keep_their_reader_events(name, read, unread, located):
     source = ROOT / "fixtures/private" / (name + ".pdf")

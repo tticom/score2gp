@@ -76,9 +76,11 @@ def test_refused_bars_keep_measured_located_causes_and_no_written_beats(converte
     route, bars, _ = converted
     expected = {
         2: (0, 8, "notehead_digit_count_mismatch", None, "notation_tab_column"),
-        4: (1, 7, "note_duration_event_unread", "rest_glyph_beside_note", "note_duration_record"),
+        # REFUSE-08: the rest in bars 4 and 8 is now read; the bars stay refused for the notehead/tab-digit
+        # mismatch at event 5 that the rest refusal used to hide.
+        4: (1, 5, "notehead_digit_count_mismatch", None, "notation_tab_column"),
         6: (1, 8, "notehead_digit_count_mismatch", None, "notation_tab_column"),
-        8: (2, 7, "note_duration_event_unread", "rest_glyph_beside_note", "note_duration_record"),
+        8: (2, 5, "notehead_digit_count_mismatch", None, "notation_tab_column"),
     }
     assert route["summary"]["refused_bars"] == len(expected)
     for number, (system, event, reason, detail, source) in expected.items():
@@ -95,6 +97,7 @@ def test_refused_bars_keep_measured_located_causes_and_no_written_beats(converte
             assert (evidence["notation_head_count"], evidence["tab_candidate_count"],
                     evidence["distinct_tab_strings"]) == (2, 1, 1)
             assert len(evidence["tab_candidate_ids"]) == 1
-            assert evidence["dx_spaces"] == 0.0
+            # measured per bar; the events REFUSE-08 exposed in bars 4 and 8 stand 0.06 space off their column
+            assert evidence["dx_spaces"] == {4: 0.06, 8: 0.06}.get(number, 0.0)
         else:
             assert evidence["cause"] == detail
