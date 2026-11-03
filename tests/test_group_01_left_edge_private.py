@@ -27,10 +27,11 @@ from score2gp.pdf import _detect_tab_systems
 ROOT = Path(__file__).resolve().parents[1]
 PRIVATE = ROOT / "fixtures/private"
 
+# REFUSE-07 adds Hey Joe bars 3, 7 and Pride and Joy bar 7 (rolled-chord wave columns read as no symbol).
 # source -> (source bars, bars written, {source bar: TAB digits placed in it} for the checked bars)
 CASES = {
-    "Hey Joe": (12, {0, 1, 4, 10}, {0: 12, 1: 13, 4: 15, 10: 28}),
-    "Pride and Joy": (14, {0, 1, 2, 3, 6, 9, 13}, {0: 4, 1: 4, 2: 9, 3: 16, 4: 10}),
+    "Hey Joe": (12, {0, 1, 3, 4, 7, 10}, {0: 12, 1: 13, 4: 15, 10: 28}),
+    "Pride and Joy": (14, {0, 1, 2, 3, 6, 7, 9, 13}, {0: 4, 1: 4, 2: 9, 3: 16, 4: 10}),
 }
 
 

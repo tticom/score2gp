@@ -74,6 +74,16 @@ SMALL_HEAD_MAX_HEIGHT_SPACES = 0.85
 GRACE_MAX_GAP_SPACES = 3.0
 # A stroke fragment of a wave glyph (vibrato, arpeggio) is thinner than any notehead measured (0.75 spaces).
 STROKE_FRAGMENT_MAX_THIN_SPACES = 0.7
+# REFUSE-07: a rolled-chord (arpeggio) wave is printed as a vertical stack of identical narrow curved
+# strokes, each overlapping its neighbour; a stack of this many is a wave column, never a rest or a note.
+WAVE_COLUMN_MIN_STROKES = 3
+WAVE_COLUMN_X_TOLERANCE_SPACES = 0.05
+WAVE_COLUMN_FORM_TOLERANCE_SPACES = 0.05
+# The arrowhead that ends a wave column: a small filled glyph standing on the column's end and spanning it.
+WAVE_ARROW_MAX_WIDTH_SPACES = 1.2
+WAVE_ARROW_MAX_HEIGHT_SPACES = 1.3
+WAVE_ARROW_END_GAP_SPACES = 0.1
+WAVE_ARROW_END_OVERLAP_SPACES = 0.3
 STAFF_LINE_MIN_LENGTH_PT = 50.0
 STAFF_LINE_MERGE_GAP_PT = 20.0  # TAB lines are interrupted around fret numbers
 # A staff line is mostly ink along its span (TAB lines about 0.8 despite fret-number gaps); a chain
@@ -685,6 +695,52 @@ def _is_stroke_fragment_outside_band(glyph: Glyph, staff: Staff) -> bool:
     s = staff.space
     outside = glyph.bbox[3] <= staff.top or glyph.bbox[1] >= staff.bottom
     return outside and glyph.curved and glyph.filled and min(glyph.w, glyph.h) < STROKE_FRAGMENT_MAX_THIN_SPACES * s
+
+
+def _wave_column_ids(glyphs: list[Glyph], space: float) -> set[str]:
+    """REFUSE-07: the strokes of a vertical wave column (a rolled-chord mark's body), and its arrowhead.
+
+    A rolled chord's wave is drawn as a stack of identical narrow curved strokes sharing one left edge,
+    each touching or overlapping the next. A rest is a single glyph and a notehead is never this narrow, so
+    a run of ``WAVE_COLUMN_MIN_STROKES`` or more strokes of one measured form, stacked without a gap, is a
+    wave column. A lone stroke, or strokes of unequal form or with a gap between them, is not matched.
+    """
+    narrow = [g for g in glyphs if g.curved and g.filled and g.w <= space and g.h <= 1.1 * space]
+    ids: set[str] = set()
+    columns: list[list[Glyph]] = []
+    used: set[str] = set()
+    for first in sorted(narrow, key=lambda g: (g.bbox[0], g.bbox[1])):
+        if first.ident in used:
+            continue
+        column = sorted(
+            (g for g in narrow
+             if abs(g.bbox[0] - first.bbox[0]) <= WAVE_COLUMN_X_TOLERANCE_SPACES * space
+             and abs(g.w - first.w) <= WAVE_COLUMN_FORM_TOLERANCE_SPACES * space
+             and abs(g.h - first.h) <= WAVE_COLUMN_FORM_TOLERANCE_SPACES * space),
+            key=lambda g: g.bbox[1])
+        used.update(g.ident for g in column)
+        run = column[:1]
+        for g in column[1:] + [None]:
+            if g is not None and g.bbox[1] <= run[-1].bbox[3] + 0.01 * space:
+                run.append(g)
+                continue
+            if len(run) >= WAVE_COLUMN_MIN_STROKES:
+                ids.update(r.ident for r in run)
+                columns.append(run)
+            run = [g] if g is not None else []
+    # The arrowhead is the small filled glyph standing on either end of a column and spanning its width.
+    for run in columns:
+        left, right = min(r.bbox[0] for r in run), max(r.bbox[2] for r in run)
+        top, bottom = min(r.bbox[1] for r in run), max(r.bbox[3] for r in run)
+        for g in glyphs:
+            if (g.ident not in ids and g.filled and g.w <= WAVE_ARROW_MAX_WIDTH_SPACES * space
+                    and g.h <= WAVE_ARROW_MAX_HEIGHT_SPACES * space
+                    and g.bbox[0] <= left + 0.01 * space and g.bbox[2] >= right - 0.01 * space
+                    and (-WAVE_ARROW_END_GAP_SPACES * space <= g.bbox[3] - top <= WAVE_ARROW_END_OVERLAP_SPACES * space
+                         or -WAVE_ARROW_END_GAP_SPACES * space <= bottom - g.bbox[1]
+                         <= WAVE_ARROW_END_OVERLAP_SPACES * space)):
+                ids.add(g.ident)
+    return ids
 
 
 def _is_dot(glyph: Glyph, space: float) -> bool:
@@ -1463,6 +1519,7 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
     # (and counted) as something else. Nothing that could be a rest is dropped silently.
     ignored: dict[str, int] = {}
     overlaps: list[dict[str, Any]] = []
+    wave_ids = _wave_column_ids(symbols.glyphs, s)  # the column runs past this staff's zone
     head_boxes = [h.bbox for h in heads]
     accidental_marks: list[tuple[tuple[float, float, float, float], str, str, float]] = []
     for t in symbols.texts:
@@ -1501,6 +1558,11 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
             non_events.append({"reason": "stroke_fragment_outside_staff_band", "glyph": g, "cx": g.cx,
                                "width_spaces": g.w / s, "height_spaces": g.h / s,
                                "distance_spaces": max(staff.top - g.bbox[3], g.bbox[1] - staff.bottom) / s})
+            continue
+        if kind not in WRITTEN_VALUES and g.ident in wave_ids:
+            # REFUSE-07: a stroke of a rolled-chord wave column, wherever it stands against a head or stem.
+            non_events.append({"reason": "wave_column_stroke", "glyph": g, "cx": g.cx,
+                               "width_spaces": g.w / s, "height_spaces": g.h / s})
             continue
         if beside:
             # A glyph whose own form identifies a rest value is a rest even beside a note (another
