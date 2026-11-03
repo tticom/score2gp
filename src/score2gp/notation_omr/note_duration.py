@@ -146,6 +146,7 @@ REST_ROW_STEP_SPACES = 0.05
 REST_EDGE_HYSTERESIS_SPACES = 0.1
 REST_STEM_MARGIN_SPACES = 0.05
 REST_HOOK_MIN_HEIGHT_SPACES = 0.2
+REST_HOOK_MIN_WIDTH_SPACES = 0.2  # REFUSE-08: stem-edge slivers left by the cut (measured <= 0.1) are not hook balls (>= 0.58)
 REST_STEM_TOP_SHARE = 0.3  # a hooked rest's stem top lies in the upper part of the glyph
 REST_WINDOW = {"min_w": 0.6, "max_w": 2.6, "min_h": 0.3, "max_h": 6.0}
 REST_VERTICAL_REACH_SPACES = 2.0
@@ -1071,7 +1072,7 @@ def _hooks_beside_stem(rows: list[tuple[float, list[tuple[float, float]]]], spac
         current = []
         for a, b in runs:
             b = min(b, cut)
-            if b - a <= 0:
+            if b - a < REST_HOOK_MIN_WIDTH_SPACES * space:
                 continue
             joined = [piece for (pa, pb), piece in previous if a <= pb and pa <= b]
             roots = []
@@ -1130,6 +1131,14 @@ def _rest_glyph(glyph: Glyph, staff: Staff) -> str | None:
         if counts.count(1) >= QUARTER_REST_SINGLE_RUN_SHARE * len(counts) and _column_counts(glyph, (0.5,))[0] >= 2:
             return "quarter"
     return "unidentified"
+
+
+def _rest_form_outranks_accidental_position(beside: str | None, kind: str | None) -> bool:
+    """REFUSE-08: a glyph whose own form fixes a rest value (slanted stem and hook count, a block on a line,
+    a quarter-rest zigzag) is a rest even where an accidental would stand, just left of a notehead. Only
+    that position is released: a rest over, under or touching a head or stem stays a located overlap.
+    The value comes from the shape alone, never from spacing or the bar total."""
+    return beside == "accidental_beside_notehead" and kind in WRITTEN_VALUES
 
 
 def _is_thick_barline(glyph: Glyph, staff: Staff) -> bool:
@@ -1554,6 +1563,8 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
         else:
             beside = None
         kind = _rest_glyph(g, staff)
+        if _rest_form_outranks_accidental_position(beside, kind):
+            beside = None
         if not beside and kind not in WRITTEN_VALUES and _is_stroke_fragment_outside_band(g, staff):
             non_events.append({"reason": "stroke_fragment_outside_staff_band", "glyph": g, "cx": g.cx,
                                "width_spaces": g.w / s, "height_spaces": g.h / s,

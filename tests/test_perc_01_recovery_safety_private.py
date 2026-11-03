@@ -29,7 +29,10 @@ LEDGER = {'Heartbreaker': {1: (14, 'b44dc1a11bbf8943c23ca2d71284a2add6360c825b00
                    7: (13, 'dd2651581c9ee3e906e0678c419eeb3f8709560b81ed920e4bc0bff7cc06f99b')},
  'Brown Sugar': {6: (16, '05aa46b1d415fdff96fc92c7f6022bffef20a9afb7f3e8cb263a58c6106fd044'),  # REFUSE-01B pin
                  1: (4, 'fba59b99e2ac5a9b119749f5fd1eb1a4fe45c5a766759d5da37d52c8768a3a4d'),
-                 2: (7, 'f655b787b0ed94165bf15129f9088b867203f3c74f0cdba6833a0399e7c4ba2b')}}
+                 2: (7, 'f655b787b0ed94165bf15129f9088b867203f3c74f0cdba6833a0399e7c4ba2b'),
+                 # REFUSE-08 pin (sixteenth rest read as 16th, not eighth): bar total 4/4 checked, rest value
+                 # checked against the printed page; strings/frets are a regression pin. Not independently verified.
+                 7: (18, '6210d095ba11ae14f0c8b1f1f2b7f645aa840c160f5660a1d4bcbb818620d153')}}
 
 
 def assert_recovery_ledger(name, output):
