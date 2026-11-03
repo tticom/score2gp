@@ -144,9 +144,11 @@ def test_twelve_bar_blues_whole_note_chords_triplets_rest_tie_and_implied_rest(w
     summary = route["summary"]
     assert summary["implied_rests"] == 1 and summary["written_bars_with_implied_rest"] == 1
     assert names[26][-1] == "R:quarter"
-    # the leading bar's chord is not in TabRaw, so the bar is refused rather than written empty or guessed
+    # GROUP-01: the leading bar's chord was outside the system (its system started after the short first line
+    # piece), so the bar was refused. The staff now reaches its start barline: the chord is read, 6 digits, one whole.
     first = route["bars"][0]
-    assert first["status"] == "refused"
+    assert first["status"] == "written" and first["tab_digits"] == 6
+    assert names[1] == ["whole"]
 
 
 def test_implied_rest_is_labelled_and_counted_apart_from_printed_rests(work: Path) -> None:

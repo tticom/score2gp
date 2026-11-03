@@ -5127,6 +5127,68 @@ def _right_extended_tab_groups(
     return extended
 
 
+def _left_extended_tab_groups(
+    page: Any,
+    segments: list[_LineSegment],
+    existing_groups: list[list[_LineSegment]],
+) -> list[tuple[list[_LineSegment], list[_LineSegment]]]:
+    """GROUP-01: extend an accepted TAB group to the system-start barline that closes its first bar on the left.
+
+    A first bar whose lines are drawn as a short piece before the clef or time signature (under the 75 pt line
+    filter) leaves the group, and so the system, starting after that piece: the system-start barline then lies
+    outside the system and the first bar's digits lie outside every bar box. The group is extended only where all
+    six of its own lines continue to the left to one common start AND a drawn vertical spanning the whole TAB staff
+    stands on that start. Six rows beginning on a full-height vertical are a staff edge; a text underline or a
+    diagram does not draw one. Line y coordinates are left unchanged and nothing is extrapolated.
+    """
+    pieces = [
+        segment for segment in segments
+        if abs(segment.y1 - segment.y0) <= 1.0 and abs(segment.x1 - segment.x0) >= 30.0
+    ]
+    joined = merge_collinear_horizontal_segments(pieces)
+    verticals = [segment for segment in segments if abs(segment.x0 - segment.x1) <= 2.0]
+    extended = []
+    for old in existing_groups:
+        if len(old) != 6 or classify_staff_line_group(old, page) != "tab":
+            continue
+        old_x0 = min(min(line.x0, line.x1) for line in old)
+        continuations = []
+        for line in old:
+            y = (line.y0 + line.y1) / 2
+            same_row = [
+                candidate for candidate in joined
+                if abs((candidate.y0 + candidate.y1) / 2 - y) <= 1.0
+                and min(candidate.x0, candidate.x1) < min(line.x0, line.x1) - 2.0
+                and max(candidate.x0, candidate.x1) >= max(line.x0, line.x1) - 2.0
+            ]
+            if not same_row:
+                break
+            continuations.append(min(same_row, key=lambda candidate: min(candidate.x0, candidate.x1)))
+        if len(continuations) != len(old):
+            continue
+        starts = [min(line.x0, line.x1) for line in continuations]
+        new_x0 = min(starts)
+        if old_x0 - new_x0 < 30.0 or max(starts) > new_x0 + 2.0:
+            continue
+        # The added span must be free: a staff row already given to another accepted group is that group's, so
+        # a row drawn across two groups is never claimed twice.
+        if any(abs((line.y0 + line.y1) / 2 - (used.y0 + used.y1) / 2) <= 1.0
+               and min(max(used.x0, used.x1), old_x0) > max(min(used.x0, used.x1), new_x0)
+               for line in old for other in existing_groups if other is not old for used in other):
+            continue
+        top = min((line.y0 + line.y1) / 2 for line in old)
+        bottom = max((line.y0 + line.y1) / 2 for line in old)
+        if not any(abs((v.x0 + v.x1) / 2 - new_x0) <= 2.0
+                   and min(v.y0, v.y1) <= top + 1.0 and max(v.y0, v.y1) >= bottom - 1.0
+                   for v in verticals):
+            continue
+        extended.append((old, [
+            line.merge_with(continuation, new_x0, line.y0, max(line.x0, line.x1), line.y1)
+            for line, continuation in zip(old, continuations)
+        ]))
+    return extended
+
+
 def _detect_tab_systems(
     page: Any,
     page_index: int,
@@ -5157,6 +5219,8 @@ def _detect_tab_systems(
     for old_group, extended_group in _right_extended_tab_groups(page, segments, line_groups):
         line_groups[next(i for i, group in enumerate(line_groups) if group is old_group)] = extended_group
         previous_right_edge[id(extended_group)] = max(max(line.x0, line.x1) for line in old_group)
+    for old_group, extended_group in _left_extended_tab_groups(page, segments, line_groups):
+        line_groups[next(i for i, group in enumerate(line_groups) if group is old_group)] = extended_group
     line_groups.extend(recovered_groups)
     if recovered_groups:
         line_groups.sort(key=lambda group: (min((line.y0 + line.y1) / 2 for line in group),

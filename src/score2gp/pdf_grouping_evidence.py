@@ -63,8 +63,8 @@ def locate_unsafe_notation_bars(tabraw: Any, note_durations: dict,
             events = records.get(index, [])
             candidates = placed.get(index, [])
             local_codes = sorted({code for candidate in candidates
-                                  for code in (candidate.raw or {}).get("grouping_warnings", [])
-                                  + (candidate.raw or {}).get("assignment_warnings", [])
+                                  for code in ((candidate.raw or {}).get("grouping_warnings") or [])
+                                  + ((candidate.raw or {}).get("assignment_warnings") or [])
                                   if code in unsafe_codes})
             strikes = [
                 {"location": event["location"], "head_count": len(heads),
