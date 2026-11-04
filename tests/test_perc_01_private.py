@@ -86,6 +86,10 @@ def test_real_source_census_rejects_recognition_mutants(census, monkeypatch, mut
 # Independently transcribed from the printed notation and TAB. The private
 # event ledger stays under ignored work/; only counts and digests are tracked.
 LEDGER = {'Castles Made of Sand': {
+                          # REFUSE-09 bar (stem-up eighth flag read): rhythm and flag count checked against the
+                          # printed notation page; strings/frets are a regression pin, not an independent
+                          # transcription. No reference GP exists: not independently verified.
+                          1: (15, '4cbf90d5bd9938b4f7b8c0b4eef40b7ff0e0a88fb5b67d827b7e467348661377'),
                           # REFUSE-05 pins (dotted notes painted as stroked points): rhythm checked against
                           # the printed notation page; strings/frets are a regression pin, not an independent
                           # transcription. No reference GP exists: not independently verified.
@@ -127,7 +131,8 @@ LEDGER = {'Castles Made of Sand': {
                 33: (9, '6da9ccb6e9a2259e0a190384cdebe4e0ff0fbd4b10ab819018d2c66f8138a89a'),
                 34: (13, '0435d011aa8723a7b2b01382000a71a1803996b5e564862933549a3f5057765c')}}
 
-STORAGE = {('Castles Made of Sand', 8): '7cb51280b9f8ce17671235a4e14a4c9d8ada64cdcade26897cd2b919806446d0',
+STORAGE = {('Castles Made of Sand', 1): '6b8146334d8a5425c8abb46368180aab573063c6f75c60e7930ffc47ccfec43d',
+ ('Castles Made of Sand', 8): '7cb51280b9f8ce17671235a4e14a4c9d8ada64cdcade26897cd2b919806446d0',
  ('Crossroads', 1): '76d9674abe162b5396215b1aafce3692c3f2e7fc7a092f734b0cc5189d8bb965',
  ('Crossroads', 3): '76d9674abe162b5396215b1aafce3692c3f2e7fc7a092f734b0cc5189d8bb965',
  ('Crossroads', 33): '2b8056269f5fa44ed1ea4d098824e072daf030c8e359b22552fdd051891b0283'}

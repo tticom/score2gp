@@ -906,16 +906,23 @@ def _beam_lines_at_stem(stem: Stem, beams: list[Glyph], space: float) -> list[di
     return [{"band": (a, b), "sources": ids} for a, b, ids in merged]
 
 
+# REFUSE-09: scans stay in the stretch where a flag runs outward from its stem. A single stem-up flag curls back
+# under its own blade from about 0.55 of its reach (measured on the corpus: one run to 0.5, two from 0.55), so a
+# scan at 0.6 crossed it twice and the glyph was left unidentified; two-blade flags keep two runs from 0.15 to 0.8.
+GRACE_READABLE_FLAG_HOOKS = (1, 2)  # REFUSE-09: a grace carries no metrical duration; one or two drawn blades both fix an eighth or 16th grace
+FLAG_SCAN_FRACTIONS = (0.3, 0.4, 0.5)
+
+
 def _flag_hooks(glyph: Glyph, stem: Stem, space: float) -> int:
     """Hooks in one flag glyph: blades crossed by vertical scans through its middle.
 
     A combined sixteenth-note flag is one glyph with two blades; each blade crosses a scan line
-    through the flag's middle once. Scans at three positions must agree, else the glyph is not
+    through the flag's middle once. Scans at three positions (FLAG_SCAN_FRACTIONS) must agree, else the glyph is not
     identified (0).
     """
     reach = glyph.bbox[2] - stem.x
     counts = [len(_runs(glyph.shape, True, stem.x + f * reach, glyph.bbox[1] - 1, glyph.bbox[3] + 1))
-              for f in (0.4, 0.5, 0.6)]
+              for f in FLAG_SCAN_FRACTIONS]
     return counts[0] if len(set(counts)) == 1 and 1 <= counts[0] <= 4 else 0
 
 
@@ -2013,7 +2020,7 @@ def _record(event: dict[str, Any], staff: Staff, state: dict[str, Any], bar: int
         # A flag is what makes it a grace; a beam, a dot or a tuplet on it is not read.
         if not parts["flag_hooks"] and not parts["beam_count"]:
             reason = reason or "grace_note_without_flag"
-        elif parts["flag_hooks"] != 1:
+        elif parts["flag_hooks"] not in GRACE_READABLE_FLAG_HOOKS:
             reason = reason or "grace_note_unsupported_flag_count"
         elif parts["beam_count"]:
             reason = reason or "grace_note_beamed"

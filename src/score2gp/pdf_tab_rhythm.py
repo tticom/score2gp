@@ -32,6 +32,7 @@ from .meter import bar_capacity_ticks
 from .notation_omr.note_duration import (
     SCHEMA,
     WRITTEN_VALUES,
+    _flag_hooks,
     _frac,
     _governing_signature,
     _signature_basis,
@@ -74,6 +75,7 @@ NUMERAL_MAX_HEIGHT_SPACES = 2.5
 NUMERAL_MAX_WIDTH_SPACES = 2.4
 SIGNATURE_REACH_SPACES = 6.0
 
+FLAG_BOX_MATCH_PT = 0.05  # a flag box and its drawn glyph share one drawing rectangle
 DURATION_BY_BEAMS = ["quarter", "eighth", "16th", "32nd", "64th"]
 
 
@@ -88,6 +90,7 @@ class _Stem:
     dots: int = 0
     column: int | None = None
     flag: bool = False
+    flag_boxes: list[tuple[float, float, float, float]] = field(default_factory=list)
     beam_ok: bool = True
 
 
@@ -137,6 +140,7 @@ class _Staff:
     other: list[tuple[str, tuple[float, float, float, float]]] = field(default_factory=list)
     tuplet_words: list[tuple[float, float, str]] = field(default_factory=list)
     labels: list[tuple[tuple[float, float, float, float], str]] = field(default_factory=list)
+    glyphs: list[Any] = field(default_factory=list)  # the page's drawn glyphs, to count a flag's hooks (REFUSE-09)
     header: tuple[float, float] | None = None
 
     @property
@@ -412,6 +416,7 @@ class _Reader:
             labelled = any(abs(cx - st.x) <= 1.0 * sp and box[1] >= st.y1 + 0.3 * sp for st in staff.stems)
             if flagged is not None and not labelled:
                 flagged.flag = True
+                flagged.flag_boxes.append(box)
                 self.bump("flag_glyph")
             elif labelled and h <= 1.2 * sp and w <= 1.0 * sp:
                 self.bump("fingering_label_glyph")
@@ -554,8 +559,13 @@ class _Reader:
                     ev["reason"] = "beam_levels_inconsistent"
                 elif st.beams >= len(DURATION_BY_BEAMS):
                     ev["reason"] = "more_than_four_beams"
-                elif (self._flag_near(staff, st)):
-                    ev["reason"] = "flag_glyph_unread"
+                elif self._flag_near(staff, st):
+                    hooks = self._flag_hooks_of(staff, st)
+                    if hooks is None:
+                        ev["reason"] = "flag_glyph_unread"
+                    else:
+                        ev["written"] = DURATION_BY_BEAMS[hooks]
+                        ev["dots"] = st.dots
                 else:
                     ev["written"] = DURATION_BY_BEAMS[st.beams]
                     ev["dots"] = st.dots
@@ -569,7 +579,12 @@ class _Reader:
             elif st.beams >= len(DURATION_BY_BEAMS):
                 ev["reason"] = "more_than_four_beams"
             elif self._flag_near(staff, st):
-                ev["reason"] = "flag_glyph_unread"
+                hooks = self._flag_hooks_of(staff, st)
+                if hooks is None:
+                    ev["reason"] = "flag_glyph_unread"
+                else:
+                    ev["written"] = DURATION_BY_BEAMS[hooks]
+                    ev["dots"] = st.dots
             else:
                 ev["written"] = DURATION_BY_BEAMS[st.beams]
                 ev["dots"] = st.dots
@@ -637,6 +652,28 @@ class _Reader:
     @staticmethod
     def _flag_near(staff: _Staff, stem: _Stem) -> bool:
         return stem.flag
+
+    @staticmethod
+    def _flag_hooks_of(staff: _Staff, stem: _Stem) -> int | None:
+        """REFUSE-09: the hooks of the flag glyphs on a beamless stem, counted from the drawn blades.
+
+        Each flag box is matched to the one drawn glyph that has that box; the glyph's hooks are the blades
+        every scan through its outward stretch crosses (the notation reader's rule). A stem with a beam,
+        a flag with no matching glyph, or a glyph whose scans disagree is not read (None): the value is
+        never taken from spacing or the bar total.
+        """
+        if stem.beams or not stem.flag_boxes:
+            return None
+        total = 0
+        for box in stem.flag_boxes:
+            matches = [g for g in staff.glyphs if all(abs(a - b) <= FLAG_BOX_MATCH_PT for a, b in zip(g.bbox, box))]
+            if len(matches) != 1:
+                return None
+            hooks = _flag_hooks(matches[0], stem, staff.space)
+            if hooks == 0:
+                return None
+            total += hooks
+        return total if 1 <= total < len(DURATION_BY_BEAMS) else None
 
     @staticmethod
     def _event_at(events: list[dict[str, Any]], staff: _Staff, x: float, y: float, side: str) -> dict[str, Any] | None:
@@ -872,6 +909,8 @@ def read_tab_rhythm(pdf_path: str | Path, tabraw: Any, pages: tuple[int, int] | 
             staves = _staves_of_page(page, symbols, page_index, bar_offset)
             if not staves:
                 continue
+            for staff in staves:
+                staff.glyphs = symbols.glyphs
             class_counts = _classify_page(page, staves)
             for name, n in class_counts.items():
                 marks_by_class[name] = marks_by_class.get(name, 0) + n
