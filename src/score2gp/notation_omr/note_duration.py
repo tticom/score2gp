@@ -129,7 +129,15 @@ POINT_DOT_ROUND_CAP = 1  # PDF line cap style 1
 POINT_DOT_RING_SIDES = 16
 ARC_MIN_WIDTH_SPACES = 1.5
 ARC_MAX_HEIGHT_SPACES = 1.3
+# REFUSE-10: a tie or slur longer than a few notes rises above ARC_MAX_HEIGHT_SPACES yet stays a shallow
+# crescent: its rise is a small part of its length (a semicircle is 0.5). Measured on the approved set, a
+# taller form that is not a long arc is consumed as a tie without this bound and changes written output.
+ARC_MAX_RISE_RATIO = 0.25
 ARC_MAX_FILL_RATIO = 0.45  # below NOTEHEAD_MIN_FILL_RATIO: a crescent, never an oval
+# REFUSE-10: a vibrato or trill line is a thin zigzag of at least this many direction reversals (four full
+# periods), so a chevron or a single stroke is never one; it is at least this wide.
+WAVY_LINE_MIN_REVERSALS = 8
+WAVY_LINE_MIN_WIDTH_SPACES = 2.0
 TIE_END_REACH_SPACES = 1.0
 TIE_SAME_POSITION_SPACES = 0.25
 TIE_VERTICAL_REACH_SPACES = 1.6
@@ -800,6 +808,101 @@ def _is_slanted_arc(glyph: Glyph, space: float) -> bool:
             and max(map(abs, residuals)) <= ARC_MAX_HEIGHT_SPACES * space)
 
 
+def _is_crescent_band(glyph: Glyph, space: float) -> bool:
+    """A thin band tapering at both ends: one painted run on every vertical scan, ends thinner than the middle."""
+    fractions = (0.05, 0.25, 0.5, 0.75, 0.95)
+    scans = [_runs(glyph.shape, True, glyph.bbox[0] + f * glyph.w, glyph.bbox[1] - 1, glyph.bbox[3] + 1)
+             for f in fractions]
+    if any(len(runs) != 1 for runs in scans):
+        return False
+    widths = [runs[0][1] - runs[0][0] for runs in scans]
+    return (max(widths[0], widths[-1]) < min(widths[1:-1])
+            and max(widths) < BEAM_MIN_THICKNESS_SPACES * space)
+
+
+def _is_shallow_crescent(glyph: Glyph, space: float) -> bool:
+    """REFUSE-10: a tie or slur crescent taller than ARC_MAX_HEIGHT_SPACES, because it is long.
+
+    The shape is the arc's own (thin, tapering at both ends, mostly unpainted); only the height bound is
+    relaxed to a rise that is a small part of the width, because a long arc rises more. The caller also
+    accepts the glyph only where both of its ends are located on adjacent heads (a tie).
+    """
+    return (glyph.curved and glyph.filled and glyph.w >= ARC_MIN_WIDTH_SPACES * space
+            and glyph.h > ARC_MAX_HEIGHT_SPACES * space and glyph.h <= ARC_MAX_RISE_RATIO * glyph.w
+            and _fill_ratio(glyph) <= ARC_MAX_FILL_RATIO and _is_crescent_band(glyph, space))
+
+
+def _is_wavy_line_outside_staff(glyph: Glyph, staff: Staff) -> bool:
+    """REFUSE-10: a vibrato or trill line, a long thin zigzag drawn wholly above or below the five lines.
+
+    Notation fixes its meaning (a held-note effect, no duration, pitch or string), so it is a located
+    non-event even when it runs over noteheads. It is matched by its form alone: a filled outline made only
+    of straight segments, thinner than any notehead, wide, with many direction reversals along its path.
+    """
+    space = staff.space
+    if not (glyph.filled and not glyph.curved and (glyph.bbox[3] <= staff.top or glyph.bbox[1] >= staff.bottom)
+            and glyph.w >= WAVY_LINE_MIN_WIDTH_SPACES * space
+            and glyph.h < STROKE_FRAGMENT_MAX_THIN_SPACES * space):
+        return False
+    items = glyph.drawing.get("items", [])
+    if not items or any(item[0] != "l" for item in items):
+        return False
+    ys: list[float] = []
+    for item in items:
+        for point in (item[1], item[2]):
+            if not ys or abs(ys[-1] - point.y) > 1e-6:
+                ys.append(point.y)
+    steps = [b - a for a, b in zip(ys, ys[1:])]
+    reversals = sum(1 for a, b in zip(steps, steps[1:]) if a * b < 0)
+    return reversals >= WAVY_LINE_MIN_REVERSALS
+
+
+def _shallow_crescent_ties(glyphs: list[Glyph], events: list[dict[str, Any]], space: float,
+                           neighbours: list[tuple[float, float, float, float]]
+                           ) -> list[tuple[dict, dict, Glyph]]:
+    """REFUSE-10: shallow crescents that join two adjacent single-head notes at one staff position.
+
+    A tie is fixed by notation: an arc leaving a note and ending on the very next note at the same staff
+    position, standing clear above or below both heads, onto a note that prints no accidental. Both ends must
+    be located by exactly one head each; anything else is not returned and keeps its earlier handling.
+    """
+    notes = [(e, e["_heads"][0]) for e in events if len(e.get("_heads", [])) == 1]
+    result = []
+    reach = TIE_END_REACH_SPACES * space
+    for contour in glyphs:
+        if not _is_shallow_crescent(contour, space):
+            continue
+        starts = [(e, h) for e, h in notes
+                  if h.bbox[0] - 0.3 * space <= contour.bbox[0] <= h.bbox[2] + reach]
+        stops = [(e, h) for e, h in notes
+                 if h.bbox[0] - reach <= contour.bbox[2] <= h.bbox[2] + 0.3 * space]
+        if len(starts) != 1 or len(stops) != 1:
+            continue
+        start, first = starts[0]
+        stop, last = stops[0]
+        following = min((e for e in events if e["_cx"] > start["_cx"]),
+                        key=lambda e: e["_cx"], default=None)
+        above = (contour.bbox[3] <= min(first.bbox[1], last.bbox[1])
+                 and max(first.bbox[1], last.bbox[1]) - contour.bbox[3] <= reach)
+        below = (contour.bbox[1] >= max(first.bbox[3], last.bbox[3])
+                 and contour.bbox[1] - min(first.bbox[3], last.bbox[3]) <= reach)
+        if (following is stop and abs(first.cy - last.cy) <= TIE_SAME_POSITION_SPACES * space
+                and (above or below) and not _carries_accidental(last, neighbours, space)):
+            result.append((start, stop, contour))
+    return result
+
+
+def _carries_accidental(head: Glyph, neighbours: list[tuple[float, float, float, float]], space: float) -> bool:
+    """True when any other drawn mark or text box stands just left of the head, where an accidental is printed.
+
+    A note that prints its own accidental is struck at a new pitch: an arc onto it is a hammer-on or pull-off
+    over one staff position, never a tie (a tied note repeats the pitch and prints no accidental). Any mark
+    there blocks the tie reading, which only ever keeps a bar refused.
+    """
+    return any(head.bbox[0] - b[2] <= ACCIDENTAL_REACH_SPACES * space and b[2] <= head.bbox[0] + 0.1 * space
+               and b[1] <= head.bbox[3] and head.bbox[1] <= b[3] for b in neighbours)
+
+
 def _arc_end_ys(glyph: Glyph) -> tuple[float, float] | None:
     """Vertical centre of the painted band at each end of a crescent, or None."""
     ends = []
@@ -809,6 +912,11 @@ def _arc_end_ys(glyph: Glyph) -> tuple[float, float] | None:
             return None
         ends.append((runs[0][0] + runs[0][1]) / 2)
     return ends[0], ends[1]
+
+
+def _vertical_gap(head: Glyph, y: float) -> float:
+    """Distance from a height to the head's painted extent (zero when the height is within it)."""
+    return max(head.bbox[1] - y, y - head.bbox[3], 0.0)
 
 
 def _slanted_slur_ids(glyphs: list[Glyph], events: list[dict[str, Any]], space: float) -> set[str]:
@@ -844,7 +952,16 @@ def _slanted_slur_ids(glyphs: list[Glyph], events: list[dict[str, Any]], space: 
                      if h.bbox[0] - reach <= glyph.bbox[2] <= h.bbox[2] + 0.3 * space
                      and abs(h.cy - ends[1]) <= TIE_VERTICAL_REACH_SPACES * space]
             if len(starts) != 1 or len(stops) != 1:
-                continue
+                # REFUSE-10: the arc end stands clear of its head's centre by the head's own half height
+                # as well as the gap: measure the distance to the head's painted extent instead.
+                starts = [(e, h) for e, h in notes
+                          if h.bbox[0] - 0.3 * space <= glyph.bbox[0] <= h.bbox[2] + reach
+                          and _vertical_gap(h, ends[0]) <= TIE_VERTICAL_REACH_SPACES * space]
+                stops = [(e, h) for e, h in notes
+                         if h.bbox[0] - reach <= glyph.bbox[2] <= h.bbox[2] + 0.3 * space
+                         and _vertical_gap(h, ends[1]) <= TIE_VERTICAL_REACH_SPACES * space]
+                if len(starts) != 1 or len(stops) != 1:
+                    continue
         start, first = starts[0]
         stop, last = stops[0]
         # A slur may span several notes (REFUSE-02): its ends are two different
@@ -1530,6 +1647,13 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
         [g for g in glyphs if g.ident not in used | flag_ids | arc_ids | parenthesis_ids], events, s)
     arc_ids |= slur_ids
     state["diagnostics"]["arcs_not_ties"] += len(slur_ids)
+    crescent_ties = _shallow_crescent_ties(
+        [g for g in glyphs if g.ident not in used | flag_ids | arc_ids | parenthesis_ids],
+        [e for e in events if not e.get("_grace")], s,
+        [g.bbox for g in glyphs if g.ident not in head_ids and not _is_shallow_crescent(g, s)]
+        + [t.bbox for t in symbols.texts if t.text in ACCIDENTAL_TEXT and in_zone(t.cx, t.cy)])
+    crescent_tie_ids = {contour.ident for _start, _stop, contour in crescent_ties}
+    arc_ids |= crescent_tie_ids
 
     # Every other glyph after the header is a rest, a located unread event, or a symbol classified
     # (and counted) as something else. Nothing that could be a rest is dropped silently.
@@ -1576,6 +1700,11 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
             non_events.append({"reason": "stroke_fragment_outside_staff_band", "glyph": g, "cx": g.cx,
                                "width_spaces": g.w / s, "height_spaces": g.h / s,
                                "distance_spaces": max(staff.top - g.bbox[3], g.bbox[1] - staff.bottom) / s})
+            continue
+        if kind not in WRITTEN_VALUES and _is_wavy_line_outside_staff(g, staff):
+            # REFUSE-10: a vibrato or trill line outside the five lines, even over noteheads.
+            non_events.append({"reason": "wavy_line_outside_staff", "glyph": g, "cx": g.cx,
+                               "width_spaces": g.w / s, "height_spaces": g.h / s})
             continue
         if kind not in WRITTEN_VALUES and g.ident in wave_ids:
             # REFUSE-07: a stroke of a rolled-chord wave column, wherever it stands against a head or stem.
@@ -1736,7 +1865,13 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
     # contour. If its ends locate adjacent heads at the same staff position,
     # silently treating it as decoration would drop a possible tie. Refuse its owners;
     # do not enlarge the accepted contour or assign a tie from spacing.
-    for start, stop, contour in _unclassified_tie_contours(glyphs, tie_events, s):
+    for start, stop, contour in crescent_ties:
+        for end, key in ((start, "start"), (stop, "stop")):
+            end.setdefault("_tie", {"start": False, "stop": False, "sources": []})
+            end["_tie"][key] = True
+            end["_tie"]["sources"].append(contour.ident)
+    for start, stop, contour in _unclassified_tie_contours(
+            [g for g in glyphs if g.ident not in crescent_tie_ids], tie_events, s):
         for owner in (start, stop):
             owner["_unread"] = "unclassified_same_position_arc"
         state["diagnostics"].setdefault("unclassified_tie_contours", []).append({

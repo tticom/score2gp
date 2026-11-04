@@ -165,6 +165,22 @@ def _is_black(drawing: dict[str, Any]) -> bool:
     return colour is None or all(v < 0.2 for v in colour)
 
 
+def _is_boxed_text_label(drawing: dict[str, Any], box: tuple[float, float, float, float],
+                         words: Sequence[Any]) -> bool:
+    """REFUSE-10: an unfilled rectangle outline that frames printed text (a rehearsal or section label).
+
+    The frame is one stroked rectangle with no fill, and the text it frames is read from the PDF text layer:
+    a word spanning no more than the frame's width whose centre lies inside it (a font's line box runs a
+    little past the stroke vertically, so its height is not compared). A rest is a filled block and a stem or barline is a thin stroke, so neither
+    can be matched; an empty frame, or a frame with no text inside it, is not matched and stays unread.
+    """
+    items = drawing["items"]
+    if drawing.get("type") != "s" or len(items) != 1 or items[0][0] != "re" or drawing.get("fill") is not None:
+        return False
+    return any(box[0] <= word[0] and word[2] <= box[2] and box[1] <= (word[1] + word[3]) / 2 <= box[3]
+               and str(word[4]).strip() for word in words)
+
+
 def _classify_page(page: Any, staves: list[_Staff], offset_free: bool = True) -> dict[str, int]:
     """Sort the page's drawings into the marks each TAB staff owns; return a count per class (this page)."""
     counts: dict[str, int] = {}
@@ -191,6 +207,7 @@ def _classify_page(page: Any, staves: list[_Staff], offset_free: bool = True) ->
         return best
 
     seen_stems: set[tuple[float, float, float]] = set()
+    page_words = page.get_text("words")
     for index, drawing in enumerate(page.get_drawings()):
         rect = drawing["rect"]
         box = (float(rect.x0), float(rect.y0), float(rect.x1), float(rect.y1))
@@ -260,6 +277,9 @@ def _classify_page(page: Any, staves: list[_Staff], offset_free: bool = True) ->
                 continue
         if all(i[0] == "c" for i in items) and 2 <= len(items) <= 4 and w >= 1.2 * sp and w >= 2.5 * h:
             continue  # a slur, tie or hammer-on/pull-off crescent: an arc (read above), not a rhythm mark
+        if _is_boxed_text_label(drawing, box, page_words):
+            count("boxed_text_label")  # REFUSE-10: a section name in a frame is text, never a rhythm mark
+            continue
         s.labels.append((box, ident))
     # tuplet numerals and any rest rectangles inside the string band are read below, per staff
     words = page.get_text("words")

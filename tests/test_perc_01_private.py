@@ -90,6 +90,10 @@ LEDGER = {'Castles Made of Sand': {
                           # printed notation page; strings/frets are a regression pin, not an independent
                           # transcription. No reference GP exists: not independently verified.
                           1: (15, '4cbf90d5bd9938b4f7b8c0b4eef40b7ff0e0a88fb5b67d827b7e467348661377'),
+                          # REFUSE-10 bar (vibrato line over the heads no longer refuses it): rhythm checked
+                          # against the printed notation page; strings/frets are a regression pin, not an
+                          # independent transcription. No reference GP exists: not independently verified.
+                          9: (16, 'd384bdfe12b0183cd3f9389d155e89756b701795a2cb2de906589813d161a209'),
                           # REFUSE-05 pins (dotted notes painted as stroked points): rhythm checked against
                           # the printed notation page; strings/frets are a regression pin, not an independent
                           # transcription. No reference GP exists: not independently verified.
@@ -106,6 +110,10 @@ LEDGER = {'Castles Made of Sand': {
                           12: (1,
                                'bbabb968b5dd1dd1b6906df6eb09b4be2f8c80a2b477bcba11d4e880282d686d')},
  'Crossroads': {3: (6, '3f7e44f06938d9b40b6c46975b47dfa3cccce99ca3702e5d965e75e12b6afea5'),
+                # REFUSE-10 bar (vibrato line over the heads no longer refuses it): rhythm checked against
+                # the printed notation page and the bar total; strings/frets are a regression pin, not an
+                # independent transcription. No reference GP exists: not independently verified.
+                25: (7, 'ee8627c5c8b38e96829c8b60749a7631c648692abf46bde6827a231a4a8df7fc'),
                 # REFUSE-05 pins (dotted notes painted as stroked points): rhythm checked against the printed
                 # notation page; strings/frets are a regression pin. Not independently verified.
                 4: (9, 'dac83adcfb575ca7b04c137652a068eb8d1bf8c5c96ebfa4524a72090cddd481'),
@@ -135,6 +143,7 @@ STORAGE = {('Castles Made of Sand', 1): '6b8146334d8a5425c8abb46368180aab573063c
  ('Castles Made of Sand', 8): '7cb51280b9f8ce17671235a4e14a4c9d8ada64cdcade26897cd2b919806446d0',
  ('Crossroads', 1): '76d9674abe162b5396215b1aafce3692c3f2e7fc7a092f734b0cc5189d8bb965',
  ('Crossroads', 3): '76d9674abe162b5396215b1aafce3692c3f2e7fc7a092f734b0cc5189d8bb965',
+ ('Crossroads', 25): '147a2421153bccf993b1cefbe8fd79974c620bc5841dd382987c9d13c2155cbe',
  ('Crossroads', 33): '2b8056269f5fa44ed1ea4d098824e072daf030c8e359b22552fdd051891b0283'}
 
 
