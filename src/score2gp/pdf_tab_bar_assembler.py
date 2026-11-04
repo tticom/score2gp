@@ -23,7 +23,8 @@ from .tabraw import TabCandidate
 COLUMN_SPACES = 0.75  # TAB digits closer than this in x are one column (one chord)
 MATCH_SPACES = 1.0  # a notation event and a TAB column further apart than this are not the same event
 BAR_EDGE_SPACES = 0.5  # a TAB digit this close outside a notation bar's barlines still belongs to it
-MAX_EVENTS_PER_BAR = 64  # more notation events or TAB columns than this in one bar is unsafe grouping
+ENABLE_PARTIAL_TIE = True  # REFUSE-12 mutant switch: False refuses a chord whose one head is tied (the old behaviour)
+MAX_EVENTS_PER_BAR = 64 # more notation events or TAB columns than this in one bar is unsafe grouping
 
 
 def empty_notation_source(note_durations: dict[str, Any] | None) -> bool:
@@ -176,6 +177,22 @@ def _match_bar(records: list[dict[str, Any]], digits: list[TabCandidate], space:
             return matched, _refusal("notation_tab_column_ambiguous", index)
         used.add(column)
         cands = sorted(columns[column], key=lambda c: c.string)
+        if len(cands) != heads and len({c.string for c in cands}) == len(cands):
+            partial = _partial_tie_continuation(record, cands, previous, heads, cross_count)
+            if partial is not None:
+                # REFUSE-12: one head of this chord is the end of a tie from the single note before it and
+                # prints no digit; the other heads print theirs. Only the tied head copies a position.
+                positions = sorted([*partial["positions"], *((c.string, c.parsed_fret) for c in cands)])
+                matched.append({"record": record, "positions": positions, "candidates": cands,
+                                "inherited": list(previous.get("candidates") or []),
+                                "tied_positions": list(partial["positions"]),
+                                "match": {"kind": "tab_column_with_tie_continuation",
+                                          "candidate_ids": [c.id for c in cands],
+                                          "tied_from": previous["location"],
+                                          "dx_spaces": round(near[0][0] / space, 3)}})
+                previous = {"positions": positions, "location": _location(record),
+                            "candidates": [*cands, *(previous.get("candidates") or [])], "tie": record.get("tie")}
+                continue
         if len(cands) != heads or len({c.string for c in cands}) != len(cands):
             refusal = _refusal("notehead_digit_count_mismatch", index)
             # Keep the measured disagreement, rather than asking a caller to
@@ -210,6 +227,28 @@ def _match_bar(records: list[dict[str, Any]], digits: list[TabCandidate], space:
         refusal["candidate_ids"] = [c.id for c in columns[unused[0]]]
         return matched, refusal
     return matched, None
+
+
+def _partial_tie_continuation(record: dict[str, Any], cands: Sequence[TabCandidate], previous: dict[str, Any] | None,
+                              heads: int, cross_count: int) -> dict[str, Any] | None:
+    """The tied note's positions when exactly one head of ``record`` is the end of the arc that left the one
+    note written just before it, and the chord's other heads each have a TAB digit; else None (stay refused).
+
+    The arc's two ends are one drawing shared by both records (a tie, not a slur: it joins the same staff
+    position), the chord's tie ends on exactly one head, and that head is the only one without a digit.
+    """
+    tie = record.get("tie") or {}
+    if (not ENABLE_PARTIAL_TIE or previous is None or cross_count or tie.get("start") or not tie.get("stop")
+            or len(tie.get("stop_head_positions") or ()) != 1 or heads - len(cands) != 1):
+        return None
+    left = previous.get("tie") or {}
+    if (len(previous["positions"]) != 1 or not left.get("start") or left.get("continues_beyond_system")
+            or not set(left.get("sources") or ()) & set(tie.get("sources") or ())):
+        return None
+    string, fret = previous["positions"][0]
+    if fret is None or string in {c.string for c in cands}:
+        return None
+    return {"positions": [(string, fret)]}
 
 
 def _is_arriving_tie(tie: dict[str, Any], previous: dict[str, Any] | None, heads: int) -> bool:
@@ -431,7 +470,7 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
                 events.append(build_note_type_event(
                     m["record"], positions=m["positions"], candidates=m["candidates"], output_bar_idx=output_index,
                     event_idx=i, onset_ticks=ticks_for_quarters(onset) if onset else 0, track_id=track_id,
-                    inherited=m.get("inherited") or ()))
+                    inherited=m.get("inherited") or (), tied_positions=m.get("tied_positions")))
                 onset += Fraction(m["record"]["duration_quarters"])  # a grace adds none
             last = matched[-1] if matched else None
             tied_from = ({"positions": last["positions"], "location": _location(last["record"]),

@@ -1861,7 +1861,7 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
                 continue
             state["diagnostics"]["arcs_not_ties"] += 1
             continue
-        start, stop = tie
+        start, stop, start_head, stop_head = tie
         start.setdefault("_tie", {"start": False, "stop": False, "sources": []})
         start["_tie"]["start"] = True
         start["_tie"]["sources"].append(arc.ident)
@@ -1869,6 +1869,10 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
             stop.setdefault("_tie", {"start": False, "stop": False, "sources": []})
             stop["_tie"]["stop"] = True
             stop["_tie"]["sources"].append(arc.ident)
+            if ENABLE_TIED_HEAD_OWNERSHIP and len(stop.get("_heads", [])) > 1:
+                # REFUSE-12: the arc ends on ONE head of a chord. Record which, so the route can tie that
+                # head alone; an event-level tie would tie every note of the chord.
+                stop["_tie"].setdefault("stop_head_positions", []).append(_staff_position(stop_head, staff, s))
         else:
             start["_tie"]["continues_beyond_system"] = True
             leaving = [h for h in start.get("_heads", [])]
@@ -2049,6 +2053,7 @@ def _unclassified_tie_contours(glyphs: list[Glyph], events: list[dict[str, Any]]
 
 
 ENABLE_ARRIVING_TIE = True  # REFUSE-11 mutant switch: False reads no arriving tie (the old behaviour)
+ENABLE_TIED_HEAD_OWNERSHIP = True  # REFUSE-12 mutant switch: False records no tied-head position (the old behaviour)
 
 
 def _staff_position(head: Glyph, staff: Staff, space: float) -> int:
@@ -2100,10 +2105,10 @@ def _tie_ends(arc: Glyph, events: list[dict[str, Any]], space: float):
     following = sorted((e for e in events if e["_cx"] > start["_cx"]), key=lambda e: e["_cx"])
     ends_at = [(e, h) for e, h in notes if e is not start and h.bbox[0] - reach <= arc.bbox[2] <= h.bbox[2] + 0.3 * space]
     if not ends_at:
-        return (start, None) if not following else None
+        return (start, None, head, None) if not following else None
     stops = [(e, h) for e, h in ends_at if abs(h.cy - head.cy) <= TIE_SAME_POSITION_SPACES * space]
     if len(stops) == 1 and following and stops[0][0] is following[0]:
-        return start, stops[0][0]
+        return start, stops[0][0], head, stops[0][1]
     return None
 
 
