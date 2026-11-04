@@ -31,11 +31,16 @@ SOURCE = "Derek Trucks BB King"
 # Source bars newly written by REFUSE-06 (all four were refused with grace_note_in_tuplet).
 NEWLY_WRITTEN = (1, 7, 8, 10)
 # Source bars that stay refused for another, unchanged reason.
-STILL_REFUSED = {0: "parenthesized_head_unrepresented", 2: "rest_glyph_unidentified",
+# (REFUSE-14 reads the ghost-note bars 0, 9 and 14, so they are no longer refused.)
+STILL_REFUSED = {2: "rest_glyph_unidentified",
                  4: "unsupported_overlapping_form", 5: "unsupported_overlapping_form",
-                 6: "unsupported_overlapping_form", 9: "parenthesized_head_unrepresented",
+                 6: "unsupported_overlapping_form",
                  12: "grace_note_beat_too_far", 13: "unsupported_overlapping_form",
-                 14: "parenthesized_head_unrepresented", 15: "unsupported_overlapping_form"}
+                 15: "unsupported_overlapping_form"}
+# REFUSE-14: in source bar 9 the reference tags event 4 (an eighth) as a tie start although the next beat is a
+# different pitch, which no printed tie can be; the page prints slide arcs there and no tie. Only that one
+# `tie` field is exempt, and only where the written beat carries no tie; every other field must equal the reference.
+REFERENCE_ONLY_TIE = (9, 4)
 # One grace beat the reference tags with a 5:3 tuplet that no printed bracket covers: a zero-duration
 # reference-side tag on a grace, not a duration. Every other beat must equal the reference.
 UNBRACKETED_GRACE = (7, 0)
@@ -69,7 +74,10 @@ def _check(route, packaged, reference):
             if (bar, index) == UNBRACKETED_GRACE:
                 assert g["grace"] == w["grace"] and g["written"] == w["written"] and g["positions"] == w["positions"]
                 continue
-            assert [g[f] for f in FIELDS] == [w[f] for f in FIELDS], f"BEAT_{bar}_{index}"
+            fields = [f for f in FIELDS if not ((bar, index) == REFERENCE_ONLY_TIE and f == "tie")]
+            if (bar, index) == REFERENCE_ONLY_TIE:
+                assert g["tie"] == (False, False), f"BEAT_{bar}_{index}_TIE"
+            assert [g[f] for f in fields] == [w[f] for f in fields], f"BEAT_{bar}_{index}"
 
 
 def test_graces_under_a_tuplet_bracket_are_read_and_match_the_reference(tmp_path):

@@ -491,6 +491,7 @@ class Note(BaseModel):
     fret: int | None = Field(default=None, ge=0)
     pitch: int | None = Field(default=None, ge=0, le=127)
     is_dead: bool = False
+    is_ghost: bool = False
     articulations: list[Literal["staccato", "staccatissimo", "accent", "marcato", "tenuto"]] = Field(default_factory=list)
     techniques: list[Technique] = Field(default_factory=list)
     left_hand_fingering: str | None = None

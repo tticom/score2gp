@@ -1619,6 +1619,10 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
     for event in events:
         unsupported = [g for head in event.get("_heads", [])
                        for g in parentheses.get(head.ident, [])]
+        if unsupported and len(unsupported) == 2 * len(event["_heads"]):
+            # REFUSE-14: every head of the event is enclosed by its own printed parenthesis pair, which
+            # is the notation for a ghost note: the whole event is ghosted (no head is picked by inference).
+            event["_ghost"] = unsupported
         if unsupported:
             event["_unread_symbols"] = unsupported
     # Located-only symbols are recorded with their class but never enter the event
@@ -2145,6 +2149,8 @@ def _record(event: dict[str, Any], staff: Staff, state: dict[str, Any], bar: int
         # source-read duration while exposing each unsupported owning-head
         # annotation as a located unread symbol, rather than erasing that note.
         state["diagnostics"].setdefault("unread_symbols", []).extend(record["unread_symbols"])
+    if event.get("_ghost"):
+        record["ghost"] = {"parenthesis_sources": [glyph.ident for glyph in event["_ghost"]]}
     if len({len(row) for row in dot_rows}) > 1:
         reason = reason or "dot_rows_disagree"
     if "_rest" in event:

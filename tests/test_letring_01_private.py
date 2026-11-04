@@ -77,21 +77,21 @@ def test_derek_dashed_let_ring_locates_span_and_refuses_unwritten_bar():
             for j, e in enumerate(b["events"] or []) if e["let_ring"]] == [
                 (10, 7, 1), (10, 8, 1), (10, 9, 1)]
     data, report, warnings = convert("Derek Trucks BB King")
-    assert ET.fromstring(data).find(".//LetRing") is None
     actual = read_written_bars(data)
-    assert actual[9]["events"] is None, "the unread source bar must remain empty"
-    # REFUSE-06 reads graces under a tuplet bracket: four more bars (1, 7, 8, 10 of the source) are written
-    # and match the reference (see test_refuse_06); none holds a let-ring mark, so the count is 6, not 2.
-    assert sum(b["events"] is not None for b in actual) == 6
+    # REFUSE-06 read graces under a tuplet bracket (source bars 1, 7, 8, 10) and REFUSE-14 reads the ghost-note
+    # bars 0, 9 and 14, so the let-ring bar (source bar 9, bar 10 here) is written now and 9 bars are written.
+    # The let-ring marks must land on exactly the reference's beats, nowhere else.
+    assert actual[9]["events"] is not None, "the let-ring bar is written once its ghost head is read"
+    assert sum(b["events"] is not None for b in actual) == 9
+    locations = lambda bars: [(i + 1, j + 1, len(e["let_ring"]))
+                             for i, b in enumerate(bars) for j, e in enumerate(b["events"] or []) if e["let_ring"]]
+    assert locations(actual) == locations(expected), "LET_RING_NOT_ON_REFERENCE_BEATS"
     [decision] = report["decisions"]
     assert decision["bar_index"] == 10
     assert decision["beat_indices"] == [7, 8, 9]
     assert decision["span"] == "dashed"
-    assert decision["code"] == "pdf_let_ring_bar_unavailable"
-    [warning] = [w for w in warnings if w["code"] == decision["code"]]
-    [where] = warning["provenance"]
-    assert (where["page"], where["bar_index"]) == (1, 10)
-    assert where["raw"]["bbox"]
+    assert decision["code"] == "pdf_let_ring_attached"
+    assert not [w for w in warnings if w["code"] == "pdf_let_ring_bar_unavailable"]
 
 
 def test_chapter_19_dashed_spans_cover_exactly_the_printed_note_columns():

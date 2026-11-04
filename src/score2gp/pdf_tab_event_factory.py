@@ -113,6 +113,7 @@ def build_note_type_event(
                 fret=fret,
                 pitch=pitch,
                 is_dead=is_strike,
+                is_ghost=bool(record.get("ghost")) and not is_strike,
                 confidence=candidate.confidence if candidate else (source.confidence if source else 1.0),
                 provenance=provenance,
                 techniques=[TieTechnique(state=note_tie_state)] if note_tie_state else [],
