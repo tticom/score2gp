@@ -137,7 +137,13 @@ LEDGER = {'Castles Made of Sand': {
                 23: (14, 'ba7604f63bd42f94ef678754d77dc93e5d8d077e1828a407cb1d9b67a29481dc'),
                 28: (5, 'e9c5081b9def05d52b0851f36f1e41b6f0388807b5473ce7ad2c680549514665'),
                 33: (9, '6da9ccb6e9a2259e0a190384cdebe4e0ff0fbd4b10ab819018d2c66f8138a89a'),
-                34: (13, '0435d011aa8723a7b2b01382000a71a1803996b5e564862933549a3f5057765c')}}
+                34: (13, '0435d011aa8723a7b2b01382000a71a1803996b5e564862933549a3f5057765c'),
+                # REFUSE-11 bars (a note tied over a system break; the TAB prints an empty "( )" there):
+                # rhythm and the tie checked against the printed notation page and the bar total;
+                # strings/frets are inherited from the previous system's tied note, a regression pin, not an
+                # independent transcription. No reference GP exists: not independently verified.
+                22: (13, '3c2d68f57d370eddc7fbf9dcca13aaa26d3d2c5e2b784d7b7a807d1079a8f7e8'),
+                24: (13, '5603cc739771f61bc1fd6a28fa3ebf4586655ee8cbb720b7e5a1411d46dc665b')}}
 
 STORAGE = {('Castles Made of Sand', 1): '6b8146334d8a5425c8abb46368180aab573063c6f75c60e7930ffc47ccfec43d',
  ('Castles Made of Sand', 8): '7cb51280b9f8ce17671235a4e14a4c9d8ada64cdcade26897cd2b919806446d0',

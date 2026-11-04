@@ -34,6 +34,10 @@ LEDGER = {'Heartbreaker': {1: (14, 'b44dc1a11bbf8943c23ca2d71284a2add6360c825b00
                    # printed page and bar totals; strings/frets are a regression pin. Not independently verified.
                    2: (15, '39da5756c418ca678685f239d8e09a14495bd1456bfdc3dbe930817c287220f8'),
                    4: (21, 'c29824c60debbd42d7c3405a6c74717e9be26e6ff050bbed47d665218fbda158'),
+                   # REFUSE-11 pin (first note tied over the system break; the TAB prints an empty "( )"):
+                   # rhythm and tie checked against the printed page and bar total; strings/frets are
+                   # inherited from the previous system's tied note, a regression pin. Not independently verified.
+                   5: (13, '7b3c1158fac3b83132b09e850df994a77f7f36e742ea3ba9c14d84bee4f4f16f'),
                    6: (14, '317fb90d5e1f5077a3314049d7ca5fecf452b4da9f1f8919b57011ef53d765b8'),  # REFUSE-01B pins
                    7: (13, 'dd2651581c9ee3e906e0678c419eeb3f8709560b81ed920e4bc0bff7cc06f99b')},
  'Brown Sugar': {# REFUSE-10 pins (vibrato lines; long tie crescent across a barline to a whole note, whose
@@ -41,6 +45,10 @@ LEDGER = {'Heartbreaker': {1: (14, 'b44dc1a11bbf8943c23ca2d71284a2add6360c825b00
                  # a regression pin. No reference GP exists: not independently verified.
                  3: (8, '0b312f726ead567d1136078691dc08fa7a857f68766451627f1586d30cbabbcf'),
                  4: (7, '7d7cf1b7be4e285e74eeb68f3aba7d294f0d0c85e8d911addfa9f320783b18ae'),
+                 # REFUSE-11 pin (first note tied over the system break; the TAB prints an empty "( )"):
+                 # checked against the printed page and bar total; strings/frets are inherited from the
+                 # previous system's tied note, a regression pin. Not independently verified.
+                 5: (11, '939d0b13e3906476ec953a9f2acfcf70ea712ee3ada6333678dd57249381e90d'),
                  9: (12, 'd24b8169f083858384bddbfc061d1f6b36370f71add2ea588908a352f67b20ac'),
                  10: (1, '9aa7d608152d4a72af17d844adea4c3a875a249fc4099716be44659a5ba738bf'),
                  6: (16, '05aa46b1d415fdff96fc92c7f6022bffef20a9afb7f3e8cb263a58c6106fd044'),  # REFUSE-01B pin
