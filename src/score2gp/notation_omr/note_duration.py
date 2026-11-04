@@ -1848,6 +1848,17 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
     for arc in arcs:
         tie = _tie_ends(arc, tie_events, s)
         if tie is None:
+            arriving = _arriving_tie_end(arc, tie_events, s)
+            if arriving is not None and ENABLE_ARRIVING_TIE:
+                # REFUSE-11: an arc that ends on the system's first note and starts before any note of
+                # this system. It is read as nothing here (it is only an arc ending at a head); the route
+                # ties it to the previous system's last note only if that note's tie ran off the system
+                # end on the same staff position.
+                head = arriving[1]
+                arriving[0].setdefault("_tie", {"start": False, "stop": False, "sources": []})
+                arriving[0]["_tie"]["arrives_from_previous_system"] = {
+                    "source": arc.ident, "head_position": _staff_position(head, staff, s)}
+                continue
             state["diagnostics"]["arcs_not_ties"] += 1
             continue
         start, stop = tie
@@ -1860,6 +1871,9 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
             stop["_tie"]["sources"].append(arc.ident)
         else:
             start["_tie"]["continues_beyond_system"] = True
+            leaving = [h for h in start.get("_heads", [])]
+            if len(leaving) == 1:
+                start["_tie"]["leaving_head_position"] = _staff_position(leaving[0], staff, s)
 
     # A taller crescent ending on a whole head is outside the supported tie
     # contour. If its ends locate adjacent heads at the same staff position,
@@ -2032,6 +2046,37 @@ def _unclassified_tie_contours(glyphs: list[Glyph], events: list[dict[str, Any]]
                 and (above or below)):
             result.append((start, stop, contour))
     return result
+
+
+ENABLE_ARRIVING_TIE = True  # REFUSE-11 mutant switch: False reads no arriving tie (the old behaviour)
+
+
+def _staff_position(head: Glyph, staff: Staff, space: float) -> int:
+    """A notehead's vertical place in half staff spaces above the bottom line (a pitch, without accidentals)."""
+    return round((staff.bottom - head.cy) / (space / 2))
+
+
+def _arriving_tie_end(arc: Glyph, events: list[dict[str, Any]], space: float):
+    """(first event, head) when ``arc`` is the end of a tie coming from the system before, or None.
+
+    The arc must end at the very first note of the system, at the head's own staff height, and begin
+    before every note of this system (no head of this system can own its start). Nothing else is read:
+    that it is a tie and not a slur is settled by the route from the previous system's last note.
+    """
+    if not events:
+        return None
+    first = min(events, key=lambda e: e["_cx"])
+    if len(first.get("_heads", [])) != 1:
+        return None
+    head = first["_heads"][0]
+    reach = TIE_END_REACH_SPACES * space
+    if arc.bbox[0] + 0.3 * space >= head.bbox[0]:
+        return None  # it starts at or after the head: not an arrival
+    if not (head.bbox[0] - reach <= arc.bbox[2] <= head.bbox[2] + 0.3 * space):
+        return None
+    if abs(head.cy - arc.cy) > TIE_VERTICAL_REACH_SPACES * space:
+        return None
+    return first, head
 
 
 def _tie_ends(arc: Glyph, events: list[dict[str, Any]], space: float):

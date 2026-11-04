@@ -136,19 +136,35 @@ def _match_bar(records: list[dict[str, Any]], digits: list[TabCandidate], space:
                 return matched, refusal
         if not near:
             tie = record.get("tie") or {}
+            if _is_arriving_tie(tie, previous, heads):
+                # REFUSE-11: the tie ran off the previous system's end on this very staff position and an arc
+                # ends on this system's first note; a tied continuation prints no TAB digit.
+                arrival = tie["arrives_from_previous_system"]
+                record = {**record, "tie": {**tie, "stop": True, "sources": [*tie.get("sources", []), arrival["source"]]}}
+                entry = {"record": record, "positions": list(previous["positions"]), "candidates": [],
+                         "inherited": list(previous.get("candidates") or []),
+                         "match": {"kind": "tie_continuation", "tied_from": previous["location"],
+                                   "tie_from_previous_system": True}}
+                matched.append(entry)
+                previous = {"positions": entry["positions"], "location": _location(record),
+                            "candidates": entry["inherited"], "tie": record["tie"]}
+                continue
             if tie.get("stop") and previous is not None and len(previous["positions"]) == heads:
                 entry = {"record": record, "positions": list(previous["positions"]), "candidates": [],
                          "inherited": list(previous.get("candidates") or []),
                          "match": {"kind": "tie_continuation", "tied_from": previous["location"]}}
                 matched.append(entry)
                 previous = {"positions": entry["positions"], "location": _location(record),
-                            "candidates": entry["inherited"]}
+                            "candidates": entry["inherited"], "tie": record.get("tie")}
                 continue
             refusal = _refusal("notation_note_without_tab_digit", index)
             if tie.get("stop"):
                 # A tied continuation prints no TAB digit; it is written only from the chord it continues.
                 cause = ("tie_stop_without_written_predecessor" if previous is None
                          else "tie_stop_head_count_differs_from_predecessor")
+            elif tie.get("arrives_from_previous_system") and previous is None:
+                # An arc ends here from the system before, but no written note precedes it to continue.
+                cause = "tie_stop_without_written_predecessor"
             else:
                 cause = "no_tab_column_at_notation_event"
             refusal["evidence"] = _disagreement_evidence(records, columns, digits, cause, record)
@@ -183,7 +199,8 @@ def _match_bar(records: list[dict[str, Any]], digits: list[TabCandidate], space:
                         "match": {"kind": "tab_column", "candidate_ids": [c.id for c in cands],
                                   "dx_spaces": round(near[0][0] / space, 3)}})
         if not grace:
-            previous = {"positions": positions, "location": _location(record), "candidates": cands}
+            previous = {"positions": positions, "location": _location(record), "candidates": cands,
+                        "tie": record.get("tie")}
     unused = [i for i in range(len(columns)) if i not in used]
     if unused:
         reason = ("percussive_strike_without_owning_note"
@@ -193,6 +210,17 @@ def _match_bar(records: list[dict[str, Any]], digits: list[TabCandidate], space:
         refusal["candidate_ids"] = [c.id for c in columns[unused[0]]]
         return matched, refusal
     return matched, None
+
+
+def _is_arriving_tie(tie: dict[str, Any], previous: dict[str, Any] | None, heads: int) -> bool:
+    """An arc ends on this event from the system before, and the written note before it ran off its system
+    end at the same staff position (both single heads). Same place on both sides is what makes it a tie."""
+    arrival = tie.get("arrives_from_previous_system")
+    if tie.get("stop") or not arrival or previous is None or heads != 1 or len(previous["positions"]) != 1:
+        return False
+    left = previous.get("tie") or {}
+    return bool(left.get("start") and left.get("continues_beyond_system")
+                and left.get("leaving_head_position") == arrival["head_position"])
 
 
 def _side(notation: int, tab: int) -> str:
@@ -407,7 +435,8 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
                 onset += Fraction(m["record"]["duration_quarters"])  # a grace adds none
             last = matched[-1] if matched else None
             tied_from = ({"positions": last["positions"], "location": _location(last["record"]),
-                          "candidates": last["candidates"] or last.get("inherited") or []}
+                          "candidates": last["candidates"] or last.get("inherited") or [],
+                          "tie": last["record"].get("tie")}
                          if last is not None and last["record"]["kind"] != "rest" else None)
             entry.update(status="written", reason=None, detail=None, location=None)
             implied = sum(1 for m in matched if (m["record"].get("rest") or {}).get("implied"))
