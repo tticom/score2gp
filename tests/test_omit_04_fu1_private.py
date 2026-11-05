@@ -80,7 +80,9 @@ def test_refused_bars_keep_measured_located_causes_and_no_written_beats(converte
         # mismatch at event 5 that the rest refusal used to hide.
         4: (1, 5, "notehead_digit_count_mismatch", None, "notation_tab_column"),
         6: (1, 8, "notehead_digit_count_mismatch", None, "notation_tab_column"),
-        8: (2, 5, "notehead_digit_count_mismatch", None, "notation_tab_column"),
+        # TIEOWN-01 reads the tie head the count mismatch hid; the bar is still refused, for the unread
+        # accidental beside a notehead at event 5 that the mismatch used to hide.
+        8: (2, 5, "note_duration_event_unread", "unsupported_overlapping_form", "unread_symbol"),
     }
     assert route["summary"]["refused_bars"] == len(expected)
     for number, (system, event, reason, detail, source) in expected.items():

@@ -90,12 +90,16 @@ def test_partial_tie_chord_is_written_and_equals_the_reference(tmp_path):
     _check_written_like_the_reference(tmp_path)
 
 
-@pytest.mark.parametrize("source,bar", [("Lesson-6", 26), ("E_Chord_Lick_Chord", 7)])
-def test_bars_not_settled_by_the_tie_stay_refused(tmp_path, source, bar):
+@pytest.mark.parametrize("source,bar,reason", [
+    # TIEOWN-01 reads the outgoing head of Lesson-6 bar 26 but refuses it for an unread third arc: still refused,
+    # now with the more specific located reason.
+    ("Lesson-6", 26, "tie_head_ownership_unconfirmed"),
+    ("E_Chord_Lick_Chord", 7, "notehead_digit_count_mismatch")])
+def test_bars_not_settled_by_the_tie_stay_refused(tmp_path, source, bar, reason):
     """Rejects widening the rule to a chord whose outgoing tie head is unread, or past a later unreadable event."""
     bars, _ = _convert(source, tmp_path)
     assert bars[bar]["status"] == "refused", f"BAR_WRITTEN_{source}_{bar}"
-    assert bars[bar]["reason"] == "notehead_digit_count_mismatch", "REFUSAL_NOT_LOCATED"
+    assert bars[bar]["reason"] == reason, "REFUSAL_NOT_LOCATED"
 
 
 def test_mutant_drop_partial_tie_fails(tmp_path, monkeypatch):
