@@ -72,8 +72,8 @@ def _convert(name, folder, runtime=ROOT):
 
 
 @pytest.mark.parametrize("name,refused,written", [
-    ("Derek Trucks BB King", (0, 14), (1, 3, 7, 8, 10, 11)),  # 1, 7, 8, 10 by REFUSE-06 (graces under a tuplet bracket; match the reference GP)
-    ("Ex 2 Hands Up", (10,), (1, 2, 3, 4, 6, 8, 11)),  # 6, 8 newly recovered by PERC-01 (9 source-verified events); 11 by REFUSE-03 (half note + half rest, equals the reference GP bar)
+    ("Derek Trucks BB King", (), (0, 1, 3, 7, 8, 9, 10, 11, 14)),  # 0, 9, 14 by REFUSE-14 (ghost heads; checked against the reference GP)  # 1, 7, 8, 10 by REFUSE-06 (graces under a tuplet bracket; match the reference GP)
+    ("Ex 2 Hands Up", (), (1, 2, 3, 4, 6, 7, 8, 9, 10, 11)),  # 7, 9, 10 by REFUSE-14 (ghost heads; match the reference GP)  # 6, 8 newly recovered by PERC-01 (9 source-verified events); 11 by REFUSE-03 (half note + half rest, equals the reference GP bar)
 ])
 def test_new_parenthesized_bars_are_located_refusals_in_final_output(name, refused, written):
     work = ROOT / "work"
@@ -97,7 +97,9 @@ def test_new_parenthesized_bars_are_located_refusals_in_final_output(name, refus
         for entry in route["bars"]:
             parentheses = [s for s in entry.get("unread_symbols", [])
                            if s["class"] == "parenthesized_head_unrepresented"]
-            if parentheses and entry["overlap_preservation_basis"] == "base_equivalent_refused":
+            # REFUSE-14: a fully parenthesised (ghost) bar is written on purpose; the written set above pins which.
+            if (parentheses and entry["overlap_preservation_basis"] == "base_equivalent_refused"
+                    and entry["status"] == "refused"):
                 assert final_bars[entry["source_bar_index"]]["events"] is None
 
 

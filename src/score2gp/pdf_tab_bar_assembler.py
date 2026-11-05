@@ -448,7 +448,15 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
             entry["unread_symbols"] = overlaps[source_bar]
             entry["overlap_preservation_basis"] = (
                 "base_equivalent_written" if preserved else "base_equivalent_refused")
-            if refusal is None and not preserved:
+            ghost_only = all(sym["class"] == "parenthesized_head_unrepresented" for sym in overlaps[source_bar]) and all(
+                r.get("ghost") for r in records if r.get("unread_symbols"))
+            if preserved or not ghost_only:
+                # REFUSE-14: a parenthesis is read as a ghost note only where it alone kept the bar refused.
+                # A bar the base reader already wrote keeps its previous (un-ghosted) notes unchanged, and any
+                # other overlapping form refuses the bar as before.
+                for m in matched:
+                    m["record"].pop("ghost", None)
+            if refusal is None and not preserved and not ghost_only:
                 symbol = overlaps[source_bar][0]
                 refusal = _refusal("note_duration_event_unread",
                                    symbol["location"]["event_index"], symbol["class"])

@@ -882,6 +882,9 @@ def build_gpif(
                             note_id = str(notes_count)
                             notes_count += 1
                             note_node = ET.SubElement(notes_db, "Note", {"id": note_id})
+                            if getattr(note, "is_ghost", False):
+                                # REFUSE-14: a parenthesised head is a ghost note (GP's AntiAccent "Normal").
+                                _text(note_node, "AntiAccent", "Normal")
                             _text(note_node, "InstrumentArticulation", "0")
 
                             is_hopo_dest = (event.id, note.string) in hopo_dests
@@ -1976,6 +1979,8 @@ def _note(parent: ET.Element, note: Note, bar_index: int, onset_ticks: int, dura
         ET.SubElement(note_node, "PalmMute")
     if getattr(note, "is_dead", False):
         ET.SubElement(note_node, "DeadNote")
+    if getattr(note, "is_ghost", False):
+        _text(note_node, "AntiAccent", "Normal")
 
     articulations = getattr(note, "articulations", [])
     if "staccato" in articulations:
