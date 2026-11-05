@@ -2074,6 +2074,8 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
 
                             if -3.0 <= gap <= 5.0:
                                 if vertical_offset <= 2.0:
+                                    if not _glyphs_form_one_fret(merged_text, d2["text"]):
+                                        break
                                     proposed_text = merged_text + d2["text"]
                                     if proposed_text.isdigit() and int(proposed_text) > 24:
                                         d2["warnings"].append("pdf_fret_digits_not_merged_exceeds_max_fret")
@@ -5722,7 +5724,114 @@ def _detect_tab_systems(
                                             cumulative_y_offset, _recover_paint=True)
             if recovered and not any(s.grouping_warnings for s in recovered):
                 return recovered
+    if not _recover_paint and final_systems and not any(s.grouping_warnings for s in final_systems):
+        added = _digit_interrupted_systems_added(page, page_index, first_bar_index,
+                                                 cumulative_y_offset, final_systems)
+        if added is not None:
+            return added
     return final_systems
+
+
+def _glyphs_form_one_fret(left_text: str, right_text: str) -> bool:
+    """TABEXT-01: may two adjacent digit glyphs on one string line be one fret?
+
+    No fret is printed with a leading zero, so a "0" glyph beside another digit
+    is two frets (an open string, then the next fret), never "0n".
+    """
+    return not left_text.startswith("0")
+
+
+def _added_system_has_row_evidence(system: _TabSystem, drawn: list[_LineSegment]) -> bool:
+    """The legacy-row evidence DUR-03 already requires before a short-piece system is accepted.
+
+    Three rows drawn over the whole staff width, or five rows that the ordinary
+    75 pt filter already drew (each possibly interrupted), stand independently
+    of the recovered geometry. Fewer legacy rows are not evidence of a staff.
+    """
+    def at(y: float):
+        return [line for line in drawn if abs(y - (line.y0 + line.y1) / 2) <= 1.0]
+
+    intact = sum(any(min(line.x0, line.x1) <= system.x0 + 2.0 and max(line.x0, line.x1) >= system.x1 - 2.0
+                     for line in at(y)) for y in system.line_ys)
+    old_rows = sum(bool(at(y)) for y in system.line_ys)
+    return intact >= 3 or old_rows >= 5
+
+
+def _digit_interrupted_systems_added(
+    page: Any,
+    page_index: int,
+    first_bar_index: int,
+    cumulative_y_offset: float,
+    base_systems: list[_TabSystem],
+) -> list[_TabSystem] | None:
+    """Recover a TAB system whose painted rows are cut by its own fret digits.
+
+    TABEXT-01. A system drawn with a knocked-out gap behind every digit leaves
+    rows too short for the ordinary 75 pt filter, so the whole system is missing
+    and its digits are then excluded as page or legend numbers. The paint
+    recovery pass already joins such rows; it is accepted here only when it
+    keeps every base system's rows, adds a system, is
+    free of grouping warnings, and each added system carries the legacy-row
+    evidence DUR-03 requires and holds a fret digit on its own rows. A page number or legend cannot satisfy that: it is not on a drawn
+    row. A page with no digit outside the base systems is not re-detected.
+    """
+    try:
+        words = page.get_text("words")
+    except Exception:
+        return None
+    outside_digit = False
+    for word in words:
+        if not any(ch.isdigit() for ch in str(word[4])):
+            continue
+        wx, wy = (word[0] + word[2]) / 2, (word[1] + word[3]) / 2
+        if not any(s.candidate_zone_contains(wx, wy) for s in base_systems):
+            outside_digit = True
+            break
+    if not outside_digit:
+        return None
+    try:
+        recovered = _detect_tab_systems(page, page_index, first_bar_index,
+                                        cumulative_y_offset, _recover_paint=True)
+    except Exception:
+        return None
+    if len(recovered) <= len(base_systems) or any(s.grouping_warnings for s in recovered):
+        return None
+
+    def _same(a: _TabSystem, b: _TabSystem) -> bool:
+        return (len(a.line_ys) == len(b.line_ys)
+                and all(abs(p - q) <= 0.05 for p, q in zip(a.line_ys, b.line_ys)))
+
+    unmatched = list(recovered)
+    for base in base_systems:
+        match = next((s for s in unmatched if _same(base, s)), None)
+        if match is None:
+            return None
+        unmatched.remove(match)
+    drawn = merge_collinear_horizontal_segments(sorted(
+        (segment for segment in _drawing_segments(page.get_drawings()) if segment.is_horizontal),
+        key=lambda segment: segment.y0))
+    for system in unmatched:
+        if not _added_system_has_row_evidence(system, drawn):
+            return None
+        rows = [system.line_ys[0], system.line_ys[-1]]
+        if len(system.line_ys) != 6 or not any(
+                parse_fret_text(str(w[4]).strip("()")) is not None
+                and system.x0 <= (w[0] + w[2]) / 2 <= system.x1
+                and rows[0] - 3.0 <= (w[1] + w[3]) / 2 <= rows[1] + 3.0
+                for w in words):
+            return None
+    # Keep the base systems as detected (their extents may differ slightly in the
+    # recovery pass); take only the added systems from it.
+    from dataclasses import replace
+    merged = sorted([*base_systems, *unmatched], key=lambda s: s.line_ys[0])
+    result = []
+    next_bar = first_bar_index
+    for index, system in enumerate(merged, start=1):
+        floating = [{**fb, "system_index": index} for fb in (getattr(system, "floating_barlines", None) or [])]
+        result.append(replace(system, system_index=index, first_bar_index=next_bar,
+                              floating_barlines=floating))
+        next_bar += max(1, len(system.barlines) - 1)
+    return result
 
 
 
