@@ -27,7 +27,7 @@ def test_derek_music_font_keys_are_read_or_located_by_the_existing_gate():
     # ninth grace is now refused for another, located reason (too far from its beat).
     assert result["summary"]["read_events"] == 225
     assert result["summary"]["unread_reasons"] == {
-        "grace_note_beat_too_far": 1, "rest_glyph_unidentified": 1}
+        "grace_note_beat_too_far": 1}  # REFUSE-16: the glyph once taken for a rest is an accidental in ghost parentheses (bar 2 now refused by its tie onto a grace)
 
 
 @pytest.mark.parametrize("name,read,unread,located", [

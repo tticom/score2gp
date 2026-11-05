@@ -116,7 +116,7 @@ def _check_hammer_ons_stay_unread_as_ties(tmp_path):
 
 def _check_correct_refusals(tmp_path):
     bars, _durations = _convert("Derek Trucks BB King", tmp_path)
-    for bar in (4, 5, 6, 13, 15):
+    for bar in (4, 5, 6, 15):  # REFUSE-16 writes bar 13 (ghost head with its accidental; equals the reference)
         assert bars[bar]["status"] == "refused", f"DEREK_BAR_{bar}_MUST_STAY_REFUSED"
 
 
