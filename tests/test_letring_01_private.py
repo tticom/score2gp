@@ -82,7 +82,7 @@ def test_derek_dashed_let_ring_locates_span_and_refuses_unwritten_bar():
     # bars 0, 9 and 14, so the let-ring bar (source bar 9, bar 10 here) is written now and 9 bars are written.
     # The let-ring marks must land on exactly the reference's beats, nowhere else.
     assert actual[9]["events"] is not None, "the let-ring bar is written once its ghost head is read"
-    assert sum(b["events"] is not None for b in actual) == 9
+    assert sum(b["events"] is not None for b in actual) == 10  # REFUSE-16: source bar 13 (ghost head with its own accidental; matches the reference GP)
     locations = lambda bars: [(i + 1, j + 1, len(e["let_ring"]))
                              for i, b in enumerate(bars) for j, e in enumerate(b["events"] or []) if e["let_ring"]]
     assert locations(actual) == locations(expected), "LET_RING_NOT_ON_REFERENCE_BEATS"

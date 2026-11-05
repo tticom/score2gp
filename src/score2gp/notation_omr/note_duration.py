@@ -654,6 +654,15 @@ def _unread_shape_class(glyph: Glyph, space: float) -> str:
     return "straight_form"
 
 
+def _parenthesis_inner_edges(head: Glyph, glyphs: list[Glyph], space: float) -> list[float]:
+    """Left edges a head's left parenthesis may abut: the head itself, or its own recognised accidental."""
+    return [head.bbox[0]] + [
+        a.bbox[0] for a in glyphs
+        if a.ident != head.ident and head.bbox[0] - a.bbox[2] <= ACCIDENTAL_REACH_SPACES * space
+        and a.bbox[2] <= head.bbox[0] + 0.1 * space and a.bbox[1] <= head.bbox[3] and head.bbox[1] <= a.bbox[3]
+        and _accidental_direction(a, space)]
+
+
 def _notehead_parentheses(glyphs: list[Glyph], heads: list[Glyph],
                           space: float) -> dict[str, list[Glyph]]:
     """Paired curved strokes enclosing one head, not a new note or a rest.
@@ -678,9 +687,12 @@ def _notehead_parentheses(glyphs: list[Glyph], heads: list[Glyph],
             sides["right"].append(glyph)
     pairs: dict[str, list[Glyph]] = {}
     for head in heads:
+        # REFUSE-16: a head's own printed accidental stands inside its parentheses, so the left one then
+        # abuts that accidental (a recognised sharp, flat or natural just left of the head), not the head.
+        edges = _parenthesis_inner_edges(head, glyphs, space)
         left = [g for g in sides["left"]
                 if abs(g.cy - head.cy) <= 0.15 * space
-                and abs(g.bbox[2] - head.bbox[0]) <= 0.25 * space]
+                and any(abs(g.bbox[2] - edge) <= 0.25 * space for edge in edges)]
         right = [g for g in sides["right"]
                  if abs(g.cy - head.cy) <= 0.15 * space
                  and abs(g.bbox[0] - head.bbox[2]) <= 0.25 * space]
@@ -772,6 +784,20 @@ def _is_beam(glyph: Glyph, space: float) -> bool:
     return (min(thicknesses) >= BEAM_MIN_THICKNESS_SPACES * space
             and max(thicknesses) <= BEAM_MAX_THICKNESS_SPACES * space
             and max(thicknesses) - min(thicknesses) <= BEAM_THICKNESS_VARIATION_SPACES * space)
+
+
+def _arc_joins_note_and_grace(glyph: Glyph, events: list[dict[str, Any]], space: float) -> bool:
+    """True for an arc leaving one single-head event and ending on the next, one of them a grace, with both
+    heads at one staff position: the notation of a tie onto or from a grace note."""
+    notes = sorted(((e, e["_heads"][0]) for e in events if len(e.get("_heads", [])) == 1),
+                   key=lambda item: item[0]["_cx"])
+    reach = TIE_END_REACH_SPACES * space
+    starts = [i for i, (_e, h) in enumerate(notes) if h.bbox[0] - 0.3 * space <= glyph.bbox[0] <= h.bbox[2] + reach]
+    stops = [i for i, (_e, h) in enumerate(notes) if h.bbox[0] - reach <= glyph.bbox[2] <= h.bbox[2] + 0.3 * space]
+    if len(starts) != 1 or len(stops) != 1 or stops[0] != starts[0] + 1:
+        return False
+    (first, a), (last, b) = notes[starts[0]], notes[stops[0]]
+    return bool(first.get("_grace") or last.get("_grace")) and abs(a.cy - b.cy) <= TIE_SAME_POSITION_SPACES * space
 
 
 def _is_arc(glyph: Glyph, space: float) -> bool:
@@ -1723,6 +1749,8 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
             else:
                 ignored[beside] = ignored.get(beside, 0) + 1
                 direction = _accidental_direction(g, s) if beside == "accidental_beside_notehead" else None
+                if not direction and not base_equivalent and beside == "accidental_beside_notehead":
+                    direction = _grace_scale_accidental_direction(g, s, heads, small_ids)
                 if direction:
                     accidental_marks.append((g.bbox, direction, g.ident, _glyph_anchor(g, direction, s)))
                 elif not base_equivalent:
@@ -1740,6 +1768,14 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
         events.append({"_rest": g, "_rest_kind": kind, "_cx": g.cx})
 
     _attach_accidentals(events, accidental_marks, staff)
+    if not base_equivalent:
+        # REFUSE-16: an arc joining a note and an adjacent grace head at one staff position is a tie the
+        # reader does not carry across a grace (REFUSE-11/12 tie only ordinary notes). It is located, never
+        # dropped, so a bar that holds it is not written without the tie.
+        for glyph in arcs:
+            if glyph.ident not in slur_ids | crescent_tie_ids and _arc_joins_note_and_grace(glyph, events, s):
+                ignored["over_or_under_notehead"] = ignored.get("over_or_under_notehead", 0) + 1
+                overlaps.append({"glyph": glyph, "cx": glyph.cx, "position": "over_or_under_notehead"})
 
     # Assign events to bars.
     edges = [staff.x0] + [x for pair in boundaries for x in pair] + [staff.x1]
@@ -1975,6 +2011,30 @@ def _accidental_direction(glyph: Glyph, space: float) -> str | None:
     from .key_signature import _kind  # key_signature imports this module
 
     return _kind(glyph, space) or ("natural" if _is_natural_accidental(glyph, space) else None)
+
+
+def _grace_scale_accidental_direction(glyph: Glyph, space: float, heads: list[Glyph],
+                                      small_ids: set[str]) -> str | None:
+    """REFUSE-16: a sharp, flat or natural printed at grace size, just left of a small (grace) head.
+
+    An engraver sets a grace note's accidental in the same reduced size as its head, so the accidental is
+    the same drawn form as a full-size one at a smaller scale. The scale is this staff's own small head
+    width over its median full-size head width (measured, never fixed); the unchanged form tests then run
+    at that scale. Only a glyph standing in an accidental's place left of a small head qualifies, so a
+    glyph beside a full-size head is judged exactly as before.
+    """
+    full = sorted(h.w for h in heads if h.ident not in small_ids)
+    if not full:
+        return None
+    full_width = full[len(full) // 2]
+    for head in heads:
+        if head.ident not in small_ids:
+            continue
+        b = head.bbox
+        if (b[0] - glyph.bbox[2] <= ACCIDENTAL_REACH_SPACES * space and glyph.bbox[2] <= b[0] + 0.1 * space
+                and glyph.bbox[1] <= b[3] and b[1] <= glyph.bbox[3]):
+            return _accidental_direction(glyph, space * head.w / full_width)
+    return None
 
 
 def _glyph_anchor(glyph: Glyph, direction: str, space: float) -> float:
