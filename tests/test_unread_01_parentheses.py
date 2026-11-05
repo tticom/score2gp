@@ -73,7 +73,7 @@ def _convert(name, folder, runtime=ROOT):
 
 @pytest.mark.parametrize("name,refused,written", [
     ("Derek Trucks BB King", (), (0, 1, 3, 7, 8, 9, 10, 11, 14)),  # 0, 9, 14 by REFUSE-14 (ghost heads; checked against the reference GP)  # 1, 7, 8, 10 by REFUSE-06 (graces under a tuplet bracket; match the reference GP)
-    ("Ex 2 Hands Up", (), (1, 2, 3, 4, 6, 7, 8, 9, 10, 11)),  # 7, 9, 10 by REFUSE-14 (ghost heads; match the reference GP)  # 6, 8 newly recovered by PERC-01 (9 source-verified events); 11 by REFUSE-03 (half note + half rest, equals the reference GP bar)
+    ("Ex 2 Hands Up", (), (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)),  # 5 by TABEXT-01 (a "0" glyph is its own fret, not merged into "012"; equals the reference GP bar)  # 7, 9, 10 by REFUSE-14 (ghost heads; match the reference GP)  # 6, 8 newly recovered by PERC-01 (9 source-verified events); 11 by REFUSE-03 (half note + half rest, equals the reference GP bar)
 ])
 def test_new_parenthesized_bars_are_located_refusals_in_final_output(name, refused, written):
     work = ROOT / "work"
