@@ -70,6 +70,7 @@ def build_note_type_event(
     track_id: str,
     inherited: Sequence[TabCandidate] = (),
     tied_positions: Sequence[tuple[int, int]] | None = None,
+    tie_states: dict[tuple[int, int], str | None] | None = None,
 ) -> Event:
     """One Event whose duration is its note-type record's, and whose (string, fret) positions come from the TAB.
 
@@ -94,6 +95,9 @@ def build_note_type_event(
         source = inherited_by_position.get((string, fret)) if candidate is None else None
         # REFUSE-12: when only some heads are tied, the tie belongs to those heads alone.
         note_tie_state = tie_state if tied_positions is None or (string, fret) in tied_positions else None
+        if tie_states is not None:
+            # TIEOWN-01: each head's own tie state, read from where its arc ends; no head inherits the event's.
+            note_tie_state = tie_states.get((string, fret))
         is_strike = candidate is not None and candidate.kind == "percussive-strike"
         pitch = None if is_strike else _STRING_TO_BASE_PITCH[string] + fret
         provenance = [candidate.to_provenance()] if candidate else []

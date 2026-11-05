@@ -143,12 +143,22 @@ LEDGER = {'Castles Made of Sand': {
                 # strings/frets are inherited from the previous system's tied note, a regression pin, not an
                 # independent transcription. No reference GP exists: not independently verified.
                 22: (13, '3c2d68f57d370eddc7fbf9dcca13aaa26d3d2c5e2b784d7b7a807d1079a8f7e8'),
-                24: (13, '5603cc739771f61bc1fd6a28fa3ebf4586655ee8cbb720b7e5a1411d46dc665b')}}
+                24: (13, '5603cc739771f61bc1fd6a28fa3ebf4586655ee8cbb720b7e5a1411d46dc665b'),
+                # TIEOWN-01 bars (a chord of strikes plus one filled head; the arc leaves the filled head and ends
+                # on the one note after it, which prints no digit): bars 1->2 and 15->16. Rhythm, the tied head and
+                # the continuation checked against the printed notation page by eye; strings/frets are a regression
+                # pin, not an independent transcription. No reference GP exists: not independently verified.
+                1: (4, '00b58521eaf5034170618c60a6c2694072c724b399f02f88788d5754b04be972'),
+                2: (2, 'cf23239c463a6b30f3fc5997ca6fdc2a8931e6721b9d54a3496160ab2a222876'),
+                15: (9, 'cdcfb403712032b48ac6e3c4185e675d85f35162eacbbe684ecc20a506640825'),
+                16: (7, '4147a2727eea8886e85c6ce0257ef22714875fdecd8ed478d7d551a1679e3dae')}}
 
 STORAGE = {('Castles Made of Sand', 1): '6b8146334d8a5425c8abb46368180aab573063c6f75c60e7930ffc47ccfec43d',
  ('Castles Made of Sand', 8): '7cb51280b9f8ce17671235a4e14a4c9d8ada64cdcade26897cd2b919806446d0',
  ('Crossroads', 1): '76d9674abe162b5396215b1aafce3692c3f2e7fc7a092f734b0cc5189d8bb965',
  ('Crossroads', 3): '76d9674abe162b5396215b1aafce3692c3f2e7fc7a092f734b0cc5189d8bb965',
+ ('Crossroads', 15): 'af74118f9d5034cd6ff91f9dbbc34180dc062faee02c7d88b65276fab9075cee',
+ ('Crossroads', 16): '2b8056269f5fa44ed1ea4d098824e072daf030c8e359b22552fdd051891b0283',
  ('Crossroads', 25): '147a2421153bccf993b1cefbe8fd79974c620bc5841dd382987c9d13c2155cbe',
  ('Crossroads', 33): '2b8056269f5fa44ed1ea4d098824e072daf030c8e359b22552fdd051891b0283'}
 
@@ -316,9 +326,9 @@ def test_mixed_tie_refusal_rejects_copying_a_pitched_tie_to_strikes(tmp_path, mo
     assert result.exit_code == 0
     route = json.loads((normal / 'build/note-type-route.json').read_text())
     first = route['bars'][0]
-    assert first['status'] == 'refused'
-    assert first['reason'] == 'mixed_percussive_tie_ownership_unread'
-    assert first['location'] == dict(page_index=0, system_index=0, bar_index=0, event_index=3)
+    # TIEOWN-01 reads the one filled head the arc leaves, so the bar is written; the strikes still carry no tie.
+    assert first['status'] == 'written'
+    assert first['events'][-1]['match']['kind'] == 'tab_column'
     assert_no_unprinted_strike_ties(output)
     source_code = inspect.getsource(assembler._match_bar)
     old = 'if cross_count and cross_count < heads and ('

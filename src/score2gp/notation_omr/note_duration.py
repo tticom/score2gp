@@ -1905,6 +1905,10 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
         start.setdefault("_tie", {"start": False, "stop": False, "sources": []})
         start["_tie"]["start"] = True
         start["_tie"]["sources"].append(arc.ident)
+        if ENABLE_TIED_HEAD_OWNERSHIP and len(start.get("_heads", [])) > 1:
+            # TIEOWN-01: the arc leaves ONE head of a chord. Its position, and its rank among the chord's heads,
+            # let the route tie that head alone instead of every note of the chord.
+            _record_tie_end(start["_tie"], "start", start, start_head, staff, s)
         if stop is not None:
             stop.setdefault("_tie", {"start": False, "stop": False, "sources": []})
             stop["_tie"]["stop"] = True
@@ -1912,7 +1916,7 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
             if ENABLE_TIED_HEAD_OWNERSHIP and len(stop.get("_heads", [])) > 1:
                 # REFUSE-12: the arc ends on ONE head of a chord. Record which, so the route can tie that
                 # head alone; an event-level tie would tie every note of the chord.
-                stop["_tie"].setdefault("stop_head_positions", []).append(_staff_position(stop_head, staff, s))
+                _record_tie_end(stop["_tie"], "stop", stop, stop_head, staff, s)
         else:
             start["_tie"]["continues_beyond_system"] = True
             leaving = [h for h in start.get("_heads", [])]
@@ -2123,6 +2127,19 @@ ENABLE_TIED_HEAD_OWNERSHIP = True  # REFUSE-12 mutant switch: False records no t
 def _staff_position(head: Glyph, staff: Staff, space: float) -> int:
     """A notehead's vertical place in half staff spaces above the bottom line (a pitch, without accidentals)."""
     return round((staff.bottom - head.cy) / (space / 2))
+
+
+def _record_tie_end(tie: dict[str, Any], side: str, event: dict[str, Any], head: Glyph, staff: Staff,
+                    space: float) -> None:
+    """Note which head of a chord a tie arc end sits on: ``<side>_head_positions`` (staff positions) and
+    ``<side>_head_ranks`` (0 = lowest head of the chord). A rank is recorded only when every head of the
+    chord has its own staff position, so that the rank names exactly one head; otherwise the ends stay
+    unequal in length and the route reads no owner."""
+    position = _staff_position(head, staff, space)
+    tie.setdefault(f"{side}_head_positions", []).append(position)
+    positions = sorted(_staff_position(h, staff, space) for h in event["_heads"])
+    if len(set(positions)) == len(positions):
+        tie.setdefault(f"{side}_head_ranks", []).append(positions.index(position))
 
 
 def _arriving_tie_end(arc: Glyph, events: list[dict[str, Any]], space: float):
