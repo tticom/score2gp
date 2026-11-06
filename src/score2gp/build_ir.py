@@ -1679,6 +1679,22 @@ def _source_system_row_counts(
     return None, warning
 
 
+def _no_candidates_details(tabraw: TabRaw) -> dict[str, object]:
+    """NOROUTE-01: say why a source with no candidate at all was refused, from what the extractor recorded.
+
+    A scanned or raster source has no vector page to read (``pdf_input_class_scanned_pdf_unsupported``), a
+    drawn-but-unrecognised one has no TAB system. Nothing here is read from the page or guessed.
+    """
+    details: dict[str, object] = {
+        "inspection_kind": str(tabraw.inspection_kind),
+        "pdf_layout_class": str(tabraw.pdf_layout_class),
+        "pdf_layout_warnings": ",".join(tabraw.pdf_layout_warnings),
+    }
+    if "pdf_input_class_scanned_pdf_unsupported" in tabraw.pdf_layout_warnings:
+        details["located_reason"] = "scanned_raster_source_without_vector_tab"
+    return details
+
+
 def build_ir_from_tabraw_only(
     tabraw_path: str | Path,
     *,
@@ -1721,6 +1737,7 @@ def build_ir_from_tabraw_only(
             category="pdf_only_tab_grouping_unsafe",
             stage="layout-gating",
             message="PDF-only tab building refused: no candidates found in TabRaw.",
+            details=_no_candidates_details(tabraw),
         )
 
     # 1. Check layout warnings
