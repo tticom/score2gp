@@ -20,9 +20,10 @@ from score2gp.cli import app
 ROOT = Path(__file__).resolve().parents[1]
 PRIVATE = ROOT / "fixtures/private"
 
-# source -> (CLI exit code, refusal category) as measured on the current runtime
+# source -> (CLI exit code, refusal category) as measured on the current runtime.
+# PARANOID - BLACK SABBATH was listed here with pdf_only_tab_time_signature_unread; TSIG-01 reads its printed
+# cut-time glyph, so it now converts (23 of 38 bars written) and is pinned by test_tsig_01_cut_time_glyph_private.py.
 REFUSALS = {
-    "PARANOID - BLACK SABBATH": (2, "pdf_only_tab_time_signature_unread"),
     "5_Grateful_Dead_Intros": (1, "percussive_strike_without_owning_note"),
     "LegatoLicks": (4, "pdf_only_tab_grouping_unsafe"),
     "Lick in All 5 CAGED Shapes start on the 5 _ guitar tab creator": (4, "pdf_only_tab_grouping_unsafe"),
