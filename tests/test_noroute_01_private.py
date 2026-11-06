@@ -24,7 +24,7 @@ PRIVATE = ROOT / "fixtures/private"
 # PARANOID - BLACK SABBATH was listed here with pdf_only_tab_time_signature_unread; TSIG-01 reads its printed
 # cut-time glyph, so it now converts (23 of 38 bars written) and is pinned by test_tsig_01_cut_time_glyph_private.py.
 REFUSALS = {
-    "5_Grateful_Dead_Intros": (1, "percussive_strike_without_owning_note"),
+    "5_Grateful_Dead_Intros": (2, "pdf_only_tab_no_notation_bars"),  # PERCX-01: was percussive_strike_without_owning_note
     "LegatoLicks": (4, "pdf_only_tab_grouping_unsafe"),
     "Lick in All 5 CAGED Shapes start on the 5 _ guitar tab creator": (4, "pdf_only_tab_grouping_unsafe"),
 }

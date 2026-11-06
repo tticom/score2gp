@@ -734,6 +734,16 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
         route["summary"]["written_bars_with_implied_rest"] = sum(1 for e in written if e.get("implied_rests"))
         route["summary"]["implied_rests"] = sum(e.get("implied_rests", 0) for e in written)
     unowned_strikes = [c for c in unplaced if c.kind == "percussive-strike"]
+    if unowned_strikes and not route_bars:
+        # PERCX-01: with no bar read at all (a TAB-only source whose printed marks give no rhythm) a strike has no
+        # notation note to own it, and is owned by its own TAB column instead. It is carried, not refused for
+        # that: what stops the source is the rhythm it does not print, which the caller refuses.
+        route["tab_column_strikes"] = [
+            {"owner": "tab_column", "candidate_id": c.id,
+             "location": {"page_index": (c.page_index or 1) - 1, "system_index": c.system_index,
+                          "bar_index": c.bar_index, "string": c.string,
+                          "bbox": c.bbox.model_dump() if c.bbox else None}}
+            for c in unowned_strikes]
     if unowned_strikes:
         route["located_refusals"] = [
             {"class": "percussive_strike", "reason": "percussive_strike_without_owning_note",

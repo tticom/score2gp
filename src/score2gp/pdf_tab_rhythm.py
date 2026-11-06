@@ -668,6 +668,8 @@ class _Reader:
                 tie_next.add(li)
                 tie_prev.add(ri)
                 continue
+            if any(d.kind == "percussive-strike" for d in (*left["digits"], *right["digits"])):
+                continue  # a strike carries no pitch to hold: an arc beside one is not a tie
             lp = sorted((d.string, d.parsed_fret) for d in left["digits"])
             rp = sorted((d.string, d.parsed_fret) for d in right["digits"])
             if _same_positions(lp, rp):
@@ -790,6 +792,13 @@ class _Reader:
             record["rest"] = {"glyph": written, "source": e["rest_source"]}
         else:
             record["notehead"] = {"kind": "tab_digits", "count": len(e["digits"]) or 0, "sources": [d.id for d in e["digits"]]}
+            if any(d.kind == "percussive-strike" for d in e["digits"]):
+                # PERCX-01: the owning head of an X strike is its own TAB column's X. The index runs down the staff,
+                # as the notation reader's does, so it grows with the string number.
+                record["notehead"]["heads"] = [
+                    {"kind": "cross" if d.kind == "percussive-strike" else "filled", "source": d.id,
+                     "staff_position_index": d.string}
+                    for d in sorted(e["digits"], key=lambda d: d.string)]
             if e.get("digitless"):
                 record["notehead"]["count"] = 0  # set to the tied-from note's count below
             if st is not None:
@@ -941,8 +950,10 @@ def read_tab_rhythm(pdf_path: str | Path, tabraw: Any, pages: tuple[int, int] | 
 
     path = Path(pdf_path)
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
-    fret_digits = [c for c in tabraw.candidates if c.kind == "fret" and c.parsed_fret is not None and c.string is not None
-                   and c.x is not None and c.y is not None and c.bbox is not None]
+    # PERCX-01: an X strike is a TAB column of its own (it has no notation staff to own it), so it is read with the digits.
+    fret_digits = [c for c in tabraw.candidates
+                   if ((c.kind == "fret" and c.parsed_fret is not None) or c.kind == "percussive-strike")
+                   and c.string is not None and c.x is not None and c.y is not None and c.bbox is not None]
     signatures: dict[int, dict[str, Any] | None] = {}
     basis: dict[int, dict[str, Any] | None] = {}
     time_signatures: list[dict[str, Any]] = []
@@ -1069,6 +1080,7 @@ class _View:
         self.y = y
         self.string = candidate.string
         self.parsed_fret = candidate.parsed_fret
+        self.kind = candidate.kind
         self.bbox = candidate.bbox
 
 
