@@ -93,9 +93,10 @@ def _check_system_bars(tmp_path):
 
 def _check_leading_zero_bar(tmp_path):
     bars, out = _convert("Ex 2 Hands Up", tmp_path)
-    assert bars[5]["status"] == "written", "EX2_BAR_5_REFUSED"
-    written = _gpif_bars(out)[bars[5]["output_bar_index"] - 1]
-    assert written in _gpif_bars(PRIVATE / "Ex 2 Hands Up.gp"), "EX2_BAR_5_DIFFERS_FROM_REFERENCE"
+    # REFUSE-17: the clef/start-repeat stub is no bar, so this bar (source 5 before) is source bar 4.
+    assert bars[4]["status"] == "written", "EX2_BAR_4_REFUSED"
+    written = _gpif_bars(out)[bars[4]["output_bar_index"] - 1]
+    assert written in _gpif_bars(PRIVATE / "Ex 2 Hands Up.gp"), "EX2_BAR_4_DIFFERS_FROM_REFERENCE"
 
 
 def _systems(source, page_number):

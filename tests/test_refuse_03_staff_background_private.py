@@ -94,11 +94,10 @@ def test_ex_2_hands_up_bar_matches_reference(tmp_path):
     reference = PRIVATE / "Ex 2 Hands Up.gp"
     assert reference.is_file(), "REQUIRED_REFUSE_03_REFERENCE_MISSING"
     output, route = _convert("Ex 2 Hands Up.pdf", tmp_path)
-    entry = next(b for b in route["bars"] if b["source_bar_index"] == 11)
+    entry = next(b for b in route["bars"] if b["source_bar_index"] == 10)
     assert entry["status"] == "written", "EX2_BAR_REFUSED"
-    # The output carries one leading source bar (the clef/repeat stub before the first barline) that the
-    # reference does not, so its bar n is the reference's bar n - 1.
+    # REFUSE-17: the clef/start-repeat stub is no bar, so output bar n is the reference's bar n.
     shape = lambda events: [(e["kind"], e["written"], e["dots"]) for e in events]  # noqa: E731
     written = shape(read_gp_bars(output)[entry["output_bar_index"] - 1]["events"])
-    expected = shape(read_gp_bars(reference)[entry["output_bar_index"] - 2]["events"])
+    expected = shape(read_gp_bars(reference)[entry["output_bar_index"] - 1]["events"])
     assert written == expected, "EX2_BAR_DIFFERS_FROM_REFERENCE"

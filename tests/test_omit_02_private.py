@@ -103,17 +103,19 @@ def test_real_repeat_end_decision_does_not_depend_on_last_bar_position():
     # stems, not barlines. Source boundaries give 5/4/3 partitions, including
     # the leading header-only partition: 11 musical bars, also 11 reference
     # master bars. Repeat indices below come from those source boundaries.
-    assert [system["bar_count"] for system in durations["systems"]] == [5, 4, 3]
+    # REFUSE-17: the leading header-only partition is a start-repeat sign, not a bar: 4/4/3 bars, and the
+    # sign is carried as the first bar's own start-repeat signal (bar_index 1, ``bar_start``).
+    assert [system["bar_count"] for system in durations["systems"]] == [4, 4, 3]
     full = {signal["bar_index"]: signal for signal in
             read_notation_barline_signals(pdf, durations)}
-    assert (full[1]["status"], full[1]["kind"]) == ("read", "repeat-start")
-    assert [(full[i]["status"], full[i]["kind"]) for i in (5, 7, 9)] == [
+    assert (full[1]["status"], full[1]["kind"], full[1].get("bar_start")) == ("read", "repeat-start", True)
+    assert [(full[i]["status"], full[i]["kind"]) for i in (4, 6, 8)] == [
         ("read", "repeat-end")] * 3
-    assert all(full[i]["kind"] not in ("double", "end") for i in (5, 7, 9))
+    assert all(full[i]["kind"] not in ("double", "end") for i in (4, 6, 8))
     durations["systems"] = durations["systems"][:2]
     truncated = {signal["bar_index"]: signal for signal in
                  read_notation_barline_signals(pdf, durations)}
-    assert (truncated[9]["status"], truncated[9]["kind"]) == ("read", "repeat-end")
+    assert (truncated[8]["status"], truncated[8]["kind"]) == ("read", "repeat-end")
 
 
 def test_real_repeat_package_uses_reference_flags():

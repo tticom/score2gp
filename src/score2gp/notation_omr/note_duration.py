@@ -143,6 +143,8 @@ TIE_SAME_POSITION_SPACES = 0.25
 TIE_VERTICAL_REACH_SPACES = 1.6
 HEADER_CLEF_START_SPACES = 3.0
 HEADER_CONTIGUITY_SPACES = 1.5
+REPEAT_DOT_MAX_SPACES = 0.6  # a repeat dot is a small filled disc, at most this many spaces across
+REPEAT_DOT_REACH_SPACES = 1.5  # ... standing within this many spaces right of the barline it belongs to
 ACCIDENTAL_REACH_SPACES = 2.0
 REST_BLOCK = {"min_w": 0.8, "max_w": 1.8, "min_h": 0.3, "max_h": 0.8, "line": 0.12}
 REST_QUARTER = {"min_w": 0.7, "max_w": 1.5, "min_h": 2.2, "max_h": 3.6}
@@ -1500,6 +1502,37 @@ def _barlines(staff: Staff, symbols: PageSymbols) -> list[tuple[float, float]]:
     return [(a, b) for a, b in clusters if a - staff.x0 > BARLINE_CLUSTER_SPACES * s]
 
 
+def _is_start_repeat_after_header(staff: Staff, glyphs: list[Glyph], texts: list[Text],
+                                  cluster: tuple[float, float]) -> bool:
+    """REFUSE-17: the first barline cluster of a system is a start-repeat barline that follows only the header.
+
+    A start-repeat sign (thick band, thin line, two dots on the right) printed straight after the clef and
+    meter opens the first bar; it does not close a bar. Read as a boundary it would leave a bar made of the
+    header alone. The sign is recognised from its own printed form: a thick barline band just left of the
+    cluster, two small filled discs just right of it, and before it only an unbroken run of header symbols
+    (clef, key, meter) from the staff start. A blank bar before a repeat sign leaves a gap and is not matched.
+    """
+    s = staff.space
+    a, b = cluster
+    thick = [g for g in glyphs if _is_thick_barline(g, staff) and g.bbox[2] <= a + 0.1 * s
+             and a - g.bbox[2] <= BARLINE_CLUSTER_SPACES * s]
+    if len(thick) != 1:
+        return False
+    run_end = staff.x0
+    members = [m.bbox for m in glyphs if m.bbox[2] <= thick[0].bbox[0]] + [
+        t.bbox for t in texts if t.bbox[2] <= thick[0].bbox[0] and staff.top - s <= t.cy <= staff.bottom + s]
+    for x0, _, x1, _ in sorted(members):
+        if x0 > staff.x0 + HEADER_CLEF_START_SPACES * s and x0 > run_end + HEADER_CONTIGUITY_SPACES * s:
+            return False
+        run_end = max(run_end, x1)
+    if thick[0].bbox[0] > run_end + HEADER_CONTIGUITY_SPACES * s:
+        return False
+    dots = [g for g in glyphs if g.filled and g.w <= REPEAT_DOT_MAX_SPACES * s and g.h <= REPEAT_DOT_MAX_SPACES * s
+            and b - 0.1 * s <= g.bbox[0] <= b + REPEAT_DOT_REACH_SPACES * s
+            and staff.top < g.cy < staff.bottom]
+    return len(dots) == 2 and abs(dots[0].cy - dots[1].cy) > 0.5 * s
+
+
 def _covers_staff(glyph: Glyph, staff: Staff) -> bool:
     """A filled shape whose box encloses the whole staff (a page background or frame) is not a printed symbol.
 
@@ -1778,6 +1811,12 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
                 overlaps.append({"glyph": glyph, "cx": glyph.cx, "position": "over_or_under_notehead"})
 
     # Assign events to bars.
+    leading_start_repeat = None
+    if (boundaries and not any(e["_cx"] < boundaries[0][0] for e in events)
+            and _is_start_repeat_after_header(staff, glyphs, [t for t in symbols.texts if in_zone(t.cx, t.cy)], boundaries[0])):
+        leading_start_repeat = [round(boundaries[0][0], 3), round(boundaries[0][1], 3)]
+        boundaries = boundaries[1:]  # REFUSE-17: a start-repeat sign opens bar 1, it does not end a bar before it
+        ignored["leading_start_repeat_barline"] = ignored.get("leading_start_repeat_barline", 0) + 1
     edges = [staff.x0] + [x for pair in boundaries for x in pair] + [staff.x1]
     bars = [(edges[i], edges[i + 1]) for i in range(0, len(edges) - 1, 2)]
     for event in events:
@@ -1974,7 +2013,8 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
     for reason, count in ignored.items():
         state["diagnostics"]["ignored_symbols"] += count
         by_reason[reason] = by_reason.get(reason, 0) + count
-    return {"records": records, "bar_count": len(bars), "bars": bars, "time_signature": state.get("time_signature")}
+    return {"records": records, "bar_count": len(bars), "bars": bars, "time_signature": state.get("time_signature"),
+            "leading_start_repeat": leading_start_repeat}
 
 
 ACCIDENTAL_TEXT = {"#": "sharp", "♯": "sharp", "b": "flat", "♭": "flat"}
@@ -2569,7 +2609,10 @@ def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = No
                                 "bar_count": result["bar_count"], "staff_space": round(staff.space, 4),
                                 "staff": {"top": round(staff.top, 3), "bottom": round(staff.bottom, 3),
                                           "x0": round(staff.x0, 3), "x1": round(staff.x1, 3)},
-                                "bars": [[round(a, 3), round(b, 3)] for a, b in result["bars"]]})
+                                "bars": [[round(a, 3), round(b, 3)] for a, b in result["bars"]],
+                                # REFUSE-17: present only where a start-repeat sign opens the system's first bar
+                                **({"leading_start_repeat": result["leading_start_repeat"]}
+                                   if result.get("leading_start_repeat") else {})})
                 state["bar_offset"] += result["bar_count"]
                 state["system_number"] += 1
     checks = _bar_checks(records, bar_signatures, state["diagnostics"].get("located_unread_events", []))

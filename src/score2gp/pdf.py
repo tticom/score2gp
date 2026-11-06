@@ -5013,9 +5013,14 @@ def _notation_system_barline_signals(
 ) -> list[dict[str, Any]]:
     signals = []
     top, bottom = system["staff"]["top"], system["staff"]["bottom"]
-    for local_index, (_, end_x) in enumerate(system["bars"]):
+    # REFUSE-17: a start-repeat sign that opens the system's first bar is no bar end; its signal is marked
+    # ``bar_start`` and carries that first bar's own index.
+    boundaries = ([(system["leading_start_repeat"][0], system["first_bar_index"] + 1, True)]
+                  if system.get("leading_start_repeat") else [])
+    boundaries += [(end_x, system["first_bar_index"] + local_index + 1, False)
+                   for local_index, (_, end_x) in enumerate(system["bars"])]
+    for end_x, bar_index, bar_start in boundaries:
         strokes = _notation_strokes_at_end(segments, end_x, top, bottom)
-        bar_index = system["first_bar_index"] + local_index + 1
         kind, reason, dots = _classify_notation_barline(
             strokes, drawings, glyphs, top, bottom, bar_index == final_bar_index,
         )
@@ -5036,6 +5041,7 @@ def _notation_system_barline_signals(
             "bar_index": bar_index,
             "status": "read" if kind is not None else "refused",
             "kind": kind, "reason": reason, "strokes": sources,
+            **({"bar_start": True} if bar_start else {}),
         })
     return signals
 
