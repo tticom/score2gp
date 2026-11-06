@@ -207,6 +207,89 @@ def classify_common_cut(glyph: Glyph, raster: list[list[bool]], strokes: list[An
     return None, "common_time_cut_time_ambiguous"
 
 
+CONTOUR_ROWS = 80  # a finer grid than the numerals' so a stroke beside a C is not merged into it
+STROKE_MIN_ASPECT = 1.5  # a cut-time stroke is at least this much taller than it is wide
+STROKE_MAX_GAP_SHARE = 0.5  # the stroke stands within this share of the C's width of the C
+STROKE_CENTRE_SHARE = 0.15  # the stroke and the C are level on the glyph's height within this share
+
+
+def _components(raster: list[list[bool]]) -> list[list[tuple[int, int]]]:
+    """Painted cells grouped by 4-connectivity, leftmost group first."""
+    rows, columns = len(raster), len(raster[0])
+    seen = [[False] * columns for _ in range(rows)]
+    groups: list[list[tuple[int, int]]] = []
+    for r0 in range(rows):
+        for c0 in range(columns):
+            if not raster[r0][c0] or seen[r0][c0]:
+                continue
+            stack, cells = [(r0, c0)], []
+            seen[r0][c0] = True
+            while stack:
+                r, c = stack.pop()
+                cells.append((r, c))
+                for dr, dc in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                    nr, nc = r + dr, c + dc
+                    if 0 <= nr < rows and 0 <= nc < columns and raster[nr][nc] and not seen[nr][nc]:
+                        seen[nr][nc] = True
+                        stack.append((nr, nc))
+            groups.append(cells)
+    return sorted(groups, key=lambda cells: min(c for _, c in cells))
+
+
+def _is_open_c(cells: list[tuple[int, int]]) -> bool:
+    """A painted form with a bowl on the left, nothing right of its midline across its middle three rows (the
+    opening) and a terminal on the right at the top or bottom: the C of common and cut time. A heavy
+    terminal may curl back toward the middle, so only the middle rows are tested; an enclosed counter is
+    checked by the caller."""
+    r0, r1 = min(r for r, _ in cells), max(r for r, _ in cells) + 1
+    c0, c1 = min(c for _, c in cells), max(c for _, c in cells) + 1
+    painted = set(cells)
+    centre = (r0 + r1) // 2
+    middle = range(centre - 1, centre + 2)
+    midline = (c0 + c1) // 2
+    left_bowl = any((r, c0 + k) in painted for r in middle for k in range(2))
+    opening = not any((r, c) in painted for r in middle for c in range(midline, c1))
+    third = max(1, (c1 - c0) // 6)
+    terminal = any((r, c) in painted for r in range(r0, r1) for c in range(c1 - third, c1))
+    return left_bowl and opening and terminal
+
+
+def classify_common_cut_contour(glyph: Glyph, space: float) -> tuple[str | None, str | None]:
+    """'common' for a lone open C, 'cut' for an open C with a tall stroke beside it, else (None, why not).
+
+    Read from the painted contour alone (TSIG-01), never from a bar's totals. A cut-time stroke is a second
+    painted form that is tall and narrow, stands against the C, is level with it, and reaches past the C's
+    top and its bottom: ``CUT_STROKE_OVERHANG_SPACES`` is the least overhang, so a stroke the C's own height
+    (a bracket, a slur end, a barline) is not a cut stroke.
+    """
+    raster = glyph_raster(glyph, CONTOUR_ROWS)
+    rows = len(raster)
+    if _counters(raster):
+        return None, "common_time_closed_counter"
+    groups = _components(raster)
+    if not groups:
+        return None, "common_time_not_an_open_c"
+    first = groups[0]
+    if not _is_open_c(first):
+        return None, "common_time_not_an_open_c"
+    if len(groups) == 1:
+        return "common", None
+    if len(groups) != 2:
+        return None, "common_cut_time_component_count"
+    stroke = groups[1]
+    c_rows, c_cols = [r for r, _ in first], [c for _, c in first]
+    s_rows, s_cols = [r for r, _ in stroke], [c for _, c in stroke]
+    overhang_rows = CUT_STROKE_OVERHANG_SPACES * space / (glyph.h / rows)
+    stroke_h, stroke_w = max(s_rows) - min(s_rows) + 1, max(s_cols) - min(s_cols) + 1
+    c_w = max(c_cols) - min(c_cols) + 1
+    gap = min(s_cols) - max(c_cols) - 1
+    level = abs((min(s_rows) + max(s_rows)) - (min(c_rows) + max(c_rows))) / 2 <= STROKE_CENTRE_SHARE * rows
+    reaches = min(c_rows) - min(s_rows) >= overhang_rows and max(s_rows) - max(c_rows) >= overhang_rows
+    if (stroke_h >= STROKE_MIN_ASPECT * stroke_w and gap <= STROKE_MAX_GAP_SHARE * c_w and level and reaches):
+        return "cut", None
+    return None, "cut_time_stroke_not_through_c"
+
+
 def _clef(staff: Staff, symbols: PageSymbols) -> Glyph | None:
     s = staff.space
     clefs = [g for g in symbols.glyphs if g.bbox[0] <= staff.x0 + CLEF_MAX_START_SPACES * s

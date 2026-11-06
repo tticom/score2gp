@@ -39,7 +39,7 @@ from .notation_omr.note_duration import (
     _tuplet_ratio,
     extract_page_symbols,
 )
-from .notation_omr.time_signature import VALID_DENOMINATORS, classify_numeral, glyph_raster
+from .notation_omr.time_signature import VALID_DENOMINATORS, classify_common_cut_contour, classify_numeral, glyph_raster
 
 TAB_RHYTHM_SCHEMA = "tab-rhythm.v0.1"
 
@@ -74,6 +74,13 @@ NUMERAL_MIN_HEIGHT_SPACES = 1.2
 NUMERAL_MAX_HEIGHT_SPACES = 2.5
 NUMERAL_MAX_WIDTH_SPACES = 2.4
 SIGNATURE_REACH_SPACES = 6.0
+# TSIG-01: a common-time (C) or cut-time (C with a stroke) contour in the meter's place. The C is as wide as it is
+# tall less its stroke's overhang, so a cut glyph may stand taller than a numeral (it stood 3.5 spaces on the source).
+COMMON_CUT_MIN_HEIGHT_SPACES, COMMON_CUT_MAX_HEIGHT_SPACES = 2.0, 4.5
+COMMON_CUT_MIN_WIDTH_SPACES = 1.4
+COMMON_CUT_CENTRE_SPACES = 0.5  # centred on the staff's middle, give or take this
+ENABLE_COMMON_CUT_GLYPH = True  # TSIG-01: False restores numerals-only reading
+COMMON_CUT_VALUES = {"common": (4, 4), "cut": (2, 2)}  # the printed symbol's own meter: C is 4/4, cut C is 2/2
 
 FLAG_BOX_MATCH_PT = 0.05  # a flag box and its drawn glyph share one drawing rectangle
 DURATION_BY_BEAMS = ["quarter", "eighth", "16th", "32nd", "64th"]
@@ -344,6 +351,29 @@ def _numerals(page_symbols: Any, staff: _Staff, x_lo: float, x_hi: float) -> tup
     return rows["top"], rows["bottom"], bad
 
 
+def _common_cut_signature(page_symbols: Any, staff: _Staff, x_lo: float, x_hi: float) -> dict[str, Any] | None:
+    """A common-time or cut-time glyph standing where a meter is printed, read by its contour alone (TSIG-01).
+
+    Cut time is written 2/2 and common time 4/4 as printed; the bar totals are never consulted. A C-sized
+    contour that is neither (a closed form, a stroke that does not pass the C) is unread with a located reason.
+    """
+    if not ENABLE_COMMON_CUT_GLYPH:
+        return None
+    sp = staff.space
+    mid = (staff.top + staff.bottom) / 2
+    for g in sorted(page_symbols.glyphs, key=lambda g: g.bbox[0]):
+        if not (x_lo <= g.bbox[0] < x_hi) or not g.filled or not g.curved:
+            continue
+        if not (COMMON_CUT_MIN_HEIGHT_SPACES * sp <= g.h <= COMMON_CUT_MAX_HEIGHT_SPACES * sp
+                and g.w >= COMMON_CUT_MIN_WIDTH_SPACES * sp and abs(g.cy - mid) <= COMMON_CUT_CENTRE_SPACES * sp):
+            continue
+        kind, why = classify_common_cut_contour(g, sp)
+        if kind is None:
+            return {"value": None, "reason": why or "common_cut_time_unread", "sources": [g.ident]}
+        return {"value": COMMON_CUT_VALUES[kind], "sources": [g.ident], "shape": f"{kind}_time"}
+    return None
+
+
 def _read_signatures(page_symbols: Any, staff: _Staff, first_x: dict[int, float]) -> dict[int, dict[str, Any]]:
     """Printed time signatures at a bar's start: {bar_in_staff: {'value': (n, d), 'sources': [...]}}."""
     out: dict[int, dict[str, Any]] = {}
@@ -352,6 +382,11 @@ def _read_signatures(page_symbols: Any, staff: _Staff, first_x: dict[int, float]
         lo = staff.x0 if b == 0 else a
         hi = min(first_x.get(b, lo + SIGNATURE_REACH_SPACES * sp), lo + SIGNATURE_REACH_SPACES * sp)
         top, bottom, bad = _numerals(page_symbols, staff, lo, hi)
+        if not top and not bottom and not bad:
+            symbol = _common_cut_signature(page_symbols, staff, lo, hi)
+            if symbol is not None:
+                out[b] = symbol
+            continue
         if not top and not bottom:
             continue
         if not top or not bottom or bad:
@@ -965,7 +1000,16 @@ def read_tab_rhythm(pdf_path: str | Path, tabraw: Any, pages: tuple[int, int] | 
                         unread_signature = {"reason": reading["reason"], "location": {"page_index": page_index, "bar_index": bar_offset + b}}
                         time_signatures.append({"first_bar_index": bar_offset + b, "page_index": page_index, "status": "unreadable",
                                                 "value": None, "sources": reading["sources"], "reason": reading["reason"]})
-                    signature = _governing_signature(carried, origin, declared, unread_signature)
+                    printed_signature, governing_unread = carried, unread_signature
+                    if (carried is not None and declared is not None and carried.get("shape") in ("common_time", "cut_time")
+                            and tuple(declared["value"]) != tuple(carried["value"])
+                            and bar_capacity_ticks(*declared["value"], 1) == bar_capacity_ticks(*carried["value"], 1)):
+                        # TSIG-01: a C or cut-C glyph and the caller's explicit meter of equal bar capacity (4/4 for
+                        # 2/2): the caller's choice governs and the glyph reading stays on record, so it is no conflict.
+                        printed_signature = None
+                        governing_unread = {"reason": "meter_glyph_overridden_by_declared_equal_capacity",
+                                            "glyph_value": list(carried["value"]), "sources": carried["sources"]}
+                    signature = _governing_signature(printed_signature, origin, declared, governing_unread)
                     signatures[bar_offset + b] = signature
                     basis[bar_offset + b] = _signature_basis(signature)
                 bars_read = reader.read_staff(staff, system_index=position, system_number=system_number, bar_offset=bar_offset,
