@@ -1879,6 +1879,7 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                     if "pdf_tuning_label_unassociated" not in w["warnings"]:
                         w["warnings"].append("pdf_tuning_label_unassociated")
 
+            glyph_census = None  # TABEXT-02: built only on a page holding an unreadable digit run
             system_digits = {s.system_index: [] for s in systems}
             system_digits_merged = {s.system_index: [] for s in systems}
             non_playable_words = []
@@ -1915,6 +1916,13 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
                 is_above_staff = y < min_y - tolerance
 
                 if text.isdigit():
+                    if not _is_printable_fret_text(text):
+                        if glyph_census is None:
+                            glyph_census = _page_digit_glyph_census(page)
+                        pieces = _split_adjacent_fret_run(rw, glyph_census, system, cumulative_y_offset)
+                        if pieces is not None:
+                            system_digits[system.system_index].extend(pieces)
+                            continue
                     system_digits[system.system_index].append(rw)
                 else:
                     if any(c.isdigit() for c in text):
@@ -5736,6 +5744,88 @@ def _detect_tab_systems(
         if added is not None:
             return added
     return final_systems
+
+
+# TABEXT-02: a PDF word of adjacent fret digits (e.g. "107", "1110") is not one fret. Within one printed fret the
+# glyph pitch is the font's own pitch for that pair; between two frets it is larger. The split is made only where
+# that difference settles it.
+_RUN_BREAK_MARGIN = 0.4  # pt over the pair's in-fret pitch; real breaks measured 0.75-0.86, in-fret noise 0.01
+
+
+def _is_printable_fret_text(text: str) -> bool:
+    return text.isdigit() and not (len(text) > 1 and text.startswith("0")) and int(text) <= 24
+
+
+def _page_digit_glyph_census(page: Any) -> dict[str, Any]:
+    """Per digit glyph (x0, x1, y0, y1, origin_x, char, font, size) and per-pair in-fret pitch of the page."""
+    glyphs: list[tuple[float, float, float, float, float, str, str, float]] = []
+    words_of_two: list[tuple[str, str, str, float, float]] = []
+    for block in page.get_text("rawdict")["blocks"]:
+        for line in block.get("lines", []):
+            for span in line["spans"]:
+                chars = span["chars"]
+                run = []
+                for ch in chars + [None]:
+                    if ch is not None and ch["c"].isdigit():
+                        x0, y0, x1, y1 = ch["bbox"]
+                        g = (x0, x1, y0, y1, ch["origin"][0], ch["c"], span["font"], round(span["size"], 2))
+                        glyphs.append(g)
+                        run.append(g)
+                    else:
+                        if len(run) == 2 and run[0][5] != "0":
+                            words_of_two.append((run[0][5], run[1][5], run[0][6] + str(run[0][7]),
+                                                 run[1][4] - run[0][4], 0.0))
+                        run = []
+    pitch: dict[tuple[str, str, str], list[float]] = {}
+    for a, b, fontkey, pt, _ in words_of_two:
+        if _is_printable_fret_text(a + b):
+            pitch.setdefault((fontkey, a, b), []).append(pt)
+    return {"glyphs": glyphs, "pitch": {k: sorted(v)[len(v) // 2] for k, v in pitch.items()}}
+
+
+def _split_adjacent_fret_run(rw: dict[str, Any], census: dict[str, Any], system: Any,
+                             y_offset: float = 0.0) -> list[dict[str, Any]] | None:
+    """Split a run of adjacent fret digits at the glyph-pitch breaks, or None when the evidence does not settle it.
+
+    Each break is a pair whose pitch exceeds the page's own in-fret pitch for that pair (same font and size) by
+    the margin, or, with no in-fret example of the pair on the page, the first glyph's advance. Every piece must
+    be a printable fret and the word must be on a string row; y_offset is the page's cumulative offset in word y; otherwise the word is left as it was (refused).
+    """
+    text = rw["text"]
+    if len(text) < 2:
+        return None
+    y_center = (rw["y0"] + rw["y1"]) / 2
+    _line, string, _dist, _string_warnings = system.string_for_y(
+        y_center, rw["y1"] - rw["y0"], 0.0, relaxed_tolerance=True)
+    if string is None:
+        return None
+    glyphs = [g for g in census["glyphs"]
+              if rw["x0"] - 0.5 <= g[0] and g[1] <= rw["x1"] + 0.5 and abs((g[2] + g[3]) / 2 + y_offset - y_center) <= 1.5]
+    glyphs.sort(key=lambda g: g[4])
+    if "".join(g[5] for g in glyphs) != text:
+        return None
+    cuts = [0]
+    for left, right in zip(glyphs, glyphs[1:]):
+        if left[6] != right[6] or left[7] != right[7]:
+            return None
+        reference = census["pitch"].get((left[6] + str(left[7]), left[5], right[5]), left[1] - left[0])
+        if (right[4] - left[4]) > reference + _RUN_BREAK_MARGIN:
+            cuts.append(glyphs.index(right))
+    if len(cuts) == 1:
+        return None
+    cuts.append(len(glyphs))
+    pieces = []
+    for start, end in zip(cuts, cuts[1:]):
+        part = glyphs[start:end]
+        piece_text = "".join(g[5] for g in part)
+        if not _is_printable_fret_text(piece_text):
+            return None
+        piece = dict(rw)
+        piece.update({"x0": part[0][0], "x1": part[-1][1], "text": piece_text,
+                      "warnings": list(rw.get("warnings", [])),
+                      "provenance": list(rw.get("provenance", [])) + ["pdf_glyph_run_split_by_pitch"]})
+        pieces.append(piece)
+    return pieces
 
 
 def _glyphs_form_one_fret(left_text: str, right_text: str) -> bool:
