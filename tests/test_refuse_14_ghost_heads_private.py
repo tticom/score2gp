@@ -26,7 +26,7 @@ from score2gp.notation_omr import note_duration as nd
 
 ROOT = Path(__file__).resolve().parents[1]
 PRIVATE = ROOT / "fixtures/private"
-CASES = {"Ex 2 Hands Up": (7, 9, 10), "Derek Trucks BB King": (0, 9, 14)}
+CASES = {"Ex 2 Hands Up": (6, 8, 9), "Derek Trucks BB King": (0, 9, 14)}
 
 
 def _convert(source, tmp_path):

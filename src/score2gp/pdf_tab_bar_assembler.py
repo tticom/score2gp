@@ -488,8 +488,28 @@ def _time_signature(check: dict[str, Any]) -> TimeSignature:
     return TimeSignature(numerator=numerator, denominator=denominator)
 
 
+def _printed_digit_texts(bar_digits: Sequence[TabCandidate], printed: Sequence[TabCandidate],
+                         system: dict[str, Any], bar_index: int) -> list[TabCandidate]:
+    """REFUSE-17: numbers printed on the strings of a TAB-only bar that no grouped TAB column owns.
+
+    Only TAB-only systems are searched: there the notation reader's staff is the top TAB string, so the
+    string band is known. The numbers are only counted and located; they are never read as notes.
+    """
+    staff = system["staff"]
+    if staff["top"] != staff["bottom"]:
+        return []
+    x0, x1 = system["bars"][bar_index - system["first_bar_index"]]
+    y0, y1 = staff["top"] - 0.5 * system["staff_space"], staff["top"] + 5.5 * system["staff_space"]
+    owned = {c.id for c in bar_digits}
+    return [c for c in printed
+            if c.id not in owned and c.page_index == system["page_index"] + 1 and c.kind in ("fret", "candidate-text")
+            and c.raw_text.isdigit() and c.x is not None and c.y is not None
+            and x0 <= c.x <= x1 and y0 <= c.y <= y1]
+
+
 def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict[str, Any], *,
-                            track_id: str, refused_tab_system: Any = None) -> tuple[list[Bar], dict[str, Any]]:
+                            track_id: str, refused_tab_system: Any = None,
+                            printed_candidates: Sequence[TabCandidate] = ()) -> tuple[list[Bar], dict[str, Any]]:
     """Bars for every notation bar, written from note types and TAB positions or refused and left empty.
 
     ``refused_tab_system`` (PARTIAL-01) is the one TAB system whose layout is refused; its digits are
@@ -617,13 +637,21 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
         elif not records:
             refusal = None if empty_source else _refusal("bar_without_notation_event")
             if refusal is not None:
+                ungrouped = [] if bar_digits else _printed_digit_texts(
+                    bar_digits, printed_candidates, system, source_bar)
                 refusal["evidence"] = {
                     "source": "notation_tab_bar_counts",
-                    "cause": ("tab_digits_without_notation_event" if bar_digits else "bar_without_notation_or_tab_item"),
+                    "cause": ("tab_digits_without_notation_event" if bar_digits
+                              else "tab_digits_printed_but_not_grouped" if ungrouped
+                              else "bar_without_notation_or_tab_item"),
                     "notation_events": 0, "tab_columns": len(_columns(bar_digits, system["staff_space"])),
-                    "tab_digits": len(bar_digits), "tab_side": "tab_has_extra" if bar_digits else "counts_equal",
+                    "tab_digits": len(bar_digits),
+                    "tab_side": ("tab_has_extra" if bar_digits else "tab_ungrouped" if ungrouped else "counts_equal"),
                     "rhythm_source": "tab_rhythm" if "tab_rhythm" in diagnostics else "notation_staff",
                 }
+                if ungrouped:
+                    refusal["evidence"]["printed_digit_texts"] = len(ungrouped)
+                    refusal["evidence"]["printed_digit_ids"] = sorted(c.id for c in ungrouped)
         else:
             next_first = next((r for r in sorted(by_bar.get(source_bar + 1, []), key=lambda r: r["event_index"])
                                if not r.get("grace")), None)

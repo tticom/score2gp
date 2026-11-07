@@ -1864,7 +1864,8 @@ def build_ir_from_tabraw_only(
         digits = partial_digits
     try:
         bars, note_type_route = assemble_note_type_bars(
-            digits, note_durations, track_id=TRACK_ID, refused_tab_system=refused_tab_system)
+            digits, note_durations, track_id=TRACK_ID, refused_tab_system=refused_tab_system,
+            printed_candidates=tabraw.candidates)
     except PdfTabBarAssemblerError as err:
         raise BuildIrInputRiskError(
             category=err.category,
@@ -4288,7 +4289,7 @@ def _attach_symbols_and_techniques(
                    signal["staff_index"], source_index)
             output_index = (source_index if notation_barlines is not None
                             else bar_key_to_output_idx.get(key))
-            if kind == "repeat-start" and output_index is not None:
+            if kind == "repeat-start" and output_index is not None and not signal.get("bar_start"):
                 output_index += 1
             target = bars_by_index.get(output_index) if output_index is not None else None
             reason = signal.get("reason")
