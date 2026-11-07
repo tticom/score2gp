@@ -690,6 +690,24 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
                     "bbox": symbol["location"]["bbox"],
                 }
                 entry["events"] = []
+        if refusal is None:
+            # A bar whose events the tick grid cannot hold (e.g. a 22-note tuplet) is a representation gap of that
+            # bar alone: it is refused with its located reason, not allowed to refuse every bar of the source.
+            try:
+                span = Fraction(0)
+                for m in matched:
+                    if span:
+                        ticks_for_quarters(span)
+                    if Fraction(m["record"]["duration_quarters"]) > 0:
+                        ticks_for_quarters(Fraction(m["record"]["duration_quarters"]))
+                    span += Fraction(m["record"]["duration_quarters"])
+            except PdfTabBarAssemblerError as err:
+                if err.category != "pdf_only_tab_duration_off_tick_grid":
+                    raise
+                refusal = _refusal("duration_off_tick_grid", None, err.details.get("duration_quarters"))
+                refusal["evidence"] = {"source": "tick_grid", "cause": "duration_not_whole_ticks",
+                                       "duration_quarters": err.details.get("duration_quarters")}
+                entry["events"] = []
         events: list[Event] = []
         if refusal is None:
             onset = Fraction(0)
