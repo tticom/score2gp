@@ -53,7 +53,12 @@ WARN_SCANNED_PDF_UNSUPPORTED = "pdf_input_class_scanned_pdf_unsupported"
 WARN_NO_EXTRACTABLE_TAB_GEOMETRY = "pdf_input_class_no_extractable_tab_geometry"
 
 
-def inspect_pdf(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
+def inspect_pdf(
+    path: str | Path,
+    out_dir: str | Path,
+    *,
+    retain_geometry_detail: bool = True,
+) -> dict[str, Any]:
     pdf_path = Path(path)
     out = Path(out_dir)
     pages_dir = out / "pages"
@@ -172,6 +177,8 @@ def inspect_pdf(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
                     for s in extract_visual_slide_evidence(drawings, diags_model.staves if hasattr(diags_model, "staves") else None)
                 ],
             }
+            if not retain_geometry_detail:
+                _release_page_geometry_detail(page_info)
             inspection_nodes += inspection_page_nodes(page_info)
             check_inspection_budget(inspection_nodes, index)
             summary["pages"].append(page_info)
@@ -213,6 +220,24 @@ def inspect_pdf(path: str | Path, out_dir: str | Path) -> dict[str, Any]:
     return summary
 
 
+_STRUCTURAL_CANDIDATE_KEYS = ("sections", "repeats", "lyrics")
+
+
+def _release_page_geometry_detail(page_info: dict[str, Any]) -> None:
+    """Drop per-page geometry that no later stage reads from the inspection.
+
+    ``extract_tab`` reads only the structural signals of ``geometry_candidates``
+    (sections, repeats, lyrics) and rebuilds the staff diagnostics it needs from
+    the open page, so the primitive/cluster lists and the full staff diagnostics
+    are not retained once their page has been processed.
+    """
+    page_info.pop("pdf_staff_notation_diagnostics", None)
+    page_info["geometry_candidates"] = [
+        {key: cand[key] for key in _STRUCTURAL_CANDIDATE_KEYS if key in cand}
+        for cand in page_info.get("geometry_candidates", [])
+    ]
+
+
 def extract_tab(
     path: str | Path,
     out_dir: str | Path,
@@ -232,7 +257,7 @@ def extract_tab(
         tabraw_path = out / "tab_raw.json"
     out.mkdir(parents=True, exist_ok=True)
     if inspection is None:
-        inspection = inspect_pdf(path, out / "inspect")
+        inspection = inspect_pdf(path, out / "inspect", retain_geometry_detail=False)
     meta = {
         "detected_systems": 0,
         "detected_staves": 0,
@@ -2540,11 +2565,17 @@ def _extract_pdf_text_candidates(pdf_path: Path, warnings: list[dict[str, Any]],
 
             # NPG-04C: Wire geometric rhythm extraction for notation staves
             diags_model = None
+            page_diags = None
             if inspection_data and 'pages' in inspection_data and page_number - 1 < len(inspection_data['pages']):
                 page_diags = inspection_data['pages'][page_number - 1].get('pdf_staff_notation_diagnostics')
-                if page_diags:
-                    from .pdf_staff_geometry import PdfStaffNotationGeometryDiagnostics
-                    diags_model = PdfStaffNotationGeometryDiagnostics.model_validate(page_diags)
+            page_system_ids = {c.get("system_index") for c in candidates[page_cand_start_idx:]}
+            if page_diags is None and any(sys_obj.system_index in page_system_ids for sys_obj in systems):
+                # Released from the inspection (PERF-02): rebuild from the open page.
+                from .pdf_staff_notation_diagnostics import extract_notation_diagnostics_dict
+                page_diags = extract_notation_diagnostics_dict(page, page_number)
+            if page_diags:
+                from .pdf_staff_geometry import PdfStaffNotationGeometryDiagnostics
+                diags_model = PdfStaffNotationGeometryDiagnostics.model_validate(page_diags)
 
             if diags_model and diags_model.staves:
                 from .tabraw import TabCandidate
