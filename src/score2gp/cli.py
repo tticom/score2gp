@@ -1001,7 +1001,7 @@ def convert_command(
 
     # Stage 1: Inspect PDF and Extract Tab Candidates
     try:
-        pdf_summary = inspect_pdf_file(pdf, actual_work_dir / "inspect")
+        pdf_summary = inspect_pdf_file(pdf, actual_work_dir / "inspect", retain_geometry_detail=False)
         summary["pdf"] = pdf_summary
     except PdfInspectionResourceLimit as exc:
         counts = {

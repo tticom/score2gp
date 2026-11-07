@@ -19,7 +19,9 @@ from typer.testing import CliRunner
 
 from score2gp import pdf
 from score2gp.cli import app
-from score2gp.pdf_resource_budget import INSPECTION_PAGE_NODE_LIMIT
+from score2gp.pdf_resource_budget import (
+    INSPECTION_BUDGET_CODE, INSPECTION_PAGE_NODE_LIMIT, PdfInspectionResourceLimit,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 PRIVATE = ROOT / "fixtures/private"
@@ -43,6 +45,9 @@ def _convert(name, scratch):
 
 
 def _assert_main_refusal(monkeypatch):
+    # PERF-02: the convert path now releases per-page geometry, so the 34-page
+    # source fits the unchanged budget there. The budget itself is exercised on
+    # the real source through the default (fully retaining) inspection.
     observed = []
     check = pdf.check_inspection_budget
 
@@ -58,28 +63,22 @@ def _assert_main_refusal(monkeypatch):
     work.mkdir(exist_ok=True)
     with TemporaryDirectory(prefix="perf01-gate-", dir=work) as directory:
         scratch = Path(directory)
-        result, report = _convert("Melodic_Expressions.pdf", scratch)
-        assert result.exit_code == 1
-        assert report["refusal_code"] == "pdf_resource_inspection_page_nodes_exceeded", "resource gate did not refuse"
-        assert report["status"] == "refused"
-        assert report["stage"] == "pdf-inspection"
-        assert not report["output_written"]
-        assert not (scratch / "result.gp").exists()
-        assert not (scratch / "conversion/inspect/inspect_pdf.json").exists()
-        assert not (scratch / "conversion/tab").exists()
-        counts = report["summary_counts"]
-        assert counts["inspection_page_nodes"] == observed[-1][0]
-        assert counts["page_index"] == observed[-1][1]
-        assert counts["limit"] == INSPECTION_PAGE_NODE_LIMIT
+        try:
+            pdf.inspect_pdf(_source("Melodic_Expressions.pdf"), scratch / "inspect")
+        except PdfInspectionResourceLimit as exc:
+            refusal = exc
+        else:
+            raise AssertionError("resource gate did not refuse")
+        assert not (scratch / "inspect/inspect_pdf.json").exists()
+        assert refusal.count == observed[-1][0]
+        assert refusal.page_index == observed[-1][1]
+        assert str(refusal).startswith(INSPECTION_BUDGET_CODE)
         # Independently counted from the base inspection JSON, using a recursive
         # value walk rather than the production iterative counter.
         assert observed[-1] == (2_060_433, 10)
         assert len(observed) == 10
         assert all(count <= INSPECTION_PAGE_NODE_LIMIT for count, _ in observed[:-1])
         assert observed[-1][0] > INSPECTION_PAGE_NODE_LIMIT
-        warnings = json.loads((scratch / "conversion/warnings.json").read_text(encoding="utf-8"))
-        assert any(w["code"] == report["refusal_code"] and w["page_index"] == 10
-                   and w["inspection_page_nodes"] == 2_060_433 for w in warnings)
     return observed
 
 
@@ -89,7 +88,7 @@ def test_main_source_refuses_at_inspection_budget(monkeypatch):
 
 def test_old_unbounded_behavior_is_rejected_on_main_source(monkeypatch):
     monkeypatch.setattr(pdf, "check_inspection_budget", lambda count, page: None)
-    with pytest.raises(AssertionError, match="resource gate did not refuse"):
+    with pytest.raises(AssertionError, match="unbounded inspection continued|resource gate did not refuse"):
         _assert_main_refusal(monkeypatch)
 
 
@@ -99,12 +98,14 @@ def test_old_unbounded_behavior_is_rejected_on_main_source(monkeypatch):
 # SLIDE-01 deliberately changes written slide marks, so the Melodic_Expressions whole-GPIF digest is the
 # new head value; its digest with slide marks removed is the base digest (unchanged apart from slides).
 @pytest.mark.parametrize("name,nodes,gpif_digest,without_slides_digest", [
-    ("Lesson-6.pdf", 676202,
+    ("Lesson-6.pdf", 17533,
      "902d5262822a5944a650d981c776feec3ea1bb4ce541c471456c02c17d1072b6", None),
-    ("Melodic_Expressions_Chap_19_.pdf", 581458,
+    ("Melodic_Expressions_Chap_19_.pdf", 11460,
      "6a8edd68f46b4388c2c7f3e1c1042d73915901b2d428835ef82715fd16573e2f",
      "72a242fc55283c603fb04f715330261b7dc947ce228908235842ef8e0944060b"),
 ])
+# PERF-02: the node counts are of the retained (released-geometry) inspection written by convert;
+# the fully retained counts (676202 / 581458) are pinned in test_perf_02_inspection_retention.py.
 def test_real_control_inspection_count_and_gpif_are_unchanged(name, nodes, gpif_digest, without_slides_digest):
     # Counts and GPIF SHA-256 come from fresh CLI conversions at product base
     # 7ff8c66cebf9fd147de5b64a59a4a4f867729b64, without sidecars/references.
