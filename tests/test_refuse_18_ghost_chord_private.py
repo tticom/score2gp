@@ -13,6 +13,7 @@ Synthetic tests carry no acceptance weight: none are used. The two-page cut belo
 Mutants (each run, each fails a test below):
   DROP_CHORD_PAREN_RULE  `_chord_parentheses` finds no pair: the two bars stay refused (`test_dropping_the_rule...`).
   GHOST_ON_PRESERVED_BAR the ghost flag is kept on an already written bar: the 5-head bar gains ghost notes.
+  GHOST_CHORD_IN_WRITTEN_BAR the chord ghost is kept in a bar main wrote without it (source bar 586): 1 -> 5 ghosts.
 """
 import json
 import tempfile
@@ -27,10 +28,15 @@ from score2gp.notation_omr import note_duration as nd
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "fixtures/private/Melodic_Expressions.pdf"
-PAGES = (20, 22, 32)  # 0-based pages holding the tall pairs
+PAGES = (20, 22, 32, 33)  # 0-based pages holding the tall pairs
 # source bar of the cut -> (heads in the ghost chord, ghost notes the written bar must hold)
 NEWLY_WRITTEN = {28: (2, 2), 58: (3, 3)}
 PRESERVED = 64  # a 5-head ghost chord in a bar the base reader already wrote: its notes stay un-ghosted
+# source bar 586 of Melodic_Expressions (cut bar 68): written on main with one single-head ghost note and a
+# 4-head chord inside tall parentheses that main did not ghost. The review of f8902ea found the chord newly
+# ghosted (1 -> 5 ghost notes). An already written bar keeps exactly what main wrote: 1 ghost note.
+WRITTEN_ON_MAIN = 68
+WRITTEN_ON_MAIN_GHOSTS = 1
 
 
 def _convert(tmp_path):
@@ -84,6 +90,16 @@ def test_an_already_written_bar_keeps_its_notes_unghosted(converted):
     route, ghosts, _ = converted
     assert route[PRESERVED]["status"] == "written"
     assert ghosts.get(route[PRESERVED]["output_bar_index"], 0) == 0, "PRESERVED_BAR_GAINED_GHOST_NOTES"
+
+
+def test_a_bar_written_on_main_keeps_the_ghost_notes_main_wrote(converted):
+    """Mutant GHOST_CHORD_IN_WRITTEN_BAR: the chord ghost applied to a bar main already wrote gives 5, not 1."""
+    route, ghosts, durations = converted
+    assert route[WRITTEN_ON_MAIN]["status"] == "written"
+    chords = [e for e in durations["events"] if e["location"]["bar_index"] == WRITTEN_ON_MAIN and e["kind"] == "chord"
+              and (e.get("ghost") or {}).get("chord_pair")]
+    assert chords, "BAR_586_CHORD_PAIR_NOT_FOUND"
+    assert ghosts[route[WRITTEN_ON_MAIN]["output_bar_index"]] == WRITTEN_ON_MAIN_GHOSTS, "WRITTEN_BAR_GHOSTS_CHANGED"
 
 
 def test_a_bar_with_another_unread_event_stays_refused(converted):

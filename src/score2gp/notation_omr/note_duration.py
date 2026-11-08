@@ -668,7 +668,7 @@ def _parenthesis_inner_edges(head: Glyph, glyphs: list[Glyph], space: float) -> 
 
 
 def _notehead_parentheses(glyphs: list[Glyph], heads: list[Glyph],
-                          space: float) -> dict[str, list[Glyph]]:
+                          space: float, chord_pairs: set[str] | None = None) -> dict[str, list[Glyph]]:
     """Paired curved strokes enclosing one head, not a new note or a rest.
 
     The approved contours have one horizontal paint run and two vertical
@@ -710,7 +710,10 @@ def _notehead_parentheses(glyphs: list[Glyph], heads: list[Glyph],
             ownership[glyph.ident] = ownership.get(glyph.ident, 0) + 1
     result = {head: pair for head, pair in pairs.items()
               if all(ownership[g.ident] == 1 for g in pair)}
-    result.update(_chord_parentheses(glyphs, heads, tall, space, set(result)))
+    chords = _chord_parentheses(glyphs, heads, tall, space, set(result)) if chord_pairs is not None else {}
+    chord_pairs = chord_pairs if chord_pairs is not None else set()
+    chord_pairs.update(chords)
+    result.update(chords)
     return result
 
 
@@ -1610,7 +1613,9 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
             heads.append(g)
             head_kind[g.ident] = kind
     head_ids = set(head_kind)
-    parentheses = {} if base_equivalent else _notehead_parentheses(glyphs, heads, s)
+    chord_pair_heads: set[str] = set()
+    parentheses = {} if base_equivalent else _notehead_parentheses(
+        glyphs, heads, s, chord_pair_heads if state.get("chord_pairs", True) else None)
     parenthesis_ids = {g.ident for pair in parentheses.values() for g in pair}
     small_ids = {h.ident for h in heads if _is_small_head(h, s)}
     non_events: list[dict[str, Any]] = []
@@ -1729,6 +1734,9 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
             # REFUSE-14: every head of the event is enclosed by its own printed parenthesis pair, which
             # is the notation for a ghost note: the whole event is ghosted (no head is picked by inference).
             event["_ghost"] = unsupported
+            # REFUSE-18: remember a ghost that only a tall chord pair supplies, so a bar the reader
+            # already wrote without it keeps its notes (the assembler decides, as for REFUSE-14).
+            event["_ghost_chord_pair"] = any(head.ident in chord_pair_heads for head in event["_heads"])
         if unsupported:
             event["_unread_symbols"] = unsupported
     # Located-only symbols are recorded with their class but never enter the event
@@ -2315,6 +2323,8 @@ def _record(event: dict[str, Any], staff: Staff, state: dict[str, Any], bar: int
         state["diagnostics"].setdefault("unread_symbols", []).extend(record["unread_symbols"])
     if event.get("_ghost"):
         record["ghost"] = {"parenthesis_sources": [glyph.ident for glyph in event["_ghost"]]}
+        if event.get("_ghost_chord_pair"):
+            record["ghost"]["chord_pair"] = True
     if len({len(row) for row in dot_rows}) > 1:
         reason = reason or "dot_rows_disagree"
     if "_rest" in event:
@@ -2574,7 +2584,7 @@ def _resolve_strike_head_positions(records: list[dict[str, Any]], staff: Staff,
 
 def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = None,
                         time_signature: tuple[int, int] | None = None, *,
-                        _base_equivalent: bool = False) -> dict[str, Any]:
+                        _base_equivalent: bool = False, _chord_pairs: bool = True) -> dict[str, Any]:
     """Read a duration record for every event on every notation staff of the PDF.
 
     ``pages`` is an inclusive 1-based page range. ``time_signature`` is a caller-declared
@@ -2596,7 +2606,7 @@ def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = No
     time_signatures: list[dict[str, Any]] = []
     carried: dict[str, Any] | None = None  # the last printed signature, in force until another is printed
     state: dict[str, Any] = {"bar_offset": 0, "system_number": 0, "time_signature": None,
-                             "base_equivalent": _base_equivalent,
+                             "base_equivalent": _base_equivalent, "chord_pairs": _chord_pairs,
                              "diagnostics": {"ignored_symbols": 0, "ignored_symbols_by_reason": {}, "arcs_not_ties": 0, "unassociated_numbers": 0, "label_numbers": 0,
                                              "events_outside_bars": 0, "pages_without_notation_staff": 0,
                                              "non_events": [], "non_events_by_reason": {}}}
@@ -2683,6 +2693,11 @@ def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = No
         # must refuse a newly writable bar. No reference is consulted.
         state["diagnostics"]["base_equivalent_note_durations"] = read_note_durations(
             path, pages, time_signature, _base_equivalent=True)
+    if any((r.get("ghost") or {}).get("chord_pair") for r in records):
+        # REFUSE-18: the same reading without chord pairs is what the reader wrote before this rule; the
+        # assembler keeps an already written bar exactly as that reading wrote it.
+        state["diagnostics"]["chord_pair_free_note_durations"] = read_note_durations(
+            path, pages, time_signature, _chord_pairs=False)
     return {
         "schema": SCHEMA,
         "source": {"pdf_sha256": digest, "pages": list(pages) if pages else None, "page_heights": page_heights},
