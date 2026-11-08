@@ -566,6 +566,24 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
                 if s["first_bar_index"] + i in written
             }
 
+    # REFUSE-18: a ghost that only a tall chord pair supplies is applied where that reading newly writes a bar.
+    # A bar the reader already wrote without chord pairs keeps its notes exactly as that reading wrote them.
+    chord_free_written: set[tuple[Any, ...]] = set()
+    chord_free = diagnostics.get("chord_pair_free_note_durations")
+    if chord_free is not None:
+        try:
+            _, free_route = assemble_note_type_bars(
+                digits, chord_free, track_id=track_id, refused_tab_system=refused_tab_system)
+        except PdfTabBarAssemblerError:
+            pass
+        else:
+            free_ok = {b["source_bar_index"] for b in free_route["bars"] if b["status"] == "written"}
+            chord_free_written = {
+                (s["page_index"], s["system_index"], *bounds)
+                for s in chord_free["systems"] for i, bounds in enumerate(s["bars"])
+                if s["first_bar_index"] + i in free_ok
+            }
+
     bars: list[Bar] = []
     route_bars: list[dict[str, Any]] = []
     tied_from: dict[str, Any] | None = None
@@ -690,6 +708,12 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
                     "bbox": symbol["location"]["bbox"],
                 }
                 entry["events"] = []
+        if chord_free_written:
+            bounds = system["bars"][source_bar - system["first_bar_index"]]
+            if (system["page_index"], system["system_index"], *bounds) in chord_free_written:
+                for m in matched:
+                    if (m["record"].get("ghost") or {}).get("chord_pair"):
+                        m["record"].pop("ghost", None)
         if refusal is None:
             # A bar whose events the tick grid cannot hold (e.g. a 22-note tuplet) is a representation gap of that
             # bar alone: it is refused with its located reason, not allowed to refuse every bar of the source.
