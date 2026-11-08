@@ -62,7 +62,8 @@ def _refused_causes(source, tmp_path):
 
 def test_grateful_dead_bars_stay_refused_and_say_what_is_printed(tmp_path):
     causes = _refused_causes("7_Grateful_Dead_Melodies", tmp_path)
-    assert causes == {"tab_digits_printed_but_not_grouped": 6, "bar_without_notation_or_tab_item": 16}
+    # TABEXT-03: the 8 bars that print digits no longer count here; the 8 left print none (blank bars, simile signs).
+    assert causes == {"bar_without_notation_or_tab_item": 8}
 
 
 def test_gloria_and_exact_blank_bars_stay_refused(tmp_path):

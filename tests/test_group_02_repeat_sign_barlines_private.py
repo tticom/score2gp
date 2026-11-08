@@ -49,7 +49,8 @@ def test_sign_after_the_clef_is_not_a_barline():
 
 def test_holdout_end_repeat_splits_the_printed_bars():
     """Rejects: leaving the mid-system end repeat unaccepted (two printed bars merged into one)."""
-    system = [s for s in _systems("7_Grateful_Dead_Melodies", 0) if s.system_index == 8][0]
+    system = [s for s in _systems("7_Grateful_Dead_Melodies", 0) if s.system_index == 7][0]
+    # TABEXT-03: the digit-interrupted row above it is now a system, so this row is system 7 (was 8).
     assert len(system.barlines) == 9  # 8 printed bars
 
 

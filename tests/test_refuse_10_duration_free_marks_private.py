@@ -98,7 +98,8 @@ def _check_back_in_black(tmp_path):
 
 def _check_boxed_label(tmp_path):
     bars, durations = _convert("7_Grateful_Dead_Melodies", tmp_path)
-    for bar in (8, 9, 45):
+    # TABEXT-03: a leading narrow bar of the "Outro" row now exists (source bar 17), so the old bar 45 is 46.
+    for bar in (8, 9, 46):
         assert bars[bar]["status"] == "refused", f"BAR_{bar}_MUST_STAY_REFUSED"  # no rhythm mark is printed
         assert bars[bar]["detail"] != "unclassified_mark_below_strings", f"BAR_{bar}_FRAME_IS_NOT_A_RHYTHM_MARK"
 

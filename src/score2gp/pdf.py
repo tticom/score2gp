@@ -5123,6 +5123,62 @@ def read_notation_barline_signals(
     return signals
 
 
+_ROW_INDEX: dict[str, Any] = {"segments": None, "rows": {}, "words": None, "frets": []}
+
+
+def _row_continuous_but_for_digits(page: Any, segments: list[_LineSegment], y: float, xa: float, xb: float,
+                                   words: list[Any], line_spacing: float) -> bool:
+    """TABEXT-03: a TAB string row is drawn over [xa, xb] with breaks only where a fret number sits on it.
+
+    The drawn pieces of the row (any length) must cover the span except for gaps over 1 pt, and every such gap must
+    lie inside the box of a printed fret number centred on this row. A row broken anywhere else is not continuous.
+    The per-row piece index and the fret-word boxes are built once per page object list (held by reference, so an id
+    can never be reused for a different list).
+    """
+    index = _ROW_INDEX
+    if index["segments"] is not segments:
+        rows: dict[int, list[tuple[float, float, float]]] = {}
+        for s in segments:
+            if abs(s.y1 - s.y0) <= 0.3 and abs(s.x1 - s.x0) >= 1.0:
+                yc = (s.y0 + s.y1) / 2
+                rows.setdefault(round(yc), []).append((yc, min(s.x0, s.x1), max(s.x0, s.x1)))
+        index.update(segments=segments, rows=rows)
+    if index["words"] is not words:
+        index.update(words=words, frets=[(w[0], w[2], (w[1] + w[3]) / 2) for w in words
+                                         if parse_fret_text(str(w[4]).strip()) is not None])
+    spans = sorted((x0, x1) for key in (round(y) - 1, round(y), round(y) + 1)
+                   for yc, x0, x1 in index["rows"].get(key, ()) if abs(yc - y) <= 0.5)
+    fret_boxes = [(x0, x1) for x0, x1, yc in index["frets"] if abs(yc - y) <= 0.5 * line_spacing]
+    cursor = xa
+    for left, right in spans:
+        if right <= cursor:
+            continue
+        if left >= xb:
+            break
+        if left > cursor + 1.0 and not (any(b0 - 2.0 <= cursor and left <= b1 + 2.0 for b0, b1 in fret_boxes)):
+            return False
+        cursor = max(cursor, right)
+    return cursor >= xb - 1.0
+
+
+def _long_pieces_in_span(segments: list[_LineSegment], ys: list[float], xa: float, xb: float) -> int:
+    """TABEXT-03: rows that draw a piece of at least 75 pt (the ordinary line filter) wholly inside [xa, xb].
+
+    A span narrower than the filter can never hold one, so it never counts as evidence of more staff.
+    """
+    rows = _ROW_INDEX["rows"] if _ROW_INDEX["segments"] is segments else {}
+    return sum(any(x1 - x0 >= 75.0 and x0 >= xa - 2.0 and x1 <= xb + 2.0
+                   for key in (round(y) - 1, round(y), round(y) + 1) for yc, x0, x1 in rows.get(key, ())
+                   if abs(yc - y) <= 0.5) for y in ys)
+
+
+def _fret_number_in_span(words: list[Any], ys: list[float], xa: float, xb: float, line_spacing: float) -> bool:
+    """TABEXT-03: a printed fret number lies on the staff rows between xa and xb (the span carries a played note)."""
+    top, bottom = min(ys) - 0.5 * line_spacing, max(ys) + 0.5 * line_spacing
+    return any(xa <= (w[0] + w[2]) / 2 <= xb and top <= (w[1] + w[3]) / 2 <= bottom
+               and parse_fret_text(str(w[4]).strip()) is not None for w in words)
+
+
 def _recovered_segmented_tab_groups(
     page: Any,
     segments: list[_LineSegment],
@@ -5198,6 +5254,117 @@ def _recovered_segmented_tab_groups(
     return recovered
 
 
+def _bridged_tab_groups(
+    page: Any,
+    segments: list[_LineSegment],
+    groups: list[list[_LineSegment]],
+) -> list[tuple[list[_LineSegment], list[_LineSegment], list[_LineSegment]]]:
+    """TABEXT-03: join two TAB groups of one staff that lose a bar narrower than the 75 pt line filter between them.
+
+    A narrow bar draws every line as a piece under 75 pt, so the staff splits in two groups and that bar's digits
+    lie in neither. The groups are joined only where the six rows share their y coordinates, the gap is a bar
+    wide (30 to 100 pt), every row is drawn across it (broken only at fret numbers), and a drawn vertical spanning
+    the whole staff stands on each side of it. Nothing is extrapolated.
+    """
+    sixes = [group for group in groups if len(group) == 6]
+    if len(sixes) < 2:
+        return []
+    verticals = [segment for segment in segments if abs(segment.x0 - segment.x1) <= 2.0]
+    words = None
+    joined = []
+    is_tab: dict[int, bool] = {}
+
+    def tab(group: list[_LineSegment]) -> bool:
+        if id(group) not in is_tab:
+            is_tab[id(group)] = classify_staff_line_group(group, page) == "tab"
+        return is_tab[id(group)]
+
+    for left in sixes:
+        left_x1 = max(max(row.x0, row.x1) for row in left)
+        for right in sixes:
+            if right is left:
+                continue
+            right_x0 = min(min(row.x0, row.x1) for row in right)
+            if not 30.0 <= right_x0 - left_x1 <= 200.0:
+                continue
+            ys_left = sorted((row.y0 + row.y1) / 2 for row in left)
+            ys_right = sorted((row.y0 + row.y1) / 2 for row in right)
+            if any(abs(a - b) > 1.0 for a, b in zip(ys_left, ys_right)):
+                continue
+            if not (tab(left) and tab(right)):
+                continue
+            top, bottom = ys_left[0], ys_left[-1]
+            if not all(any(abs((v.x0 + v.x1) / 2 - x) <= 2.0 and min(v.y0, v.y1) <= top + 1.0
+                           and max(v.y0, v.y1) >= bottom - 1.0 for v in verticals)
+                       for x in (left_x1, right_x0)):
+                continue
+            if words is None:
+                words = page.get_text("words")
+            spacing = (bottom - top) / 5.0
+            if not all(_row_continuous_but_for_digits(page, segments, y, left_x1, right_x0, words, spacing)
+                       for y in ys_left):
+                continue
+            if not _fret_number_in_span(words, ys_left, left_x1, right_x0, spacing):
+                continue
+            order_l = sorted(left, key=lambda row: (row.y0 + row.y1) / 2)
+            order_r = sorted(right, key=lambda row: (row.y0 + row.y1) / 2)
+            joined.append((left, right, [
+                a.merge_with(b, min(a.x0, a.x1), a.y0, max(b.x0, b.x1), a.y1) for a, b in zip(order_l, order_r)]))
+            break
+    return joined
+
+
+def _digit_extended_tab_groups(
+    page: Any,
+    segments: list[_LineSegment],
+    groups: list[list[_LineSegment]],
+) -> list[tuple[list[_LineSegment], list[_LineSegment], list[list[_LineSegment]]]]:
+    """TABEXT-03: extend a TAB group to the right over bars whose rows are broken only at fret numbers.
+
+    A bar whose six rows are interrupted at every number draws only pieces under the 75 pt line filter, so the group
+    stops before it and its digits lie outside every bar box. The group is extended to the furthest drawn vertical
+    spanning the whole staff to which all six rows run, broken only at fret numbers. A row already given to another
+    group is never claimed twice; line y coordinates are unchanged and nothing is extrapolated.
+    """
+    verticals = [segment for segment in segments if abs(segment.x0 - segment.x1) <= 2.0]
+    words = None
+    extended = []
+    for old in groups:
+        if len(old) != 6:
+            continue
+        ordered = sorted(old, key=lambda row: (row.y0 + row.y1) / 2)
+        ys = [(row.y0 + row.y1) / 2 for row in ordered]
+        top, bottom = ys[0], ys[-1]
+        old_x1 = max(max(row.x0, row.x1) for row in old)
+        stops = sorted({round((v.x0 + v.x1) / 2, 1) for v in verticals
+                        if (v.x0 + v.x1) / 2 > old_x1 + 20.0 and min(v.y0, v.y1) <= top + 1.0
+                        and max(v.y0, v.y1) >= bottom - 1.0}, reverse=True)
+        if not stops or classify_staff_line_group(old, page) != "tab":
+            continue
+        if words is None:
+            words = page.get_text("words")
+        spacing = (bottom - top) / 5.0
+        for stop in stops:
+            blockers = [other for other in groups if other is not old and any(
+                abs((row.y0 + row.y1) / 2 - ys[0]) <= 1.0 and min(row.x0, row.x1) < stop - 2.0 and max(row.x0, row.x1) > old_x1 + 2.0
+                for row in other)]
+            # The five rows of an incomplete candidate that lie wholly inside the span, on this staff's own rows,
+            # are the same staff with one row too broken to be drawn as a long piece: it is joined, never doubled.
+            swallowed = [other for other in blockers if len(other) == 5
+                         and classify_staff_line_group(other, page) == "incomplete_tab_candidate"
+                         and all(any(abs((row.y0 + row.y1) / 2 - y) <= 1.0 for y in ys) for row in other)
+                         and min(min(row.x0, row.x1) for row in other) >= old_x1 - 2.0
+                         and max(max(row.x0, row.x1) for row in other) <= stop + 2.0]
+            if len(swallowed) != len(blockers):
+                continue
+            if (all(_row_continuous_but_for_digits(page, segments, y, old_x1, stop, words, spacing) for y in ys)
+                    and _fret_number_in_span(words, ys, old_x1, stop, spacing)
+                    and _long_pieces_in_span(segments, ys, old_x1, stop) >= 3):
+                extended.append((old, [row.merge_with(row, min(row.x0, row.x1), row.y0, stop, row.y1) for row in ordered], swallowed))
+                break
+    return extended
+
+
 def _right_extended_tab_groups(
     page: Any,
     segments: list[_LineSegment],
@@ -5257,6 +5424,7 @@ def _left_extended_tab_groups(
     page: Any,
     segments: list[_LineSegment],
     existing_groups: list[list[_LineSegment]],
+    candidates: list[list[_LineSegment]] | None = None,
 ) -> list[tuple[list[_LineSegment], list[_LineSegment]]]:
     """GROUP-01: extend an accepted TAB group to the system-start barline that closes its first bar on the left.
 
@@ -5274,7 +5442,7 @@ def _left_extended_tab_groups(
     joined = merge_collinear_horizontal_segments(pieces)
     verticals = [segment for segment in segments if abs(segment.x0 - segment.x1) <= 2.0]
     extended = []
-    for old in existing_groups:
+    for old in (existing_groups if candidates is None else candidates):
         if len(old) != 6 or classify_staff_line_group(old, page) != "tab":
             continue
         old_x0 = min(min(line.x0, line.x1) for line in old)
@@ -5287,15 +5455,23 @@ def _left_extended_tab_groups(
                 and min(candidate.x0, candidate.x1) < min(line.x0, line.x1) - 2.0
                 and max(candidate.x0, candidate.x1) >= max(line.x0, line.x1) - 2.0
             ]
-            if not same_row:
-                break
-            continuations.append(min(same_row, key=lambda candidate: min(candidate.x0, candidate.x1)))
-        if len(continuations) != len(old):
+            # TABEXT-03: a row drawn only as pieces under 30 pt before the start (broken at a fret number) has no
+            # continuation of its own; it is then checked by the digit rule below, and three rows must still continue.
+            continuations.append(min(same_row, key=lambda candidate: min(candidate.x0, candidate.x1)) if same_row else None)
+        found = [c for c in continuations if c is not None]
+        if len(found) < 3:
             continue
-        starts = [min(line.x0, line.x1) for line in continuations]
+        starts = [min(line.x0, line.x1) for line in found]
         new_x0 = min(starts)
-        if old_x0 - new_x0 < 30.0 or max(starts) > new_x0 + 2.0:
+        if old_x0 - new_x0 < 30.0:
             continue
+        if max(starts) > new_x0 + 2.0 or len(found) < len(old):
+            # TABEXT-03: rows may start later only where a fret number breaks the row at its start.
+            words = page.get_text("words")
+            spacing = (max((row.y0 + row.y1) / 2 for row in old) - min((row.y0 + row.y1) / 2 for row in old)) / 5.0
+            if not all(_row_continuous_but_for_digits(page, segments, (line.y0 + line.y1) / 2, new_x0, old_x0, words, spacing)
+                       for line in old):
+                continue
         # The added span must be free: a staff row already given to another accepted group is that group's, so
         # a row drawn across two groups is never claimed twice.
         if any(abs((line.y0 + line.y1) / 2 - (used.y0 + used.y1) / 2) <= 1.0
@@ -5309,7 +5485,7 @@ def _left_extended_tab_groups(
                    for v in verticals):
             continue
         extended.append((old, [
-            line.merge_with(continuation, new_x0, line.y0, max(line.x0, line.x1), line.y1)
+            line.merge_with(continuation or line, new_x0, line.y0, max(line.x0, line.x1), line.y1)
             for line, continuation in zip(old, continuations)
         ]))
     return extended
@@ -5349,6 +5525,28 @@ def _detect_tab_systems(
     for old_group, extended_group in _left_extended_tab_groups(page, segments, line_groups):
         line_groups[next(i for i, group in enumerate(line_groups) if group is old_group)] = extended_group
     line_groups.extend(recovered_groups)
+    added_groups = list(recovered_groups)
+    for _ in range(4):
+        bridges = _bridged_tab_groups(page, segments, line_groups)
+        if not bridges:
+            break
+        used: set[int] = set()
+        for old_left, old_right, merged in bridges:
+            if id(old_left) in used or id(old_right) in used:
+                continue
+            used.update((id(old_left), id(old_right)))
+            line_groups[next(i for i, g in enumerate(line_groups) if g is old_left)] = merged
+            line_groups[:] = [g for g in line_groups if g is not old_right]
+            added_groups.append(merged)
+    # TABEXT-03: groups recovered or joined above are given the same left-edge extension as the groups before them.
+    if added_groups:
+        for old_group, extended_group in _left_extended_tab_groups(
+                page, segments, line_groups, [g for g in line_groups if any(g is added for added in added_groups)]):
+            line_groups[next(i for i, group in enumerate(line_groups) if group is old_group)] = extended_group
+    for old_group, extended_group, swallowed in _digit_extended_tab_groups(page, segments, line_groups):
+        line_groups[next(i for i, g in enumerate(line_groups) if g is old_group)] = extended_group
+        for gone in swallowed:
+            line_groups[:] = [g for g in line_groups if g is not gone]
     if recovered_groups:
         line_groups.sort(key=lambda group: (min((line.y0 + line.y1) / 2 for line in group),
                                             min(min(line.x0, line.x1) for line in group)))
