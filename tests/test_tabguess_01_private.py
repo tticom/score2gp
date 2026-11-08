@@ -6,7 +6,7 @@ model sees only the x of the TAB columns and the meter. SYNTHETIC TESTS CARRY NO
 are used here. Reference-less sources (no .gp in the corpus) are NOT independently verified: their "truth" is
 the reader's own output.
 
-Nothing guessed is written anywhere: the no-rhythm source keeps its 53 + 22 refused bars (test below).
+Nothing guessed is written anywhere: the no-rhythm source keeps its 68 + 8 refused bars (test below).
 
 Mutants (each shown to fail the test it is named under; see the handback):
   UNIFORM_SPACING   SPACING_RULE = "uniform": every column gets an equal share of the bar, spacing ignored.
@@ -96,22 +96,22 @@ def test_holdout_sources_scored_once_pinned(build_root):
 
 
 def test_no_rhythm_source_keeps_every_refusal_and_writes_no_guess(build_root):
-    """Rejects writing guessed bars: the source that prints no rhythm keeps its 53 + 22 refused bars, the GP
+    """Rejects writing guessed bars: the source that prints no rhythm keeps its 68 + 8 refused bars, the GP
     holds only the 7 printed whole-rest bars, and the word GUESS appears in no output."""
     out, build = _convert(build_root, NO_RHYTHM)
     route = json.loads((build / "note-type-route.json").read_bytes())["summary"]
     assert route["written_bars"] == 7
-    assert route["refused_bars"] == 75
-    assert route["refusal_reasons"] == {"note_duration_event_unread": 53, "bar_without_notation_event": 22}
+    assert route["refused_bars"] == 76
+    assert route["refusal_reasons"] == {"note_duration_event_unread": 68, "bar_without_notation_event": 8}
     for artefact in build.rglob("*.json"):
         assert T.GUESS_LABEL not in artefact.read_text(encoding="utf-8", errors="ignore")
     bars = T.load_bars(build, NO_RHYTHM)
     refused = [b for b in bars if b.status == "refused"]
-    assert len(refused) == 75
+    assert len(refused) == 76
     # every refused bar with a printed TAB digit has its column(s), and the model only reports a labelled guess
     columned = [b for b in refused if b.col_x]
-    assert len(columned) == 53
-    assert sum(len(b.col_x) for b in columned) == 202
+    assert len(columned) == 68  # TABEXT-03: was 53; the 14 digit-bearing bars that lay outside a system now have columns
+    assert sum(len(b.col_x) for b in columned) == 238  # was 202 before TABEXT-03: the printed digits outside a system are columns now
     for b in columned:
         guess = T.infer_rhythm(b.col_x, b.capacity)
         assert guess is not None and sum(guess) == Fraction(b.capacity)

@@ -54,7 +54,8 @@ def test_black_dog_refusals_are_located(tmp_path):
 def test_tab_only_source_bar_without_event_says_where_the_rhythm_came_from(tmp_path):
     """Rejects an unlocated bar_without_notation_event for the source whose 'staff' is the TAB placeholder."""
     route = _route("7_Grateful_Dead_Melodies.pdf", tmp_path)
-    bar = route["bars"][12]
+    # TABEXT-03: bar 12 prints digits and now reaches its bar; bar 16 is the sheet's blank final bar of that row.
+    bar = route["bars"][16]
     assert (bar["status"], bar["reason"]) == ("refused", "bar_without_notation_event")
     assert bar["refusal_evidence"]["rhythm_source"] == "tab_rhythm"
     assert bar["refusal_evidence"]["notation_events"] == 0
