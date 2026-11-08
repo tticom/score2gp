@@ -146,6 +146,8 @@ HEADER_CONTIGUITY_SPACES = 1.5
 REPEAT_DOT_MAX_SPACES = 0.6  # a repeat dot is a small filled disc, at most this many spaces across
 REPEAT_DOT_REACH_SPACES = 1.5  # ... standing within this many spaces right of the barline it belongs to
 ACCIDENTAL_REACH_SPACES = 2.0
+# REFUSE-18: the tallest parenthesis pair read around one stacked chord (staff spaces); taller strokes stay unread.
+PAREN_CHORD_MAX_HEIGHT_SPACES = 6.5
 REST_BLOCK = {"min_w": 0.8, "max_w": 1.8, "min_h": 0.3, "max_h": 0.8, "line": 0.12}
 REST_QUARTER = {"min_w": 0.7, "max_w": 1.5, "min_h": 2.2, "max_h": 3.6}
 # A quarter rest is one zigzag stroke: nearly every horizontal scan crosses it once (its foot curls,
@@ -675,18 +677,20 @@ def _notehead_parentheses(glyphs: list[Glyph], heads: list[Glyph],
     so this locates an unsupported form; it does not discard an annotation.
     """
     sides: dict[str, list[Glyph]] = {"left": [], "right": []}
+    tall: dict[str, list[Glyph]] = {"left": [], "right": []}
     for glyph in glyphs:
-        if not (glyph.curved and glyph.filled
-                and 0.4 <= glyph.w / space <= 1.0
-                and 0.75 <= glyph.h / space <= 1.25):
+        if not (glyph.curved and glyph.filled and 0.4 <= glyph.w / space <= 1.0):
+            continue
+        height = glyph.h / space
+        if not (0.75 <= height <= PAREN_CHORD_MAX_HEIGHT_SPACES):
             continue
         if any(count != 1 for count in _row_counts(glyph)):
             continue
         columns = _column_counts(glyph, (0.1, 0.5, 0.9))
-        if columns == [0, 2, 2]:
-            sides["left"].append(glyph)
-        elif columns == [2, 2, 0]:
-            sides["right"].append(glyph)
+        side = "left" if columns == [0, 2, 2] else "right" if columns == [2, 2, 0] else None
+        if side is None:
+            continue
+        (sides if height <= 1.25 else tall)[side].append(glyph)
     pairs: dict[str, list[Glyph]] = {}
     for head in heads:
         # REFUSE-16: a head's own printed accidental stands inside its parentheses, so the left one then
@@ -704,8 +708,51 @@ def _notehead_parentheses(glyphs: list[Glyph], heads: list[Glyph],
     for pair in pairs.values():
         for glyph in pair:
             ownership[glyph.ident] = ownership.get(glyph.ident, 0) + 1
-    return {head: pair for head, pair in pairs.items()
-            if all(ownership[g.ident] == 1 for g in pair)}
+    result = {head: pair for head, pair in pairs.items()
+              if all(ownership[g.ident] == 1 for g in pair)}
+    result.update(_chord_parentheses(glyphs, heads, tall, space, set(result)))
+    return result
+
+
+def _chord_parentheses(glyphs: list[Glyph], heads: list[Glyph], tall: dict[str, list[Glyph]],
+                       space: float, taken: set[str]) -> dict[str, list[Glyph]]:
+    """REFUSE-18: one tall parenthesis pair enclosing every head of a stacked chord (a ghost chord).
+
+    The pair is two curved strokes of one measured form and equal height, taller than a single-head pair.
+    It encloses the heads whose centres lie within its vertical span and between its strokes; its left
+    stroke abuts the left edge of those heads (or a recognised accidental of one) and its right stroke
+    abuts their right edge. At least two heads must be enclosed and no head may be claimed by another
+    pair, and no stroke may fit two candidate pairs: otherwise the pair is not matched and the
+    strokes stay located, unread symbols. The value comes from the printed shapes, never from spacing.
+    """
+    found: dict[str, list[Glyph]] = {}
+    claimed: dict[str, int] = {}
+    candidates = []
+    for left in tall["left"]:
+        for right in tall["right"]:
+            if (abs(left.cy - right.cy) > 0.15 * space or abs(left.h - right.h) > 0.1 * space
+                    or not left.bbox[2] <= right.bbox[0] or right.bbox[0] - left.bbox[2] > 2.5 * space):
+                continue
+            inside = [h for h in heads
+                      if left.bbox[1] - 0.1 * space <= h.cy <= left.bbox[3] + 0.1 * space
+                      and left.bbox[2] - 0.1 * space <= h.bbox[0] and h.bbox[2] <= right.bbox[0] + 0.1 * space]
+            if len(inside) < 2 or any(h.ident in taken for h in inside):
+                continue
+            inner_left = min(edge for h in inside for edge in _parenthesis_inner_edges(h, glyphs, space))
+            if (abs(left.bbox[2] - inner_left) > 0.25 * space
+                    or abs(right.bbox[0] - max(h.bbox[2] for h in inside)) > 0.25 * space):
+                continue
+            candidates.append((left, right, inside))
+    for left, right, inside in candidates:
+        for glyph in (left, right):
+            claimed[glyph.ident] = claimed.get(glyph.ident, 0) + 1
+        for h in inside:
+            claimed[h.ident] = claimed.get(h.ident, 0) + 1
+    for left, right, inside in candidates:
+        if claimed[left.ident] == claimed[right.ident] == 1 and all(claimed[h.ident] == 1 for h in inside):
+            for h in inside:
+                found[h.ident] = [left, right]
+    return found
 
 
 def _is_stroke_fragment_outside_band(glyph: Glyph, staff: Staff) -> bool:
@@ -1676,9 +1723,9 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
         if event["_stem"] is None:
             event["_cx"] = sum(h.cx for h in event["_heads"]) / len(event["_heads"])
     for event in events:
-        unsupported = [g for head in event.get("_heads", [])
-                       for g in parentheses.get(head.ident, [])]
-        if unsupported and len(unsupported) == 2 * len(event["_heads"]):
+        unsupported = list({g.ident: g for head in event.get("_heads", [])
+                            for g in parentheses.get(head.ident, [])}.values())
+        if unsupported and all(head.ident in parentheses for head in event["_heads"]):
             # REFUSE-14: every head of the event is enclosed by its own printed parenthesis pair, which
             # is the notation for a ghost note: the whole event is ghosted (no head is picked by inference).
             event["_ghost"] = unsupported
