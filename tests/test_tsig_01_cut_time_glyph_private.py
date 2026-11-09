@@ -43,7 +43,7 @@ def test_cut_time_glyph_is_read_as_printed_and_bars_are_written(tmp_path):
     assert result.exit_code == 0, result.output
     route = json.loads((build / "w" / "note-type-route.json").read_bytes())
     written = [b for b in route["bars"] if b["status"] == "written"]
-    assert len(written) == 23
+    assert len(written) == 25  # NOTAB-01: two printed-row bars newly written
     assert len(route["bars"]) == 38
     assert {b["time_signature"] for b in route["bars"]} == {"2/2"}
     assert {b["time_signature_source"] for b in route["bars"]} == {"vector_glyphs"}
@@ -67,7 +67,7 @@ def test_refused_bars_keep_their_located_reasons(tmp_path):
     _, build = _convert(tmp_path)
     route = json.loads((build / "w" / "note-type-route.json").read_bytes())
     refused = [b for b in route["bars"] if b["status"] != "written"]
-    assert len(refused) == 15
+    assert len(refused) == 13  # NOTAB-01: two bars newly written
     assert all(b["reason"] and b["location"].get("page_index") is not None for b in refused)
 
 

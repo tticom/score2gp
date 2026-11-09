@@ -76,10 +76,10 @@ def test_paranoid_tab_groups_are_resolved_and_unsettled_bars_stay_refused_and_lo
     assert report["status"] == "partial"
     summary = route["summary"]
     assert summary["unplaced_tab_digits"] == 0
-    assert summary["source_bars"] == 38 and summary["written_bars"] == 23 and summary["refused_bars"] == 15
-    assert summary["written_bars_printed_marks"] == 20 and summary["implied_rests"] == 3
+    assert summary["source_bars"] == 38 and summary["written_bars"] == 25 and summary["refused_bars"] == 13  # NOTAB-01 reads 2 printed-row bars
+    assert summary["written_bars_printed_marks"] == 22 and summary["implied_rests"] == 3
     refused = [b for b in route["bars"] if b["status"] == "refused"]
-    assert len(refused) == 15
+    assert len(refused) == 13  # NOTAB-01
     assert all(b["reason"] and b["location"]["page_index"] >= 0 and "bar_index" in b["location"] for b in refused)
     assert set(summary["refusal_reasons"]) <= {"bar_total_mismatch", "bar_without_notation_event", "notation_note_without_tab_digit",
                                                "note_duration_event_unread"}

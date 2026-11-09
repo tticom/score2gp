@@ -1863,9 +1863,41 @@ def build_ir_from_tabraw_only(
     if partial_digits is not None:
         digits = partial_digits
     try:
-        bars, note_type_route = assemble_note_type_bars(
-            digits, note_durations, track_id=TRACK_ID, refused_tab_system=refused_tab_system,
-            printed_candidates=tabraw.candidates)
+        # The assembler marks records in place (e.g. it drops a ghost flag from a bar the base reader already
+        # wrote), so every pass starts from a pristine copy: a repeated pass must see the same input as the first.
+        import copy
+        pristine = copy.deepcopy(note_durations)
+
+        def _assemble(**extra):
+            used = copy.deepcopy(pristine)
+            return used, *assemble_note_type_bars(
+                digits, used, track_id=TRACK_ID, refused_tab_system=refused_tab_system,
+                printed_candidates=tabraw.candidates, **extra)
+
+        from .pdf_tab_digit_recovery import (recover_printed_bar_digits, unread_new_chord_arrows,
+                                             apply_recovered_chord_labels)
+        note_durations, bars, note_type_route = _assemble()
+        recovered, withheld = recover_printed_bar_digits(
+            tabraw.source_pdf, note_durations, note_type_route, tabraw.candidates)
+        if recovered:
+            replacements = {c.id: c for c in recovered}
+            original_ids = {c.id for c in tabraw.candidates}
+            tabraw = tabraw.model_copy(update={"candidates": [replacements.get(c.id, c) for c in tabraw.candidates]
+                                              + [c for c in recovered if c.id not in original_ids]})
+            digits = list({c.id: c for c in [*digits, *recovered]}.values())
+            fret_candidates = list({c.id: c for c in [*fret_candidates, *recovered]}.values())
+            note_durations, bars, note_type_route = _assemble()
+        unread_arrows = unread_new_chord_arrows(
+            tabraw.source_pdf, note_durations, bars, note_type_route, tabraw.candidates, {c.id for c in recovered})
+        if unread_arrows:
+            note_durations, bars, note_type_route = _assemble(located_refusals=unread_arrows)
+        for entry in note_type_route["bars"]:
+            if entry["source_bar_index"] in withheld and entry["status"] == "refused":
+                # The bar's own located cause stays as it was; the reader's reason is added beside it.
+                evidence = entry.setdefault("refusal_evidence", {})
+                evidence.setdefault("cause", withheld[entry["source_bar_index"]])
+                evidence.update(tab_digit_recovery_withheld=True,
+                                tab_digit_recovery_withheld_cause=withheld[entry["source_bar_index"]])
     except PdfTabBarAssemblerError as err:
         raise BuildIrInputRiskError(
             category=err.category,
@@ -2061,6 +2093,7 @@ def build_ir_from_tabraw_only(
                                    technique_bars=technique_bars)
     from .pdf_attachment_recovery import recover_unplaced_attachments
     recover_unplaced_attachments(score, tabraw, note_durations, classify=_classify_technique)
+    apply_recovered_chord_labels(score, tabraw.candidates, recovered)
 
     # Construct diagnostics
     tabraw_candidates_loaded = len(tabraw.candidates)

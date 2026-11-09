@@ -337,6 +337,9 @@ def test_vibrato_uses_notation_bar_after_digitless_bar(tmp_path):
         bar_index=target.bar_index, string=target.string,
         bbox_values=(target.x - 4, target.y - 12, target.x + 4, target.y - 4),
         cycles=3, amplitude=4.0))
+    # The digitless bar models a source that prints no digit there. NOTAB-01 reads digits the PDF itself prints,
+    # so the page must not be offered back to the builder or the removed digits would be read again.
+    raw.source_pdf = None
     raw.to_json_file(raw_path)
     score, diagnostics = build_ir_from_tabraw_only(raw_path, note_durations=records)
     assert diagnostics.note_type_route["bars"][0]["status"] == "refused"

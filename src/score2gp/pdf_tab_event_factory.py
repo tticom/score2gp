@@ -10,6 +10,7 @@ from .ir import (
     NotatedDuration,
     Note,
     NoteSpelling,
+    PalmMuteTechnique,
     Provenance,
     SourceStage,
     TieTechnique,
@@ -101,9 +102,15 @@ def build_note_type_event(
         is_strike = candidate is not None and candidate.kind == "percussive-strike"
         pitch = None if is_strike else _STRING_TO_BASE_PITCH[string] + fret
         provenance = [candidate.to_provenance()] if candidate else []
+        if candidate is not None and candidate.raw.get("position_basis"):
+            provenance[0].raw = {"position_basis": candidate.raw["position_basis"],
+                                 "pdf_word_index": candidate.raw.get("pdf_word_index")}
         if source is not None:
             provenance = [source.to_provenance()]
             provenance[0].raw = {"derived_from": "tie_continuation"}
+        palm_sources = candidate.raw.get("recovered_palm_mute_sources") if candidate is not None else None
+        if palm_sources:
+            provenance[0].raw["palm_mute_source_ids"] = palm_sources
         if is_strike:
             head = head_by_candidate[candidate.id]
             provenance[0].raw = {"notation_head_source": head["source"],
@@ -120,7 +127,8 @@ def build_note_type_event(
                 is_ghost=bool(record.get("ghost")) and not is_strike,
                 confidence=candidate.confidence if candidate else (source.confidence if source else 1.0),
                 provenance=provenance,
-                techniques=[TieTechnique(state=note_tie_state)] if note_tie_state else [],
+                techniques=([TieTechnique(state=note_tie_state)] if note_tie_state else [])
+                           + ([PalmMuteTechnique()] if palm_sources else []),
                 spelling=(NoteSpelling(accidental=printed[pitch % 12], source="printed")
                           if pitch is not None and pitch % 12 in printed and pitch % 12 in BLACK_KEYS else None),
             )
