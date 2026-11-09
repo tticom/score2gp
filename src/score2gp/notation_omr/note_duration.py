@@ -2227,14 +2227,16 @@ def _staff_position(head: Glyph, staff: Staff, space: float) -> int:
 def _record_tie_end(tie: dict[str, Any], side: str, event: dict[str, Any], head: Glyph, staff: Staff,
                     space: float) -> None:
     """Note which head of a chord a tie arc end sits on: ``<side>_head_positions`` (staff positions) and
-    ``<side>_head_ranks`` (0 = lowest head of the chord). A rank is recorded only when every head of the
-    chord has its own staff position, so that the rank names exactly one head; otherwise the ends stay
-    unequal in length and the route reads no owner."""
+    ``<side>_head_ranks`` (0 = lowest head of the chord). The owned position must name exactly one head.
+    Other heads may share a position: they cannot make this arc's unique endpoint ambiguous. Their
+    positions still come from their printed TAB digits, never from their notation pitches."""
     position = _staff_position(head, staff, space)
     tie.setdefault(f"{side}_head_positions", []).append(position)
     positions = sorted(_staff_position(h, staff, space) for h in event["_heads"])
-    if len(set(positions)) == len(positions):
+    if positions.count(position) == 1:
         tie.setdefault(f"{side}_head_ranks", []).append(positions.index(position))
+        if len(set(positions)) != len(positions):
+            tie["endpoint_rank_basis"] = "unique_endpoint_with_unrelated_duplicate"
 
 
 def _arriving_tie_end(arc: Glyph, events: list[dict[str, Any]], space: float):

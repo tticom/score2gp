@@ -68,6 +68,22 @@ def _column_x(column: Sequence[TabCandidate]) -> float:
     return sum(c.x for c in column) / len(column)
 
 
+def _read_recovered_tab_heads(record: dict[str, Any], candidates: Sequence[TabCandidate]) -> dict[str, Any]:
+    """In TAB-only rhythm, the printed digits themselves are the chord heads.
+
+    This never changes a notation notehead count. Every added digit has its own
+    painted-string proof; the shared printed rhythm mark already belongs to this column.
+    """
+    if (record.get("tab_rhythm") and record["notehead"]["kind"] == "tab_digits"
+            and len({c.string for c in candidates}) == len(candidates)
+            and any(c.raw.get("position_basis") == "six_painted_tab_rows_at_notation_bar" for c in candidates)):
+        return {**record, "kind": "chord" if len(candidates) > 1 else "note",
+                "notehead": {**record["notehead"], "count": len(candidates),
+                             "sources": [c.id for c in candidates]},
+                "tab_rhythm": {**record["tab_rhythm"], "head_count_basis": "printed_tab_column"}}
+    return record
+
+
 def place_tab_digits(digits: Sequence[TabCandidate], note_durations: dict[str, Any]
                      ) -> tuple[dict[int, list[TabCandidate]], list[TabCandidate]]:
     """Each TAB digit's notation bar (global, zero-based): the nearest notation staff above it on its page,
@@ -203,6 +219,8 @@ def _match_bar(records: list[dict[str, Any]], digits: list[TabCandidate], space:
             return matched, _refusal("notation_tab_column_ambiguous", index)
         used.add(column)
         cands = sorted(columns[column], key=lambda c: c.string)
+        record = _read_recovered_tab_heads(record, cands)
+        heads = record["notehead"]["count"]
         if len(cands) != heads and len({c.string for c in cands}) == len(cands):
             partial = _partial_tie_continuation(record, cands, previous, heads, cross_count)
             if partial is not None:
@@ -216,6 +234,8 @@ def _match_bar(records: list[dict[str, Any]], digits: list[TabCandidate], space:
                                    "candidate_ids": [c.id for c in cands],
                                    "tied_from": previous["location"],
                                    "dx_spaces": round(near[0][0] / space, 3)}}
+                if partial.get("endpoint_rank_basis"):
+                    entry["match"]["endpoint_rank_basis"] = partial["endpoint_rank_basis"]
                 if partial.get("tie_states") is not None:
                     entry.pop("tied_positions")
                     entry["tie_states"] = partial["tie_states"]
@@ -442,6 +462,7 @@ def _partial_tie_continuation(record: dict[str, Any], cands: Sequence[TabCandida
         states[position] = ("continue" if stops_here and starts_here else "stop" if stops_here
                             else "start" if starts_here else None)
     return {"positions": copied, "tie_states": states, "tie_out": out,
+            "endpoint_rank_basis": tie.get("endpoint_rank_basis") or left.get("endpoint_rank_basis"),
             "patch_previous": None if applied else list(copied)}
 
 
@@ -509,7 +530,8 @@ def _printed_digit_texts(bar_digits: Sequence[TabCandidate], printed: Sequence[T
 
 def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict[str, Any], *,
                             track_id: str, refused_tab_system: Any = None,
-                            printed_candidates: Sequence[TabCandidate] = ()) -> tuple[list[Bar], dict[str, Any]]:
+                            printed_candidates: Sequence[TabCandidate] = (),
+                            located_refusals: dict[int, dict[str, Any]] | None = None) -> tuple[list[Bar], dict[str, Any]]:
     """Bars for every notation bar, written from note types and TAB positions or refused and left empty.
 
     ``refused_tab_system`` (PARTIAL-01) is the one TAB system whose layout is refused; its digits are
@@ -554,7 +576,8 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
     if overlaps and baseline is not None:
         try:
             _, base_route = assemble_note_type_bars(
-                digits, baseline, track_id=track_id, refused_tab_system=refused_tab_system)
+                digits, baseline, track_id=track_id, refused_tab_system=refused_tab_system,
+                located_refusals=located_refusals)
         except PdfTabBarAssemblerError:
             # A base route that could not build a score wrote no bar.
             pass
@@ -573,7 +596,8 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
     if chord_free is not None:
         try:
             _, free_route = assemble_note_type_bars(
-                digits, chord_free, track_id=track_id, refused_tab_system=refused_tab_system)
+                digits, chord_free, track_id=track_id, refused_tab_system=refused_tab_system,
+                located_refusals=located_refusals)
         except PdfTabBarAssemblerError:
             pass
         else:
@@ -637,6 +661,10 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
                 == (refused_tab_system.notation_page_index, refused_tab_system.notation_system_index)):
             refusal = _refusal(refused_tab_system.code, None,
                                f"TAB page {refused_tab_system.page_index}, system {refused_tab_system.system_index}")
+        elif located_refusals and source_bar in located_refusals:
+            evidence = located_refusals[source_bar]
+            refusal = _refusal(evidence.get("reason", "tab_chord_arrow_unread"), evidence["event_index"])
+            refusal["evidence"] = evidence
         elif key.get("status") == "refused" and key.get("refuse_bar"):
             refusal = _refusal(key["reason"])
             refusal["evidence"] = {

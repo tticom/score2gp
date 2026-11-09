@@ -153,7 +153,11 @@ def test_page_numbers_and_legends_never_become_a_system():
 
 
 def test_mutant_drop_system_recovery_fails(tmp_path, monkeypatch):
+    # NOTAB-01 can independently read a refused bar from all six painted rows.
+    # The product mutant now drops both paths; the output assertion is unchanged.
+    from score2gp import pdf_tab_digit_recovery
     monkeypatch.setattr(pdf, "_digit_interrupted_systems_added", lambda *a, **k: None)
+    monkeypatch.setattr(pdf_tab_digit_recovery, "recover_printed_bar_digits", lambda *a, **k: ([], {}))
     with pytest.raises(AssertionError):
         _check_system_bars(tmp_path)
 
