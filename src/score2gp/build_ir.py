@@ -1679,6 +1679,30 @@ def _source_system_row_counts(
     return None, warning
 
 
+def _ungrouped_source_details(tabraw: TabRaw) -> dict[str, object]:
+    """GROUP-03: say why a source with candidates but no TAB system was refused, from TabRaw alone.
+
+    Nothing here is grouped, read or guessed: it only names what the extractor recorded. ASCII rows that print no
+    bar separator and no rhythm leave the bar boundaries and durations undetermined (a guess would be needed);
+    text with no fret or string candidate leaves no TAB row to group.
+    """
+    frets = [c for c in tabraw.candidates if c.kind == "fret"]
+    raws = [c.raw or {} for c in frets]
+    blocks = {r.get("ascii_block_id") for r in raws if r.get("ascii_tab")}
+    if blocks:
+        separators = sum(int(r.get("ascii_bar_separator_count") or 0) for r in raws)
+        return {
+            "located_reason": ("ascii_tab_rows_without_barlines_or_rhythm" if separators == 0
+                               else "ascii_tab_rows_without_rhythm"),
+            "ascii_block_count": len(blocks), "ascii_fret_candidates": len(frets),
+            "ascii_bar_separator_count": separators,
+            "ascii_timing_statuses": sorted({str(r.get("ascii_timing_status")) for r in raws}),
+        }
+    if not frets:
+        return {"located_reason": "text_without_tab_rows", "text_candidates": len(tabraw.candidates)}
+    return {}
+
+
 def _no_candidates_details(tabraw: TabRaw) -> dict[str, object]:
     """NOROUTE-01: say why a source with no candidate at all was refused, from what the extractor recorded.
 
@@ -1809,6 +1833,8 @@ def build_ir_from_tabraw_only(
                 located = locate_unclassified_tab_groups(tabraw.source_pdf, note_durations)
                 if located:
                     details["located_grouping_refusals"] = located
+                else:
+                    details.update(_ungrouped_source_details(tabraw))
             raise BuildIrInputRiskError(
                 category="pdf_only_tab_grouping_unsafe",
                 stage="layout-gating",
