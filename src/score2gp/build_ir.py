@@ -1690,7 +1690,13 @@ def _ungrouped_source_details(tabraw: TabRaw) -> dict[str, object]:
     raws = [c.raw or {} for c in frets]
     blocks = {r.get("ascii_block_id") for r in raws if r.get("ascii_tab")}
     if blocks:
-        separators = sum(int(r.get("ascii_bar_separator_count") or 0) for r in raws)
+        # The extractor stores the block's separator count on every candidate of the block; count it once per block.
+        per_block: dict[object, int] = {}
+        for r in raws:
+            if r.get("ascii_tab"):
+                block = r.get("ascii_block_id")
+                per_block[block] = max(per_block.get(block, 0), int(r.get("ascii_bar_separator_count") or 0))
+        separators = sum(per_block.values())
         return {
             "located_reason": ("ascii_tab_rows_without_barlines_or_rhythm" if separators == 0
                                else "ascii_tab_rows_without_rhythm"),

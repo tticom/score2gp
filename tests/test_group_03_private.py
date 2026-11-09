@@ -69,3 +69,24 @@ def test_mutant_drop_ungrouped_location_fails_real_sources(tmp_path, monkeypatch
         _check_ascii(tmp_path / "a")
     with pytest.raises(KeyError):
         _check_text(tmp_path / "b")
+
+
+def _ascii_candidate(block, separators):
+    from types import SimpleNamespace
+    return SimpleNamespace(kind="fret", raw={
+        "ascii_tab": True, "ascii_block_id": block, "ascii_bar_separator_count": separators,
+        "ascii_timing_status": "timing_unavailable"})
+
+
+def test_separator_count_is_taken_once_per_block_not_per_candidate():
+    """Rejects: summing the block-level separator count over every fret candidate (3 separators x 54 candidates
+    reported 162). Infrastructure test of the diagnostic arithmetic: the extractor stores the block's count on
+    each of its candidates, which the real ASCII source (0 separators) cannot exercise; no acceptance weight."""
+    from types import SimpleNamespace
+    candidates = ([_ascii_candidate("ascii-p000-s000", 3) for _ in range(54)]
+                  + [_ascii_candidate("ascii-p000-s001", 2) for _ in range(10)])
+    details = build_ir._ungrouped_source_details(SimpleNamespace(candidates=candidates))
+    assert details["located_reason"] == "ascii_tab_rows_without_rhythm"
+    assert details["ascii_block_count"] == 2
+    assert details["ascii_bar_separator_count"] == 5
+    assert details["ascii_fret_candidates"] == 64
