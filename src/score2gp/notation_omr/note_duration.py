@@ -2616,6 +2616,52 @@ def _resolve_strike_head_positions(records: list[dict[str, Any]], staff: Staff,
                                                "fifths": fifths, "octave_shift": 0}
 
 
+def _consume_bar_key_glyphs(records: list[dict[str, Any]], keys: list[dict[str, Any]],
+                            diagnostics: dict[str, Any]) -> list[dict[str, Any]]:
+    """REFUSE-19: a positively read signature glyph is not an unidentified rest.
+
+    Only the key reader's exact source IDs qualify. A partial or ambiguous key
+    supplies none, and a read duration or a note is never removed. Reindex the
+    remaining events and their grace/diagnostic links after removing the glyph.
+    """
+    sources = {source for key in keys if key["status"] == "read" for source in key["sources"]}
+    removed = [r for r in records if r["status"] == "unread" and r["kind"] in ("rest", "unclassified")
+               and (r.get("rest") or {}).get("source") in sources]
+    if not removed:
+        return records
+    removed_indices: dict[int, set[int]] = {}
+    for record in removed:
+        removed_indices.setdefault(record["bar_index"], set()).add(record["event_index"])
+        diagnostics["non_events"].append({
+            "reason": "printed_bar_key_signature", **record["location"],
+            "source": record["rest"]["source"],
+        })
+    counts = diagnostics["non_events_by_reason"]
+    counts["printed_bar_key_signature"] = counts.get("printed_bar_key_signature", 0) + len(removed)
+
+    def relocate(record):
+        location = record.get("location", record)
+        indices = removed_indices.get(location.get("bar_index"), set())
+        index = location.get("event_index")
+        if indices and index is not None:
+            shifted = index - sum(i < index for i in indices)
+            location["event_index"] = shifted
+            if "event_index" in record:
+                record["event_index"] = shifted
+            grace = record.get("grace")
+            if grace and grace.get("beat_event_index") is not None:
+                beat = grace["beat_event_index"]
+                grace["beat_event_index"] = beat - sum(i < beat for i in indices)
+
+    result = [r for r in records if r not in removed]
+    for record in result:
+        relocate(record)
+    for field in ("unread_symbols", "located_unread_events"):
+        for record in diagnostics.get(field, []):
+            relocate(record)
+    return result
+
+
 def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = None,
                         time_signature: tuple[int, int] | None = None, *,
                         _base_equivalent: bool = False, _chord_pairs: bool = True) -> dict[str, Any]:
@@ -2661,10 +2707,11 @@ def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = No
                 state["system_index"] = system_index
                 text_before = state["time_signature"]
                 result = _read_staff(staff, symbols, notation + tab, state)
-                records.extend(result["records"])
                 system_keys = read_bar_key_signatures(
                     staff, symbols, result["bars"], key_signature,
                 )
+                result["records"] = _consume_bar_key_glyphs(result["records"], system_keys, state["diagnostics"])
+                records.extend(result["records"])
                 _resolve_strike_head_positions(result["records"], staff, symbols, system_keys)
                 for bar, bar_key in enumerate(system_keys):
                     bar_key_signatures[state["bar_offset"] + bar] = bar_key
