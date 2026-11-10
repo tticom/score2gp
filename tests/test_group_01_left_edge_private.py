@@ -31,9 +31,11 @@ PRIVATE = ROOT / "fixtures/private"
 # REFUSE-16 adds Pride and Joy bar 4 (a grace-size flat; printed-page check, no reference .gp).
 # REFUSE-07 adds Hey Joe bars 3, 7 and Pride and Joy bar 7 (rolled-chord wave columns read as no symbol).
 # TIEOWN-01 adds Pride and Joy bar 8 (a strike chord whose filled head ties to the next note; printed-page check).
+# DUR-04 adds Hey Joe bars 5, 8 and 9 (a bare tuplet number scoped to the notes it stands over; bar totals 4/4 checked
+# against the printed page, not independently verified).
 # source -> (source bars, bars written, {source bar: TAB digits placed in it} for the checked bars)
 CASES = {
-    "Hey Joe": (12, {0, 1, 2, 3, 4, 6, 7, 10}, {0: 12, 1: 13, 4: 15, 10: 28}),
+    "Hey Joe": (12, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, {0: 12, 1: 13, 4: 15, 10: 28}),
     "Pride and Joy": (14, {0, 1, 2, 3, 4, 6, 7, 8, 9, 13}, {0: 4, 1: 4, 2: 9, 3: 16, 4: 10}),
 }
 

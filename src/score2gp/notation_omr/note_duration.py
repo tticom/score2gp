@@ -165,6 +165,9 @@ REST_VERTICAL_REACH_SPACES = 2.0
 TUPLET_BRACKET_REACH_SPACES = 1.5
 TUPLET_BRACKET_OVERLAP_SPACES = 0.3
 TUPLET_NUMBER_BEAM_REACH_SPACES = 2.5
+# DUR-04: a number over a longer, uneven beam group counts only its own notes; the run it stands over must lead
+# the next-best run by this much (staff spaces) or the number stays unassociated rather than guessed.
+TUPLET_RUN_MARGIN_SPACES = 1.0
 LABEL_GAP_SPACES = 1.0
 SCAN_SAMPLES = 16
 # An oval fills pi/4 of its box, less when tilted; a tie crescent of notehead size fills about 0.3.
@@ -1370,6 +1373,25 @@ def _tuplet_ratio(text: str) -> tuple[int, int] | None:
     return actual, 2 ** int(math.log2(actual))
 
 
+def _run_under_number(digit: Text, members: list[dict[str, Any]], count: int, space: float) -> list[dict[str, Any]] | None:
+    """The `count` consecutive events a bare tuplet number stands over, inside a longer beam group.
+
+    A printed number states how many notes it spans, so over a beam group of another size (and not a whole
+    multiple of it, which stays read as before) it cannot span the whole group. The run is the one whose
+    first and last notes enclose the number and whose centre is nearest to it; if a second run is nearly as
+    good, the number is not placed. The bar total is never consulted.
+    """
+    ordered = sorted(members, key=lambda e: e["_cx"])
+    runs = [ordered[i:i + count] for i in range(len(ordered) - count + 1)]
+    scored = sorted((abs(digit.cx - (r[0]["_cx"] + r[-1]["_cx"]) / 2), i) for i, r in enumerate(runs)
+                    if r[0]["_cx"] <= digit.cx <= r[-1]["_cx"])
+    if not scored:
+        return None
+    if len(scored) > 1 and scored[1][0] - scored[0][0] < TUPLET_RUN_MARGIN_SPACES * space:
+        return None
+    return runs[scored[0][1]]
+
+
 def _read_tuplets(digits: list[Text], polylines: list[Polyline], groups: list[dict[str, Any]],
                   events: list[dict[str, Any]], space: float) -> tuple[list[dict[str, Any]], list[Text]]:
     """Tuplets spanned by a bracket around a number, or by a number over one beam group.
@@ -1395,6 +1417,8 @@ def _read_tuplets(digits: list[Text], polylines: list[Polyline], groups: list[di
                      and min(abs(digit.cy - y) for y in g["beam_ys"]) <= TUPLET_NUMBER_BEAM_REACH_SPACES * space]
             if len(under) == 1:
                 members = [e for e in events if e.get("_beam_group") == under[0]["id"]]
+                if ratio and len(members) > ratio[0] and len(members) % ratio[0]:
+                    members = _run_under_number(digit, members, ratio[0], space) or []
                 sources += under[0]["sources"]
         if members and ratio:
             tuplets.append({"actual": ratio[0], "normal": ratio[1], "members": members, "sources": sources,
