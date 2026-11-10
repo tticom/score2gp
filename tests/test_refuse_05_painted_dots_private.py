@@ -123,11 +123,18 @@ def test_black_dog_dotted_bars_are_written_with_printed_durations(tmp_path):
             assert any((e["written"], e["dots"]) == expected for e in events), f"GPIF_DOT_{bar}"
 
 
-def test_brown_sugar_short_bar_stays_refused():
-    """Nothing is painted as a dot in this bar, so its short total must stay refused (unchanged)."""
+def test_brown_sugar_short_bar_is_settled_without_a_dot():
+    """REFUSE-05 left this short bar refused because nothing is painted as a dot in it. DUR-04 settles it from a
+    different printed symbol (the "3" scoped to the notes it stands over); no dot is read or invented.
+
+    Mutant: painting a dot onto a note to make the bar fit would leave a dot in this bar.
+    """
     result = _read("Brown Sugar.pdf")
     checks = {c["bar_index"]: c["status"] for c in result["bar_checks"]}
-    assert checks[7] != "match", "BROWN_SUGAR_BAR_7_TOTAL_LOOSENED"
+    assert checks[7] == "match", "BROWN_SUGAR_BAR_7_STILL_SHORT"
+    events = [e for e in result["events"] if e["bar_index"] == 7]
+    assert not any(e["dots"]["count"] for e in events), "BROWN_SUGAR_BAR_7_DOT_INVENTED"
+    assert sum(1 for e in events if e["tuplet"]) == 3
 
 
 def _fake_event(x0, y0, x1, y1, dots=()):
