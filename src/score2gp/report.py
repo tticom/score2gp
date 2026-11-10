@@ -77,6 +77,11 @@ def write_conversion_report(
 ) -> None:
     if not debug_barline_candidates:
         summary = _bounded_conversion_summary(summary)
+    # Keep every diagnostic value, but avoid repeating indentation for deeply
+    # nested candidate provenance. Explicit debug reports retain the readable
+    # full dump; both forms remain ordinary JSON inside the same HTML block.
+    summary_json = (json.dumps(summary, indent=2) if debug_barline_candidates
+                    else json.dumps(summary, separators=(",", ":")))
     warning_items = "\n".join(
         f"<li><strong>{html.escape(item.get('code', 'warning'))}</strong>: {html.escape(item.get('message', ''))}</li>"
         for item in warnings
@@ -104,7 +109,7 @@ def write_conversion_report(
 {manifest_section}<h2>Warnings</h2>
 <ul>{warning_items}</ul>
 <h2>Summary</h2>
-<pre>{html.escape(json.dumps(summary, indent=2))}</pre>
+<pre>{html.escape(summary_json)}</pre>
 </body>
 </html>
 """

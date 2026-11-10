@@ -188,6 +188,10 @@ class Glyph:
     shape: _NoteheadShape
     curved: bool
     filled: bool
+    # The shape and bounding box stay fixed for this page's reading. Reuse the
+    # identical grid across notehead, key/time-signature and arc checks, without
+    # retaining glyphs beyond their ordinary lifetime or mixing resolutions.
+    _fill_ratios: dict[int, float] = field(default_factory=dict, init=False, repr=False, compare=False)
 
     @property
     def cx(self) -> float:
@@ -336,12 +340,16 @@ def _runs(shape: _NoteheadShape, vertical: bool, at: float, lo: float, hi: float
 
 
 def _fill_ratio(glyph: Glyph, n: int = 12) -> float:
+    if n in glyph._fill_ratios:
+        return glyph._fill_ratios[n]
     x0, y0, x1, y1 = glyph.bbox
     hits = sum(
         _inside_fill(x0 + (i + 0.5) * (x1 - x0) / n, y0 + (j + 0.5) * (y1 - y0) / n, glyph.shape)
         for i in range(n) for j in range(n)
     )
-    return hits / (n * n)
+    ratio = hits / (n * n)
+    glyph._fill_ratios[n] = ratio
+    return ratio
 
 
 def _row_counts(glyph: Glyph, samples: int = SCAN_SAMPLES) -> list[int]:
