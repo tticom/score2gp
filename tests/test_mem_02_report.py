@@ -108,17 +108,7 @@ def _census(tab):
     return systems, rejected, accepted
 
 
-# PERF-02 lets Melodic_Expressions.pdf past the inspection budget for the first time, so this report-size
-# gate now runs on it and fails by ~1.7 MB over the allowance. Strict xfail: it must turn green when the
-# report is bounded for this source (follow-up), and the gate is not loosened.
-_REPORT_SIZE_XFAIL = {"Melodic_Expressions.pdf"}
-
-
-@pytest.mark.parametrize("name", [
-    pytest.param(n, marks=pytest.mark.xfail(strict=True, reason="PERF-02: report exceeds size allowance on newly reachable source"))
-    if n in _REPORT_SIZE_XFAIL else n
-    for n in (SOURCES or ["Lesson-3.pdf"])
-])
+@pytest.mark.parametrize("name", SOURCES or ["Lesson-3.pdf"])
 def test_default_real_report_is_bounded_and_preserves_other_content(name):
     work = ROOT / "work"
     work.mkdir(exist_ok=True)
