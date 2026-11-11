@@ -1238,6 +1238,11 @@ def convert_command(
                 from .tabraw import TabRaw as _TabRaw
                 tab_rhythm = read_tab_rhythm(pdf, _TabRaw.from_json_file(tabraw_path), pages=parse_page_range(pages),
                                              time_signature=declared_time_signature)
+                # Keep the located inventory even when every event is unread.
+                # Zero read events does not imply zero printed bars (REFUSE-20).
+                (actual_work_dir / "tab-rhythm.json").write_text(
+                    json.dumps(tab_rhythm, indent=2) + "\n", encoding="utf-8"
+                )
                 if tab_rhythm["summary"]["read_events"]:  # a source with no rhythm mark at all keeps its refusal
                     note_durations = tab_rhythm
             (actual_work_dir / "note-durations.json").write_text(json.dumps(note_durations, indent=2) + "\n", encoding="utf-8")
