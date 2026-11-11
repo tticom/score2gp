@@ -173,8 +173,26 @@ def unread_new_chord_arrows(source_pdf, reading, bars, route, candidates, recove
     return result
 
 
-def _palm_spans(candidates, drawings, page_index, notation, owner, offset):
-    """A printed P.M. label and its unique dashed stroke in this staff's band."""
+def _has_palm_extension_ink(drawings, label, offset, space):
+    """Inspect individual painted items: a compound path's box may span a page."""
+    for drawing in drawings:
+        for item in drawing["items"]:
+            if item[0] == "re":
+                x0, y0, x1, y1 = item[1]
+            elif item[0] in ("l", "c"):
+                points = item[1:]
+                x0, x1 = min(p.x for p in points), max(p.x for p in points)
+                y0, y1 = min(p.y for p in points), max(p.y for p in points)
+            else:
+                x0, y0, x1, y1 = drawing["rect"]
+            if (x0 < label.bbox.x1 + space and x1 > label.bbox.x1
+                    and y0 <= label.y - offset + 0.5 * space and y1 >= label.y - offset - 0.5 * space):
+                return True
+    return False
+
+
+def _palm_spans(candidates, drawings, page_index, notation, owner, offset, reading=None):
+    """A P.M. span has its drawn endpoint; a bare P.M. must stand over one event."""
     space = notation["staff_space"]
     labels = [c for c in candidates if c.kind == "technique-text" and c.page_index == page_index + 1
               and c.raw_text.strip().lower() in ("p.m.", "p.m", "pm", "palm mute", "palm-mute")
@@ -190,6 +208,19 @@ def _palm_spans(candidates, drawings, page_index, notation, owner, offset):
                    if abs(a.y - b.y) <= 0.1 and b.x > a.x
                    and abs(a.y - (label.y - offset)) <= 0.5 * space
                    and 0 <= a.x - label.bbox.x1 <= space]
+        if not strokes and reading is not None:
+            # REFUSE-19: the bare effect mark names the event directly below its
+            # printed text. It supplies neither a span nor a guessed endpoint.
+            if _has_palm_extension_ink(drawings, label, offset, space):
+                return None  # An unrecognised extension is not a bare effect mark.
+            events = [e for e in reading["events"]
+                      if e["page_index"] == page_index and e["system_index"] == notation["system_index"]
+                      and e["status"] == "read" and e["kind"] in ("note", "chord")
+                      and label.bbox.x0 <= (e["location"]["bbox"][0] + e["location"]["bbox"][2]) / 2 <= label.bbox.x1]
+            if len(events) != 1:
+                return None
+            result.append((label.id, label.bbox.x0, label.bbox.x1))
+            continue
         if len(strokes) != 1:
             return None
         result.append((label.id, label.bbox.x0, strokes[0][1]))
@@ -371,7 +402,7 @@ def recover_printed_bar_digits(source_pdf: str | None, reading: dict[str, Any], 
             if chords is None:
                 withheld[bar] = "printed_chord_label_owner_unread"
                 continue
-            palms = _palm_spans(candidates, drawings, p, notation, owner, offset)
+            palms = _palm_spans(candidates, drawings, p, notation, owner, offset, reading)
             if palms is None:
                 withheld[bar] = "palm_mute_span_unread"
                 continue
