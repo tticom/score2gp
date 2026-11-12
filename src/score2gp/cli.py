@@ -1255,6 +1255,9 @@ def convert_command(
                 tabraw = TabRaw.from_json_file(tabraw_path)
                 tabraw.structural_signals["notation_barlines"] = read_notation_barline_signals(pdf, note_durations)
                 tabraw.to_json_file(tabraw_path)
+                # The builder reloads the completed artifact. Release this parse
+                # before it does so, rather than retaining two full copies.
+                del tabraw
             tabraw_kwargs = {
                 "tabraw_path": tabraw_path,
                 "note_durations": note_durations,
