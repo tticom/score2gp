@@ -127,6 +127,14 @@ Re-measured on the normal CLI for the source holding most C02 bars (source 35, 5
 Result: C02 is not a class the page evidence settles; C01 (82 bars) is unread by maintainer decision except where a rhythm mark is printed, and the only C01 bars not excluded as duration-basis-unproven (source 39) depend on grace/technique ownership. No further class was read.
 Holdout: the tied bracketed-chord reader's trigger (`tab_digit_run_or_parenthesis_unread`, `parenthesized_head_unrepresented`) occurs only in source 35 in the whole private set (1 and 2 refused bars remain there, all in that source). No second source prints the form, so a positive separate-source holdout does not exist. Acceptance 2 remains **unmet** and is reported as such, not claimed.
 
+## Revision round 7: multi-source overlapping-form census (counts only)
+
+Goal: find a class that occurs in more than one source so that a positive separate-source holdout can exist. Re-measured with the normal CLI over all 43 approved PDFs at head 451c086 (zero-based sorted-name file order; the located inventory below uses the earlier numbering, which is offset by one from index 3 on). No code changed in this round.
+
+`unsupported_overlapping_form` is the only multi-source cause with several bars: 15 baseline bars in 6 sources (indices 12, 13, 16, 20, 35, 40 in the inventory numbering). Per refused bar, the unread overlapping forms were classified by shape and viewed on the printed page. They are not one class: bend arrows with a printed label, slide arcs with a printed label, hammer-on arcs with a printed label, rolled-chord wave columns whose stroke form differs from the one the reader matches, curved accidental forms the reader does not identify, bracketed heads with no printed digit, and wave pieces drawn as curves above the staff. Each is a different technique or glyph form with its own owner rule; none is a single rule the page settles across sources. The only wave-column form in a refused bar (one bar) is shared with already written bars in 3 other sources, whose waves the reader leaves unowned today, so reading it would not newly write a second source's bar.
+`tie_stop_without_written_predecessor` (3 sources, 9 bars) depends on the predecessor bar being written; it is a cascade of other refusals, not an independently readable class.
+Result: no second class was found that the page settles and that has a held-out source on which at least one bar is newly written. Acceptance 2 remains **unmet**; no maintainer waiver of the positive holdout was supplied, and none is claimed. All bars in these causes stay refused with located reasons and are reported as unfinished reader gaps.
+
 ## Located inventory, before and after
 
 Source indices follow the sorted PDF inventory. All indices are zero-based. A missing event is shown as `?`: no event is invented in a bar without an event inventory.
