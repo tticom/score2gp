@@ -121,6 +121,12 @@ The delivered subset does not prove selection of the next-largest settled class.
 The largest diagnostic cause remains C01. All remaining causes in the table and the four source-level reader gaps are unfinished. The first located inventory refusal is source 3, page 0, system 0, bar 0, event 0, R01/C01.
 Full validation results and any Windows baseline failure IDs belong in the launcher report and handback packet; a running or interrupted suite is never a pass.
 
+## Revision round 6: second-ranked class and holdout availability (counts only)
+
+Re-measured on the normal CLI for the source holding most C02 bars (source 35, 594-bar inventory): 36 bars refuse as `no_tab_column_at_notation_event`; in 23 of them exactly one notation event lacks a TAB column while the TAB digit count equals the TAB column count, and 19 of the 36 carry an unread bracketed-head symbol (`parenthesized_head_unrepresented`) at the very event that has no column. A bracketed head with no printed digit is a head whose string/fret the page does not print; reading it would invent a value (the REFUSE-13 finding, unchanged). The other 13 have 2 to 24 extra notation events per bar (the TAB column count is far below the notation count), which is a TAB-extraction disagreement, not a settled page reading.
+Result: C02 is not a class the page evidence settles; C01 (82 bars) is unread by maintainer decision except where a rhythm mark is printed, and the only C01 bars not excluded as duration-basis-unproven (source 39) depend on grace/technique ownership. No further class was read.
+Holdout: the tied bracketed-chord reader's trigger (`tab_digit_run_or_parenthesis_unread`, `parenthesized_head_unrepresented`) occurs only in source 35 in the whole private set (1 and 2 refused bars remain there, all in that source). No second source prints the form, so a positive separate-source holdout does not exist. Acceptance 2 remains **unmet** and is reported as such, not claimed.
+
 ## Located inventory, before and after
 
 Source indices follow the sorted PDF inventory. All indices are zero-based. A missing event is shown as `?`: no event is invented in a bar without an event inventory.
