@@ -1907,7 +1907,7 @@ def build_ir_from_tabraw_only(
                 printed_candidates=tabraw.candidates, **extra)
 
         from .pdf_tab_digit_recovery import (recover_printed_bar_digits, unread_new_chord_arrows,
-                                             apply_recovered_chord_labels)
+                                             apply_recovered_chord_labels, apply_recovered_chord_vibrato)
         note_durations, bars, note_type_route = _assemble()
         recovered, withheld = recover_printed_bar_digits(
             tabraw.source_pdf, note_durations, note_type_route, tabraw.candidates)
@@ -2126,6 +2126,7 @@ def build_ir_from_tabraw_only(
     from .pdf_attachment_recovery import recover_unplaced_attachments
     recover_unplaced_attachments(score, tabraw, note_durations, classify=_classify_technique)
     apply_recovered_chord_labels(score, tabraw.candidates, recovered)
+    apply_recovered_chord_vibrato(score, recovered)
 
     # Construct diagnostics
     tabraw_candidates_loaded = len(tabraw.candidates)
@@ -4948,7 +4949,21 @@ def _attach_symbols_and_techniques(
                     continue
                 sources = _notes_by_candidate_id(bar, candidate.raw.get("source_candidate_id"))
                 targets = _notes_by_candidate_id(bar, candidate.raw.get("target_candidate_id"))
-                if len(sources) != 1 or len(targets) != 1 or sources[0][0].timing.onset_ticks >= targets[0][0].timing.onset_ticks:
+                chord_departure = candidate.raw.get("ownership") == "labeled_chord_departure"
+                if chord_departure and len(sources) == 1:
+                    source_event, source_note = sources[0]
+                    target_bar = bars_by_index.get(bar.index + 1)
+                    targets = _notes_by_candidate_id(target_bar, candidate.raw.get("target_candidate_id")) if target_bar else []
+                    # Read only the moving head of a partly tied chord, from the
+                    # last timed event to the next bar's first timed event.
+                    if (source_event is not bar.events[-1] or len(source_event.notes) < 2
+                            or not any(n is not source_note and any(t.kind == "tie" and t.state == "stop"
+                                       for t in n.techniques) for n in source_event.notes)
+                            or len(targets) != 1 or targets[0][0] is not target_bar.events[0]
+                            or targets[0][1].string != source_note.string):
+                        targets = []
+                if (len(sources) != 1 or len(targets) != 1
+                        or (not chord_departure and sources[0][0].timing.onset_ticks >= targets[0][0].timing.onset_ticks)):
                     score.warnings.append(_slide_not_extracted_warning(candidate, bar_idx, REASON_NOTE_NOT_FOUND))
                     continue
                 (_, source_note), (target_event, _) = sources[0], targets[0]

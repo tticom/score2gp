@@ -16,12 +16,15 @@ def _kind(drawing: dict[str, Any]) -> str:
 
 
 def _marks(page: pymupdf.Page) -> list[dict[str, Any]]:
+    return _marks_from_drawings(page.get_drawings())
+
+
+def _marks_from_drawings(drawings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Find a vertical repeated curl path ending in a triangular direction arrow.
 
     Dimensions are in PDF points. Individual curls may be separate filled paths;
     the repeated geometry, not a private source's drawing index, identifies them.
     """
-    drawings = page.get_drawings()
     curls = [(i, drawing) for i, drawing in enumerate(drawings)
              if drawing["type"] == "f" and 4 <= _kind(drawing).count("c") <= 24
              and set(_kind(drawing)) == {"c"}

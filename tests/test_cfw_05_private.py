@@ -31,8 +31,7 @@ def _oracle():
     return module
 
 
-@pytest.fixture(scope="module")
-def converted():
+def _conversion(drop_shared_reader=False):
     pdf, reference = PRIVATE / (SOURCE + ".pdf"), PRIVATE / (SOURCE + ".gp")
     assert pdf.is_file() and reference.is_file(), "required CFW private inputs missing"
     work = ROOT / "work"
@@ -40,13 +39,39 @@ def converted():
     with tempfile.TemporaryDirectory(prefix="cfw05-", dir=work) as directory:
         folder = Path(directory)
         output = folder / "output.gp"
-        run = subprocess.run([
-            sys.executable, "-m", "score2gp.cli", "convert", "--pdf", str(pdf),
+        command = [sys.executable, "-m", "score2gp.cli"]
+        if drop_shared_reader:
+            command = [sys.executable, "-c",
+                       "from unittest.mock import patch\n"
+                       "from score2gp.notation_omr import note_duration as nd\n"
+                       "original=nd._wave_column_ids\n"
+                       "def legacy(glyphs, space):\n"
+                       "    with patch('score2gp.pdf_arpeggios._marks_from_drawings', return_value=[]):\n"
+                       "        return original(glyphs, space)\n"
+                       "nd._wave_column_ids=legacy\n"
+                       "from score2gp.cli import app\napp()"]
+        run = subprocess.run([*command, "convert", "--pdf", str(pdf),
             "--out", str(output), "--work-dir", str(folder / "build"),
             "--pdf-only-tab", "--time-signature", "4/4", "--no-strict",
         ], capture_output=True, text=True)
         assert run.returncode == 0, run.stderr
         yield folder, output, reference
+
+
+@pytest.fixture(scope="module")
+def converted():
+    yield from _conversion()
+
+
+@pytest.fixture(scope="module")
+def unresolved_converted():
+    """DROP_SHARED_ARPEGGIO_READER retains the original real unresolved case.
+
+    All original refusal/strike assertions below remain active. Recognizing
+    that wave now permits the default run; disabling just that positive rule
+    must still fail closed on the same approved PDF.
+    """
+    yield from _conversion(drop_shared_reader=True)
 
 
 def _assert_refused(output):
@@ -76,9 +101,9 @@ def _write_probe(score, folder, name):
     return produced
 
 
-def test_read_cross_keeps_unresolved_bar_located_and_empty(converted):
+def test_read_cross_keeps_unresolved_bar_located_and_empty(unresolved_converted):
     """Reject deleting the overlap gate even though strike/duration reading succeeds."""
-    folder, output, reference = converted
+    folder, output, reference = unresolved_converted
     route = json.loads((folder / "build/note-type-route.json").read_text())
     reading = json.loads((folder / "build/note-durations.json").read_text())
     bar = route["bars"][BAR]
@@ -104,13 +129,13 @@ def test_read_cross_keeps_unresolved_bar_located_and_empty(converted):
 
 
 @pytest.mark.parametrize("mutant", ["drop_strike", "ordinary_fret_zero", "move_one_string"])
-def test_real_source_premature_write_mutants_fail_refusal_contract(converted, mutant):
+def test_real_source_premature_write_mutants_fail_refusal_contract(unresolved_converted, mutant):
     """All three unsafe writes fail the same final-output assertion as the real run.
 
     Remove the unresolved-symbol gate only in this negative control, then use
     the real reader/assembler events. This does not claim a faithful written bar.
     """
-    folder, output, reference = converted
+    folder, output, reference = unresolved_converted
     _assert_refused(output)
     reading = json.loads((folder / "build/note-durations.json").read_text())
     reading["diagnostics"]["unread_symbols"] = []
@@ -139,3 +164,16 @@ def test_real_source_premature_write_mutants_fail_refusal_contract(converted, mu
         _assert_strike_alignment(produced, reference)
     with pytest.raises(AssertionError):
         _assert_refused(produced)
+
+
+def test_read_roll_writes_the_reference_strike_and_arpeggio(converted):
+    """Reject dropping the new wave rule or losing the previously read strike."""
+    folder, output, reference = converted
+    route = json.loads((folder / "build/note-type-route.json").read_text())
+    assert route["summary"]["written_bars"] == 19
+    assert route["bars"][BAR]["status"] == "written"
+    _assert_strike_alignment(output, reference)
+    oracle = _oracle()
+    rolls = [r for r in oracle.read_gp_arpeggios(reference) if r[0] == BAR + 1]
+    assert len(rolls) == 1
+    assert [r for r in oracle.read_gp_arpeggios(output) if r[0] == BAR + 1] == rolls

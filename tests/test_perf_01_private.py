@@ -22,6 +22,7 @@ from score2gp.cli import app
 from score2gp.pdf_resource_budget import (
     INSPECTION_BUDGET_CODE, INSPECTION_PAGE_NODE_LIMIT, PdfInspectionResourceLimit,
 )
+from refuse20_controls import without_verified_added_bar
 
 ROOT = Path(__file__).resolve().parents[1]
 PRIVATE = ROOT / "fixtures/private"
@@ -143,6 +144,10 @@ def test_real_control_inspection_count_and_gpif_are_unchanged(name, nodes, gpif_
         # by test_letring_01_private. Dropping the feature fails the count here.
         expected_let_ring_notes = 10 if name == "Melodic_Expressions_Chap_19_.pdf" else 0
         assert actual.count(b"<LetRing />") == expected_let_ring_notes
+        if name == "Melodic_Expressions_Chap_19_.pdf":
+            # The allowed new-bar exception restores only source bar 4 after
+            # checking its actual output. Keep both original byte digests.
+            actual = without_verified_added_bar(actual, scratch / "conversion/score.ir.json", 4)
         # OMIT-05-FU1 adds only verified default template sizes. Keep every
         # original digest and count after removing those seven attributes.
         before_sizes = without_verified_default_template_sizes(actual)

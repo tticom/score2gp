@@ -13,6 +13,7 @@ from typing import Any, Sequence
 
 from .tabraw import TabCandidate, parse_fret_text
 from .ir import BoundingBox
+from .pdf_tab_bar_assembler import COLUMN_SPACES, MATCH_SPACES
 
 _ROW_ROUNDING_PT = 0.001  # Detected row coordinates are serialized to three decimal places.
 
@@ -84,7 +85,65 @@ def _missing_numeric_words(words, known, page, offset):
     return result
 
 
-def _unread_number_word(words, owner, left, right, space, census):
+def _read_tied_parenthesized_words(words, owner, left, right, space, records, notation_space):
+    """Read a complete bracketed TAB chord as the printed tie's continuation.
+
+    Both notation events must share a drawn tie, and every bracketed position
+    must equal the literal position printed immediately before it. Partial,
+    unmatched and differently fretted chords remain unread.
+    """
+    def x(word):
+        return (word[0] + word[2]) / 2
+
+    def positions(items):
+        result = []
+        for word in items:
+            rows = [i + 1 for i, row in enumerate(owner.line_ys)
+                    if abs((word[1] + word[3]) / 2 - row) <= 0.2 * space]
+            fret = parse_fret_text(word[4].strip("()"))
+            if len(rows) != 1 or fret is None:
+                return None
+            result.append((rows[0], fret))
+        return sorted(result) if len({row for row, _ in result}) == len(result) else None
+
+    bracketed = [w for w in words if left < x(w) < right
+                 and re.fullmatch(r"\([0-9]+\)", w[4])
+                 and min(abs((w[1] + w[3]) / 2 - row) for row in owner.line_ys) <= 0.5 * space]
+    groups = []
+    for word in sorted(bracketed, key=x):
+        if groups and x(word) - x(groups[-1][-1]) <= COLUMN_SPACES * space:
+            groups[-1].append(word)
+        else:
+            groups.append([word])
+    records = sorted(records, key=lambda r: r["event_index"])
+    read = set()
+    for group in groups:
+        cx = sum(x(w) for w in group) / len(group)
+        targets = [(i, e) for i, e in enumerate(records)
+                   if e["status"] == "read" and e["kind"] in ("note", "chord")
+                   and not e.get("grace") and e.get("tie", {}).get("stop")
+                   and abs((e["location"]["bbox"][0] + e["location"]["bbox"][2]) / 2 - cx)
+                   <= MATCH_SPACES * notation_space]
+        if len(targets) != 1 or targets[0][0] == 0:
+            continue
+        i, target = targets[0]
+        previous = records[i - 1]
+        if (previous["status"] != "read" or previous["kind"] not in ("note", "chord")
+                or previous.get("grace") or not previous.get("tie", {}).get("start")
+                or not set(previous["tie"]["sources"]) & set(target["tie"]["sources"])):
+            continue
+        px = (previous["location"]["bbox"][0] + previous["location"]["bbox"][2]) / 2
+        printed = [w for w in words if left < x(w) < right and re.fullmatch(r"[0-9]+", w[4])
+                   and abs(x(w) - px) <= MATCH_SPACES * notation_space
+                   and min(abs((w[1] + w[3]) / 2 - row) for row in owner.line_ys) <= 0.5 * space]
+        owned = positions(group)
+        if (owned is not None and owned == positions(printed)
+                and len(owned) == target["notehead"]["count"] == previous["notehead"]["count"]):
+            read.update(tuple(w[5:8]) for w in group)
+    return read
+
+
+def _unread_number_word(words, owner, left, right, space, census, read_tied_words=()):
     from .pdf import _split_adjacent_fret_run
     for word in words:
         text = word[4]
@@ -94,6 +153,8 @@ def _unread_number_word(words, owner, left, right, space, census):
         y = (word[1] + word[3]) / 2
         if min(abs(y - row) for row in owner.line_ys) > 0.5 * space:
             continue
+        if tuple(word[5:8]) in read_tied_words:
+            continue  # Its complete printed chord and shared tie were positively read.
         if (not re.fullmatch(r"[0-9]+", text) or parse_fret_text(text) is None
                 or (len(text) > 1 and text.startswith("0"))):
             return "tab_digit_run_or_parenthesis_unread"
@@ -388,7 +449,16 @@ def recover_printed_bar_digits(source_pdf: str | None, reading: dict[str, Any], 
             if not _continuous_rows(segments, words, owner.line_ys, left, right, space):
                 continue
             offset = sum(reading["source"]["page_heights"][:p])
-            unread_word = _unread_number_word(words, owner, left, right, space, census)
+            tied_words = _read_tied_parenthesized_words(
+                words, owner, left, right, space,
+                [e for e in reading["events"] if e["bar_index"] == bar], notation["staff_space"])
+            waves = _tied_chord_waves(
+                drawings, owner, left, right, notation["staff"]["bottom"],
+                [e for e in reading["events"] if e["bar_index"] == bar]) if tied_words else []
+            if waves is None:
+                withheld[bar] = "printed_vibrato_chord_owner_unread"
+                continue
+            unread_word = _unread_number_word(words, owner, left, right, space, census, tied_words)
             if unread_word:
                 withheld[bar] = unread_word
                 continue
@@ -423,10 +493,84 @@ def recover_printed_bar_digits(source_pdf: str | None, reading: dict[str, Any], 
                     "string": rows[0] + 1, "line_index": rows[0] + 1,
                     "system_index": notation["system_index"] + 1, "staff_index": 1, "bar_index": bar + 1,
                     "raw": {**candidate.raw, "position_basis": "six_painted_tab_rows_at_notation_bar",
-                            "recovered_chord_labels": chords,
+                            "recovered_chord_labels": chords, "recovered_chord_vibrato": waves,
                             "recovered_palm_mute_sources": [ident for ident, a, b in palms if a <= candidate.x <= b]}}))
             if found and checks[bar].get("implied_rest_quarters"):
                 withheld[bar] = "printed_rhythm_completion_unread"
             else:
                 recovered.extend(found)
     return recovered, withheld
+
+
+def _tied_chord_waves(drawings, owner, left, right, notation_bottom, records):
+    """Read repeated wave glyphs between notation and TAB over a complete tied chord.
+
+    A wave above the TAB column belongs to the complete chord, unlike a mark
+    inside the strings. Its start and continuation must share a witnessed tie.
+    Other wave owners stay unread; no nearest-event fallback is used.
+    """
+    from .pdf_geometry import extract_visual_vibrato_evidence
+    groups = []
+    marks = sorted(extract_visual_vibrato_evidence(drawings), key=lambda m: (round(m.bbox[1], 1), m.bbox[0]))
+    for mark in marks:
+        x0, y0, x1, y1 = mark.bbox
+        width = x1 - x0
+        if not (left < x0 < right and notation_bottom < y0 < y1 < owner.line_ys[0]
+                and width > y1 - y0 and mark.cycles >= 4):
+            continue
+        group = next((g for g in groups if abs(g[-1].bbox[1] - y0) < .01
+                      and abs(g[-1].bbox[3] - y1) < .01
+                      and abs(g[-1].bbox[2] - g[-1].bbox[0] - width) < .01
+                      and g[-1].cycles == mark.cycles
+                      and 0 < x0 - g[-1].bbox[0] <= width), None)
+        if group is None:
+            groups.append([mark])
+        else:
+            group.append(mark)
+    result = []
+    for group in groups:
+        if len(group) < 3:
+            continue
+        x0 = group[0].bbox[0]
+        targets = [e for e in records if e['status'] == 'read' and e['kind'] == 'chord'
+                   and e.get('tie', {}).get('start') and not e.get('grace')
+                   and e['location']['bbox'][0] <= x0 <= e['location']['bbox'][2]]
+        if len(targets) != 1:
+            return None
+        event = targets[0]
+        following = [e for e in records if e['event_index'] == event['event_index'] + 1
+                     and e['status'] == 'read' and e.get('tie', {}).get('stop')
+                     and set(e['tie']['sources']) & set(event['tie']['sources'])]
+        if len(following) != 1 or following[0]['notehead']['count'] != event['notehead']['count']:
+            return None
+        end = group[-1].bbox[2]
+        if end < following[0]['location']['bbox'][2]:
+            return None
+        result.append(dict(event_index=event['event_index'], end_event_index=following[0]['event_index'],
+                           bbox=[x0, group[0].bbox[1], end, group[0].bbox[3]],
+                           sources=len(group), heads=event['notehead']['count']))
+    return result
+
+
+def apply_recovered_chord_vibrato(score, recovered):
+    """Retain a witnessed chord-wide wave only on newly recovered event owners."""
+    from .ir import VibratoTechnique
+
+    bars = {bar.index: bar for bar in score.bars}
+    waves = {(c.bar_index, w["event_index"], w["end_event_index"]): (w, c)
+             for c in recovered for w in c.raw.get("recovered_chord_vibrato", [])}
+    for (bar_index, first, last), (wave, candidate) in sorted(waves.items()):
+        bar = bars.get(bar_index)
+        if bar is None or not bar.events:
+            continue  # A later located refusal withheld the complete bar.
+        events = bar.events[first:last + 1]
+        if len(events) != last - first + 1 or any(len(e.notes) != wave["heads"] for e in events):
+            raise ValueError("Read chord vibrato lost its complete event owner")
+        for event in events:
+            for note in event.notes:
+                note.techniques.append(VibratoTechnique(kind="vibrato", width="unknown", speed="unknown"))
+                provenance = candidate.to_provenance()
+                provenance.bar_index = bar_index
+                provenance.raw = {"derived_from": "printed_tied_chord_wave",
+                                  "wave_bbox": wave["bbox"], "wave_glyph_count": wave["sources"]}
+                note.provenance.append(provenance)

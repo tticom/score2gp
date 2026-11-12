@@ -96,6 +96,88 @@ def _arcs_over_pair(arcs, stroke, left, right, pairs) -> list[tuple[float, float
             and sy0 - 2 * gap <= a[1] <= sy1 + 2 * gap]
 
 
+def _chord_slur_envelope(arcs, stroke, left, right, pairs) -> bool:
+    """Two slurs enclosing the same parallel chord slides name one transition.
+
+    Both ends of each arc must lie in the printed fret columns. One arc must
+    stand above every slide and the other below every slide; overlapping or
+    nested arcs on one side remain ambiguous.
+    """
+    if len(arcs) != 2:
+        return False
+    peers = [(s, a, b) for s, a, b in pairs
+             if (a.get("system_index"), a.get("bar_index")) ==
+             (left.get("system_index"), left.get("bar_index"))
+             and s["direction"] == stroke["direction"]
+             and all(max(box["x0"], peer["bbox"]["x0"]) <= min(box["x1"], peer["bbox"]["x1"])
+                     for box, peer in ((left["bbox"], a), (right["bbox"], b)))]
+    if len({a.get("string") for _, a, _ in peers}) < 2:
+        return False
+    if not all(a["bbox"]["x0"] <= arc[0] <= a["bbox"]["x1"]
+               and b["bbox"]["x0"] <= arc[2] <= b["bbox"]["x1"]
+               for arc in arcs for _, a, b in peers):
+        return False
+    top = min(s["bbox"][1] for s, _, _ in peers)
+    bottom = max(s["bbox"][3] for s, _, _ in peers)
+    return min(a[1] for a in arcs) < top and max(a[1] for a in arcs) > bottom
+
+
+def read_labeled_chord_departures(digits, drawings, arcs, labels, page_offset, first_index):
+    """Read a shallow labeled slide leaving a chord across one barline.
+
+    This is separate from the ordinary diagonal detector: a shallow line alone
+    has no slide authority. Require a printed slide label, a uniquely bound
+    pair on one string, a source chord, adjacent bars in one system, and one
+    slur ending inside both fret boxes. Timed chord ownership is checked again
+    when the mark is attached to the score.
+    """
+    marks = []
+    seen = set()
+    for drawing in drawings:
+        for item in drawing.get("items", []):
+            if item[0] != "l":
+                continue
+            a, b = item[1:3]
+            dx, dy = b.x - a.x, b.y - a.y
+            if not dx or not 0 < abs(dy / dx) < .15 or not 5 <= (dx * dx + dy * dy) ** .5 <= 50:
+                continue
+            box = (min(a.x, b.x), min(a.y, b.y), max(a.x, b.x), max(a.y, b.y))
+            if box in seen:
+                continue
+            seen.add(box)
+            stroke = {"bbox": box, "direction": "up" if dy / dx < 0 else "down"}
+            lefts = [d for d in digits if _binds_left(stroke, d, page_offset)]
+            rights = [d for d in digits if _binds_right(stroke, d, page_offset)]
+            if len(lefts) != 1 or len(rights) != 1:
+                continue
+            left, right = lefts[0], rights[0]
+            if (left.get("string") != right.get("string") or left.get("bar_index") is None
+                    or right.get("bar_index") != left["bar_index"] + 1
+                    or left.get("system_index") != right.get("system_index")):
+                continue
+            lines = left.get("raw", {}).get("tab_line_ys") or []
+            # A sustained head of the departing chord need not print another
+            # TAB digit. The timed notation chord, not a digit count, proves it.
+            if len(lines) != 6:
+                continue
+            gap = (lines[-1] - lines[0]) / 5
+            owning_labels = [label for label in labels
+                             if box[0] <= (label["bbox"]["x0"] + label["bbox"]["x1"]) / 2 <= box[2]
+                             and 0 <= box[1] - (label["bbox"]["y1"] - page_offset) <= 3 * gap]
+            over = [arc for arc in arcs
+                    if left["bbox"]["x0"] <= arc[0] <= left["bbox"]["x1"]
+                    and right["bbox"]["x0"] <= arc[2] <= right["bbox"]["x1"]
+                    and box[1] - 2 * gap <= arc[1] <= box[3] + 2 * gap]
+            if len(owning_labels) != 1 or len(over) != 1:
+                continue
+            marks.append({"index": first_index + len(marks), "bbox": list(box),
+                          "direction": stroke["direction"], "status": "read", "style": "legato",
+                          "placement": "between-notes", "ownership": "labeled_chord_departure",
+                          "anchor_candidate_id": left["id"], "source_candidate_id": left["id"],
+                          "target_candidate_id": right["id"]})
+    return marks
+
+
 def read_slide_marks(
     digits: list[dict[str, Any]],
     strokes: list[dict[str, Any]],
@@ -150,7 +232,7 @@ def read_slide_marks(
                 mark.update(status="refused", reason=REASON_DIFFERENT_STRINGS)
             else:
                 over = _arcs_over_pair(arcs, stroke, left, right, pairs)
-                if len(over) > 1:
+                if len(over) > 1 and not _chord_slur_envelope(over, stroke, left, right, pairs):
                     mark.update(status="refused", reason=REASON_SLUR_AMBIGUOUS)
                 else:
                     mark.update(status="read", style="legato" if over else "shift")

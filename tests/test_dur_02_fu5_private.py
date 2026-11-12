@@ -63,8 +63,8 @@ def converted():
 def test_real_source_techniques_survive_notation_bar_placement(converted):
     """Reject the old whole-TAB-system key mapping which drops every technique."""
     result, _ = converted
-    assert result["written_bars"] == 18
-    assert result["refused_bars"] == [3, 6, 9]
+    assert result["written_bars"] == 19
+    assert result["refused_bars"] == [3, 9]
     differences = [(d["bar_index"], d["event_index"], d["field"])
                    for d in result["differences"] if d["field"] in _oracle().TECHNIQUE_FIELDS]
     # SLIDE-01: slides whose type the page does not decide are no longer guessed. The three reference

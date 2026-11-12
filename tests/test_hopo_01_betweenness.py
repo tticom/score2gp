@@ -31,7 +31,8 @@ REAL = {
     "Lesson-5": (8, 0),
     "Lesson-4": (8, 0),
     "Melodic Soloing Masterclass": (12, 0),
-    "Can't Find My Way Home (open chord shenanigans)": (14, 0),
+    # REFUSE-20's newly read source bar 6 adds one reference-owned origin.
+    "Can't Find My Way Home (open chord shenanigans)": (15, 0),
     "Bebop Licks in Am": (24, 5),
 }
 

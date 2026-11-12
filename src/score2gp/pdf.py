@@ -386,22 +386,26 @@ def _slide_mark_candidates(candidates: list[dict[str, Any]], inspection: dict[st
     no authority to create a technique. See ``pdf_slide_marks`` for the reading rules.
     """
     import pymupdf as fitz  # type: ignore[import-not-found]
-    from .pdf_slide_marks import read_slide_marks, slur_arcs
+    from .pdf_slide_marks import read_labeled_chord_departures, read_slide_marks, slur_arcs
 
     result = []
-    arcs_by_page: dict[int, list] = {}
     for page in inspection.get("pages", []):
         strokes = page.get("visual_slide_evidence", [])
-        if not strokes:
-            continue
         page_offset = sum(p["height"] for p in inspection["pages"] if p["page"] < page["page"])
         digits = [c for c in candidates if c.get("kind") == "fret" and c.get("bbox")
                   and c.get("page_index") == page["page"] and c.get("string") is not None]
-        if page["page"] not in arcs_by_page:
-            with fitz.open(pdf_path) as doc:
-                arcs_by_page[page["page"]] = slur_arcs(doc[page["page"] - 1].get_drawings())
+        labels = [c for c in candidates if c.get("kind") == "technique-text" and c.get("bbox")
+                  and c.get("page_index") == page["page"] and c.get("raw_text", "").strip().lower() in ("sl", "sl.")]
+        if not strokes and not labels:
+            continue
+        with fitz.open(pdf_path) as doc:
+            drawings = doc[page["page"] - 1].get_drawings()
+            arcs = slur_arcs(drawings)
         by_id = {d["id"]: d for d in digits}
-        for mark in read_slide_marks(digits, strokes, arcs_by_page[page["page"]], page_offset):
+        marks = read_slide_marks(digits, strokes, arcs, page_offset)
+        marks += read_labeled_chord_departures(digits, drawings, arcs, labels,
+                                               page_offset, len(strokes))
+        for mark in marks:
             anchor = by_id[mark["anchor_candidate_id"]]
             x0, y0, x1, y1 = mark["bbox"]
             if mark["placement"] == "before-note":
@@ -412,7 +416,7 @@ def _slide_mark_candidates(candidates: list[dict[str, Any]], inspection: dict[st
                 candidate_id = f"pdf-p{page['page']:03d}-slide-mark-{mark['index']}"
                 reading = {k: mark[k] for k in ("status", "style", "reason") if k in mark}
                 raw = {"direction": mark["direction"], "placement": mark["placement"], "reading": reading}
-                for key in ("source_candidate_id", "target_candidate_id"):
+                for key in ("source_candidate_id", "target_candidate_id", "ownership"):
                     if key in mark:
                         raw[key] = mark[key]
             result.append(make_tab_candidate(

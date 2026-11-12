@@ -23,14 +23,13 @@ LABELS = [(0, 0), (0, 4), (1, 5), (2, 0), (2, 5), (3, 0),
           (8, 0), (8, 5), (9, 5), (10, 0), (10, 5), (11, 0),
           (12, 0), (12, 5), (13, 5), (14, 0), (14, 5), (15, 0),
           (16, 0), (16, 5), (17, 5), (18, 0), (18, 5), (19, 0)]
-REFUSED = {3: "notehead_digit_count_mismatch", 6: "note_duration_event_unread",
-           9: "notehead_digit_count_mismatch"}
+REFUSED = {3: "notehead_digit_count_mismatch", 9: "notehead_digit_count_mismatch"}
 
 
 def _assert_chords(root, reference):
     truth = _chords(reference)
     wanted = {loc: truth[loc] for loc in LABELS if loc[0] not in REFUSED}
-    assert len(wanted) == 26
+    assert len(wanted) == 28
     assert _chords(root) == wanted
 
 
@@ -141,13 +140,12 @@ def test_refused_bars_stay_empty_and_unplaced_marks_keep_located_reasons(convert
     assert len(route["bars"]) == 21
     assert {b["source_bar_index"]: b["reason"] for b in route["bars"]
             if b["status"] == "refused"} == REFUSED
-    assert route["summary"]["written_bars"] == 18
+    assert route["summary"]["written_bars"] == 19
     assert all(bar not in REFUSED for bar, _ in _beats(output))
     score = json.loads((build / "score.ir.json").read_text())
     unplaced = [w for w in score["warnings"] if w["code"] == "pdf_only_tab_attachment_bar_unplaced"]
     refused_marks = {"pdf-p001-c0039": 4, "pdf-p001-c0040": 4, "pdf-p001-c0043": 4,
-                     "pdf-p001-c0112": 7, "pdf-p001-c0113": 7, "pdf-p001-c0115": 7,
-                     "pdf-p001-c0117": 7, "pdf-p001-c0159": 10, "pdf-p001-c0160": 10,
+                     "pdf-p001-c0159": 10, "pdf-p001-c0160": 10,
                      "pdf-p001-c0161": 10}
     wanted = {ident: (bar, "annotation_bar_refused") for ident, bar in refused_marks.items()}
     wanted.update({"pdf-p001-c0005": (1, "annotation_technique_unsupported"),
@@ -157,7 +155,7 @@ def test_refused_bars_stay_empty_and_unplaced_marks_keep_located_reasons(convert
                    "pdf-p002-c0259": (16, "annotation_per_head_target_unresolved"),
                    "pdf-p001-c0189": (None, "annotation_system_unresolved"),
                    "pdf-p002-c0361": (None, "annotation_system_unresolved")})
-    assert len(unplaced) == 17
+    assert len(unplaced) == 13
     assert {w["provenance"][0]["raw_token_id"]: (
         w["provenance"][0]["bar_index"], w["message"].split("reason=")[1].rstrip("."))
             for w in unplaced} == wanted

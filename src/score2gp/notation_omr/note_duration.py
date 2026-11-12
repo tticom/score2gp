@@ -789,8 +789,11 @@ def _wave_column_ids(glyphs: list[Glyph], space: float) -> set[str]:
     a run of ``WAVE_COLUMN_MIN_STROKES`` or more strokes of one measured form, stacked without a gap, is a
     wave column. A lone stroke, or strokes of unequal form or with a gap between them, is not matched.
     """
+    from ..pdf_arpeggios import _marks_from_drawings  # noqa: PLC0415 - share the positive arrow/curl reader
+
     narrow = [g for g in glyphs if g.curved and g.filled and g.w <= space and g.h <= 1.1 * space]
-    ids: set[str] = set()
+    ids = {glyphs[index].ident for mark in _marks_from_drawings([g.drawing for g in glyphs])
+           for index in mark["stroke_indices"]}
     columns: list[list[Glyph]] = []
     used: set[str] = set()
     for first in sorted(narrow, key=lambda g: (g.bbox[0], g.bbox[1])):
@@ -1811,6 +1814,7 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
     overlaps: list[dict[str, Any]] = []
     wave_ids = _wave_column_ids(symbols.glyphs, s)  # the column runs past this staff's zone
     head_boxes = [h.bbox for h in heads]
+    staggered = _staggered_accidental_owners(glyphs, events, boundaries, staff)
     accidental_marks: list[tuple[tuple[float, float, float, float], str, str, float]] = []
     for t in symbols.texts:
         direction = ACCIDENTAL_TEXT.get(t.text)
@@ -1822,6 +1826,10 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
         if g.ident in dead_beam_ids:
             located_events.append({"_rest": g, "_rest_kind": None, "_cx": g.cx, "_kind": "unclassified",
                                    "_dots": [], "_unread": "beam_attached_to_dead_note_x_head"})
+            continue
+        if g.ident in staggered:
+            direction, event, head = staggered[g.ident]
+            _attach_accidental_to_head(event, head, direction, g.ident, staff)
             continue
         # Rests stand within reach of the staff; beyond it are tempo marks, text symbols and the like.
         if not (staff.top - REST_VERTICAL_REACH_SPACES * s <= g.bbox[1] and g.bbox[3] <= staff.bottom + REST_VERTICAL_REACH_SPACES * s):
@@ -2196,12 +2204,62 @@ def _attach_accidentals(events: list[dict[str, Any]], marks: list[tuple[tuple[fl
         if best is None:
             continue
         _, event, head = best
-        step = round((staff.bottom - head.cy) / (space / 2))
-        natural = _TREBLE_STEP_PITCH_CLASSES[step % 7]
-        pitch_class = (natural + {"sharp": 1, "flat": -1, "natural": 0}[direction]) % 12
-        event.setdefault("_accidentals", []).append(
-            {"direction": direction, "pitch_class": pitch_class, "source": ident,
-             "head_staff_position_index": round((head.cy - staff.top) / (space / 2))})
+        _attach_accidental_to_head(event, head, direction, ident, staff)
+
+
+def _attach_accidental_to_head(event: dict[str, Any], head: Glyph, direction: str,
+                               ident: str, staff: Staff) -> None:
+    step = round((staff.bottom - head.cy) / (staff.space / 2))
+    natural = _TREBLE_STEP_PITCH_CLASSES[step % 7]
+    pitch_class = (natural + {"sharp": 1, "flat": -1, "natural": 0}[direction]) % 12
+    event.setdefault("_accidentals", []).append(
+        {"direction": direction, "pitch_class": pitch_class, "source": ident,
+         "head_staff_position_index": round((head.cy - staff.top) / (staff.space / 2))})
+
+
+def _staggered_accidental_owners(glyphs: list[Glyph], events: list[dict[str, Any]],
+                                 boundaries: list[tuple[float, float]], staff: Staff
+                                 ) -> dict[str, tuple[str, dict[str, Any], Glyph]]:
+    """Read an outlying accidental through a contiguous run belonging to one chord.
+
+    Each intervening glyph must itself be an identified accidental on a pitch
+    of that chord. The outlying mark must name exactly one head; neither a
+    barline nor an unclassified shape can bridge the gap. Ordinary accidentals
+    keep their existing direct attachment path, and identified rests never enter
+    the run.
+    """
+    space = staff.space
+    marks = [(g, _accidental_direction(g, space)) for g in glyphs]
+    marks = [(g, direction) for g, direction in marks
+             if direction and _rest_glyph(g, staff) not in WRITTEN_VALUES]
+    owners = {}
+    for glyph, direction in marks:
+        candidates = []
+        anchor = _glyph_anchor(glyph, direction, space)
+        for event in events:
+            chord = event.get("_heads", ())
+            if len(chord) < 2:
+                continue
+            for head in chord:
+                gap = head.bbox[0] - glyph.bbox[2]
+                if gap <= ACCIDENTAL_REACH_SPACES * space or abs(head.cy - anchor) > .25 * space:
+                    continue
+                if any(glyph.bbox[2] < edge[0] < head.bbox[0] for edge in boundaries):
+                    continue
+                run = [g for g, kind in marks
+                       if glyph.bbox[0] <= g.bbox[0] and g.bbox[2] <= head.bbox[0]
+                       and any(abs(h.cy - _glyph_anchor(g, kind, space)) <= .25 * space for h in chord)]
+                edge = glyph.bbox[2]
+                count = 1
+                for mark in sorted(run, key=lambda g: g.bbox[0]):
+                    if edge < mark.bbox[2] and mark.bbox[0] <= edge + .5 * space:
+                        edge = mark.bbox[2]
+                        count += 1
+                if count >= 2 and head.bbox[0] - edge <= .5 * space:
+                    candidates.append((direction, event, head))
+        if len(candidates) == 1:
+            owners[glyph.ident] = candidates[0]
+    return owners
 
 
 def _event_bbox(event: dict[str, Any]) -> tuple[float, float, float, float]:

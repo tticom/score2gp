@@ -15,6 +15,7 @@ from slide_gpif import gpif_without_slides_sha256, gpif_with_legacy_double_barli
 from chord_gpif import without_verified_chord_additions
 from score2gp.notation_omr.note_duration import read_note_durations
 from test_dur_02_oracle import read_gp_bars
+from refuse20_controls import without_verified_added_bar
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -138,6 +139,8 @@ def test_base_written_parentheses_keep_byte_identical_gpif(
             # the preserved parenthesized bars; reject dropping the new marks.
             expected_let_ring_notes = 10 if name == "Melodic_Expressions_Chap_19_" else 0
             assert gpif.count(b"<LetRing />") == expected_let_ring_notes
+            if name == "Melodic_Expressions_Chap_19_":
+                gpif = without_verified_added_bar(gpif, folder / "head/score.ir.json", 4)
             # OMIT-05-FU1 deliberately adds default template sizes. Verify
             # them before removing only those attributes for the old digests.
             from slide_gpif import without_verified_default_template_sizes
