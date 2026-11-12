@@ -1907,7 +1907,7 @@ def build_ir_from_tabraw_only(
                 printed_candidates=tabraw.candidates, **extra)
 
         from .pdf_tab_digit_recovery import (recover_printed_bar_digits, unread_new_chord_arrows,
-                                             apply_recovered_chord_labels)
+                                             apply_recovered_chord_labels, apply_recovered_chord_vibrato)
         note_durations, bars, note_type_route = _assemble()
         recovered, withheld = recover_printed_bar_digits(
             tabraw.source_pdf, note_durations, note_type_route, tabraw.candidates)
@@ -2126,6 +2126,7 @@ def build_ir_from_tabraw_only(
     from .pdf_attachment_recovery import recover_unplaced_attachments
     recover_unplaced_attachments(score, tabraw, note_durations, classify=_classify_technique)
     apply_recovered_chord_labels(score, tabraw.candidates, recovered)
+    apply_recovered_chord_vibrato(score, recovered)
 
     # Construct diagnostics
     tabraw_candidates_loaded = len(tabraw.candidates)

@@ -66,9 +66,27 @@ def test_read_bare_palm_marks_do_not_refuse_a_clear_bar_in_the_staff(converted):
 
 
 def _check_refused(converted):
-    route, _ = converted
-    for index in (2, 3, 5, 6):
+    route, ir = converted
+    for index in (2, 5):
         assert route[index]["status"] == "refused", f"BAR_{index}_OTHER_UNREAD_EVIDENCE_LOST"
+    # REFUSE-20 positively reads these complete tied chords and their waves.
+    # Requiring refusal here would reject the new reader. Require the printed
+    # content instead, so blind parenthesis acceptance still fails this guard.
+    bars = {b["index"]: b for b in ir["bars"]}
+    for index, count, heads in ((3, 16, 2), (6, 13, 3)):
+        message = f"BAR_{index}_OTHER_UNREAD_EVIDENCE_LOST"
+        assert route[index]["status"] == "written", message
+        events = bars[route[index]["output_bar_index"]]["events"]
+        assert len(events) == count, message
+        assert sum(e["timing"]["duration_ticks"] for e in events) == 3840, message
+        origin, destination = events[11:13]
+        assert len(origin["notes"]) == len(destination["notes"]) == heads, message
+        assert [(n["string"], n["fret"]) for n in origin["notes"]] == [
+            (n["string"], n["fret"]) for n in destination["notes"]], message
+        assert all(any(t["kind"] == "tie" and t["state"] == "stop" for t in n["techniques"])
+                   for n in destination["notes"]), message
+        assert all(any(t["kind"] == "vibrato" for t in n["techniques"])
+                   for e in (origin, destination) for n in e["notes"]), message
 
 
 def test_other_unread_marks_and_spans_still_refuse_their_bars(converted):
@@ -77,8 +95,9 @@ def test_other_unread_marks_and_spans_still_refuse_their_bars(converted):
 
 
 def test_allow_any_parenthesized_number_would_write_unfinished_bars(converted, tmp_path, monkeypatch):
-    """Reject ALLOW_ANY_PARENTHESIS: printed vibrato on these bars is still unread."""
+    """Reject ALLOW_ANY_PARENTHESIS without the positive chord/wave proof."""
     _check_refused(converted)
+    monkeypatch.setattr(recovery, "_read_tied_parenthesized_words", lambda *a: set())
     monkeypatch.setattr(recovery, "_unread_number_word", lambda *a: None)
     with pytest.raises(AssertionError, match="OTHER_UNREAD_EVIDENCE_LOST"):
         _check_refused(_convert(tmp_path))
@@ -94,6 +113,7 @@ def test_drop_bare_palm_mark_reader_fails(converted, tmp_path, monkeypatch):
 
 def test_drop_number_and_tab_mark_guards_fails(converted, tmp_path, monkeypatch):
     _check_refused(converted)
+    monkeypatch.setattr(recovery, "_read_tied_parenthesized_words", lambda *a: set())
     monkeypatch.setattr(recovery, "_unread_number_word", lambda *a: None)
     monkeypatch.setattr(recovery, "_unread_tab_ink", lambda *a: False)
     with pytest.raises(AssertionError, match="OTHER_UNREAD_EVIDENCE_LOST"):
