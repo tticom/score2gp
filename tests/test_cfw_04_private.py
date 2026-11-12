@@ -35,14 +35,13 @@ def test_every_written_bar_matches_reference_and_every_refusal_is_located():
         assert result.returncode == 0, result.stderr
         route = json.loads((folder / "intermediate" / "note-type-route.json").read_text(encoding="utf-8"))
         assert len(route["bars"]) == 21
-        assert route["summary"]["written_bars"] == 18
+        assert route["summary"]["written_bars"] == 19
         refused = [bar for bar in route["bars"] if bar["status"] == "refused"]
         assert [(bar["source_bar_index"], bar["reason"]) for bar in refused] == [
             (3, "notehead_digit_count_mismatch"),
-            (6, "note_duration_event_unread"),
             (9, "notehead_digit_count_mismatch"),
         ]
-        assert route["bars"][6]["detail"] == "unsupported_overlapping_form"
+        assert route["bars"][6]["status"] == "written"
         assert all(bar["location"]["bar_index"] == bar["source_bar_index"] for bar in refused)
 
         spec = importlib.util.spec_from_file_location("cfw04_oracle", ROOT / "tests" / "test_dur_02_oracle.py")
@@ -58,4 +57,21 @@ def test_every_written_bar_matches_reference_and_every_refusal_is_located():
                 continue
             assert len(want["events"]) == len(have["events"]), bar
             for index, (left, right) in enumerate(zip(want["events"], have["events"])):
-                assert {field: left[field] for field in FIELDS} == {field: right[field] for field in FIELDS}, (bar, index)
+                if bar != 6:
+                    assert {field: left[field] for field in FIELDS} == {field: right[field] for field in FIELDS}, (bar, index)
+                    continue
+                # REFUSE-20's held-out rolled chord has a printed X. GPIF's
+                # nominal Fret on a native Muted note is not a printed fret.
+                # Compare every sounding position, the exact muted strings,
+                # and every independently read rhythm/technique channel. All
+                # previously written bars retain their original exact check.
+                fields = [f for f in oracle.EVENT_FIELDS if f != "positions"]
+                assert {f: left.get(f) for f in fields} == {f: right.get(f) for f in fields}, (bar, index)
+                muted = left.get("percussive_strikes", [])
+                assert len(left["positions"]) == len(right["positions"])
+                assert [p for p in left["positions"] if p[0] not in muted] == [
+                    p for p in right["positions"] if p[0] not in muted
+                ], (bar, index)
+        expected_rolls = [r for r in oracle.read_gp_arpeggios(REFERENCE) if r[0] == 7]
+        assert len(expected_rolls) == 1
+        assert [r for r in oracle.read_gp_arpeggios(output) if r[0] == 7] == expected_rolls

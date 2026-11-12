@@ -10,6 +10,7 @@ from typer.testing import CliRunner
 
 from score2gp.notation_omr import note_duration as nd
 from score2gp.cli import app
+from refuse20_controls import disable_duration_roll_extension
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -99,6 +100,10 @@ def _assert_located_symbols(source, dead_heads, overlaps):
 ])
 def test_silent_unclassified_drop_mutant_fails_on_the_real_source(
         monkeypatch, name, dead_heads, overlaps):
+    if name == "Lesson-3":
+        # The former unknown wave parts are now positively owned. Disable
+        # only that new reader to retain every original silent-drop assertion.
+        disable_duration_roll_extension(monkeypatch)
     source = ROOT / "fixtures/private" / (name + ".pdf")
     assert source.is_file(), "required approved private source missing"
     # Counts come from the source-contour census. Base-written overlaps remain

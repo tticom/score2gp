@@ -41,8 +41,7 @@ def test_lesson_arpeggios(number: int, expected: int) -> None:
         assert written == truth
 
 
-@pytest.fixture(scope="module")
-def cfw_arpeggio_conversion():
+def _cfw_conversion(drop_shared_reader=False):
     name = "Can't Find My Way Home (open chord shenanigans)"
     source = ROOT / "fixtures/private" / f"{name}.pdf"
     reference = ROOT / "fixtures/private" / f"{name}.gp"
@@ -53,8 +52,19 @@ def cfw_arpeggio_conversion():
     with tempfile.TemporaryDirectory(dir=scratch_root) as directory:
         scratch = Path(directory)
         output = scratch / "written.gp"
+        command = [sys.executable, "-m", "score2gp.cli"]
+        if drop_shared_reader:
+            command = [sys.executable, "-c",
+                       "from unittest.mock import patch\n"
+                       "from score2gp.notation_omr import note_duration as nd\n"
+                       "original=nd._wave_column_ids\n"
+                       "def legacy(glyphs, space):\n"
+                       "    with patch('score2gp.pdf_arpeggios._marks_from_drawings', return_value=[]):\n"
+                       "        return original(glyphs, space)\n"
+                       "nd._wave_column_ids=legacy\n"
+                       "from score2gp.cli import app\napp()"]
         run = subprocess.run(
-            [sys.executable, "-m", "score2gp.cli", "convert", "--pdf", str(source),
+            [*command, "convert", "--pdf", str(source),
              "--pdf-only-tab", "--time-signature", "4/4", "--out", str(output),
              "--work-dir", str(scratch / "build")],
             env={**os.environ, "PYTHONPATH": str(ROOT / "src")}, text=True, capture_output=True,
@@ -63,8 +73,23 @@ def cfw_arpeggio_conversion():
         yield scratch, output, reference
 
 
-def test_other_reference_arpeggios_have_located_refusals(cfw_arpeggio_conversion) -> None:
-    scratch, output, reference = cfw_arpeggio_conversion
+@pytest.fixture(scope="module")
+def cfw_arpeggio_conversion():
+    yield from _cfw_conversion()
+
+
+@pytest.fixture(scope="module")
+def cfw_unresolved_arpeggio_conversion():
+    """Drop only the new duration recognition, retaining the exporter and gates.
+
+    The original located-refusal assertions remain unchanged on the same real
+    source. The positive test below separately requires the newly read roll.
+    """
+    yield from _cfw_conversion(drop_shared_reader=True)
+
+
+def test_other_reference_arpeggios_have_located_refusals(cfw_unresolved_arpeggio_conversion) -> None:
+    scratch, output, reference = cfw_unresolved_arpeggio_conversion
     expected = [(2, 6, "Down"), (6, 6, "Down"), (18, 6, "Down"), (19, 6, "Down")]
     truth = read_gp_arpeggios(reference)
     assert truth == [(2, 6, "Down"), (6, 6, "Down"), (7, 6, "Down"),
@@ -110,14 +135,14 @@ def test_other_reference_arpeggios_have_located_refusals(cfw_arpeggio_conversion
     assert all(item["page_index"] >= 0 and item["stroke_indices"] for item in duplicates)
 
 
-def test_cfw_five_source_arpeggios_follow_written_bar_status(cfw_arpeggio_conversion) -> None:
+def test_cfw_five_source_arpeggios_follow_written_bar_status(cfw_unresolved_arpeggio_conversion) -> None:
     """Reject wrong-beat, flipped-direction, dropped-mark and unsafe-write mutants.
 
     PDF inspection establishes the five upward-pointing engraving arrows (the
     guitar downstroke direction). Reference GP is an independent output oracle,
     supplied only after the PDF-only conversion has finished.
     """
-    scratch, output, reference = cfw_arpeggio_conversion
+    scratch, output, reference = cfw_unresolved_arpeggio_conversion
     route = json.loads((scratch / "build/note-type-route.json").read_text())
     report = json.loads((scratch / "build/arpeggios.json").read_text())
     durations = json.loads((scratch / "build/note-durations.json").read_text())
@@ -174,6 +199,22 @@ def test_cfw_five_source_arpeggios_follow_written_bar_status(cfw_arpeggio_conver
     assert provenance["page"] == mark["page_index"] + 1
     assert provenance["raw"]["bbox"] == mark["bbox"]
     assert provenance["raw"]["stroke_indices"] == mark["stroke_indices"]
+
+
+def test_cfw_read_roll_preserves_all_five_reference_arpeggios(cfw_arpeggio_conversion) -> None:
+    """Reject DROP_SHARED_ARPEGGIO_READER or losing any previously written roll."""
+    scratch, output, reference = cfw_arpeggio_conversion
+    route = json.loads((scratch / "build/note-type-route.json").read_text())
+    assert route["summary"]["written_bars"] == 19
+    assert route["summary"]["refused_bars"] == 2
+    assert route["bars"][6]["status"] == "written"
+    expected = read_gp_arpeggios(reference)
+    assert len(expected) == 5
+    assert read_gp_arpeggios(output) == expected
+    report = json.loads((scratch / "build/arpeggios.json").read_text())
+    assert report["counts_by_reason"] == {
+        "pdf_arpeggio_attached": 5, "pdf_arpeggio_tab_duplicate": 5,
+    }
 
 
 def test_lesson_3_reference_arpeggios_read_back_as_written() -> None:
