@@ -314,6 +314,12 @@ def _runs(shape: _NoteheadShape, vertical: bool, at: float, lo: float, hi: float
     Exact: the line is cut wherever an outline edge crosses it and each piece is tested once.
     """
     cuts = {lo, hi}
+    # A horizontal midpoint query uses the same edge intersection for every
+    # interval on this scan line. Compute those crossings once, with exactly
+    # _inside_fill's arithmetic and half-open vertex rule, instead of walking
+    # the whole contour again for each midpoint. Keep inclusive intersections
+    # for cuts: a vertex can split the line without contributing a crossing.
+    crossings: list[tuple[float, int]] = []
     for ax, ay, bx, by in shape.fill_edges:
         if vertical:
             a, b, p, q = ax, bx, ay, by
@@ -323,13 +329,20 @@ def _runs(shape: _NoteheadShape, vertical: bool, at: float, lo: float, hi: float
             v = p + (at - a) * (q - p) / (b - a)
             if lo < v < hi:
                 cuts.add(v)
+            if not vertical and (ay <= at) != (by <= at):
+                crossings.append((v, 1 if by > ay else -1))
     ordered = sorted(cuts)
     runs: list[list[float]] = []
     for a, b in zip(ordered, ordered[1:]):
         if b - a <= 1e-9:
             continue
         m = (a + b) / 2
-        inside = _inside_fill(at, m, shape) if vertical else _inside_fill(m, at, shape)
+        if vertical:
+            inside = _inside_fill(at, m, shape)
+        elif shape.even_odd:
+            inside = sum(x > m for x, _ in crossings) % 2 == 1
+        else:
+            inside = sum(direction for x, direction in crossings if x > m) != 0
         if not inside:
             continue
         if runs and abs(runs[-1][1] - a) <= 1e-6:
