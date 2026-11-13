@@ -38,6 +38,7 @@ from typing import Any
 from score2gp.meter import bar_capacity_ticks
 
 from .font_glyphs import is_music_font_text, music_font_drawings
+from .bends import read_simple_bends
 
 from ..pdf import (
     CURVE_FLATTENING_TOLERANCE_PT,
@@ -848,6 +849,24 @@ def _is_dot(glyph: Glyph, space: float) -> bool:
             and DOT_MIN_SPACES * space <= glyph.h <= DOT_MAX_SPACES * space
             and abs(glyph.w - glyph.h) <= DOT_ROUNDNESS_SPACES * space
             and _inside_fill(glyph.cx, glyph.cy, glyph.shape))
+
+
+def _is_unrepresented_fermata(glyph: Glyph, space: float) -> bool:
+    """Locate a dome with a separate central dot; never supply a duration.
+
+    Top to bottom, the painted contour splits from one band into the dome's
+    two legs, then three bands around its isolated dot, then two legs again.
+    The centre vertical scan meets dome and dot; side scans meet only dome.
+    """
+    if not (glyph.filled and glyph.curved and 1.8 <= glyph.w / space <= 3.5
+            and 1.0 <= glyph.h / space <= 2.5
+            and len(_path_subpaths(glyph.drawing.get("items", []))) == 2):
+        return False
+    runs = []
+    for count in _row_counts(glyph):
+        if not runs or runs[-1] != count:
+            runs.append(count)
+    return runs == [1, 2, 3, 2] and _column_counts(glyph, (0.1, 0.3, 0.5, 0.7, 0.9)) == [1, 1, 2, 1, 1]
 
 
 def _is_beam(glyph: Glyph, space: float) -> bool:
@@ -1933,6 +1952,24 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
     if bars and not any(e["_bar"] == bar_count - 1 for e in events) and bars[-1][1] - bars[-1][0] < 3 * s:
         bars = bars[:-1]  # the sliver after a final barline drawn short of the staff end
 
+    if not base_equivalent:
+        events = read_simple_bends(events, glyphs, [t for t in symbols.texts if in_zone(t.cx, t.cy)],
+                                   head_kind, s, bars)
+        if any(e.get("_bend") for e in events):
+            state["new_bend_seen"] = True
+        if state.get("new_bend_seen"):
+            for glyph in glyphs:
+                if not _is_unrepresented_fermata(glyph, s):
+                    continue
+                owners = [e for e in events if e.get("_heads")
+                          and abs(e["_cx"] - glyph.cx) <= 0.5 * s
+                          and 0 <= min(h.bbox[1] for h in e["_heads"]) - glyph.bbox[3] <= 3 * s]
+                if len(owners) == 1:
+                    # Locate the hold sign; the assembler gates only newly
+                    # read bend bars and their newly enabled continuations.
+                    overlaps.append({"glyph": glyph, "cx": glyph.cx,
+                                     "class": "fermata_unrepresented", "position": "over_notehead"})
+
     for item in non_events:
         glyph = item.pop("glyph")
         cx = item.pop("cx")
@@ -1950,7 +1987,7 @@ def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], sta
         position = None if bar is None else sum(
             1 for e in events if e["_bar"] == bar and e["_cx"] < item["cx"])
         state["diagnostics"].setdefault("unread_symbols", []).append({
-            "status": "unread", "class": "unsupported_overlapping_form", "reason": item["position"],
+            "status": "unread", "class": item.get("class", "unsupported_overlapping_form"), "reason": item["position"],
             "shape_class": _unread_shape_class(glyph, s), "source": glyph.ident,
             "location": {"page_index": staff.page_index, "system_index": state["system_index"],
                          "bar_index": None if bar is None else state["bar_offset"] + bar,
@@ -2413,6 +2450,8 @@ def _record(event: dict[str, Any], staff: Staff, state: dict[str, Any], bar: int
     }
     parts = {"kind": "rest", "head_kind": None, "has_stem": False, "flag_hooks": 0, "beam_count": 0,
              "beam_group_size": 0, "rest_glyph": None}
+    if event.get("_bend"):
+        record["bend"] = event["_bend"]
     reason = event.get("_unread")
     if event.get("_unread_symbols"):
         record["unread_symbols"] = [
@@ -2835,7 +2874,7 @@ def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = No
     state["diagnostics"]["bar_time_signatures"] = bar_time_signatures
     state["diagnostics"]["bar_key_signatures"] = bar_key_signatures
     if not _base_equivalent and any(
-        symbol["class"] in ("unsupported_overlapping_form", "parenthesized_head_unrepresented")
+        symbol["class"] in ("unsupported_overlapping_form", "parenthesized_head_unrepresented", "fermata_unrepresented")
         for symbol in state["diagnostics"].get("unread_symbols", [])
     ):
         # UNREAD-01 preservation is source-derived, never a fixture/bar list.

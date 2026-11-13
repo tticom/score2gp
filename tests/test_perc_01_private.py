@@ -110,6 +110,10 @@ LEDGER = {'Castles Made of Sand': {
                           12: (1,
                                'bbabb968b5dd1dd1b6906df6eb09b4be2f8c80a2b477bcba11d4e880282d686d')},
  'Crossroads': {3: (6, '3f7e44f06938d9b40b6c46975b47dfa3cccce99ca3702e5d965e75e12b6afea5'),
+                # REFUSE-21: independently page-transcribed complete bars.
+                # The separate bend test checks their amounts and owners.
+                14: (6, '0a0bfe8110c10dede2bd37673aa6458e4cf9d413b7323da512e0b93724b2431f'),
+                37: (14, '303e5af09f5f3531c7d71c6f8c472c53c26250f72f8dc3ad8413c39af4020388'),
                 # REFUSE-10 bar (vibrato line over the heads no longer refuses it): rhythm checked against
                 # the printed notation page and the bar total; strings/frets are a regression pin, not an
                 # independent transcription. No reference GP exists: not independently verified.
@@ -157,6 +161,8 @@ STORAGE = {('Castles Made of Sand', 1): '6b8146334d8a5425c8abb46368180aab573063c
  ('Castles Made of Sand', 8): '7cb51280b9f8ce17671235a4e14a4c9d8ada64cdcade26897cd2b919806446d0',
  ('Crossroads', 1): '76d9674abe162b5396215b1aafce3692c3f2e7fc7a092f734b0cc5189d8bb965',
  ('Crossroads', 3): '76d9674abe162b5396215b1aafce3692c3f2e7fc7a092f734b0cc5189d8bb965',
+ # REFUSE-21: dead-fret storage regression pin, not a sounding-pitch oracle.
+ ('Crossroads', 14): '6b8146334d8a5425c8abb46368180aab573063c6f75c60e7930ffc47ccfec43d',
  ('Crossroads', 15): 'af74118f9d5034cd6ff91f9dbbc34180dc062faee02c7d88b65276fab9075cee',
  ('Crossroads', 16): '2b8056269f5fa44ed1ea4d098824e072daf030c8e359b22552fdd051891b0283',
  ('Crossroads', 25): '147a2421153bccf993b1cefbe8fd79974c620bc5841dd382987c9d13c2155cbe',
