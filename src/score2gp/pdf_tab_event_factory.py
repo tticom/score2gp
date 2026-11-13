@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, Sequence
 
 from .ir import (
     DEFAULT_TICKS_PER_QUARTER,
+    BendTechnique,
     Event,
     GraceTiming,
     NotatedDuration,
@@ -128,7 +129,10 @@ def build_note_type_event(
                 confidence=candidate.confidence if candidate else (source.confidence if source else 1.0),
                 provenance=provenance,
                 techniques=([TieTechnique(state=note_tie_state)] if note_tie_state else [])
-                           + ([PalmMuteTechnique()] if palm_sources else []),
+                           + ([PalmMuteTechnique()] if palm_sources else [])
+                           + ([BendTechnique(semitones=record["bend"]["semitones"],
+                                             text=record["bend"]["label"])]
+                              if record.get("bend") and not is_strike else []),
                 spelling=(NoteSpelling(accidental=printed[pitch % 12], source="printed")
                           if pitch is not None and pitch % 12 in printed and pitch % 12 in BLACK_KEYS else None),
             )

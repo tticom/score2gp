@@ -569,7 +569,7 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
     empty_source = not digits and empty_notation_source(note_durations)
     overlaps: dict[int, list[dict[str, Any]]] = {}
     for symbol in diagnostics.get("unread_symbols", []):
-        if symbol["class"] in ("unsupported_overlapping_form", "parenthesized_head_unrepresented"):
+        if symbol["class"] in ("unsupported_overlapping_form", "parenthesized_head_unrepresented", "fermata_unrepresented"):
             overlaps.setdefault(symbol["location"]["bar_index"], []).append(symbol)
     base_written: set[tuple[Any, ...]] = set()
     baseline = diagnostics.get("base_equivalent_note_durations")
@@ -617,6 +617,7 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
         key = bar_keys.get(source_bar, {})
         system = system_of[source_bar]
         records = sorted(by_bar.get(source_bar, []), key=lambda r: r["event_index"])
+        new_bend_bar = any(r.get("bend") for r in records)
         bar_digits = placed.get(source_bar, [])
         output_index = source_bar + 1
         entry: dict[str, Any] = {
@@ -712,13 +713,16 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
                     status=check["status"], total_quarters=str(total), expected_quarters=str(expected))
         entry["events"] = [{"event_index": m["record"]["event_index"], "kind": m["record"]["kind"],
                             "match": m["match"]} for m in matched]
-        if source_bar in overlaps:
+        active_overlaps = [s for s in overlaps.get(source_bar, [])
+                           if s["class"] != "fermata_unrepresented" or new_bend_bar
+                           or (tied_from or {}).get("new_bend_bar")]
+        if active_overlaps:
             bounds = system["bars"][source_bar - system["first_bar_index"]]
             preserved = (system["page_index"], system["system_index"], *bounds) in base_written
-            entry["unread_symbols"] = overlaps[source_bar]
+            entry["unread_symbols"] = active_overlaps
             entry["overlap_preservation_basis"] = (
                 "base_equivalent_written" if preserved else "base_equivalent_refused")
-            ghost_only = all(sym["class"] == "parenthesized_head_unrepresented" for sym in overlaps[source_bar]) and all(
+            ghost_only = all(sym["class"] == "parenthesized_head_unrepresented" for sym in active_overlaps) and all(
                 r.get("ghost") for r in records if r.get("unread_symbols"))
             if preserved or not ghost_only:
                 # REFUSE-14: a parenthesis is read as a ghost note only where it alone kept the bar refused.
@@ -727,7 +731,7 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
                 for m in matched:
                     m["record"].pop("ghost", None)
             if refusal is None and not preserved and not ghost_only:
-                symbol = overlaps[source_bar][0]
+                symbol = active_overlaps[0]
                 refusal = _refusal("note_duration_event_unread",
                                    symbol["location"]["event_index"], symbol["class"])
                 refusal["evidence"] = {
@@ -779,7 +783,7 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
             tied_from = ({"positions": last["positions"], "location": _location(last["record"]),
                           "candidates": last["candidates"] or last.get("inherited") or [],
                           "tie": last["record"].get("tie"), "tie_out": last.get("tie_out"),
-                          "pending_out": last.get("pending_out"), "entry": None}
+                          "pending_out": last.get("pending_out"), "entry": None, "new_bend_bar": new_bend_bar}
                          if last is not None and last["record"]["kind"] != "rest" else None)
             entry.update(status="written", reason=None, detail=None, location=None)
             implied = sum(1 for m in matched if (m["record"].get("rest") or {}).get("implied"))
