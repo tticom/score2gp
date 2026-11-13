@@ -509,6 +509,33 @@ def _time_signature(check: dict[str, Any]) -> TimeSignature:
     return TimeSignature(numerator=numerator, denominator=denominator)
 
 
+ENABLE_UNPRINTED_BARS = True  # REFUSE-22 mutant switch: False refuses a bar with nothing printed in it (the old behaviour)
+_UNPRINTED_KINDS = ("fret", "percussive-strike", "candidate-text", "visual-vibrato", "visual-slide")
+
+
+def _bar_unprinted_on_tab_side(bar_digits: Sequence[TabCandidate], printed: Sequence[TabCandidate],
+                               note_durations: dict[str, Any], system: dict[str, Any], bar_index: int) -> bool:
+    """REFUSE-22: no TAB-side item at all lies under a bar that the reader found unprinted.
+
+    The reader proves that nothing is drawn in the bar's staff; this proves the TAB lines below it carry no
+    number, rest, strike or slide/vibrato mark either, grouped or not. TabRaw runs down the document, so a
+    candidate's page y is its y less the heights of the pages before it.
+    """
+    if bar_digits:
+        return False
+    heights = note_durations["source"].get("page_heights") or []
+    x0, x1 = system["bars"][bar_index - system["first_bar_index"]]
+    top = system["staff"]["top"] - 0.5 * system["staff_space"]
+    below = [s["staff"]["top"] for s in note_durations["systems"]
+             if s["page_index"] == system["page_index"] and s["staff"]["top"] > system["staff"]["top"]]
+    bottom = (min(below) - 2 * system["staff_space"]) if below else float("inf")
+    offset = sum(heights[:system["page_index"]])
+    return not any(
+        c.kind in _UNPRINTED_KINDS and c.page_index == system["page_index"] + 1
+        and c.x is not None and c.y is not None and x0 <= c.x <= x1 and top <= c.y - offset <= bottom
+        for c in printed)
+
+
 def _printed_digit_texts(bar_digits: Sequence[TabCandidate], printed: Sequence[TabCandidate],
                          system: dict[str, Any], bar_index: int) -> list[TabCandidate]:
     """REFUSE-17: numbers printed on the strings of a TAB-only bar that no grouped TAB column owns.
@@ -567,6 +594,7 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
     system_of = {s["first_bar_index"] + i: s for s in systems for i in range(s["bar_count"])}
     diagnostics = note_durations.get("diagnostics", {})
     empty_source = not digits and empty_notation_source(note_durations)
+    unprinted_bars = set(diagnostics.get("unprinted_bars", ()))
     overlaps: dict[int, list[dict[str, Any]]] = {}
     for symbol in diagnostics.get("unread_symbols", []):
         if symbol["class"] in ("unsupported_overlapping_form", "parenthesized_head_unrepresented", "fermata_unrepresented"):
@@ -656,6 +684,7 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
             )
         unread = next((r for r in records if r["status"] != "read"), None)
         refusal = None
+        unprinted = False
         matched: list[dict[str, Any]] = []
         if (refused_tab_system is not None
                 and (system["page_index"], system["system_index"])
@@ -682,7 +711,9 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
                 "bbox": unread["location"]["bbox"],
             }
         elif not records:
-            refusal = None if empty_source else _refusal("bar_without_notation_event")
+            unprinted = (ENABLE_UNPRINTED_BARS and source_bar in unprinted_bars
+                         and _bar_unprinted_on_tab_side(bar_digits, printed_candidates, note_durations, system, source_bar))
+            refusal = None if empty_source or unprinted else _refusal("bar_without_notation_event")
             if refusal is not None:
                 ungrouped = [] if bar_digits else _printed_digit_texts(
                     bar_digits, printed_candidates, system, source_bar)
@@ -786,6 +817,8 @@ def assemble_note_type_bars(digits: Sequence[TabCandidate], note_durations: dict
                           "pending_out": last.get("pending_out"), "entry": None, "new_bend_bar": new_bend_bar}
                          if last is not None and last["record"]["kind"] != "rest" else None)
             entry.update(status="written", reason=None, detail=None, location=None)
+            if unprinted:
+                entry["unprinted_bar"] = True  # REFUSE-22: written empty because nothing at all is printed in it
             implied = sum(1 for m in matched if (m["record"].get("rest") or {}).get("implied"))
             if implied:
                 # TABRHY-01: a rest the printed marks do not show, written to fill the bar's end; never a printed rest.
