@@ -62,14 +62,17 @@ def _refused_causes(source, tmp_path):
 
 def test_grateful_dead_bars_stay_refused_and_say_what_is_printed(tmp_path):
     causes = _refused_causes("7_Grateful_Dead_Melodies", tmp_path)
-    # TABEXT-03: the 8 bars that print digits no longer count here; the 8 left print none (blank bars, simile signs).
-    assert causes == {"bar_without_notation_or_tab_item": 8}
+    # TABEXT-03: the 8 bars that print digits no longer count here; the 8 left print none. REFUSE-22 writes the 4 bars
+    # with nothing printed at all (see test_refuse_22_unprinted_bars_private); the 4 that print a glyph or a
+    # two-bar repeat sign across a barline stay refused here.
+    assert causes == {"bar_without_notation_or_tab_item": 4}
 
 
 def test_gloria_and_exact_blank_bars_stay_refused(tmp_path):
-    assert _refused_causes("Gloria", tmp_path) == {"bar_without_notation_or_tab_item": 4}
-    assert _refused_causes("The_EXACT_System_Pros_Use_To_Sound_Great_On_ANY_Chord", tmp_path) == {
-        "bar_without_notation_or_tab_item": 2}
+    # REFUSE-22: Gloria's 3 bars holding only a barline and the EXACT System's 2 empty bars are written (nothing is
+    # printed in them); Gloria's system-first bar still holds a clef and key signature and stays refused.
+    assert _refused_causes("Gloria", tmp_path) == {"bar_without_notation_or_tab_item": 1}
+    assert _refused_causes("The_EXACT_System_Pros_Use_To_Sound_Great_On_ANY_Chord", tmp_path) == {}
 
 
 def test_paranoid_bars_say_digits_are_printed_but_not_grouped(tmp_path):

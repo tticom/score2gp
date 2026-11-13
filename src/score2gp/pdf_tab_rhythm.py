@@ -37,6 +37,7 @@ from .notation_omr.note_duration import (
     _governing_signature,
     _signature_basis,
     _tuplet_ratio,
+    unprinted_bars,
     extract_page_symbols,
 )
 from .notation_omr.time_signature import VALID_DENOMINATORS, classify_common_cut_contour, classify_numeral, glyph_raster
@@ -961,6 +962,7 @@ def read_tab_rhythm(pdf_path: str | Path, tabraw: Any, pages: tuple[int, int] | 
     carried: dict[str, Any] | None = None
     unread_signature: dict[str, Any] | None = None
     marks_by_class: dict[str, int] = {}
+    unprinted: list[int] = []
     with pymupdf.open(path) as doc:
         heights = [round(float(page.rect.height), 3) for page in doc]
         reader = _Reader({}, heights)
@@ -1031,6 +1033,9 @@ def read_tab_rhythm(pdf_path: str | Path, tabraw: Any, pages: tuple[int, int] | 
                                                  "x0": round(staff.x0, 3), "x1": round(staff.x1, 3)},
                                        "bars": [[round(a, 3), round(z, 3)] for a, z in staff.bars],
                                        "tab_staff": {"top": round(staff.top, 3), "bottom": round(staff.bottom, 3)}})
+                unprinted.extend(bar_offset + i for i in unprinted_bars(
+                    symbols, staff.lines, staff.bars, (staff.top - 3 * staff.space, staff.bottom + 3 * staff.space),
+                    (staff.top, staff.bottom + 3 * staff.space)))
                 bar_offset += bars_read
                 system_number += 1
     unplaced = []
@@ -1063,7 +1068,7 @@ def read_tab_rhythm(pdf_path: str | Path, tabraw: Any, pages: tuple[int, int] | 
             "ignored_symbols": 0, "ignored_symbols_by_reason": {}, "arcs_not_ties": 0, "unassociated_numbers": 0,
             "label_numbers": 0, "events_outside_bars": 0, "pages_without_notation_staff": len(heights),
             "non_events": [], "non_events_by_reason": {}, "key_signatures": [], "time_signatures": time_signatures,
-            "bar_time_signatures": basis, "bar_key_signatures": {},
+            "bar_time_signatures": basis, "bar_key_signatures": {}, "unprinted_bars": unprinted,
             "tab_rhythm": {"schema": TAB_RHYTHM_SCHEMA, "basis": "printed_rhythm_marks_under_staffless_tab",
                            "marks_by_class": dict(sorted(marks_by_class.items())), "reader_counts": dict(sorted(reader.counts.items())),
                            "implied_rest_bars": implied, "unplaced_digits": unplaced, "bars": reader.bar_reports},

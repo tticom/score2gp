@@ -100,14 +100,16 @@ def test_no_rhythm_source_keeps_every_refusal_and_writes_no_guess(build_root):
     holds only the 7 printed whole-rest bars, and the word GUESS appears in no output."""
     out, build = _convert(build_root, NO_RHYTHM)
     route = json.loads((build / "note-type-route.json").read_bytes())["summary"]
-    assert route["written_bars"] == 7
-    assert route["refused_bars"] == 76
-    assert route["refusal_reasons"] == {"note_duration_event_unread": 68, "bar_without_notation_event": 8}
+    # REFUSE-22 additionally writes the 4 bars in which nothing at all is printed (no rhythm is guessed for them:
+    # they hold no event); the other 4 bars without an event keep their refusal.
+    assert route["written_bars"] == 7 + 4
+    assert route["refused_bars"] == 72
+    assert route["refusal_reasons"] == {"note_duration_event_unread": 68, "bar_without_notation_event": 4}
     for artefact in build.rglob("*.json"):
         assert T.GUESS_LABEL not in artefact.read_text(encoding="utf-8", errors="ignore")
     bars = T.load_bars(build, NO_RHYTHM)
     refused = [b for b in bars if b.status == "refused"]
-    assert len(refused) == 76
+    assert len(refused) == 72
     # every refused bar with a printed TAB digit has its column(s), and the model only reports a labelled guess
     columned = [b for b in refused if b.col_x]
     assert len(columned) == 68  # TABEXT-03: was 53; the 14 digit-bearing bars that lay outside a system now have columns

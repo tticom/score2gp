@@ -1661,6 +1661,75 @@ def _covers_staff(glyph: Glyph, staff: Staff) -> bool:
             and glyph.bbox[1] <= staff.top and glyph.bbox[3] >= staff.bottom)
 
 
+UNPRINTED_EDGE_SPACES = 0.8  # a barline stroke this close to a bar's edge belongs to the barline, not to the bar
+
+
+def unprinted_bars(symbols: PageSymbols, lines: list[float], bars: list[tuple[float, float]],
+                   band: tuple[float, float], text_band: tuple[float, float]) -> list[int]:
+    """REFUSE-22: the bars of one staff in which the page prints nothing at all.
+
+    A bar is unprinted when, between its barlines, no drawn glyph, no stroke other than a staff line, no
+    stroked path and no text lies inside the vertical ``band`` (texts: ``text_band``). A barline's own
+    strokes at the bar's edges are not content. Anything else, including a clef, a key signature or a
+    rest, leaves the bar out, so a bar this returns shows the reader nothing to play. It never decides
+    that a bar is empty because its content was unreadable: unreadable content is still content.
+    """
+    top, bottom = lines[0], lines[-1]
+    space = (bottom - top) / (len(lines) - 1)
+    edge = UNPRINTED_EDGE_SPACES * space
+    staff_height = bottom - top
+    left, right = min(a for a, _ in bars), max(z for _, z in bars)
+
+    def near(x0: float, y0: float, x1: float, y1: float, limits: tuple[float, float]) -> bool:
+        return x1 > left and x0 < right and y1 >= limits[0] and y0 <= limits[1]
+
+    # Only what lies in this staff's band is ever compared with a bar: a page holds thousands of shapes.
+    glyphs = [g for g in symbols.glyphs if near(*g.bbox, band)]
+    strokes = [(min(s.x0, s.x1), min(s.y0, s.y1), max(s.x0, s.x1), max(s.y0, s.y1), s) for s in symbols.segments]
+    strokes = [item for item in strokes if near(*item[:4], band)]
+    paths = [p.bbox for p in symbols.polylines if near(*p.bbox, band)]
+    words = [t.bbox for t in symbols.texts if near(*t.bbox, text_band)]
+    out: list[int] = []
+    for index, (a, z) in enumerate(bars):
+        def inside(x0: float, y0: float, x1: float, y1: float, limits: tuple[float, float]) -> bool:
+            # Overlap, not the centre: a sign printed across a barline (a two-bar repeat) is in both bars.
+            return x1 > a and x0 < z and y1 >= limits[0] and y0 <= limits[1]
+
+        def at_edge(x0: float, x1: float) -> bool:
+            return x0 - a <= edge or z - x1 <= edge
+
+        def encloses(box: tuple[float, float, float, float]) -> bool:
+            # A page background or frame enclosing the whole bar is not a printed symbol.
+            return box[0] <= a and box[2] >= z and box[1] <= top and box[3] >= bottom
+
+        printed = False
+        for g in glyphs:
+            if not inside(*g.bbox, band) or encloses(g.bbox):
+                continue
+            if not (g.bbox[2] - g.bbox[0] <= 0.7 * space and g.bbox[3] - g.bbox[1] >= 0.9 * staff_height
+                    and at_edge(g.bbox[0], g.bbox[2])):
+                printed = True  # anything but a thick barline's own stroke
+                break
+        if not printed:
+            for x0, y0, x1, y1, seg in strokes:
+                if not inside(x0, y0, x1, y1, band):
+                    continue
+                if seg.horizontal:
+                    if any(abs((seg.y0 + seg.y1) / 2 - line) <= 0.15 for line in lines):
+                        continue  # a staff line
+                elif seg.vertical and y1 - y0 >= 0.9 * staff_height and at_edge(x0, x1):
+                    continue  # a barline stroke
+                printed = True
+                break
+        if not printed:
+            printed = any(inside(*box, band) and not encloses(box) for box in paths)
+        if not printed:
+            printed = any(inside(*box, text_band) for box in words)
+        if not printed:
+            out.append(index)
+    return out
+
+
 def _read_staff(staff: Staff, symbols: PageSymbols, all_staves: list[Staff], state: dict[str, Any]) -> dict[str, Any]:
     s = staff.space
     upper, lower = _zone(staff, all_staves)
@@ -2817,6 +2886,10 @@ def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = No
                 state["system_index"] = system_index
                 text_before = state["time_signature"]
                 result = _read_staff(staff, symbols, notation + tab, state)
+                state["diagnostics"].setdefault("unprinted_bars", []).extend(
+                    state["bar_offset"] + i for i in unprinted_bars(
+                        symbols, staff.lines, result["bars"], _zone(staff, notation + tab),
+                        (staff.top, staff.bottom)))
                 system_keys = read_bar_key_signatures(
                     staff, symbols, result["bars"], key_signature,
                 )
@@ -2869,6 +2942,7 @@ def read_note_durations(pdf_path: str | Path, pages: tuple[int, int] | None = No
     for r in records:
         if r["reason"]:
             reasons[r["reason"]] = reasons.get(r["reason"], 0) + 1
+    state["diagnostics"].setdefault("unprinted_bars", [])
     state["diagnostics"]["key_signatures"] = key_signatures
     state["diagnostics"]["time_signatures"] = time_signatures
     state["diagnostics"]["bar_time_signatures"] = bar_time_signatures

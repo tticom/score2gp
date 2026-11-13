@@ -74,7 +74,10 @@ def test_grateful_digits_reach_their_bars(tmp_path):
     causes = {i: (b.get("refusal_evidence") or {}).get("cause") for i, b in bars.items() if b["status"] != "written"}
     assert "tab_digits_printed_but_not_grouped" not in causes.values(), "GRATEFUL_DIGITS_STILL_UNGROUPED"
     empty = {i for i, c in causes.items() if c == "bar_without_notation_or_tab_item"}
-    assert empty == GRATEFUL_NO_DIGITS, "GRATEFUL_DIGIT_BAR_STILL_SEEN_AS_EMPTY"
+    # REFUSE-22 writes the four bars of this set in which nothing at all is printed; the others stay refused.
+    unprinted = {i for i, b in bars.items() if b.get("unprinted_bar")}
+    assert unprinted == {16, 62, 66, 75} and unprinted <= GRATEFUL_NO_DIGITS
+    assert empty == GRATEFUL_NO_DIGITS - unprinted, "GRATEFUL_DIGIT_BAR_STILL_SEEN_AS_EMPTY"
     # 17 is the leading narrow bar of the "Outro" row: it was missing from the output altogether before.
     for bar in (8, 9, 12, 13, 14, 17, 27, 31, 39, 70, 71, 72, 73, 74):
         assert bars[bar]["tab_digits"] > 0, f"GRATEFUL_BAR_{bar}_HOLDS_NO_DIGITS"
