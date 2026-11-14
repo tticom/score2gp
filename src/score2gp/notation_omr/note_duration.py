@@ -149,6 +149,11 @@ REPEAT_DOT_REACH_SPACES = 1.5  # ... standing within this many spaces right of t
 ACCIDENTAL_REACH_SPACES = 2.0
 # REFUSE-18: the tallest parenthesis pair read around one stacked chord (staff spaces); taller strokes stay unread.
 PAREN_CHORD_MAX_HEIGHT_SPACES = 6.5
+# REFUSE-23: some engravers set a head's left parenthesis one accidental slot (measured 1.27 to 1.39 spaces) left of
+# the head even when no accidental is printed. Only an empty slot between that stroke and the head is read.
+ENABLE_PAREN_ACCIDENTAL_SLOT = True
+PAREN_SLOT_MIN_SPACES = 1.2
+PAREN_SLOT_MAX_SPACES = 1.45
 REST_BLOCK = {"min_w": 0.8, "max_w": 1.8, "min_h": 0.3, "max_h": 0.8, "line": 0.12}
 REST_QUARTER = {"min_w": 0.7, "max_w": 1.5, "min_h": 2.2, "max_h": 3.6}
 # A quarter rest is one zigzag stroke: nearly every horizontal scan crosses it once (its foot curls,
@@ -692,6 +697,19 @@ def _parenthesis_inner_edges(head: Glyph, glyphs: list[Glyph], space: float) -> 
         and _accidental_direction(a, space)]
 
 
+def _empty_accidental_slot(stroke: Glyph, head: Glyph, glyphs: list[Glyph], space: float) -> bool:
+    """REFUSE-23: the left stroke stands one unused accidental slot left of the head, with nothing between."""
+    if not ENABLE_PAREN_ACCIDENTAL_SLOT:
+        return False
+    gap = head.bbox[0] - stroke.bbox[2]
+    if not PAREN_SLOT_MIN_SPACES * space <= gap <= PAREN_SLOT_MAX_SPACES * space:
+        return False
+    return not any(g.ident not in (stroke.ident, head.ident)
+                   and g.bbox[0] < head.bbox[0] and g.bbox[2] > stroke.bbox[2]
+                   and g.bbox[1] < head.bbox[3] and g.bbox[3] > head.bbox[1]
+                   for g in glyphs)
+
+
 def _notehead_parentheses(glyphs: list[Glyph], heads: list[Glyph],
                           space: float, chord_pairs: set[str] | None = None) -> dict[str, list[Glyph]]:
     """Paired curved strokes enclosing one head, not a new note or a rest.
@@ -723,7 +741,8 @@ def _notehead_parentheses(glyphs: list[Glyph], heads: list[Glyph],
         edges = _parenthesis_inner_edges(head, glyphs, space)
         left = [g for g in sides["left"]
                 if abs(g.cy - head.cy) <= 0.15 * space
-                and any(abs(g.bbox[2] - edge) <= 0.25 * space for edge in edges)]
+                and (any(abs(g.bbox[2] - edge) <= 0.25 * space for edge in edges)
+                     or _empty_accidental_slot(g, head, glyphs, space))]
         right = [g for g in sides["right"]
                  if abs(g.cy - head.cy) <= 0.15 * space
                  and abs(g.bbox[0] - head.bbox[2]) <= 0.25 * space]
