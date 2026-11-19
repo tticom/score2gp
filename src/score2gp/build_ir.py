@@ -18,6 +18,7 @@ from . import __version__
 from .pdf_slide_marks import (
     REASON_END_UNBOUND,
     REASON_LABEL_WITHOUT_MARK,
+    REASON_SLIDE_IN_AND_OUT,
     REASON_NOTE_NOT_FOUND,
     REASON_TYPE_NOT_READ,
     SLIDE_MARK_NOT_EXTRACTED,
@@ -4932,7 +4933,16 @@ def _attach_symbols_and_techniques(
             placement = candidate.raw.get("placement")
             if placement == "before-note":
                 targets = _notes_by_candidate_id(bar, candidate.raw.get("target_candidate_id"))
-                if len(targets) == 1:
+                target_id = candidate.raw.get("target_candidate_id")
+                # One Slide flag is written per note. A note that also starts a drawn slide keeps that
+                # slide; the slide into it is not written, rather than overwriting or merging the two.
+                also_slides_out = any(
+                    other.kind == "visual-slide" and other.raw.get("source_candidate_id") == target_id
+                    and (other.raw.get("reading") or {}).get("status") == "read"
+                    for other in tabraw.candidates)
+                if also_slides_out:
+                    score.warnings.append(_slide_not_extracted_warning(candidate, bar_idx, REASON_SLIDE_IN_AND_OUT))
+                elif len(targets) == 1:
                     _, target = targets[0]
                     target.techniques.append(SlideTechnique(
                         kind="slide", style="slide-in", direction=candidate.raw["direction"],
@@ -4962,8 +4972,19 @@ def _attach_symbols_and_techniques(
                             or len(targets) != 1 or targets[0][0] is not target_bar.events[0]
                             or targets[0][1].string != source_note.string):
                         targets = []
+                across_barline = candidate.raw.get("ownership") == "cross_bar"
+                if across_barline and len(sources) == 1:
+                    # A slide over a barline leaves the bar's last timed event and lands on the
+                    # next bar's first, on the same string; any other pairing is not written.
+                    target_bar = bars_by_index.get(bar.index + 1)
+                    targets = _notes_by_candidate_id(target_bar, candidate.raw.get("target_candidate_id")) if target_bar else []
+                    if (sources[0][0] is not bar.events[-1] or len(targets) != 1
+                            or targets[0][0] is not target_bar.events[0]
+                            or targets[0][1].string != sources[0][1].string):
+                        targets = []
                 if (len(sources) != 1 or len(targets) != 1
-                        or (not chord_departure and sources[0][0].timing.onset_ticks >= targets[0][0].timing.onset_ticks)):
+                        or (not chord_departure and not across_barline
+                            and sources[0][0].timing.onset_ticks >= targets[0][0].timing.onset_ticks)):
                     score.warnings.append(_slide_not_extracted_warning(candidate, bar_idx, REASON_NOTE_NOT_FOUND))
                     continue
                 (_, source_note), (target_event, _) = sources[0], targets[0]

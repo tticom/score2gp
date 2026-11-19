@@ -11,9 +11,10 @@ tolerance the leading-slide reader always used: within half a digit width, at th
 
 | Drawn mark | Written as | GPIF `Slide` flags |
 | --- | --- | --- |
-| stroke ends at a digit, no digit before it in the system | slide-in (`up`/`down`) | 16 / 32 |
+| stroke ends at a digit, no digit of that string within one stroke length before it | slide-in (`up`/`down`) | 16 / 32 |
 | stroke joins two digits on one string, a slur arc spans both | legato | 2 |
 | stroke joins two digits on one string, no arc spans both | shift | 1 |
+| the same, joining the last digit of one bar to the first digit of the next bar of one system | as above | 2 / 1 |
 
 A slur over a chord applies to every slide stroke joining the same two fret columns in the
 same system and bar. The reader checks the full height of that chord, so its lower strings
@@ -32,15 +33,20 @@ run status `slide_not_written`.
 | --- | --- |
 | `slide_endpoint_not_bound_to_digit` | one end of the stroke touches no digit, or the end touches two |
 | `slide_endpoints_on_different_strings` | the two bound digits are on different strings |
-| `slide_endpoints_in_different_bars` | the two bound digits are in different bars (cross-bar slide) |
+| `slide_endpoints_in_different_bars` | the two bound digits are in bars that are not adjacent in one system, or are on different strings |
 | `slide_slur_evidence_ambiguous` | more than one slur arc spans the pair, so legato/shift is undecidable |
 | `slide_endpoint_note_not_found` | a bound digit has no note in the bar (or the pair is not in time order) |
 | `slide_type_not_read` | a bare diagonal (slope/direction only) names no type |
 | `slide_label_without_drawn_mark` | a printed `sl.` label has no drawn stroke under it |
+| `slide_in_note_also_slides_out` | the slide-in's note also starts a read slide; neither is merged |
 
 A printed `sl.` label alone never writes a slide: it does not say which slide it is.
 
 ## Known limits
 
-* Slide-out and cross-bar slides are refused (reported), not written.
+* Slide-out is refused (reported), not written. A slide across a barline is written only when its
+  source is the last timed event of its bar and its target the first of the next bar, on one string.
+* A slide-in onto a note that also starts a drawn slide is not written (`slide_in_note_also_slides_out`):
+  one Slide flag is written per note.
+* Strokes up to 100 page units are considered (TECH-01); a stroke still has to touch a digit at an end.
 * MusicXML-sourced slides carry no drawn evidence; that path is unchanged.

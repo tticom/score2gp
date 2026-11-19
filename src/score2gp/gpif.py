@@ -987,7 +987,8 @@ def build_gpif(
                                     elif style == "legato":
                                         slide_flags = 2
                                     elif style == "slide-in":
-                                        slide_flags = 16
+                                        # In from below is 16, in from above is 32.
+                                        slide_flags = 32 if getattr(tech, "direction", None) == "down" else 16
                                     elif style == "slide-out":
                                         slide_flags = 4
                                     else:

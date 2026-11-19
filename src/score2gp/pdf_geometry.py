@@ -34,6 +34,10 @@ class VisualVibratoEvidence(BaseModel):
         return v
 
 
+# A slide stroke runs between two digits of one string; it can be as long as the gap between them.
+SLIDE_STROKE_MAX_LENGTH = 100.0
+
+
 class VisualSlideEvidence(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -194,7 +198,7 @@ def extract_visual_slide_evidence(
             dy = y1 - y0
             length = (dx * dx + dy * dy) ** 0.5
 
-            if not (5.0 <= length <= 50.0):
+            if not (5.0 <= length <= SLIDE_STROKE_MAX_LENGTH):
                 continue
 
             if abs(dx) < 1e-3:

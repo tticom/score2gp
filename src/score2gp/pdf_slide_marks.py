@@ -4,9 +4,11 @@ A slide on a TAB staff is drawn as a short diagonal stroke touching a fret digit
 Where the stroke is anchored decides the family, and a slur arc over the pair decides
 the connecting type:
 
-* stroke ends at a digit, nothing before it in the system -> slide into the note
+* stroke ends at a digit, nothing on that string within one stroke length before it -> slide into the note
 * stroke joins two digits on one string, one slur arc over both -> legato slide
 * stroke joins two digits on one string, no arc over them -> shift slide
+* stroke joins the last digit of one bar to the first digit of the next bar of the same system,
+  on one string -> the same rules by slur arc (a slide across a barline)
 * anything else (an end bound to no digit, endpoints on different strings, several
   candidate arcs) -> refused with a reason code; no slide type is guessed.
 
@@ -28,6 +30,7 @@ REASON_SLUR_AMBIGUOUS = "slide_slur_evidence_ambiguous"
 REASON_NOTE_NOT_FOUND = "slide_endpoint_note_not_found"
 REASON_TYPE_NOT_READ = "slide_type_not_read"
 REASON_LABEL_WITHOUT_MARK = "slide_label_without_drawn_mark"
+REASON_SLIDE_IN_AND_OUT = "slide_in_note_also_slides_out"
 
 
 def slur_arcs(drawings: list[dict[str, Any]]) -> list[tuple[float, float, float]]:
@@ -183,6 +186,7 @@ def read_slide_marks(
     strokes: list[dict[str, Any]],
     arcs: list[tuple[float, float, float]],
     page_offset: float,
+    printed_digits: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """One reading per diagonal stroke that touches a TAB digit; strokes touching none are not slide marks.
 
@@ -210,11 +214,18 @@ def read_slide_marks(
             mark.update(status="refused", reason=REASON_END_UNBOUND, placement="unbound")
         elif rights and not lefts:
             target = rights[0]
+            # A shift or legato stroke whose left digit was not extracted would sit right after
+            # that digit, so a digit of the same string closer than one stroke length keeps it refused.
             preceded = any(d.get("system_index") == target.get("system_index")
-                           and d["bbox"]["x1"] <= x0 for d in digits)
+                           and d.get("string") == target.get("string")
+                           and d["bbox"]["x1"] <= x0 and x0 - d["bbox"]["x1"] <= x1 - x0
+                           for d in digits)
+            # A printed digit that touches the stroke's start but was not extracted (a small glyph)
+            # makes this the right end of a slide between two notes, not a slide into the note.
+            slurred_in = any(_binds_left(stroke, d, page_offset) for d in printed_digits or [])
             lead_len = width / 2 <= x1 - x0 <= 2 * width
             short = (y1 - y0) <= (target["bbox"]["y1"] - target["bbox"]["y0"])
-            if not preceded and lead_len and short:
+            if not preceded and not slurred_in and lead_len and short:
                 mark.update(status="read", style="slide-in", placement="before-note",
                             target_candidate_id=target["id"])
             else:
@@ -226,7 +237,11 @@ def read_slide_marks(
             left, right = lefts[0], rights[0]
             mark.update(placement="between-notes", source_candidate_id=left["id"],
                         target_candidate_id=right["id"])
-            if (left.get("system_index"), left.get("bar_index")) != (right.get("system_index"), right.get("bar_index")):
+            across = (left.get("system_index") == right.get("system_index")
+                      and None not in (left.get("bar_index"), right.get("bar_index"))
+                      and right["bar_index"] == left["bar_index"] + 1)
+            same_bar = (left.get("system_index"), left.get("bar_index")) == (right.get("system_index"), right.get("bar_index"))
+            if not same_bar and not (across and left.get("string") == right.get("string")):
                 mark.update(status="refused", reason=REASON_CROSS_BAR)
             elif left.get("string") != right.get("string"):
                 mark.update(status="refused", reason=REASON_DIFFERENT_STRINGS)
@@ -236,5 +251,7 @@ def read_slide_marks(
                     mark.update(status="refused", reason=REASON_SLUR_AMBIGUOUS)
                 else:
                     mark.update(status="read", style="legato" if over else "shift")
+                    if across:
+                        mark["ownership"] = "cross_bar"
         marks.append(mark)
     return marks

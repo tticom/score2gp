@@ -112,14 +112,16 @@ def test_new_parenthesized_bars_are_located_refusals_in_final_output(name, refus
 # GPIF with its slide marks removed are the base digests above, so everything else stays byte-identical.
 @pytest.mark.parametrize("name,indices,head_gpif_sha256,base_gpif_without_slides_sha256", [
     ("Melodic Soloing Masterclass", (7,),
-     "5d58c37f097d15d81613225e11d74ab914bf3246060edaa48d38a41e7f8c09e7",
+     "750674364422292f3f0ed3438dfdbc5ce3e15ea7d068e5c59186f8a93600c11d",
      "eef50156ec15497a93f53e518689ad6598974281f83fc9db526f7a86017c7a66"),
     ("Melodic_Expressions_Chap_19_", (21, 23),
-     "6a8edd68f46b4388c2c7f3e1c1042d73915901b2d428835ef82715fd16573e2f",
+     "c63f7475537f9d9b648892e2a7e10b4f019011b48f1f39cc2f0832533c413c17",
      "72a242fc55283c603fb04f715330261b7dc947ce228908235842ef8e0944060b"),
 ])
 def test_base_written_parentheses_keep_byte_identical_gpif(
         name, indices, head_gpif_sha256, base_gpif_without_slides_sha256):
+    # TECH-01 writes more printed slides in Melodic Soloing Masterclass and Chapter 19, so those two whole-GPIF
+    # digests are new head values; the digest without Slide marks (the base check below) is unchanged.
     # Whole-GPIF byte digests from ordinary no-reference conversion at actual
     # base dfe05d05978d6625a0e3658fe54280aec3189f53; rechecked in the frozen
     # base/head corpus sweep. No private musical content is embedded here.
