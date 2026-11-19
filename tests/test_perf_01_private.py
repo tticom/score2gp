@@ -102,9 +102,11 @@ def test_old_unbounded_behavior_is_rejected_on_main_source(monkeypatch):
     ("Lesson-6.pdf", 17533,
      "902d5262822a5944a650d981c776feec3ea1bb4ce541c471456c02c17d1072b6", None),
     ("Melodic_Expressions_Chap_19_.pdf", 11460,
-     "6a8edd68f46b4388c2c7f3e1c1042d73915901b2d428835ef82715fd16573e2f",
+     "c63f7475537f9d9b648892e2a7e10b4f019011b48f1f39cc2f0832533c413c17",
      "72a242fc55283c603fb04f715330261b7dc947ce228908235842ef8e0944060b"),
 ])
+# TECH-01 writes three more printed slides in Chapter 19: its whole-GPIF digest is the new head value;
+# the digest without slide marks is unchanged.
 # PERF-02: the node counts are of the retained (released-geometry) inspection written by convert;
 # the fully retained counts (676202 / 581458) are pinned in test_perf_02_inspection_retention.py.
 def test_real_control_inspection_count_and_gpif_are_unchanged(name, nodes, gpif_digest, without_slides_digest):

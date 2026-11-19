@@ -68,7 +68,9 @@ def test_written_bars_match_independent_printed_notation_and_tab_ledger(converte
     # position as well as ties, slides and the remaining package fields.
     with zipfile.ZipFile(output) as package:
         assert hashlib.sha256(package.read("Content/score.gpif")).hexdigest() == (
-            "8d9e7893986785965288ac62ece369b1b79849bae7afca2588d1d89d7baa211c")
+            "e7bfaee7eb4ebe371d0dcf4bc126b76d1a235ce4ca610d409d1727e2aa9e8069")
+        # TECH-01 writes two more printed slides (four Slide properties before, six now); nothing else changes.
+        assert package.read("Content/score.gpif").count(b'name="Slide"') == 6
 
 
 def test_refused_bars_keep_measured_located_causes_and_no_written_beats(converted):

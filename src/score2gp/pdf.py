@@ -401,8 +401,11 @@ def _slide_mark_candidates(candidates: list[dict[str, Any]], inspection: dict[st
         with fitz.open(pdf_path) as doc:
             drawings = doc[page["page"] - 1].get_drawings()
             arcs = slur_arcs(drawings)
+            printed_digits = [
+                {"bbox": {"x0": w[0], "y0": w[1] + page_offset, "x1": w[2], "y1": w[3] + page_offset}}
+                for w in doc[page["page"] - 1].get_text("words") if w[4].strip().isdigit()]
         by_id = {d["id"]: d for d in digits}
-        marks = read_slide_marks(digits, strokes, arcs, page_offset)
+        marks = read_slide_marks(digits, strokes, arcs, page_offset, printed_digits)
         marks += read_labeled_chord_departures(digits, drawings, arcs, labels,
                                                page_offset, len(strokes))
         for mark in marks:

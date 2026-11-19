@@ -103,16 +103,18 @@ def test_lesson_5_unextracted_mark_writes_no_slide_and_is_located():
 
 def test_bebop_shift_slides_are_flags_1():
     written, reported = _convert("Bebop Licks in Am")
-    assert dict(written) == {"1": 4}
+    # TECH-01: the slurred stroke across a barline is now written as legato (Flags 2).
+    assert dict(written) == {"1": 4, "2": 1}
     reasons = Counter(d["message"].split(": ")[1].split(";")[0] for d in reported)
-    assert reasons == {"slide_endpoints_in_different_bars": 1, "slide_label_without_drawn_mark": 2}
+    assert reasons == {"slide_label_without_drawn_mark": 2}
 
 
 def test_bebop_marks_without_a_slur_are_shift_and_the_slurred_one_crosses_a_bar():
+    # TECH-01: the slurred mark across the barline is read as legato (it was refused as cross-bar).
     marks = _slide_candidates("Bebop Licks in Am")
     readings = Counter((m["raw"]["reading"]["status"], m["raw"]["reading"].get("style") or
                         m["raw"]["reading"]["reason"]) for m in marks)
-    assert readings == {("read", "shift"): 4, ("refused", "slide_endpoints_in_different_bars"): 1}
+    assert readings == {("read", "shift"): 4, ("read", "legato"): 1}
 
 
 def test_leading_slide_into_a_note_is_slide_in():

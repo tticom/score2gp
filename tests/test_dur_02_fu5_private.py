@@ -85,8 +85,10 @@ def test_preserve_second_source():
         assert result["refused_bars"] == []
         # SLIDE-01 changes the written slides only (four shift slides now carry the shift flag); the
         # whole-GPIF digest is the new head value and the digest without slide marks is the base one.
+        # TECH-01 then writes the legato slide across a barline (one more Slide property), so the
+        # whole-GPIF digest changed again while the digest without slide marks below did not.
         assert _gpif_hash(output) == (
-            "b3083f043c1e20e74d090f805fe1cca27e47e419fe3fcde1122f826020f476dd")
+            "0c5f068ee216770638687731685f5c417bb96e341dd11761141531ff0b312a0f")
         with zipfile.ZipFile(output) as package:
             before_sizes = without_verified_default_template_sizes(package.read("Content/score.gpif"))
             assert gpif_without_slides_sha256(before_sizes) == (
