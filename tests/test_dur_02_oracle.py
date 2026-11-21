@@ -32,7 +32,10 @@ WRITTEN = {"Whole": "whole", "Half": "half", "Quarter": "quarter", "Eighth": "ei
            "16th": "16th", "32nd": "32nd", "64th": "64th"}
 RHYTHM_TAGS = {"NoteValue", "AugmentationDot", "PrimaryTuplet"}
 TECHNIQUE_FIELDS = ("hopo_origin", "hopo_destination", "slide", "vibrato", "palm_mute", "let_ring")
-EVENT_FIELDS = ("kind", "written", "dots", "tuplet", "tie", "positions", "grace", "percussive_strikes", *TECHNIQUE_FIELDS)
+# The native bend properties, read verbatim as the file stores them (Guitar Pro 7 ``Float`` values).
+BEND_PROPERTIES = ("BendOriginValue", "BendOriginOffset", "BendMiddleValue", "BendMiddleOffset1",
+                   "BendMiddleOffset2", "BendDestinationValue", "BendDestinationOffset")
+EVENT_FIELDS = ("kind", "written", "dots", "tuplet", "tie", "positions", "grace", "percussive_strikes", *TECHNIQUE_FIELDS, "bend")
 
 
 class OracleRefusal(Exception):
@@ -295,7 +298,7 @@ def read_gp_bars(gp: Path | bytes, *, include_grace: bool = False,
                 tuplet = rhythm.find("PrimaryTuplet")
                 note_ids = (beat.findtext("Notes") or "").split()
                 positions, origins, destinations, strikes = [], [], [], []
-                techniques: dict[str, list[tuple[Any, ...]]] = {field: [] for field in TECHNIQUE_FIELDS}
+                techniques: dict[str, list[tuple[Any, ...]]] = {field: [] for field in (*TECHNIQUE_FIELDS, "bend")}
                 for nid in note_ids:
                     note = notes[nid]
                     props = {p.get("name"): p for p in note.iterfind("Properties/Property")}
@@ -318,6 +321,11 @@ def read_gp_bars(gp: Path | bytes, *, include_grace: bool = False,
                     for field, tag in (("palm_mute", "PalmMute"), ("let_ring", "LetRing")):
                         if note.find(tag) is not None or tag in props:
                             techniques[field].append(position)
+                    if "Bended" in props or any(name in props for name in BEND_PROPERTIES):
+                        # An absent value stays None, so a missing field differs from a written zero.
+                        techniques["bend"].append((*position, *(
+                            props[name].findtext("Float") if name in props else None
+                            for name in BEND_PROPERTIES)))
                     tie = note.find("Tie")
                     origins.append(tie is not None and tie.get("origin") == "true")
                     destinations.append(tie is not None and tie.get("destination") == "true")
@@ -331,7 +339,9 @@ def read_gp_bars(gp: Path | bytes, *, include_grace: bool = False,
                     "positions": sorted(positions),
                     **({"percussive_strikes": sorted(strikes)} if strikes else {}),
                     **({"grace": beat.findtext("GraceNotes")} if include_grace else {}),
-                    **{field: sorted(values) for field, values in techniques.items()},
+                    **{field: sorted(values) for field, values in techniques.items() if field != "bend"},
+                    # Only a note that carries a bend adds the key, so every pre-bend event reads as before.
+                    **({"bend": sorted(techniques["bend"])} if techniques["bend"] else {}),
                 })
         key = master.find("Key")
         count = int(key.findtext("AccidentalCount")) if key is not None else None
@@ -504,6 +514,12 @@ def _gp(bars: list[list[dict[str, Any]] | None],
                 for field, tag in (("palm_mute", "PalmMute"), ("let_ring", "LetRing")):
                     if (string, fret) in event.get(field, []):
                         ET.SubElement(note, tag)
+                for item in event.get("bend", []):
+                    if item[:2] == (string, fret):
+                        ET.SubElement(ET.SubElement(props, "Property", {"name": "Bended"}), "Enable")
+                        for name, value in zip(BEND_PROPERTIES, item[2:]):
+                            if value is not None:
+                                ET.SubElement(ET.SubElement(props, "Property", {"name": name}), "Float").text = value
             if note_ids:
                 ET.SubElement(beat, "Notes").text = " ".join(note_ids)
         voice = ET.SubElement(voice_db, "Voice", {"id": voice_id})
@@ -587,6 +603,45 @@ def test_each_technique_placement_is_compared_by_bar_and_event():
         changed[index].pop(field)
         result = compare_gp(_gp([reference]), _gp([changed]))
         assert [(d["bar_index"], d["event_index"], d["field"]) for d in result["differences"]] == [(0, index, field)]
+
+
+# One full bend-and-release, written the way a Guitar Pro 7 file stores it: seven Float properties.
+_BEND = (3, 5, "0.000000", "0.000000", "100.000000", "17.000000", "34.000000", "0.000000", "50.000000")
+
+
+def _with_bend(bend: tuple[Any, ...] | None) -> bytes:
+    bar = _bar()
+    if bend is not None:
+        bar[0] = {**bar[0], "bend": [bend]}
+    return _gp([bar])
+
+
+def test_bend_is_compared_as_a_field_of_its_own_and_located():
+    """Mutants rejected: a bend whose destination is changed, one whose offset is changed, one dropped, one
+    added where the reference has none, and one on another note. Each is one located ``bend`` difference."""
+    reference = _with_bend(_BEND)
+    assert compare_gp(reference, _with_bend(_BEND))["differences"] == []
+    changed_destination = (*_BEND[:7], "50.000000", _BEND[8])
+    changed_offset = (*_BEND[:6], "88.000000", *_BEND[7:])
+    changed_middle = (*_BEND[:4], "50.000000", *_BEND[5:])
+    for mutant, label in ((changed_destination, "destination"), (changed_offset, "offset"),
+                          (changed_middle, "middle value"), (None, "dropped")):
+        differences = compare_gp(reference, _with_bend(mutant))["differences"]
+        assert [(d["bar_index"], d["event_index"], d["field"]) for d in differences] == [(0, 0, "bend")], label
+    extra = compare_gp(_with_bend(None), reference)["differences"]
+    assert [(d["bar_index"], d["event_index"], d["field"], d["expected"]) for d in extra] == [(0, 0, "bend", None)]
+    moved = _bar()
+    moved[1] = {**moved[1], "bend": [(2, 7, *_BEND[2:])]}
+    result = compare_gp(reference, _gp([moved]))
+    assert [(d["event_index"], d["field"]) for d in result["differences"]] == [(0, "bend"), (1, "bend")]
+
+
+def test_bend_values_are_read_as_stored_and_a_missing_value_differs_from_zero():
+    reference = _with_bend(_BEND)
+    stored_zero = _with_bend((*_BEND[:8], "0.000000"))
+    differences = compare_gp(stored_zero, _with_bend((*_BEND[:8], None)))["differences"]
+    assert [(d["event_index"], d["field"]) for d in differences] == [(0, "bend")]
+    assert read_gp_bars(reference)[0]["events"][0]["bend"] == [_BEND]
 
 
 def test_word_spellings_of_short_note_values_are_reported_as_differences():

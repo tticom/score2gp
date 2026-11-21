@@ -64,7 +64,7 @@ def test_melodic_soloing_writes_every_reference_slide():
 
 def test_melodic_soloing_changes_nothing_but_the_slides():
     counts = _compare("Melodic Soloing Masterclass")["difference_counts"]
-    assert counts == {"double_bar": 1, "master_bar_extra_children": 8, "tie": 2}
+    assert counts == {"bend": 3, "double_bar": 1, "master_bar_extra_children": 8, "tie": 2}
 
 
 def test_bebop_holdout_matches_one_more_reference_slide_and_adds_none():
